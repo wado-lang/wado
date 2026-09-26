@@ -448,10 +448,6 @@ impl CstStore {
         return self.id[i] as NodeKind;
     }
 
-    pub fn close_kind(&self, i: i32) -> NodeKind {
-        return self.id[i] as NodeKind;
-    }
-
     pub fn span(&self, i: i32) -> Span {
         return Span::new(self.offset[i], self.end[i]);
     }
@@ -1513,69 +1509,6 @@ impl Parser {
     }
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_term(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                pos += 1;
-                pos = scan_term(tokens, pos, follow);
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_factor(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && _kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        sg_1_done: {
-            sg_1: {
-                pos += 1;
-                pos = scan_factor(tokens, pos, follow);
-                if pos < 0 { break sg_1; }
-                break sg_1_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn scan_factor(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if kind == TK_INT {
-        pos = start + 1;
-        return pos;
-    } else if kind == TK_LIT_LPAREN {
-        pos = start + 1;
-        try_1: {
-            pos = scan_expr(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-            if pos < 0 { break try_1; }
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
-            pos += 1;
-            return pos;
-        }
-        return -1;
-    }
-    return -1;
-}
-
 fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
     _parse_expr(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -1597,29 +1530,9 @@ fn _parse_prog(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 1;
     _parse_term(p, follow);
-    loop {
-        if p.recovering { break; }
+    while !p.recovering && (_kind_set_0(p.peek_kind())) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            sg_2_done: {
-                sg_2: {
-                    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break sg_2; }
-                    pos += 1;
-                    pos = scan_term(tokens, pos, follow);
-                    if pos < 0 { break sg_2; }
-                    break sg_2_done;
-                }
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
-        p.expect_set(&SYNC_0, &EXPECTED_0);
+        p.take();
         p.site = 2;
         _parse_term(p, follow);
     }
@@ -1640,29 +1553,9 @@ fn _parse_expr(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
     _parse_factor(p, follow);
-    loop {
-        if p.recovering { break; }
+    while !p.recovering && (_kind_set_1(p.peek_kind())) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            sg_3_done: {
-                sg_3: {
-                    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { break sg_3; }
-                    pos += 1;
-                    pos = scan_factor(tokens, pos, follow);
-                    if pos < 0 { break sg_3; }
-                    break sg_3_done;
-                }
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
-        p.expect_set(&SYNC_1, &EXPECTED_1);
+        p.take();
         p.site = 4;
         _parse_factor(p, follow);
     }
@@ -1681,7 +1574,7 @@ fn _parse_term(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_factor__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_INT {
         p.take();
@@ -1696,7 +1589,7 @@ fn _parse_factor__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of factor matches",
         p.peek_span(),
-        &EXPECTED_2,
+        &EXPECTED_0,
     );
     return;
 }
@@ -1789,12 +1682,8 @@ fn _kind_set_1(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [48];
-global EXPECTED_0: List<i32> = [TK_LIT_MINUS, TK_LIT_PLUS];
-global SYNC_1: List<i32> = [192];
-global EXPECTED_1: List<i32> = [TK_LIT_SLASH, TK_LIT_STAR];
-global SYNC_2: List<i32> = [257];
-global EXPECTED_2: List<i32> = [TK_INT, TK_LIT_LPAREN];
+global SYNC_0: List<i32> = [257];
+global EXPECTED_0: List<i32> = [TK_INT, TK_LIT_LPAREN];
 
 global FOLLOW_SETS: List<List<i32>> = [[4], [512]];
 global FOLLOW_MASK_0: i64 = 1;

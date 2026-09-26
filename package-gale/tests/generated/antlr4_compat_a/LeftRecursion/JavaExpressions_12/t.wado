@@ -424,8 +424,8 @@ pub enum EventTag {
 
 pub struct CstStore {
     pub tag: List<EventTag>,
-    pub a: List<i32>,
-    pub b: List<i32>,
+    pub id: List<i32>,
+    pub offset: List<i32>,
     alt: List<i32>,
     end: List<i32>,
     flags: List<NodeFlags>,
@@ -445,15 +445,11 @@ impl CstStore {
     }
 
     pub fn kind(&self, i: i32) -> NodeKind {
-        return self.a[i] as NodeKind;
-    }
-
-    pub fn close_kind(&self, i: i32) -> NodeKind {
-        return self.b[i] as NodeKind;
+        return self.id[i] as NodeKind;
     }
 
     pub fn span(&self, i: i32) -> Span {
-        return Span::new(self.b[i], self.end[i]);
+        return Span::new(self.offset[i], self.end[i]);
     }
 
     pub fn alt(&self, i: i32) -> i32 {
@@ -487,7 +483,7 @@ impl CstStore {
     }
 
     pub fn token_index(&self, i: i32) -> i32 {
-        return self.a[i];
+        return self.id[i];
     }
 
     pub fn first_child(&self, i: i32) -> i32 {
@@ -524,7 +520,7 @@ impl CstStore {
         token_names: &List<String>,
     ) -> String {
         let mut out = String::with_capacity(256);
-        let _ = render_node(&mut out, &self.tag, &self.a, i, toks, rule_names, token_names);
+        let _ = render_node(&mut out, &self.tag, &self.id, i, toks, rule_names, token_names);
         return out;
     }
 }
@@ -558,8 +554,8 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
 
 pub struct TreeBuilder {
     tag: List<EventTag>,
-    a: List<i32>,
-    b: List<i32>,
+    id: List<i32>,
+    offset: List<i32>,
     alt: List<i32>,
     open: List<i32>,
     last_finished: i32,
@@ -570,8 +566,8 @@ impl TreeBuilder {
     pub fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
-            a: List::with_capacity(rows),
-            b: List::with_capacity(rows),
+            id: List::with_capacity(rows),
+            offset: List::with_capacity(rows),
             alt: List::with_capacity(rows),
             open: [],
             last_finished: -1,
@@ -579,20 +575,20 @@ impl TreeBuilder {
         };
     }
 
-    fn push_row(&mut self, tag: EventTag, a: i32, b: i32) {
+    fn push_row(&mut self, tag: EventTag, id: i32, offset: i32) {
         if self.tag.len() >= self.tag.capacity() {
             builtin::cold_path();
             self.tag.grow();
-            self.a.grow();
-            self.b.grow();
+            self.id.grow();
+            self.offset.grow();
             self.alt.grow();
-            assert self.a.capacity() == self.tag.capacity()
-                && self.b.capacity() == self.tag.capacity()
+            assert self.id.capacity() == self.tag.capacity()
+                && self.offset.capacity() == self.tag.capacity()
                 && self.alt.capacity() == self.tag.capacity(), "TreeBuilder event columns must grow in lockstep";
         }
         self.tag.push_within_capacity(tag);
-        self.a.push_within_capacity(a);
-        self.b.push_within_capacity(b);
+        self.id.push_within_capacity(id);
+        self.offset.push_within_capacity(offset);
         self.alt.push_within_capacity(-1);
     }
 
@@ -618,8 +614,8 @@ impl TreeBuilder {
 
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
         self.tag.insert(checkpoint, EventTag::Open);
-        self.a.insert(checkpoint, kind as i32);
-        self.b.insert(checkpoint, start);
+        self.id.insert(checkpoint, kind as i32);
+        self.offset.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
         if self.last_finished >= checkpoint {
@@ -632,8 +628,8 @@ impl TreeBuilder {
 
     pub fn truncate(&mut self, checkpoint: i32) {
         self.tag.truncate(checkpoint);
-        self.a.truncate(checkpoint);
-        self.b.truncate(checkpoint);
+        self.id.truncate(checkpoint);
+        self.offset.truncate(checkpoint);
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
@@ -647,8 +643,9 @@ impl TreeBuilder {
     }
 
     pub fn finish_node(&mut self, end: i32) {
-        self.push_row(EventTag::Close, end, 0);
-        self.last_finished = self.open[self.open.len() - 1];
+        let row = self.open[self.open.len() - 1];
+        self.push_row(EventTag::Close, self.id[row], end);
+        self.last_finished = row;
         let _ = self.open.pop();
     }
 
@@ -660,7 +657,7 @@ impl TreeBuilder {
     }
 
     pub fn node_kind(&self, row: i32) -> NodeKind {
-        return self.a[row] as NodeKind;
+        return self.id[row] as NodeKind;
     }
 
     pub fn resume_node(&mut self, row: i32, end: i32) {
@@ -693,7 +690,7 @@ impl TreeBuilder {
 
     pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
-            let kind = self.a[self.open[i]];
+            let kind = self.id[self.open[i]];
             if kind != K_ERROR as i32 {
                 out.push(rule_names[kind]);
             }
@@ -714,7 +711,6 @@ impl TreeBuilder {
 
     pub fn finish(&self) -> CstStore {
         let n = self.tag.len();
-        let mut b = self.b;
         let mut end = List::filled(n, 0);
         let mut flags = List::filled(n, NodeFlags::none());
         let mut next = List::filled(n, 0);
@@ -722,12 +718,10 @@ impl TreeBuilder {
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
                 Open => {
-                    let node_kind = self.a[r];
-                    let start_offset = self.b[r];
-                    if node_kind == K_ERROR as i32 {
+                    if self.id[r] == K_ERROR as i32 {
                         flags[r] = NodeFlags::Error;
                     }
-                    end[r] = start_offset;
+                    end[r] = self.offset[r];
                     stack.push(r);
                 },
                 Miss => {
@@ -741,12 +735,9 @@ impl TreeBuilder {
                 Close => {
                     let oi = stack[stack.len() - 1];
                     let _ = stack.pop();
-                    let close_offset = self.a[r];
-                    let open_kind = self.a[oi];
-                    if close_offset > end[oi] {
-                        end[oi] = close_offset;
+                    if self.offset[r] > end[oi] {
+                        end[oi] = self.offset[r];
                     }
-                    b[r] = open_kind;
                     next[oi] = r + 1;
                     bubble_to_parent(&stack, &mut end, &mut flags, oi);
                 },
@@ -760,7 +751,7 @@ impl TreeBuilder {
             next[oi] = n;
             bubble_to_parent(&stack, &mut end, &mut flags, oi);
         }
-        return CstStore { tag: self.tag, a: self.a, b, alt: self.alt, end, flags, next };
+        return CstStore { tag: self.tag, id: self.id, offset: self.offset, alt: self.alt, end, flags, next };
     }
 
     pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
@@ -789,7 +780,7 @@ impl TreeBuilder {
             if i < self.open.len() - 1 {
                 out.push_str(", ");
             }
-            let kind = self.a[self.open[i]];
+            let kind = self.id[self.open[i]];
             let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
             out.push_str(&name);
         }
@@ -817,7 +808,7 @@ impl TreeBuilder {
         token_names: &List<String>,
     ) -> String {
         let mut out = String::with_capacity(128);
-        let _ = render_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
+        let _ = render_node(&mut out, &self.tag, &self.id, root, toks, rule_names, token_names);
         return out;
     }
 }
@@ -825,13 +816,13 @@ impl TreeBuilder {
 fn render_node(
     out: &mut String,
     tag: &List<EventTag>,
-    a: &List<i32>,
+    id: &List<i32>,
     i: i32,
     toks: &TokenStream,
     rule_names: &List<String>,
     token_names: &List<String>,
 ) -> i32 {
-    let name = if a[i] == K_ERROR as i32 { "<error>" } else { rule_names[a[i]] };
+    let name = if id[i] == K_ERROR as i32 { "<error>" } else { rule_names[id[i]] };
     if i + 1 >= tag.len() || tag[i + 1] matches { Close } {
         out.push_str(&name);
         if i + 1 < tag.len() {
@@ -846,26 +837,26 @@ fn render_node(
         match tag[c] {
             Open => {
                 out.push_str(" ");
-                c = render_node(out, tag, a, c, toks, rule_names, token_names);
+                c = render_node(out, tag, id, c, toks, rule_names, token_names);
             },
             Close => {
                 out.push_str(")");
                 return c + 1;
             },
             Tok => {
-                if !toks.is_empty_text(a[c]) {
+                if !toks.is_empty_text(id[c]) {
                     out.push_str(" ");
-                    toks.push_token_text_escaped(out, a[c]);
+                    toks.push_token_text_escaped(out, id[c]);
                 }
                 c += 1;
             },
             Miss => {
-                out.push_str(` <missing ${token_names[toks.kind_at(a[c])]}>`);
+                out.push_str(` <missing ${token_names[toks.kind_at(id[c])]}>`);
                 c += 1;
             },
             Skip => {
                 out.push_str(" <skip ");
-                toks.push_token_text_escaped(out, a[c]);
+                toks.push_token_text_escaped(out, id[c]);
                 out.push_str(">");
                 c += 1;
             },
@@ -2365,8 +2356,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '!' => {
                 end = try_lit_BANG(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_BANG; }
-                end = try_lit_BANGEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '=' => {
+                        end = try_lit_BANGEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '$' | 'A'..='Z' | '_' | 'a'..='b' | 'd'..='h' | 'j'..='m' | 'o'..='r' | 'u'..='z' => {
                 end = try_ID(&lexer.chars, start);
@@ -2375,16 +2373,32 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '%' => {
                 end = try_lit_PERCENT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PERCENT; }
-                end = try_lit_PERCENTEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_PERCENTEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '=' => {
+                        end = try_lit_PERCENTEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_PERCENTEQ; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '&' => {
                 end = try_lit_AMP(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_AMP; }
-                end = try_lit_AMPAMP(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_AMPAMP; }
-                end = try_lit_AMPEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_AMPEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '&' => {
+                        end = try_lit_AMPAMP(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_AMPAMP; }
+                    },
+                    '=' => {
+                        end = try_lit_AMPEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_AMPEQ; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '(' => {
                 end = try_lit_LPAREN(&lexer.chars, start);
@@ -2397,28 +2411,61 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '*' => {
                 end = try_lit_STAR(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-                end = try_lit_STAREQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_STAREQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '=' => {
+                        end = try_lit_STAREQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_STAREQ; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '+' => {
-                end = try_lit_PLUSPLUS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_PLUSPLUS; }
-                end = try_lit_PLUS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-                end = try_lit_PLUSEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_PLUSEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '+' => {
+                        end = try_lit_PLUSPLUS(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_PLUSPLUS; }
+                        end = try_lit_PLUS(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
+                    },
+                    '=' => {
+                        end = try_lit_PLUS(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
+                        end = try_lit_PLUSEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_PLUSEQ; }
+                    },
+                    _ => {
+                        end = try_lit_PLUS(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
+                    },
+                }
             },
             ',' => {
                 end = try_lit_COMMA(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
             },
             '-' => {
-                end = try_lit_MINUSMINUS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_MINUSMINUS; }
-                end = try_lit_MINUS(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-                end = try_lit_MINUSEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_MINUSEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '-' => {
+                        end = try_lit_MINUSMINUS(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_MINUSMINUS; }
+                        end = try_lit_MINUS(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
+                    },
+                    '=' => {
+                        end = try_lit_MINUS(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
+                        end = try_lit_MINUSEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_MINUSEQ; }
+                    },
+                    _ => {
+                        end = try_lit_MINUS(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
+                    },
+                }
             },
             '.' => {
                 end = try_lit_DOT(&lexer.chars, start);
@@ -2427,8 +2474,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '/' => {
                 end = try_lit_SLASH(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-                end = try_lit_SLASHEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_SLASHEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '=' => {
+                        end = try_lit_SLASHEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_SLASHEQ; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '0'..='9' => {
                 end = try_INT(&lexer.chars, start);
@@ -2439,34 +2493,67 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
             },
             '<' => {
-                end = try_lit_LTLT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_LTLT; }
-                end = try_lit_LTEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
-                end = try_lit_LT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-                end = try_lit_LTLTEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_LTLTEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '<' => {
+                        end = try_lit_LTLT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_LTLT; }
+                        end = try_lit_LT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
+                        end = try_lit_LTLTEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_LTLTEQ; }
+                    },
+                    '=' => {
+                        end = try_lit_LTEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
+                        end = try_lit_LT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
+                    },
+                    _ => {
+                        end = try_lit_LT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
+                    },
+                }
             },
             '=' => {
-                end = try_lit_EQEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '=' => {
+                        end = try_lit_EQEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; }
+                    },
+                    _ => {
+                    },
+                }
                 end = try_lit_EQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
             },
             '>' => {
-                end = try_lit_GTGTGT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGT; }
-                end = try_lit_GTGT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
-                end = try_lit_GTEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
-                end = try_lit_GT(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-                end = try_lit_GTGTEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_GTGTEQ; }
-                end = try_lit_GTGTGTEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGTEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '=' => {
+                        end = try_lit_GTEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
+                        end = try_lit_GT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
+                    },
+                    '>' => {
+                        end = try_lit_GTGTGT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGT; }
+                        end = try_lit_GTGT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
+                        end = try_lit_GT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
+                        end = try_lit_GTGTEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_GTGTEQ; }
+                        end = try_lit_GTGTGTEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGTEQ; }
+                    },
+                    _ => {
+                        end = try_lit_GT(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
+                    },
+                }
             },
             '?' => {
                 end = try_lit_QUESTION(&lexer.chars, start);
@@ -2483,48 +2570,99 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '^' => {
                 end = try_lit_CARET(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_CARET; }
-                end = try_lit_CARETEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_CARETEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '=' => {
+                        end = try_lit_CARETEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_CARETEQ; }
+                    },
+                    _ => {
+                    },
+                }
             },
             'c' => {
-                end = try_lit_class(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_class; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    'l' => {
+                        end = try_lit_class(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_class; }
+                    },
+                    _ => {
+                    },
+                }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             'i' => {
-                end = try_lit_instanceof(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_instanceof; }
-                end = try_lit_int(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_int; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    'n' => {
+                        end = try_lit_instanceof(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_instanceof; }
+                        end = try_lit_int(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_int; }
+                    },
+                    _ => {
+                    },
+                }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             'n' => {
-                end = try_lit_new(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_new; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    'e' => {
+                        end = try_lit_new(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_new; }
+                    },
+                    _ => {
+                    },
+                }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             's' => {
-                end = try_lit_super(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_super; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    'u' => {
+                        end = try_lit_super(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_super; }
+                    },
+                    _ => {
+                    },
+                }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             't' => {
-                end = try_lit_this(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_this; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    'h' => {
+                        end = try_lit_this(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_this; }
+                    },
+                    _ => {
+                    },
+                }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             '|' => {
                 end = try_lit_PIPE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
-                end = try_lit_PIPEPIPE(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; }
-                end = try_lit_PIPEEQ(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_PIPEEQ; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '=' => {
+                        end = try_lit_PIPEEQ(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_PIPEEQ; }
+                    },
+                    '|' => {
+                        end = try_lit_PIPEPIPE(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '~' => {
                 end = try_lit_TILDE(&lexer.chars, start);
@@ -2739,11 +2877,11 @@ impl Parser {
     }
 
     fn rule_string_tree(&self) -> String {
-        return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return self.b.render_open(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
 
     fn rule_tree_at(&self, row: i32) -> String {
-        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
 
     fn rule_stack(&self) -> String {
@@ -2751,7 +2889,7 @@ impl Parser {
     }
 
     fn rule_string_tree_final(&self) -> String {
-        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -2853,45 +2991,45 @@ impl Parser {
         self.b.skip(_sk);
     }
 
-    fn sync_delete(&mut self, expected: &List<i32>, names: &List<i32>) -> bool {
-        if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(expected, self.peek_at(1)) {
+    fn sync_delete(&mut self, sync: &List<i32>, expected: &List<i32>) -> bool {
+        if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(sync, self.peek_at(1)) {
             return false;
         }
-        self.report_extraneous(names, RecoveryAction::Deleted);
+        self.report_extraneous(expected, RecoveryAction::Deleted);
         self.skip_one();
         return true;
     }
 
-    fn sync_enter(&mut self, expected: &List<i32>, names: &List<i32>) {
-        if !self.recovering && !self.sync_delete(expected, names) {
-            self.fail_expecting(names);
+    fn sync_enter(&mut self, sync: &List<i32>, expected: &List<i32>) {
+        if !self.recovering && !self.sync_delete(sync, expected) {
+            self.fail_expecting(expected);
         }
     }
 
-    fn sync_alts(&mut self, expected: &List<i32>, names: &List<i32>) {
-        if !self.recovering && !self.sync_delete(expected, names) {
-            self.no_viable("no viable alternative", self.peek_span(), names);
+    fn sync_alts(&mut self, sync: &List<i32>, expected: &List<i32>) {
+        if !self.recovering && !self.sync_delete(sync, expected) {
+            self.no_viable("no viable alternative", self.peek_span(), expected);
         }
     }
 
-    fn sync_back(&mut self, expected: &List<i32>, names: &List<i32>) {
+    fn sync_back(&mut self, sync: &List<i32>, expected: &List<i32>) {
         if self.recovering || self.kinds[self.pos] == TK_EOF { return; }
         if self.speculating {
-            self.fail_expecting(names);
+            self.fail_expecting(expected);
             return;
         }
-        self.report_extraneous(names, RecoveryAction::SkippedTo);
-        self.skip_until(&self.resync_set(expected));
+        self.report_extraneous(expected, RecoveryAction::SkippedTo);
+        self.skip_until(&self.resync_set(sync));
     }
 
-    fn fail_expecting(&mut self, names: &List<i32>) {
+    fn fail_expecting(&mut self, expected: &List<i32>) {
         let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
-        self.fail_on_token("got", names, code);
+        self.fail_on_token("got", expected, code);
     }
 
-    fn report_extraneous(&mut self, names: &List<i32>, recovery: RecoveryAction) {
+    fn report_extraneous(&mut self, expected: &List<i32>, recovery: RecoveryAction) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
+        self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *expected, self.kinds[self.pos], recovery));
     }
 
     fn report_missing(&mut self, kind: i32) {
@@ -2900,7 +3038,7 @@ impl Parser {
         let at_eof = found == TK_EOF;
         let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
         let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
-        self.report(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
+        self.report(Diagnostic::error(code, `missing ${TOKEN_NAMES[kind]}`, self.tokens.span_at(self.pos), [kind], found, recovery));
     }
 
     fn report_unexpected(&mut self, kind: i32) {
@@ -3766,30 +3904,9 @@ fn _parse_expression_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 1;
     p.atn_ret_pending = 19;
     _parse_e(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-    loop {
-        if p.recovering { break; }
+    while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            sg_4_done: {
-                sg_4: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_4; }
-                    pos += 1;
-                    p.atn.stack.push(28);
-                    pos = scan_e(tokens, pos, &mut p.atn, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
-                    p.atn.stack.pop();
-                    if pos < 0 { break sg_4; }
-                    break sg_4_done;
-                }
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos < 0 { break; }
-        p.expect(TK_LIT_COMMA, &SYNC_0, false);
+        p.take();
         p.site = 2;
         p.atn_ret_pending = 28;
         _parse_e(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
@@ -3933,17 +4050,17 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
                     rep_scan: {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
-                        sg_5_done: {
-                            sg_5: {
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break sg_5; }
+                        sg_4_done: {
+                            sg_4: {
+                                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break sg_4; }
                                 pos += 1;
                                 p.atn.stack.push(81);
                                 pos = scan_e(tokens, pos, &mut p.atn, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
                                 p.atn.stack.pop();
-                                if pos < 0 { break sg_5; }
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_5; }
+                                if pos < 0 { break sg_4; }
+                                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break sg_4; }
                                 pos += 1;
-                                break sg_5_done;
+                                break sg_4_done;
                             }
                             break rep_scan;
                         }
@@ -3965,7 +4082,6 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
         return;
     }
     if _kind_set_2(kind) {
-        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_6, &EXPECTED_6); }
         p.take();
         p.site = 21;
         p.atn_ret_pending = 111;
@@ -3973,7 +4089,6 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
         return;
     }
     if _kind_set_3(kind) {
-        if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_7, &EXPECTED_7); }
         p.take();
         p.site = 22;
         p.atn_ret_pending = 122;
@@ -4029,7 +4144,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
                     p.take();
-                    p.expect(TK_LIT_super, &SYNC_8, false);
+                    p.expect(TK_LIT_super, &SYNC_6, false);
                     p.expect(TK_LIT_LPAREN, &SYNC_4, false);
                     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
                     let mut opt_scan_pos: i32 = -1;
@@ -4059,8 +4174,8 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
                     p.take();
-                    p.expect(TK_LIT_new, &SYNC_9, false);
-                    p.expect(TK_ID, &SYNC_8, false);
+                    p.expect(TK_LIT_new, &SYNC_7, false);
+                    p.expect(TK_ID, &SYNC_6, false);
                     p.expect(TK_LIT_LPAREN, &SYNC_4, false);
                     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
                     let mut opt_scan_pos_2: i32 = -1;
@@ -4351,7 +4466,7 @@ fn _parse_typespec__inner_alt_0(p: &mut Parser) -> () {
 
 fn _parse_typespec__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_5, false);
-    p.expect(TK_LIT_LBRACKET, &SYNC_10, false);
+    p.expect(TK_LIT_LBRACKET, &SYNC_8, false);
     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
     return;
 }
@@ -4363,13 +4478,13 @@ fn _parse_typespec__inner_alt_2(p: &mut Parser) -> () {
 
 fn _parse_typespec__inner_alt_3(p: &mut Parser) -> () {
     p.expect(TK_LIT_int, &SYNC_5, false);
-    p.expect(TK_LIT_LBRACKET, &SYNC_10, false);
+    p.expect(TK_LIT_LBRACKET, &SYNC_8, false);
     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
     return;
 }
 
 fn _parse_typespec__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_11, &EXPECTED_11); }
+    if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_9, &EXPECTED_9); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _atn_alt = atn_predict_once(&ATN_SIM, 18, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0);
@@ -4388,7 +4503,7 @@ fn _parse_typespec__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of typespec matches",
         p.peek_span(),
-        &EXPECTED_11,
+        &EXPECTED_9,
     );
     return;
 }
@@ -4446,22 +4561,18 @@ global CALL_FOLLOW_SETS: List<List<i32>> = [[8], [32], [128], [1024], [], [8256]
 global CALL_FOLLOW: List<i32> = [0, 1, 1, 2, 3, 4, 4, 4, 2, 4, 2, 5, 2, 6, 4, 6, 2, 7, 4, 4, 2, 7, 7, 4, 7, 4, 7, 4, 7, 4, 7, 4, 7, 4, 7, 4, 7, 4, 7, 4, 7, 4, 7, 4, 7, 4, 8, 7, 4, 7];
 global CALL_FOLLOW_ENDS: List<bool> = [false, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, true, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, false, true, false, true];
 
-fn token_display_name(kind: i32) -> String {
-    return token_kind_name(kind);
-}
-
 fn _token_names() -> List<String> {
     let mut v: List<String> = List::with_capacity(54);
     for let mut k = 0; k < 54; k += 1 {
-        v.push(token_display_name(k));
+        v.push(token_kind_name(k));
     }
     return v;
 }
 
-global CTX_TOKEN_NAMES: List<String> = _token_names();
+global TOKEN_NAMES: List<String> = _token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
 }
 
 pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String {
@@ -4475,7 +4586,7 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
     if _kind < 0 { return String::new(); }
     let _sub = result.cst.find_child(0, _kind as NodeKind);
     if _sub >= 0 {
-        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
     return String::new();
 }
@@ -4535,15 +4646,11 @@ global SYNC_4: List<i32> = [2069443, 2097152];
 global EXPECTED_4: List<i32> = [TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_RPAREN, TK_LIT_TILDE, TK_LIT_int, TK_LIT_new, TK_LIT_super, TK_LIT_this];
 global SYNC_5: List<i32> = [8192];
 global EXPECTED_5: List<i32> = [TK_LIT_LBRACKET];
-global SYNC_6: List<i32> = [491520];
-global EXPECTED_6: List<i32> = [TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_PLUS, TK_LIT_PLUSPLUS];
-global SYNC_7: List<i32> = [1572864];
-global EXPECTED_7: List<i32> = [TK_LIT_BANG, TK_LIT_TILDE];
-global SYNC_8: List<i32> = [64];
-global SYNC_9: List<i32> = [1];
-global SYNC_10: List<i32> = [16384];
-global SYNC_11: List<i32> = [1, 2097152];
-global EXPECTED_11: List<i32> = [TK_ID, TK_LIT_int];
+global SYNC_6: List<i32> = [64];
+global SYNC_7: List<i32> = [1];
+global SYNC_8: List<i32> = [16384];
+global SYNC_9: List<i32> = [1, 2097152];
+global EXPECTED_9: List<i32> = [TK_ID, TK_LIT_int];
 
 global FOLLOW_SETS: List<List<i32>> = [[8], [32], [2069315, 2097152], [128], [16384], [0, 256]];
 global FOLLOW_MASK_0: i64 = 1;
