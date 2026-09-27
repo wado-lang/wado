@@ -6,7 +6,7 @@ use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_res
 use { Extent } from "./extent.wado";
 use { Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, Node, element_of, is_binary_elementwise } from "./graph.wado";
+use { Graph, Node, data_type, element_of, is_binary_elementwise } from "./graph.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { expected } from "./safetensors.wado";
 use {
@@ -848,7 +848,7 @@ fn is_alias(node: &Node, checked: &Checked) -> bool {
     let primitives = &checked.primitives;
     return node.op == "Identity"
         || node.op == "Cast"
-            && !node.int_attr("to", 0) matches { Ok(6) }
+            && !node.int_attr("to", 0).map(|to| data_type(to)) matches { Ok(Some(Int32)) }
             && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
 }
 

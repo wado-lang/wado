@@ -26,6 +26,7 @@ use {
     Node,
     Rank,
     ValueInfo,
+    data_type,
     dims_of,
     element_of,
     is_binary_elementwise,
@@ -444,11 +445,12 @@ fn is_layout(op: &String) -> bool {
 fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Result<Option<String>, InferError> {
     let op = node.op;
     if op == "Cast" {
-        return match int_attr(node, "to", 0)? {
-            1 => Result::Ok(Option::Some(KERNEL_ELEMENT)),
-            7 => Result::Ok(Option::Some("i64")),
-            9 => Result::Ok(Option::Some("bool")),
-            to => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
+        let to = int_attr(node, "to", 0)?;
+        return match data_type(to) {
+            Some(Float) => Result::Ok(Option::Some(KERNEL_ELEMENT)),
+            Some(Int64) => Result::Ok(Option::Some("i64")),
+            Some(Bool) => Result::Ok(Option::Some("bool")),
+            _ => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
         };
     }
     if op == "Range" {

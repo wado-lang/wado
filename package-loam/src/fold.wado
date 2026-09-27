@@ -3,7 +3,7 @@
 
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
-use { Elements, Known, Node } from "./graph.wado";
+use { Elements, Known, Node, data_type } from "./graph.wado";
 use { Poly } from "./poly.wado";
 use { broadcast_extents, checked_element_count, element_count, stretched_strides } from "./runtime/tensor.wado";
 use { Shape } from "./shape.wado";
@@ -401,27 +401,28 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
 /// integer stays one, since an extent fits either width, and the run converts
 /// it to anything else.
 fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
+    let target = data_type(to);
     if x.elements matches { Symbolic(_) } {
-        return Result::Ok(if to == 6 || to == 7 { Option::Some(*x) } else { null });
+        return Result::Ok(if target matches { Some(Int32 | Int64) } { Option::Some(*x) } else { null });
     }
     let count = x.len();
-    let elements = match to {
-        1 => {
+    let elements = match target {
+        Some(Float) => {
             let mut out = List::<f32>::with_capacity(count);
             for let i of 0..<count {
                 out.push(as_float(&x.elements, i));
             }
             Elements::Floats(out);
         },
-        6 | 7 => {
+        Some(Int32 | Int64) => {
             let mut out = List::<i64>::with_capacity(count);
             for let i of 0..<count {
                 let v = as_int(&x.elements, i);
-                out.push(if to == 6 { v as i32 as i64 } else { v });
+                out.push(if target matches { Some(Int32) } { v as i32 as i64 } else { v });
             }
             Elements::Ints(out);
         },
-        9 => {
+        Some(Bool) => {
             let mut out = List::<bool>::with_capacity(count);
             for let i of 0..<count {
                 out.push(as_float(&x.elements, i) != 0.0);

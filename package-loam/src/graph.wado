@@ -2,6 +2,11 @@
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
 use { TreeMap } from "core:collections";
+use grog from "lib:grog";
+use onnx from "./onnx.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
 use { Poly } from "./poly.wado";
 use { checked_element_count } from "./runtime/tensor.wado";
 
@@ -75,6 +80,15 @@ pub struct Element {
 /// The one element type the kernels have arithmetic for. A layout kernel moves
 /// an `i64` or `bool` tensor, and every other kernel reads and produces this.
 pub global KERNEL_ELEMENT: String = "f32";
+
+/// The `TensorProto.DataType` a number names, as `Cast`'s `to` and a tensor's
+/// `data_type` carry one. `None` for a number the enum does not declare.
+pub fn data_type(number: i64) -> Option<onnx::TensorProtoDataType> {
+    if !(0 <= number <= i32::MAX as i64) {
+        return null;
+    }
+    return onnx::TensorProtoDataType::from_number(number as i32);
+}
 
 /// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not
 /// read. Half precision is held and widened, never computed.
