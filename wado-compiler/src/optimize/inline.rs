@@ -1681,10 +1681,8 @@ fn splice_growth(size: usize, sites: usize) -> usize {
 #[derive(Clone, Copy)]
 struct Candidates<'a> {
     bodies: &'a IndexMap<FuncId, NirFunction>,
-    /// The candidates admitted at [`Site::Loop`] sites alone.
-    loop_only: &'a IndexSet<FuncId>,
-    /// The candidates admitted at the one site the round began with.
-    sole: &'a IndexSet<FuncId>,
+    /// Which sites splice each candidate.
+    reach: &'a IndexMap<FuncId, Reach>,
     /// Per candidate, the call sites a splice of it brings, its own splices'
     /// included: what a loop holding a site of it holds once the round ends.
     carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
@@ -1747,8 +1745,7 @@ pub fn inline_functions(
     // `(module, name)` lookup, no entry-point fallback, no collision between two
     // functions that happen to share a name.
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
-    let mut loop_only: IndexSet<FuncId> = IndexSet::default();
-    let mut sole: IndexSet<FuncId> = IndexSet::default();
+    let mut reach: IndexMap<FuncId, Reach> = IndexMap::default();
     let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
 
     // Also collect function_strings for each candidate (to update caller's
@@ -1873,15 +1870,7 @@ pub fn inline_functions(
         }
         if verdict.reach != Reach::Nowhere {
             let id = func.id.expect("func_id assigned at lower");
-            match verdict.reach {
-                Reach::Loops => {
-                    loop_only.insert(id);
-                }
-                Reach::Sole => {
-                    sole.insert(id);
-                }
-                Reach::Everywhere | Reach::Nowhere => {}
-            }
+            reach.insert(id, verdict.reach);
             let string_key = (func.module_source.clone(), func.name.clone());
             // Get the strings used by this function
             if let Some(strings) = project.function_strings.get(&string_key) {
@@ -1983,8 +1972,7 @@ pub fn inline_functions(
     let carried = carried_calls(&inline_candidates);
     let candidates = Candidates {
         bodies: &inline_candidates,
-        loop_only: &loop_only,
-        sole: &sole,
+        reach: &reach,
         carried: &carried,
         net_price: &net_price,
         // A threshold's worth of threshold-sized callees: a call tree that
@@ -2014,7 +2002,7 @@ pub fn inline_functions(
                 address_taken: std::mem::take(&mut func.address_taken_locals),
                 stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
                 loop_calls: Vec::new(),
-                original_exprs: func.body.as_ref().map_or(0, |b| b.exprs.len()),
+                original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
             };
             let mut labels = InlineLabels::default();
             // Calls in this body that mutate no caller-reachable state, taken
@@ -2676,13 +2664,15 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-    let admitted = match site {
-        Site::Cold => candidate.inline_hint == InlineHint::Always,
-        Site::Plain | Site::Loop if candidates.sole.contains(&func_id) => {
-            frame.original_site(call_id)
+    let admitted = match (site, candidates.reach[&func_id]) {
+        (Site::Cold, _) => candidate.inline_hint == InlineHint::Always,
+        (Site::Plain | Site::Loop, Reach::Everywhere) => true,
+        (Site::Plain | Site::Loop, Reach::Sole) => frame.original_site(call_id),
+        (Site::Loop, Reach::Loops) => frame.sole_loop_site(func_id),
+        (Site::Plain, Reach::Loops) => false,
+        (Site::Plain | Site::Loop, Reach::Nowhere) => {
+            unreachable!("a candidate is reached somewhere")
         }
-        Site::Plain => !candidates.loop_only.contains(&func_id),
-        Site::Loop => !candidates.loop_only.contains(&func_id) || frame.sole_loop_site(func_id),
     };
     if !admitted {
         return None;
