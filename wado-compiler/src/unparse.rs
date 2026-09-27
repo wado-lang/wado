@@ -2067,21 +2067,9 @@ impl<'a> Unparser<'a> {
             self.output.push(' ');
         }
 
-        // `matches` and logical `!` bind looser than the value-producing unary
-        // operators, so a value-unary parent must parenthesize them. `!` itself
-        // binds looser than `matches` and is right-associative, so `!x matches
-        // { P }` and `!!x` need no parens.
-        let needs_parens = match &u.expr {
-            Expr::Binary(_)
-            | Expr::Assign(_)
-            | Expr::CompoundAssign(_)
-            | Expr::ComparisonChain(_)
-            | Expr::Cast(_) => true,
-            Expr::Matches(_) => u.op != UnaryOp::Not,
-            Expr::Unary(inner) => inner.op == UnaryOp::Not && u.op != UnaryOp::Not,
-            _ => false,
-        };
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&u.expr));
+        self.with_parens_if(unary_operand_needs_parens(u.op, &u.expr), |s| {
+            s.unparse_expr(&u.expr);
+        });
     }
 
     fn unparse_assign(&mut self, a: &AssignExpr) {
@@ -3273,6 +3261,49 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
         | Expr::TupleLiteral(_)
         | Expr::TupleComprehension(_)
         | Expr::LabeledBlock(_)
+        | Expr::Spread(..)
+        | Expr::Resume(_)
+        | Expr::Error(_) => false,
+    }
+}
+
+/// Whether the operand of the prefix operator `op` needs parens. Exhaustive, so
+/// a new [`Expr`] is decided here rather than defaulted: a default once printed
+/// `&(0..<5)` as `&0..<5`, a range of `&0`.
+fn unary_operand_needs_parens(op: UnaryOp, expr: &Expr) -> bool {
+    match expr {
+        // Every binary operator, `as`, and `..<` bind looser than a prefix one.
+        Expr::Binary(_)
+        | Expr::Assign(_)
+        | Expr::CompoundAssign(_)
+        | Expr::ComparisonChain(_)
+        | Expr::Cast(_)
+        | Expr::Range(_) => true,
+        // `matches` and logical `!` bind looser than the value-producing prefix
+        // operators. `!` itself binds looser than `matches` and is
+        // right-associative, so `!x matches { P }` and `!!x` need no parens.
+        Expr::Matches(_) => op != UnaryOp::Not,
+        Expr::Unary(inner) => inner.op == UnaryOp::Not && op != UnaryOp::Not,
+        // Each opens with a keyword, delimiter, or operator, or is a postfix form.
+        Expr::Ident(_)
+        | Expr::Literal(_)
+        | Expr::Call(_)
+        | Expr::MethodCall(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::FieldAccess(_)
+        | Expr::Index(_)
+        | Expr::TryOp(_)
+        | Expr::Block(_)
+        | Expr::If(_)
+        | Expr::Match(_)
+        | Expr::Closure(_)
+        | Expr::TemplateString(_)
+        | Expr::TaggedTemplate(_)
+        | Expr::StructLiteral(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::LabeledBlock(_)
+        | Expr::WithHandler(_)
         | Expr::Spread(..)
         | Expr::Resume(_)
         | Expr::Error(_) => false,
