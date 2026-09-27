@@ -9,6 +9,7 @@
 use { TreeMap } from "core:collections";
 use { eval } from "core:eval";
 use { emit } from "../src/emit.wado";
+use { Graph } from "../src/graph.wado";
 use { infer } from "../src/infer.wado";
 use { read } from "../src/onnx_proto.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
@@ -29,6 +30,16 @@ global INPUTS: TreeMap<String, String> = {
 /// how the run stopped.
 fn loam(model: ByteList, output_axes: List<String>, lengths: List<i32>) -> String {
     let graph = read(model).unwrap();
+    return match built(&graph, output_axes) {
+        Ok(source) => run(source, &graph, lengths),
+        Err(reason) => `refused: ${reason}`,
+    };
+}
+
+/// The module the generator writes for `graph`, whose one output's axes are
+/// `output_axes`.
+fn built(graph: &Graph, output_axes: List<String>) -> Result<String, String> {
+    assert graph.outputs.len() == 1;
     let output = graph.outputs[0].name;
     let schema = Schema {
         layout: [
@@ -47,18 +58,13 @@ fn loam(model: ByteList, output_axes: List<String>, lengths: List<i32>) -> Strin
             LayoutRule { pattern: output, axes: output_axes },
         ],
     };
-    let checked = match infer(&graph, &schema) {
-        Ok(c) => c,
-        Err(e) => {
-            return `refused: ${e}`;
-        },
-    };
-    let source = match emit(&graph, &checked) {
-        Ok(s) => s,
-        Err(e) => {
-            return `refused: ${e}`;
-        },
-    };
+    let checked = infer(graph, &schema).map_err(|e| `${e}`)?;
+    return emit(graph, &checked).map_err(|e| `${e}`);
+}
+
+/// `source` with a `run` that calls its `forward` at each of `lengths` and
+/// prints what it returns, run under `eval`.
+fn run(source: String, graph: &Graph, lengths: List<i32>) -> String {
     let mut args = "";
     for let vi of graph.inputs {
         args.push_str(`&${INPUTS[vi.name]}, `);
