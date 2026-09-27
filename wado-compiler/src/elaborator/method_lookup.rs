@@ -929,6 +929,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
     }
 
+    /// Whether `method_name` on `receiver`, a generic instance, is declared
+    /// only by inherent impls reaching every instance of its head with no
+    /// bound: the method is then the same whatever the type arguments, so
+    /// what they are may be settled after the call.
+    pub(super) fn method_ignores_type_args(&self, receiver: TypeId, method_name: &str) -> bool {
+        let key = {
+            let tt = self.tysys.type_table.borrow();
+            let ResolvedType::GenericInstance { def, .. } = tt.get(receiver) else {
+                return false;
+            };
+            if tt.is_tuple_def(*def) {
+                return false;
+            }
+            self.impl_target_of(receiver, &DeclName::new(tt.def_name(*def)))
+        };
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let tt = self.tysys.type_table.borrow();
+        let mut declaring = trait_env
+            .inherent_impl_keys(&key)
+            .into_iter()
+            .filter(|&def| {
+                impl_header(&trait_env, &ImplBlockRef(def))
+                    .methods
+                    .iter()
+                    .any(|m| m.name == method_name)
+            })
+            .peekable();
+        declaring.peek().is_some()
+            && declaring.all(|def| {
+                tt.impl_covers_every_instance(def)
+                    && impl_header(&trait_env, &ImplBlockRef(def))
+                        .type_params
+                        .iter()
+                        .all(|param| param.bounds.is_empty())
+            })
+    }
+
     /// [`Self::fill_defaulted_method_type_args`] for a static's own slots,
     /// reading the trait and the declaring module off its signature.
     pub(super) fn fill_static_default_type_args(

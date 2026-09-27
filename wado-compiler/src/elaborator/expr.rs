@@ -1592,9 +1592,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        self.resolve_field_projection(&field_access.expr, ctx, expected_type, |this, expr_type| {
-            this.resolve_field_of(field_access, expr_type)
-        })
+        // A field is looked up on a type whose head is known (`wrap(1).v.x`).
+        self.resolve_projection(
+            &field_access.expr,
+            ctx,
+            expected_type,
+            |this, receiver| !this.tysys.type_table.borrow().is_infer_var(receiver),
+            |this, receiver, _| this.resolve_field_of(field_access, receiver),
+        )
     }
 
     /// Resolve the field `field_access` names on a receiver of `expr_type`.

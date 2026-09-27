@@ -219,26 +219,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return result;
         }
 
-        let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
-
-        // A `_` resolves to UNKNOWN, so these are their own hole mask.
-        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
-
-        let outcome = self.resolve_method_call_with(
-            MethodCallInput {
-                receiver,
-                receiver_ast: Some(&method_call.receiver),
-                method_name: &method_call.method,
-                method_id: Some(method_call.method_id),
-                call_id: Some(method_call.id),
-                defaults_site: None,
-                type_args,
-                args: &method_call.args,
-                expected_type,
-                span: method_call.span,
-                required_trait: None,
-            },
+        let mut dispatch = None;
+        // Which impl answers can turn on the receiver's type arguments
+        // (`impl Tag for Box<i32>`), so the receiver's literals wait only where
+        // it cannot.
+        let type_id = self.resolve_projection(
+            &method_call.receiver,
             ctx,
+            expected_type,
+            |this, receiver| this.method_ignores_type_args(receiver, &method_call.method),
+            |this, receiver, ctx| {
+                // A `_` resolves to UNKNOWN, so these are their own hole mask.
+                let type_args: Vec<TypeId> = this.resolve_turbofish_args(&method_call.type_args);
+                let outcome = this.resolve_method_call_with(
+                    MethodCallInput {
+                        receiver,
+                        receiver_ast: Some(&method_call.receiver),
+                        method_name: &method_call.method,
+                        method_id: Some(method_call.method_id),
+                        call_id: Some(method_call.id),
+                        defaults_site: None,
+                        type_args,
+                        args: &method_call.args,
+                        expected_type,
+                        span: method_call.span,
+                        required_trait: None,
+                    },
+                    ctx,
+                );
+                dispatch = outcome.dispatch;
+                outcome.type_id
+            },
         );
 
         // A `&mut self` method mutates the element `xs[i]` names, so the
@@ -248,7 +259,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which is the borrow `&mut xs[i]` takes, and leave the write-back pass
         // to write it back or refuse it.
         if let ast::Expr::Index(index_expr) = &method_call.receiver
-            && outcome.dispatch.as_ref().is_some_and(|dispatch| {
+            && dispatch.is_some_and(|dispatch| {
                 dispatch.self_kind == ast::SelfKind::MutRef && !dispatch.is_ref_impl
             })
             && self.index_element_denies_ref_mut(index_expr, ctx)
@@ -256,7 +267,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.resolve_index_access(index_expr, ctx, IndexAccess::Mutable);
         }
 
-        outcome.type_id
+        type_id
     }
 
     /// Dispatch a method call from an already-resolved receiver TIR. See

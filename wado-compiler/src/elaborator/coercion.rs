@@ -190,12 +190,12 @@ pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
 /// A nested call's literal waits in the enclosing collection instead where its
 /// value reaches the enclosing call: where its variable is chained to one of
 /// these (`unbox(wrap(1), x)`), is named by the answer of one
-/// (`same(wrap(1), x)`), or a field of the nested call's result is read
-/// (`same(wrap(1).v, x)`, see [`Elaborator::resolve_field_projection`]).
+/// (`same(wrap(1), x)`), or a field or method of the nested call's result is
+/// read (`same(wrap(1).v, x)`, see [`Elaborator::resolve_projection`]).
 pub(super) struct PendingLiterals {
     own_vars: Vec<TypeId>,
     literals: Vec<(Expr, TypeId)>,
-    /// Collected for a field access whose receiver is resolving: it takes over
+    /// Collected for a projection whose receiver is resolving: it takes over
     /// every variable the receiver call leaves open.
     awaits_receiver: bool,
 }
@@ -209,7 +209,7 @@ impl PendingLiterals {
         }
     }
 
-    fn of_field_access() -> Self {
+    fn of_projection() -> Self {
         Self {
             own_vars: Vec::new(),
             literals: Vec::new(),
@@ -701,47 +701,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Resolve a field access's `receiver`, then `read_field` from its type.
-    /// Where the receiver is a generic call or constructor, or a field of one,
-    /// the literals it leaves open wait for the field's type to meet
-    /// `expected`: in `same(wrap(1).v, x)` the literal takes `x`'s type.
-    ///
-    /// A method's receiver never waits: which impl a method comes from can
-    /// turn on the receiver's type arguments (`impl Tag for Box<i32>`).
-    pub(super) fn resolve_field_projection(
+    /// Resolve the `receiver` of a field access or method call, then `project`
+    /// from its type. Where the receiver is a generic call or constructor, or
+    /// a projection of one, the literals it leaves open wait for the
+    /// projection's type to meet `expected`: in `same(wrap(1).v, x)` the
+    /// literal takes `x`'s type. They are answered first instead where
+    /// `waits` says the projection cannot be read before the receiver's type
+    /// is settled.
+    pub(super) fn resolve_projection(
         &mut self,
         receiver: &Expr,
         ctx: &mut FunctionContext,
         expected: Option<TypeId>,
-        read_field: impl FnOnce(&mut Self, TypeId) -> TypeId,
+        waits: impl FnOnce(&Self, TypeId) -> bool,
+        project: impl FnOnce(&mut Self, TypeId, &mut FunctionContext) -> TypeId,
     ) -> TypeId {
         if !matches!(
             receiver,
-            Expr::Call(_) | Expr::FieldAccess(_) | Expr::StructLiteral(_)
+            Expr::Call(_) | Expr::FieldAccess(_) | Expr::MethodCall(_) | Expr::StructLiteral(_)
         ) {
             let receiver_type = self.resolve_expr(receiver, ctx, None);
-            return read_field(self, receiver_type);
+            return project(self, receiver_type, ctx);
         }
-        let collection = PendingLiterals::of_field_access();
-        let (field_type, pending) = self.collecting_pending_literals(collection, |this| {
-            let receiver_type = this.resolve_receiver(receiver, ctx);
-            this.settle_bare_receiver(receiver_type, ctx);
-            let receiver_type = this.apply_infer_holes(receiver_type);
+        let collection = PendingLiterals::of_projection();
+        let (projected, pending) = self.collecting_pending_literals(collection, |this| {
+            let mut receiver_type = this.resolve_receiver(receiver, ctx);
+            receiver_type = this.apply_infer_holes(receiver_type);
+            if !waits(this, receiver_type) {
+                this.settle_receiver(ctx);
+                receiver_type = this.apply_infer_holes(receiver_type);
+            }
             this.annotate_ctx
                 .pending_literals
                 .last_mut()
-                .expect("the field access's collection is pushed")
+                .expect("the projection's collection is pushed")
                 .awaits_receiver = false;
-            read_field(this, receiver_type)
+            project(this, receiver_type, ctx)
         });
         let ret = expected.map(|expected| ExpectedReturn {
-            declared: field_type,
+            declared: projected,
             expected,
         });
         let taken_over = pending.own_vars.clone();
         self.chain_expected_return(&taken_over, ret);
         self.settle_pending_literals(pending, &[], ret, ctx);
-        self.apply_infer_holes(field_type)
+        self.apply_infer_holes(projected)
     }
 
     /// Resolve a field access's receiver. A generic struct literal naming none
@@ -766,18 +770,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type[0]
     }
 
-    /// Answer now the literals a receiver of bare variable type holds (`wrap(1)
-    /// .v.x`): a field is looked up on a type whose head is known.
-    fn settle_bare_receiver(&mut self, receiver_type: TypeId, ctx: &mut FunctionContext) {
-        let receiver_type = self.apply_infer_holes(receiver_type);
-        if !self.tysys.type_table.borrow().is_infer_var(receiver_type) {
-            return;
-        }
+    /// Answer now the literals the projection's receiver holds.
+    fn settle_receiver(&mut self, ctx: &mut FunctionContext) {
         let collection = self
             .annotate_ctx
             .pending_literals
             .last_mut()
-            .expect("the field access's collection is pushed");
+            .expect("the projection's collection is pushed");
         let pending = std::mem::replace(collection, PendingLiterals::of_call(&[]));
         self.settle_pending_literals(pending, &[], None, ctx);
     }
