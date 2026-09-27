@@ -625,12 +625,8 @@ By its [precedence](#precedence), `-x as u32` is `(-x) as u32`, and
 let i = 42;
 let f = i as f64;           // i32 to f64
 let truncated = 3.14 as i32; // f64 to i32 (truncates to 3)
-<<<<<<< HEAD
-assert f == 42.0 && truncated == 3;
-||||||| 4cf9b655e
-=======
 let clamped = 300.0 as u8;   // saturates to 255
->>>>>>> origin/main
+assert f == 42.0 && truncated == 3 && clamped == 255;
 
 // Chained casts
 let x = 10 as f64 as i32 as f64;

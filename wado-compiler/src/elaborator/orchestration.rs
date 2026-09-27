@@ -856,10 +856,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             registry
         };
 
-        for redeclaration in resolutions.redeclarations() {
-            let _ = logger.error_in(&redeclaration.module, redeclaration);
-        }
-
         for (module_source, violation) in orphan_violations {
             let _ = logger.error_in(&module_source, violation);
         }
