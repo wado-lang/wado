@@ -1,0 +1,9 @@
+// A field read on a type that has no fields names the type and the field,
+// rather than leaving the result untyped.
+export fn run() {
+    let n: i32 = 5;
+    let x = n.value;
+}
+
+__DATA__
+{"compile_error": ":5:13: analysis error: type 'i32' has no field 'value'", "compile_error_codes": ["STRUCT_FIELD_MISMATCH"]}

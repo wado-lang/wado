@@ -964,6 +964,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A field read on a type that declares no fields (`n.value`, `n: i32`)
+    FieldOfFieldless {
+        type_name: String,
+        field_name: String,
+        span: Span,
+    },
+
     /// Duplicate field name in struct literal
     DuplicateField {
         name: String,
@@ -2210,6 +2217,15 @@ impl TypeError {
             } => (
                 Code::StructFieldMismatch,
                 format!("struct '{struct_name}' has no field '{field_name}'"),
+                *span,
+            ),
+            TypeError::FieldOfFieldless {
+                type_name,
+                field_name,
+                span,
+            } => (
+                Code::StructFieldMismatch,
+                format!("type '{type_name}' has no field '{field_name}'"),
                 *span,
             ),
             TypeError::DuplicateField { name, span } => (

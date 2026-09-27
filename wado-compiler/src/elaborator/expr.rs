@@ -1719,8 +1719,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return self.field_not_found(&name, field_name, span);
                 }
             }
+            // An unsolved variable is reported where it stays unsolved, and the
+            // rest say nothing: each is either reported already or accepted
+            // anywhere.
+            ResolvedType::InferVar(_) => return (0, TypeTable::UNKNOWN),
+            _ if matches!(
+                struct_type,
+                TypeTable::UNKNOWN | TypeTable::ERROR | TypeTable::NEVER
+            ) =>
+            {
+                return (0, TypeTable::UNKNOWN);
+            }
             _ => {}
         }
+        let type_name = self.tysys.type_table.borrow().type_name(struct_type);
+        let _ = self.emit(TypeError::FieldOfFieldless {
+            type_name,
+            field_name: field_name.to_string(),
+            span,
+        });
         (0, TypeTable::UNKNOWN)
     }
 
