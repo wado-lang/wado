@@ -169,15 +169,6 @@ fn expects_rejection(data: &String) -> Result<bool, String> {
     };
 }
 
-/// Whether `path` is an e2e fixture the suite runs, rather than a helper
-/// module beside them.
-fn is_run_fixture(path: &String) -> bool {
-    let Some(rest) = path.strip_prefix(`${FIXTURE_DIR}/`) else {
-        return false;
-    };
-    return rest.ends_with(".wado") && !rest.contains("/");
-}
-
 /// Why `block`, which names `reference`, breaks a rule, or `null` if it keeps
 /// them all. `files` holds each file that could be read, by its path.
 fn check_block(block: &FencedCode, reference: &Reference, files: &TreeMap<String, String>) -> Option<String> {
@@ -186,9 +177,6 @@ fn check_block(block: &FencedCode, reference: &Reference, files: &TreeMap<String
         return Option::Some(`no file \`${path}\``);
     };
     let Fixture(name) = reference else {
-        if is_run_fixture(&path) {
-            return Option::Some(`\`${path}\` is an e2e fixture: name it as a \`fixture\``);
-        }
         if !quotes(text, &block.code) {
             return Option::Some(`\`${path}\` does not contain the block`);
         }
@@ -460,13 +448,4 @@ test "a source is quoted whole, with no assert asked of it" {
     assert verdict_of(markdown, &files) == null;
     assert verdict_of(markdown, &file_map("lib/a.wado", "fn f() {}\n")) matches { Some(Broken(_)) };
     assert verdict_of(markdown, &TreeMap::new()) matches { Some(Broken(_)) };
-}
-
-test "an e2e fixture is named as a fixture, not a source" {
-    let path = fs::join(&FIXTURE_DIR, "a.wado");
-    let markdown = `<!-- {"source": "${path}"} -->\n\`\`\`wado\nfn f() {}\n\`\`\`\n`;
-    assert verdict_of(markdown, &file_map(path, "fn f() {}\n")) matches { Some(Broken(_)) };
-    let helper = fs::join(&FIXTURE_DIR, "sub/a.wado");
-    let quoting_helper = `<!-- {"source": "${helper}"} -->\n\`\`\`wado\nfn f() {}\n\`\`\`\n`;
-    assert verdict_of(quoting_helper, &file_map(helper, "fn f() {}\n")) == null;
 }

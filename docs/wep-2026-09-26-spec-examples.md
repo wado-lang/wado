@@ -78,11 +78,9 @@ quotes each file. The block is matched against the code before the fixture's
 `__DATA__`.
 
 A `source` path is relative to the repository root and names any file: a
-standard library module, a package's test, a helper module whose own
-`__DATA__` is the example. The block is matched against the whole file, and
-the `assert` rule does not apply, since what runs the file is not the e2e
-suite. A top-level fixture is named as a `fixture`, so the `assert` rule
-cannot be stepped around.
+standard library module, a unit test's input, a helper module whose own
+`__DATA__` is the example, a fixture whose example has nothing to assert. The
+block is matched against the whole file, and the `assert` rule does not apply.
 
 ### Why a quotation, and not a generated test
 
@@ -181,6 +179,7 @@ The last two are what this WEP is for. The migration will find them.
 - The match proves the quoted text compiles in its fixture, not that the
   fixture exercises it. A block quoted from a function no test calls passes.
 - A `source` quotation is held to its file alone. Nothing asks that the file is
-  compiled or run.
+  compiled or run, and naming a fixture as a `source` steps around the `assert`
+  rule.
 - The cheatsheet repeats the specification's examples in a shorter form, and
   nothing holds it to this rule.
