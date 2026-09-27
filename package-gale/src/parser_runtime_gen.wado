@@ -473,11 +473,9 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // rule resynchronises on: a call stamps `site`, its entry pushes it.
     s.add_field("site", "i32");
     s.add_field("sites", "List<i32>");
-    // What the latest real failure expected, and the failures recovered from
-    // since a token last matched, each a rule and that expected set; the pair
-    // stands in for ANTLR4's ATN state. The same failure again where recovery
-    // last left off skips a token instead of letting a loop re-enter it there
-    // ("Building: TreeBuilder + recovery" in `resilient-parser.md`).
+    // What the latest failure expected, where recovery last left off, and the
+    // failures recovered from since a token matched: the progress guard of
+    // "Building: TreeBuilder + recovery" in `resilient-parser.md`.
     s.add_field("failed_expected", "List<i32>");
     s.add_field("recovery_pos", "i32");
     s.add_field("recovered_failures", "List<[NodeKind, List<i32>]>");

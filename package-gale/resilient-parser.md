@@ -99,10 +99,11 @@ That set can hold the token the rule failed on. A `statement*` whose
 failure again at the position where recovery last left off skips that token
 before it resyncs, and recovery always makes progress. A failure is the same
 when it is in the same rule and expected the same tokens, which stands in for
-ANTLR4's ATN state. The recursive frames of one rule count as one: in
-`e : '(' e ')' | 'x'`, two frames that both miss the `)` at one token skip it,
-while a frame that failed on its first token does not make the frame around it
-skip. The failures compared are those since a token last matched.
+ANTLR4's ATN state. Which frame failed does not enter into it. In
+`e : '(' e ')' | 'x'`, two frames that both miss the `)` at one token skip it.
+A frame that failed on its first token does not make the frame around it skip,
+because that frame fails on the `)`. The failures compared are those since a
+token last matched.
 
 After an error, neither a failed rule nor a sync reports again until a token
 matches, so the cascade of one mistake is one diagnostic.
