@@ -12,7 +12,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
-use super::coercion::{ExpectedReturn, answers_last};
+use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
@@ -487,7 +487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<TypeId> {
         let own_vars = inst.map_or(&[][..], |inst| &inst.vars);
         self.chain_expected_return(own_vars, ret);
-        let (mut resolved, pending) = self.collecting_pending_literals(own_vars, |this| {
+        let collection = PendingLiterals::of_call(own_vars);
+        let (mut resolved, pending) = self.collecting_pending_literals(collection, |this| {
             let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
             let mut deferred: Vec<usize> = Vec::new();
             for (i, arg) in args.iter().enumerate() {

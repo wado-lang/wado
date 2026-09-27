@@ -182,7 +182,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Settle the walk's variables back onto their slots, substituting through
     /// `args`. [`Self::solve_infer_var`] keeps the first answer, so a slot the
-    /// arguments pinned stays pinned and one they left open goes back rigid.
+    /// arguments pinned stays pinned and one they left open goes back rigid,
+    /// unless an enclosing collection took it over to answer later.
     pub(super) fn settle_onto_slots(
         &mut self,
         inst: &Instantiated,
@@ -190,7 +191,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &mut [TypeId],
     ) {
         for (&var, &slot) in inst.vars.iter().zip(slots.iter()) {
-            self.solve_infer_var(var, slot);
+            if !self.awaits_pending_call(var) {
+                self.solve_infer_var(var, slot);
+            }
         }
         for arg in args {
             *arg = self.apply_infer_holes(*arg);

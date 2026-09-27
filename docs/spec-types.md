@@ -907,7 +907,14 @@ argument, a nested generic call or constructor included. It takes the type the
 call's other arguments settle, so with `fn pick<T>(b: Box<T>, fallback: T)` and
 `x: u64`, `pick(Box { value: 1 }, x)` is `pick::<u64>`, as it would be with
 `&Box { value: 1 }`, with `wrap(1)` for a generic `wrap` returning `Box<U>`, or
-with the arguments swapped. Where no argument settles a parameter, the type
+with the arguments swapped. Arithmetic on literals answers as a literal does
+(`Box { value: 1 << 32 }`), and so does a literal behind a field of a generic
+call's or constructor's result: in `pick(Box { value: x }, wrap(1).value)` the
+`1` is a `u64`, as it is with `Box { value: 1 }.value` there. A method's receiver
+does not wait, since which impl the method comes from can turn on the receiver's
+type arguments: `wrap(1).get()` reads a `Box<i32>`. Nor does a struct literal
+that fills a field from its default or from `..base`, both read in settled
+types. Where no argument settles a parameter, the type
 expected of the call does: `let y: u64 = pick(Box { value: 1 }, 2)` is
 `pick::<u64>`. Only a parameter neither settles takes a default from its
 literals: `f64` if one of them is a float, else `i32`, else `u8` when every one

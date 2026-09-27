@@ -25,7 +25,7 @@ use super::call::{CaseSite, DefaultTypeBinding, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
-use super::instantiate::Instantiation;
+use super::instantiate::{Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
@@ -53,6 +53,7 @@ use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::primitive::PrimitiveType;
 use crate::tir::{AnonStructId, StructDef};
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 /// Outcome of trying to derive type arguments for a generic function
@@ -642,7 +643,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::StaticMethodCall(static_call) => {
                 self.resolve_static_method_call(static_call, ctx, expected_type)
             }
-            Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
+            Expr::FieldAccess(field_access) => {
+                self.resolve_field_access(field_access, ctx, expected_type)
+            }
             Expr::Index(index) => {
                 let access = if ctx.mut_place_subscripts.contains(&index.id) {
                     IndexAccess::Mutable
@@ -1583,14 +1586,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         FuncRefInference::Ok(inferred)
     }
 
-    /// Resolve a binary expression
-    pub(super) fn resolve_field_access(
+    fn resolve_field_access(
         &mut self,
         field_access: &ast::FieldAccessExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
-        let expr_type = self.resolve_expr(&field_access.expr, ctx, None);
+        self.resolve_field_projection(&field_access.expr, ctx, expected_type, |this, expr_type| {
+            this.resolve_field_of(field_access, expr_type)
+        })
+    }
 
+    /// Resolve the field `field_access` names on a receiver of `expr_type`.
+    fn resolve_field_of(&mut self, field_access: &ast::FieldAccessExpr, expr_type: TypeId) -> TypeId {
         // Record use→def reference for the field name, pointing at the field
         // definition's AstId in the struct declaration.
         self.record_field_reference(expr_type, &field_access.field, field_access.field_id);
@@ -2631,14 +2639,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if b == TypeTable::NEVER {
             return Some(a);
         }
-        let (a_undecided, b_undecided) = (self.is_undecided_branch(a), self.is_undecided_branch(b));
-        if a_undecided && !b_undecided {
-            return Some(b);
+        // An indefinite branch defers to one carrying an inference variable,
+        // which defers to a decided one: `if c { null } else { Some(1) }`
+        // with the literal still pending is an `Option` of its variable.
+        match self.branch_decidedness(a).cmp(&self.branch_decidedness(b)) {
+            Ordering::Less => Some(b),
+            Ordering::Greater => Some(a),
+            Ordering::Equal => self.tysys.type_table.borrow().resource_join(a, b),
         }
-        if b_undecided && !a_undecided {
-            return Some(a);
+    }
+
+    /// How far a branch's type is decided, least first: indefinite, carrying
+    /// an inference variable, decided.
+    fn branch_decidedness(&self, branch: TypeId) -> u8 {
+        if self.tysys.type_table.borrow().is_indefinite(branch) {
+            0
+        } else if self.type_has_infer_hole(branch) {
+            1
+        } else {
+            2
         }
-        self.tysys.type_table.borrow().resource_join(a, b)
     }
 
     pub(super) fn resolve_match_expr(
@@ -3641,6 +3661,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => None,
         }
+    }
+
+    /// The instance a named literal of a generic struct builds over fresh
+    /// variables, one per parameter, beside the parameters themselves, where
+    /// the literal names none of them. A literal taking its fields from a
+    /// `..base` or a field default has none: both are read in settled types.
+    pub(super) fn open_struct_literal_instance(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+    ) -> Option<(TypeId, Instantiated, Vec<TypeId>)> {
+        let written = struct_lit.name.as_deref()?;
+        if !struct_lit.type_args.is_empty() || !struct_lit.spreads.is_empty() {
+            return None;
+        }
+        let def = self.tysys.resolutions.declared(struct_lit.name_id?)?;
+        let info = self.lookup_struct_fields_of_decl(def)?;
+        let walks_a_default = info
+            .fields
+            .iter()
+            .zip(&info.field_defaults)
+            .any(|((name, _, _), default)| {
+                default.is_some() && !struct_lit.fields.iter().any(|f| &f.name == name)
+            });
+        let slots = info.type_param_type_ids.clone();
+        if slots.is_empty() || walks_a_default {
+            return None;
+        }
+        let inst = self.instantiate(
+            &slots,
+            &Instantiation {
+                kind: "struct",
+                name: written,
+                span: struct_lit.span,
+                type_args: &[],
+                self_binding: None,
+            },
+        );
+        let open = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_generic_instance(def, inst.vars.clone());
+        Some((open, inst, slots))
     }
 
     pub(super) fn resolve_struct_literal(

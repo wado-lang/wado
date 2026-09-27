@@ -59,6 +59,10 @@ fn only<T>(b: Box<T>) -> T {
     return b.v;
 }
 
+fn either<T>(a: T, b: T) -> T {
+    return a;
+}
+
 export fn run() with Stdout {
     let wide: u64 = 7;
     let narrow: i32 = 3;
@@ -77,9 +81,15 @@ export fn run() with Stdout {
     println(`${only(wrap(6))}`);
     println(`${only(wrap(2.5))}`);
     println(`${opt(Some(1), 2)}`);
+
+    // A branch beside `null` holds the nested call whose literal is pending.
+    let flag = builtin::black_box(true);
+    let some_wide: Option<u64> = Some(7);
+    println(`${either(if flag { Option::Some(0x1_0000_0009) } else { null }, some_wide):?}`);
+    println(`${either(match flag { false => null, true => Option::Some(0x1_0000_000A) }, some_wide):?}`);
 }
 
 __DATA__
 {
-    "stdout": "4294967296\n4294967297\n4294967298\n4294967299\n4294967300\n4294967301\n4294967302\n4294967303\n4294967304\n-1\n7\n5\n6\n2.5\n1\n"
+    "stdout": "4294967296\n4294967297\n4294967298\n4294967299\n4294967300\n4294967301\n4294967302\n4294967303\n4294967304\n-1\n7\n5\n6\n2.5\n1\nOption::Some(4294967305)\nOption::Some(4294967306)\n"
 }

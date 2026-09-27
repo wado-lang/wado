@@ -182,21 +182,38 @@ pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
 
 /// The numeric literals, and operations over them ([`is_literal_operation`]), a
 /// call's arguments hold, at any depth, where the type expected of them is one
-/// of the call's own open variables: `second(Pair { a: 1, b: 2 }, x)`. Each answers last, as a literal argument
-/// does: it takes what the other arguments answer its variable with, and a
-/// variable none of them answers takes the literals' default. A nested generic
-/// call's literal waits here too where its variable is chained to one of these:
-/// `unbox(wrap(1), x)`.
+/// of the call's own open variables: `second(Pair { a: 1, b: 2 }, x)`. Each
+/// answers last, as a literal argument does: it takes what the other arguments
+/// answer its variable with, and a variable none of them answers takes the
+/// literals' default.
+///
+/// A nested call's literal waits in the enclosing collection instead where its
+/// value reaches the enclosing call: where its variable is chained to one of
+/// these (`unbox(wrap(1), x)`), is named by the answer of one
+/// (`same(wrap(1), x)`), or a field of the nested call's result is read
+/// (`same(wrap(1).v, x)`, see [`Elaborator::resolve_field_projection`]).
 pub(super) struct PendingLiterals {
     own_vars: Vec<TypeId>,
     literals: Vec<(Expr, TypeId)>,
+    /// Collected for a field access whose receiver is resolving: it takes over
+    /// every variable the receiver call leaves open.
+    awaits_receiver: bool,
 }
 
 impl PendingLiterals {
-    pub(super) fn new(own_vars: &[TypeId]) -> Self {
+    pub(super) fn of_call(own_vars: &[TypeId]) -> Self {
         Self {
             own_vars: own_vars.to_vec(),
             literals: Vec::new(),
+            awaits_receiver: false,
+        }
+    }
+
+    fn of_field_access() -> Self {
+        Self {
+            own_vars: Vec::new(),
+            literals: Vec::new(),
+            awaits_receiver: true,
         }
     }
 }
@@ -597,6 +614,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// enclosing call's open variables. In `unbox(wrap(1), x)` the literal is
     /// then pending at `unbox`'s `T`, which `x` answers, rather than taking
     /// its default before `x` is reached.
+    ///
+    /// Where `ret` expects the enclosing call's bare open variable, that one is
+    /// chained to the declared return instead: in `same(wrap(1), x)` it names
+    /// `wrap`'s `U`, so the enclosing call takes the literal over.
     pub(super) fn chain_expected_return(
         &mut self,
         own_vars: &[TypeId],
@@ -609,6 +630,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if own_vars.contains(&var) && self.awaits_pending_call(answer) {
                 self.chain_infer_var(var, answer);
             }
+        }
+        let expected = self.apply_infer_holes(ret.expected);
+        let declared = self.apply_infer_holes(ret.declared);
+        let expects_open_var = matches!(
+            self.tysys.type_table.borrow().get(expected),
+            ResolvedType::InferVar(_)
+        ) && self.awaits_pending_call(expected);
+        let names_own_var = {
+            let tt = self.tysys.type_table.borrow();
+            !matches!(tt.get(declared), ResolvedType::InferVar(_))
+                && tt.infer_vars_in(declared).iter().any(|v| own_vars.contains(v))
+        };
+        if expects_open_var && names_own_var {
+            self.chain_infer_var(expected, declared);
         }
     }
 
@@ -645,6 +680,110 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .flat_map(|pending| pending.own_vars.iter().copied());
         own_vars.iter().copied().chain(enclosing).collect()
+    }
+
+    /// Whether the innermost enclosing collection takes over the open `var`
+    /// a call's arguments left unanswered: the call is a field access's
+    /// receiver, or an answer of one of its variables names `var`.
+    fn enclosing_takes_over(&mut self, var: TypeId) -> bool {
+        let Some(enclosing) = self.annotate_ctx.pending_literals.last() else {
+            return false;
+        };
+        if enclosing.awaits_receiver {
+            return true;
+        }
+        let owned = enclosing.own_vars.clone();
+        owned.into_iter().any(|own| {
+            let answer = self.apply_infer_holes(own);
+            self.tysys
+                .type_table
+                .borrow()
+                .infer_vars_in(answer)
+                .contains(&var)
+        })
+    }
+
+    /// Resolve a field access's `receiver`, then `read_field` from its type.
+    /// Where the receiver is a generic call or constructor, or a field of one,
+    /// the literals it leaves open wait for the field's type to meet
+    /// `expected`: in `same(wrap(1).v, x)` the literal takes `x`'s type.
+    ///
+    /// A method's receiver never waits: which impl a method comes from can
+    /// turn on the receiver's type arguments (`impl Tag for Box<i32>`).
+    pub(super) fn resolve_field_projection(
+        &mut self,
+        receiver: &Expr,
+        ctx: &mut FunctionContext,
+        expected: Option<TypeId>,
+        read_field: impl FnOnce(&mut Self, TypeId) -> TypeId,
+    ) -> TypeId {
+        if !matches!(
+            receiver,
+            Expr::Call(_) | Expr::FieldAccess(_) | Expr::StructLiteral(_)
+        ) {
+            let receiver_type = self.resolve_expr(receiver, ctx, None);
+            return read_field(self, receiver_type);
+        }
+        let collection = PendingLiterals::of_field_access();
+        let (field_type, pending) = self.collecting_pending_literals(collection, |this| {
+            let receiver_type = this.resolve_receiver(receiver, ctx);
+            this.settle_bare_receiver(receiver_type, ctx);
+            let receiver_type = this.apply_infer_holes(receiver_type);
+            this.annotate_ctx
+                .pending_literals
+                .last_mut()
+                .expect("the projection's collection is pushed")
+                .awaits_receiver = false;
+            read_field(this, receiver_type)
+        });
+        let ret = expected.map(|expected| ExpectedReturn {
+            declared: field_type,
+            expected,
+        });
+        let taken_over = pending.own_vars.clone();
+        self.chain_expected_return(&taken_over, ret);
+        self.settle_pending_literals(pending, &[], ret, ctx);
+        self.apply_infer_holes(field_type)
+    }
+
+    /// Resolve a field access's receiver. A generic struct literal naming none
+    /// of its parameters takes a variable for each, as a call does: `Box { v:
+    /// 1 }.v` waits as `wrap(1).v` does.
+    fn resolve_receiver(&mut self, receiver: &Expr, ctx: &mut FunctionContext) -> TypeId {
+        let open = match receiver {
+            Expr::StructLiteral(struct_lit) => self.open_struct_literal_instance(struct_lit),
+            _ => None,
+        };
+        let Some((open, inst, slots)) = open else {
+            return self.resolve_expr(receiver, ctx, None);
+        };
+        let collection = PendingLiterals::of_call(&inst.vars);
+        let (receiver_type, pending) = self
+            .collecting_pending_literals(collection, |this| this.resolve_expr(receiver, ctx, Some(open)));
+        self.solve_own_infer_holes_against(open, receiver_type, &inst.vars);
+        self.settle_pending_literals(pending, &[], None, ctx);
+        let mut receiver_type = [receiver_type];
+        self.settle_onto_slots(&inst, &slots, &mut receiver_type);
+        receiver_type[0]
+    }
+
+    /// Answer now the literals a receiver of bare variable type holds (`wrap(1)
+    /// .v.x`): a field is looked up on a type whose head is known.
+    fn settle_bare_receiver(&mut self, receiver_type: TypeId, ctx: &mut FunctionContext) {
+        let receiver_type = self.apply_infer_holes(receiver_type);
+        if !matches!(
+            self.tysys.type_table.borrow().get(receiver_type),
+            ResolvedType::InferVar(_)
+        ) {
+            return;
+        }
+        let collection = self
+            .annotate_ctx
+            .pending_literals
+            .last_mut()
+            .expect("the projection's collection is pushed");
+        let pending = std::mem::replace(collection, PendingLiterals::of_call(&[]));
+        self.settle_pending_literals(pending, &[], None, ctx);
     }
 
     /// [`Scope::awaits_pending_call`] on `ty` with the solved variables
@@ -695,7 +834,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.type_table.borrow().get(var),
                 ResolvedType::InferVar(_)
             );
-            let hint = hints.get(&var).copied();
+            let hint = hints.get(&var).copied();            if open && hint.is_none() && self.enclosing_takes_over(var) {
+                let enclosing = self
+                    .annotate_ctx
+                    .pending_literals
+                    .last_mut()
+                    .expect("an enclosing collection takes over");
+                enclosing.own_vars.push(var);
+                enclosing
+                    .literals
+                    .extend(literals.into_iter().map(|expr| (expr, var)));
+                continue;
+            }
             // An operation's operands take one type only once it is known, so
             // it cannot wait for the call's own inference as a literal can.
             let yields_to_return = open
