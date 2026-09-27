@@ -4,8 +4,8 @@
 //!
 //!     wado run package-loam/example/gpt2.wado -- "Hello, my name is"
 //!
-//! The graph is compiled for a fixed context. A shorter sequence is padded on
-//! the right: attention is causal, so no real position reads the padding.
+//! The graph leaves the sequence length to the run, so each step reads the
+//! tokens so far and nothing more.
 
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use { from_string } from "core:json";
@@ -15,8 +15,7 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
         generator: {
             module: "../src/generator.wado",
             options: {
-                // `sequence_length` is CONTEXT.
-                dims: { batch_size: 1, sequence_length: 32 },
+                dims: { batch_size: 1 },
                 outputs: ["logits"],
                 layout: [
                     {
@@ -72,7 +71,11 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
                         axes: ["Embed", "Vocab"],
                     },
                     {
-                        pattern: "/transformer/Reshape_1_output_0",
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
                         axes: ["Batch", "Seq"],
                     },
                     {
@@ -112,6 +115,14 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
                         axes: ["Batch", "Seq", "Head", "Dim"],
                     },
                     {
+                        pattern: "*attn.bias",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
                         pattern: "*/attn/Slice_4_output_0",
                         axes: ["Batch", "Head", "Seq", "Seq"],
                     },
@@ -120,30 +131,29 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
         },
     };
 
-global CONTEXT: i32 = 32;
 global STEPS: i32 = 8;
+
+/// How many tokens the model reads at most: one position per row of `wpe`.
+fn positions(weights: &gpt2::Weights) -> i32 {
+    return weights.transformer_wpe_weight.extents[0];
+}
+
+/// The longest prompt `greedy` extends by `steps`. The last token it picks is
+/// never read, so the model reads one fewer than it returns.
+fn longest_prompt(steps: i32, weights: &gpt2::Weights) -> i32 {
+    return positions(weights) - steps + 1;
+}
 
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
 fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
-    assert !prompt.is_empty() && prompt.len() + steps <= CONTEXT;
+    assert 1 <= prompt.len() <= longest_prompt(steps, weights);
     let mut ids = *prompt;
     for let _ of 0..<steps {
-        let mut input: List<i64> = [];
-        let mut mask: List<i64> = [];
-        for let i of 0..<CONTEXT {
-            let real = i < ids.len();
-            input.push(if real { ids[i] as i64 } else { 0 });
-            mask.push(if real { 1 } else { 0 });
-        }
+        let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
+        let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
         let logits = gpt2::forward(
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
-                data: input,
-                extents: [1, CONTEXT],
-            },
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
-                data: mask,
-                extents: [1, CONTEXT],
-            },
+            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
+            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
             weights,
         );
         let vocab = logits.extents[2];
@@ -166,11 +176,13 @@ export fn run() with (Stdout, Stderr, Environment) {
     }
     let tokenizer = tiny();
     let ids = tokenizer.encode(&prompt);
-    if ids.is_empty() || ids.len() + STEPS > CONTEXT {
-        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${CONTEXT - STEPS}`);
+    let weights = gpt2::Weights::embedded();
+    let longest = longest_prompt(STEPS, &weights);
+    if !(1 <= ids.len() <= longest) {
+        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${longest}`);
         return;
     }
-    println(tokenizer.decode(&greedy(&ids, STEPS, &gpt2::Weights::embedded())));
+    println(tokenizer.decode(&greedy(&ids, STEPS, &weights)));
 }
 
 struct Generated {
@@ -197,4 +209,11 @@ test "each prompt continues with the tokens onnxruntime picks greedily" {
         assert got == want;
         assert tokenizer.decode(&got) == case.text;
     }
+}
+
+#[timeout_ms(30000)]
+test "the longest prompt fills every position the model reads" {
+    let weights = gpt2::Weights::embedded();
+    let prompt = List::<i32>::filled(longest_prompt(2, &weights), 0);
+    assert greedy(&prompt, 2, &weights).len() == positions(&weights) + 1;
 }

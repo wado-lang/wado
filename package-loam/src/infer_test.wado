@@ -1,6 +1,7 @@
 //! What stage 0 proves of a graph, and what it stops the build for.
 
 use { Extent } from "./extent.wado";
+use { Elements } from "./graph.wado";
 use {
     AttributeConflict,
     AxisCountConflict,
@@ -97,8 +98,8 @@ test "an extent mismatch between the layers names both extents" {
 test "a symbolic batch axis flows through both layers" {
     let graph = read(&mlp(64)).unwrap();
     let shapes = infer(&graph, &mlp_schema()).unwrap().shapes;
-    assert shapes["H"].axes[0].extent.agrees(&Extent::Symbol("N"));
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
+    assert shapes["H"].axes[0].extent.agrees(&Extent::symbol(&"N"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"N"));
 }
 
 test "a bias broadcasts against the batch axis ahead of it" {
@@ -180,7 +181,7 @@ test "an unknown dimension takes its axis's name as its symbol" {
         ],
     };
     let shapes = infer(&graph, &schema).unwrap().shapes;
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"Batch"));
 }
 
 test "an operator given too few operands stops the build rather than trapping" {
@@ -292,7 +293,7 @@ test "regrouping a merged axis the layout wrote stops the build, its parts havin
         Y = Reshape(W, S)
     }`;
     let e = y_axes(source, [rule("W", ["(Head Dim)", "Out"])]).unwrap_err();
-    assert e == "Y = Reshape: axis Head is ?, and Reshape reads static extents";
+    assert e == "Y = Reshape: axis Head has no stated extent, and Reshape reads it";
 }
 
 fn qkv() -> List<LayoutRule> {
@@ -326,6 +327,14 @@ test "Split sizes that miss the axis's extent stop the build" {
         Q, Y, V = Split<axis = 2>(X, S)
     }`;
     assert y_axes(source, qkv()).unwrap_err() == "Q = Split: the parts sum to 20, and axis 2 is 24";
+}
+
+test "a Split size past the axis stops the build rather than wrapping into it" {
+    let source = `g (float[1, 4, 24] X) => (float[1, 4, 8] Y) {
+        S = Constant<value_ints = [4294967304, 8, 8]>()
+        Q, Y, V = Split<axis = 2>(X, S)
+    }`;
+    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: a part is 4294967304, and axis 2 is 24";
 }
 
 test "a scalar operand to MatMul stops the build rather than trapping" {
@@ -383,7 +392,7 @@ test "a declared symbolic name need not be the one the schema gave the axis" {
         layout: [rule("*", ["Batch", "B"])],
     };
     let shapes = infer(&graph, &schema).unwrap().shapes;
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"Batch"));
 }
 
 test "a declared static extent settles an axis the nodes left symbolic" {
@@ -398,7 +407,7 @@ test "a declared static extent settles an axis the nodes left symbolic" {
     let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
     // Only the declared output is settled; the input keeps what it stated.
-    assert shapes["X"].axes[0].extent.agrees(&Extent::Symbol("N"));
+    assert shapes["X"].axes[0].extent.agrees(&Extent::symbol(&"N"));
 }
 
 test "a declared `?` claims nothing about the produced extent" {
@@ -411,7 +420,7 @@ test "a declared `?` claims nothing about the produced extent" {
         layout: [rule("*", ["Batch", "B"])],
     };
     let shapes = infer(&graph, &schema).unwrap().shapes;
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"N"));
 }
 
 test "a graph output no node produces stops the build" {
@@ -721,12 +730,33 @@ test "an output declared as an element other than the one computed stops the bui
     assert y_axes(source, [rule("M", ["Key"])]).unwrap_err() == "Y: declared float and computed in i64";
 }
 
-test "Shape of a symbolic extent stops the build" {
+test "a Reshape to the Shape of a symbolic tensor keeps its axes" {
     let source = `g (float[N, 3] X) => (float[N, 3] Y) {
         S = Shape(X)
         Y = Reshape(X, S)
     }`;
-    assert y_axes(source, [rule("X", ["Batch", "Col"])]).unwrap_err() == "S = Shape: axis Batch is N, and Shape reads static extents";
+    assert y_axes(source, [rule("X", ["Batch", "Col"])]).unwrap() == "Batch=N,Col=3";
+}
+
+test "a Reshape's -1 takes what the symbolic rest leaves" {
+    // An exporter writes `x.view(-1, x.size(1))` as a Shape, a Gather and a
+    // Concat, so the target holds the symbol itself.
+    let source = `g (float[B, N, 4] X) => (float[B, N, 4] Y) <int64[1] Minus = {-1}, int64[1] Four = {4}, int64[1] Zero = {0}> {
+        One = Constant <value = int64 {1}> ()
+        S = Shape(X)
+        N = Gather <axis = 0> (S, One)
+        U = Unsqueeze(N, Zero)
+        T = Concat <axis = 0> (Minus, U, Four)
+        Y = Reshape(X, T)
+    }`;
+    assert y_axes(source, [rule("X", ["Batch", "Seq", "Dim"])]).unwrap() == "Batch=B,Seq=N,Dim=4";
+}
+
+test "a Reshape merging symbolic axes gives the merge their product" {
+    let source = `g (float[B, N, 4] X) => (float[?, 4] Y) <int64[2] T = {-1, 4}> {
+        Y = Reshape(X, T)
+    }`;
+    assert y_axes(source, [rule("X", ["Batch", "Seq", "Dim"])]).unwrap() == "Merged<[Batch, Seq]>=B * N,Dim=4";
 }
 
 test "Reshape splits a merged axis back into its parts" {
@@ -800,12 +830,205 @@ test "a Reshape target that changes the element count stops the build" {
     assert e == "Y = Reshape: 24 elements cannot take the shape [5, 5]";
 }
 
-test "a Reshape over a symbolic extent stops the build" {
+/// What the inputs owe a graph whose `Y` slices an axis of 8 from `start` to
+/// `end`, each an expression of `X`'s length `N`.
+fn owed_by_slice(start: String, end: String) -> Result<List<String>, String> {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+        S = Shape(X)
+        Y = Slice(M, ${start}, ${end})
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("Y", ["Part"]),
+    ];
+    let graph = read(&source).unwrap();
+    return match infer(&graph, &Schema { layout }) {
+        Ok(checked) => Result::Ok(checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect()),
+        Err(e) => Result::Err(`${e}`),
+    };
+}
+
+test "a Slice bound the build cannot show within its axis is owed by the inputs" {
+    assert owed_by_slice("Z", "S").unwrap() == ["Y = Slice: the bound N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+}
+
+test "a Slice from a number to a symbol owes that it does not run backwards" {
+    let owed = owed_by_slice("Three", "S").unwrap();
+    assert owed.contains_str("Y = Slice: axis 0 must not run backwards from 3 to N (N - 3 >= 0)");
+}
+
+test "a Slice running backwards between numbers is empty, as ONNX counts it" {
+    let source = `g (float[N] X) => (float[?] Y) <int64[1] B = {5}, int64[1] E = {3}> {
+        Y = Slice(X, B, E)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Part"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Part=0";
+}
+
+test "a Slice running backwards by a symbolic amount for every input is empty" {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+        S = Shape(X)
+        B = Add(S, Three)
+        Y = Slice(M, B, Z)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("Y", ["Part"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Part=0";
+}
+
+test "a Range over a symbolic start counts a span the build knows, however it divides" {
+    let source = `g (float[N] X) => (int64[?] Y, int64[?] W) <int64[1] Three = {3}, int64[1] Two = {2}> {
+        S = Shape(X)
+        L = Add(S, Three)
+        Y = Range(S, L, Two)
+        W = Range(L, S, Two)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [
+            rule("X", ["Seq"]),
+            rule("Y", ["Pos"]),
+            rule("W", ["Back"]),
+        ],
+    }).unwrap();
+    assert checked.shapes["Y"].axes[0].extent.agrees(&Extent::Static(2));
+    assert checked.shapes["W"].axes[0].extent.agrees(&Extent::Static(0));
+    assert checked.owed.is_empty();
+}
+
+test "Slice bounds past either end of a symbolic axis keep it whole and owe nothing" {
+    let source = `g (float[N] X) => (float[N] Y) <int64[1] B = {-4000000000}, int64[1] E = {4000000000}> {
+        Y = Slice(X, B, E)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("X", ["Seq"])],
+    }).unwrap();
+    assert checked.owed.is_empty();
+    assert checked.shapes["Y"].axes[0].name == "Seq";
+}
+
+test "a symbolic Slice bound past the end for every input clamps there and owes nothing" {
+    let source = `g (float[N] X) => (float[N] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+        S = Shape(X)
+        E = Add(S, Three)
+        Y = Slice(X, Z, E)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("X", ["Seq"])],
+    }).unwrap();
+    assert checked.owed.is_empty();
+    assert checked.shapes["Y"].axes[0].name == "Seq";
+}
+
+test "Slice listing an axis twice stops the build rather than guessing" {
+    let source = `g (float[4] X) => (float[1] Y) <int64[2] B = {0, 1}, int64[2] E = {3, 2}, int64[2] P = {0, 0}> {
+        Y = Slice(X, B, E, P)
+    }`;
+    let e = y_axes(source, [rule("*", ["A"])]).unwrap_err();
+    assert e == "Y = Slice: axis 0 is listed twice";
+}
+
+test "an output declared static where the nodes left a symbol owes the two equal" {
+    let source = `g (float[N] X) => (float[8] Y) {
+        Y = Relu(X)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("*", ["Seq"])],
+    }).unwrap();
+    assert checked.shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
+    let owed: List<String> = checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
+    assert owed == [
+        "Y: axis Seq must be 8, as the graph declares (N - 8 >= 0)",
+        "Y: axis Seq must be 8, as the graph declares (-N + 8 >= 0)",
+    ] as List<String>;
+}
+
+test "an output declared static that no symbol value produces stops the build" {
+    let source = `g (float[N] X) => (int64[3] Y) <int64[1] Z = {0}, int64[1] Ten = {10}, int64[1] One = {1}> {
+        S = Shape(X)
+        L = Add(S, Ten)
+        Y = Range(Z, L, One)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Pos"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y: axis Pos is declared 3 and produced N + 10";
+}
+
+test "a symbolic integer cast to int32 owes that it fits, where an extent cannot show it" {
+    let source = `g (float[N] X) => (int64[?] Y) <int64[1] Z = {0}, int64[1] Big = {100000}, int64[1] One = {1}> {
+        S = Shape(X)
+        W = Cast<to = 6>(S)
+        P = Mul(S, Big)
+        Q = Cast<to = 6>(P)
+        Y = Range(Z, Q, One)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [
+            rule("X", ["Seq"]),
+            rule("Y", ["Pos"]),
+        ],
+    }).unwrap();
+    let owed: List<String> = checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
+    assert owed == ["Q = Cast: 100000 * N must fit in int32 (-100000 * N + 2147483647 >= 0)"] as List<String>;
+}
+
+test "a Range the run computes, longer than any list, stops the build" {
+    let source = `g (float[N] X) => (int64[?] Y) <int64[1] Far = {3000000000}, int64[1] One = {1}> {
+        S = Shape(X)
+        L = Add(S, Far)
+        Y = Range(S, L, One)
+    }`;
+    let e = y_axes(source, [rule("*", ["Seq"])]).unwrap_err();
+    assert e == "Y = Range: 3000000000 elements are more than a list holds";
+}
+
+test "a condition every layer repeats is owed once" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        B = Slice(M, Z, S)
+        Y = Add(A, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("A", ["Seq"]),
+        rule("B", ["Seq"]),
+    ];
+    let graph = read(&source).unwrap();
+    assert infer(&graph, &Schema { layout }).unwrap().owed.len() == 1;
+}
+
+test "a Reshape carries a symbolic extent past the axes it splits" {
     let source = `g (float[N, 12] X) => (float[N, 3, 4] Y) <int64[3] S = {0, 3, 4}> {
         Y = Reshape(X, S)
     }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Wide"]),
+        rule("Y", ["Batch", "Row", "Col"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=N,Row=3,Col=4";
+}
+
+test "a Reshape whose target cannot hold the symbolic count stops the build" {
+    let source = `g (float[N, 12] X) => (float[N, 3, 4] Y) <int64[2] S = {3, 4}> {
+        Y = Reshape(X, S)
+    }`;
     let e = y_axes(source, [rule("X", ["Batch", "Wide"])]).unwrap_err();
-    assert e == "Y = Reshape: axis Batch is N, and Reshape reads static extents";
+    assert e == "Y = Reshape: 12 * N elements cannot take the shape [3, 4]";
 }
 
 fn pooled() -> List<LayoutRule> {
@@ -910,4 +1133,98 @@ test "a tensor of more elements than a list holds stops the build, however it ar
         rule("Y", ["R", "C"]),
     ];
     assert y_axes(produced, layout).unwrap_err() == "Y: its extents multiply past what a list can hold";
+}
+
+test "a symbolic integer some input could carry past i64 stops the build, since the run would wrap it" {
+    let source = `g (float[N] X) => (int64[1] Y) <int64[1] Big = {5000000000000000000}> {
+        S = Shape(X)
+        Y = Mul(S, Big)
+    }`;
+    assert y_axes(source, [rule("X", ["Seq"])]).unwrap_err() == "Y = Mul: N Mul 5000000000000000000 leaves i64";
+}
+
+test "a Reshape target whose symbolic extents multiply past i64 stops the build rather than trapping" {
+    let source = `g (float[N] X) => (float[?, ?, ?] Y) <int64[1] Big = {3000000000}> {
+        S = Shape(X)
+        B = Mul(S, Big)
+        T = Concat<axis = 0>(B, B, B)
+        Y = Reshape(X, T)
+    }`;
+    let e = y_axes(source, [rule("X", ["Seq"])]).unwrap_err();
+    assert e == "Y = Reshape: the target shape [3000000000 * N, 3000000000 * N, 3000000000 * N] multiplies past what a list can hold";
+}
+
+/// What the inputs owe a graph, as `reason (slack >= 0)`.
+fn owed_by(source: String, layout: List<LayoutRule>) -> List<String> {
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema { layout }).unwrap();
+    return checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
+}
+
+test "a symbolic Reshape extent owes that it is not 0, which would copy the input's extent instead" {
+    let source = `g (float[4, N] X) => (float[N, 4] Y) <int64[1] Four = {4}, int64[1] One = {1}, int64[1] Two = {2}> {
+        S = Shape(X)
+        L = Slice(S, One, Two)
+        T = Concat<axis = 0>(L, Four)
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["Col", "Row"]),
+    ];
+    assert owed_by(source, layout) == [
+        "Y = Reshape: the target's N must not be 0, which reads the input's extent 4 instead (N - 1 >= 0)",
+    ] as List<String>;
+}
+
+test "a symbolic Reshape extent that is the input's own at its position owes nothing, since 0 copies the same" {
+    let source = `g (float[N, 4] X) => (float[N, 2, 2] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[2] Halves = {2, 2}> {
+        S = Shape(X)
+        L = Slice(S, Z, One)
+        T = Concat<axis = 0>(L, Halves)
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["Row", "Half", "Pair"]),
+    ];
+    assert owed_by(source, layout).is_empty();
+}
+
+test "a Reshape -1 beside a symbolic extent owes that the rest do not multiply to 0" {
+    let source = `g (float[N, 4] X) => (float[N, 4] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[1] Rest = {-1}> {
+        S = Shape(X)
+        L = Slice(S, Z, One)
+        T = Concat<axis = 0>(L, Rest)
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["Row", "Col"]),
+    ];
+    assert owed_by(source, layout) == [
+        "Y = Reshape: the target's extents besides -1 multiply to N, which must not be 0 (N - 1 >= 0)",
+    ] as List<String>;
+}
+
+test "int32 arithmetic the build folds keeps the low 32 bits, as the run's int32 does" {
+    let source = `g (float[1] X) => (int64[1] Y) <int32[1] A = {50000}> {
+        M = Mul(A, A)
+        Y = Cast<to = 7>(M)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("*", ["One"])],
+    }).unwrap();
+    assert checked.known["Y"].elements == Elements::Ints([-1794967296]);
+}
+
+test "symbolic int32 arithmetic owes that it fits, as a Cast to int32 does" {
+    let source = `g (float[N] X) => (int64[1] Y) {
+        S = Shape(X)
+        W = Cast<to = 6>(S)
+        P = Mul(W, W)
+        Y = Cast<to = 7>(P)
+    }`;
+    assert owed_by(source, [rule("*", ["Seq"])]) == ["P = Mul: N * N must fit in int32 (-N * N + 2147483647 >= 0)"] as List<String>;
 }

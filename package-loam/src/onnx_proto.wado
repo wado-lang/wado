@@ -39,11 +39,13 @@ pub fn read_tensor<S: AsByteSlice>(bytes: S) -> Result<onnx::TensorProto, String
 pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
     let name = name_of(t);
     let raw = t.raw_data.unwrap_or(b"");
-    let data_type = t.data_type.unwrap_or(0);
-    let width = match data_type {
-        1 | 6 => 4,
-        7 => 8,
-        9 => 1,
+    let Some(element) = onnx::TensorProtoDataType::from_number(t.data_type.unwrap_or(0)) else {
+        return Result::Ok(null);
+    };
+    let width = match element {
+        Float | Int32 => 4,
+        Int64 => 8,
+        Bool => 1,
         _ => {
             return Result::Ok(null);
         },
@@ -52,14 +54,14 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
         return Result::Err(`${name}: ${raw.len()} raw bytes is not whole elements of ${width} bytes`);
     }
     let typed = raw.is_empty();
-    let elements = match data_type {
-        1 => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
-        6 => {
+    let elements = match element {
+        Float => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
+        Int32 => {
             let values = if typed { t.int32_data } else { List::<i32>::from_le_bytes(raw) };
             Elements::Ints(values.into_iter().map(|v| v as i64).collect());
         },
-        7 => Elements::Ints(if typed { t.int64_data } else { List::<i64>::from_le_bytes(raw) }),
-        9 => {
+        Int64 => Elements::Ints(if typed { t.int64_data } else { List::<i64>::from_le_bytes(raw) }),
+        Bool => {
             let values = if typed {
                 t.int32_data;
             } else {
@@ -69,7 +71,7 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
         },
         _ => unreachable(),
     };
-    let known = Known { extents: extents_of(t, &name)?, elements };
+    let known = Known { extents: extents_of(t, &name)?, elements, int32: element == Int32 };
     if known.len() == 0 && check_element_count(&name, 0, &known.extents).is_err() {
         return Result::Err(constant_without_values(&name));
     }
@@ -89,27 +91,16 @@ fn extents_of(t: &onnx::TensorProto, name: &String) -> Result<List<i32>, String>
     return Result::Ok(extents);
 }
 
-/// The element type name the textual format spells for a `TensorProto.DataType`.
+/// The element type name the textual format spells for a `TensorProto.DataType`:
+/// the enum's own name in lower case, for the types up to `bfloat16`.
 fn dtype_name(elem_type: i32) -> Option<String> {
-    return match elem_type {
-        1 => Option::Some("float"),
-        2 => Option::Some("uint8"),
-        3 => Option::Some("int8"),
-        4 => Option::Some("uint16"),
-        5 => Option::Some("int16"),
-        6 => Option::Some("int32"),
-        7 => Option::Some("int64"),
-        8 => Option::Some("string"),
-        9 => Option::Some("bool"),
-        10 => Option::Some("float16"),
-        11 => Option::Some("double"),
-        12 => Option::Some("uint32"),
-        13 => Option::Some("uint64"),
-        14 => Option::Some("complex64"),
-        15 => Option::Some("complex128"),
-        16 => Option::Some("bfloat16"),
-        _ => null,
+    let Some(element) = onnx::TensorProtoDataType::from_number(elem_type) else {
+        return null;
     };
+    if element matches { Undefined } || element.number() > onnx::TensorProtoDataType::Bfloat16.number() {
+        return null;
+    }
+    return Option::Some(`${element}`.to_ascii_lowercase());
 }
 
 /// An ONNX `int64` dimension as the shape algebra's `i32` extent.
@@ -278,9 +269,9 @@ fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     for let t of graph.initializer {
         let name = name_of(&t);
         check_inline(&t, &name)?;
-        let data_type = t.data_type.unwrap_or(0);
-        let Some(dtype) = dtype_name(data_type) else {
-            return Result::Err(`${name}: element type ${data_type}`);
+        let elem_type = t.data_type.unwrap_or(0);
+        let Some(dtype) = dtype_name(elem_type) else {
+            return Result::Err(`${name}: element type ${elem_type}`);
         };
         if is_build_time(&dtype) {
             constants[name] = known_tensor(&t)?.unwrap();

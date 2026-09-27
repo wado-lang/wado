@@ -1,4 +1,5 @@
 use { Extent } from "./extent.wado";
+use { Poly } from "./poly.wado";
 
 test "two numbers agree when they are the same number" {
     assert Extent::Static(4).agrees(&Extent::Static(4));
@@ -8,18 +9,32 @@ test "two numbers agree when they are the same number" {
 test "a symbol agrees only with itself" {
     // The batch axis flows through a whole network unchanged, so it meets its
     // own symbol at every operation and never has to be a number.
-    assert Extent::Symbol("batch").agrees(&Extent::Symbol("batch"));
-    assert !Extent::Symbol("batch").agrees(&Extent::Symbol("seq"));
+    assert Extent::symbol(&"batch").agrees(&Extent::symbol(&"batch"));
+    assert !Extent::symbol(&"batch").agrees(&Extent::symbol(&"seq"));
 }
 
 test "a symbol proves nothing about a number" {
-    // Stage 0 has no runtime tier to fall back on, so an undischargeable
-    // condition is a failure rather than a check deferred to the run.
-    assert !Extent::Symbol("seq").agrees(&Extent::Static(4));
-    assert !Extent::Static(4).agrees(&Extent::Symbol("seq"));
+    // `forward` checks only the inequalities stage 0 owes, so an operation
+    // needing the two equal is a failure rather than a check deferred to the run.
+    assert !Extent::symbol(&"seq").agrees(&Extent::Static(4));
+    assert !Extent::Static(4).agrees(&Extent::symbol(&"seq"));
+}
+
+test "an unstated extent agrees with nothing, itself included" {
+    assert !Extent::Unstated.agrees(&Extent::Unstated);
+    assert !Extent::Unstated.agrees(&Extent::Static(4));
+}
+
+test "a polynomial with no symbol left is a static extent" {
+    let seq = Poly::symbol(&"seq");
+    assert Extent::of(seq.try_sub(&seq).unwrap().try_add(&Poly::constant(3)).unwrap()) matches { Some(Static(3)) };
+    assert Extent::of(Poly::constant(-1)) matches { None };
+    let doubled = Extent::of(seq.try_mul(&Poly::constant(2)).unwrap()).unwrap();
+    assert doubled.agrees(&Extent::of(seq.try_add(&seq).unwrap()).unwrap());
 }
 
 test "an extent renders as what a diagnostic should name it" {
     assert `${Extent::Static(512)}` == "512";
-    assert `${Extent::Symbol("seq")}` == "seq";
+    assert `${Extent::symbol(&"seq")}` == "seq";
+    assert `${Extent::Unstated}` == "?";
 }
