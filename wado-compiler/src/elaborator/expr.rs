@@ -82,6 +82,13 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
     }
 }
 
+/// Whether `expr` is a literal that names its own type — a named struct literal
+/// or a range — and so takes only its type arguments from the type expected of
+/// it.
+fn names_its_type(expr: &Expr) -> bool {
+    matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
+}
+
 /// An integer literal standing as a cast operand, bare or negated, and which of
 /// the two it was — the shape reify re-types to the cast's target width.
 pub(super) fn int_literal_cast_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str, bool)> {
@@ -3468,20 +3475,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A closure takes its parameter types from the function
                     // type it is cast to, as it would from an annotation.
                     ast::Expr::Closure(_) => Some(target_type),
-                    // A named literal takes its type arguments from the type it
-                    // is cast to, and from its base where that is a newtype:
-                    // `Pair { a: 1 } as Wide` crosses the boundary a cast may.
-                    named
-                        if matches!(named, ast::Expr::Range(_))
-                            || matches!(named, ast::Expr::StructLiteral(lit) if lit.name.is_some()) =>
-                    {
-                        Some(
-                            self.tysys
-                                .type_table
-                                .borrow()
-                                .representation_head(target_type),
-                        )
-                    }
+                    // Its base where the target is a newtype: `Pair { a: 1 } as
+                    // Wide` crosses the boundary a cast may.
+                    named if names_its_type(named) => Some(
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .representation_head(target_type),
+                    ),
                     _ => None,
                 };
                 self.resolve_expr(&cast.expr, ctx, expected)

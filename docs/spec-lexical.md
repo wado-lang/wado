@@ -484,8 +484,8 @@ to its target type (see
 A named struct literal or a range literal takes its type arguments from the
 target, or from the target's base where that is a newtype, as it would from an
 annotation: `Pair { a: 1, b: 2 } as Wide`, where `type Wide = Pair<u64>`, builds
-a `Pair<u64>`. A diverging operand (`!`) casts to any type. References and function types
-follow [Casts](./spec-types.md#casts).
+a `Pair<u64>`. A diverging operand (`!`) casts to any type. References and
+function types follow [Casts](./spec-types.md#casts).
 
 Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
 direction, and an integer converts to `char` only from `u8` (see
