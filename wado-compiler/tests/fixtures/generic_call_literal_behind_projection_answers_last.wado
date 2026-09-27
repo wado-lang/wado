@@ -1,8 +1,8 @@
 // A numeric literal behind a field of a generic call's or constructor's result
 // answers last too: `wrap(5).v` takes the type the enclosing call settles for
-// it, and so does one behind a method whose impl reaches every instance. A
-// method some impl answers for one instance (`impl Tag for Box<i32>`) takes its
-// receiver's literals' default first, since which impl answers turns on it.
+// it, and so does one behind a method. A method two impls could answer
+// (`impl<T> Tag for Box<T>` and `impl Tag for Box<i32>`) takes its receiver's
+// literals' default first, since which impl answers turns on it.
 use { println, Stdout } from "core:cli";
 
 struct Box<T> {
@@ -77,9 +77,10 @@ export fn run() with Stdout {
     let field: u64 = Pair { a: 0x1_0000_0009, b: 0 }.a;
     println(`${field}`);
 
-    // A method some impl answers for one instance defaults its receiver first.
+    // Two impls could answer, and a bare receiver has no head to ask: the
+    // receiver defaults first.
     println(`${wrap(5).tag()} ${Box { v: 5 }.tag()} ${wrap(5).v.to_string()}`);
-    // One every instance shares waits.
+    // One impl answers every instance, so the receiver waits.
     println(`${same(wrap(0x1_0000_000A).get(), wide)}`);
     let unwrapped: u64 = Option::Some(0x1_0000_000B).unwrap();
     println(`${unwrapped}`);

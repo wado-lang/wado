@@ -720,13 +720,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// projection's type to meet `expected`: in `same(wrap(1).v, x)` the
     /// literal takes `x`'s type. They are answered first instead where
     /// `waits` says the projection cannot be read before the receiver's type
-    /// is settled.
+    /// is settled; it may answer some of them itself.
     pub(super) fn resolve_projection(
         &mut self,
         receiver: &Expr,
         ctx: &mut FunctionContext,
         expected: Option<TypeId>,
-        waits: impl FnOnce(&Self, TypeId) -> bool,
+        waits: impl FnOnce(&mut Self, TypeId) -> bool,
         project: impl FnOnce(&mut Self, TypeId, &mut FunctionContext) -> TypeId,
     ) -> TypeId {
         if !matches!(
@@ -752,8 +752,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type = this.apply_infer_holes(receiver_type);
                 if !waits(this, receiver_type) {
                     this.settle_receiver(ctx);
-                    receiver_type = this.apply_infer_holes(receiver_type);
                 }
+                receiver_type = this.apply_infer_holes(receiver_type);
             }
             project(this, receiver_type, ctx)
         });

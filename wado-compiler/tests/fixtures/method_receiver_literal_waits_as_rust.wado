@@ -1,0 +1,76 @@
+// A literal in a method's receiver waits whatever declares the method, as
+// Rust's does: a bound is checked on the type the literal settles to, one impl
+// that alone could answer settles it, and only where several could does it
+// take its default before one is chosen.
+use { println, Stdout } from "core:cli";
+
+struct Bx<T> {
+    v: T,
+}
+
+fn wrap<U>(u: U) -> Bx<U> {
+    return Bx { v: u };
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+impl<T: Default> Bx<T> {
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+trait Pick<T> with () {
+    fn pick(&self) -> T;
+}
+
+impl<T: Default> Pick<T> for Bx<T> {
+    fn pick(&self) -> T {
+        return self.v;
+    }
+}
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+impl Tag for Bx<u64> {
+    fn tag(&self) -> String {
+        return "u64";
+    }
+}
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for Bx<i32> {
+    fn name(&self) -> String {
+        return "i32";
+    }
+}
+
+impl Name for Bx<u64> {
+    fn name(&self) -> String {
+        return "u64";
+    }
+}
+
+export fn run() with Stdout {
+    let wide: u64 = 7;
+    // A bounded inherent impl.
+    println(`${same(wrap(0x1_0000_0000).get(), wide)}`);
+    // A bounded blanket trait impl.
+    println(`${same(wrap(0x1_0000_0001).pick(), wide)}`);
+    // The one impl that could answer settles the literal.
+    println(`${wrap(5).tag()} ${Bx { v: 0x1_0000_0002 }.tag()}`);
+    // Two could, so the literal takes its default first.
+    println(wrap(5).name());
+}
+
+__DATA__
+{
+    "stdout": "4294967296\n4294967297\nu64 u64\ni32\n"
+}

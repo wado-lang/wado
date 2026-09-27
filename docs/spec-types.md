@@ -924,10 +924,13 @@ parameters as an annotation does. A struct literal waits only where the fields
 it writes mention every parameter of its struct. Where they leave one out, the
 literal settles where it stands, as it would outside a call.
 
-A method's receiver waits only where every impl declaring the method is inherent,
-bound-free, and reaches every instance of the receiver's type. Otherwise which
-impl answers can turn on the receiver's type arguments, so its literals settle
-first: with `impl Tag for Box<i32>`, `wrap(1).tag()` reads a `Box<i32>`.
+A method's receiver waits as Rust's does. The method is found on the receiver's
+head, and an impl's bounds are checked on the type the literal settles to. Where
+only one impl could answer the method, it settles the literal: with
+`impl Tag for Box<u64>` alone, `wrap(1).tag()` reads a `Box<u64>`. Inherent
+impls are asked first, and trait impls only where no inherent impl could answer.
+Where several could, as `impl Tag for Box<i32>` and `impl Tag for Box<u64>` can,
+the literal takes its default first and the impl for that type answers.
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says

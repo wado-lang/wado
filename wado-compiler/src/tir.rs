@@ -6350,6 +6350,16 @@ struct ImplTarget {
     args: Vec<TypeId>,
 }
 
+/// What an impl target binds at a receiver's arguments.
+#[derive(Debug, Default)]
+pub struct TargetBinding {
+    /// The type each of the target's parameter slots takes.
+    pub slots: IndexMap<u32, TypeId>,
+    /// Each open receiver variable, beside what the target writes where it
+    /// stands.
+    pub met: Vec<(TypeId, TypeId)>,
+}
+
 impl TypeTable {
     /// Record what impl block `def`'s target writes: `whole`, and `args` for
     /// the head it names.
@@ -6468,8 +6478,22 @@ impl TypeTable {
         written: &[TypeId],
         receiver_args: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
+        self.open_impl_target_binding(written, receiver_args, &|_| false)
+            .map(|binding| binding.slots)
+    }
+
+    /// [`Self::impl_target_binding`] where the receiver's arguments hold
+    /// variables still to be answered, which `open` tells: each meets whatever
+    /// the target writes at its place, and the binding records what it met.
+    pub fn open_impl_target_binding(
+        &self,
+        written: &[TypeId],
+        receiver_args: &[TypeId],
+        open: &dyn Fn(TypeId) -> bool,
+    ) -> Option<TargetBinding> {
+        let mut binding = TargetBinding::default();
         if written.is_empty() || receiver_args.is_empty() {
-            return Some(IndexMap::default());
+            return Some(binding);
         }
         let fixed = written
             .iter()
@@ -6478,7 +6502,8 @@ impl TypeTable {
         if receiver_args.len() < written.len() && fixed == written.len() {
             return None;
         }
-        self.bind_type_params(&written[..fixed], receiver_args.get(..fixed)?)
+        self.bind_all(&written[..fixed], receiver_args.get(..fixed)?, open, &mut binding)
+            .then_some(binding)
     }
 
     /// The type-parameter slots `concrete` fills in `written`, at any depth;
@@ -6488,33 +6513,39 @@ impl TypeTable {
         written: &[TypeId],
         concrete: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
-        let mut bound = IndexMap::default();
-        self.bind_all(written, concrete, &mut bound)
-            .then_some(bound)
+        let mut binding = TargetBinding::default();
+        self.bind_all(written, concrete, &|_| false, &mut binding)
+            .then_some(binding.slots)
     }
 
     fn bind_all(
         &self,
         written: &[TypeId],
         concrete: &[TypeId],
-        bound: &mut IndexMap<u32, TypeId>,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
     ) -> bool {
         written.len() == concrete.len()
             && written
                 .iter()
                 .zip(concrete)
-                .all(|(&w, &c)| self.bind_one(w, c, bound))
+                .all(|(&w, &c)| self.bind_one(w, c, open, binding))
     }
 
     fn bind_one(
         &self,
         written: TypeId,
         concrete: TypeId,
-        bound: &mut IndexMap<u32, TypeId>,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
     ) -> bool {
         if let Some(slot) = self.param_slot(written) {
-            let prior = *bound.entry(slot).or_insert(concrete);
+            let prior = *binding.slots.entry(slot).or_insert(concrete);
             return self.type_key(prior) == self.type_key(concrete);
+        }
+        if open(concrete) {
+            binding.met.push((concrete, written));
+            return true;
         }
         // An `_` or an unresolvable name: nothing written to match against.
         if matches!(
@@ -6523,7 +6554,8 @@ impl TypeTable {
         ) {
             return true;
         }
-        if let Some(agrees) = self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, bound))
+        if let Some(agrees) =
+            self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, open, binding))
         {
             return agrees;
         }

@@ -1,0 +1,49 @@
+// A method's receiver literal waits past an impl's bound, which is then
+// checked against the type the literal settles to: here `u64`, which is not
+// `Small`, whether the impl is inherent or a trait's.
+struct Bx<T> {
+    v: T,
+}
+
+fn wrap<U>(u: U) -> Bx<U> {
+    return Bx { v: u };
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+trait Small with () {}
+
+impl Small for u8 {}
+
+impl<T: Small> Bx<T> {
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+trait Pick<T> with () {
+    fn pick(&self) -> T;
+}
+
+impl<T: Small> Pick<T> for Bx<T> {
+    fn pick(&self) -> T {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let wide: u64 = 7;
+    let a = same(wrap(3).get(), wide);
+    let b = same(wrap(3).pick(), wide);
+    let narrow: u8 = 2;
+    let c = same(wrap(3).get(), narrow);
+    let d = same(wrap(3).pick(), narrow);
+}
+
+__DATA__
+{
+    "compile_error": "type 'u64' does not implement trait 'Small' required by bound on 'T'",
+    "compile_error_count": 2
+}

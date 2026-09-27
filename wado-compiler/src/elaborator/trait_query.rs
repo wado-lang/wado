@@ -751,7 +751,8 @@ impl TypeSystem {
     }
 
     /// Whether `type_id` answers every one of `bounds`, each at the arguments it
-    /// writes.
+    /// writes. One naming only variables a pending call is still to answer may
+    /// become a type that does, and is checked once it is answered.
     fn bounds_hold(
         &self,
         ctx: &Scope,
@@ -759,9 +760,10 @@ impl TypeSystem {
         type_id: TypeId,
         bounds: &[FqTraitName],
     ) -> bool {
-        bounds
-            .iter()
-            .all(|trait_| self.type_implements_trait(ctx, scope, type_id, trait_))
+        ctx.awaits_pending_call(&self.type_table.borrow(), type_id)
+            || bounds
+                .iter()
+                .all(|trait_| self.type_implements_trait(ctx, scope, type_id, trait_))
     }
 
     /// `answer` under the recursion guard. A question already open answers

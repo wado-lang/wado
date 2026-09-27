@@ -220,14 +220,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let mut dispatch = None;
-        // Which impl answers can turn on the receiver's type arguments
-        // (`impl Tag for Box<i32>`), so the receiver's literals wait only where
-        // it cannot.
         let type_id = self.resolve_projection(
             &method_call.receiver,
             ctx,
             expected_type,
-            |this, receiver| this.method_ignores_type_args(receiver, &method_call.method),
+            |this, receiver| this.receiver_waits(receiver, &method_call.method, method_call.span),
             |this, receiver, ctx| {
                 // A `_` resolves to UNKNOWN, so these are their own hole mask.
                 let type_args: Vec<TypeId> = this.resolve_turbofish_args(&method_call.type_args);
