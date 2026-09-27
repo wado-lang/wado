@@ -1,6 +1,7 @@
 //! What stage 0 proves of a graph, and what it stops the build for.
 
 use { Extent } from "./extent.wado";
+use { Elements } from "./graph.wado";
 use {
     AttributeConflict,
     AxisCountConflict,
@@ -326,6 +327,14 @@ test "Split sizes that miss the axis's extent stop the build" {
         Q, Y, V = Split<axis = 2>(X, S)
     }`;
     assert y_axes(source, qkv()).unwrap_err() == "Q = Split: the parts sum to 20, and axis 2 is 24";
+}
+
+test "a Split size past the axis stops the build rather than wrapping into it" {
+    let source = `g (float[1, 4, 24] X) => (float[1, 4, 8] Y) {
+        S = Constant<value_ints = [4294967304, 8, 8]>()
+        Q, Y, V = Split<axis = 2>(X, S)
+    }`;
+    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: a part is 4294967304, and axis 2 is 24";
 }
 
 test "a scalar operand to MatMul stops the build rather than trapping" {
@@ -1124,4 +1133,82 @@ test "a tensor of more elements than a list holds stops the build, however it ar
         rule("Y", ["R", "C"]),
     ];
     assert y_axes(produced, layout).unwrap_err() == "Y: its extents multiply past what a list can hold";
+}
+
+test "a symbolic integer some input could carry past i64 stops the build, since the run would wrap it" {
+    let source = `g (float[N] X) => (int64[1] Y) <int64[1] Big = {5000000000000000000}> {
+        S = Shape(X)
+        Y = Mul(S, Big)
+    }`;
+    assert y_axes(source, [rule("X", ["Seq"])]).unwrap_err() == "Y = Mul: N Mul 5000000000000000000 leaves i64";
+}
+
+test "a Reshape target whose symbolic extents multiply past i64 stops the build rather than trapping" {
+    let source = `g (float[N] X) => (float[?, ?, ?] Y) <int64[1] Big = {3000000000}> {
+        S = Shape(X)
+        B = Mul(S, Big)
+        T = Concat<axis = 0>(B, B, B)
+        Y = Reshape(X, T)
+    }`;
+    let e = y_axes(source, [rule("X", ["Seq"])]).unwrap_err();
+    assert e == "Y = Reshape: the target shape [3000000000 * N, 3000000000 * N, 3000000000 * N] multiplies past what a list can hold";
+}
+
+/// What the inputs owe a graph, as `reason (slack >= 0)`.
+fn owed_by(source: String, layout: List<LayoutRule>) -> List<String> {
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema { layout }).unwrap();
+    return checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
+}
+
+test "a symbolic Reshape extent owes that it is not 0, which would copy the input's extent instead" {
+    let source = `g (float[4, N] X) => (float[N, 4] Y) <int64[1] Four = {4}, int64[1] One = {1}, int64[1] Two = {2}> {
+        S = Shape(X)
+        L = Slice(S, One, Two)
+        T = Concat<axis = 0>(L, Four)
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["Col", "Row"]),
+    ];
+    assert owed_by(source, layout) == [
+        "Y = Reshape: the target's N must not be 0, which reads the input's extent 4 instead (N - 1 >= 0)",
+    ] as List<String>;
+}
+
+test "a symbolic Reshape extent that is the input's own at its position owes nothing, since 0 copies the same" {
+    let source = `g (float[N, 4] X) => (float[N, 2, 2] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[2] Halves = {2, 2}> {
+        S = Shape(X)
+        L = Slice(S, Z, One)
+        T = Concat<axis = 0>(L, Halves)
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["Row", "Half", "Pair"]),
+    ];
+    assert owed_by(source, layout).is_empty();
+}
+
+test "int32 arithmetic the build folds keeps the low 32 bits, as the run's int32 does" {
+    let source = `g (float[1] X) => (int64[1] Y) <int32[1] A = {50000}> {
+        M = Mul(A, A)
+        Y = Cast<to = 7>(M)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("*", ["One"])],
+    }).unwrap();
+    assert checked.known["Y"].elements == Elements::Ints([-1794967296]);
+}
+
+test "symbolic int32 arithmetic owes that it fits, as a Cast to int32 does" {
+    let source = `g (float[N] X) => (int64[1] Y) {
+        S = Shape(X)
+        W = Cast<to = 6>(S)
+        P = Mul(W, W)
+        Y = Cast<to = 7>(P)
+    }`;
+    assert owed_by(source, [rule("*", ["Seq"])]) == ["P = Mul: N * N must fit in int32 (-N * N + 2147483647 >= 0)"] as List<String>;
 }

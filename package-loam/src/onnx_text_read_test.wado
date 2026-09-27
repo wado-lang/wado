@@ -397,6 +397,15 @@ test "an initializer pointing at another file names itself rather than being dro
     assert e == "W: an initializer whose data lives in another file is not read";
 }
 
+test "an int32 initializer past int32 names itself rather than being read wide" {
+    let e = read(
+        `agraph (float[1] X) => (float[1] Y) <int32[1] A = {4294967298}> {
+            Y = Identity(X)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "A: 4294967298 is not an int32";
+}
+
 test "a sequence type names itself rather than being read as a tensor" {
     let e = read(
         `agraph (seq(float[2]) X) => (float[2] Y) {

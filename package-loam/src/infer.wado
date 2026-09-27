@@ -16,6 +16,7 @@ use {
     resolve_index,
     slice_bounds,
     steps_over,
+    too_many,
 } from "./fold.wado";
 use {
     AttrError,
@@ -330,6 +331,9 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
     let mut primitives = TreeMap::<String, String>::new();
     let mut owed: List<Condition> = [];
     let mut known = graph.constants;
+    for let [name, k] of known.entries() {
+        primitives[*name] = known_primitive(k);
+    }
     for let declared of [&graph.inputs, &graph.initializers] {
         for let vi of *declared {
             shapes[vi.name] = shape_of(&vi, schema)?;
@@ -352,6 +356,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         match fold(node, &known, &shapes) {
             Ok(Some(k)) => {
                 owe_int32_fit(node, &k, &mut owed)?;
+                primitives[node.outputs[0]] = known_primitive(&k);
                 known[node.outputs[0]] = k;
                 continue;
             },
@@ -363,7 +368,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         }
         for let [index, input] of node.inputs.into_iter().enumerate() {
             if !read_at_build_time(node, index) {
-                materialize(&input, &known, &mut shapes, &mut primitives, schema)?;
+                materialize(&input, &known, &mut shapes, schema)?;
             }
         }
         let produced = if node.op == "Split" {
@@ -380,7 +385,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         }
     }
     for let vi of &graph.outputs {
-        materialize(&vi.name, &known, &mut shapes, &mut primitives, schema)?;
+        materialize(&vi.name, &known, &mut shapes, schema)?;
         let Some(produced) = shapes.get(vi.name) else {
             builtin::cold_path();
             return Result::Err(InferError::Undefined(vi.name));
@@ -491,7 +496,8 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
     return Result::Ok(Option::Some(KERNEL_ELEMENT));
 }
 
-/// The primitive a folded tensor is held in once a kernel reads it.
+/// The primitive a folded tensor is held in once a kernel reads it. Every
+/// folded tensor has one, read or not, so no two compare equal for want of it.
 fn known_primitive(k: &Known) -> String {
     return match k.elements {
         Ints(_) | Symbolic(_) => "i64",
@@ -505,7 +511,6 @@ fn materialize(
     tensor: &String,
     known: &TreeMap<String, Known>,
     shapes: &mut TreeMap<String, Shape>,
-    primitives: &mut TreeMap<String, String>,
     schema: &Schema,
 ) -> Result<(), InferError> {
     if shapes.contains_key(*tensor) {
@@ -514,7 +519,6 @@ fn materialize(
     let Some(k) = known.get(*tensor) else {
         return Result::Ok(());
     };
-    primitives[*tensor] = known_primitive(&k);
     let mut dims: List<Dim> = [];
     for let e of k.extents {
         dims.push(Dim::Static(e));
@@ -553,8 +557,17 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
             Symbolic(p) => {
                 let stated = Poly::constant(declared as i64);
                 let condition = `axis ${axis.name} must be ${declared}, as the graph declares`;
-                owe_at(vi.name, owed, p.sub(&stated), condition).is_ok()
-                    && owe_at(vi.name, owed, stated.sub(&p), condition).is_ok();
+                match [
+                    p.try_sub(&stated),
+                    stated.try_sub(&p),
+                ] {
+                    [Some(above), Some(below)] => {
+                        owe_at(vi.name, owed, above, condition).is_ok()
+                            && owe_at(vi.name, owed, below, condition).is_ok();
+                    },
+                    // A difference no polynomial holds is one the build cannot owe.
+                    _ => false,
+                }
             },
             Unstated => unreachable(),
         };
@@ -642,10 +655,12 @@ fn infer_node(
     let op = node.op;
     if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
         let operand = operand_at(node, shapes, 0);
-        return match regrouped_extents(node, known, &extents_of(node, &operand)?) {
-            Ok(targets) => regrouped(node, &operand, &targets, schema),
-            Err(reason) => Result::Err(refusal(node, reason)),
-        };
+        let input = extents_of(node, &operand)?;
+        let targets = regrouped_extents(node, known, &input).map_err(|reason| refusal(node, reason))?;
+        if op == "Reshape" {
+            owe_nonzero_targets(node, known, &input, owed)?;
+        }
+        return regrouped(node, &operand, &targets, schema);
     }
     if op == "Flatten" {
         return flatten(node, &operand_at(node, shapes, 0), schema);
@@ -797,32 +812,32 @@ pub fn split_parts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Re
         return Result::Err(refusal(node, `axis ${axis} is ${x.axes[axis].extent}, and Split reads its extent`));
     };
     let count = node.outputs.len();
-    let mut parts: List<i32> = [];
+    let mut sizes: List<i64> = [];
     match axes_of(node, known, 1, "split").map_err(|reason| refusal(node, reason))? {
-        Some(sizes) => {
-            if sizes.len() != count {
-                return Result::Err(refusal(node, `${sizes.len()} sizes are given for ${count} outputs`));
+        Some(given) => {
+            if given.len() != count {
+                return Result::Err(refusal(node, `${given.len()} sizes are given for ${count} outputs`));
             }
-            for let size of sizes {
-                parts.push(size as i32);
-            }
+            sizes = given;
         },
         None => {
-            let chunk = (whole + count - 1) / count;
+            let chunk = ((whole + count - 1) / count) as i64;
             for let _ of 0..<count - 1 {
-                parts.push(chunk);
+                sizes.push(chunk);
             }
-            parts.push(whole - chunk * (count - 1));
+            sizes.push(whole as i64 - chunk * (count - 1) as i64);
         },
     }
-    let mut sum = 0;
-    for let part of parts {
-        if part < 0 {
-            return Result::Err(refusal(node, `a part is ${part}`));
+    let mut parts: List<i32> = [];
+    let mut sum = 0 as i64;
+    for let size of sizes {
+        if !(0 <= size <= whole as i64) {
+            return Result::Err(refusal(node, `a part is ${size}, and axis ${axis} is ${whole}`));
         }
-        sum += part;
+        parts.push(size as i32);
+        sum += size;
     }
-    if sum != whole {
+    if sum != whole as i64 {
         return Result::Err(refusal(node, `the parts sum to ${sum}, and axis ${axis} is ${whole}`));
     }
     return Result::Ok(parts);
@@ -838,8 +853,11 @@ fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, Infer
         extents[0..<axis].to_list(),
         extents[axis..<extents.len()].to_list(),
     ] {
-        // `held` bounded the operand, so either run's product is an extent.
-        targets.push(Extent::of(count_of(&run)).unwrap());
+        let Some(count) = count_of(&run) else {
+            return Result::Err(refusal(node, `the extents ${node.inputs[0]} flattens multiply past i64`));
+        };
+        // `held` bounded the operand's elements, so either run's are an extent.
+        targets.push(Extent::of(count).unwrap());
     }
     return regrouped(node, operand, &targets, schema);
 }
@@ -938,7 +956,7 @@ fn within(node: &Node, bound: &Poly, dim: &Poly, owed: &mut List<Condition>) -> 
     let constant = bound.as_constant().map(|c| i64::clamp(c, -limit, limit));
     let from_end = constant matches { Some(c) && c < 0 };
     let resolved = match constant {
-        Some(c) && c < 0 => dim.add(&Poly::constant(c)),
+        Some(c) && c < 0 => difference(node, dim, &Poly::constant(-c))?,
         Some(c) => Poly::constant(c),
         None => *bound,
     };
@@ -953,8 +971,8 @@ fn within(node: &Node, bound: &Poly, dim: &Poly, owed: &mut List<Condition>) -> 
     return Result::Ok(resolved);
 }
 
-/// `a - b`, of integers the graph computed, or the refusal where a coefficient
-/// leaves `i64`.
+/// `a - b`, of integers the graph computed, or the refusal where no polynomial
+/// holds it.
 fn difference(node: &Node, a: &Poly, b: &Poly) -> Result<Poly, InferError> {
     return a.try_sub(b).ok_or(refusal(node, `${*a} - ${*b} leaves i64`));
 }
@@ -976,11 +994,40 @@ pub fn range_count(
     return counted(node, run_count(node, owed, &start, &limit, &delta, `${start} to ${limit} must not run backwards`)?);
 }
 
-/// A `Cast` to int32 folds a symbolic integer as it stands, which is the run's
+/// A `Reshape` target extent only the run knows is read as written, which is
+/// ONNX's reading save where it is 0: unless `allowzero` is set, ONNX then reads
+/// the input's extent at that position. The inputs owe that it is not, where
+/// the input's extent there is not the same length.
+fn owe_nonzero_targets(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    input: &List<Extent>,
+    owed: &mut List<Condition>,
+) -> Result<(), InferError> {
+    if int_attr(node, "allowzero", 0)? != 0 {
+        return Result::Ok(());
+    }
+    // `regrouped_extents` has read the target.
+    let written = polys_at(node, known, 1, "shape").unwrap().unwrap();
+    for let [i, w] of written.into_iter().enumerate() {
+        if w.as_constant() matches { Some(_) } || i < input.len() && input[i].poly() == w {
+            continue;
+        }
+        let zero = if i < input.len() {
+            `which reads the input's extent ${input[i]} instead`;
+        } else {
+            "which ONNX reads nowhere past the input's axes";
+        };
+        owe(node, owed, difference(node, &w, &Poly::constant(1))?, `the target's ${w} must not be 0, ${zero}`)?;
+    }
+    return Result::Ok(());
+}
+
+/// A folded int32 holds a symbolic integer as it stands, which is the run's
 /// int32 only where the value fits. What the extents cannot show fits, the
 /// inputs owe.
 fn owe_int32_fit(node: &Node, folded: &Known, owed: &mut List<Condition>) -> Result<(), InferError> {
-    if node.op != "Cast" || !data_type(int_attr(node, "to", 0)?) matches { Some(Int32) } {
+    if !folded.int32 {
         return Result::Ok(());
     }
     let Symbolic(values) = &folded.elements else {
@@ -1008,7 +1055,9 @@ fn run_count(
 ) -> Result<Poly, InferError> {
     let span = difference(node, to, from)?;
     if let Some(s) = span.as_constant() && let Some(d) = step.as_constant() && d != 0 {
-        return Result::Ok(Poly::constant(steps_over(s, d)));
+        let count = steps_over(0, s, d);
+        too_many(count).map_err(|reason| refusal(node, reason))?;
+        return Result::Ok(Poly::constant(count as i64));
     }
     let forwards = step.as_constant() matches { Some(d) && d > 0 };
     if forwards && span.is_negative() {

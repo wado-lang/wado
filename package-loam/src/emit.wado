@@ -63,6 +63,8 @@ pub variant EmitError {
     OutputCount(i32),
     /// A symbol the run needs the value of, which no input's axis carries.
     Unbound(String),
+    /// A value the run computes in `i64`, which some input carries past it.
+    Wide(Poly),
 }
 
 impl Display for UnmappedDtype {
@@ -97,6 +99,7 @@ impl Display for EmitError {
             Collision(e) => e.fmt(f),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
             Unbound(symbol) => f.write_str(`${symbol}: the run needs this length, and no input's axis gives it`),
+            Wide(p) => f.write_str(`${p}: the run computes this in i64, and some input carries it past`),
         }
     }
 }
@@ -503,6 +506,10 @@ impl Symbols {
 
     /// A symbolic integer as the `i64` expression `forward` computes it by.
     fn spell(&mut self, p: &Poly) -> Result<String, EmitError> {
+        if !p.fits_i64() {
+            builtin::cold_path();
+            return Result::Err(EmitError::Wide(*p));
+        }
         for let symbol of p.symbols() {
             if !self.idents.contains_key(symbol) {
                 builtin::cold_path();

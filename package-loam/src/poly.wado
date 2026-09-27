@@ -69,22 +69,6 @@ impl Poly {
         return names;
     }
 
-    /// The sum, of polynomials the caller knows keep every coefficient within
-    /// `i64`, as extents do.
-    pub fn add(&self, other: &Poly) -> Poly {
-        return within_i64(self.try_add(other));
-    }
-
-    /// The difference, as `add` requires.
-    pub fn sub(&self, other: &Poly) -> Poly {
-        return within_i64(self.try_sub(other));
-    }
-
-    /// The product, as `add` requires.
-    pub fn mul(&self, other: &Poly) -> Poly {
-        return within_i64(self.try_mul(other));
-    }
-
     /// The sum, or `None` where a coefficient leaves `i64`.
     pub fn try_add(&self, other: &Poly) -> Option<Poly> {
         let mut terms = self.terms;
@@ -92,7 +76,7 @@ impl Poly {
         return Poly::collected(terms);
     }
 
-    /// The difference, or `None` where a coefficient leaves `i64`.
+    /// The difference, or `None` as for `try_add`.
     pub fn try_sub(&self, other: &Poly) -> Option<Poly> {
         let mut negated: List<Term> = [];
         for let t of &other.terms {
@@ -101,7 +85,7 @@ impl Poly {
         return self.try_add(&Poly { terms: negated });
     }
 
-    /// The product, or `None` where a coefficient leaves `i64`.
+    /// The product, or `None` as for `try_add`.
     pub fn try_mul(&self, other: &Poly) -> Option<Poly> {
         let mut terms: List<Term> = [];
         for let a of &self.terms {
@@ -160,10 +144,7 @@ impl Poly {
     fn bounds(&self) -> [i128, i128] {
         let [mut low, mut high] = [0 as i128, 0 as i128];
         for let t of &self.terms {
-            let mut reach = t.coefficient as i128;
-            for let _ of &t.symbols {
-                reach = saturated(reach * i32::MAX as i128);
-            }
+            let reach = t.reach();
             if t.symbols.is_empty() || reach < 0 {
                 low += reach;
             }
@@ -172,6 +153,18 @@ impl Poly {
             }
         }
         return [low, high];
+    }
+
+    /// Whether every value of the symbols keeps this within `i64`, and every
+    /// partial product and sum `forward` computes on the way, term by term.
+    /// Stage 0's own algebra is exact however large it grows; this is what a
+    /// value the run computes in `i64` needs.
+    pub fn fits_i64(&self) -> bool {
+        let mut magnitude = 0 as i128;
+        for let t of &self.terms {
+            magnitude += i128::abs(t.reach());
+        }
+        return magnitude <= i64::MAX as i128;
     }
 
     /// `terms` summed into canonical form, or `None` where a sum leaves `i64`.
@@ -197,16 +190,24 @@ impl Poly {
     }
 }
 
+impl Term {
+    /// The value at every symbol's largest, `i32::MAX`, which bounds the value
+    /// and every partial product at any other. Held within 2^64 either way.
+    fn reach(&self) -> i128 {
+        let mut reach = self.coefficient as i128;
+        for let _ of &self.symbols {
+            reach = saturated(reach * i32::MAX as i128);
+        }
+        return reach;
+    }
+}
+
 /// `value`, where an `i64` holds it.
 fn narrowed(value: i128) -> Option<i64> {
     if !(i64::MIN as i128 <= value <= i64::MAX as i128) {
         return null;
     }
     return Option::Some(value as i64);
-}
-
-fn within_i64(p: Option<Poly>) -> Poly {
-    return p.expect("a polynomial over extents left i64");
 }
 
 /// `reach` held within 2^64 either way. That is past any `i64` constant a sum

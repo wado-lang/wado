@@ -89,7 +89,7 @@ test "shape arithmetic over a symbol folds as a polynomial" {
     let product = folded(node("Mul", ["S", "T"], []), k);
     assert product == Known {
         extents: [1],
-        elements: Elements::integers([Poly::symbol(&"N").mul(&Poly::constant(4))]),
+        elements: Elements::integers([Poly::symbol(&"N").try_mul(&Poly::constant(4)).unwrap()]),
     };
     let gone = folded(node("Sub", ["S", "S"], []), k);
     assert gone == ints([1], [0]);
@@ -294,6 +294,7 @@ test "Cast to int32 keeps a known integer's low 32 bits beside a symbolic one" {
     assert folded(node("Cast", ["D"], [attr("to", ["6"])]), k) == Known {
         extents: [2],
         elements: Elements::Symbolic([n, Poly::constant(705032704)]),
+        int32: true,
     };
 }
 
@@ -312,6 +313,44 @@ test "Range counts from start to limit" {
         ["D", ints([], [1])],
     ]);
     assert folded(node("Range", ["S", "L", "D"], []), k) == ints([4], [0, 1, 2, 3]);
+}
+
+test "a step past the span takes one element, however large the step" {
+    let up = knowns([
+        ["S", ints([], [0])],
+        ["L", ints([], [5])],
+        ["D", ints([], [i64::MAX])],
+    ]);
+    assert folded(node("Range", ["S", "L", "D"], []), up) == ints([1], [0]);
+    let down = knowns([
+        ["S", ints([], [5])],
+        ["L", ints([], [0])],
+        ["D", ints([], [i64::MIN])],
+    ]);
+    assert folded(node("Range", ["S", "L", "D"], []), down) == ints([1], [5]);
+    let sliced = knowns([
+        ["X", ints([5], [0, 1, 2, 3, 4])],
+        ["B", ints([1], [0])],
+        ["E", ints([1], [5])],
+        ["A", ints([1], [0])],
+        ["P", ints([1], [i64::MAX])],
+    ]);
+    assert folded(node("Slice", ["X", "B", "E", "A", "P"], []), sliced) == ints([1], [0]);
+}
+
+test "a Range longer than any list is refused before it is counted out" {
+    let ints_range = knowns([
+        ["S", ints([], [0])],
+        ["L", ints([], [3_000_000_000])],
+        ["D", ints([], [1])],
+    ]);
+    assert fold(&node("Range", ["S", "L", "D"], []), &ints_range, &runtime([])).unwrap_err() == "3000000000 elements are more than a list holds";
+    let floats_range = knowns([
+        ["S", floats([], [0.0])],
+        ["L", floats([], [3.0e9])],
+        ["D", floats([], [1.0])],
+    ]);
+    assert fold(&node("Range", ["S", "L", "D"], []), &floats_range, &runtime([])).unwrap_err() == "3000000000 elements are more than a list holds";
 }
 
 test "Range with a zero float delta is refused" {

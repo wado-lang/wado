@@ -139,6 +139,9 @@ pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) 
 pub struct Known {
     pub extents: List<i32>,
     pub elements: Elements,
+    /// Whether the integers are ONNX's int32, which wraps at 32 bits where
+    /// int64 does not, though `i64` holds both.
+    pub int32: bool = false,
 }
 
 /// A known tensor's elements, in the type stage 0 computes them in. ONNX's

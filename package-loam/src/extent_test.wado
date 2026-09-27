@@ -27,9 +27,10 @@ test "an unstated extent agrees with nothing, itself included" {
 
 test "a polynomial with no symbol left is a static extent" {
     let seq = Poly::symbol(&"seq");
-    assert Extent::of(seq.sub(&seq).add(&Poly::constant(3))) matches { Some(Static(3)) };
+    assert Extent::of(seq.try_sub(&seq).unwrap().try_add(&Poly::constant(3)).unwrap()) matches { Some(Static(3)) };
     assert Extent::of(Poly::constant(-1)) matches { None };
-    assert Extent::of(seq.mul(&Poly::constant(2))).unwrap().agrees(&Extent::of(seq.add(&seq)).unwrap());
+    let doubled = Extent::of(seq.try_mul(&Poly::constant(2)).unwrap()).unwrap();
+    assert doubled.agrees(&Extent::of(seq.try_add(&seq).unwrap()).unwrap());
 }
 
 test "an extent renders as what a diagnostic should name it" {

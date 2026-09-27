@@ -15,6 +15,33 @@ pub fn fold(
     known: &TreeMap<String, Known>,
     shapes: &TreeMap<String, Shape>,
 ) -> Result<Option<Known>, String> {
+    return evaluated(node, known, shapes).map(|found| found.map(|k| in_width(k)));
+}
+
+/// `k` as its ONNX element holds it: an int32 keeps the low 32 bits of each
+/// value the build knows. One only the run knows stays whole, and `infer` owes
+/// that it fits.
+fn in_width(k: Known) -> Known {
+    if !k.int32 {
+        return k;
+    }
+    let narrowed = |p: Poly| match p.as_constant() {
+        Some(c) => Poly::constant(c as i32 as i64),
+        None => p,
+    };
+    let elements = match k.elements {
+        Ints(v) => Elements::Ints(v.into_iter().map(|c| c as i32 as i64).collect()),
+        Symbolic(v) => Elements::integers(v.into_iter().map(narrowed).collect()),
+        _ => unreachable(),
+    };
+    return Known { ..k, elements };
+}
+
+fn evaluated(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    shapes: &TreeMap<String, Shape>,
+) -> Result<Option<Known>, String> {
     let op = node.op;
     if op == "Constant" {
         return constant(node).map(|k| Option::Some(k));
@@ -70,7 +97,7 @@ fn regrouped(node: &Node, known: &TreeMap<String, Known>, x: &Known) -> Result<K
         };
         extents.push(n);
     }
-    return Result::Ok(Known { extents, elements: x.elements });
+    return Result::Ok(Known { ..*x, extents });
 }
 
 /// The extents a regrouping gives `input`: `Reshape`'s target, or `input` with
@@ -97,7 +124,7 @@ pub fn regrouped_extents(
 /// The target holds as many elements as the input for every value of the
 /// symbols, or the build cannot show the reshape sound.
 fn reshape_extents(written: &List<Poly>, input: &List<Extent>, allow_zero: bool) -> Result<List<Extent>, String> {
-    let total = count_of(input);
+    let total = count_of(input).expect("`held` or a known tensor bounded the operand's count");
     let mut extents: List<Extent> = [];
     let mut inferred = -1;
     for let [i, w] of written.into_iter().enumerate() {
@@ -119,29 +146,31 @@ fn reshape_extents(written: &List<Poly>, input: &List<Extent>, allow_zero: bool)
     if !fits(&extents) {
         return Result::Err(`the target shape ${spelled(written)} multiplies past what a list can hold`);
     }
-    let stated = count_of(&extents);
+    let stated = count_of(&extents).unwrap();
     if inferred >= 0 && stated != Poly::constant(0) {
         if let Some(rest) = total.divided_by(&stated) && let Some(e) = Extent::of(rest) {
             extents[inferred] = e;
         }
     }
-    if count_of(&extents) != total {
+    if count_of(&extents) != Option::Some(total) {
         return Result::Err(`${total} elements cannot take the shape ${spelled(written)}`);
     }
     return Result::Ok(extents);
 }
 
-/// The elements a tensor of `extents` holds, which the caller has shown stated.
-pub fn count_of(extents: &List<Extent>) -> Poly {
+/// The elements a tensor of `extents` holds, which the caller has shown
+/// stated, or `None` where no polynomial holds the product.
+pub fn count_of(extents: &List<Extent>) -> Option<Poly> {
     let mut p = Poly::constant(1);
     for let e of *extents {
-        p = p.mul(&e.poly());
+        p = p.try_mul(&e.poly())?;
     }
-    return p;
+    return Option::Some(p);
 }
 
-/// Whether the extents a shape states multiply within what a list can hold. A
-/// symbolic extent can only raise the product, so the stated ones decide it.
+/// Whether the extents a shape states multiply within what a list can hold,
+/// and all of them into a polynomial stage 0 can compare. A symbolic extent can
+/// only raise the product, so the stated ones decide the first.
 pub fn fits(extents: &List<Extent>) -> bool {
     let mut stated: List<i32> = [];
     for let e of *extents {
@@ -149,7 +178,7 @@ pub fn fits(extents: &List<Extent>) -> bool {
             stated.push(n);
         }
     }
-    return checked_element_count(&stated) matches { Some(_) };
+    return checked_element_count(&stated) matches { Some(_) } && count_of(extents) matches { Some(_) };
 }
 
 fn spelled(values: &List<Poly>) -> String {
@@ -238,7 +267,7 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
     let mut extents = leading;
     extents.extend(&indices.extents);
     extents.extend(&trailing);
-    return Result::Ok(Known { extents, elements: picked(&data.elements, &picks) });
+    return Result::Ok(Known { ..*data, extents, elements: picked(&data.elements, &picks) });
 }
 
 /// `Unsqueeze`'s output extents: `input` with a 1 at each of `axes`, which
@@ -322,7 +351,7 @@ fn concat(parts: &List<Known>, axis: i64) -> Result<Known, String> {
     }
     let mut extents = first.extents;
     extents[a] = along;
-    return Result::Ok(Known { extents, elements: picked(&joined_elements(parts)?, &picks) });
+    return Result::Ok(Known { ..*first, extents, elements: picked(&joined_elements(parts)?, &picks) });
 }
 
 /// A `Slice`'s operands: one start, end, axis and step per axis it lists. A
@@ -377,7 +406,8 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
         let e = if s > 0 { clamped(ends[i], dim, 0, dim) } else { clamped(ends[i], dim, -1, dim - 1) };
         begin[a] = b;
         step[a] = s;
-        extents[a] = steps_over(e - b, s) as i32;
+        // `b` and `e` lie within the axis, so the count does too.
+        extents[a] = steps_over(b, e, s) as i32;
     }
     let mut picks: List<i32> = [];
     let strides = stretched_strides(&x.extents, rank);
@@ -392,26 +422,21 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
         }
         picks.push(at);
     }
-    return Result::Ok(Option::Some(Known { extents, elements: picked(&x.elements, &picks) }));
+    return Result::Ok(Option::Some(Known { ..*x, extents, elements: picked(&x.elements, &picks) }));
 }
 
 /// `Cast` to float, int32, int64 or bool. A float becomes an integer by
-/// truncation toward zero, an int32 keeps the low 32 bits, and anything nonzero
-/// becomes `true`. A symbolic integer stays one, which to int32 is exact only
-/// where it fits: `infer` owes that. The run converts one to anything else.
+/// truncation toward zero, `in_width` takes an int32's low 32 bits, and
+/// anything nonzero becomes `true`. A symbolic integer stays one. The run
+/// converts one to anything else.
 fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
     let target = data_type(to);
-    if let Symbolic(values) = &x.elements {
-        return Result::Ok(match target {
-            Some(Int64) => Option::Some(*x),
-            Some(Int32) => {
-                let narrowed = values.into_iter().map(|v| match v.as_constant() {
-                    Some(c) => Poly::constant(c as i32 as i64),
-                    None => *v,
-                }).collect();
-                Option::Some(Known { extents: x.extents, elements: Elements::Symbolic(narrowed) });
-            },
-            _ => null,
+    let int32 = target matches { Some(Int32) };
+    if x.elements matches { Symbolic(_) } {
+        return Result::Ok(if target matches { Some(Int32 | Int64) } {
+            Option::Some(Known { ..*x, int32 });
+        } else {
+            null;
         });
     }
     let count = x.len();
@@ -426,8 +451,7 @@ fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
         Some(Int32 | Int64) => {
             let mut out = List::<i64>::with_capacity(count);
             for let i of 0..<count {
-                let v = as_int(&x.elements, i);
-                out.push(if target matches { Some(Int32) } { v as i32 as i64 } else { v });
+                out.push(as_int(&x.elements, i));
             }
             Elements::Ints(out);
         },
@@ -442,7 +466,7 @@ fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
             return Result::Err(`\`to\` is element type ${to}, which the build does not compute in`);
         },
     };
-    return Result::Ok(Option::Some(Known { extents: x.extents, elements }));
+    return Result::Ok(Option::Some(Known { extents: x.extents, elements, int32 }));
 }
 
 /// Element `i` as a float. `cast` has taken the symbolic case already.
@@ -465,11 +489,22 @@ fn as_int(elements: &Elements, i: i32) -> i64 {
     };
 }
 
-/// How many steps of `step` fit in `span`, as `Slice` and `Range` count them:
-/// the last may fall short, and a span running against the step holds none.
-pub fn steps_over(span: i64, step: i64) -> i64 {
+/// How many steps of `step` fit from `from` to `to`, as `Slice` and `Range`
+/// count them: the last may fall short, and a span running against the step
+/// holds none. Wide, since the span and the count of any two `i64` do not fit
+/// one.
+pub fn steps_over(from: i64, to: i64, step: i64) -> i128 {
     assert step != 0;
-    return i64::max(if step > 0 { (span + step - 1) / step } else { (-span - step - 1) / -step }, 0);
+    let [span, s] = [to as i128 - from as i128, step as i128];
+    return i128::max(if s > 0 { (span + s - 1) / s } else { (-span - s - 1) / -s }, 0);
+}
+
+/// The refusal of a tensor of `count` elements, where that is more than a list holds.
+pub fn too_many(count: i128) -> Result<(), String> {
+    if count > i32::MAX as i128 {
+        return Result::Err(`${count} elements are more than a list holds`);
+    }
+    return Result::Ok(());
 }
 
 /// `Range`, or `None` where a bound only the run knows leaves it to the run.
@@ -483,14 +518,17 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
             if d == 0 {
                 return Result::Err("delta is 0");
             }
-            let count = steps_over(l - s, d);
+            let count = steps_over(s, l, d);
+            too_many(count)?;
             let mut values: List<i64> = [];
-            for let i of 0..<count {
-                values.push(s + i * d);
+            for let i of 0..<count as i32 {
+                // Each value lies between `s` and `l`, though `i * d` may not.
+                values.push((s as i128 + i as i128 * d as i128) as i64);
             }
             Result::Ok(Option::Some(Known {
                 extents: [values.len()],
                 elements: Elements::Ints(values),
+                int32: start.int32,
             }));
         },
         [Floats(s), Floats(l), Floats(d)] => {
@@ -498,7 +536,13 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
             if d == 0.0 {
                 return Result::Err("delta is 0");
             }
-            let count = f32::max(f32::ceil((l - s) / d), 0.0) as i32;
+            let wide = f32::max(f32::ceil((l - s) / d), 0.0);
+            if wide.is_nan() {
+                return Result::Err(`${s} to ${l} by ${d} counts no number of elements`);
+            }
+            // A float past `i128` converts to its largest, which is too many as well.
+            too_many(wide as i128)?;
+            let count = wide as i32;
             let mut values: List<f32> = [];
             for let i of 0..<count {
                 values.push(s + i as f32 * d);
@@ -535,7 +579,7 @@ fn constant_of_shape(node: &Node, shape: &Known) -> Result<Known, String> {
         fill = t;
     }
     let count = element_count(&extents);
-    return Result::Ok(Known { extents, elements: picked(&fill.elements, &List::<i32>::filled(count, 0)) });
+    return Result::Ok(Known { ..fill, extents, elements: picked(&fill.elements, &List::<i32>::filled(count, 0)) });
 }
 
 fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
@@ -566,7 +610,8 @@ fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
             Elements::integers(out);
         },
     };
-    return Result::Ok(Known { extents, elements });
+    // ONNX computes in the operands' one element type.
+    return Result::Ok(Known { extents, elements, int32: a.int32 });
 }
 
 /// Integer arithmetic, where a symbol may stand for an operand. A quotient of
@@ -577,9 +622,9 @@ fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
 fn poly_op(op: &String, l: &Poly, r: &Poly) -> Result<Poly, String> {
     let overflow = `${*l} ${*op} ${*r} leaves i64`;
     return match op.as_str_slice() {
-        "Add" => l.try_add(r).ok_or(overflow),
-        "Sub" => l.try_sub(r).ok_or(overflow),
-        "Mul" => l.try_mul(r).ok_or(overflow),
+        "Add" => in_int64(l.try_add(r), overflow),
+        "Sub" => in_int64(l.try_sub(r), overflow),
+        "Mul" => in_int64(l.try_mul(r), overflow),
         "Div" => {
             if let Some(a) = l.as_constant() && let Some(b) = r.as_constant() {
                 if a < 0 || b <= 0 {
@@ -592,6 +637,15 @@ fn poly_op(op: &String, l: &Poly, r: &Poly) -> Result<Poly, String> {
             exact.ok_or(`${*l} / ${*r} is not a quotient the build can show exact`);
         },
         _ => Result::Err(`${*op} of integers is not evaluated`),
+    };
+}
+
+/// An int64 the graph computed, or `overflow` where no polynomial holds it or
+/// some input carries it past i64, where ONNX's int64 wraps and it does not.
+fn in_int64(exact: Option<Poly>, overflow: String) -> Result<Poly, String> {
+    return match exact {
+        Some(v) && v.fits_i64() => Result::Ok(v),
+        _ => Result::Err(overflow),
     };
 }
 

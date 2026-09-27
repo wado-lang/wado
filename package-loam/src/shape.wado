@@ -14,6 +14,16 @@ fn short_of(consumed: &Poly, produced: &Poly) -> bool {
     return *consumed != *produced && produced.divided_by(consumed) matches { Some(_) };
 }
 
+/// `out`, the axes a regrouping has determined, with the rest of `count` left
+/// undetermined.
+fn undetermined_past(out: List<Option<Axis>>, count: i32) -> List<Option<Axis>> {
+    let mut all = out;
+    while all.len() < count {
+        all.push(null);
+    }
+    return all;
+}
+
 /// One axis: the identity the type layer carries, paired with the length it
 /// cannot. See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
 pub struct Axis {
@@ -139,7 +149,8 @@ impl Shape {
 
     /// `Reshape` onto `targets`, once `extents` has shown every part stated:
     /// each output axis is the run of parts it spans, merged where several, or
-    /// `None` where no regrouping determines it.
+    /// `None` where no regrouping determines it. A product no polynomial holds
+    /// cannot be compared, so it determines no axis from there on.
     pub fn regroup(&self, targets: &List<Extent>) -> List<Option<Axis>> {
         let parts = self.parts();
         let mut out: List<Option<Axis>> = [];
@@ -148,7 +159,10 @@ impl Shape {
         let mut produced = Poly::constant(1);
         for let target of *targets {
             let aligned = consumed == produced;
-            produced = produced.mul(&target.poly());
+            let Some(p) = produced.try_mul(&target.poly()) else {
+                return undetermined_past(out, targets.len());
+            };
+            produced = p;
             if target.is_one() {
                 let takes_unit = aligned && next < parts.len() && parts[next].extent.is_one();
                 out.push(if takes_unit { Option::Some(parts[next]) } else { null });
@@ -159,7 +173,10 @@ impl Shape {
             }
             let mut run: List<Axis> = [];
             while next < parts.len() && short_of(&consumed, &produced) {
-                consumed = consumed.mul(&parts[next].extent.poly());
+                let Some(c) = consumed.try_mul(&parts[next].extent.poly()) else {
+                    return undetermined_past(out, targets.len());
+                };
+                consumed = c;
                 if !parts[next].extent.is_one() {
                     run.push(parts[next]);
                 }

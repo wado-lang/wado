@@ -71,7 +71,7 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
         },
         _ => unreachable(),
     };
-    let known = Known { extents: extents_of(t, &name)?, elements };
+    let known = Known { extents: extents_of(t, &name)?, elements, int32: element == Int32 };
     if known.len() == 0 && check_element_count(&name, 0, &known.extents).is_err() {
         return Result::Err(constant_without_values(&name));
     }

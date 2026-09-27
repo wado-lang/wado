@@ -273,6 +273,20 @@ g (float[N, 2] X) => (float[N, 2] X)
     assert out.contains("return *X;");
 }
 
+test "folded tensors of one source keep their own elements, a Cast between them" {
+    let source = `g (float[3] X) => (float[3] Y) <int64[3] A = {0, 1, 2}> {
+        B = Cast<to = 1>(A)
+        C = Identity(B)
+        D = Identity(A)
+        G = Gather(X, D)
+        Y = Add(G, C)
+    }`;
+    let out = generate(source, [rule("*", ["Item"])]).unwrap();
+
+    assert out.contains("let D = Tensor::<i64, [Item]> { data: [0, 1, 2]");
+    assert out.contains("let C = Tensor::<f32, [Item]> { data: [(0 as f32), (1 as f32), (2 as f32)]");
+}
+
 test "two names that sanitize to one identifier stop the build" {
     let source = `
 g (float[N, 2] "a.b", float[N, 2] "a/b") => (float[N, 2] out)
