@@ -849,7 +849,7 @@ test "a Slice from a number to a symbol owes that it does not run backwards" {
     assert owed.contains_str("Y = Slice: axis 0 must not run backwards from 3 to N (N - 3 >= 0)");
 }
 
-test "a Slice that runs backwards for every input stops the build" {
+test "a Slice running backwards between numbers is empty, as ONNX counts it" {
     let source = `g (float[N] X) => (float[?] Y) <int64[1] B = {5}, int64[1] E = {3}> {
         Y = Slice(X, B, E)
     }`;
@@ -857,10 +857,10 @@ test "a Slice that runs backwards for every input stops the build" {
         rule("X", ["Seq"]),
         rule("Y", ["Part"]),
     ];
-    assert y_axes(source, layout).unwrap_err() == "Y = Slice: axis 0 must not run backwards from 5 to 3, and it is not";
+    assert y_axes(source, layout).unwrap() == "Part=0";
 }
 
-test "a Slice that runs backwards by a symbolic amount for every input stops the build" {
+test "a Slice running backwards by a symbolic amount for every input is empty" {
     let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
         S = Shape(X)
         B = Add(S, Three)
@@ -871,7 +871,23 @@ test "a Slice that runs backwards by a symbolic amount for every input stops the
         rule("M", ["Pos"]),
         rule("Y", ["Part"]),
     ];
-    assert y_axes(source, layout).unwrap_err() == "Y = Slice: axis 0 must not run backwards from N + 3 to 0, and it is not";
+    assert y_axes(source, layout).unwrap() == "Part=0";
+}
+
+test "a Range over a symbolic start counts a span the build knows, however it divides" {
+    let source = `g (float[N] X) => (int64[?] Y, int64[?] W) <int64[1] Three = {3}, int64[1] Two = {2}> {
+        S = Shape(X)
+        L = Add(S, Three)
+        Y = Range(S, L, Two)
+        W = Range(L, S, Two)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("X", ["Seq"]), rule("Y", ["Pos"]), rule("W", ["Back"])],
+    }).unwrap();
+    assert checked.shapes["Y"].axes[0].extent.agrees(&Extent::Static(2));
+    assert checked.shapes["W"].axes[0].extent.agrees(&Extent::Static(0));
+    assert checked.owed.is_empty();
 }
 
 test "Slice bounds past either end of a symbolic axis keep it whole and owe nothing" {
@@ -908,6 +924,35 @@ test "an output declared static where the nodes left a symbol owes the two equal
         "Y: axis Seq must be 8, as the graph declares (N - 8 >= 0)",
         "Y: axis Seq must be 8, as the graph declares (-N + 8 >= 0)",
     ] as List<String>;
+}
+
+test "an output declared static that no symbol value produces stops the build" {
+    let source = `g (float[N] X) => (int64[3] Y) <int64[1] Z = {0}, int64[1] Ten = {10}, int64[1] One = {1}> {
+        S = Shape(X)
+        L = Add(S, Ten)
+        Y = Range(Z, L, One)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Pos"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y: axis Pos is declared 3 and produced N + 10";
+}
+
+test "a symbolic integer cast to int32 owes that it fits, where an extent cannot show it" {
+    let source = `g (float[N] X) => (int64[?] Y) <int64[1] Z = {0}, int64[1] Big = {100000}, int64[1] One = {1}> {
+        S = Shape(X)
+        W = Cast<to = 6>(S)
+        P = Mul(S, Big)
+        Q = Cast<to = 6>(P)
+        Y = Range(Z, Q, One)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("X", ["Seq"]), rule("Y", ["Pos"])],
+    }).unwrap();
+    let owed: List<String> = checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
+    assert owed == ["Q = Cast: 100000 * N must fit in int32 (-100000 * N + 2147483647 >= 0)"] as List<String>;
 }
 
 test "a Range the run computes, longer than any list, stops the build" {

@@ -270,9 +270,9 @@ fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     for let t of graph.initializer {
         let name = name_of(&t);
         check_inline(&t, &name)?;
-        let data_type = t.data_type.unwrap_or(0);
-        let Some(dtype) = dtype_name(data_type) else {
-            return Result::Err(`${name}: element type ${data_type}`);
+        let elem_type = t.data_type.unwrap_or(0);
+        let Some(dtype) = dtype_name(elem_type) else {
+            return Result::Err(`${name}: element type ${elem_type}`);
         };
         if is_build_time(&dtype) {
             constants[name] = known_tensor(&t)?.unwrap();

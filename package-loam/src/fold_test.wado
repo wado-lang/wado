@@ -280,6 +280,17 @@ test "Cast turns an extent into a float the scale is computed in" {
     assert folded(node("Pow", ["D", "H"], []), k2) == floats([], [f32::sqrt(8.0)]);
 }
 
+test "Cast to int32 keeps a known integer's low 32 bits beside a symbolic one" {
+    let n = Poly::symbol(&"N");
+    let k = knowns([
+        ["D", Known { extents: [2], elements: Elements::Symbolic([n, Poly::constant(5000000000)]) }],
+    ]);
+    assert folded(node("Cast", ["D"], [attr("to", ["6"])]), k) == Known {
+        extents: [2],
+        elements: Elements::Symbolic([n, Poly::constant(705032704)]),
+    };
+}
+
 test "integer arithmetic broadcasts" {
     let k = knowns([
         ["A", ints([2], [5, 7])],

@@ -16,6 +16,7 @@ use {
     regrouped_extents,
     resolve_index,
     slice_bounds,
+    steps_over,
 } from "./fold.wado";
 use {
     AttrError,
@@ -351,6 +352,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         operands_given(node, &known, &shapes)?;
         match fold(node, &known, &shapes) {
             Ok(Some(k)) => {
+                owe_int32_fit(node, &k, &mut owed)?;
                 known[node.outputs[0]] = k;
                 continue;
             },
@@ -545,26 +547,31 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
             continue;
         };
         let axis = &merged.axes[i];
+        let conflict = || {
+            builtin::cold_path();
+            return InferError::Declared(DeclaredConflict {
+                tensor: vi.name,
+                axis: axis.name,
+                declared: Extent::Static(declared),
+                produced: axis.extent,
+            });
+        };
         match axis.extent {
             Static(found) => {
                 if declared != found {
-                    builtin::cold_path();
-                    return Result::Err(InferError::Declared(DeclaredConflict {
-                        tensor: vi.name,
-                        axis: axis.name,
-                        declared: Extent::Static(declared),
-                        produced: axis.extent,
-                    }));
+                    return Result::Err(conflict());
                 }
             },
-            // The graph states a length the nodes only carried a name for, and
-            // a consumer of the shape table is owed the constant. A symbol is
-            // left in either difference, so neither is a number to refuse.
+            // The graph states a length the nodes only carried a polynomial
+            // for, and a consumer of the shape table is owed the constant.
             Symbolic(p) => {
                 let stated = Poly::constant(declared as i64);
                 let condition = `axis ${axis.name} must be ${declared}, as the graph declares`;
-                owe_at(vi.name, owed, p.sub(&stated), condition).unwrap();
-                owe_at(vi.name, owed, stated.sub(&p), condition).unwrap();
+                for let slack of [p.sub(&stated), stated.sub(&p)] as List<Poly> {
+                    if owe_at(vi.name, owed, slack, condition).is_err() {
+                        return Result::Err(conflict());
+                    }
+                }
                 merged.axes[i].extent = Extent::Static(declared);
             },
             Unstated => unreachable(),
@@ -912,8 +919,7 @@ pub fn slice_cuts(
         let dim = x.axes[a].extent.poly();
         let begin = within(node, &starts[i], &dim, owed)?;
         let end = within(node, &ends[i], &dim, owed)?;
-        let count = difference(node, &end, &begin)?;
-        owe(node, owed, count, `axis ${a} must not run backwards from ${begin} to ${end}`)?;
+        let count = run_count(node, owed, &begin, &end, &Poly::constant(1), `axis ${a} must not run backwards from ${begin} to ${end}`)?;
         if begin != Poly::constant(0) || count != dim {
             cuts.push(Cut { axis: a, start: begin, extent: counted(node, count)? });
         }
@@ -968,13 +974,56 @@ pub fn range_count(
     owed: &mut List<Condition>,
 ) -> Result<Extent, InferError> {
     let [start, limit, delta] = range_bounds(node, known)?;
-    let span = difference(node, &limit, &start)?;
-    let count = if delta.as_constant() matches { Some(d) && d > 0 } { span.divided_by(&delta) } else { null };
-    let Some(c) = count else {
-        return Result::Err(refusal(node, `${start} to ${limit} by ${delta} is not a count the build can show exact`));
+    return counted(node, run_count(node, owed, &start, &limit, &delta, `${start} to ${limit} must not run backwards`)?);
+}
+
+/// A `Cast` to int32 folds a symbolic integer as it stands, which is the run's
+/// int32 only where the value fits. What the extents cannot show fits, the
+/// inputs owe.
+fn owe_int32_fit(node: &Node, folded: &Known, owed: &mut List<Condition>) -> Result<(), InferError> {
+    if node.op != "Cast" || !(data_type(int_attr(node, "to", 0)?) matches { Some(Int32) }) {
+        return Result::Ok(());
+    }
+    let Symbolic(values) = &folded.elements else {
+        return Result::Ok(());
     };
-    owe(node, owed, c, `${start} to ${limit} must not run backwards`)?;
-    return counted(node, c);
+    for let v of values {
+        if v.is_within_i32() {
+            continue;
+        }
+        let condition = `${*v} must fit in int32`;
+        owe(node, owed, Poly::constant(i32::MAX as i64).sub(v), condition)?;
+        owe(node, owed, v.sub(&Poly::constant(i32::MIN as i64)), condition)?;
+    }
+    return Result::Ok(());
+}
+
+/// The steps of `step` from `from` to `to`, as ONNX counts them: none for a
+/// span running backwards. A symbolic span must divide by the step, and where
+/// it may run either way the inputs owe `condition`, that it runs forwards: a
+/// count clamped at none has no polynomial to name it.
+fn run_count(
+    node: &Node,
+    owed: &mut List<Condition>,
+    from: &Poly,
+    to: &Poly,
+    step: &Poly,
+    condition: String,
+) -> Result<Poly, InferError> {
+    let span = difference(node, to, from)?;
+    if let Some(s) = span.as_constant() && let Some(d) = step.as_constant() && d != 0 {
+        return Result::Ok(Poly::constant(steps_over(s, d)));
+    }
+    let forwards = step.as_constant() matches { Some(d) && d > 0 };
+    if forwards && span.is_negative() {
+        return Result::Ok(Poly::constant(0));
+    }
+    let count = if forwards { span.divided_by(step) } else { null };
+    let Some(c) = count else {
+        return Result::Err(refusal(node, `${*from} to ${*to} by ${*step} is not a count the build can show exact`));
+    };
+    owe(node, owed, c, condition)?;
+    return Result::Ok(c);
 }
 
 /// A `Range`'s start, limit and delta, each one integer the build knows.

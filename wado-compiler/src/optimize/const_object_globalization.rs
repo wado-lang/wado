@@ -1811,30 +1811,33 @@ fn readonly_body_violation(body: &Body, idx: u32, gate: &Gate<'_>) -> Option<&'s
     // The aliases answer a narrower question. `block_readonly` also rejects a
     // bare whole-value read, which is a consuming use of the constant but
     // ordinary for a local that merely names part of it.
-    projection_alias_roots(body, idx, gate)
+    let aliases: Vec<u32> = projection_alias_roots(body, idx, gate)
         .into_iter()
         .filter(|&root| root != idx)
-        .any(|root| written_through(body, root, gate))
-        .then_some("an alias of the binding is written")
+        .collect();
+    written_through(body, &aliases, gate).then_some("an alias of the binding is written")
 }
 
-/// Whether a write reaches the storage local `idx` names: an assignment
+/// Whether a write reaches the storage one of `roots` names: an assignment
 /// through it, a `&mut` of it or of one of its projections, or a call that
 /// mutates it as a receiver. Filling the local itself only renames it.
-fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
-    let rooted_at_idx = |e: ExprId| projection_root_of(body, e, gate) == Some(idx);
+fn written_through(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
+    if roots.is_empty() {
+        return false;
+    }
+    let rooted = |e: ExprId| projection_root_of(body, e, gate).is_some_and(|r| roots.contains(&r));
     reachable_nodes(body).into_iter().any(|node| {
         let NodeRef::Expr(e) = node else {
             return false;
         };
         match &body.exprs[e].kind {
             ExprKind::Assign { target, .. } => {
-                assign_target_local(body, *target).is_none() && rooted_at_idx(*target)
+                assign_target_local(body, *target).is_none() && rooted(*target)
             }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
-            } => inner.as_expr().is_some_and(rooted_at_idx),
+            } => inner.as_expr().is_some_and(rooted),
             ExprKind::Call {
                 func_id,
                 args,
@@ -1843,7 +1846,7 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
             } => args.first().is_some_and(|recv| {
                 recv.expr
                     .as_expr()
-                    .is_some_and(|r| rooted_at_idx(strip_refs(body, r)))
+                    .is_some_and(|r| rooted(strip_refs(body, r)))
                     && gate.callee_mutates_self(*func_id) != Some(false)
             }),
             _ => false,
@@ -1875,7 +1878,16 @@ fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
                             value.is_some_and(delivers)
                         }
-                        _ => false,
+                        // A binding names storage inside the body, and the
+                        // rest deliver nothing but through a node this walk
+                        // reaches on its own.
+                        StmtKind::Let { .. }
+                        | StmtKind::LetDestructure { .. }
+                        | StmtKind::Expr(_)
+                        | StmtKind::If { .. }
+                        | StmtKind::Loop { .. }
+                        | StmtKind::LabeledBlock { .. }
+                        | StmtKind::Continue => false,
                     },
                     // Assigning into a local is naming, not escaping: that
                     // local is already one of `roots`, so its own uses are

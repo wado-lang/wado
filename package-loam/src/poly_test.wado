@@ -51,6 +51,20 @@ test "a negative constant no term can raise is negative for every input" {
     assert !seq.sub(&c(2)).is_negative();
 }
 
+test "a polynomial is within i32 where every extent keeps it there" {
+    let [n, m] = [
+        s("n"),
+        s("m"),
+    ];
+    assert n.is_within_i32();
+    assert n.sub(&c(1)).is_within_i32();
+    assert c(-1).sub(&n).is_within_i32();
+    assert !n.mul(&c(2)).is_within_i32();
+    assert !n.mul(&m).is_within_i32();
+    assert !n.add(&c(1)).is_within_i32();
+    assert !n.mul(&n).mul(&n).mul(&n).mul(&n).is_within_i32();
+}
+
 test "a polynomial renders highest degree first, the constant last" {
     let [a, b] = [
         s("a"),
@@ -63,6 +77,8 @@ test "a polynomial renders highest degree first, the constant last" {
     assert `${c(1).sub(&a)}` == "-a + 1";
     assert `${a.mul(&b).mul(&c(2)).sub(&a)}` == "2 * a * b - a";
     assert `${a.mul(&a)}` == "a * a";
+    assert `${c(i64::MIN)}` == "-9223372036854775808";
+    assert `${a.add(&c(i64::MIN).mul(&b))}` == "a - 9223372036854775808 * b";
 }
 
 test "a polynomial spells each symbol as the generated module binds it" {

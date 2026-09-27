@@ -20,7 +20,7 @@ use crate::lower::plan::value_copy::analyze::{
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
-    BuiltinDeclarations, FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr,
+    BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -127,6 +127,25 @@ impl<'a> OwnedCalls<'a> {
         self.returns_projection
             .get(&func.module_source, &func.name)
             .map(Vec::as_slice)
+    }
+
+    /// The arguments a call to `func` hands back a projection of, as
+    /// [`Self::projected_params`] names them.
+    pub fn projected_args<'e>(
+        &self,
+        func: &'e FunctionRef,
+        args: &'e [CallArg],
+    ) -> Option<impl Iterator<Item = &'e TirExpr>> {
+        let params = self.projected_params(func)?;
+        Some(params.iter().map(move |&p| {
+            assert!(
+                p < args.len(),
+                "`{}` projects parameter {p}, past its {} arguments",
+                func.name,
+                args.len()
+            );
+            &args[p].expr
+        }))
     }
 }
 
@@ -552,12 +571,8 @@ impl Projector<'_> {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. } => self.projected(inner, visiting),
             TirExprKind::Call { func, args, .. } => {
-                let handed_back = self.oracle.projected_params(func)?;
-                let args: Option<Vec<&TirExpr>> = handed_back
-                    .iter()
-                    .map(|&p| args.get(p).map(|a| &a.expr))
-                    .collect();
-                self.union(args?, visiting)
+                let handed_back = self.oracle.projected_args(func, args)?.collect();
+                self.union(handed_back, visiting)
             }
             TirExprKind::Match { arms, .. } => self.union(
                 arms.iter()

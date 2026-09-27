@@ -375,10 +375,9 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
         }
         let b = if s > 0 { clamped(starts[i], dim, 0, dim) } else { clamped(starts[i], dim, 0, dim - 1) };
         let e = if s > 0 { clamped(ends[i], dim, 0, dim) } else { clamped(ends[i], dim, -1, dim - 1) };
-        let count = if s > 0 { (e - b + s - 1) / s } else { (b - e - s - 1) / -s };
         begin[a] = b;
         step[a] = s;
-        extents[a] = i64::max(count, 0) as i32;
+        extents[a] = steps_over(e - b, s) as i32;
     }
     let mut picks: List<i32> = [];
     let strides = stretched_strides(&x.extents, rank);
@@ -397,13 +396,23 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
 }
 
 /// `Cast` to float, int32, int64 or bool. A float becomes an integer by
-/// truncation toward zero, and anything nonzero becomes `true`. A symbolic
-/// integer stays one, since an extent fits either width, and the run converts
-/// it to anything else.
+/// truncation toward zero, an int32 keeps the low 32 bits, and anything nonzero
+/// becomes `true`. A symbolic integer stays one, which to int32 is exact only
+/// where it fits: `infer` owes that. The run converts one to anything else.
 fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
     let target = data_type(to);
-    if x.elements matches { Symbolic(_) } {
-        return Result::Ok(if target matches { Some(Int32 | Int64) } { Option::Some(*x) } else { null });
+    if let Symbolic(values) = &x.elements {
+        return Result::Ok(match target {
+            Some(Int64) => Option::Some(*x),
+            Some(Int32) => {
+                let narrowed = values.into_iter().map(|v| match v.as_constant() {
+                    Some(c) => Poly::constant(c as i32 as i64),
+                    None => *v,
+                }).collect();
+                Option::Some(Known { extents: x.extents, elements: Elements::Symbolic(narrowed) });
+            },
+            _ => null,
+        });
     }
     let count = x.len();
     let elements = match target {
@@ -456,6 +465,13 @@ fn as_int(elements: &Elements, i: i32) -> i64 {
     };
 }
 
+/// How many steps of `step` fit in `span`, as `Slice` and `Range` count them:
+/// the last may fall short, and a span running against the step holds none.
+pub fn steps_over(span: i64, step: i64) -> i64 {
+    assert step != 0;
+    return i64::max(if step > 0 { (span + step - 1) / step } else { (-span - step - 1) / -step }, 0);
+}
+
 /// `Range`, or `None` where a bound only the run knows leaves it to the run.
 fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, String> {
     if start.len() != 1 || limit.len() != 1 || delta.len() != 1 {
@@ -467,7 +483,7 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
             if d == 0 {
                 return Result::Err("delta is 0");
             }
-            let count = i64::max(if d > 0 { (l - s + d - 1) / d } else { (s - l - d - 1) / -d }, 0);
+            let count = steps_over(l - s, d);
             let mut values: List<i64> = [];
             for let i of 0..<count {
                 values.push(s + i * d);

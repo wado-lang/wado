@@ -225,10 +225,8 @@ pub(crate) fn is_owned_value(
         // copied.
         TirExprKind::Call { func, args, .. } => {
             oracle.is_owned(func)
-                || oracle.projected_params(func).is_some_and(|ps| {
-                    ps.iter().all(|&p| {
-                        is_owned_value(&args[p].expr, fresh_locals, oracle, type_table)
-                    })
+                || oracle.projected_args(func, args).is_some_and(|mut handed_back| {
+                    handed_back.all(|a| is_owned_value(a, fresh_locals, oracle, type_table))
                 })
         }
         TirExprKind::CmRawCall { .. } => true,
