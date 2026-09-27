@@ -388,11 +388,12 @@ pub(super) fn for_each_type_id_in_wir_type(ty: &mut WirType, f: &mut impl FnMut(
 }
 
 /// Visit every `WirTypeId` slot in `instr`'s subtree: the type-bearing
-/// instruction fields plus ids nested in `WirType` fields (`DeclareLocal`,
-/// `Block`/`If` results, `Select`). The single authority both DCE walks
+/// instruction fields plus ids nested in each node's value types
+/// ([`WirInstr::for_each_value_type_mut`]). The single authority both DCE walks
 /// (type-reachability collection and post-compaction remapping) derive from,
 /// so a type-bearing variant cannot be visited by one and missed by the other.
 pub(super) fn for_each_type_id_slot(instr: &mut WirInstr, f: &mut impl FnMut(&mut WirTypeId)) {
+    instr.for_each_value_type_mut(&mut |ty| for_each_type_id_in_wir_type(ty, f));
     match instr {
         WirInstr::StructNew { type_id, .. }
         | WirInstr::StructGet { type_id, .. }
@@ -420,19 +421,6 @@ pub(super) fn for_each_type_id_slot(instr: &mut WirInstr, f: &mut impl FnMut(&mu
         } => {
             f(dest_type_id);
             f(src_type_id);
-        }
-        WirInstr::DeclareLocal { ty, .. } => {
-            for_each_type_id_in_wir_type(ty, f);
-        }
-        WirInstr::Block { result, .. } | WirInstr::If { result, .. } => {
-            if let Some(ty) = result {
-                for_each_type_id_in_wir_type(ty, f);
-            }
-        }
-        WirInstr::Select { ty, .. } => {
-            if let Some(ty) = ty {
-                for_each_type_id_in_wir_type(ty, f);
-            }
         }
         _ => {}
     }
