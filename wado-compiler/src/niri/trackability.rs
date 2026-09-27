@@ -324,13 +324,9 @@ pub(super) fn aggregate_safe_locals(
                 expr,
             }
             | ExprKind::Cast { expr, .. } => read_value(*expr, &mut value_reads),
-            ExprKind::Call {
-                args, has_receiver, ..
-            } => {
-                for (i, arg) in args.iter().enumerate() {
-                    // A receiver reaches the caller's storage whatever its
-                    // declared `self` mode, so it is never a passing read.
-                    if !(arg.is_mut || (*has_receiver && i == 0)) {
+            ExprKind::Call { args, .. } => {
+                for (arg, reaches_storage) in args.with_storage_reach() {
+                    if !reaches_storage {
                         read_value(arg.expr, &mut value_reads);
                     } else if !reached.covers(body, arg.expr) {
                         disqualify_root(body, arg.expr, &mut disqualified);
@@ -413,14 +409,9 @@ pub(super) fn clobbered_locals(
                     disqualify(body, *expr, &mut set);
                 }
             }
-            ExprKind::Call {
-                args, has_receiver, ..
-            } => {
-                for (i, arg) in args.iter().enumerate() {
-                    if !(arg.is_mut || (*has_receiver && i == 0)) {
-                        continue;
-                    }
-                    if !reached.covers(body, arg.expr) {
+            ExprKind::Call { args, .. } => {
+                for (arg, reaches_storage) in args.with_storage_reach() {
+                    if reaches_storage && !reached.covers(body, arg.expr) {
                         disqualify(body, arg.expr, &mut set);
                     }
                 }

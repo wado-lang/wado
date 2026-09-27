@@ -8,6 +8,7 @@ use std::ops::ControlFlow;
 
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
+use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
 use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, non_nan_float, truncate_int};
 use crate::hashmap;
@@ -331,12 +332,9 @@ pub enum ExprKind {
         /// call node carries no `FunctionRef`.
         func_id: FuncId,
         type_args: Vec<TypeId>,
-        /// Arguments in the callee's parameter order — a method's receiver is
-        /// `args[0]`, so `args[i]` maps to `params[i]` for every call shape.
-        args: Vec<ArenaCallArg>,
-        /// Whether `args[0]` is the receiver of an instance method, carried down
-        /// from [`crate::tir::TirExprKind::Call`] with its meaning intact.
-        has_receiver: bool,
+        /// Arguments in the callee's parameter order, carried down from
+        /// [`crate::tir::TirExprKind::Call`] with the receiver's meaning intact.
+        args: CallArgs<ArenaCallArg>,
     },
     CmRawCall {
         target: CmCallTarget,
@@ -454,17 +452,14 @@ impl ExprKind {
         receiver_is_mut: bool,
         args: Vec<ArenaCallArg>,
     ) -> Self {
-        let mut all = Vec::with_capacity(args.len() + 1);
-        all.push(ArenaCallArg {
+        let receiver = ArenaCallArg {
             expr: receiver,
             is_mut: receiver_is_mut,
-        });
-        all.extend(args);
+        };
         ExprKind::Call {
             func_id,
             type_args: Vec::new(),
-            args: all,
-            has_receiver: true,
+            args: CallArgs::method(receiver, args),
         }
     }
 
@@ -476,17 +471,26 @@ impl ExprKind {
     /// (traversal, substitution, operand rewriting) matches `Call` directly and
     /// never needs this.
     pub fn as_method_call(&self) -> Option<(Operand, FuncId, &[ArenaCallArg])> {
-        let ExprKind::Call {
-            func_id,
-            args,
-            has_receiver: true,
-            ..
-        } = self
-        else {
+        let ExprKind::Call { func_id, args, .. } = self else {
             return None;
         };
-        let (receiver, rest) = args.split_first()?;
+        let (Some(receiver), rest) = args.split() else {
+            return None;
+        };
         Some((receiver.expr, *func_id, rest))
+    }
+}
+
+impl CallArgs<ArenaCallArg> {
+    /// Each argument with whether the callee may reach the caller's storage
+    /// through it: a `mut` argument does, and so does a receiver, whatever
+    /// `self` mode its callee declares.
+    pub fn with_storage_reach(&self) -> impl Iterator<Item = (&ArenaCallArg, bool)> {
+        let (receiver, rest) = self.split();
+        let receiver = receiver.map(|r| (r, true));
+        receiver
+            .into_iter()
+            .chain(rest.iter().map(|a| (a, a.is_mut)))
     }
 }
 
@@ -1003,18 +1007,13 @@ impl Body {
                 func_id,
                 type_args,
                 args,
-                has_receiver,
             } => ExprKind::Call {
                 func_id,
                 type_args,
-                args: args
-                    .into_iter()
-                    .map(|a| ArenaCallArg {
-                        expr: self.clone_operand(a.expr),
-                        is_mut: a.is_mut,
-                    })
-                    .collect(),
-                has_receiver,
+                args: args.map(|a| ArenaCallArg {
+                    expr: self.clone_operand(a.expr),
+                    is_mut: a.is_mut,
+                }),
             },
             ExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
                 target,

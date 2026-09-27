@@ -17,6 +17,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::call_args::CallArgs;
 use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
@@ -704,8 +705,7 @@ fn string_call(
         None => TirExprKind::Call {
             func: Box::new(func),
             type_args,
-            args,
-            has_receiver: false,
+            args: CallArgs::free(args),
         },
     };
     TirExpr::new(kind, return_type, span)
@@ -736,8 +736,7 @@ fn build_formatter_expr(
                     )),
                 }),
                 type_args: vec![],
-                args: vec![CallArg::new(buf.mut_ref(tt), false)],
-                has_receiver: false,
+                args: CallArgs::free(vec![CallArg::new(buf.mut_ref(tt), false)]),
             },
             formatter_type,
             span,

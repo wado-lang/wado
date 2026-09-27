@@ -304,7 +304,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
 }
 
 /// Rewrite every call of a confirmed function in `body`: drop the dead-position
-/// arguments, clearing `has_receiver` when the receiver itself is dropped.
+/// arguments.
 fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let mut calls = Vec::new();
     body.for_each_reachable_node(|node| {
@@ -330,24 +330,12 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
     let Some(dead) = confirmed.get(func_id).cloned() else {
         return false;
     };
-    let ExprKind::Call {
-        args, has_receiver, ..
-    } = &mut body.exprs[id].kind
-    else {
+    let ExprKind::Call { args, .. } = &mut body.exprs[id].kind else {
         return false;
     };
-    // Dropping `args[0]` of a method call makes it a free call of the same
-    // callee. The receiver was verified pure, so discarding it is
+    // A dropped receiver was verified pure, so discarding it is
     // observation-free.
-    if dead.first() == Some(&true) {
-        *has_receiver = false;
-    }
-    let mut i = 0;
-    args.retain(|_| {
-        let alive = !dead.get(i).copied().unwrap_or(false);
-        i += 1;
-        alive
-    });
+    args.retain_positions(|i| !dead.get(i).copied().unwrap_or(false));
     true
 }
 

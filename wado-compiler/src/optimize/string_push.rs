@@ -134,12 +134,11 @@ impl Rule for ConstAsciiPushRule {
                 func_id,
                 args,
                 type_args,
-                has_receiver: true,
             } = &engine.body.exprs[id].kind
             else {
                 return false;
             };
-            let [receiver, arg0] = args.as_slice() else {
+            let (Some(receiver), [arg0]) = args.split() else {
                 return false;
             };
             if *func_id != self.push_char_id {

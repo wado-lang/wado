@@ -5,6 +5,7 @@
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
 use crate::ast::{RestClause, Visibility};
+use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -749,12 +750,13 @@ fn build_dispatch_wrapper_function(
                     method_info: None,
                 }),
                 type_args: vec![],
-                args: arg_exprs
-                    .iter()
-                    .cloned()
-                    .map(|e| CallArg::new(e, false))
-                    .collect(),
-                has_receiver: false,
+                args: CallArgs::free(
+                    arg_exprs
+                        .iter()
+                        .cloned()
+                        .map(|e| CallArg::new(e, false))
+                        .collect(),
+                ),
             },
             return_type,
             span,
@@ -802,12 +804,13 @@ fn build_dispatch_wrapper_function(
                     method_info: None,
                 }),
                 type_args: vec![],
-                args: arg_exprs
-                    .iter()
-                    .cloned()
-                    .map(|e| CallArg::new(e, false))
-                    .collect(),
-                has_receiver: false,
+                args: CallArgs::free(
+                    arg_exprs
+                        .iter()
+                        .cloned()
+                        .map(|e| CallArg::new(e, false))
+                        .collect(),
+                ),
             },
             return_type,
             span,
@@ -851,8 +854,7 @@ fn build_dispatch_wrapper_function(
                     method_info: None,
                 }),
                 type_args: vec![],
-                args: vec![CallArg::new(message, false)],
-                has_receiver: false,
+                args: CallArgs::free(vec![CallArg::new(message, false)]),
             },
             TypeTable::NEVER,
             span,
@@ -1046,8 +1048,7 @@ fn build_resource_fallback_call(
             TirExprKind::Call {
                 func: Box::new(func_ref),
                 type_args: vec![],
-                args,
-                has_receiver: false,
+                args: CallArgs::free(args),
             },
             return_type,
             span,
@@ -2145,8 +2146,7 @@ fn wrap_async_result(
                 method_info: None,
             }),
             type_args: vec![],
-            args: wrap_args,
-            has_receiver: false,
+            args: CallArgs::free(wrap_args),
         },
         op.return_type,
         span,
@@ -2240,8 +2240,7 @@ fn build_handler_op_closure(
                 &type_table.borrow(),
             )),
             type_args: vec![],
-            args: arg_call_args,
-            has_receiver: false,
+            args: CallArgs::free(arg_call_args),
         }
     };
     let method_call = TirExpr::new(call_kind, method_ret, span);
@@ -2340,8 +2339,7 @@ fn build_trap_closure(
                 method_info: None,
             }),
             type_args: vec![],
-            args: vec![],
-            has_receiver: false,
+            args: CallArgs::free(vec![]),
         },
         closure_ret,
         span,
@@ -2413,8 +2411,7 @@ fn build_default_closure(
                 method_info: None,
             }),
             type_args: Vec::new(),
-            args,
-            has_receiver: false,
+            args: CallArgs::free(args),
         },
         op.return_type,
         span,
@@ -2726,12 +2723,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
     // (`Effect::op(...)`) and resource calls tagged with `cm_name` on
     // `method_info`.
     let new_call: Option<TirExpr> = match &expr.kind {
-        TirExprKind::Call {
-            func,
-            args,
-            has_receiver: false,
-            ..
-        } => {
+        TirExprKind::Call { func, args, .. } if args.receiver().is_none() => {
             let return_type = expr.type_id;
             // Resource static call?
             if let Some(method_info) = &func.method_info
@@ -2744,7 +2736,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                     .map(|wrapper| {
                         wrapper_call(
                             wrapper,
-                            args.clone(),
+                            args.clone().into_vec(),
                             return_type,
                             expr.span,
                             ctx.entry_source,
@@ -2757,7 +2749,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             {
                 Some(wrapper_call(
                     wrapper.clone(),
-                    args.clone(),
+                    args.clone().into_vec(),
                     return_type,
                     expr.span,
                     ctx.entry_source,
@@ -2766,15 +2758,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 None
             }
         }
-        TirExprKind::Call {
-            func,
-            args,
-            has_receiver: true,
-            ..
-        } => {
-            let Some((receiver, args)) = args.split_first() else {
-                return;
-            };
+        TirExprKind::Call { func, args, .. } if let (Some(receiver), args) = args.split() => {
             let receiver = &receiver.expr;
             let mi_cm = func
                 .method_info
@@ -2844,8 +2828,7 @@ fn wrapper_call(
                 method_info: None,
             }),
             type_args: Vec::new(),
-            args,
-            has_receiver: false,
+            args: CallArgs::free(args),
         },
         return_type,
         span,

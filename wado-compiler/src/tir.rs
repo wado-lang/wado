@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use sha2::Digest;
 
+use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
@@ -5216,14 +5217,10 @@ impl TirExprKind {
         type_args: Vec<TypeId>,
         args: Vec<CallArg>,
     ) -> Self {
-        let mut all = Vec::with_capacity(args.len() + 1);
-        all.push(CallArg::new(*receiver, false));
-        all.extend(args);
         Self::Call {
             func: Box::new(func),
             type_args,
-            args: all,
-            has_receiver: true,
+            args: CallArgs::method(CallArg::new(*receiver, false), args),
         }
     }
 
@@ -5235,16 +5232,12 @@ impl TirExprKind {
     /// (traversal, substitution, type-arg rewriting) matches `Call` directly and
     /// never needs this.
     pub fn as_method_call(&self) -> Option<(&TirExpr, &FunctionRef, &[CallArg])> {
-        let TirExprKind::Call {
-            func,
-            args,
-            has_receiver: true,
-            ..
-        } = self
-        else {
+        let TirExprKind::Call { func, args, .. } = self else {
             return None;
         };
-        let (receiver, rest) = args.split_first()?;
+        let (Some(receiver), rest) = args.split() else {
+            return None;
+        };
         Some((&receiver.expr, func, rest))
     }
 
@@ -5332,17 +5325,12 @@ pub enum TirExprKind {
         func: Box<FunctionRef>,
         /// Explicit type arguments for generic functions: `identity::<i32>(x)`
         type_args: Vec<TypeId>,
-        /// Arguments in the callee's parameter order — a method's receiver is
-        /// `args[0]`, so `args[i]` maps to `params[i]` for every call shape.
-        args: Vec<CallArg>,
-        /// Whether `args[0]` is the receiver of an instance method, set by
-        /// `TirExprKind::method_call` alone — so it marks dot syntax. A
-        /// trait-qualified (UFCS) call carries its receiver in `args[0]` too but
-        /// leaves this `false`: it spells the receiver's mode itself
-        /// (`Trait::m(&mut x, …)`), so the receiver is already reference-typed
-        /// and needs none of the treatment this flag gates, notably `lower`'s
-        /// never-value-copy-a-receiver rule.
-        has_receiver: bool,
+        /// Arguments in the callee's parameter order, `args[i]` for
+        /// `params[i]` in every call shape. Only `TirExprKind::method_call`
+        /// builds one with a receiver, so a trait-qualified (UFCS) call's
+        /// already reference-typed first argument needs none of the treatment a
+        /// receiver gets, notably `lower`'s never-value-copy-a-receiver rule.
+        args: CallArgs<CallArg>,
     },
     /// Raw Component Model call to a lowered WASI import or a canonical built-in.
     ///

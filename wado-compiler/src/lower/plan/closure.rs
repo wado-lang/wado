@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
+use crate::call_args::CallArgs;
 use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1474,8 +1475,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                         method_info: None,
                     }),
                     type_args: Vec::new(),
-                    args: call_args,
-                    has_receiver: false,
+                    args: CallArgs::free(call_args),
                 },
                 sig.return_type,
                 span,
@@ -1653,14 +1653,7 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 }
                 self.in_callee_position = prev;
             }
-            TirExprKind::Call {
-                args,
-                has_receiver: true,
-                ..
-            } => {
-                let Some((receiver, rest)) = args.split_first() else {
-                    return;
-                };
+            TirExprKind::Call { args, .. } if let (Some(receiver), rest) = args.split() => {
                 let prev = self.in_callee_position;
                 self.in_callee_position = true;
                 self.visit_expr(&receiver.expr);
@@ -1986,12 +1979,7 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                     expr.type_id = return_type;
                 }
             }
-            TirExprKind::Call {
-                func,
-                args,
-                has_receiver,
-                ..
-            } => {
+            TirExprKind::Call { func, args, .. } => {
                 for arg in &mut *args {
                     self.visit_expr(&mut arg.expr);
                 }
@@ -2005,7 +1993,7 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                     .copied()
                     .unwrap_or(0) as usize;
                 self.try_redirect_to_specialized_callee(func, args, arg_offset);
-                if *has_receiver && let Some((receiver, _)) = args.split_first_mut() {
+                if let (Some(receiver), _) = args.split_mut() {
                     self.try_redirect_inspect_to_functor(&mut receiver.expr, func);
                 }
             }

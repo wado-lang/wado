@@ -4,6 +4,7 @@
 //! `lower::translate` emits one canonical `Match` shape. The `br_table` sends
 //! many offsets to one arm body.
 
+use crate::call_args::CallArgs;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirGlobal, NirLiteralPattern, NirLocal};
@@ -366,9 +367,8 @@ fn build_switch(
         let cold_call = engine.alloc_expr(
             ExprKind::Call {
                 func_id: cold_path_id,
-                args: vec![],
+                args: CallArgs::free(vec![]),
                 type_args: vec![],
-                has_receiver: false,
             },
             TypeTable::UNIT,
             span,
@@ -383,9 +383,8 @@ fn build_switch(
         let call = engine.alloc_expr(
             ExprKind::Call {
                 func_id: unreachable_id,
-                args: vec![],
+                args: CallArgs::free(vec![]),
                 type_args: vec![],
-                has_receiver: false,
             },
             TypeTable::NEVER,
             span,

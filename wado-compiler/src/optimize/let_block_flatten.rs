@@ -156,6 +156,7 @@ fn is_place_expr(kind: &ExprKind) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::call_args::CallArgs;
     use std::assert_matches;
 
     use crate::hashmap::IndexSet;
@@ -175,8 +176,7 @@ mod tests {
         ExprKind::Call {
             func_id: FuncId::from_u32(0),
             type_args: vec![],
-            args: vec![],
-            has_receiver: false,
+            args: CallArgs::free(vec![]),
         }
     }
 
