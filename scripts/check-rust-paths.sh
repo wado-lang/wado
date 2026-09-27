@@ -28,5 +28,7 @@ if [ "${#corpus[@]}" -gt 0 ]; then
 fi
 
 cargo build --bin wado
-exec ./target/debug/wado run package-gale/tools/rust_inline_paths.wado -- \
+# The tool is compiled on every run, and `-O2` takes longer to compile than it
+# saves in running; `-O1` is the fastest end to end.
+exec ./target/debug/wado run -O1 package-gale/tools/rust_inline_paths.wado -- \
     "${corpus[@]}" "$@"

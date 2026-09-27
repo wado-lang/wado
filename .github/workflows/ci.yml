@@ -93,13 +93,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: mise run check-deps
       - run: mise run test-hooks
-      - run: mise run check-rust-paths
-      - run: mise run check-spec-examples
-      - run: mise run check-wadopoet-vocabulary
-      - run: mise run check-internal-names
-      - run: mise run check-review-filters
+      - run: mise run check
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
