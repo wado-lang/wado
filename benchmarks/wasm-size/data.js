@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790475004163,
+  "lastUpdate": 1790485249981,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60601,6 +60601,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4b3bec4b990d8c43ab8199401932b2b58562a7b8"
         },
         "date": 1790475003461,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20200,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288402,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b52d7a43d63aec7f9acd1df3358bd18420a5cb0",
+          "message": "Merge pull request #2185 from wado-lang/claude/wado-eval-feature-8je3nk\n\nfeat(core:eval): compile and run a Wado program from a test, with cached outcomes",
+          "timestamp": "2026-09-27T13:31:18+09:00",
+          "tree_id": "51096da871c29c8c076a1d67edaf28df2c825c0b",
+          "url": "https://github.com/wado-lang/wado/commit/9b52d7a43d63aec7f9acd1df3358bd18420a5cb0"
+        },
+        "date": 1790485248973,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
