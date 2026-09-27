@@ -105,6 +105,8 @@ Pass the package directory and let the CLI discover the files. A hand-written gl
 
 A test that calls `generate` belongs in `src/codegen_test.wado`. A test file that reaches `generate` compiles the whole generator, which takes about two minutes at `-O2` however small the test is. Keeping all such tests in one file pays that cost once. A unit test beside its module stays cheap as long as it does not reach `generate`. No check enforces this rule. A file that breaks it shows up as a two-minute compile in the output of `wado test`.
 
+A codegen test asserts what the generated parser does, not what its source says. `parses`, `lexes`, `printed` and `traced` run it through [`core:eval`](../docs/stdlib-core-eval.md) and return the trees, tokens, action output or trace lines; take the expected trees from the jar. Each run costs a few seconds of compile, cached across runs. Match the source text only for what running cannot show: that a feature left unused emits nothing, or which strategy the emitter picked.
+
 Each corpus file carries up to `DESCRIPTORS_PER_FILE` descriptors, each importing its grammar as `t_<Name>`. Grouping is what bounds the corpus's compile time: every entry module is a whole-program `-O3` build, so the shared Gale runtime is compiled once per file rather than once per descriptor.
 
 Test layers, all driven by `.g4` in `tests/grammars/` plus the descriptor corpus:

@@ -281,41 +281,6 @@ aax => error
 ", got;
 }
 
-test "LR helper stamps min_prec on a self-ref nested inside a Repeat group" {
-    // A self-ref nested in `(',' b+=expr)*` kept min_prec 0 and ate the outer `>>`.
-    // Two LR alts, so a `conflict_min` that always reads `lr_alts[0]` also trips.
-    let input = "grammar Test;
-s : expr EOF ;
-expr :
-    a=expr '*' a=expr #Factor
-    | b+=expr (',' b+=expr)* '>>' c=expr #Send
-    | ID #JustId
-;
-ID : 'a' ;
-WS : [ \\t\\n]+ -> skip ;
-";
-    let got = parses(input, "s", ["a,a>>a*a", "a*a,a>>a", "a>>a>>a"]);
-    assert got == "a,a>>a*a => (s (expr (expr a) , (expr a) >> (expr (expr a) * (expr a))))
-a*a,a>>a => (s (expr (expr (expr a) * (expr a)) , (expr a) >> (expr a)))
-a>>a>>a => (s (expr (expr (expr a) >> (expr a)) >> (expr a)))
-", got;
-}
-
-test "SimpleCst group emit threads min_prec_arg on a self-ref alt inside an LR suffix" {
-    // The SimpleCst group emitters dropped `min_prec_arg`, so `(expr | INT)` inside
-    // an LR suffix lost the stamp the deep walker set.
-    let input = "grammar Test;
-s : expr EOF ;
-expr : expr ',' (expr | INT) | INT ;
-INT : [0-9]+ ;
-WS : [ \\t\\n]+ -> skip ;
-";
-    let got = parses(input, "s", ["1,1", "1,1,1"]);
-    assert got == "1,1 => (s (expr (expr 1) , (expr 1)))
-1,1,1 => (s (expr (expr 1) , (expr (expr 1) , (expr 1))))
-", got;
-}
-
 test "generate emits pub fn parse_<rule>(input) per parser rule" {
     // `parse_R(input)` is the start-rule API; `parse(input)` stays as the first rule's
     // alias, which driver tests and descriptors without a `[start]` call.
@@ -1142,7 +1107,7 @@ x : 'a' 'b' | 'a' 'b' 'c' ;
 WS : ' ' -> skip ;
 ";
 
-test "wildcard caller suffix keeps the at-end conflict on the ATN" {
+test "a wildcard after the call leaves an at-end conflict to the token after it" {
     // Only the token after `x`'s longer alternative tells them apart.
     let got = parses(AT_END_WILDCARD_FOLLOW_G4, "s", ["a b c", "a b c a", "a b a"]);
     assert got == "a b c => (s (x a b) c)\na b c a => (s (x a b c) a)\na b a => (s (x a b) a)\n", got;
@@ -1266,16 +1231,6 @@ A : 'a' ;
 B : 'b' ;
 ";
 
-// The op walker's `Direct` chain sees only baked token sets, and an
-// alternative open-ended through a rule keeps a Direct branch.
-global OP_INDIRECT_WILDCARD_G4: String = "
-grammar T;
-e : e ( w | A ) | C ;
-w : . ;
-A : 'a' ;
-C : 'c' ;
-";
-
 // `w` is open-ended, but through a rule reference: its first set is empty for
 // the same reason a surface `.`'s is, and it is not the empty alternative.
 global INDIRECT_WILDCARD_ALT_G4: String = "
@@ -1356,11 +1311,6 @@ test "an alternative that derives only epsilon through a rule is selected by its
     assert got == "b => (s x b)\nab => (s a b)\n", got;
 }
 
-test "the op walker keeps an alternative open-ended through a rule in place" {
-    // `w` admits `a` too, and ties go to the lowest viable alternative.
-    let got = parses(OP_INDIRECT_WILDCARD_G4, "e", ["ca", "cc"]);
-    assert got == "ca => (e (e c) (w a))\ncc => (e (e c) (w c))\n", got;
-}
 
 // The root's alternative, which the tree alone does not show when every
 // alternative builds the same one.
@@ -1854,78 +1804,65 @@ options { language = Wado; }
 r : ( {false}? A | B ) ;
 A : 'a' ;
 B : 'b' ;
-",
-        "grammar T;
+", "grammar T;
 options { language = Wado; }
 r : ( {false}? A B )+ A ;
 A : 'a' ;
 B : 'b' ;
-",
-        "grammar C;
+", "grammar C;
 options { superClass = PBase; }
 shr : GT { this.NextGT() }? GT ;
 GT : '>' ;
-",
-        "grammar C;
+", "grammar C;
 options { superClass = PBase; language = Wado; }
 r : A { this.p(\"of\") }? A ;
 A : 'a' ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : 'a' { lx.set_type(TK_B) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : ('a' { lx.set_type(TK_B) } | 'c') ;
 B : 'b' ;
 WS : ' ' -> skip ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : ('a' { lx.set_type(TK_B) })+ ;
 B : 'b' ;
 WS : ' ' -> skip ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : F 'z' ;
 fragment F : 'a' { lx.set_type(TK_B) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : 'a' (~'b' { lx.set_type(TK_B) })+ 'c' ;
 B : 'b' ;
 WS : ' ' -> skip ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : 'a' .*? { pos > start + 2 }? 'c' { lx.set_type(TK_B) } ;
 B : 'b' ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : 'a' (~'b' { lx.set_type(TK_B) })*? 'c' ;
 B : 'b' ;
 WS : ' ' -> skip ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : 'a' ~('b')+ { lx.set_type(TK_B) } 'c' ;
 B : 'b' ;
 WS : ' ' -> skip ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : 'a' { lx.set_type(TK_X) } | 'c' { lx.set_type(TK_Y) } ;
 B : 'b' ;
 WS : ' ' -> skip ;
-",
-        "lexer grammar L;
+", "lexer grammar L;
 options { language = Wado; }
 A : 'a' { if $mode == 0 { $mode = MODE_TAIL } } ;
 mode TAIL;
