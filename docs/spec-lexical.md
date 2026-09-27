@@ -566,10 +566,14 @@ A range operator builds a range value from two bounds:
 `..<b` or bare `..` range.
 
 Both bounds must have the same type after literal coercion, and that type is
-`T`. `T` must implement `Ord`, so a range over any other type is an error. Where
-both bounds are literals and the context expects a range of the same kind, they
-take its `T`: `let r: RangeExclusive<u64> = 0..<0x1_0000_0000;` types both
-bounds as `u64`.
+`T`. `T` must implement `Ord`, so a range over any other type is an error.
+
+Where both bounds are numeric literals, the range takes its `T` from its context
+as a lone literal takes its type. An expected range of the same kind supplies
+it: a `let` annotation, a parameter type, or a generic parameter the call's
+other arguments settle. So `let r: RangeExclusive<u64> = 0..<0x1_0000_0000;`
+types both bounds as `u64`. A range names its own type, as a named struct
+literal does, so an expected newtype over a range supplies nothing.
 
 A range whose bounds are both literals must not run backwards. An integer,
 float or `char` literal counts as one, negated or cast too:

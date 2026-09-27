@@ -29,9 +29,9 @@ use super::instantiate::Instantiation;
 use super::orchestration::first_infer_span;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
-use super::tysys::TypeSystem;
+use super::tysys::{TypeSystem, range_item};
 use super::util;
-use crate::ast::{RangeExpr, Visibility};
+use crate::ast::{RangeExpr, RangeKind, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
 use crate::defs::{DefId, DefKind};
@@ -3511,7 +3511,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the wide-int struct ref into codegen. `char` targets are
         // excluded: the char-cast diagnostic below already covers them.
         {
-            use crate::primitive::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
             let target_supported = !tt.is_wide_int(source_type)
                 || tt.is_wide_int(target_type)
@@ -5395,9 +5394,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        use crate::ast::RangeKind;
-
-        let order = range_endpoint_order(&self.tysys.type_table.borrow(), range, expected_type);
+        let element = expected_type.and_then(|t| {
+            self.tysys
+                .type_table
+                .borrow()
+                .range_element(t, range_item(range.kind))
+        });
+        let order = range_endpoint_order(range, element);
         let (start, end) = order.resolve(
             &range.start,
             &range.end,
@@ -5469,18 +5472,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_name, struct_type) = self.tysys.range_type(range.kind, element_type);
+        self.record_range_instance(range, element_type)
+    }
+
+    /// Record `range` as the range struct over `element`, and return that type.
+    pub(super) fn record_range_instance(&mut self, range: &RangeExpr, element: TypeId) -> TypeId {
+        let (struct_name, struct_type) = self.tysys.range_type(range.kind, element);
 
         // Mangled name for the resulting `TirExprKind::StructLiteral`.
         // The monomorphizer keys instantiation lookup on this form
         // (`RangeExclusive<i32>`), so there is one spelling of it: the body
         // walk mangles it here and records it, and reify reads it back instead
         // of running its own `type_name(t)` + `mangle_generic_name`.
-        let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
+        let arg_names = vec![self.tysys.type_table.borrow().type_name(element)];
         let mangled_name = mangle_generic_name(&struct_name, &arg_names);
         self.record_generic_instantiation_with_mangle(
             range.id,
-            vec![element_type],
+            vec![element],
             struct_type,
             Some(mangled_name),
         );

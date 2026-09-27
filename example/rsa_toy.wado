@@ -62,14 +62,15 @@ fn passes_witness(n: u64, a: u64, d: u64, s: i32) -> bool {
     return false;
 }
 
-/// Deterministic for every `u64`: the first twelve primes as bases decide all
-/// n < 3.18 × 10^23 (Jiang & Deng, 2014).
+/// The first twelve primes. As Miller–Rabin bases they decide every
+/// n < 3.18 × 10^23 (Jiang & Deng, 2014), so all of `u64`.
+global BASES: List<u64> = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
+
 fn is_prime(n: u64) -> bool {
-    let bases: List<u64> = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
     if n < 2 {
         return false;
     }
-    for let p of bases {
+    for let p of BASES {
         if n % p == 0 {
             return n == p;
         }
@@ -80,7 +81,7 @@ fn is_prime(n: u64) -> bool {
         d /= 2;
         s += 1;
     }
-    for let a of bases {
+    for let a of BASES {
         if !passes_witness(n, a, d, s) {
             return false;
         }
