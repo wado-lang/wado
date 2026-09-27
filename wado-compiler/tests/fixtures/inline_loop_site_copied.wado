@@ -1,0 +1,57 @@
+// A loop's sites of a callee include those its spliced callees carry: `tally`
+// calls `wrap` from two sites, and each splice of `wrap` brings a site of
+// `mix`. That is two sites of `mix` in one loop, a dispatch, so `tally` keeps
+// the calls (`inline_loop_site_repeated.wado` writes them directly).
+
+fn mix(x: i32, y: i32) -> i32 {
+    let mut h = x ^ y * 0x27d4eb2d;
+    h = (h ^ h >> 15) * 0x2c1b3c6d;
+    h = (h ^ h >> 12) * 0x297a2d39;
+    h = h ^ h >> 15;
+    if h < 0 {
+        h = (h ^ y) * 0x3c6ef372;
+        h = (h ^ h >> 7) * 0x1b873593;
+    } else {
+        h = (h + x) * 0x1b873593;
+        h = (h ^ h >> 9) * 0x3c6ef372;
+    }
+    h = (h ^ h >> 13) * 0x2c1b3c6d;
+    h = (h ^ y >> 11) * 0x297a2d39;
+    return h ^ h >> 13;
+}
+
+fn wrap(x: i32, y: i32) -> i32 {
+    return mix(x, y);
+}
+
+#[inline(never)]
+fn once(x: i32, y: i32) -> i32 {
+    return mix(x, y);
+}
+
+#[inline(never)]
+fn tally(xs: &List<i32>) -> i32 {
+    let mut total = 0;
+    for let x of xs {
+        if *x % 2 == 0 {
+            let h = wrap(*x, total);
+            total += h;
+        } else {
+            let h = wrap(total, *x);
+            total -= h;
+        }
+    }
+    return total;
+}
+
+export fn run() {
+    let xs: List<i32> = [1, 2, 3];
+    assert tally(&builtin::black_box(xs)) != once(builtin::black_box(5), builtin::black_box(3));
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "inline_loop_site_copied.wado/tally",
+    "wir_expect:O2": ["\"inline_loop_site_copied.wado/mix\"("]
+}

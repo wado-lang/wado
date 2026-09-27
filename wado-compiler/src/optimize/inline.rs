@@ -858,9 +858,11 @@ fn body_has_loop(body: &Body) -> bool {
 /// Whether running `body` reaches a safepoint: a call, or an allocation, where
 /// the collector may run. A copying collector moves objects there, so every
 /// reference live across one is spilled and reloaded, and a loop holds more of
-/// them than the callee does. `safepoint_calls` says which calls are one; the
-/// literal a `return` hands back is taken apart by the caller that splices it;
-/// and code past a `cold_path()` marker is no part of the run.
+/// them than the callee does. `safepoint_calls` says which calls are one. The
+/// literal a `return` hands back is not: it is the body's last act, so what is
+/// live across it is what was live across the call it replaces, and a caller
+/// that takes it apart deletes it. Code past a `cold_path()` marker is no part
+/// of the run.
 fn has_safepoint(
     body: &Body,
     type_table: &TypeTable,
@@ -1169,6 +1171,10 @@ enum Reach {
     /// Only a site inside a loop, where it is the callee's only site: a
     /// callee under [`PAYBACK_FACTOR`] with more than one site.
     Loops,
+    /// Only the one site the round began with: a callee under
+    /// [`PAYBACK_FACTOR`] with one site. A splice of its caller copies that
+    /// site, and the copy is a second one.
+    Sole,
     Everywhere,
 }
 
@@ -1344,7 +1350,7 @@ fn classify_callee(
     {
         Reach::Nowhere
     } else if sites == 1 {
-        Reach::Everywhere
+        Reach::Sole
     } else {
         Reach::Loops
     };
@@ -1677,6 +1683,11 @@ struct Candidates<'a> {
     bodies: &'a IndexMap<FuncId, NirFunction>,
     /// The candidates admitted at [`Site::Loop`] sites alone.
     loop_only: &'a IndexSet<FuncId>,
+    /// The candidates admitted at the one site the round began with.
+    sole: &'a IndexSet<FuncId>,
+    /// Per candidate, the call sites a splice of it brings, its own splices'
+    /// included: what a loop holding a site of it holds once the round ends.
+    carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
     /// Each candidate's written price, net of the call site it replaces.
     net_price: &'a IndexMap<FuncId, usize>,
     rescan_cap: usize,
@@ -1737,6 +1748,7 @@ pub fn inline_functions(
     // functions that happen to share a name.
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
     let mut loop_only: IndexSet<FuncId> = IndexSet::default();
+    let mut sole: IndexSet<FuncId> = IndexSet::default();
     let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
 
     // Also collect function_strings for each candidate (to update caller's
@@ -1861,8 +1873,14 @@ pub fn inline_functions(
         }
         if verdict.reach != Reach::Nowhere {
             let id = func.id.expect("func_id assigned at lower");
-            if verdict.reach == Reach::Loops {
-                loop_only.insert(id);
+            match verdict.reach {
+                Reach::Loops => {
+                    loop_only.insert(id);
+                }
+                Reach::Sole => {
+                    sole.insert(id);
+                }
+                Reach::Everywhere | Reach::Nowhere => {}
             }
             let string_key = (func.module_source.clone(), func.name.clone());
             // Get the strings used by this function
@@ -1962,9 +1980,12 @@ pub fn inline_functions(
     let inline_first_param_types = first_param_types(project);
     let inline_type_table = project.type_table.borrow();
     let inline_call_immutability = CallImmutability::new(project, &inline_type_table);
+    let carried = carried_calls(&inline_candidates);
     let candidates = Candidates {
         bodies: &inline_candidates,
         loop_only: &loop_only,
+        sole: &sole,
+        carried: &carried,
         net_price: &net_price,
         // A threshold's worth of threshold-sized callees: a call tree that
         // doubles per level exceeds it within a few levels.
@@ -1993,6 +2014,7 @@ pub fn inline_functions(
                 address_taken: std::mem::take(&mut func.address_taken_locals),
                 stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
                 loop_calls: Vec::new(),
+                original_exprs: func.body.as_ref().map_or(0, |b| b.exprs.len()),
             };
             let mut labels = InlineLabels::default();
             // Calls in this body that mutate no caller-reachable state, taken
@@ -2104,11 +2126,20 @@ struct CallerFrame {
     address_taken: IndexSet<u32>,
     stores_aliased: IndexSet<u32>,
     /// Per enclosing loop, innermost last: how many sites in its body call
-    /// each function.
+    /// each function, the ones its splices bring included.
     loop_calls: Vec<IndexMap<FuncId, usize>>,
+    /// How many expressions the body held before this pass spliced into it.
+    /// The arena only appends, so a call below it is one the round's site
+    /// counts saw, and one above it came in with a splice.
+    original_exprs: usize,
 }
 
 impl CallerFrame {
+    /// Whether `call` is a site the round began with.
+    fn original_site(&self, call: ExprId) -> bool {
+        call.index() < self.original_exprs
+    }
+
     /// Whether `callee` is called from one site of the innermost loop. Several
     /// sites of one callee in a loop are a dispatch, each running on some
     /// iterations only, so the per-iteration saving a [`Site::Loop`] price
@@ -2120,12 +2151,67 @@ impl CallerFrame {
     }
 }
 
-/// How many sites under `block` call each function.
-fn call_counts(body: &Body, block: BlockId) -> IndexMap<FuncId, usize> {
+/// How many sites under `block` call each function, counting the sites a
+/// candidate's splice brings as the block's own.
+fn call_counts(
+    body: &Body,
+    block: BlockId,
+    carried: &IndexMap<FuncId, IndexMap<FuncId, usize>>,
+) -> IndexMap<FuncId, usize> {
     let mut out = IndexMap::default();
     for_each_call_site(body, NodeRef::Block(block), |callee| {
-        *out.entry(callee).or_default() += 1;
+        add_site(&mut out, callee, carried);
     });
+    out
+}
+
+fn add_site(
+    out: &mut IndexMap<FuncId, usize>,
+    callee: FuncId,
+    carried: &IndexMap<FuncId, IndexMap<FuncId, usize>>,
+) {
+    *out.entry(callee).or_default() += 1;
+    for (&g, &n) in carried.get(&callee).into_iter().flatten() {
+        *out.entry(g).or_default() += n;
+    }
+}
+
+/// [`Candidates::carried`]: per candidate, its body's call sites with each
+/// candidate among them expanded into the sites it carries in turn. No
+/// candidate reaches itself, since a recursive function is never one.
+fn carried_calls(
+    candidates: &IndexMap<FuncId, NirFunction>,
+) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
+    fn visit(
+        id: FuncId,
+        candidates: &IndexMap<FuncId, NirFunction>,
+        out: &mut IndexMap<FuncId, IndexMap<FuncId, usize>>,
+    ) {
+        if out.contains_key(&id) {
+            return;
+        }
+        let body = candidates[&id]
+            .body
+            .as_ref()
+            .expect("a candidate has a body");
+        let mut callees = Vec::new();
+        for_each_call_site(body, NodeRef::Block(body.root), |g| callees.push(g));
+        for &g in &callees {
+            assert_ne!(g, id, "a candidate is never recursive");
+            if candidates.contains_key(&g) {
+                visit(g, candidates, out);
+            }
+        }
+        let mut sites = IndexMap::default();
+        for g in callees {
+            add_site(&mut sites, g, out);
+        }
+        out.insert(id, sites);
+    }
+    let mut out = IndexMap::default();
+    for &id in candidates.keys() {
+        visit(id, candidates, &mut out);
+    }
     out
 }
 
@@ -2268,7 +2354,9 @@ fn inline_calls_in_block(
                 site,
             ),
             Shape::Loop(b) => {
-                frame.loop_calls.push(call_counts(body, b));
+                frame
+                    .loop_calls
+                    .push(call_counts(body, b, candidates.carried));
                 inline_calls_in_block(
                     body,
                     b,
@@ -2590,6 +2678,9 @@ fn try_inline_call_expr(
     let candidate = candidates.bodies.get(&func_id)?;
     let admitted = match site {
         Site::Cold => candidate.inline_hint == InlineHint::Always,
+        Site::Plain | Site::Loop if candidates.sole.contains(&func_id) => {
+            frame.original_site(call_id)
+        }
         Site::Plain => !candidates.loop_only.contains(&func_id),
         Site::Loop => !candidates.loop_only.contains(&func_id) || frame.sole_loop_site(func_id),
     };
