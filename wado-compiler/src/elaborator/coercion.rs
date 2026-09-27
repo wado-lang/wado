@@ -2,7 +2,7 @@
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-use super::tysys::TypeSystem;
+use super::tysys::{TypeSystem, range_item};
 use super::util;
 use crate::ast::{self, Expr, Literal, LiteralMember, UnaryOp};
 use crate::compiler_host::CompilerHost;
@@ -217,19 +217,33 @@ pub(super) fn numeric_literal_pair_order(
     }
 }
 
-/// Order the endpoints of `start..end`. A literal endpoint takes its type from
-/// the other one. Two literals take `element`, the element type of the range
-/// the context expects, and failing that a byte endpoint settles `0..=b'z'`.
+/// Order the endpoints of `range`. A literal endpoint takes its type from the
+/// other one. Two literals take the element type of `range_type`, where that is
+/// a range of the same kind, and failing that a byte endpoint settles
+/// `0..=b'z'`.
 pub(super) fn range_endpoint_order(
     tt: &TypeTable,
-    start: &Expr,
-    end: &Expr,
-    element: Option<TypeId>,
+    range: &ast::RangeExpr,
+    range_type: Option<TypeId>,
 ) -> LiteralPairOrder {
+    let (start, end) = (&range.start, &range.end);
     match (is_numeric_literal_expr(start), is_numeric_literal_expr(end)) {
-        (true, true) => numeric_literal_pair_order(tt, start, end, element),
+        (true, true) => {
+            let element = range_type.and_then(|t| range_element(tt, range.kind, t));
+            numeric_literal_pair_order(tt, start, end, element)
+        }
         (true, false) => LiteralPairOrder::RightAnchors,
         _ => LiteralPairOrder::LeftAnchors,
+    }
+}
+
+fn range_element(tt: &TypeTable, kind: ast::RangeKind, ty: TypeId) -> Option<TypeId> {
+    let range_def = tt.compiler_item_def(range_item(kind))?;
+    match tt.get(ty) {
+        ResolvedType::GenericInstance { def, type_args } if *def == range_def => {
+            type_args.first().copied()
+        }
+        _ => None,
     }
 }
 

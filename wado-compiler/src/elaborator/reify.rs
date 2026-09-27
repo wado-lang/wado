@@ -5062,16 +5062,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         // Annotate has unified the endpoints, so either type is the element
-        // type — but only in the order the elaborator resolved them in. Two
-        // literals are the one pair that order cannot tell apart, and the
-        // recorded element type is what the elaborator settled them on.
-        let element = self.tysys.range_element(range.kind, recorded_type);
-        let order = range_endpoint_order(
-            &self.tysys.type_table.borrow(),
-            &range.start,
-            &range.end,
-            element,
-        );
+        // type — but only in the order the elaborator resolved them in. The
+        // recorded type is the expectation two literal endpoints settled on.
+        let order =
+            range_endpoint_order(&self.tysys.type_table.borrow(), range, Some(recorded_type));
         let (start, end) = order.resolve(
             &range.start,
             &range.end,

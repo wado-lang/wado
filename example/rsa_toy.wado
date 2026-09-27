@@ -159,10 +159,7 @@ fn pollard_rho(n: u64, c: u64) -> Option<u64> {
 }
 
 fn find_factor(n: u64) -> u64 {
-    assert n > 3 && !is_prime(n);
-    if n % 2 == 0 {
-        return 2;
-    }
+    assert n % 2 == 1 && n > 1 && !is_prime(n);
     let mut c: u64 = 1;
     loop {
         if let Some(d) = pollard_rho(n, c) {

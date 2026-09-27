@@ -311,19 +311,6 @@ impl TypeSystem {
         (name, type_table.make_generic_instance(def, vec![element]))
     }
 
-    /// The element type of `ty`, where it is the struct a `kind` range literal
-    /// builds.
-    pub(crate) fn range_element(&self, kind: RangeKind, ty: TypeId) -> Option<TypeId> {
-        let type_table = self.type_table.borrow();
-        let def = type_table.compiler_item_def(range_item(kind))?;
-        match type_table.get(ty) {
-            ResolvedType::GenericInstance { def: of, type_args } if *of == def => {
-                type_args.first().copied()
-            }
-            _ => None,
-        }
-    }
-
     /// The name an operator impl on `ty` is indexed under. `None` for a type no
     /// user impl can supply an operator for.
     pub(crate) fn operator_receiver_name(&self, ty: TypeId) -> Option<String> {

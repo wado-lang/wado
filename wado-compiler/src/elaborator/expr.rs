@@ -5397,13 +5397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         use crate::ast::RangeKind;
 
-        let element = expected_type.and_then(|t| self.tysys.range_element(range.kind, t));
-        let order = range_endpoint_order(
-            &self.tysys.type_table.borrow(),
-            &range.start,
-            &range.end,
-            element,
-        );
+        let order = range_endpoint_order(&self.tysys.type_table.borrow(), range, expected_type);
         let (start, end) = order.resolve(
             &range.start,
             &range.end,
