@@ -75,21 +75,19 @@ type "functype//core:prelude/primitive.wado/i32::clamp$cold0" = fn(i32, i32);  /
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::slice" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [ref Array<u8>, i32, i32];  // TypeId(25)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(25)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(26)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
+type "functype//wasi/future-read:transmission-wasi/cli/types.wado#error-code" = fn(i32, i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/future-read:transmission-wasi/cli/types.wado#error-code" = fn(i32, i32) -> i32;  // TypeId(31)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(31)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -139,7 +137,7 @@ fn "stream_write_raw_offset.wado/run"() with Stderr {
         self_23 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: out, start: 0, end: end_22 };
         if @unlikely(0 > end_22) {
             cold_path;
-            "core:prelude/primitive.wado/i32::clamp$cold0$spec0"(end_22);
+            "core:prelude/primitive.wado/i32::clamp$cold0"(0, end_22);
             unreachable;
         }
         s = select i32(2 < end_22, 2, end_22);
@@ -466,58 +464,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-<<<<<<< HEAD
-||||||| 7a536bf27
-fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::slice"(self) {
-    let len: i32;
-    let s: i32;
-    let e: i32;
-    let a_22: i32;
-    let $av_24: i32;
-    $av_24 = self.start;
-    len = self.end - $av_24;
-    if @unlikely(0 > len) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$cold0$spec0"(len);
-        unreachable;
-    }
-    s = select i32(2 < len, 2, len);
-    if @unlikely(s > len) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$cold0"(s, len);
-        unreachable;
-    }
-    a_22 = select i32(10 > s, 10, s);
-    e = select i32(a_22 < len, a_22, len);
-    return self.repr, $av_24 + s, $av_24 + e;
-}
-
-=======
-fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::slice"(self) {
-    let len: i32;
-    let s: i32;
-    let e: i32;
-    let a_22: i32;
-    let $av_24: i32;
-    $av_24 = self.start;
-    len = self.end - $av_24;
-    if @unlikely(0 > len) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$cold0"(0, len);
-        unreachable;
-    }
-    s = select i32(2 < len, 2, len);
-    if @unlikely(s > len) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$cold0"(s, len);
-        unreachable;
-    }
-    a_22 = select i32(10 > s, 10, s);
-    e = select i32(a_22 < len, a_22, len);
-    return self.repr, $av_24 + s, $av_24 + e;
-}
-
->>>>>>> origin/main
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
