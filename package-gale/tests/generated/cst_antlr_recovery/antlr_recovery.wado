@@ -1275,8 +1275,10 @@ pub global RK_TRAIL: NodeKind = 18;
 pub global RK_GRPEND: NodeKind = 19;
 pub global RK_STMTS: NodeKind = 20;
 pub global RK_STMT: NodeKind = 21;
+pub global RK_NEST: NodeKind = 22;
+pub global RK_NE: NodeKind = 23;
 
-global RULE_NAMES: List<String> = ["loop", "tail", "tailed", "opt", "grp", "plus", "twice", "one", "single", "inner", "multi", "my", "mw", "expr", "e", "quiet", "mid", "pair", "trail", "grpend", "stmts", "stmt"];
+global RULE_NAMES: List<String> = ["loop", "tail", "tailed", "opt", "grp", "plus", "twice", "one", "single", "inner", "multi", "my", "mw", "expr", "e", "quiet", "mid", "pair", "trail", "grpend", "stmts", "stmt", "nest", "ne"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1305,8 +1307,9 @@ struct Parser {
     max_errors: i32,
     site: i32,
     sites: List<i32>,
+    failed_expected: List<i32>,
     recovery_pos: i32,
-    recovery_rules: List<NodeKind>,
+    recovered_failures: List<[NodeKind, List<i32>]>,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -1322,7 +1325,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], recovery_pos: -1, recovery_rules: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -1334,21 +1337,28 @@ impl Parser {
         if self.supersedes_pending(span.start) {
             self.pending = Option::Some(Diagnostic::error(code, with_expected(message, &kind_names(expected)), span, *expected, self.kinds[self.pos], RecoveryAction::None));
         }
+        self.enter_recovery(expected);
+    }
+
+    fn enter_recovery(&mut self, expected: &List<i32>) {
         self.recovering = true;
+        if !self.speculating { self.failed_expected = *expected; }
     }
 
     fn fail_on_token(&mut self, what: String, expected: &List<i32>, code: DiagnosticCode) {
         if self.supersedes_pending(self.tokens.starts[self.pos]) {
             self.fail(`${what} "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), expected, code);
+            return;
         }
-        self.recovering = true;
+        self.enter_recovery(expected);
     }
 
     fn fail_on_kind(&mut self, kind: i32) {
-        if self.supersedes_pending(self.tokens.starts[self.pos]) {
-            self.fail_expecting(&([kind] as List<i32>));
+        if self.speculating && !self.supersedes_pending(self.tokens.starts[self.pos]) {
+            self.recovering = true;
+            return;
         }
-        self.recovering = true;
+        self.fail_expecting(&([kind] as List<i32>));
     }
 
     fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
@@ -1369,15 +1379,15 @@ impl Parser {
         let node = if row < 0 { self.b.innermost_open() } else { row };
         self.b.resume_node(node, self.last_end());
         assert self.b.node_kind(node) == rule, "recover_rule: the resumed node is the failed rule's";
+        if !self.b.in_error_mode() { self.recovered_failures.clear(); }
         self.commit_pending();
         self.recovering = false;
-        if self.pos != self.recovery_pos {
-            self.recovery_pos = self.pos;
-            self.recovery_rules = [];
-        } else if self.recovery_rules.contains(&rule) && self.kinds[self.pos] != TK_EOF {
+        let failure = [rule, self.failed_expected];
+        if self.pos == self.recovery_pos && self.recovered_failures.contains(&failure) && self.kinds[self.pos] != TK_EOF {
             self.skip_one();
         }
-        self.recovery_rules.push(rule);
+        self.recovery_pos = self.pos;
+        self.recovered_failures.push(failure);
         self.skip_until(&self.resync_set(&[]));
         return true;
     }
@@ -2170,6 +2180,56 @@ fn _parse_stmt(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_nest__inner(p: &mut Parser) -> () {
+    p.site = 14;
+    _parse_ne(p);
+    p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
+    return;
+}
+
+fn _parse_nest(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    p.sites.push(p.site);
+    let _start = p.peek_start();
+    p.b.start_node(RK_NEST, _start);
+    _parse_nest__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_NEST, "nest", -1); }
+    p.b.finish_node(p.last_end());
+    p.sites.pop();
+}
+
+fn _parse_ne__inner(p: &mut Parser) -> () {
+    if !kind_set_has(&SYNC_10, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_10, &EXPECTED_10); }
+    let kind = p.peek_kind();
+    if kind == TK_LIT_LPAREN {
+        p.take();
+        p.site = 15;
+        _parse_ne(p);
+        p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
+        return;
+    } else if kind == TK_LIT_x {
+        p.take();
+        return;
+    }
+    p.no_viable(
+        "no alternative of ne matches",
+        p.peek_span(),
+        &EXPECTED_10,
+    );
+    return;
+}
+
+fn _parse_ne(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    p.sites.push(p.site);
+    let _start = p.peek_start();
+    p.b.start_node(RK_NE, _start);
+    _parse_ne__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_NE, "ne", -1); }
+    p.b.finish_node(p.last_end());
+    p.sites.pop();
+}
+
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -2276,9 +2336,17 @@ pub fn parse_stmt<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseR
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_stmt(p));
 }
 
+pub fn parse_nest<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_nest(p));
+}
+
+pub fn parse_ne<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_ne(p));
+}
+
 global CALL_FOLLOW_SETS: List<List<i32>> = [[128], [64], [256], [32], [], [1024], [4096], [8192], [16384], [43873]];
-global CALL_FOLLOW: List<i32> = [0, 1, 2, 3, 4, 4, 4, 4, 5, 6, 7, 8, 7, 9];
-global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, false, true, true, true, false, true, false, false, false, false, false];
+global CALL_FOLLOW: List<i32> = [0, 1, 2, 3, 4, 4, 4, 4, 5, 6, 7, 8, 7, 9, 8, 6];
+global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, false, true, true, true, false, true, false, false, false, false, false, false, false];
 
 global TOKEN_NAMES: List<String> = ["INT", "'z'", "' '", "Eof", "Error", "'x'", "'y'", "'!'", "'w'", "'q'", "'+'", "'('", "')'", "'end'", "';'", "'a'", "'b'", "'v'"];
 
@@ -2324,6 +2392,8 @@ global SYNC_7: List<i32> = [65536];
 global SYNC_8: List<i32> = [256];
 global SYNC_9: List<i32> = [32];
 global EXPECTED_9: List<i32> = [TK_LIT_x];
+global SYNC_10: List<i32> = [2080];
+global EXPECTED_10: List<i32> = [TK_LIT_LPAREN, TK_LIT_x];
 
 global FOLLOW_SETS: List<List<i32>> = [[128]];
 global FOLLOW_MASK_0: i64 = 1;

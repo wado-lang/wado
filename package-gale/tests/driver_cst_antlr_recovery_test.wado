@@ -72,6 +72,13 @@ test "a rule failing again where it last failed skips the token its loop re-ente
     assert_tree(&rec::parse_stmts("x z x y end"), "(stmts stmt (stmt x z) (stmt x y) end)");
     assert_tree(&rec::parse_stmts("x y x z x w end"), "(stmts (stmt x y) stmt (stmt x z) (stmt x w) end)");
     assert_tree(&rec::parse_stmts("x x y end"), "(stmts stmt (stmt x) (stmt x y) end)");
+    assert_tree(&rec::parse_stmts("x x x y end"), "(stmts stmt (stmt x) (stmt x) (stmt x y) end)");
+    assert_tree(&rec::parse_stmts("x z x z end"), "(stmts stmt (stmt x z) stmt (stmt x z) end)");
+}
+
+test "what counts as failing again is where in its rule the failure is, not which frame" {
+    assert_tree(&rec::parse_nest("( ( ;"), "(nest (ne ( (ne ( ne) <missing ')'>) ;)");
+    assert_tree(&rec::parse_nest("( ( ( x ; ;"), "(nest (ne ( (ne ( (ne ( (ne x)) ;) <missing ')'>) ;)");
 }
 
 test "a terminal missing at the end of a rule is inserted where EOF follows" {

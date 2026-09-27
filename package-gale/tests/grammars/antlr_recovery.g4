@@ -2,7 +2,9 @@
 // (single-token deletion on entry, a skipped run after a loop iteration) and a
 // failed rule resynchronising on what the rules under way can continue with.
 // `tail` and `single` pin where no sync runs. `stmts` pins that a rule failing
-// again where it last failed moves past the token its loop re-enters it on.
+// again where it last failed moves past the token its loop re-enters it on, and
+// `nest` that the recursive frames of one rule fail again only where they
+// failed at the same point in it.
 
 grammar AntlrRecovery;
 
@@ -28,6 +30,8 @@ trail  : grpend 'end' ;
 grpend : 'x' ('y' 'v' | 'w') ;
 stmts  : stmt* 'end' ;
 stmt   : 'x' 'y' | 'x' 'w' ;
+nest   : ne ';' ;
+ne     : '(' ne ')' | 'x' ;
 
 INT : [0-9]+ ;
 Z   : 'z' ;
