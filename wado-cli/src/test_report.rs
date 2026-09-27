@@ -411,8 +411,19 @@ impl TestReporter for HeartbeatReporter {
 
     fn on_test_result(&self, result: &TestResult) {
         self.state.tests_seen.fetch_add(1, Ordering::Relaxed);
+        // A reading asked for is shown, even where the digest would stay quiet.
+        let announce_metered = |label: &str| {
+            if result.fuel.is_some() {
+                self.announce(&format!(
+                    "{label:<8}{} :: {} ({})",
+                    result.file_path,
+                    result.display_name,
+                    result.cost()
+                ));
+            }
+        };
         match result.outcome {
-            TestOutcome::Pass => {}
+            TestOutcome::Pass => announce_metered("ok"),
             TestOutcome::Fail => {
                 self.state.tests_failed.fetch_add(1, Ordering::Relaxed);
                 let cost = result.cost();
@@ -434,12 +445,15 @@ impl TestReporter for HeartbeatReporter {
             }
             TestOutcome::TodoPending => {
                 self.state.todo_pending.fetch_add(1, Ordering::Relaxed);
+                announce_metered("todo");
             }
             TestOutcome::TodoResolved => {
                 self.state.todo_resolved.fetch_add(1, Ordering::Relaxed);
                 self.announce(&format!(
-                    "resolved  {} :: {} — remove the #[TODO] attribute",
-                    result.file_path, result.display_name
+                    "resolved  {} :: {} ({}) — remove the #[TODO] attribute",
+                    result.file_path,
+                    result.display_name,
+                    result.cost()
                 ));
             }
         }

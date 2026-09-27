@@ -377,15 +377,6 @@ impl AccessorTask<WasiState> for HandlerTask {
             resp_tx,
         } = job;
 
-        // The store's meter is shared by every request in flight on the worker,
-        // so a reading covers this request alone only when it ran alone.
-        let fuel_meter = accessor
-            .with(|store| runtime::fuel_spent(store))
-            .map(|start| {
-                let path = wasi_req.path_with_query.as_ref().map_or("", |p| p.as_str());
-                (start, format!("{} {path}", wasi_req.method))
-            });
-
         let mut resp_tx = Some(resp_tx);
         let (frame_tx, frame_rx) = mpsc::channel::<Frame<Bytes>>(8);
         let mut frame_rx_holder = Some(frame_rx);
@@ -519,13 +510,29 @@ impl AccessorTask<WasiState> for HandlerTask {
             };
             let _ = tx.send(outcome);
         }
-        if let Some((start, target)) = fuel_meter {
-            let now = accessor
-                .with(|store| runtime::fuel_spent(store))
-                .expect("the store metered at the start of the request");
-            eprintln!("fuel {} {target}", now - start);
-        }
         Ok(())
+    }
+}
+
+/// The fuel reading of the request a worker is serving under `--report-fuel`.
+struct FuelReading {
+    /// The store's meter when the request started.
+    start: u64,
+    /// Method and path. The query is left out: it can carry credentials.
+    target: String,
+}
+
+impl FuelReading {
+    fn open(start: u64, req: &WasiRequest) -> Self {
+        let path = req.path_with_query.as_ref().map_or("", |p| p.path());
+        Self {
+            start,
+            target: format!("{} {path}", req.method),
+        }
+    }
+
+    fn close(self, spent: u64, suffix: &str) {
+        eprintln!("fuel {} {}{suffix}", spent - self.start, self.target);
     }
 }
 
@@ -782,6 +789,9 @@ async fn worker_loop(
             }
         };
 
+        // Outside the dispatch loop, so a trap that ends the loop still leaves
+        // the reading here to close.
+        let mut open_reading: Option<FuelReading> = None;
         let stop = store
             .run_concurrent(async |accessor| {
                 let mut inflight = FuturesUnordered::new();
@@ -826,10 +836,24 @@ async fn worker_loop(
                         access.as_context_mut().set_epoch_deadline(epoch_ticks);
                     });
 
+                    let spent = accessor.with(|access| runtime::fuel_spent(access));
+                    if inflight.is_empty()
+                        && let Some(reading) = open_reading.take()
+                    {
+                        reading.close(spent.expect("a reading opens on a metered store"), "");
+                    }
+
                     match step {
                         Step::Turn => {}
                         Step::Job => match job {
                             Some(job) => {
+                                if let Some(spent) = spent {
+                                    assert!(
+                                        inflight.is_empty(),
+                                        "--report-fuel serves one request at a time"
+                                    );
+                                    open_reading = Some(FuelReading::open(spent, &job.wasi_req));
+                                }
                                 // The `JoinHandle` is kept in `inflight` so a
                                 // recycle can wait for the request to finish;
                                 // the task itself is driven by `run_concurrent`.
@@ -850,6 +874,15 @@ async fn worker_loop(
             })
             .await
             .and_then(|inner| inner);
+
+        if let Some(reading) = open_reading {
+            assert!(
+                stop.is_err(),
+                "the dispatch loop closes every reading it finishes"
+            );
+            let spent = runtime::fuel_spent(&store).expect("a reading opens on a metered store");
+            reading.close(spent, " (trapped)");
+        }
 
         match stop {
             // Drop the old store (returns its pooling slots) and loop to
@@ -1201,11 +1234,18 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     // per-worker default whatever the host's CPU count turned out to be.
     // Held to the same `u32` as an explicit `--max-concurrency`, which is
     // what `run_http_server` converts it back to.
-    let max_concurrency = opts.max_concurrency.unwrap_or_else(|| {
+    let mut max_concurrency = opts.max_concurrency.unwrap_or_else(|| {
         workers
             .saturating_mul(DEFAULT_MAX_CONCURRENCY_PER_WORKER)
             .min(u32::MAX as usize)
     });
+    // A worker's requests share its store's meter, so a reading is one
+    // request's only when that request runs alone.
+    if opts.runtime.report_fuel && (workers, max_concurrency) != (1, 1) {
+        eprintln!("Fuel reporting: forcing --workers 1 --max-concurrency 1");
+        workers = 1;
+        max_concurrency = 1;
+    }
     run_http_server(
         wasm,
         &opts.input,

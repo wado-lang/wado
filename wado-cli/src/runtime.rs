@@ -75,6 +75,8 @@ pub struct WasiState {
     http: WasiHttpCtx,
     http_hooks: WadoHttpHooks,
     tls: WasiTlsCtx,
+    /// The fuel [`new_store`] filled the store with, where its engine meters.
+    fuel_start: Option<u64>,
 }
 
 /// Per-guest stdout/stderr capacity for [`WasiState::new_capturing_stdio`].
@@ -178,6 +180,7 @@ impl WasiState {
             http,
             http_hooks,
             tls,
+            fuel_start: None,
         }
     }
 
@@ -228,6 +231,7 @@ impl WasiState {
             http,
             http_hooks,
             tls,
+            fuel_start: None,
         })
     }
 }
@@ -534,22 +538,22 @@ pub fn create_serve_engine(
 /// A store over `state`. On a metering engine it holds fuel it can never
 /// exhaust, so `--report-fuel` observes the guest without stopping it.
 #[must_use]
-pub fn new_store(engine: &Engine, state: WasiState) -> Store<WasiState> {
+pub fn new_store(engine: &Engine, mut state: WasiState) -> Store<WasiState> {
+    let fuel_start = engine.get_consume_fuel().then_some(u64::MAX);
+    state.fuel_start = fuel_start;
     let mut store = Store::new(engine, state);
-    if engine.get_consume_fuel() {
-        store.set_fuel(u64::MAX).expect("the engine meters fuel");
+    if let Some(fuel) = fuel_start {
+        store.set_fuel(fuel).expect("the engine meters fuel");
     }
     store
 }
 
-/// The fuel `store` has spent since [`new_store`], or `None` when its engine
-/// does not meter.
-pub fn fuel_spent(store: impl AsContext) -> Option<u64> {
+/// The fuel `store` has spent since [`new_store`] filled it, or `None` when
+/// its engine does not meter.
+pub fn fuel_spent(store: impl AsContext<Data = WasiState>) -> Option<u64> {
     let store = store.as_context();
-    store
-        .engine()
-        .get_consume_fuel()
-        .then(|| u64::MAX - store.get_fuel().expect("the engine meters fuel"))
+    let start = store.data().fuel_start?;
+    Some(start - store.get_fuel().expect("the engine meters fuel"))
 }
 
 /// Create a Store with WASI state, preopened directories, and program arguments.

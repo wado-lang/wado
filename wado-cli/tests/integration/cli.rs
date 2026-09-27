@@ -654,11 +654,15 @@ fn reported_fuel(args: &[&str]) -> u64 {
         .unwrap()
 }
 
-/// Fuel counts Wasm operators, so a program spends the same fuel on every run,
-/// whatever the machine and its load.
+/// Fuel counts Wasm operators, so pure computation spends the same fuel on
+/// every run, whatever the machine and its load.
 #[test]
 fn test_run_report_fuel_is_deterministic() {
-    let args = ["run", "--report-fuel", "example/hello.wado"];
+    let args = [
+        "run",
+        "--report-fuel",
+        "wado-cli/tests/fixtures/run_pure.wado",
+    ];
     let first = reported_fuel(&args);
     assert!(first > 0);
     assert_eq!(first, reported_fuel(&args));
@@ -900,6 +904,23 @@ fn test_test_report_fuel_joins_the_duration() {
         .assert()
         .success()
         .stdout(predicate::str::is_match(r"ok   prints and passes \(\S+, fuel \d+\)").unwrap());
+}
+
+/// The digest stays quiet about a passing test, but not about a reading the
+/// run asked for.
+#[test]
+fn test_test_heartbeat_shows_a_passing_tests_fuel() {
+    wado()
+        .args([
+            "test",
+            "--report-fuel",
+            "wado-cli/tests/fixtures/test_stdout.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::is_match(r"ok +\S+ :: prints and passes \(\S+, fuel \d+\)").unwrap(),
+        );
 }
 
 #[test]

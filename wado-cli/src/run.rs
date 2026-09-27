@@ -257,12 +257,17 @@ async fn run_cli_component(
 
     // `run` is exported through the `wasi:cli/run` instance, so bind via the
     // `Command` bindings; the async export is driven through `run_concurrent`.
-    let command =
+    let instantiated =
         wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, &component, &linker)
-            .await?;
-    let outer = store
-        .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
-        .await;
+            .await;
+    let outer = match instantiated {
+        Ok(command) => {
+            store
+                .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
+                .await
+        }
+        Err(e) => Err(e),
+    };
 
     if let Some(fuel) = runtime::fuel_spent(&store) {
         eprintln!("fuel {fuel}");

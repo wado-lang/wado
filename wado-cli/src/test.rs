@@ -1592,7 +1592,7 @@ async fn collect_into_vec<T>(mut rx: mpsc::Receiver<T>) -> Vec<T> {
 }
 
 /// Build a `TestResult` for a setup-time failure (store/linker/instance/etc.).
-fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
+fn fail_result(job: &TestJob, error: String, start: Instant, fuel: Option<u64>) -> TestResult {
     TestResult {
         file_path: job.module.path.clone(),
         test_name: job.test_name.clone(),
@@ -1600,7 +1600,7 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
         outcome: TestOutcome::Fail,
         error: Some(error),
         duration: start.elapsed(),
-        fuel: None,
+        fuel,
         stdout: String::new(),
         stderr: String::new(),
     }
@@ -1616,7 +1616,7 @@ async fn run_single_test_safe(job: TestJob, preopened_dirs: &[(String, String)])
         .await;
     panic_or_result.unwrap_or_else(|payload| {
         let cause = format_panic_payload(&payload);
-        fail_result(&job, format!("test worker panicked: {cause}"), start)
+        fail_result(&job, format!("test worker panicked: {cause}"), start, None)
     })
 }
 
@@ -1628,7 +1628,9 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
     let (mut store, stdout_pipe, stderr_pipe) =
         match runtime::create_test_store(&module.engine, preopened_dirs, &module.path) {
             Ok(v) => v,
-            Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
+            Err(e) => {
+                return fail_result(job, format!("failed to set up store: {e:#}"), start, None);
+            }
         };
 
     // Profiling samples on every epoch tick, so it takes the deadline the
@@ -1652,7 +1654,10 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         .await
     {
         Ok(inst) => inst,
-        Err(e) => return fail_result(job, format!("failed to instantiate: {e:#}"), start),
+        Err(e) => {
+            let fuel = runtime::fuel_spent(&store);
+            return fail_result(job, format!("failed to instantiate: {e:#}"), start, fuel);
+        }
     };
 
     let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &job.test_name);
