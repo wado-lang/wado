@@ -27,6 +27,5 @@ if [ "${#corpus[@]}" -gt 0 ]; then
     git ls-files 'docs/spec-*.md' > "${list}"
 fi
 
-scripts/build-dev-bins.sh wado
-exec ./target/debug/wado run package-gale-highlight-wado/tools/spec_examples.wado -- \
+exec scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/spec_examples.wado -- \
     "${corpus[@]}" "$@"

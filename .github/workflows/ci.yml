@@ -74,6 +74,10 @@ jobs:
   # as an artifact. The runners' concurrency cap, not any one job, is what a run
   # waits on, so a compile repeated per job is paid for in queue time: `wado`
   # was compiled nine times a run and the e2e binary five.
+  #
+  # A binary holds the absolute paths of the checkout it was built in (the
+  # fixtures, the stdlib), so a job running one checks out at the same path:
+  # the same runner image's workspace.
   build-wado:
     name: Build (wado)
     needs: changes
@@ -100,7 +104,6 @@ jobs:
             target/debug/wado
             target/debug/wado-dev-tools
           if-no-files-found: error
-          retention-days: 1
 
   build-e2e:
     name: Build (E2E)
@@ -131,7 +134,6 @@ jobs:
           name: prebuilt-e2e
           path: target/debug/e2e
           if-no-files-found: error
-          retention-days: 1
 
   # The Rust tests, preceded by the static gates: each gate is sub-minute, so a
   # Cargo.lock drift, a hook break, an internal-name regression, or a wasm32
@@ -190,14 +192,13 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
           prebuilt: wado e2e
 
-      # What `cargo test` would do: run from the package, which the harness
-      # finds its fixtures through. The e2e test names are lower case.
+      # From the package, as `cargo test` runs it: a fixture's preopen seed is a
+      # path relative to it. The e2e test names are lower case.
       - name: e2e "fixture_test_${LEVEL,,}"
         working-directory: wado-compiler
-        env:
-          CARGO_MANIFEST_DIR: ${{ github.workspace }}/wado-compiler
         run: ../target/debug/e2e "fixture_test_${LEVEL,,}"
       - run: mise run test-stdlib "$LEVEL"
 
@@ -220,6 +221,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
           prebuilt: wado
 
       - run: mise run check-rust-paths
@@ -230,7 +232,7 @@ jobs:
       - run: mise run check-highlight
       # `--dry-run` builds every publishable world without pushing, so it needs
       # neither wkg nor credentials.
-      - run: target/debug/wado publish --dry-run
+      - run: scripts/dev-bin.sh wado publish --dry-run
       - run: mise run test-web-glue
 
   test-gale-o2:
@@ -247,6 +249,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
           prebuilt: wado
 
       - run: mise run test-gale-o2
@@ -267,7 +270,15 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
           prebuilt: wado
+      # Its own workspace, target/ and lockfile, which no other job builds. Only
+      # main saves, as cargo-cache.yml does for the workspace's.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: wado-run-webgpu
+          shared-key: webgpu
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # A runner has no GPU, and wgpu needs a driver to find any adapter at all.
       # mesa-vulkan-drivers supplies lavapipe, which answers in software.

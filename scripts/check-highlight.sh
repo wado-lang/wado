@@ -16,15 +16,13 @@ out=package-gale-highlight-wado/build/check-highlight
 rm -rf "${out}"
 mkdir -p "${out}"
 
-scripts/build-dev-bins.sh wado wado-dev-tools
-
 # The vocabulary check is cheap and explains most class divergences, so fail
 # on it first rather than through thousands of corpus rows.
-./target/debug/wado-dev-tools highlight-vocab
+scripts/dev-bin.sh wado-dev-tools highlight-vocab
 
-./target/debug/wado-dev-tools highlight-corpus --emit-corpus "${out}/corpus.txt"
-./target/debug/wado run package-gale-highlight-wado/tools/highlight_dump.wado -- \
+scripts/dev-bin.sh wado-dev-tools highlight-corpus --emit-corpus "${out}/corpus.txt"
+scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/highlight_dump.wado -- \
     --paths-from "${out}/corpus.txt" > "${out}/gale.tsv" 2> "${out}/gale.err" \
     || { cat "${out}/gale.err" >&2; exit 1; }
-./target/debug/wado-dev-tools highlight-corpus \
+scripts/dev-bin.sh wado-dev-tools highlight-corpus \
     --compare "${out}/gale.tsv" --report "${out}/divergences.tsv"

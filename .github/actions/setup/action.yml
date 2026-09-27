@@ -1,7 +1,7 @@
 name: Set up the CI toolchain
 description: >-
-  Restore (never save) the shared Rust build cache, or fetch the binaries the
-  build jobs made, and install the mise-managed tools.
+  Restore (never save) the shared Rust build cache, fetch the binaries the build
+  jobs made, and install the mise-managed tools — each as the job asks.
 
 # Secrets are not visible inside a composite action, so the caller passes the
 # token mise uses to download tools without hitting the GitHub API rate limit.
@@ -9,20 +9,26 @@ inputs:
   github-token:
     description: Token for mise tool downloads.
     required: true
+  rust-cache:
+    description: Restore the workspace's Rust build cache, for a job that compiles it.
+    default: "true"
   prebuilt:
     description: >-
-      Build artifacts to place in target/debug instead of compiling: `wado`
-      (`wado` and `wado-dev-tools`) and `e2e` (the e2e test binary). A job
-      naming any compiles nothing, so it skips the Rust cache, and
-      scripts/build-dev-bins.sh builds nothing either.
+      Build artifacts to place in target/debug, which scripts/dev-bin.sh then
+      runs without building: `wado` (`wado` and `wado-dev-tools`) and `e2e`
+      (the e2e test binary). They hold this checkout's absolute paths, so the
+      job must check out where the build job did.
     default: ""
+  mise:
+    description: Install the mise-managed tools.
+    default: "true"
 
 runs:
   using: composite
   steps:
     # The shared key hashes the workflow that fills the cache, so a change to
     # what it builds starts a new cache: an exact hit is never saved over.
-    - if: inputs.prebuilt == ''
+    - if: inputs.rust-cache == 'true'
       uses: Swatinem/rust-cache@v2
       with:
         shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml') }}
@@ -43,7 +49,8 @@ runs:
       run: |
         chmod +x target/debug/*
         echo "WADO_PREBUILT=1" >> "$GITHUB_ENV"
-    - uses: jdx/mise-action@v4.3.0
+    - if: inputs.mise == 'true'
+      uses: jdx/mise-action@v4.3.0
       with:
         cache: true
         github_token: ${{ inputs.github-token }}
