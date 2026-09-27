@@ -521,7 +521,7 @@ pub fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 
 ### `#[compiler_item("name")]`
 
-Binds a stdlib declaration to the language item of that name, such as `#[compiler_item("option")]` on `variant Option` or `#[compiler_item("display")]` on the `Display` trait. It is valid only in `core:*` modules, and an error elsewhere.
+Binds a stdlib declaration to the language item of that name, such as `#[compiler_item("option")]` on `variant Option` or `#[compiler_item("display")]` on the `Display` trait.
 
 ### `#[retain(...)]` / `#[result(...)]`
 
