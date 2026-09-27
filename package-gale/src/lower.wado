@@ -821,10 +821,9 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
 fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     let header = lower_header(rule);
 
-    // Partition alts into atom (non-LR) and lr (LR). ANTLR4 requires
-    // at least one non-LR alt; we mirror the assertion so the GIR
-    // `atom: MultiAltRule` invariant (header derived from a non-empty
-    // alt set) is honoured.
+    // Partition alts into atom (non-LR) and lr (LR). `check_left_recursion_ends`
+    // has rejected a rule with no non-LR alt, so the GIR `atom: MultiAltRule`
+    // (header derived from a non-empty alt set) always has one.
     let mut non_lr_indices: List<i32> = [];
     let mut lr_indices: List<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
@@ -912,7 +911,7 @@ fn lr_rule_is_atn_class(
     // tokens its static `suffix_first` does not name — all of them when that
     // set is empty, and still the rest in `A? .` or `(w | A)`. No static
     // first-token check decides such a loop entry; the runtime simulator admits
-    // the open end via `atn_first_admits`.
+    // the open end via `atn_state_cont_admits`.
     for let mut i = 0; i < lr_alts.len(); i += 1 {
         let a = &lr_alts[i];
         if !a.suffix.ops.is_empty() && (a.suffix_first.is_empty() || alt_class_is_open_ended(&suffix_classes[i])) {
@@ -1658,7 +1657,7 @@ fn compute_lr_conflict_min_prec(
 /// Build the LR loop's dispatch metadata. `valid_lr_alts` lists the
 /// indices (into `lr_alts`) of alts whose suffix is non-empty —
 /// degenerate `expr : expr` alts are filtered out. `groups` is the
-/// overlap-group partition over those alts' suffix classes.
+/// overlap-group partition over those alts' suffix first sets.
 fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClass>, atn_class: bool) -> LrDispatchData {
     let mut valid_lr_alts: List<i32> = [];
     let mut suffix_first_sets: List<List<String>> = [];

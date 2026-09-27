@@ -955,16 +955,6 @@ fn lr_atn_alt_decl(lr_dispatch: &LrDispatchData) -> String {
     return if lr_atn_has_overlap_group(lr_dispatch) { "let mut _atn_alt" } else { "let _atn_alt" };
 }
 
-/// Settle which member of an overlap group the LR loop enters.
-///
-/// `atn_lr_loop_decision` tests one token against each continuation's FIRST
-/// set and takes the first edge admitting it, so alternatives opening on the
-/// same token come back in grammar order rather than by which one matches
-/// (`expr 'not'? 'in' …` against `expr 'not'? 'like' …` on `not like`). Its
-/// enter-or-yield verdict needs the simulator and stands; the choice within
-/// the group does not, and is re-taken from the scan twins by longest match
-/// as the static LR dispatch does. Every scan failing leaves the simulator's
-/// answer, and with it its diagnostic path, untouched.
 /// The gate a candidate suffix scan starts from.
 ///
 /// A dispatch measures its candidates one after another and each mutates the
@@ -1029,6 +1019,16 @@ fn lr_site_is_parse(site: &LrOverlapSite) -> bool {
     return site.branch matches { ParseBody(_) };
 }
 
+/// Settle which member of an overlap group the LR loop enters.
+///
+/// `atn_lr_loop_decision` tests one token against each continuation's FIRST
+/// set and takes the first edge admitting it, so alternatives opening on the
+/// same token come back in grammar order rather than by which one matches
+/// (`expr 'not'? 'in' …` against `expr 'not'? 'like' …` on `not like`). Its
+/// enter-or-yield verdict needs the simulator and stands; the choice within
+/// the group does not, and is re-taken from the scan twins by longest match
+/// as the static LR dispatch does. Every scan failing leaves the simulator's
+/// answer, and with it its diagnostic path, untouched.
 fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
     lr_alts: &List<LrAlt>,
@@ -4304,7 +4304,9 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
         }
         if scan_body_can_match_empty(&lr.scan_suffix.elements, ctx) {
             gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-            w.line(`if scan_${rule.snake_name}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}) == p.pos { break; }`);
+            w.line(
+                `if scan_${rule.snake_name}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}) == p.pos { break; }`,
+            );
         }
         emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, &mut nc, &lr.suffix_first);
     }
