@@ -41,9 +41,10 @@ then made stale is spread across everything the branch touched.
 ### Common Development Tasks
 
 ```sh
-mise run test            # test Rust crates
+mise run test            # check the spec examples, then test Rust crates
 mise run test-wado       # test Wado modules
 mise run test-stdlib O3  # test the stdlib at one optimization level (CI runs each)
+mise run check           # run the corpus checks that finish in seconds
 mise run format          # format Rust, Markdown, and Wado files
 
 mise run benchmark-all     # runs all benchmarks and reports the results

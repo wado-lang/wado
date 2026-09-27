@@ -1,0 +1,26 @@
+// `array_copy` keeps the elements of its source, which for bytes is nothing:
+// `#[retain(elements_of = src)]` escapes only elements that carry an identity.
+// Reading it as keeping the source confined no parameter that is appended to a
+// string, so `push_str` deep-copied every borrowed string handed to it.
+
+use { println, Stdout } from "core:cli";
+
+fn bracketed(s: &String) -> String {
+    let mut out = String::with_capacity(8);
+    out.push_str("[");
+    out.push_str(*s);
+    out.push_str("]");
+    return out;
+}
+
+export fn run() with Stdout {
+    let s = "ab";
+    println(bracketed(&s));
+    println(s);
+}
+
+__DATA__
+{
+    "stdout": "[ab]\nab\n",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/string.wado/String"]
+}

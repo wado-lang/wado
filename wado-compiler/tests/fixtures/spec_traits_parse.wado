@@ -1,0 +1,12 @@
+// `FromStr` is strict; `LenientFromStr` accepts the spellings people type.
+
+test {
+    assert i32::from_str("42").unwrap() == 42;
+    assert i32::from_str("0x2A").is_err();                  // strict rejects the prefix
+
+    assert i32::from_str_lenient("0x2A").unwrap() == 42;    // radix prefixes 0x/0o/0b
+    assert i32::from_str_lenient("1_000").unwrap() == 1000; // `_` digit separators
+    assert bool::from_str_lenient("TRUE").unwrap();         // casing, plus 1/0
+    assert f64::from_str_lenient("inf").unwrap() == f64::INFINITY;
+    assert i32::from_str_lenient(" 1 ").is_err();           // never trims whitespace
+}

@@ -1,0 +1,11 @@
+// Every `resource` is an effect: calling its constructors or methods demands it.
+use { TcpSocket, IpAddressFamily } from "wasi:sockets";
+
+fn connect() -> bool with TcpSocket {
+    let socket = TcpSocket::create(IpAddressFamily::Ipv4);   // OK
+    return socket matches { Ok(_) };
+}
+
+test {
+    assert connect();
+}

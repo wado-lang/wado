@@ -1,0 +1,18 @@
+// A closure's `:#?` source states a binding's mutability, which a pattern
+// carries only through the closure's own locals.
+//
+// Regression: the source was rendered with no locals, so every binding a
+// pattern introduced printed without its `mut`.
+
+fn fmt_alt(f: fn(i32) -> i32) -> String {
+    return `${f:#?}`;
+}
+
+test "a destructured binding keeps its `mut`" {
+    let g = |n: i32| {
+        let [p, mut s] = [n, 6];
+        s += p;
+        return s;
+    };
+    assert fmt_alt(g) == "|n: i32| {\n    let [p, mut s] = [n, 6];\n    s = (s + p);\n    return s;\n}";
+}

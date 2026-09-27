@@ -1,0 +1,48 @@
+// Closure bodies, return types, parameter inference and effect rows.
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn to_int(s: String) -> Result<i32, String> {
+    return i32::from_str(s).map_err(|e| `${e}`);
+}
+
+test "an expression body" {
+    let add_one = |x: i32| x + 1;
+    let make_point = |x: i32, y: i32| Point { x, y };
+    assert add_one(41) == 42;
+    assert make_point(1, 2).y == 2;
+}
+
+test "a block body" {
+    let compute = |x: i32| {
+        let doubled = x * 2;
+        return doubled + x * 3;
+    };
+    assert compute(2) == 10;
+}
+
+test "a declared return type" {
+    let parse = |s: String| -> Result<i32, String> {
+        let n = to_int(s)?;
+        return Result::Ok(n + 1);
+    };
+    assert parse("41").unwrap() == 42;
+    assert parse("x").is_err();
+}
+
+test "parameter inference" {
+    let arr: List<i32> = [1, 2, 3];
+    assert arr.into_iter().map(|x| x * 2).collect() == [2, 4, 6];  // `x: i32`, from `Iterator::Item`
+    assert arr.into_iter().fold(0, |acc, x| acc + x) == 6;         // `acc: i32`, from the body
+    let add_one = |x: i32| x + 1;                                    // no expected type: annotate
+    assert add_one(1) == 2;
+}
+
+test "an effect row on a closure type" {
+    let f: fn(i32) -> i32 with Stdout = |x| { println(`${x}`); return x; };
+    assert f(7) == 7;
+}

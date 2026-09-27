@@ -1,0 +1,10 @@
+// Named, effect-operation, and namespace imports.
+
+// Valid patterns
+use {println, eprintln} from "core:cli";        // Named import
+use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
+use utils from "./sub/spec_modules_utils.wado";  // Namespace import
+
+test {
+    assert utils::helper_function() == 42;
+}

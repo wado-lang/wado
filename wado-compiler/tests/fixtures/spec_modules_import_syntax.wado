@@ -1,0 +1,40 @@
+// ============================================
+// WIT Package = Wado Module
+// WIT Interface = Wado interface
+// ============================================
+
+// 1. WASI standard modules (wasi:*)
+use {Stdout, Stderr} from "wasi:cli";
+use {Stdout::{write_via_stream}} from "wasi:cli";
+
+// Interface and its members together
+use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
+
+// 2. Core library (core:*)
+use {println, eprintln} from "core:cli";
+use {to_string, from_string} from "core:json";
+
+// 3. Local files (relative path, extension required)
+use {Helper} from "./sub/spec_modules_utils.wado";
+use {Config} from "../fixtures/sub/spec_modules_config.wado";
+
+// 4. CM coordinate (declared in wado.toml, or given an inline `with` source)
+use {Regexp} from "docs:regex";
+
+// 5. Library alias (rename / private / coordinate-less dependency)
+use {Router} from "lib:router";
+
+test {
+    assert to_string(&Config { port: 80 }) == Result::Ok("{\"port\":80}");
+    assert Helper { name: "h" }.name == "h";
+    assert Regexp { pattern: "a+" }.pattern == "a+" && Router { routes: 2 }.routes == 2;
+}
+
+__DATA__
+{
+  "test": {},
+  "dependencies": {
+    "docs:regex": "sub/spec_modules_regex.wado",
+    "lib:router": "sub/spec_modules_router.wado"
+  }
+}

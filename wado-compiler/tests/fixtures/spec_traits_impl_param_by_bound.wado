@@ -1,0 +1,22 @@
+// A bound determines an impl's type parameter through the types it writes.
+
+trait Show {
+    fn show(&self) -> String;
+}
+
+struct Point { x: i32, y: i32 }
+
+// `S` fixes `FieldTypes`, which fixes `..F`
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Show for S {
+    fn show(&self) -> String {
+        let mut out = "";
+        for let f of ReflectStruct::<S>::members() {
+            out.push_str(`${f.get(self):?};`);
+        }
+        return out;
+    }
+}
+
+test {
+    assert Point { x: 1, y: 2 }.show() == "1;2;";
+}

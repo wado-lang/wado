@@ -1,0 +1,9 @@
+// A `StrSlice` views part of a string without copying it.
+
+test {
+    let v = "banana".as_str_slice();
+    let part = v.slice(1, 4);            // panics off a character boundary
+    assert part == "ana";
+    assert part.len() == 3;              // in bytes
+    assert part.to_string() == "ana";    // copies out, here and only here
+}

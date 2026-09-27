@@ -1,0 +1,17 @@
+// An affine resource is move-only.
+
+pub resource Counter {
+    fn bump(&self);
+    fn consume(self);
+}
+
+fn eat(c: Counter) { }
+
+fn misuse(c: Counter, d: Counter) {
+    eat(c);          // moves `c`
+    c.bump();        // ERROR: resource `c` used after it was moved
+    d.consume();     // a by-value `self` moves `d` too
+}
+
+__DATA__
+{"compile_error": "resource `c` used after it was moved"}

@@ -30,17 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
-          shared-key: ci
-          save-if: false
-
-      - uses: jdx/mise-action@v4.3.0
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v7.0.0
         with:

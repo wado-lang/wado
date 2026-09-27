@@ -1,0 +1,56 @@
+// Tuple literals, tuple types, element access, unit and the never type.
+
+test "tuple literals" {
+    let pair = [1, "hello"];              // Type: [i32, String]
+    let triple = [42, "answer", true];    // Type: [i32, String, bool]
+    let single = [42];                    // Type: [i32] (1-tuple)
+    let empty_tuple: [] = [];             // Empty tuple (distinct from unit ())
+    let trailing = [1, 2, 3,];            // Trailing comma allowed
+    assert pair.1 == "hello" && triple.2 && single.0 == 42 && trailing.2 == 3;
+}
+
+test "tuple types" {
+    let point: [i32, i32] = [10, 20];
+    let record: [String, i32, bool] = ["Alice", 30, true];
+    assert point.1 == 20 && record.0 == "Alice";
+}
+
+test "element access" {
+    let t = [10, "hello", true];
+    let x = t.0;      // dot notation
+    let y = t[1];     // bracket notation
+    let z = t.2;
+    assert x == 10 && y == "hello" && z;
+}
+
+test "unit and empty tuple" {
+    let unit: () = ();    // Unit type/value
+    let empty: [] = [];   // Empty tuple (rarely used)
+    assert `${unit:?}` == "()" && `${empty:?}` == "[]";
+}
+
+#[expect_trap]
+test "never" {
+    // In a match arm: the None branch panics, so the match has type i32
+    let opt: Option<i32> = Option::<i32>::Some(5);
+    let x = match opt {
+        Some(v) => v,
+        None => panic("unexpected none"),
+    };
+    assert x == 5;
+
+    // In a let binding with explicit type annotation
+    let y: i32 = panic("unreachable");
+
+    // In a binary expression: execution diverges before the addition
+    let z: i32 = panic("boom") + 1;
+}
+
+fn fail(msg: String) -> ! {
+    panic(msg);
+}
+
+test {
+    let n: i32 = if true { 1 } else { fail("unreachable") };
+    assert n == 1;
+}

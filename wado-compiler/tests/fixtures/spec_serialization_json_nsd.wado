@@ -1,0 +1,17 @@
+// `core:json_nsd` writes a struct as a positional array.
+
+use { to_string, from_string } from "core:json_nsd";
+
+struct User { name: String, age: i32 }
+
+test {
+    let user = User { name: "Alice", age: 30 };
+
+    // Struct as positional array
+    let json = to_string::<User>(&user);
+    assert json.unwrap() == `["Alice",30]`;
+
+    // Deserialize from positional array
+    let back = from_string::<User>(`["Alice",30]`).unwrap();
+    assert back.name == "Alice" && back.age == 30;
+}

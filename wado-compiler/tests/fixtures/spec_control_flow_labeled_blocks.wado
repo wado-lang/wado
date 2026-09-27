@@ -1,0 +1,75 @@
+// Quoted by docs/spec-control-flow.md § Tuple comprehension and § Labeled Blocks.
+
+trait Doubled with () {
+    fn doubled(&self) -> Self;
+}
+
+impl Doubled for i32 {
+    fn doubled(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+impl Doubled for String {
+    fn doubled(&self) -> String {
+        return `${*self}${*self}`;
+    }
+}
+
+impl<..T: Doubled> Doubled for [..T] {
+    fn doubled(&self) -> [..T] {
+        return [for let v of *self { v.doubled() }];
+    }
+}
+
+test {
+    assert [1, "ab"].doubled() == [2, "abab"];
+}
+
+test "a labeled block leaves a loop nest" {
+    let grid: List<List<i32>> = [[1, 2], [3, 4]];
+    let needle = 3;
+    let mut hit = [0, 0];
+    search: {
+        for let r of 0..<grid.len() {
+            for let c of 0..<grid[r].len() {
+                if grid[r][c] == needle {
+                    hit = [r, c];
+                    break search;   // leaves both loops
+                }
+            }
+        }
+        hit = [-1, -1];             // reached only when no break was taken
+    }
+    assert hit == [1, 0];
+}
+
+struct Entry {
+    key: String,
+    value: i32,
+}
+
+test "a labeled block as an expression" {
+    let items: List<Entry> = [{ key: "a", value: 1 }, { key: "b", value: 2 }];
+    let key = "b";
+    let found = search: {
+        for let item of items {
+            if item.key == key {
+                break search: item.value;
+            }
+        }
+        -1  // the value when no break is taken
+    };
+    assert found == 2;
+}
+
+test "a loop computes a value" {
+    let mut n = 0;
+    let found = scan: {
+        loop {
+            n += 1;
+            if n * n > 50 { break scan: n; }
+        }
+    };
+    assert found == 8;
+}

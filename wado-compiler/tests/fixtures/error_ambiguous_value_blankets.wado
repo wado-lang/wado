@@ -37,8 +37,11 @@ impl Limit for Point {
 
 export fn run() {
     let p = Point { x: 1 };
+    // error: ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and
+    // 'T: ReflectStruct' apply, and nothing ranks them; write
+    // 'impl Describe for Point'
     assert p.describe() == "limit:7";
 }
 
 __DATA__
-{"compile_error": "ambiguous blanket impls of 'Describe' for 'Point'"}
+{"compile_error": "ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and 'T: ReflectStruct' apply, and nothing ranks them; write 'impl Describe for Point'"}

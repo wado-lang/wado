@@ -1,0 +1,14 @@
+// `core:args` parses argv into an ordinary struct.
+
+use { parse } from "core:args";
+
+struct Cli {
+    #[wire(positional)] input: String,
+    jobs: i32 = 1,
+    verbose: bool = false,
+}
+
+test {
+    let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]).unwrap();
+    assert cli.input == "in.txt" && cli.jobs == 4 && cli.verbose;
+}

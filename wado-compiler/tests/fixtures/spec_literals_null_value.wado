@@ -1,0 +1,33 @@
+// A type accepts `null` in a literal by converting from `Option<!>`, as
+// `core:value::Value` does. This `Value` is a cut-down copy of that one.
+
+use { TreeMap } from "core:collections";
+
+variant Value {
+    Null,
+    String(String),
+    Object(TreeMap<String, Value>),
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Value {
+        return Value::String(value);
+    }
+}
+
+impl From<Array<[String, Value]>> for Value {
+    fn from(entries: Array<[String, Value]>) -> Value {
+        return Value::Object(TreeMap::<String, Value>::from(entries));
+    }
+}
+
+impl From<Option<!>> for Value {
+    fn from(value: Option<!>) -> Value {
+        return Value::Null;
+    }
+}
+
+test {
+    let doc: Value = { name: "Alice", nickname: null };
+    assert doc matches { Object(fields) && fields["nickname"] matches { Null } };
+}

@@ -400,6 +400,7 @@ conditionTerm
 
 forStatement
     : 'for' forHead block
+    | 'for' '(' ('let' pattern '=' expression)? ';' condition? ';' expression? ')' block
     ;
 
 forHead
@@ -687,7 +688,8 @@ patternElements
     ;
 
 patternFieldList
-    : patternField (',' patternField)* (',' '..')? ','?
+    : '..'
+    | patternField (',' patternField)* (',' '..')? ','?
     ;
 
 patternField
@@ -780,7 +782,7 @@ fragment UNICODE_ESCAPE
     ;
 
 IDENTIFIER
-    : [a-zA-Z_] [a-zA-Z0-9_]*
+    : [a-zA-Z_] [\p{Alphabetic}\p{N}_]*
     ;
 
 SHEBANG

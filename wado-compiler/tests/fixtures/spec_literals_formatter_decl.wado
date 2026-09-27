@@ -1,0 +1,48 @@
+// The prelude's `Formatter` and format traits, declared here under their own
+// names in a module without the prelude. A trait spelled `Display` does not
+// answer `${x}`, so the method is called by name.
+
+#![no_prelude]
+
+use { String } from "core:prelude";
+
+struct Celsius { degrees: i32 }
+
+impl Display for Celsius {
+    fn fmt(&self, f: &mut Formatter) {
+        f.buf.push_str(`${self.degrees}°C`);
+    }
+}
+
+pub enum Alignment { Left, Center, Right }
+
+pub struct Formatter {
+    pub fill: char,          // ' ' when the spec sets none
+    pub align: Alignment,    // Right when the spec sets none
+    pub sign_plus: bool,     // `+`
+    pub alternate: bool,     // `#`
+    pub zero_pad: bool,      // `0`
+    pub width: i32,          // Formatter::NO_WIDTH (-1) when the spec sets none
+    pub precision: i32,      // Formatter::PRECISION_DEFAULT (-2) when the spec sets none
+    pub indent: i32,         // nesting depth of the alternate Inspect
+    pub buf: &mut String,    // the output, which the Formatter does not own
+}
+
+pub trait Display with ()  { fn fmt(&self, f: &mut Formatter); }
+pub trait Inspect with ()  { fn inspect(&self, f: &mut Formatter); }
+pub trait Binary with ()   { fn fmt_binary(&self, f: &mut Formatter); }
+pub trait Octal with ()    { fn fmt_octal(&self, f: &mut Formatter); }
+pub trait LowerHex with () { fn fmt_lower_hex(&self, f: &mut Formatter); }
+pub trait UpperHex with () { fn fmt_upper_hex(&self, f: &mut Formatter); }
+pub trait LowerExp with () { fn fmt_lower_exp(&self, f: &mut Formatter); }
+pub trait UpperExp with () { fn fmt_upper_exp(&self, f: &mut Formatter); }
+
+test {
+    let mut out = "";
+    let mut f = Formatter {
+        fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false,
+        zero_pad: false, width: -1, precision: -2, indent: 0, buf: &mut out,
+    };
+    Celsius { degrees: 21 }.fmt(&mut f);
+    assert out == "21°C";
+}

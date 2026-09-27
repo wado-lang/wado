@@ -110,24 +110,20 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_3: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
+global global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_3: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
 global global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_4: ref null Array<u8> = array.new_fixed<u8>(32);
 
 fn "value_copy_live_ref_holder_keeps_copy.wado/match_binding"() {
     let $load_1: i32;
-    let other: ref "core:prelude//List<i32>";
     let keep: ref "core:prelude//List<i32>";
     let v_3: ref "core:prelude//List<i32>";
     let s: ref null "core:prelude//List<i32>";
     let xs: ref "core:prelude//List<i32>";
-    let elements_8: ref Array<i32>;
     let $vc_payload_0: ref "core:prelude//List<i32>";
     let used: i32;
     let $sroa_o_value_16: ref null "core:prelude//List<i32>";
     $sroa_o_value_16 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
-    elements_8 = array.new_fixed<i32>();
-    other = struct.new "core:prelude//List<i32>" { repr: elements_8, used: 0 };
-    keep = other;
+    keep = global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_3;
     if ref.is_null($sroa_o_value_16) == 0 {
         v_3 = ref.as_non_null($sroa_o_value_16);
         keep = v_3;
@@ -150,22 +146,21 @@ fn "value_copy_live_ref_holder_keeps_copy.wado/match_binding"() {
 }
 
 fn "value_copy_live_ref_holder_keeps_copy.wado/live_iterator"() {
+    let a: ref "core:prelude//List<i32>";
     let b: ref "core:prelude//List<i32>";
     let elements_5: ref Array<i32>;
-    let self_6: ref "core:prelude//List<i32>";
-    let end: i32;
     let ref_val: ref "core:prelude/types.wado//Box<i32>";
     let $sroa_it_repr_28: ref Array<i32>;
+    a = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     elements_5 = array.new_fixed<i32>();
     b = struct.new "core:prelude//List<i32>" { repr: elements_5, used: 0 };
-    self_6 = global:value_copy_live_ref_holder_keeps_copy.wado::$const_obj_3;
-    end = self_6.used;
-    $sroa_it_repr_28 = self_6.repr;
+    $sroa_it_repr_28 = a.repr;
     b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     builtin::array_set<i32>(b.repr, 0, 7);
     return $inline_core_prelude_types_wado_Option__i32___unwrap_8: block -> ref "core:prelude/types.wado//Box<i32>" {
-        $fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_7: block {
-            break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__next_7 0 >= end;
+        block {
+            block {
+            };
             ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($sroa_it_repr_28, 0) };
             break $inline_core_prelude_types_wado_Option__i32___unwrap_8: ref_val;
         };
@@ -475,17 +470,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if len_2 == 0 {
         return 0;
     }
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b34: block {
-        l35: loop {
-            break_if b34 i >= len_2;
+    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b35: block {
+        l36: loop {
+            break_if b35 i >= len_2;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l35;
+            continue l36;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(len_2) << 32_i64));
     taken = 0;
     block {
-        l37: loop {
+        l38: loop {
             ptr_15 = ptr_3 + taken;
             count_16 = len_2 - taken;
             result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
@@ -517,7 +512,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_3, len_2, 1, 0));
                 return $sroa_written_result_40;
             }
-            continue l37;
+            continue l38;
         };
     };
 }
@@ -591,14 +586,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b46: block {
-        l47: loop {
-            break_if b46 i >= digit_count_4;
+    b47: block {
+        l48: loop {
+            break_if b47 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l47;
+            continue l48;
         };
     };
 }

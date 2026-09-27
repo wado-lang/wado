@@ -1,0 +1,9 @@
+// No `Option<!>` is a `Some`.
+
+test {
+    let x = null;
+    if let Some(v) = x { }               // Error: unreachable, no Option<!> is a Some
+}
+
+__DATA__
+{"compile_error":"invalid pattern: unreachable: no `Option<!>` is a `Some`, whose payload `!` has no value"}

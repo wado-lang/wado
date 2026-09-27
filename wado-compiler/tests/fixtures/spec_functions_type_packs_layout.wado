@@ -1,0 +1,17 @@
+// Inside the body that declares them, packs are rigid: a value matches a tuple
+// of packs by layout.
+
+fn reorder<..A, ..B>(a: [..A], b: [..B]) {
+    let ba: [..B, ..A] = [..a, ..b];   // ERROR: the order is part of the type
+    let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
+}
+
+test {
+    reorder([1], ["x"]);
+}
+
+__DATA__
+{
+    "compile_error": "type mismatch: expected '[..B, ..A]', found '[..A, ..B]'",
+    "compile_errors_contains": ["type mismatch: expected '[i32, ..A]', found '[..A]'"]
+}

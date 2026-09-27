@@ -1,0 +1,22 @@
+// Shadowing: a new binding in an inner block, or one derived from the old
+// value in the same scope.
+
+fn transform(x: i32) -> i32 {
+    return x * 10;
+}
+
+test "an inner block" {
+    let x = 1;
+    if true {
+        let x = x + 1;  // New binding, initialized from outer x
+        assert x == 2;
+    }
+    assert x == 1;      // outer x unchanged
+}
+
+test "the same scope" {
+    let x = 1;
+    let x = x + 1;  // OK: RHS references x
+    let x = transform(x);  // OK: RHS references x
+    assert x == 20;
+}

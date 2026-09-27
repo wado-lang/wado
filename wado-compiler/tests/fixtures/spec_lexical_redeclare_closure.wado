@@ -1,0 +1,9 @@
+// A closure parameter named like the binding is not a reference to the old value.
+
+fn f() {
+    let x = 1;
+    let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not the outer variable
+}
+
+__DATA__
+{"compile_error": "cannot redeclare 'x' in the same scope"}

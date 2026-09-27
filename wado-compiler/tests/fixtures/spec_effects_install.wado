@@ -1,0 +1,86 @@
+// `with E => h do { body }` installs `h` for `E` while `body` runs; the block is
+// an expression, and its body holds the effects it installs.
+use { Random } from "wasi:random";
+use { Uuid } from "core:uuid";
+
+interface Stdin {
+    fn read_line() -> String;
+}
+
+interface Stdout {
+    fn write(line: String);
+}
+
+struct Script {
+    line: String,
+}
+
+impl Stdin for Script {
+    fn read_line(&self) -> String { resume self.line }
+}
+
+struct Capture {
+    lines: List<String> = [],
+}
+
+impl Stdout for Capture {
+    fn write(&mut self, line: String) { self.lines.push(line); }
+}
+
+test "installing handlers" {
+    let mut mock = Script { line: "a" };
+    let mut s = Script { line: "b" };
+    let mut o = Capture {};
+    with Stdin => &mut mock do { assert Stdin::read_line() == "a"; }
+    with Stdin => &mut s, Stdout => &mut o do { Stdout::write(Stdin::read_line()); }
+    assert o.lines == ["b"];
+}
+
+struct Zeros {}
+
+impl Random for Zeros {
+    fn get_random_bytes(&self, max_len: u64) -> List<u8> {
+        let mut out: List<u8> = [];
+        for let mut i = 0; i < max_len as i32; i += 1 {
+            out.push(0);
+        }
+        resume out
+    }
+    ..trap
+}
+
+test "a `with` is an expression" {
+    let mut rng = Zeros {};
+    let id = with Random => &mut rng do { Uuid::v4() };
+    assert id.to_string() == "00000000-0000-4000-8000-000000000000";
+}
+
+interface A {
+    fn a() -> i32;
+}
+
+interface B {
+    fn b() -> i32;
+}
+
+struct Both {}
+
+impl A for Both {
+    fn a(&self) -> i32 { resume 1 }
+}
+
+impl B for Both {
+    fn b(&self) -> i32 { resume 2 }
+}
+
+fn use_both() -> i32 with (A, B) { return A::a() + B::b(); }
+
+fn mocked() -> i32 {                        // declares neither A nor B
+    let mut a = Both {};
+    let mut b = Both {};
+    return with A => &mut a, B => &mut b do { use_both() };
+}
+
+test "the body holds what its `with` installs" {
+    assert mocked() == 3;
+}

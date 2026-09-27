@@ -1,0 +1,14 @@
+// A bare function name is a value of function type.
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 { return f(x); }
+
+fn double(n: i32) -> i32 { return n * 2; }
+
+test {
+    let f = double;            // type: fn(i32) -> i32
+    assert f(21) == 42;
+
+    assert apply(double, 21) == 42;   // pass directly; no `&` needed
+    let g: fn(i32) -> i32 = double;
+    assert g(1) == 2;
+}

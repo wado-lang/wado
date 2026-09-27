@@ -171,7 +171,7 @@ fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr,
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let argv = args();
-    let paths = collect_paths(&argv, ".rs");
+    let paths = collect_paths(&argv, ".rs", ["--update", "--check"]);
     let update = argv.into_iter().any(|a| a == "--update");
     let check = argv.into_iter().any(|a| a == "--check");
     let status = if update || check { ratchet_mode(&paths, update) } else { list_mode(&paths) };

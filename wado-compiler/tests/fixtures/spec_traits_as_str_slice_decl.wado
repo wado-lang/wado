@@ -1,0 +1,23 @@
+// The prelude's `AsStrSlice`, declared here under its own name and
+// implemented for a word.
+
+use { AsStrSlice as PreludeAsStrSlice } from "core:prelude";
+
+struct Word { text: String }
+
+impl Eq<String> for Word {
+    fn eq(&self, other: &String) -> bool { return self.text == *other; }
+}
+
+impl AsStrSlice for Word {
+    fn as_str_slice(&self) -> StrSlice { return PreludeAsStrSlice::as_str_slice(&self.text); }
+}
+
+pub trait AsStrSlice: Eq<String> with () {
+    fn as_str_slice(&self) -> StrSlice;
+    // default bodies over the view: len, slice, chars, starts_with, find, …
+}
+
+test {
+    assert Word { text: "hi" }.as_str_slice() == "hi";
+}

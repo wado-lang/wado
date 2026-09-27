@@ -1,0 +1,14 @@
+// A cast or a trait turbofish selects where a bare literal cannot.
+
+trait Take<X> with () {
+    fn take(&self, x: X) -> i32;
+}
+
+impl Take<i32> for bool { fn take(&self, x: i32) -> i32 { return 32; } }
+impl Take<i64> for bool { fn take(&self, x: i64) -> i32 { return 64; } }
+
+test {
+    let f = true;
+    assert f.take(42 as i64) == 64;           // OK: the cast selects Take<i64>
+    assert Take::<i64>::take(&f, 42) == 64;   // OK: the trait turbofish pins the list
+}

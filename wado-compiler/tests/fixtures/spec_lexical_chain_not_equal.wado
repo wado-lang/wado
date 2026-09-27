@@ -1,0 +1,9 @@
+// `!=` never chains.
+
+test {
+    let [a, b, c] = [1, 2, 3];
+    a != b != c     // Error: != chaining not allowed
+}
+
+__DATA__
+{"compile_error": "parse error: != operator cannot be chained; use explicit && instead: `a != b && b != c`"}

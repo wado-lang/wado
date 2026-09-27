@@ -1,0 +1,10 @@
+// A cast on the argument selects one of the type's `From` impls.
+
+struct Wrapper { v: i64 }
+
+impl From<i32> for Wrapper { fn from(v: i32) -> Wrapper { return Wrapper { v: v as i64 }; } }
+impl From<i64> for Wrapper { fn from(v: i64) -> Wrapper { return Wrapper { v }; } }
+
+test {
+    assert Wrapper::from(42 as i64).v == 42;    // OK
+}
