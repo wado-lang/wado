@@ -1267,3 +1267,19 @@ test "symbolic int32 arithmetic wraps as the run does, as a Cast to int32 does" 
     };
     assert `${values[0]}` == "wrap32(N * N)";
 }
+
+test "a Reshape whose count agrees once a clamp is read as its operand owes that reading" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        Y = Reshape(A, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("A", ["Part"]),
+        rule("Y", ["Seq"]),
+    ];
+    assert owed_by(source, layout) == ["A = Slice: N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+    assert y_axes(source, layout).unwrap() == "Seq=N";
+}

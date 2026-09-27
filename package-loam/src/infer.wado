@@ -633,7 +633,7 @@ fn infer_node(
     if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
         let operand = operand_at(node, shapes, 0);
         let input = extents_of(node, &operand)?;
-        let targets = regrouped_extents(node, known, &input).map_err(|reason| refusal(node, reason))?;
+        let targets = regrouped_extents(node, known, &input, owed).map_err(|reason| refusal(node, reason))?;
         if op == "Reshape" {
             owe_reshape_target(node, known, &input, &targets, owed)?;
         }
@@ -963,7 +963,8 @@ pub fn range_count(node: &Node, known: &TreeMap<String, Known>) -> Result<Extent
 /// so the inputs owe that they do not. A symbolic extent is read as written,
 /// which is ONNX's reading save where it is 0: unless `allowzero` is set, ONNX
 /// then reads the input's extent at that position. The inputs owe that it is
-/// not, where the input's extent there is not the same length.
+/// not, where the input's extent there is not the same length, or what
+/// `Extent::agreement` owes to read it as one.
 fn owe_reshape_target(
     node: &Node,
     known: &TreeMap<String, Known>,
@@ -984,7 +985,11 @@ fn owe_reshape_target(
         return Result::Ok(());
     }
     for let [i, w] of written.into_iter().enumerate() {
-        if w.as_constant() matches { Some(_) } || i < input.len() && input[i].poly() == w {
+        if w.as_constant() matches { Some(_) } {
+            continue;
+        }
+        if i < input.len() && let Some(agreed) = input[i].agreement(&Extent::Symbolic(w)) {
+            owed.extend(&agreed);
             continue;
         }
         let zero = if i < input.len() {

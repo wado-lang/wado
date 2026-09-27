@@ -4,7 +4,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Elements, Known, Node, data_type } from "./graph.wado";
-use { Poly, ceiling } from "./poly.wado";
+use { Condition, Poly, ceiling } from "./poly.wado";
 use {
     broadcast_extents,
     checked_element_count,
@@ -94,27 +94,33 @@ fn evaluated(
 fn regrouped(node: &Node, known: &TreeMap<String, Known>, x: &Known) -> Result<Known, String> {
     let input: List<Extent> = x.extents.into_iter().map(|e| Extent::Static(e)).collect();
     let mut extents: List<i32> = [];
-    for let e of regrouped_extents(node, known, &input)? {
+    // Only a symbolic target owes, and one leaves an extent symbolic below.
+    let mut owed: List<Condition> = [];
+    for let e of regrouped_extents(node, known, &input, &mut owed)? {
         let Static(n) = e else {
             return Result::Err(`extent ${e} of the target leaves ${x.len()} elements no fixed shape`);
         };
         extents.push(n);
     }
+    assert owed.is_empty();
     return Result::Ok(Known { ..*x, extents });
 }
 
 /// The extents a regrouping gives `input`: `Reshape`'s target, or `input` with
-/// the unit axes `Unsqueeze` adds or `Squeeze` drops.
+/// the unit axes `Unsqueeze` adds or `Squeeze` drops. `owed` gains what the
+/// regrouping relies on and cannot prove.
 pub fn regrouped_extents(
     node: &Node,
     known: &TreeMap<String, Known>,
     input: &List<Extent>,
+    owed: &mut List<Condition>,
 ) -> Result<List<Extent>, String> {
     return match node.op.as_str_slice() {
         "Reshape" => reshape_extents(
             &polys_at(node, known, 1, "shape")?.ok_or("the target shape is absent")?,
             input,
             int_attr(node, "allowzero", 0)? != 0,
+            owed,
         ),
         "Unsqueeze" => unsqueezed(input, &axes_of(node, known, 1, "axes")?.ok_or("axes is absent")?),
         "Squeeze" => squeezed(input, axes_of(node, known, 1, "axes")?),
@@ -125,8 +131,14 @@ pub fn regrouped_extents(
 /// A `Reshape` target as ONNX reads it: `0` copies the input's extent at that
 /// position unless `allowzero` is set, and one `-1` is what the rest leave.
 /// The target holds as many elements as the input for every value of the
-/// symbols, or the build cannot show the reshape sound.
-fn reshape_extents(written: &List<Poly>, input: &List<Extent>, allow_zero: bool) -> Result<List<Extent>, String> {
+/// symbols, or once its derived symbols are read as `Poly::presumed` reads
+/// them, which `owed` gains; else the build cannot show the reshape sound.
+fn reshape_extents(
+    written: &List<Poly>,
+    input: &List<Extent>,
+    allow_zero: bool,
+    owed: &mut List<Condition>,
+) -> Result<List<Extent>, String> {
     let total = count_of(input).expect("`held` or a known tensor bounded the operand's count");
     let mut extents: List<Extent> = [];
     let mut inferred = -1;
@@ -158,10 +170,16 @@ fn reshape_extents(written: &List<Poly>, input: &List<Extent>, allow_zero: bool)
             extents[inferred] = e;
         }
     }
-    if count_of(&extents) != Option::Some(total) {
+    if excess(&extents, &total, owed) != Option::Some(Poly::constant(0)) {
         return Result::Err(`${total} elements cannot take the shape ${spelled(written)}`);
     }
     return Result::Ok(extents);
+}
+
+/// How many more elements `extents` hold than `total`, read as `Poly::presumed`
+/// reads it, or `None` where no polynomial holds that.
+fn excess(extents: &List<Extent>, total: &Poly, owed: &mut List<Condition>) -> Option<Poly> {
+    return count_of(extents)?.try_sub(total)?.presumed(owed);
 }
 
 /// The elements a tensor of `extents` holds, which the caller has shown
