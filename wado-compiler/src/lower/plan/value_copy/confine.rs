@@ -215,7 +215,7 @@ impl Ctx<'_> {
     fn callee_keeps(&self, func: &FunctionRef, param_index: usize, operand: &TirExpr) -> bool {
         match self.kind(func) {
             Kind::ValueCopy => false,
-            Kind::Builtin => self.builtins.retain_specs(func).any(|r| {
+            Kind::Declared => self.builtins.retain_specs(func).any(|r| {
                 r.source == param_index
                     && (!r.elements || holds_identity(operand.type_id, self.type_table))
             }),
@@ -224,44 +224,14 @@ impl Ctx<'_> {
         }
     }
 
-<<<<<<< HEAD
-    /// Whether the operand at `param_index` outlives this call. A value-copy
-    /// helper keeps nothing, a declaration keeps what `#[retain(p)]` names, a
-    /// body answers from the fixpoint, and a callee nothing describes keeps all.
-    fn callee_keeps(&self, func: &FunctionRef, param_index: usize) -> bool {
-||||||| 7c8929b7416
-    /// Whether the operand at `param_index` outlives this call. A value-copy
-    /// helper keeps nothing, a builtin keeps what `#[retain(p)]` names, a body
-    /// answers from the fixpoint, and a callee this scan cannot read keeps all.
-    fn callee_keeps(&self, func: &FunctionRef, param_index: usize) -> bool {
-=======
     /// Whether the argument at `param_index` reaches the callee uncopied, so
     /// passing a parameter there does not take it over.
     fn callee_borrows(&self, func: &FunctionRef, param_index: usize) -> bool {
->>>>>>> origin/main
         match self.kind(func) {
-<<<<<<< HEAD
-            Kind::ValueCopy => false,
-            Kind::Declared => self
-                .builtins
-                .retained_params(func)
-                .any(|p| p == param_index),
-            Kind::HasBody => self.callee_escape(func, param_index, |pe| &pe.side),
-            Kind::Opaque => true,
-||||||| 7c8929b7416
-            Kind::ValueCopy => false,
-            Kind::Builtin => self
-                .builtins
-                .retained_params(func)
-                .any(|p| p == param_index),
-            Kind::HasBody => self.callee_escape(func, param_index, |pe| &pe.side),
-            Kind::Opaque => true,
-=======
             Kind::ValueCopy => true,
-            Kind::Builtin => passes_through(self.builtins, func, param_index),
+            Kind::Declared => passes_through(self.builtins, func, param_index),
             Kind::HasBody => self.escape_of(func).confined_at(param_index),
             Kind::Opaque => false,
->>>>>>> origin/main
         }
     }
 }

@@ -5,14 +5,8 @@
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::ownership::OwnedCalls;
-<<<<<<< HEAD
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
-||||||| 7c8929b7416
-use super::retention::{BoundedRetention, FunctorRows, RESULT, Retained, RetainedParams};
-=======
-use super::retention::{BoundedRetention, FunctorRows, RESULT, Retained, RetainedParams};
 use super::{is_reference_type, needs_value_copy};
->>>>>>> origin/main
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
