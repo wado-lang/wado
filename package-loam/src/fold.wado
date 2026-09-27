@@ -238,8 +238,8 @@ fn shape_of(node: &Node, known: &TreeMap<String, Known>, shapes: &TreeMap<String
 }
 
 /// `i` resolved against `extent`, then held within `[lo, hi]`. An empty axis
-/// read backwards is `[0, -1]`, which holds only `hi`: stepping back from it
-/// meets the end at once.
+/// read backwards gives the empty `[0, -1]`, which yields `hi`, so the slice
+/// starts where it ends and holds nothing.
 fn clamped(i: i64, extent: i64, lo: i64, hi: i64) -> i64 {
     return i64::min(i64::max(resolve_index(i, extent), lo), hi);
 }
