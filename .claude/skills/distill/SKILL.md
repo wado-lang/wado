@@ -37,8 +37,7 @@ and often a helper the codebase already had.
 ## Rules
 
 Distilling keeps what the code does. The only change of behaviour it makes is a
-bug fix, and a bug fix starts from a failing test. A change that would be better
-but fixes nothing is a proposal for the user, not an edit.
+bug fix, and a bug fix starts from a failing test.
 
 ### Code
 
