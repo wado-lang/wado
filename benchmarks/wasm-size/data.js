@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790511959143,
+  "lastUpdate": 1790543665199,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60973,6 +60973,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288419,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d5d49cf56037ad2fa8223fce00f839f29dc9ecfc",
+          "message": "Merge pull request #2195 from wado-lang/claude/stdlib-inline-hints-usage-b5oaif\n\nperf(inline): the stdlib carries no inline hints; gale_gen 6.5% faster",
+          "timestamp": "2026-09-28T05:48:05+09:00",
+          "tree_id": "15bf588af4b2035a3be2e3a333df3398e9ea4579",
+          "url": "https://github.com/wado-lang/wado/commit/d5d49cf56037ad2fa8223fce00f839f29dc9ecfc"
+        },
+        "date": 1790543664548,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6728,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20219,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289040,
             "unit": "bytes"
           }
         ]
