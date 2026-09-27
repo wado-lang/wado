@@ -517,8 +517,9 @@ impl AccessorTask<WasiState> for HandlerTask {
 /// The fuel reading of the last request a worker took under `--report-fuel`.
 ///
 /// It stays open after the response: wasmtime cannot cancel a guest task, so
-/// one can outlive the response that carried it, and what it spends then is
-/// still this request's.
+/// one can outlive the response that carried it. What it spends before the next
+/// request opens is still this request's; wasmtime gives no signal that the task
+/// has ended, so what it spends after is charged to the next.
 struct FuelReading {
     /// The store's meter where the reading's unreported fuel begins.
     start: u64,

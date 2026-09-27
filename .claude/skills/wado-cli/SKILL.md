@@ -187,9 +187,10 @@ wado serve --report-fuel svc.wado   # stderr per request: fuel 1234 GET /path
 
 A test's reading includes its instantiation. A serve reading leaves out the
 query, which can carry credentials. A request that traps its worker is reported
-with `(trapped)`. A guest task can outlive its response, and wasmtime cannot
-cancel it, so any fuel it spends afterwards gets a second line marked
-`(after response)`. A serve worker's requests would share one meter, so
+with `(trapped)`. A guest task can outlive its response, and wasmtime can
+neither cancel it nor say when it ends. What it spends before the next request
+arrives gets a second line marked `(after response)`; what it spends later is
+charged to that next request. A serve worker's requests would share one meter, so
 `--report-fuel` forces `--workers 1 --max-concurrency 1`. Metering costs a few
 percent on the benchmarks, but wasmtime's documentation cites up to 2-3x for
 some workloads.
