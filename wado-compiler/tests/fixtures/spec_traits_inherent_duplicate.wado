@@ -1,0 +1,9 @@
+// Two inherent blocks reaching a common receiver may not both define a name.
+
+struct Box_<T> { v: T }
+
+impl<T> Box_<T> { fn a(&self) -> String { return "any"; } }
+impl Box_<i32> { fn a(&self) -> i32 { return self.v; } }   // ERROR: duplicate definition of `a`
+
+__DATA__
+{"compile_error": "duplicate definition of `a` for `Box_`: another inherent impl already defines it, and an inherent impl carries no trait contract to make the two interchangeable"}

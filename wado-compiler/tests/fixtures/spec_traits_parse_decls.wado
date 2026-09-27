@@ -1,0 +1,43 @@
+// The prelude's parsing traits, declared here under their own names and
+// implemented for an on/off flag.
+
+struct BadFlag {}
+
+impl Display for BadFlag {
+    fn fmt(&self, f: &mut Formatter) { f.write_str("not a flag"); }
+}
+
+impl Error for BadFlag { }
+
+struct Flag { on: bool }
+
+impl FromStr for Flag {
+    type Err = BadFlag;
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Flag, BadFlag> {
+        if s == "on" { return Result::Ok(Flag { on: true }); }
+        if s == "off" { return Result::Ok(Flag { on: false }); }
+        return Result::Err(BadFlag {});
+    }
+}
+
+impl LenientFromStr for Flag {
+    type Err = BadFlag;
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Flag, BadFlag> {
+        return Flag::from_str(s.to_ascii_lowercase());
+    }
+}
+
+pub trait FromStr with () {
+    type Err: Error;
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
+}
+
+pub trait LenientFromStr with () {
+    type Err: Error;
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
+}
+
+test {
+    assert Flag::from_str("on").unwrap().on && Flag::from_str("ON").is_err();
+    assert Flag::from_str_lenient("ON").unwrap().on;
+}

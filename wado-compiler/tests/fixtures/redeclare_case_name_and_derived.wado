@@ -1,0 +1,31 @@
+// A bare case name in a `let` pattern matches rather than binds, so repeating
+// it redeclares nothing. Neither does a binder that derives the name from the
+// binding it hides, nor one in a nested block.
+
+enum E { Only }
+
+fn transform(n: i32) -> i32 { return n * 10; }
+
+test {
+    let e = E::Only;
+    let Only = e;
+    let Only = e;
+    let o: Option<i32> = Some(1);
+    let [Some(a), n] = [o, 1] else { return; };
+    let [Some(b), n] = [o, n + 1] else { return; };
+    assert a + b + n == 4;
+}
+
+test {
+    let x = 1;
+    let x = x + 1;
+    let x = transform(x);
+    let f = || x + 1;
+    let f = |v: i32| f() + v;
+    if true {
+        let x = 5;
+        assert x == 5;
+    }
+    assert x == 20;
+    assert f(1) == 22;
+}

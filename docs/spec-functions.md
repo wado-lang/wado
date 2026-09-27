@@ -6,28 +6,39 @@ Closures are anonymous function expressions with `|params| body` syntax.
 
 An expression body returns its value implicitly:
 
+<!-- {"fixture":"spec_functions_closures.wado"} -->
+
 ```wado
 let add_one = |x: i32| x + 1;
 let make_point = |x: i32, y: i32| Point { x, y };
+assert add_one(41) == 42;
+assert make_point(1, 2).y == 2;
 ```
 
 A block body requires explicit `return`:
+
+<!-- {"fixture":"spec_functions_closures.wado"} -->
 
 ```wado
 let compute = |x: i32| {
     let doubled = x * 2;
     return doubled + x * 3;
 };
+assert compute(2) == 10;
 ```
 
 An optional `-> Type` declares the return type. A `?` in the body needs a known
 return type: this one, or the `R` of an expected `fn(..) -> R`.
+
+<!-- {"fixture":"spec_functions_closures.wado"} -->
 
 ```wado
 let parse = |s: String| -> Result<i32, String> {
     let n = to_int(s)?;
     return Result::Ok(n + 1);
 };
+assert parse("41").unwrap() == 42;
+assert parse("x").is_err();
 ```
 
 A parameter type is inferred from the expected `fn(..)` type, matched by
@@ -35,11 +46,14 @@ position. Any context that supplies such a type counts: a typed binding, a
 function or method parameter, a struct field, a newtype over a `fn(..)`.
 Annotate only where nothing supplies one; an annotation always wins:
 
+<!-- {"fixture":"spec_functions_closures.wado"} -->
+
 ```wado
 let arr: List<i32> = [1, 2, 3];
-arr.into_iter().map(|x| x * 2);             // `x: i32`, from `Iterator::Item`
-arr.into_iter().fold(0, |acc, x| acc + x);  // `acc: i32`, from the body
-let add_one = |x: i32| x + 1;               // no expected type: annotate
+assert arr.into_iter().map(|x| x * 2).collect() == [2, 4, 6];  // `x: i32`, from `Iterator::Item`
+assert arr.into_iter().fold(0, |acc, x| acc + x) == 6;         // `acc: i32`, from the body
+let add_one = |x: i32| x + 1;                                    // no expected type: annotate
+assert add_one(1) == 2;
 ```
 
 The expected type may be one of the callee's own type parameters. A sibling
@@ -52,8 +66,12 @@ A closure declares no effects; they are inferred from the body.
 `with` after the parameter list, or after `-> Type`, would be that declaration,
 and is a compile error. A handler body therefore needs a block or parentheses:
 
+<!-- {"fixture":"spec_functions_closure_handler.wado"} -->
+
 ```wado
-let f = || (with Log => &mut sink do { Log::emit(`hi`); });
+let mut f = || (with Log => &mut sink do { Log::emit(`hi`); });
+f();
+assert sink.lines == ["hi"];
 ```
 
 ### Closure Types
@@ -63,12 +81,24 @@ A closure's type is `fn(P...) -> R` when every capture is read-only, and
 `fn` is a subtype of `fn mut`: a `fn` closure is accepted where a `fn mut` is
 expected, and a `fn mut` closure where a `fn` is expected is a compile error.
 
+<!-- {"fixture":"spec_functions_closure_types.wado"} -->
+
 ```wado
 fn apply(f: fn(i32) -> i32, x: i32) -> i32 { return f(x); }
 fn apply_twice(mut f: fn mut(i32) -> i32, x: i32) -> i32 { return f(f(x)); }
 
-let n = 1;
-apply_twice(|x| x + n, 5);                  // OK: a `fn` where `fn mut` is expected
+test {
+    let n = 1;
+    assert apply_twice(|x| x + n, 5) == 7;      // OK: a `fn` where `fn mut` is expected
+    assert apply(|x| x * 2, 5) == 10;
+}
+```
+
+The other direction is rejected:
+
+<!-- {"fixture":"spec_functions_fn_mut_where_fn.wado"} -->
+
+```wado
 let mut count = 0;
 apply(|x| { count += 1; return x; }, 5);    // ERROR: a `fn mut` where `fn` is expected
 ```
@@ -83,17 +113,31 @@ A closure type carries the effects a call may perform, in the same `with` row a
 function declares (see
 [Effect Declaration in Functions](./spec-effects.md#effect-declaration-in-functions)):
 
+<!-- {"fixture":"spec_functions_closures.wado"} -->
+
 ```wado
 let f: fn(i32) -> i32 with Stdout = |x| { println(`${x}`); return x; };
+assert f(7) == 7;
 ```
 
 A type parameter may be bounded by a closure type. The bound names the type
 once, so the parameter can be reused across positions:
 
+<!-- {"fixture":"spec_functions_closure_bound.wado"} -->
+
 ```wado
 fn apply<F: fn(i32) -> i32>(f: F, x: i32) -> i32 { return f(x); }
 fn invoke<F: fn mut(i32)>(mut f: F) { f(1); f(2); }
 fn dup<F: fn(i32) -> i32>(f: F) -> [F, F] { return [f, f]; }
+
+test {
+    assert apply(|x| x + 1, 1) == 2;
+    let mut sum = 0;
+    invoke(|x| sum += x);
+    assert sum == 3;
+    let [f, g] = dup(|x| x * 10);
+    assert f(1) + g(2) == 30;
+}
 ```
 
 Only a function value satisfies such a bound. No user-defined type can be made
@@ -108,12 +152,18 @@ mutable binding. This applies whether the closure is called directly (`f()`) or
 reached through field access or indexing (`(h.f)()`, `arr[i]()`), and to a
 parameter as to a local:
 
+<!-- {"fixture":"spec_functions_call_fn_mut.wado"} -->
+
 ```wado
 fn run(mut f: fn mut(i32)) { f(1); f(2); }   // `mut f` is required
 
-let mut count = 0;
-let mut c = || count += 1;                   // `mut c` is required
-c();
+test {
+    let mut count = 0;
+    let mut c = || count += 1;                   // `mut c` is required
+    c();
+    run(|x| count += x);
+    assert count == 4;
+}
 ```
 
 A binding whose type is `&mut T` is a mutable place, so `(self.f)()` inside a
@@ -135,6 +185,8 @@ Because a capture is a reference, every closure naming a binding shares its
 location, and a closure reads the value the binding holds when the closure
 runs, not when it was made:
 
+<!-- {"fixture":"spec_functions_capture.wado"} -->
+
 ```wado
 let mut count = 0;
 let mut inc = || count += 1;   // captures &mut count; type fn mut() -> ()
@@ -151,6 +203,8 @@ between, and reads and writes the binding the source names. What a closure binds
 itself shadows, as anywhere: `|mut count| count += 1` writes its own parameter
 and captures nothing.
 
+<!-- {"fixture":"spec_functions_capture.wado"} -->
+
 ```wado
 let mut count = 0;
 let mut outer = || {
@@ -164,9 +218,13 @@ assert count == 1;
 To capture a snapshot, copy the value into a local first and let the closure
 capture that:
 
+<!-- {"fixture":"spec_functions_capture.wado"} -->
+
 ```wado
 let snapshot = original;     // a copy, independent of `original`
 let f = || snapshot * 2;
+original = 5;
+assert f() == 2;
 ```
 
 A closure capturing an outer binding is a separate matter from what a function
@@ -178,6 +236,8 @@ does with its reference _parameters_; see
 A closure is copied on assignment, on passing and on return, like any other
 value. Its captures are references, so every copy still refers to the same
 bindings:
+
+<!-- {"fixture":"spec_functions_capture.wado"} -->
 
 ```wado
 let mut count = 0;
@@ -197,14 +257,19 @@ Rationale: [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation
 
 A bare function name is an expression of function type. It evaluates to a value of type `fn(P...) -> R [with E...]` matching the function's signature.
 
+<!-- {"fixture":"spec_functions_fn_refs.wado"} -->
+
 ```wado
 fn double(n: i32) -> i32 { return n * 2; }
 
-let f = double;            // type: fn(i32) -> i32
-assert f(21) == 42;
+test {
+    let f = double;            // type: fn(i32) -> i32
+    assert f(21) == 42;
 
-apply(double, 21);         // pass directly; no `&` needed
-let g: fn(i32) -> i32 = double;
+    assert apply(double, 21) == 42;   // pass directly; no `&` needed
+    let g: fn(i32) -> i32 = double;
+    assert g(1) == 2;
+}
 ```
 
 Key points:
@@ -229,6 +294,8 @@ compile error: in an `export fn`'s parameters or result, in an import's result,
 and inside a type that crosses, as a field or a payload (`Option<fn(..)>`
 included).
 
+<!-- {"fixture":"spec_functions_cm_callback.wado"} -->
+
 ```wado
 #[cm("example:demo/target", linearity = "unrestricted")]
 resource Target {
@@ -237,7 +304,14 @@ resource Target {
     fn listen(&self, listener: fn mut(i32));
 }
 
-target.listen(|v| seen.push(v));
+test {
+    let target = mock_target();
+    let mut seen: List<i32> = [];
+    with Target => &mut EchoTarget {} do {
+        target.listen(|v| seen.push(v));
+    }
+    assert seen == [7];                 // `EchoTarget` calls the listener with 7
+}
 ```
 
 - A callback's parameters are scalars and handles, and it returns nothing. Any
@@ -265,19 +339,25 @@ Trailing function parameters may declare default values with `= expr`. A call
 that omits a defaulted argument gets the default expression filled in at the
 call site, so it costs what the call with every argument written costs:
 
-```wado
-fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) { ... }
+<!-- {"fixture":"spec_functions_default_args.wado"} -->
 
-connect("localhost");           // → connect("localhost", 8080, 30)
-connect("localhost", 3000);     // → connect("localhost", 3000, 30)
-connect("localhost", 3000, 60);
+```wado
+fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) -> String { return `${host}:${port}/${timeout}`; }
+
+test "trailing defaults" {
+    assert connect("localhost") == "localhost:8080/30";           // → connect("localhost", 8080, 30)
+    assert connect("localhost", 3000) == "localhost:3000/30";     // → connect("localhost", 3000, 30)
+    assert connect("localhost", 3000, 60) == "localhost:3000/60";
+}
 ```
 
 A parameter without a default cannot follow one with a default, and `self`
 cannot have a default:
 
+<!-- {"fixture":"spec_functions_default_order.wado"} -->
+
 ```wado
-fn foo(a: i32 = 0, b: i32) { ... }   // ERROR: parameters without defaults cannot follow
+fn foo(a: i32 = 0, b: i32) { }   // ERROR: parameters without defaults cannot follow
 ```
 
 ### Default Expressions
@@ -285,6 +365,8 @@ fn foo(a: i32 = 0, b: i32) { ... }   // ERROR: parameters without defaults canno
 A default is any expression that performs no effect. It is evaluated at each
 call that omits the argument, not once at the declaration. A default that
 performs an effect is a compile error:
+
+<!-- {"fixture":"spec_functions_default_args.wado"} -->
 
 ```wado
 fn foo(
@@ -294,39 +376,67 @@ fn foo(
     w: Option<Config> = null,     // Option::None
     v: Color = Color::Red,        // enum case
     u: i32 = i32::max(1, 2),      // pure function call
-) { ... }
+) -> String { return `${x} ${y:.2} ${z} ${w matches { None }} ${v} ${u}`; }
 
-fn noisy() -> i32 with Stdout { ... }
-fn bar(v: i32 = noisy()) { ... }  // ERROR: the default performs `Stdout`
+test "default expressions" {
+    assert foo() == "0 3.14 default true Red 2";
+    assert foo(1, 0.5, "s", Option::Some(Config { name: "c" }), Color::Green, 7) == "1 0.50 s false Green 7";
+}
+```
+
+<!-- {"fixture":"spec_functions_default_effect.wado"} -->
+
+```wado
+fn noisy() -> i32 with Stdout { println("noisy"); return 1; }
+fn bar(v: i32 = noisy()) { }  // ERROR: the default performs `Stdout`
 ```
 
 A default may name an earlier parameter, and then reads the value the call
 supplied for it. Each argument is still evaluated once, in its place among the
 others, with the receiver first:
 
-```wado
-fn make_rect(width: f64, height: f64 = width) -> Rect { ... }
-make_rect(10.0);                 // → make_rect(10.0, 10.0)
+<!-- {"fixture":"spec_functions_default_args.wado"} -->
 
-fn twice(a: i32, b: i32 = a + a) -> i32 { ... }
-twice(next());                   // `next()` runs once
+```wado
+fn make_rect(width: f64, height: f64 = width) -> Rect { return Rect { width, height }; }
+
+fn twice(a: i32, b: i32 = a + a) -> i32 { return b; }
+
+test "a default names an earlier parameter" {
+    assert make_rect(10.0).height == 10.0;   // → make_rect(10.0, 10.0)
+
+    assert twice(next()) == 2;               // `next()` runs once
+    assert CALLS == 1;
+}
 ```
 
 Where the named parameter is a `&mut`, the default borrows the same place again,
 and the callee's writes still reach it:
 
+<!-- {"fixture":"spec_functions_default_args.wado"} -->
+
 ```wado
-fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { ... }
-put(&mut s.o);                   // → put(&mut s.o, peek(&mut s.o) + 1)
+fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { *o = Option::Some(v); }
+
+test "a default borrows a `&mut` parameter's place again" {
+    let mut s = S { o: Option::Some(1) };
+    put(&mut s.o);                   // → put(&mut s.o, peek(&mut s.o) + 1)
+    assert s.o == Option::Some(2);
+}
 ```
 
 A default may name a type parameter of the declaration that wrote it. It stands
 for the type argument the call site settled on, whether a turbofish spelled it,
 an argument beside it pinned it, or the parameter's own default supplied it:
 
+<!-- {"fixture":"spec_functions_default_args.wado"} -->
+
 ```wado
-fn info<T: Default>(msg: String, fields: T = T::default()) -> String { ... }
-info::<i32>("count");  // → info::<i32>("count", 0)
+fn info<T: Default>(msg: String, fields: T = T::default()) -> String { return `${msg} ${fields:?}`; }
+
+test "a default names a type parameter" {
+    assert info::<i32>("count") == "count 0";  // → info::<i32>("count", 0)
+}
 ```
 
 The same holds for an instance or static method, where the `impl` block's
@@ -344,17 +454,17 @@ able to name. Nothing visible only at the call site changes what a default
 means: a caller's import or local spelled like a name in the default shadows
 nothing.
 
+<!-- {"fixture":"spec_functions_default_scope.wado"} -->
+
 ```wado
-// lib.wado
-global DEFAULT_PORT: i32 = 8080;                    // private to lib.wado
-pub fn connect(host: String, port: i32 = DEFAULT_PORT) { ... }
+// sub/spec_functions_default_scope_lib.wado:
+//     global DEFAULT_PORT: i32 = 8080;             // private to that module
+//     pub fn connect(host: String, port: i32 = DEFAULT_PORT) -> i32 { return port; }
+use { connect } from "./sub/spec_functions_default_scope_lib.wado";
 
-// main.wado
-use { connect } from "./lib.wado";
-
-fn start() {
+test {
     let DEFAULT_PORT = 1;
-    connect("localhost");                           // port is lib.wado's 8080
+    assert connect("localhost") == 8080;            // port is the library's 8080
 }
 ```
 
@@ -374,16 +484,23 @@ site (see
 
 A type parameter may declare a default with `= Type`, on a free function, an inherent method or a trait method. An omitted turbofish takes the default; a spelled one wins. `core:log` uses it:
 
-```wado
-pub fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, ...) { ... }
+<!-- {"fixture":"spec_functions_type_param_defaults.wado"} -->
 
-info("started");                  // → info::<NoFields>("started", NoFields {})
-info::<Fields>("started", f);
+```wado
+pub fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}) -> String { return `${message} ${to_string(&fields).unwrap()}`; }
+
+test "an omitted turbofish takes the default" {
+    let f = Fields { user: 1 };
+    assert info("started") == "started {}";                         // → info::<NoFields>("started", NoFields {})
+    assert info::<Fields>("started", f) == "started {\"user\":1}";
+}
 ```
 
 Inference runs first and the default fills only what it left unbound, so an argument or an expected type always decides the slot it pins.
 
-A default resolves in the declaring module's scope, as a [value default does](#where-a-default-resolves). It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`. By the same rule a parameter the use site declares does not answer for it, however the two are spelled:
+A default resolves in the declaring module's scope, as a [value default does](#where-a-default-resolves). It may therefore name a type the call site does not import: a caller of `core:log`'s `info` names no `NoFields`. By the same rule a parameter the use site declares does not answer for it, however the two are spelled:
+
+<!-- {"fixture":"spec_functions_type_param_defaults.wado"} -->
 
 ```wado
 struct Zero {}
@@ -393,17 +510,35 @@ fn f<Zero: Mark>(probe: Zero) -> i32 {
     let m: Marked = Marked { value: 1 };  // the module's `Zero`, not `f`'s
     return m.total();
 }
+
+test {
+    assert f(One {}) == 1;                // not 101: `f`'s `Zero` is `One` here
+}
 ```
 
 A default may name a parameter to its left, and stands for that parameter's argument. One naming a parameter at or after its own slot is rejected, since no argument has settled it yet:
 
+<!-- {"fixture":"spec_functions_type_param_defaults.wado"} -->
+
 ```wado
 struct Both<A, B = A> { v: A }        // OK: `B` takes `A`'s argument
+
+test {
+    let b: Both<i32> = Both { v: 1 };
+    assert b.v == 1;
+}
+```
+
+<!-- {"fixture":"spec_functions_type_param_default_forward.wado"} -->
+
+```wado
 struct Fwd<A = B, B = i32> { v: B }   // ERROR: `A`'s default names `B`
 struct Own<A = A> { v: i32 }          // ERROR: the same, one slot nearer
 ```
 
 Expanding a default must reach a fixpoint. One that leads back to the declaration it belongs to is rejected, whether it names that declaration directly, under an argument, or through another declaration's defaults:
+
+<!-- {"fixture":"spec_functions_type_param_default_cycle.wado"} -->
 
 ```wado
 struct Rec<T = Rec> { v: i32 }           // ERROR
@@ -414,9 +549,11 @@ struct Pong<X, Y = Ping<X>> { v: i32 }   // this one
 
 A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the list — the same parameters in the same order, with the defaults omitted — and every spelling of the call fills them from the trait's declaration:
 
+<!-- {"fixture":"spec_functions_trait_type_param_default.wado"} -->
+
 ```wado
 pub trait Boxed {
-    fn boxed<T: Named = Tag>(&self) -> String;   // `Tag` is private to this module
+    fn boxed<T: Named = Tag>(&self) -> String;   // the caller need not import `Tag`
     fn made<T: Named = Tag>() -> String;
 }
 
@@ -430,10 +567,13 @@ impl Boxed for M {
     }
 }
 
-m.boxed();            // → m.boxed::<Tag>()
-m.boxed::<Local>();   // spelled, so `Local`
-M::made();            // the static spelling reads the same declaration
-M::boxed(&m);         // and so does the receiver-taking one
+test {
+    let m = M {};
+    assert m.boxed() == "Tag";              // → m.boxed::<Tag>()
+    assert m.boxed::<Local>() == "Local";   // spelled, so `Local`
+    assert M::made() == "Tag";              // the static spelling reads the same declaration
+    assert M::boxed(&m) == "Tag";           // and so does the receiver-taking one
+}
 ```
 
 Rust rejects a type parameter default on every function, method and `impl` (rust-lang#36887), allowing them only on type and trait declarations. Wado accepts them wherever a parameter list is written.
@@ -448,9 +588,13 @@ A path written directly before a template literal is a tag. The template then
 denotes a call of that function on the template's holes, in their own types,
 with the literal text around them, instead of a rendered `String`:
 
+<!-- {"fixture":"spec_functions_tagged_template.wado"} -->
+
 ```wado
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
 let s = String::raw`${dir}\bin\run.exe`;   // backslashes kept
+assert q.query == "SELECT * FROM users WHERE id = ? AND name = ?";
+assert s == "C:\\bin\\run.exe";
 ```
 
 The tag is a function name or a static method path, with no whitespace before
@@ -482,6 +626,8 @@ it is a compile error. Its associated type `Holes` is the tuple of hole types,
 and `Members` the tuple of hole handles `members()` returns. The tag walks the
 holes with tuple `for-of`:
 
+<!-- {"fixture":"spec_functions_tagged_template.wado"} -->
+
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
     let mut query = "";
@@ -493,6 +639,11 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
     }
     query.push_str(ReflectTemplate::<T>::tail());
     return SqlQuery { query, params };
+}
+
+test "the tag sees each hole in its own type" {
+    let q = sql`id = ${7} AND name = ${"ann"}`;
+    assert q.params == [SqlParam::Int(7), SqlParam::Text("ann")];
 }
 ```
 
@@ -530,6 +681,8 @@ Rationale: [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-lite
 
 Use `<..T>` to declare a type pack parameter that represents zero or more types. Type packs enable writing functions that operate on tuples of any arity.
 
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
 ```wado
 fn identity<..T>(x: [..T]) -> [..T] {
     return x;
@@ -537,6 +690,11 @@ fn identity<..T>(x: [..T]) -> [..T] {
 
 fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
     return [a, ..rest];
+}
+
+test {
+    assert identity([1, "hello", true]) == [1, "hello", true];
+    assert prepend(0, [1, "x"]) == [0, 1, "x"];
 }
 ```
 
@@ -556,12 +714,16 @@ A parameter list may declare more than one pack. Each is settled from the
 argument that carries it alone, so nothing has to find a boundary that was
 never written:
 
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
 ```wado
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
     return [..a, ..b];
 }
 
-concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
+test {
+    assert concat([1, "x"], [true]) == [1, "x", true];   // A = [i32, String], B = [bool]
+}
 ```
 
 A tuple holding two packs (`[..A, ..B]`) settles neither pack, because matching
@@ -570,17 +732,30 @@ It just cannot be the only thing naming a pack. Something else must settle each
 one: another parameter, a turbofish, or an annotation. The tuple is then checked
 against the arity they fix.
 
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
 ```wado
 fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
     return [x, ..a, ..b, y];   // the parameters settle both packs
 }
 
-fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { … }
-joined([[1], [true]], [1, true]);         // `split` settles both
-joined([[1], [true]], [1, true, "x"]);    // ERROR: expected `[i32, bool]`
+fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { return 2; }
 
-fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { … }
-middle::<[i32], String, [bool]>([1, "mid", true]);   // the turbofish settles them
+fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { return 3; }
+
+test {
+    assert wrap(0, [1], ["a"], true) == [0, 1, "a", true];
+    assert joined([[1], [true]], [1, true]) == 2;          // `split` settles both
+    assert middle::<[i32], String, [bool]>([1, "mid", true]) == 3;   // the turbofish settles them
+}
+```
+
+Without them, the same functions are rejected:
+
+<!-- {"fixture":"spec_functions_type_packs_unsettled.wado"} -->
+
+```wado
+joined([[1], [true]], [1, true, "x"]);    // ERROR: expected `[i32, bool]`
 middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `K`, `Post`
 ```
 
@@ -597,20 +772,39 @@ Inside the body that declares them, packs are rigid, as a scalar parameter is. A
 value matches such a tuple by layout: the same fixed positions and the same packs
 in the same order. Naming the same packs is not enough.
 
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
 ```wado
-fn reorder<..A, ..B>(a: [..A], b: [..B]) {
+fn reorder<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
     let ab: [..A, ..B] = [..a, ..b];      // OK
-    // let ba: [..B, ..A] = [..a, ..b];   // ERROR: the order is part of the type
-    // let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
+    return ab;
 }
+
+test {
+    assert reorder([1], ["x", true]) == [1, "x", true];
+}
+```
+
+<!-- {"fixture":"spec_functions_type_packs_layout.wado"} -->
+
+```wado
+let ba: [..B, ..A] = [..a, ..b];   // ERROR: the order is part of the type
+let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
 ```
 
 A turbofish spells each pack as its own tuple. A flat list carries no boundary
 either:
 
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
 ```wado
-concat::<[i32], [bool, String]>([1], [true, "x"]);
-// concat::<i32, String>(…)  // ERROR: spell each type pack as a tuple
+assert concat::<[i32], [bool, String]>([1], [true, "x"]) == [1, true, "x"];
+```
+
+<!-- {"fixture":"spec_functions_type_packs_flat_turbofish.wado"} -->
+
+```wado
+concat::<i32, String>([1], ["x"]);  // ERROR: spell each type pack as a tuple
 ```
 
 Writing one argument per pack is refused as well: `<i32, String>` and
@@ -630,15 +824,23 @@ rejected where it is written.
 
 Value spread `[..expr]` splices a tuple's elements into an enclosing tuple literal:
 
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
 ```wado
 let a = [1, "hello"];
 let b = [..a, true];   // b: [i32, String, bool]
 let c = [42, ..a];     // c: [i32, i32, String]
+assert b == [1, "hello", true];
+assert c == [42, 1, "hello"];
 ```
 
 The spread expression is evaluated exactly once:
 
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
 ```wado
 // make_pair() is called once, not twice
 let t = [..make_pair(), 30];
+assert PAIRS == 1;
+assert t == [10, 20, 30];
 ```

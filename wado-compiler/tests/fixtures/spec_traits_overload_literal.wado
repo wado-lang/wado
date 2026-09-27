@@ -1,0 +1,16 @@
+// A bare literal could be several widths, so it selects no impl.
+
+trait Take<X> with () {
+    fn take(&self, x: X) -> i32;
+}
+
+impl Take<i32> for bool { fn take(&self, x: i32) -> i32 { return 32; } }
+impl Take<i64> for bool { fn take(&self, x: i64) -> i32 { return 64; } }
+
+test {
+    let f = true;
+    f.take(42);                  // ERROR: the arguments do not select
+}
+
+__DATA__
+{"compile_error": "ambiguous call to 'take': the arguments do not select between 'Take<i32>' and 'Take<i64>'; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. 'Take::<i32>::take(&value, …)'"}

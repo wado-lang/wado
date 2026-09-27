@@ -1,0 +1,17 @@
+// An associated function's arguments choose among a trait's impls.
+
+struct A {}
+struct B {}
+struct M {}
+
+trait Enc<X> with () {
+    fn make(v: X) -> i32;
+}
+
+impl Enc<A> for M { fn make(v: A) -> i32 { return 1; } }
+impl Enc<B> for M { fn make(v: B) -> i32 { return 2; } }
+
+test {
+    assert M::make(A { }) == 1;  // selects Enc<A>
+    assert M::make(B { }) == 2;  // selects Enc<B>
+}

@@ -1,0 +1,40 @@
+// An effect is declared as an `interface`, whose operations are free functions.
+
+enum ErrorCode {
+    Io,
+}
+
+// WASI CLI effects (see wasi:cli for the real definitions)
+interface Stdout {
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
+}
+
+interface Stderr {
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
+}
+
+interface Environment {
+    fn get_environment() -> List<[String, String]>;
+    fn get_arguments() -> List<String>;
+    fn get_initial_cwd() -> Option<String>;
+}
+
+// A custom effect interface
+interface Http {
+    fn get(url: String) -> String;
+    fn post(url: String, body: String) -> String;
+}
+
+struct Echo {}
+
+impl Http for Echo {
+    fn get(&self, url: String) -> String { resume `GET ${url}` }
+    fn post(&self, url: String, body: String) -> String { resume `POST ${url} ${body}` }
+}
+
+test {
+    with Http => &Echo {} do {
+        assert Http::get("/a") == "GET /a";   // an operation is called as `Effect::op(...)`
+        assert Http::post("/b", "x") == "POST /b x";
+    }
+}

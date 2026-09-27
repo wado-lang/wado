@@ -2615,15 +2615,10 @@ pub(super) fn splice_stmt(
             }
         }
         StmtKind::Continue => StmtKind::Continue,
-        StmtKind::LetDestructure {
-            pattern,
-            is_mut,
-            value,
-        } => {
-            let (p, m, v) = (*pattern, *is_mut, *value);
+        StmtKind::LetDestructure { pattern, value } => {
+            let (p, v) = (*pattern, *value);
             StmtKind::LetDestructure {
                 pattern: splice_pat(caller, callee, p, ctx),
-                is_mut: m,
                 value: splice_operand(caller, callee, v, ctx),
             }
         }

@@ -1,0 +1,28 @@
+// A type made iterable by implementing `IntoIterator`.
+
+struct Stack<T> { items: List<T> }
+struct StackIter<T> { items: List<T>, index: i32 }
+
+impl<T> Iterator for StackIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index == 0 { return null; }
+        self.index -= 1;
+        return Option::Some(self.items[self.index]);
+    }
+}
+
+impl<T> IntoIterator for Stack<T> {
+    type Item = T;
+    type Iter = StackIter<T>;
+    fn into_iter(&self) -> StackIter<T> { return StackIter { items: self.items, index: self.items.len() }; }
+}
+
+test {
+    let stack = Stack { items: [1, 2, 3] };
+    let mut seen: List<i32> = [];
+
+    // Now for-of works
+    for let x of stack { seen.push(x); }
+    assert seen == [3, 2, 1];
+}

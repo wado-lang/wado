@@ -13,7 +13,9 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
-use crate::optimize::arena_query::{expr_node_may_trap_typed, field_receiver_nonnull};
+use crate::optimize::arena_query::{
+    expr_node_may_trap_typed, field_receiver_nonnull, unary_may_trap,
+};
 use crate::optimize::bounds::{self, Builtin};
 use crate::optimize::inline::recursive_scc_members;
 use crate::tir::{BuiltinDeclarations, LinearMemory, TypeTable};
@@ -317,15 +319,9 @@ impl ModRef {
                 self.accumulate_operand(body, right, scope);
             }
             ExprKind::Unary { op, expr } => {
-                match op {
-                    NirUnaryOp::Deref => {
-                        self.heap.reads = true;
-                        self.may_trap = true;
-                    }
-                    NirUnaryOp::Ref | NirUnaryOp::MutRef => {}
-                    NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {}
-                }
-                let expr = *expr;
+                let (op, expr) = (*op, *expr);
+                self.heap.reads |= op == NirUnaryOp::Deref;
+                self.may_trap |= unary_may_trap(body, op, expr);
                 self.accumulate_operand(body, expr, scope);
             }
             ExprKind::Cast { expr, .. } => {
@@ -454,9 +450,9 @@ impl ModRef {
                 op: NirUnaryOp::Deref,
                 expr,
             } => {
-                self.heap.writes = true;
-                self.may_trap = true;
                 let expr = *expr;
+                self.heap.writes = true;
+                self.may_trap |= unary_may_trap(body, NirUnaryOp::Deref, expr);
                 self.accumulate_operand(body, expr, scope);
             }
             ExprKind::VariantPayload { expr, .. } => {

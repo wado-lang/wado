@@ -1,0 +1,10 @@
+// Quoted by docs/spec-memory.md § Value Semantics.
+
+test "assignment copies" {
+    struct Point { x: i32, y: i32 }
+
+    let a = Point { x: 1, y: 2 };
+    let mut b = a;   // b is a deep copy of a
+    b.x = 10;        // does not affect a
+    assert a.x == 1;
+}

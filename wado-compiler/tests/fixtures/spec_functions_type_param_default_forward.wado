@@ -1,0 +1,15 @@
+// A type parameter default may not name a parameter at or after its own slot.
+
+struct Fwd<A = B, B = i32> { v: B }   // ERROR: `A`'s default names `B`
+struct Own<A = A> { v: i32 }          // ERROR: the same, one slot nearer
+
+test {
+    let f: Fwd = Fwd { v: 1 };
+    let o: Own = Own { v: 1 };
+}
+
+__DATA__
+{
+    "compile_error": "the default for type parameter 'A' names 'B', which is declared no earlier than 'A' itself: only a parameter to its left has an argument to stand for",
+    "compile_errors_contains": ["the default for type parameter 'A' names 'A', which is declared no earlier than 'A' itself"]
+}

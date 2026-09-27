@@ -1,0 +1,11 @@
+// Implementing a trait requires naming it.
+use {Deserialize} from "core:serde";
+use {from_string} from "core:json";
+
+struct Config { port: i32 }
+
+impl Deserialize for Config;          // OK
+
+test {
+    assert from_string::<Config>("{\"port\":80}").unwrap().port == 80;
+}

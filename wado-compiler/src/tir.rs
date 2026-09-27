@@ -6006,8 +6006,6 @@ pub enum TirStmtKind {
     LetDestructure {
         /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
         pattern: TirPattern,
-        /// Whether bindings are mutable
-        is_mut: bool,
         /// The value expression (must be a tuple)
         value: TirExpr,
     },
@@ -7052,9 +7050,15 @@ impl DeclarationTable<BuiltinDeclaration> {
     /// The parameter a declaration's result is a component of, for a call that
     /// declared `#[result(part_of = p)]`.
     pub fn part_of<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<usize> {
-        match self.get(call.into())?.returns? {
-            ReturnConvention::PartOf(param) => Some(param),
-            ReturnConvention::Owned => None,
+        self.part_of_params(call).map(|params| params[0])
+    }
+
+    /// [`Self::part_of`] as the parameter set a result projects, which for a
+    /// declaration is that one parameter.
+    pub fn part_of_params<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&[usize]> {
+        match &self.get(call.into())?.returns {
+            Some(ReturnConvention::PartOf(param)) => Some(std::slice::from_ref(param)),
+            Some(ReturnConvention::Owned) | None => None,
         }
     }
 
@@ -7314,8 +7318,8 @@ impl TirFunction {
 /// A resolved local slot in a function, global initializer, or closure scope.
 /// `FunctionContext::locals` is the single source of truth — every parameter,
 /// `let`, destructure binding and elaborator temporary — and is projected onto
-/// `TirFunction::locals` / `TirGlobal::locals` (keyed by Wasm local index) and
-/// onto `Closure { body_locals }`, whose params stay in `params` instead.
+/// `TirFunction::locals` (keyed by Wasm local index) and onto
+/// `Closure { body_locals }`, whose params stay in `params` instead.
 #[derive(Debug, Clone)]
 pub struct TirLocal {
     /// Source-level name of the binding (or a synthesised `$name` for

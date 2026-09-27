@@ -1,0 +1,30 @@
+// A trait's default method, used by one implementor and overridden by another.
+
+trait Summary {
+    fn title(&self) -> String;  // required - must be provided
+
+    // Default method - uses self.title()
+    fn summary(&self) -> String {
+        return `Title: ${self.title()}`;
+    }
+}
+
+struct Article { headline: String }
+
+// Only provides the required method; summary() uses the default
+impl Summary for Article {
+    fn title(&self) -> String { return self.headline; }
+}
+
+struct Report { headline: String, body: String }
+
+// Overrides the default summary()
+impl Summary for Report {
+    fn title(&self) -> String { return self.headline; }
+    fn summary(&self) -> String { return `${self.headline}: ${self.body}`; }
+}
+
+test {
+    assert Article { headline: "Rain" }.summary() == "Title: Rain";
+    assert Report { headline: "Rain", body: "wet" }.summary() == "Rain: wet";
+}

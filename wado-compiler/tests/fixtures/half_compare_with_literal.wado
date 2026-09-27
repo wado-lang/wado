@@ -1,0 +1,10 @@
+// A float literal compared with a half-precision value coerces to its type, as
+// it does beside an `f32`: `h == 0.5` rounds the literal once, to `f16`.
+
+test {
+    let h: f16 = 0.5;
+    let b: bf16 = -1.25;
+    assert h == 0.5 && 0.5 == h && h != 0.25;
+    assert h < 1.0 && h >= 0.5 && b <= -1.25 && -2.0 < b;
+    assert b == -1.25 && -2.0 < b < 0.0;
+}

@@ -1,0 +1,16 @@
+// A binding declared in a control flow body ends with that body.
+
+test {
+    for let mut i = 0; i < 10; i = i + 1 {
+        let x = i * 2;
+    }
+    // i and x are not in scope here
+
+    if true {
+        let y = 42;
+    }
+    assert y == 42;  // Error: y is not in scope here
+}
+
+__DATA__
+{"compile_error": "'y' is not in scope"}

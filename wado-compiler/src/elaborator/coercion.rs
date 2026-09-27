@@ -147,9 +147,16 @@ fn is_byte_literal_expr(expr: &Expr) -> bool {
 /// the type of its operands: a comparison's is `bool`, which types neither
 /// side of `b'\n' == 10`.
 pub(super) fn is_numeric_literal_target(tt: &TypeTable, target: TypeId) -> bool {
-    // `i128` / `u128` are structs, so `is_numeric` does not see them, and a
-    // half takes a literal without being numeric: it has no arithmetic.
-    tt.is_numeric(target) || tt.is_half(target) || tt.wide_int_item(target).is_some()
+    // `i128` / `u128` are structs, which no primitive test sees.
+    is_primitive_literal_target(tt, target) || tt.wide_int_item(target).is_some()
+}
+
+/// Whether `operand` is a primitive a numeric literal can be. A literal beside
+/// such an operand takes its type directly, since every operator on a primitive
+/// takes `Self` on the right; a struct's operator trait says what the right is.
+pub(super) fn is_primitive_literal_target(tt: &TypeTable, operand: TypeId) -> bool {
+    // A half takes a literal without being numeric: it has no arithmetic.
+    tt.is_numeric(operand) || tt.is_half(operand)
 }
 
 /// Which of two operands resolves first, so the other can take its type.

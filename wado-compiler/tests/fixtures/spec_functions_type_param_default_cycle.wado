@@ -1,0 +1,22 @@
+// Expanding a type parameter default must reach a fixpoint.
+
+struct Rec<T = Rec> { v: i32 }           // ERROR
+struct Pair<A, B = Pair<A>> { v: i32 }   // ERROR
+struct Ping<X, Y = Pong<X>> { v: i32 }   // ERROR, paired with
+struct Pong<X, Y = Ping<X>> { v: i32 }   // this one
+
+test {
+    let r: Rec = Rec { v: 1 };
+    let p: Pair<i32> = Pair { v: 1 };
+    let q: Ping<i32> = Ping { v: 1 };
+}
+
+__DATA__
+{
+    "compile_error": "the default for this type parameter expands into 'Rec' again, the declaration it belongs to, so filling the slot never settles",
+    "compile_errors_contains": [
+        "expands into 'Pair' again",
+        "expands into 'Ping' again",
+        "expands into 'Pong' again"
+    ]
+}

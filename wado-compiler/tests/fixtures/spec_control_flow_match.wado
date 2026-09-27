@@ -1,0 +1,288 @@
+// Quoted by docs/spec-control-flow.md § Match Expression, § Patterns That
+// Cannot Fail, § Exhaustiveness, § Guard Expressions, § Constant Patterns,
+// § Range Patterns, § Or Patterns, § Nested Sub-Patterns, § Mutable Bindings
+// in Patterns and § Matches Operator.
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
+
+enum Command {
+    Start,
+    Stop,
+}
+
+struct Engine {
+    running: bool,
+}
+
+impl Engine {
+    fn start(&mut self) {
+        self.running = true;
+    }
+
+    fn stop(&mut self) {
+        self.running = false;
+    }
+}
+
+test "match" {
+    let opt: Option<i32> = Option::Some(21);
+    let shape = Shape::Rectangle([2.0, 3.0]);
+    let command = Command::Start;
+    let mut engine = Engine { running: false };
+
+    // Match expression (produces a value)
+    let result = match opt {
+        Some(x) => x * 2,
+        None => 0,
+    };
+    assert result == 42;
+
+    // Match with custom variants
+    let area = match shape {
+        Circle(r) => 3.14159 * r * r,
+        Rectangle([w, h]) => w * h,
+        Point => 0.0,
+    };
+    assert area == 6.0;
+
+    // Match statement (no value produced)
+    match command {
+        Start => engine.start(),
+        Stop => engine.stop(),
+    }
+    assert engine.running;
+}
+
+fn kind<S: AsStrSlice>(s: S) -> i32 {
+    return match s { "cntrl" => 1, "digit" => 2, _ => 0 };
+}
+
+test {
+    assert kind("digit".as_str_slice()) == 2;
+}
+
+variant W { A(i32) }
+
+test {
+    let w = W::A(1);
+    let r: Result<i32, !> = Ok(2);
+    let A(x) = w;                     // OK: W has no other case
+    let Ok(v) = r;                    // OK: r has no `Err`
+    assert x == 1 && v == 2;
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+test "exhaustiveness" {
+    let color = Color::Blue;
+    let name = match color {
+        Red => "red",
+        Green => "green",
+        _ => "other",  // Required for exhaustiveness
+    };
+    assert name == "other";
+}
+
+test "a case with no value needs no arm" {
+    let r: Result<i32, !> = Ok(1);
+    let n = match r {
+        Ok(v) => v,     // exhaustive: no `Result<i32, !>` is an `Err`
+    };
+    assert n == 1;
+}
+
+variant Customer {
+    Premium(i32),
+    Regular,
+}
+
+test "guards" {
+    let customer = Customer::Premium(7);
+    let discount = match customer {
+        Premium(years) && years > 5 => 0.3,
+        Premium(_) => 0.2,
+        _ => 0.1,
+    };
+    assert discount == 0.3;
+}
+
+global TK_FOO: i32 = 1;
+global TK_BAR: i32 = 2;
+
+fn token_kind(token: i32) -> String {
+    return match token {
+        TK_FOO | TK_BAR => "keyword",
+        i32::MAX        => "max",
+        _               => "other",
+    };
+}
+
+test {
+    assert token_kind(2) == "keyword" && token_kind(i32::MAX) == "max";
+    assert token_kind(3) == "other";
+}
+
+test "range patterns" {
+    let score = 75;
+    let c = 'q';
+    let grade = match score {
+        0..<60 => "F",
+        60..=100 => "P",
+        _ => "invalid",
+    };
+    let lower = c matches { 'a'..='z' };
+    assert grade == "P" && lower;
+}
+
+variant Expr {
+    Num(i32),
+    Neg(i32),
+    Zero,
+}
+
+variant Figure {
+    Circle(f64),
+    Square(f64),
+    Line,
+}
+
+test "or patterns" {
+    let color = Color::Blue;
+    let expr = Expr::Neg(7);
+    let count = 2;
+    let shape = Figure::Square(1.0);
+
+    // Enum or-patterns
+    let tone = match color {
+        Red | Blue => "cool",
+        Green => "warm",
+    };
+    assert tone == "cool";
+
+    // Variant or-patterns with bindings
+    let value = match expr {
+        Num(n) | Neg(n) => n,
+        Zero => 0,
+    };
+    assert value == 7;
+
+    // Literal or-patterns
+    let level = match count {
+        1 | 2 | 3 => "low",
+        _ => "high",
+    };
+    assert level == "low";
+
+    // Or patterns in matches operator
+    assert shape matches { Circle(_) | Square(_) };
+}
+
+enum Size {
+    Small,
+    Large,
+}
+
+struct Pt {
+    x: i32,
+    y: i32,
+}
+
+test "nested sub-patterns" {
+    let dx = 0;
+    let dy = 5;
+    let a: Option<i32> = Option::Some(1);
+    let b: Option<i32> = Option::Some(2);
+    let color = Color::Red;
+    let size = Size::Large;
+
+    // Literal sub-patterns in tuples
+    let axis = match [dx, dy] {
+        [0, 0] => "origin",
+        [0, _] => "y-axis",
+        [_, 0] => "x-axis",
+        _ => "other",
+    };
+    assert axis == "y-axis";
+
+    // Variant sub-patterns in tuples
+    let sum = match [a, b] {
+        [Some(p), Some(q)] => p + q,
+        [Some(p), None] => p,
+        [None, _] => 0,
+    };
+    assert sum == 3;
+
+    // Literal sub-patterns in structs
+    let point = Pt { x: 0, y: 0 };
+    let mut origin = false;
+    if let { x: 0, y: 0 } = point { origin = true; }
+    assert origin;
+
+    // Enum sub-patterns in tuples
+    let label = match [color, size] {
+        [Red, Large] => "big red",
+        [Blue, _] => "blue",
+        _ => "other",
+    };
+    assert label == "big red";
+
+    // Or-pattern and range sub-patterns
+    let p = Pt { x: 15, y: 4 };
+    let v = match p {
+        { x: 0 | 1, y } => y,
+        { x: 10..=20, y } => -y,
+        _ => 0,
+    };
+    assert v == -4;
+}
+
+test "mutable bindings" {
+    let opt: Option<i32> = Option::Some(1);
+    let result: Result<i32, String> = Ok(21);
+
+    if let Some(mut x) = opt {
+        x += 10;  // x is mutable
+        assert x == 11;
+    }
+
+    let doubled = match result {
+        Ok(mut value) => {
+            value *= 2;
+            value
+        },
+        Err(_) => 0,
+    };
+    assert doubled == 42;
+}
+
+test "matches" {
+    let opt: Option<i32> = Option::Some(3);
+    let shape = Shape::Circle(2.0);
+
+    // Basic usage
+    let is_some = opt matches { Some(_) };
+    let is_circle = shape matches { Circle(_) };
+    assert is_some && is_circle;
+
+    // With guard
+    let is_large = shape matches { Circle(r) && r > 10.0 };
+    assert !is_large;
+
+    // In conditions
+    let mut has_value = false;
+    if opt matches { Some(_) } {
+        has_value = true;
+    }
+    assert has_value;
+
+    // A guard inside the pattern sees its bindings
+    assert opt matches { Some(x) && x > 0 };
+}

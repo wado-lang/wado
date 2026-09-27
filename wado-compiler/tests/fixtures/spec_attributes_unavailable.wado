@@ -1,0 +1,22 @@
+// Quoted by docs/spec-attributes.md § `#[unavailable("reason")]`. A call to a
+// reserved name reports its reason.
+
+struct File {
+    path: String,
+}
+
+impl File {
+    #[unavailable("write `open_with(Options::default())` instead")]
+    pub fn open(&self);
+
+    #[unavailable("removed in 0.5.0; use `open_with`")]
+    pub fn open_timeout(&self);
+}
+
+test {
+    let f = File { path: "a.txt" };
+    f.open();
+}
+
+__DATA__
+{"compile_error":"`File::open` is unavailable: write `open_with(Options::default())` instead"}

@@ -1,0 +1,26 @@
+// An inherent method shadows a trait method of the same name.
+
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+struct Robot { id: i32 }
+
+// Inherent method
+impl Robot {
+    fn greet(&self) -> String { return "Beep boop"; }
+}
+
+// Trait method (won't be called because inherent method exists)
+impl Greet for Robot {
+    fn greet(&self) -> String { return "Hello from trait"; }
+}
+
+test {
+    let r = Robot { id: 1 };
+    assert r.greet() == "Beep boop";  // inherent method wins
+}
+
+test "the trait's method is still reachable by name" {
+    assert Greet::greet(&Robot { id: 1 }) == "Hello from trait";
+}

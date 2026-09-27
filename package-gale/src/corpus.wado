@@ -9,9 +9,15 @@ use { TreeMap } from "core:collections";
 use { from_string, to_string_pretty } from "core:json";
 
 /// The paths to process: every `--paths-from <file>` list, one path per line,
-/// plus any bare argument ending in `extension`. A list that cannot be read
-/// yields its own path, so the run reports it rather than looking clean.
-pub fn collect_paths<S: AsStrSlice>(argv: &List<String>, extension: S) -> List<String> with (Stderr, Preopens) {
+/// plus any bare argument ending in `extension`. `flags` are the arguments the
+/// caller reads itself. Any other argument stops the run, and a list that
+/// cannot be read yields its own path so the run reports it: neither may leave
+/// a run that checked nothing looking clean.
+pub fn collect_paths<S: AsStrSlice>(
+    argv: &List<String>,
+    extension: S,
+    flags: List<String>,
+) -> List<String> with (Stderr, Preopens) {
     let mut paths: List<String> = [];
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--paths-from" {
@@ -32,6 +38,8 @@ pub fn collect_paths<S: AsStrSlice>(argv: &List<String>, extension: S) -> List<S
             }
         } else if argv[i].ends_with(extension) {
             paths.push(argv[i]);
+        } else if !flags.contains_str(&argv[i]) {
+            panic(`unknown argument: ${argv[i]}`);
         }
     }
     return paths;

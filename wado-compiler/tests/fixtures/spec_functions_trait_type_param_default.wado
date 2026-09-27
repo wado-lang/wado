@@ -1,0 +1,43 @@
+// A trait method's type parameter default belongs to the trait: the impl
+// restates the list without it, and every spelling of the call fills it.
+
+pub trait Named with () {
+    fn name() -> String;
+}
+
+pub struct Tag {}
+
+impl Named for Tag {
+    fn name() -> String { return "Tag"; }
+}
+
+pub struct Local {}
+
+impl Named for Local {
+    fn name() -> String { return "Local"; }
+}
+
+pub struct M {}
+
+pub trait Boxed {
+    fn boxed<T: Named = Tag>(&self) -> String;   // the caller need not import `Tag`
+    fn made<T: Named = Tag>() -> String;
+}
+
+impl Boxed for M {
+    fn boxed<T: Named>(&self) -> String {        // no default here
+        return T::name();
+    }
+
+    fn made<T: Named>() -> String {
+        return T::name();
+    }
+}
+
+test {
+    let m = M {};
+    assert m.boxed() == "Tag";              // → m.boxed::<Tag>()
+    assert m.boxed::<Local>() == "Local";   // spelled, so `Local`
+    assert M::made() == "Tag";              // the static spelling reads the same declaration
+    assert M::boxed(&m) == "Tag";           // and so does the receiver-taking one
+}

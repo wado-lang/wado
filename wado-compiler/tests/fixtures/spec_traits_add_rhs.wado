@@ -1,0 +1,20 @@
+// The right operand selects between `Add` impls.
+
+struct Meters { v: f64 }
+struct Feet { v: f64 }
+
+impl Add for Meters {              // Meters + Meters
+    type Output = Meters;
+    fn add(&self, rhs: &Meters) -> Meters { return Meters { v: self.v + rhs.v }; }
+}
+impl Add<Feet> for Meters {        // Meters + Feet
+    type Output = Meters;
+    fn add(&self, rhs: &Feet) -> Meters { return Meters { v: self.v + rhs.v * 0.3048 }; }
+}
+
+test {
+    let m = Meters { v: 1.0 };
+    let f = Feet { v: 10.0 };
+    let total = m + f;                 // selects Add<Feet>
+    assert total.v == 4.048 && (m + m).v == 2.0;
+}

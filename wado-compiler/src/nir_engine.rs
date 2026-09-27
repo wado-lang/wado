@@ -1695,13 +1695,8 @@ impl<'a> Engine<'a> {
                 block: self.clone_block(block),
                 role,
             },
-            StmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => StmtKind::LetDestructure {
+            StmtKind::LetDestructure { pattern, value } => StmtKind::LetDestructure {
                 pattern: self.clone_pat(pattern),
-                is_mut,
                 value: self.clone_operand(value),
             },
         }

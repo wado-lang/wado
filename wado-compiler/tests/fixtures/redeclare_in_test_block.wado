@@ -1,0 +1,32 @@
+// A redeclaration that does not read the old value is rejected in every body,
+// not only a function's: a test body, and a closure in a global's initializer
+// or a field default.
+
+test {
+    let x = 1;
+    let x = 2;
+    assert x == 2;
+}
+
+global F: fn() -> i32 = || {
+    let y = 1;
+    let y = 2;
+    return y;
+};
+
+struct S {
+    f: fn() -> i32 = || {
+        let z = 1;
+        let z = 2;
+        return z;
+    },
+}
+
+__DATA__
+{
+    "compile_error": "cannot redeclare 'x' in the same scope",
+    "compile_errors_contains": [
+        "cannot redeclare 'y' in the same scope",
+        "cannot redeclare 'z' in the same scope"
+    ]
+}

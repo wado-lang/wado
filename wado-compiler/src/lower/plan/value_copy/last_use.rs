@@ -4,16 +4,22 @@
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
-use super::is_reference_type;
 use super::ownership::OwnedCalls;
+<<<<<<< HEAD
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
+||||||| 7c8929b7416
+use super::retention::{BoundedRetention, FunctorRows, RESULT, Retained, RetainedParams};
+=======
+use super::retention::{BoundedRetention, FunctorRows, RESULT, Retained, RetainedParams};
+use super::{is_reference_type, needs_value_copy};
+>>>>>>> origin/main
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::tir;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
     capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -142,7 +148,8 @@ pub struct Ownership {
 /// Decide `func`'s moves and shares together, both being readings of the one
 /// liveness this walk computes. `final_reads` are the elaborator's final-use
 /// spans, which read names only: a borrow a call takes of its receiver without
-/// a `&` is out of their sight, so this walk's pins veto them.
+/// a `&` is out of their sight, so this walk's pins veto them, and so is a
+/// parameter the callers pass uncopied.
 pub fn analyze_ownership(
     func: &TirFunction,
     oracle: &OwnedCalls,
@@ -158,6 +165,7 @@ pub fn analyze_ownership(
         return Ownership::default();
     }
     let mut_receiver_methods = &plan.mut_receiver_methods;
+    let borrowed_params = plan.confined_params.borrowed_locals(func);
 
     let mut all_locals: IndexSet<u32> = (0..func.local_count).collect();
     // Guard against a local_count that lags a grown local set.
@@ -170,6 +178,7 @@ pub fn analyze_ownership(
     let mut a = Analyzer {
         calls: &plan.retention,
         params: func.params.iter().map(|p| p.local_index).collect(),
+        borrowed_params: &borrowed_params,
         pending_bounded: Vec::new(),
         value_holds: Vec::new(),
         handed_away: IndexSet::default(),
@@ -235,7 +244,11 @@ pub fn analyze_ownership(
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|site| site.base).collect();
     let place_spans: IndexSet<Span> = moved_places.iter().map(|site| site.span).collect();
     let read_spans = local_reads(body)
-        .filter(|(local, span)| final_reads.contains(span) && !a.place_escaped(*local, None))
+        .filter(|(local, span)| {
+            final_reads.contains(span)
+                && !borrowed_params.contains(local)
+                && !a.place_escaped(*local, None)
+        })
         .map(|(_, span)| span)
         .collect();
 
@@ -422,14 +435,19 @@ impl Analyzer<'_> {
         type_table: &TypeTable,
     ) -> IndexSet<u32> {
         // A by-value parameter is owned, the caller having copied or moved it
-        // in; a reference local never is.
+        // in, unless the caller passes it uncopied. A reference local never is.
+        let owned_params = func
+            .params
+            .iter()
+            .map(|p| p.local_index)
+            .filter(|l| !self.borrowed_params.contains(l));
         let mut fresh: IndexSet<u32> = self
             .let_sources
             .keys()
             .copied()
             .chain(self.declared_owned.iter().copied())
             .chain(self.match_sources.iter().map(|(l, _)| *l))
-            .chain(func.params.iter().map(|p| p.local_index))
+            .chain(owned_params)
             .filter(|idx| !is_reference_local(func, *idx, type_table))
             .collect();
         let mut changed = true;
@@ -673,7 +691,7 @@ impl Analyzer<'_> {
                     .returns_receiver_alias
                     .contains(&func.module_source, &func.name) =>
             {
-                match self.resolver.names(&args.first()?.expr) {
+                match self.resolver.names(place::arg_at(func, args, 0)) {
                     Names::Place(p) => Some(p),
                     Names::Value | Names::Unknown => None,
                 }
@@ -865,6 +883,8 @@ struct Analyzer<'a> {
     /// This body's parameter locals. A retention landing in one leaves the
     /// frame, whatever the callee does with it.
     params: IndexSet<u32>,
+    /// The by-value parameter locals this body's callers pass uncopied.
+    borrowed_params: &'a IndexSet<u32>,
     /// `(referent root, field, destination roots)` for each bounded retention,
     /// answered once every escape this body makes is known.
     pending_bounded: Vec<(u32, Option<u32>, Vec<u32>)>,
@@ -2106,7 +2126,7 @@ impl Analyzer<'_> {
             }
             // A newtype cast hands over the storage it wraps, so a local under
             // one is taken as the bare local would be.
-            TirExprKind::Cast { .. } if is_local_place(expr) => {
+            TirExprKind::Cast { .. } if local_read(expr).is_some() => {
                 self.walk_expr(strip_casts(expr), live, record);
             }
             // A projection hands on a piece of its root, so the root is read but
@@ -2419,58 +2439,115 @@ fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {
     out
 }
 
-/// Locals whose storage a move hands to a new owner. An immutable-source share
-/// rooted at one of them keeps its copy: the new owner may be mutable.
-pub fn compute_moved_roots(func: &TirFunction, move_eligible: &MoveEligible) -> IndexSet<u32> {
-    let Some(body) = &func.body else {
-        return IndexSet::default();
-    };
-    let mut walker = MovedRoots {
-        move_eligible,
-        roots: IndexSet::default(),
-    };
-    walker.visit_block(body);
-    walker.roots
+impl MoveEligible {
+    /// Whether `value` is a move: a whole local read at its final use, or a
+    /// materialization aliasing out of a dead aggregate. A newtype cast hands
+    /// over the same storage, so it does not hide the read underneath it.
+    pub fn is_move(&self, value: &TirExpr) -> bool {
+        let value = strip_casts(value);
+        if self.place_spans.contains(&value.span) {
+            return true;
+        }
+        let TirExprKind::Local { index, .. } = &value.kind else {
+            return false;
+        };
+        self.locals.contains(index) || self.read_spans.contains(&value.span)
+    }
+
+    /// The value locals `value` reads once, where that read is a move: no other
+    /// read in `value` reaches their storage, and nothing after it does. A
+    /// reference moved hands over the reference, not what it names.
+    pub fn sole_moved_reads(&self, value: &TirExpr, type_table: &TypeTable) -> IndexSet<u32> {
+        // Per local read, whether its only read so far is a move.
+        let mut reads: IndexMap<u32, bool> = IndexMap::default();
+        let mut sites = ReadSites {
+            moves: self,
+            read: |local: u32, local_type: Option<TypeId>, moved: bool| {
+                let moved = moved
+                    && local_type.is_some_and(|t| {
+                        needs_value_copy(t, type_table) && !place::is_reference(t, type_table)
+                    });
+                reads
+                    .entry(local)
+                    .and_modify(|sole| *sole = false)
+                    .or_insert(moved);
+            },
+        };
+        sites.visit_expr(value);
+        reads
+            .into_iter()
+            .filter_map(|(local, sole)| sole.then_some(local))
+            .collect()
+    }
+
+    /// Locals whose storage a move hands to a new owner. An immutable-source
+    /// share rooted at one of them keeps its copy: the new owner may be mutable.
+    pub fn roots(&self, func: &TirFunction) -> IndexSet<u32> {
+        let mut roots = IndexSet::default();
+        if let Some(body) = &func.body {
+            let mut sites = ReadSites {
+                moves: self,
+                read: |local: u32, _: Option<TypeId>, moved: bool| {
+                    if moved {
+                        roots.insert(local);
+                    }
+                },
+            };
+            sites.visit_block(body);
+        }
+        roots
+    }
 }
 
-struct MovedRoots<'a> {
-    move_eligible: &'a MoveEligible,
-    roots: IndexSet<u32>,
+/// The reads of locals a walk makes, each at the site that decides whether it
+/// hands the local's storage over: a bare local, a projection straight off one,
+/// or a deeper place that moves. `read` gets the local, its type where the site
+/// names it, and whether the site is a move. A closure's body indexes locals of
+/// its own, and a capture reads the one it names without moving it.
+struct ReadSites<'a, F> {
+    moves: &'a MoveEligible,
+    read: F,
 }
 
-impl TirRefVisitor for MovedRoots<'_> {
+impl<F: FnMut(u32, Option<TypeId>, bool)> TirRefVisitor for ReadSites<'_, F> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         let stripped = strip_casts(expr);
-        let moved_place = self.move_eligible.place_spans.contains(&stripped.span);
-        let moved_local = match &stripped.kind {
-            TirExprKind::Local { index, .. } => {
-                self.move_eligible.locals.contains(index)
-                    || self.move_eligible.read_spans.contains(&stripped.span)
-            }
-            _ => false,
-        };
-        if (moved_place || moved_local)
-            && let Some(root) = place::place_root(stripped)
-        {
-            self.roots.insert(root);
-        }
-        // A local reached only as a projection's base is no site of its own: the
-        // fold decides on the projection above it. Counting it moves nothing and
-        // costs the binding its read-only share.
+        let moved = self.moves.is_move(stripped);
         match &stripped.kind {
+            TirExprKind::Closure { captures, .. } => {
+                for index in capture_source_locals(captures) {
+                    (self.read)(index, None, false);
+                }
+            }
+            TirExprKind::Local { index, .. } => (self.read)(*index, Some(stripped.type_id), moved),
             TirExprKind::FieldAccess { expr: base, .. }
             | TirExprKind::VariantPayload { expr: base, .. }
-                if is_local_place(base) => {}
-            TirExprKind::Index { expr: base, index } if is_local_place(base) => {
+                if let Some((local, local_type)) = local_read(base) =>
+            {
+                (self.read)(local, Some(local_type), moved);
+            }
+            TirExprKind::Index { expr: base, index }
+                if let Some((local, local_type)) = local_read(base) =>
+            {
+                (self.read)(local, Some(local_type), moved);
                 self.visit_expr(index);
             }
-            _ => self.walk_expr(expr),
+            _ => {
+                if moved && let Some(root) = place::place_root(stripped) {
+                    (self.read)(root, None, true);
+                }
+                self.walk_expr(stripped);
+            }
         }
     }
 }
 
-/// Whether `expr` is a bare local read, through the casts monomorphization
-/// leaves.
-fn is_local_place(expr: &TirExpr) -> bool {
-    matches!(strip_casts(expr).kind, TirExprKind::Local { .. })
+/// The local `expr` reads whole, and its type, through the casts
+/// monomorphization leaves.
+fn local_read(expr: &TirExpr) -> Option<(u32, TypeId)> {
+    let expr = strip_casts(expr);
+    match expr.kind {
+        TirExprKind::Local { index, .. } => Some((index, expr.type_id)),
+        _ => None,
+    }
 }

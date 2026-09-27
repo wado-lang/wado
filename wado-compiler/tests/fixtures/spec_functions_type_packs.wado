@@ -1,0 +1,72 @@
+// Variadic type packs: declared with `..`, settled per argument, spread into
+// tuples.
+
+fn identity<..T>(x: [..T]) -> [..T] {
+    return x;
+}
+
+fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
+    return [a, ..rest];
+}
+
+test {
+    assert identity([1, "hello", true]) == [1, "hello", true];
+    assert prepend(0, [1, "x"]) == [0, 1, "x"];
+}
+
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+
+test {
+    assert concat([1, "x"], [true]) == [1, "x", true];   // A = [i32, String], B = [bool]
+}
+
+fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
+    return [x, ..a, ..b, y];   // the parameters settle both packs
+}
+
+fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { return 2; }
+
+fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { return 3; }
+
+test {
+    assert wrap(0, [1], ["a"], true) == [0, 1, "a", true];
+    assert joined([[1], [true]], [1, true]) == 2;          // `split` settles both
+    assert middle::<[i32], String, [bool]>([1, "mid", true]) == 3;   // the turbofish settles them
+}
+
+fn reorder<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    let ab: [..A, ..B] = [..a, ..b];      // OK
+    return ab;
+}
+
+test {
+    assert reorder([1], ["x", true]) == [1, "x", true];
+}
+
+test {
+    assert concat::<[i32], [bool, String]>([1], [true, "x"]) == [1, true, "x"];
+}
+
+test {
+    let a = [1, "hello"];
+    let b = [..a, true];   // b: [i32, String, bool]
+    let c = [42, ..a];     // c: [i32, i32, String]
+    assert b == [1, "hello", true];
+    assert c == [42, 1, "hello"];
+}
+
+global mut PAIRS: i32 = 0;
+
+fn make_pair() -> [i32, i32] {
+    PAIRS += 1;
+    return [10, 20];
+}
+
+test {
+    // make_pair() is called once, not twice
+    let t = [..make_pair(), 30];
+    assert PAIRS == 1;
+    assert t == [10, 20, 30];
+}

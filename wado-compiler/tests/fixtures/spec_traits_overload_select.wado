@@ -1,0 +1,18 @@
+// One trait at two argument lists: the call's arguments choose the impl.
+
+struct A { v: i32 }
+struct B { v: i32 }
+
+trait Take<X> with () {
+    fn take(&self, x: X) -> String;
+}
+
+impl Take<A> for bool { fn take(&self, x: A) -> String { return "A"; } }
+impl Take<B> for bool { fn take(&self, x: B) -> String { return "B"; } }
+
+test {
+    let f = true;
+    let a: A = A { v: 1 };
+    assert f.take(B { v: 1 }) == "B";   // OK: a named struct literal selects Take<B>
+    assert f.take(a) == "A";            // OK: the local's declared type selects Take<A>
+}

@@ -1,0 +1,9 @@
+// A generic body pins `Output` to fold back into its own parameter, or
+// returns the projection.
+
+fn sum2<T: Add<Output = T>>(a: T, b: T) -> T { return a + b; }
+fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
+
+test {
+    assert sum2(2, 3) == 5 && scale(2.0, 4.0) == 8.0;
+}

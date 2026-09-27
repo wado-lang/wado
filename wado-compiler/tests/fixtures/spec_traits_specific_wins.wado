@@ -1,0 +1,18 @@
+// An impl for one instantiation wins over the impl generic over its head.
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+struct Box_<T> { v: T }
+
+impl<T> Tag for Box_<T> { fn tag(&self) -> String { return "general"; } }         // general
+impl Tag for Box_<i32> { fn tag(&self) -> String { return "specific"; } }         // specific — wins for Box_<i32>
+
+impl<..T> Tag for [..T] { fn tag(&self) -> String { return "general"; } }         // general
+impl Tag for [i32, i32] { fn tag(&self) -> String { return "specific"; } }        // specific — wins for [i32, i32]
+
+test {
+    assert Box_ { v: 1 }.tag() == "specific" && Box_ { v: "s" }.tag() == "general";
+    assert [1, 2].tag() == "specific" && [1, "s"].tag() == "general";
+}

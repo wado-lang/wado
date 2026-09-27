@@ -1,0 +1,32 @@
+// The standard WASI CLI `command` world, declared as `wasi:cli` declares it.
+use { Environment, Exit, Stdin, Stdout, Stderr, TerminalStdin, TerminalStdout, TerminalStderr, Run } from "wasi:cli";
+use { MonotonicClock, SystemClock, Timezone } from "wasi:clocks";
+use { Preopens } from "wasi:filesystem";
+use { IpNameLookup } from "wasi:sockets";
+use { Random, Insecure, InsecureSeed } from "wasi:random";
+
+#[cm("wasi:cli/command@0.3.0")]
+pub world Command {
+    import Environment;
+    import Exit;
+    import Stdin;
+    import Stdout;
+    import Stderr;
+    import TerminalStdin;
+    import TerminalStdout;
+    import TerminalStderr;
+    import MonotonicClock;
+    import SystemClock;
+    import Timezone;
+    import Preopens;
+    import IpNameLookup;
+    import Random;
+    import Insecure;
+    import InsecureSeed;
+
+    export Run;
+}
+
+test {
+    assert true;   // a world is a declaration: accepting it is the check
+}

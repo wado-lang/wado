@@ -1,0 +1,42 @@
+// A type pattern narrowing a handle to resource `R` holds `R` from then on.
+
+#[cm("example:demo/dom#node", linearity = "unrestricted", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", classes = "1..=1")]
+resource HtmlInputElement extends Node {
+    #[cm("example:demo/dom#input-value")]
+    fn value(&self) -> String;
+}
+
+fn describe(n: Node) -> String {                // holds Node
+    return match n {
+        input: HtmlInputElement => input.value(), // holds HtmlInputElement too
+        _ => "",
+    };
+}
+
+test {
+    with HtmlInputElement => &Typed {} do {
+        assert describe(an_input()) == "typed";
+        assert describe(a_node()) == "";
+    }
+}
+
+struct Typed {}
+
+impl HtmlInputElement for Typed {
+    fn value(&self, this: &HtmlInputElement) -> String {
+        resume "typed"
+    }
+}
+
+// A handle is `class * 2^37 + index`: class 0 is a plain `Node`, class 1 an
+// `HtmlInputElement`.
+fn a_node() -> Node {
+    return builtin::black_box(1.0) as Node;
+}
+
+fn an_input() -> Node {
+    return builtin::black_box(137438953472.0 + 1.0) as Node;
+}

@@ -212,6 +212,7 @@ fn "newtype_format.wado/$test_0_display_drops_the_inspect_cast"() {
     let $cond_2: bool;
     let $cond_4: bool;
     let $cond_6: bool;
+    let l: ref "core:prelude/string.wado//String";
     let $cond_14: bool;
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_19: ref "core:prelude/string.wado//String";
@@ -251,11 +252,10 @@ fn "newtype_format.wado/$test_0_display_drops_the_inspect_cast"() {
     let a_end_130: i32;
     let b_131: ref Array<u8>;
     let i_135: i32;
-    let text: ref "core:prelude/string.wado//String";
-    let a_220: ref Array<u8>;
-    let a_end_222: i32;
-    let b_223: ref Array<u8>;
-    let i_227: i32;
+    let a_219: ref Array<u8>;
+    let a_end_221: i32;
+    let b_222: ref Array<u8>;
+    let i_226: i32;
     $local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(100.5, $local_17);
     $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
@@ -415,34 +415,34 @@ condition: m.to_string() == \"100.5\"
         "core:rt/panic"($local_25.repr, $local_25.used);
         unreachable;
     }
+    l = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 100, 111), used: 4 };
     $local_35 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_36 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_35 };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__60: block {
-        text = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 100, 111), used: 4 };
         let $arg_spill_10: ref "core:prelude/string.wado//String";
         $arg_spill_10 = $local_36.buf;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_10, text.repr, 4);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_10, l.repr, 4);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__60;
     };
-    $cond_14 = $inline_core_prelude_array_wado_seq_eq_u8__66: block -> bool {
-        a_220 = $local_35.repr;
-        a_end_222 = $local_35.used;
-        b_223 = global:newtype_format.wado::$const_obj_25;
-        if a_end_222 != 4 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__66: 0;
+    $cond_14 = $inline_core_prelude_array_wado_seq_eq_u8__65: block -> bool {
+        a_219 = $local_35.repr;
+        a_end_221 = $local_35.used;
+        b_222 = global:newtype_format.wado::$const_obj_25;
+        if a_end_221 != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__65: 0;
         }
-        i_227 = 0;
+        i_226 = 0;
         b18: block {
             l19: loop {
-                break_if b18 i_227 >= a_end_222;
-                if builtin::array_get_value<u8>(a_220, i_227) != builtin::array_get_value<u8>(b_223, i_227) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__66: 0;
+                break_if b18 i_226 >= a_end_221;
+                if builtin::array_get_value<u8>(a_219, i_226) != builtin::array_get_value<u8>(b_222, i_226) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__65: 0;
                 }
-                i_227 = i_227 + 1;
+                i_226 = i_226 + 1;
                 continue l19;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__66: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__65: 1;
     };
     if @unlikely($cond_14 == 0) {
         cold_path;
