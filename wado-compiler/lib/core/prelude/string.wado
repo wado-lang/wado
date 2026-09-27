@@ -80,7 +80,6 @@ fn utf8_seq_len(b0: u8) -> i32 {
 
 /// Decode the UTF-8 scalar at byte offset `pos`, returning `[code_point, byte_length]`.
 /// Assumes valid UTF-8 with the full sequence in range.
-#[inline]
 fn decode_char_at(repr: &Array<u8>, pos: i32) -> [u32, i32] {
     let b0 = repr[pos] as u32;
     if b0 < 0x80 {
@@ -103,7 +102,6 @@ fn decode_char_at(repr: &Array<u8>, pos: i32) -> [u32, i32] {
 
 /// Encode `code` as UTF-8 at byte offset `pos`, returning the byte length (1–4).
 /// `[pos, pos + len)` must be in bounds.
-#[inline]
 fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
     if code < 0x80 {
         repr[pos] = code as u8;
