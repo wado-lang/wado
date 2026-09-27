@@ -16,6 +16,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::Elaborator;
+use super::coercion::PendingLiterals;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
@@ -287,6 +288,9 @@ pub(super) struct Scope {
     /// The binders whose bound closure is being built right now, since
     /// `T: Uses<T::Item>` asks for it again while it is built.
     pub(super) bound_closure_stack: IndexSet<TypeId>,
+    /// The numeric literals the arguments being resolved hold at one of their
+    /// call's open variables. See [`PendingLiterals`].
+    pub(super) pending_literals: Option<PendingLiterals>,
 }
 
 impl Scope {
@@ -432,6 +436,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
         body(&mut scope)
+    }
+
+    /// Run `body` collecting the numeric literals it meets at one of
+    /// `own_vars`, and answer them with its result.
+    pub(super) fn collecting_pending_literals<R>(
+        &mut self,
+        own_vars: &[TypeId],
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> (R, PendingLiterals) {
+        let (result, pending) = util::replaced(
+            self,
+            |e| &mut e.annotate_ctx.pending_literals,
+            Some(PendingLiterals::new(own_vars)),
+            body,
+        );
+        (
+            result,
+            pending.expect("the scope is restored only on return"),
+        )
     }
 
     /// Run `body` with use→def reference recording suppressed. See

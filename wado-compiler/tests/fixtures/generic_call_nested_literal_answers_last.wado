@@ -1,0 +1,78 @@
+// A numeric literal nested in a generic call's argument answers last, as one
+// standing as the argument does: it takes the type the other arguments settle,
+// whatever holds it and in whatever order they come.
+use { println, Stdout } from "core:cli";
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+struct Outer<T> {
+    p: Pair<T>,
+}
+
+struct Point {
+    x: i32,
+}
+
+fn second<T>(p: Pair<T>, fallback: T) -> T {
+    return if p.a == p.b { fallback } else { p.b };
+}
+
+fn second_ref<T>(p: &Pair<T>, fallback: T) -> T {
+    return second(*p, fallback);
+}
+
+fn inner<T>(o: Outer<T>, fallback: T) -> T {
+    return second(o.p, fallback);
+}
+
+fn from_closure<T>(f: fn() -> T, p: Pair<T>) -> T {
+    return second(p, f());
+}
+
+fn doubled<T: Add<Output = T>>(f: fn(T) -> T, p: Pair<T>, fallback: T) -> T {
+    return f(second(p, fallback));
+}
+
+fn end_of<T>(r: &RangeExclusive<T>, fallback: T) -> T {
+    return if r.start == r.end { fallback } else { r.end };
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return b;
+}
+
+struct Picker {}
+
+impl Picker {
+    fn second<T>(&self, p: Pair<T>, fallback: T) -> T {
+        return second(p, fallback);
+    }
+
+    fn first<T>(p: Pair<T>, fallback: T) -> T {
+        return if p.a == p.b { fallback } else { p.a };
+    }
+}
+
+export fn run() with Stdout {
+    let fallback: u64 = 0;
+    let picker = Picker {};
+    println(`${second(Pair { a: 1, b: 0x1_0000_0000 }, fallback)}`);
+    println(`${second_ref(&Pair { a: 1, b: 0x1_0000_0001 }, fallback)}`);
+    println(`${inner(Outer { p: Pair { a: 1, b: 0x1_0000_0002 } }, fallback)}`);
+    println(`${from_closure(|| fallback, Pair { a: 1, b: 0x1_0000_0003 })}`);
+    println(`${doubled(|x| x + x, Pair { a: 1, b: 0x1_0000_0000 }, fallback)}`);
+    println(`${end_of(&(0..<0x1_0000_0004), fallback)}`);
+    println(`${picker.second(Pair { a: 1, b: 0x1_0000_0005 }, fallback)}`);
+    println(`${Picker::first(Pair { a: 0x1_0000_0006, b: 1 }, fallback)}`);
+    println(`${second(Pair { a: 1, b: 2.5 }, 0)}`);
+    println(`${second(Pair { a: 1, b: 2 }, 5)}`);
+    println(`${same(Point { x: 1 }, { x: 2 }).x}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296\n4294967297\n4294967298\n4294967299\n8589934592\n4294967300\n4294967301\n4294967302\n2.5\n2\n2\n"
+}

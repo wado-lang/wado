@@ -85,7 +85,7 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 /// Whether `expr` is a literal that names its own type — a named struct literal
 /// or a range — and so takes only its type arguments from the type expected of
 /// it.
-pub(super) fn names_its_type(expr: &Expr) -> bool {
+fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
 }
 
@@ -619,9 +619,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
-        // Try literal coercion when expected type is known
         if let Some(target_type) = expected_type
-            && let Some(coerced) = self.try_coerce(expr, ctx, target_type)
+            && let Some(coerced) = self
+                .defer_literal_at_var(expr, target_type)
+                .or_else(|| self.try_coerce(expr, ctx, target_type))
         {
             return coerced;
         }
@@ -5414,8 +5415,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let element = expected_type.and_then(|t| {
             let tt = self.tysys.type_table.borrow();
-            tt.range_element(t, range.kind)
-                .filter(|&e| is_numeric_literal_target(&tt, e))
+            tt.range_element(t, range.kind).filter(|&e| {
+                is_numeric_literal_target(&tt, e) || matches!(tt.get(e), ResolvedType::InferVar(_))
+            })
         });
         if let Some(element) = element {
             self.sem.types.range_element_hints.insert(range.id, element);
@@ -5455,7 +5457,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let ord = self.tysys.compiler_trait(CompilerItem::Ord);
         assert!(ord.is_some(), "core:prelude declares Ord");
+        // Literal bounds pending at a variable settle to a number, which is `Ord`.
+        let pending = matches!(
+            self.tysys.type_table.borrow().get(element_type),
+            ResolvedType::InferVar(_)
+        );
         if element_type != TypeTable::ERROR
+            && !pending
             && !self.enforce_single_bound_args(
                 element_type,
                 &ord_trait_name,

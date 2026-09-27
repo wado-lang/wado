@@ -4,6 +4,7 @@ use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
+use crate::ast::AstId;
 use crate::ast::{self, Expr, Literal, LiteralMember, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -15,7 +16,7 @@ use crate::elaborator::sem::types::{
 use crate::elaborator::typecheck::{TypeCheckResult, check_assignable};
 use crate::elaborator::types::FromArrayInfo;
 use crate::escape::{unescape_byte, unescape_bytes};
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -127,6 +128,46 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
 /// `null`. Inference defers it, so the other arguments bind the parameter first.
 pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
     arg.is_some_and(|arg| is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg))
+}
+
+/// The numeric literals a call's arguments hold, at any depth, where the type
+/// expected of them is one of the call's own open variables:
+/// `second(Pair { a: 1, b: 2 }, x)`. Each answers last, as a literal argument
+/// does: it takes what the other arguments answer its variable with, and a
+/// variable none of them answers takes the literals' default.
+pub(super) struct PendingLiterals {
+    own_vars: Vec<TypeId>,
+    literals: Vec<(Expr, TypeId)>,
+}
+
+impl PendingLiterals {
+    pub(super) fn new(own_vars: &[TypeId]) -> Self {
+        Self {
+            own_vars: own_vars.to_vec(),
+            literals: Vec::new(),
+        }
+    }
+}
+
+/// The type `literals` take where nothing else answers their variable: `f64`
+/// if one is a float, else `i32` unless every one is a byte literal.
+fn default_literal_type(literals: &[Expr]) -> TypeId {
+    let kinds = literals.iter().map(|expr| {
+        let literal = classify_numeric_literal(expr).expect("only numeric literals are deferred");
+        match literal.kind {
+            NumericLiteralKind::Number(repr) if util::is_float_only_literal(repr) => TypeTable::F64,
+            NumericLiteralKind::Number(_) => TypeTable::I32,
+            NumericLiteralKind::Byte(_) => TypeTable::U8,
+        }
+    });
+    let rank = |t: &TypeId| {
+        [TypeTable::U8, TypeTable::I32, TypeTable::F64]
+            .iter()
+            .position(|r| r == t)
+    };
+    kinds
+        .max_by_key(rank)
+        .expect("a variable is pending only with a literal")
 }
 
 /// Whether `expr` is a byte literal. Among numeric literals it is the one that
@@ -435,6 +476,91 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_coercion(expr.id(), CoercionKind::NullToOption, target_type);
         self.record_expression_type(expr.id(), target_type);
         Some(target_type)
+    }
+
+    /// Defer `expr` where it is a numeric literal meeting one of the open
+    /// variables [`PendingLiterals`] collects for, answering that variable as
+    /// its type until [`Self::settle_pending_literals`].
+    pub(super) fn defer_literal_at_var(&mut self, expr: &Expr, expected: TypeId) -> Option<TypeId> {
+        if self.annotate_ctx.pending_literals.is_none() || !is_numeric_literal_expr(expr) {
+            return None;
+        }
+        let var = self.apply_infer_holes(expected);
+        // A slot instantiation declined, a pack, stays in `own_vars` rigid.
+        if !matches!(
+            self.tysys.type_table.borrow().get(var),
+            ResolvedType::InferVar(_)
+        ) {
+            return None;
+        }
+        let pending = self.annotate_ctx.pending_literals.as_mut()?;
+        if !pending.own_vars.contains(&var) {
+            return None;
+        }
+        pending.literals.push((expr.clone(), var));
+        Some(var)
+    }
+
+    /// Coerce each literal `pending` deferred to what its variable was answered
+    /// with, answering the variables nothing answered with their literals'
+    /// default first. Answers each literal's type by its id.
+    ///
+    /// A literal the answer cannot type keeps its own default. Standing as one
+    /// of `args` it is reported by the argument check, as any argument is;
+    /// nested inside one it is reported here, since the value holding it took
+    /// the answer as its own.
+    pub(super) fn settle_pending_literals(
+        &mut self,
+        pending: PendingLiterals,
+        args: &[Expr],
+        ctx: &mut FunctionContext,
+    ) -> IndexMap<AstId, TypeId> {
+        let mut by_var: IndexMap<TypeId, Vec<Expr>> = IndexMap::default();
+        for (expr, var) in pending.literals {
+            by_var.entry(var).or_default().push(expr);
+        }
+        let is_arg = |expr: &Expr| args.iter().any(|arg| arg.id() == expr.id());
+        let mut settled = IndexMap::default();
+        for (var, literals) in by_var {
+            let default = default_literal_type(&literals);
+            let mut answer = self.apply_infer_holes(var);
+            if answer == var {
+                self.solve_infer_var(var, default);
+                answer = default;
+                // An argument's own type still yields to the call's expected
+                // return type, which the call's inference weighs after this
+                // walk and re-coerces the argument to (`recoerce_literal_args`).
+                if literals.iter().all(is_arg) {
+                    for expr in &literals {
+                        let own = default_literal_type(std::slice::from_ref(expr));
+                        self.record_expression_type(expr.id(), own);
+                        settled.insert(expr.id(), own);
+                    }
+                    continue;
+                }
+            }
+            for expr in &literals {
+                let ty = self.try_coerce(expr, ctx, answer).unwrap_or_else(|| {
+                    let own = default_literal_type(std::slice::from_ref(expr));
+                    if !is_arg(expr) {
+                        let (expected, found) = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .type_names_for_mismatch(answer, own);
+                        let _ = self.emit(TypeError::TypeMismatch {
+                            expected,
+                            found,
+                            span: expr.span(),
+                        });
+                    }
+                    self.try_coerce_numeric_literal(expr, own)
+                        .expect("a literal takes its own default")
+                });
+                settled.insert(expr.id(), ty);
+            }
+        }
+        settled
     }
 
     /// Try to coerce an expression to the expected type — numeric literals,

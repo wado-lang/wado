@@ -896,11 +896,13 @@ assert none == null && ok.unwrap() == 42;
 
 When both mechanisms apply, they must agree. An untyped literal takes its type from the expected type, so `let x: Option<i64> = Option::Some(42)` is an `Option<i64>`. A value whose type is already fixed must match it: with `y: i32`, `let b: Box<i64> = Box { value: y }` is a type mismatch. Backward inference fills in any parameter the values do not mention.
 
-In a generic call, a named struct literal without a turbofish, like a closure,
-is typed after the call's other arguments, against the parameter type they
-settle. With `fn pick<T>(b: Box<T>, fallback: T)` and `x: u64`,
-`pick(Box { value: 1 }, x)` is `pick::<u64>`, as `Box { value: 1 }` annotated
-`Box<u64>` would be.
+In a generic call, a numeric literal answers last wherever it stands in an
+argument. It takes the type the call's other arguments settle, so with
+`fn pick<T>(b: Box<T>, fallback: T)` and `x: u64`, `pick(Box { value: 1 }, x)`
+is `pick::<u64>`, as it would be with `&Box { value: 1 }` or with the arguments
+swapped. Only a parameter nothing else settles takes a default from its
+literals: `f64` if one of them is a float, else `i32`, else `u8` when every one
+is a byte literal.
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says
