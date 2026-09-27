@@ -991,6 +991,19 @@ test "a scale the graph computes from a shape folds to a literal" {
     assert !out.contains("let S");
 }
 
+test "a Cast of a length only the run knows converts it at run time" {
+    let source = `g (float[N, 4] X) => (float[N, 4] Y) {
+        S = Shape(X)
+        I = Constant<value_int = 0>()
+        D = Gather(S, I)
+        F = Cast<to = 1>(D)
+        Y = Div(X, F)
+    }`;
+    let out = emitted(&generate(source, [rule("X", ["Seq", "Feat"])]).unwrap());
+    assert out.contains("let D = Tensor::<i64, []> { data: [dim_N], extents: [] };");
+    assert out.contains("let F = map(&D, |v| v as f32);");
+}
+
 test "a constant folds into the operator that reads it" {
     assert folded_add(0.5).unwrap().contains("let Y = map(X, |v| v + (0.5 as f32));");
 }

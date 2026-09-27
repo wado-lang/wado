@@ -158,13 +158,19 @@ impl Poly {
     /// Whether every value of the symbols keeps this within `i64`, and every
     /// partial product and sum `forward` computes on the way, term by term.
     /// Stage 0's own algebra is exact however large it grows; this is what a
-    /// value the run computes in `i64` needs.
+    /// value the run computes in `i64` needs. A partial sum lies between the
+    /// negative terms' sum and the positive terms'.
     pub fn fits_i64(&self) -> bool {
-        let mut magnitude = 0 as i128;
+        let [mut low, mut high] = [0 as i128, 0 as i128];
         for let t of &self.terms {
-            magnitude += i128::abs(t.reach());
+            let reach = t.reach();
+            if reach < 0 {
+                low += reach;
+            } else {
+                high += reach;
+            }
         }
-        return magnitude <= i64::MAX as i128;
+        return i64::MIN as i128 <= low && high <= i64::MAX as i128;
     }
 
     /// `terms` summed into canonical form, or `None` where a sum leaves `i64`.
@@ -204,23 +210,17 @@ impl Term {
 
 /// `value`, where an `i64` holds it.
 fn narrowed(value: i128) -> Option<i64> {
-    if !(i64::MIN as i128 <= value <= i64::MAX as i128) {
-        return null;
-    }
-    return Option::Some(value as i64);
+    return match i64::try_from(value) {
+        Ok(v) => Option::Some(v),
+        Err(_) => null,
+    };
 }
 
 /// `reach` held within 2^64 either way. That is past any `i64` constant a sum
 /// adds it to, so the sum keeps the sign and the side of `i32` it would have.
 fn saturated(reach: i128) -> i128 {
     let limit = (i64::MAX as i128 + 1) * 2;
-    if reach > limit {
-        return limit;
-    }
-    if reach < -limit {
-        return -limit;
-    }
-    return reach;
+    return i128::clamp(reach, -limit, limit);
 }
 
 /// Higher degree first, then by the symbols' names, so the constant is last.
@@ -251,6 +251,9 @@ impl Poly {
         for let [i, t] of self.terms.into_iter().enumerate() {
             if i == 0 {
                 out.push_str(if t.coefficient < 0 { "-" } else { "" });
+            } else if t.coefficient == i64::MIN {
+                // Its magnitude is past `i64`, so only a negative literal spells it.
+                out.push_str(" + -");
             } else {
                 out.push_str(if t.coefficient < 0 { " - " } else { " + " });
             }

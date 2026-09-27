@@ -243,6 +243,17 @@ test "Slice steps backwards" {
     assert folded(node("Slice", ["S", "B", "E", "X0", "St"], []), k) == ints([2], [4, 2]);
 }
 
+test "Slice steps backwards over an empty axis to nothing" {
+    let k = knowns([
+        ["S", ints([0], [])],
+        ["B", ints([1], [-1])],
+        ["E", ints([1], [i64::MIN])],
+        ["X0", ints([1], [0])],
+        ["St", ints([1], [-1])],
+    ]);
+    assert folded(node("Slice", ["S", "B", "E", "X0", "St"], []), k) == ints([0], []);
+}
+
 test "Slice of a bool mask takes the corner the ends name" {
     let mut mask: List<bool> = [];
     for let r of 0..<4 {
@@ -375,6 +386,15 @@ test "Reshape infers the one negative extent" {
         ["T", ints([2], [1, -1])],
     ]);
     assert folded(node("Reshape", ["D", "T"], []), k) == ints([1, 4], [0, 1, 2, 3]);
+}
+
+test "a Reshape -1 beside extents multiplying to 0 is refused, as ONNX leaves it no extent" {
+    let k = knowns([
+        ["D", ints([0, 4], [])],
+        ["T", ints([2], [0, -1])],
+    ]);
+    let e = fold(&node("Reshape", ["D", "T"], []), &k, &runtime([2])).unwrap_err();
+    assert e == "the target shape [0, -1] leaves -1 no extent, since the rest multiply to 0";
 }
 
 test "a Reshape target no list can hold is refused, even where its product wraps to the count" {

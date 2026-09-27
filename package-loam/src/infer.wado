@@ -658,7 +658,7 @@ fn infer_node(
         let input = extents_of(node, &operand)?;
         let targets = regrouped_extents(node, known, &input).map_err(|reason| refusal(node, reason))?;
         if op == "Reshape" {
-            owe_nonzero_targets(node, known, &input, owed)?;
+            owe_reshape_target(node, known, &input, &targets, owed)?;
         }
         return regrouped(node, &operand, &targets, schema);
     }
@@ -994,21 +994,31 @@ pub fn range_count(
     return counted(node, run_count(node, owed, &start, &limit, &delta, `${start} to ${limit} must not run backwards`)?);
 }
 
-/// A `Reshape` target extent only the run knows is read as written, which is
-/// ONNX's reading save where it is 0: unless `allowzero` is set, ONNX then reads
-/// the input's extent at that position. The inputs owe that it is not, where
-/// the input's extent there is not the same length.
-fn owe_nonzero_targets(
+/// What a `Reshape` target, read as `targets`, owes where only the run knows
+/// an extent. ONNX finds no extent for a `-1` beside extents multiplying to 0,
+/// so the inputs owe that they do not. A symbolic extent is read as written,
+/// which is ONNX's reading save where it is 0: unless `allowzero` is set, ONNX
+/// then reads the input's extent at that position. The inputs owe that it is
+/// not, where the input's extent there is not the same length.
+fn owe_reshape_target(
     node: &Node,
     known: &TreeMap<String, Known>,
     input: &List<Extent>,
+    targets: &List<Extent>,
     owed: &mut List<Condition>,
 ) -> Result<(), InferError> {
+    // `regrouped_extents` has read the target.
+    let written = polys_at(node, known, 1, "shape").unwrap().unwrap();
+    if let Some(inferred) = written.position(|w| w == Poly::constant(-1)) {
+        let mut rest = *targets;
+        rest.remove(inferred);
+        let stated = count_of(&rest).expect("`reshape_extents` multiplied these");
+        let condition = `the target's extents besides -1 multiply to ${stated}, which must not be 0`;
+        owe(node, owed, difference(node, &stated, &Poly::constant(1))?, condition)?;
+    }
     if int_attr(node, "allowzero", 0)? != 0 {
         return Result::Ok(());
     }
-    // `regrouped_extents` has read the target.
-    let written = polys_at(node, known, 1, "shape").unwrap().unwrap();
     for let [i, w] of written.into_iter().enumerate() {
         if w.as_constant() matches { Some(_) } || i < input.len() && input[i].poly() == w {
             continue;

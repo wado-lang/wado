@@ -117,4 +117,13 @@ test "a polynomial fits i64 where no input carries it, or a step on the way, pas
     assert times(square, c(2)).fits_i64();
     assert !times(square, c(3)).fits_i64();
     assert !times(square, square).fits_i64();
+    // Terms of opposite signs bound the partial sums apart, each side to its own end of i64.
+    assert c(i64::MIN).fits_i64();
+    assert plus(s("N"), c(i64::MIN)).fits_i64();
+    assert !minus(c(i64::MIN), s("N")).fits_i64();
+    assert plus(times(s("N"), c(4_000_000_000)), c(-i64::MAX)).fits_i64();
+}
+
+test "a polynomial ending in i64::MIN spells a literal i64 holds" {
+    assert `${plus(s("N"), c(i64::MIN))}` == "N + -9223372036854775808";
 }

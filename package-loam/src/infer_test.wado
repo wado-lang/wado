@@ -1191,6 +1191,22 @@ test "a symbolic Reshape extent that is the input's own at its position owes not
     assert owed_by(source, layout).is_empty();
 }
 
+test "a Reshape -1 beside a symbolic extent owes that the rest do not multiply to 0" {
+    let source = `g (float[N, 4] X) => (float[N, 4] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[1] Rest = {-1}> {
+        S = Shape(X)
+        L = Slice(S, Z, One)
+        T = Concat<axis = 0>(L, Rest)
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["Row", "Col"]),
+    ];
+    assert owed_by(source, layout) == [
+        "Y = Reshape: the target's extents besides -1 multiply to N, which must not be 0 (N - 1 >= 0)",
+    ] as List<String>;
+}
+
 test "int32 arithmetic the build folds keeps the low 32 bits, as the run's int32 does" {
     let source = `g (float[1] X) => (int64[1] Y) <int32[1] A = {50000}> {
         M = Mul(A, A)

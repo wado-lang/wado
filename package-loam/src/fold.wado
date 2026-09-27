@@ -147,7 +147,10 @@ fn reshape_extents(written: &List<Poly>, input: &List<Extent>, allow_zero: bool)
         return Result::Err(`the target shape ${spelled(written)} multiplies past what a list can hold`);
     }
     let stated = count_of(&extents).unwrap();
-    if inferred >= 0 && stated != Poly::constant(0) {
+    if inferred >= 0 {
+        if stated == Poly::constant(0) {
+            return Result::Err(`the target shape ${spelled(written)} leaves -1 no extent, since the rest multiply to 0`);
+        }
         if let Some(rest) = total.divided_by(&stated) && let Some(e) = Extent::of(rest) {
             extents[inferred] = e;
         }
@@ -234,9 +237,11 @@ fn shape_of(node: &Node, known: &TreeMap<String, Known>, shapes: &TreeMap<String
     });
 }
 
-/// `i` resolved against `extent`, then held within `[lo, hi]`.
+/// `i` resolved against `extent`, then held within `[lo, hi]`. An empty axis
+/// read backwards is `[0, -1]`, which holds only `hi`: stepping back from it
+/// meets the end at once.
 fn clamped(i: i64, extent: i64, lo: i64, hi: i64) -> i64 {
-    return i64::clamp(resolve_index(i, extent), lo, hi);
+    return i64::min(i64::max(resolve_index(i, extent), lo), hi);
 }
 
 /// An ONNX index into `extent` positions, which counts from the end where negative.
@@ -406,8 +411,9 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
         let e = if s > 0 { clamped(ends[i], dim, 0, dim) } else { clamped(ends[i], dim, -1, dim - 1) };
         begin[a] = b;
         step[a] = s;
-        // `b` and `e` lie within the axis, so the count does too.
-        extents[a] = steps_over(b, e, s) as i32;
+        let count = steps_over(b, e, s);
+        assert count <= dim as i128;
+        extents[a] = count as i32;
     }
     let mut picks: List<i32> = [];
     let strides = stretched_strides(&x.extents, rank);
@@ -522,8 +528,10 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
             too_many(count)?;
             let mut values: List<i64> = [];
             for let i of 0..<count as i32 {
-                // Each value lies between `s` and `l`, though `i * d` may not.
-                values.push((s as i128 + i as i128 * d as i128) as i64);
+                // Wide, since `i * d` may leave i64 where the value does not.
+                let v = s as i128 + i as i128 * d as i128;
+                assert i128::min(s as i128, l as i128) <= v <= i128::max(s as i128, l as i128);
+                values.push(v as i64);
             }
             Result::Ok(Option::Some(Known {
                 extents: [values.len()],
