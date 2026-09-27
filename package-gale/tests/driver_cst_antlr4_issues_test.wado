@@ -1,6 +1,6 @@
-//! Grammars from open parse-bug reports in antlr/antlr4, pinned in their
-//! corrected form ("Bugs in ANTLR4 itself" in `antlr4-compatibility.md`).
-//! Each test names its issue.
+//! Grammars from parse-bug reports in antlr/antlr4. The jar answers each of
+//! these correctly, so its trees and rejections are the expected ones, and the
+//! file pins the shapes the reports found hard. Each test names its issue.
 
 use lr_optional_close from "./grammars/lr_optional_close_atom.g4"
     with {
@@ -19,7 +19,7 @@ use token_assoc from "./grammars/lr_token_assoc_ignored.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_token_assoc_ignored" },
     };
 
-fn assert_same<S: AsStrSlice>(input: S, ok: bool, actual: String, expected: String) {
+fn assert_tree(input: String, ok: bool, actual: String, expected: String) {
     assert ok, `unexpected diagnostics for ${input}: ${actual}`;
     assert actual == expected, `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
@@ -33,7 +33,7 @@ test "an atom with an optional closing token is not a prefix operator" {
         ["(a==b;", "(start (expr ( (expr (expr a) == (expr b))) ;)"],
     ] as List<[String, String]> {
         let result = lr_optional_close::parse(input);
-        assert_same(input, result.ok(), lr_optional_close::to_string_tree(&result), expected);
+        assert_tree(input, result.ok(), lr_optional_close::to_string_tree(&result), expected);
     }
 }
 
@@ -51,17 +51,21 @@ test "a list rule recursing in its own loop takes each clause" {
         ],
     ] as List<[String, String]> {
         let result = order_by::parse(input);
-        assert_same(input, result.ok(), order_by::to_string_tree(&result), expected);
+        assert_tree(input, result.ok(), order_by::to_string_tree(&result), expected);
     }
 }
 
-// #4890
+// #4890: the first diagnostic sits where the jar reports "no viable
+// alternative", on the token after the last clause.
 test "a list rule anchored by EOF rejects what follows its last clause" {
-    for let input of [
-        "agent.skill ASC DESC", "agent.skill ASC, (agent.chat.tasks + agent.email.tasks) ASC - agent.voice.tasks",
-    ] as List<String> {
+    for let [input, col] of [
+        ["agent.skill ASC DESC", 16],
+        ["agent.skill ASC, (agent.chat.tasks + agent.email.tasks) ASC - agent.voice.tasks", 60],
+    ] as List<[String, i32]> {
         let result = order_by::parse(input);
         assert !result.ok(), `accepted ${input}: ${order_by::to_string_tree(&result)}`;
+        let d = &result.diagnostics[0];
+        assert d.line == 1 && d.col == col, `${input}: first diagnostic at ${d.line}:${d.col}, expected 1:${col}`;
     }
 }
 
@@ -73,7 +77,15 @@ test "a lexer loop leaves the character the next set needs" {
         ["- [  X ] Buy milk\r\n", "(checklistFile (itemLine - [  X ] Buy milk \\r\\n))"],
     ] as List<[String, String]> {
         let result = checklist::parse(input);
-        assert_same(input, result.ok(), checklist::to_string_tree(&result), expected);
+        assert_tree(input, result.ok(), checklist::to_string_tree(&result), expected);
+    }
+}
+
+// #4813: the brackets still take exactly one mark.
+test "a lexer loop does not let the next set match nothing" {
+    for let input of ["- [] x\n", "- [xx] y\n"] as List<String> {
+        let result = checklist::parse(input);
+        assert !result.ok(), `accepted ${input}: ${checklist::to_string_tree(&result)}`;
     }
 }
 
@@ -85,6 +97,6 @@ test "assoc on a token reference is ignored and on an alternative is not" {
         ["1^2**3^4", "(s (e (e (e 1) ^ (e 2)) ** (e (e 3) ^ (e 4))))"],
     ] as List<[String, String]> {
         let result = token_assoc::parse(input);
-        assert_same(input, result.ok(), token_assoc::to_string_tree(&result), expected);
+        assert_tree(input, result.ok(), token_assoc::to_string_tree(&result), expected);
     }
 }

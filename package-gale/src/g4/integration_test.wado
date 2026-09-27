@@ -863,7 +863,14 @@ test "parse lr_optional_close_atom.g4" {
     assert g.parser_rules.len() == 2;
     assert g.parser_rules[1].alternatives.len() == 4;
     // `'(' expr ')'?` ends in the optional, not in the self-reference.
-    assert g.parser_rules[1].alternatives[1].elements[2] matches { Repeat(_) };
+    let atom = &g.parser_rules[1].alternatives[1].elements;
+    assert atom.len() == 3;
+    if let Repeat(r) = &atom[2] {
+        assert r.kind matches { Optional };
+        assert !r.non_greedy;
+    } else {
+        panic("the atom's last element should be an Optional Repeat");
+    }
 }
 
 test "parse order_by_nested_list.g4" {
@@ -891,7 +898,16 @@ test "parse lr_token_assoc_ignored.g4" {
     assert g.name == "LrTokenAssocIgnored";
     let e = &g.parser_rules[1];
     assert e.alternatives.len() == 3;
-    // Only the `**` alternative carries the option itself.
+    // The `^` alternative carries the option on its token, the `**` one on
+    // the alternative itself.
     assert e.alternatives[0].options.len() == 0;
+    if let Literal(l) = &e.alternatives[0].elements[1] {
+        assert l.text == "^";
+        assert l.options.len() == 1;
+        assert l.options[0].name == "assoc";
+    } else {
+        panic("the `^` alternative's operator should be a Literal");
+    }
     assert e.alternatives[1].options.len() == 1;
+    assert e.alternatives[1].options[0].name == "assoc";
 }
