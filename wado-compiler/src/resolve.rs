@@ -690,11 +690,16 @@ impl Resolver<'_> {
     /// Record `name` as bound in the innermost frame, reporting it first unless
     /// `allowed` waives it. A `declares` binder may not take a name the frame
     /// already binds; a refutable one taking it binds that same name again.
-    fn bind_name(&mut self, name: &str, span: Span, allowed: bool, declares: bool) {
+    /// `_` binds nothing. Answers whether it reported a redeclaration.
+    fn bind_name(&mut self, name: &str, span: Span, allowed: bool, declares: bool) -> bool {
+        if name == "_" {
+            return false;
+        }
         self.check_shadowing(name, span, allowed);
-        if let Some(first) = self.frame_mut().insert(name.to_string(), span)
-            && declares
-        {
+        let Some(first) = self.frame_mut().insert(name.to_string(), span) else {
+            return false;
+        };
+        if declares {
             self.redeclarations.push(Redeclaration {
                 module: self.module.clone(),
                 name: name.to_string(),
@@ -702,6 +707,7 @@ impl Resolver<'_> {
                 second: span,
             });
         }
+        declares
     }
 
     /// The innermost binding frame.
@@ -722,9 +728,9 @@ impl Resolver<'_> {
     /// Whether the binder being walked declares `name` afresh, rather than
     /// rebuilding the binding it hides.
     fn binder_declares(&self, name: &str) -> bool {
-        self.pending_binder
-            .as_ref()
-            .is_some_and(|p| p.declares && !p.derives(name))
+        self.pending_binder.as_ref().is_some_and(|p| {
+            p.declares && !p.reported.contains(name) && (p.bound.contains(name) || !p.derives(name))
+        })
     }
 
     /// Whether an identifier pattern binds rather than matches. `mut x` always
@@ -823,9 +829,25 @@ struct PendingBinder {
     /// may recur: `[x, x]` in an arm may read as two cases, which only the
     /// scrutinee's type tells apart.
     declares: bool,
+    /// What the alternative being walked has bound: deriving a name exempts it
+    /// from the binding it hides, not from the pattern binding it twice.
+    bound: hashmap::IndexSet<String>,
+    /// What has been reported, once each, though every alternative of an
+    /// or-pattern binds it.
+    reported: hashmap::IndexSet<String>,
 }
 
 impl PendingBinder {
+    fn new(allowed: bool, derived: Vec<String>, declares: bool) -> Self {
+        Self {
+            allowed,
+            derived,
+            declares,
+            bound: hashmap::IndexSet::default(),
+            reported: hashmap::IndexSet::default(),
+        }
+    }
+
     fn derives(&self, name: &str) -> bool {
         self.derived.iter().any(|derived| derived == name)
     }
@@ -942,15 +964,14 @@ impl AstVisitor for Resolver<'_> {
             // value binds refutably. The pattern is walked last because the
             // name it binds reaches nothing written before it, `else` included.
             ast::Stmt::Let(l) => {
-                let pending = PendingBinder {
-                    allowed: ast::attrs_allow(&l.attrs, ast::lint::SHADOWED_NAME),
-                    derived: l
-                        .value
+                let pending = PendingBinder::new(
+                    ast::attrs_allow(&l.attrs, ast::lint::SHADOWED_NAME),
+                    l.value
                         .as_ref()
                         .map(|value| derived_from(&l.pattern, value))
                         .unwrap_or_default(),
-                    declares: true,
-                };
+                    true,
+                );
                 self.visit_id(l.id, l.span);
                 if let Some(ty) = &l.ty {
                     self.visit_type(ty);
@@ -969,12 +990,7 @@ impl AstVisitor for Resolver<'_> {
             ast::Stmt::ForOf(f) => self.in_frame(|s| {
                 s.visit_id(f.id, f.span);
                 s.visit_expr(&f.iterable);
-                let element = PendingBinder {
-                    allowed: false,
-                    derived: Vec::new(),
-                    declares: true,
-                };
-                s.in_binder(element, |s| {
+                s.in_binder(PendingBinder::new(false, Vec::new(), true), |s| {
                     s.in_pattern_position(true, |s| s.visit_pattern(&f.binding));
                 });
                 s.visit_block(&f.body);
@@ -997,11 +1013,7 @@ impl AstVisitor for Resolver<'_> {
             match element {
                 ast::ConditionElement::Let { pattern, expr, .. } => {
                     self.visit_expr(expr);
-                    let pending = PendingBinder {
-                        allowed: false,
-                        derived: derived_from(pattern, expr),
-                        declares: false,
-                    };
+                    let pending = PendingBinder::new(false, derived_from(pattern, expr), false);
                     self.in_binder(pending, |s| s.visit_pattern(pattern));
                 }
                 ast::ConditionElement::Expr(e) => self.visit_expr(e),
@@ -1042,9 +1054,13 @@ impl AstVisitor for Resolver<'_> {
         // walked against the bindings the whole pattern started from.
         if let ast::Pattern::Or(alternatives) = pat {
             let before = self.frame_mut().clone();
+            let binder_before = self.pending_binder.as_ref().map(|p| p.bound.clone());
             let mut bound = before.clone();
             for alternative in alternatives {
                 self.frame_mut().clone_from(&before);
+                if let (Some(p), Some(names)) = (&mut self.pending_binder, &binder_before) {
+                    p.bound.clone_from(names);
+                }
                 self.visit_pattern(alternative);
                 bound.extend(self.frame_mut().drain(..));
             }
@@ -1057,7 +1073,13 @@ impl AstVisitor for Resolver<'_> {
         {
             let exempt = self.binder_exempts(name);
             let declares = self.binder_declares(name);
-            self.bind_name(name, *span, exempt, declares);
+            let redeclared = self.bind_name(name, *span, exempt, declares);
+            if let Some(p) = &mut self.pending_binder {
+                p.bound.insert(name.clone());
+                if redeclared {
+                    p.reported.insert(name.clone());
+                }
+            }
         }
         ast::walk_pattern(self, pat);
     }
@@ -1292,6 +1314,38 @@ mod tests {
             other_source,
             modules,
         )
+    }
+
+    fn redeclared_names(entry: &str) -> Vec<String> {
+        let (r, _, _) = resolve(entry, "");
+        r.redeclarations().iter().map(|d| d.name.clone()).collect()
+    }
+
+    /// One mistake, one report: a binder reports a name once however many
+    /// alternatives bind it, and deriving a name from the binding it hides
+    /// does not let the pattern bind it twice.
+    #[test]
+    fn a_binder_reports_each_redeclared_name_once() {
+        assert_eq!(
+            redeclared_names(
+                "variant V { A(i32), B(i32) }\n\
+                 fn f(v: V) { let x = 1; let A(x) | B(x) = v else { return; }; }"
+            ),
+            ["x"]
+        );
+        assert_eq!(
+            redeclared_names("fn f() { let x = 1; let [x, x] = [x, 2]; }"),
+            ["x"]
+        );
+    }
+
+    /// `_` binds nothing, so no parameter list repeats it.
+    #[test]
+    fn underscore_parameters_redeclare_nothing() {
+        assert_eq!(
+            redeclared_names("fn f(_: i32, _: i32) { let g = |_: i32, _: i32| 0; }"),
+            Vec::<String>::new()
+        );
     }
 
     /// The prelude tier is in scope in every module, so only a name that reaches
