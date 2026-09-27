@@ -1,0 +1,28 @@
+// A function that installs a handler takes a concrete effect.
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct MockCounter {
+    value: i32,
+}
+
+impl Counter for MockCounter {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+global mut SEEN: i32 = 0;
+
+fn with_mock_counter(f: fn() with Counter) {
+    let mut c = MockCounter { value: 0 };
+    with Counter => &mut c do { f(); }
+}
+
+test {
+    with_mock_counter(|| { SEEN = Counter::next() + Counter::next(); });
+    assert SEEN == 3;   // the mock answered 1, then 2
+}

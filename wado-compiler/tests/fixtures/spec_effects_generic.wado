@@ -1,0 +1,19 @@
+// An effect parameter stands for the effects of the closures a call passes.
+use { println, Stdout } from "core:cli";
+
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn map<T, U, effect E>(arr: List<T>, f: fn(T) -> U with E) -> List<U> with E {
+    let mut out: List<U> = [];
+    for let x of arr {
+        out.push(f(x));
+    }
+    return out;
+}
+
+test {
+    wrapper(|| { println("x"); });   // E = Stdout, which a test block holds
+    assert map([1, 2], |x: i32| x * 10) == [10, 20];   // E = (none)
+}

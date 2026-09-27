@@ -1,0 +1,24 @@
+// Range expressions, their literal-bound check, and iteration.
+
+test "range types" {
+    let a: RangeExclusive<i32> = 0..<10;     // 0 up to, but not including, 10
+    let b: RangeInclusive<i32> = 1..=10;     // 1 through 10
+    let c: RangeInclusive<char> = 'a'..='z';
+    let d: RangeExclusive<f64> = 0.0..<1.0;
+    assert !a.contains(&10) && b.contains(&10) && c.contains(&'q') && d.contains(&0.5);
+}
+
+test "an empty literal range" {
+    let c = 5..<5;            // OK: empty
+    assert c.is_empty();
+}
+
+test "iteration" {
+    let mut seen: List<i32> = [];
+    for let i of 0..<3 { seen.push(i); }
+    assert seen == [0, 1, 2];
+    let sum = (1..=100).fold(0, |acc, x| acc + x);
+    assert sum == 5050;
+    let steps = (0..<10).step_by(3).collect();
+    assert steps == [0, 3, 6, 9];
+}

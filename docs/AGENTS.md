@@ -22,8 +22,10 @@ The specification states exactly how the language should behave. It is not the
 place for implementation details or bugs. Where the compiler falls short of a
 rule, the shortfall is a known gap in the WEP that proposed the rule.
 
-A `wado` code block quotes an e2e fixture, named in an HTML comment before it
-(`<!-- {"fixture": "name.wado"} -->`). `mise run check-spec-examples` holds this, and
+A `wado` code block quotes an e2e fixture or a source file, named in an HTML
+comment before it (`<!-- {"fixture": "name.wado"} -->`, or
+`<!-- {"source": "path/from/root"} -->`). `mise run check-spec-examples` holds
+this, and
 [WEP: Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md) says
 what it asks of the block and the fixture.
 

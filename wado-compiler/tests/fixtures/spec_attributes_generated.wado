@@ -1,0 +1,14 @@
+// Quoted by docs/spec-attributes.md § `#![generated]`: each shape of the
+// attribute, bare and with metadata, on a module that compiles as any other.
+
+#![generated]
+
+#![generated(by = "wado-from-idl", sources = ["deps/random.wit"])]
+
+#![generated(by = "wado-from-idl", sources = ["cli.wit", "clocks.wit"])]
+
+fn roll() -> i32 { return 4; }
+
+test {
+    assert roll() == 4;   // the attribute does not change how it compiles
+}

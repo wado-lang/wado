@@ -1,0 +1,26 @@
+// `struct` and `type` may be declared inside a function body.
+
+fn area(width: i32, height: i32) -> i32 {
+    struct Size {
+        width: i32,
+        height: i32,
+    }
+    let s = Size { width, height };
+    return s.width * s.height;
+}
+
+test {
+    assert area(3, 4) == 12;
+}
+
+fn wrap<T>(value: T) -> T {
+    struct Box<T> {
+        value: T,
+    }
+    let b = Box { value };
+    return b.value;
+}
+
+test {
+    assert wrap("boxed") == "boxed";
+}

@@ -1,0 +1,20 @@
+// A contextual keyword is an ordinary identifier outside its keyword position.
+
+test {
+    // 'of' as a variable name
+    let of = 42;
+    assert of == 42;
+
+    // 'of' as a struct field
+    struct Item { of: i32 }
+    let item = Item { of: 10 };
+    assert item.of == 10;
+
+    // 'of' as a for-of binding
+    let arr: List<i32> = [1, 2, 3];
+    let mut sum = 0;
+    for let of of arr {
+        sum += of;
+    }
+    assert sum == 6;
+}

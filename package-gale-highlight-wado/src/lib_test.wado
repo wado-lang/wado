@@ -72,6 +72,10 @@ test "highlight contextual keyword used as a value binder" {
     assert parse(&src).ok(), "parse failed";
 }
 
+test "a struct pattern may hold the rest marker alone" {
+    assert_highlights("fn f(p: Point) -> bool { return p matches { Point { .. } }; }\n");
+}
+
 test "highlight tagged template" {
     // A tag is the function the template calls. A qualified tag's owner is a
     // `::` head like any other, so it stays uncoloured; the template itself

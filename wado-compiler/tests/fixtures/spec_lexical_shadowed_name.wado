@@ -1,0 +1,22 @@
+// A binder that takes a name already reaching a known symbol is legal and warns.
+use { println } from "core:cli";
+
+struct Point { x: i32 }
+
+fn draw(Point: i32) { }        // warns: `Point` shadows the struct of the same name
+fn keep<i32>(v: i32) { }       // warns: `i32` shadows the builtin type of the same name
+
+test {
+    let println = 1;           // warns: `println` shadows the function of the same name
+    assert println == 1;
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_contains": [
+        "`Point` shadows the struct of the same name",
+        "`i32` shadows the builtin type of the same name",
+        "`println` shadows the function of the same name"
+    ]
+}

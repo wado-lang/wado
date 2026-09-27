@@ -1,0 +1,18 @@
+// A marker impl asks the compiler to write the serde methods.
+
+use { to_string, from_string } from "core:json";
+use { Serialize, Deserialize } from "core:serde";
+
+struct User {
+    name: String,
+    age: i32,
+}
+
+impl Serialize for User;      // compiler generates serialize method
+impl Deserialize for User;    // compiler generates deserialize method
+
+test {
+    let json = to_string(&User { name: "Ann", age: 30 }).unwrap();
+    assert json == `{"name":"Ann","age":30}`;
+    assert from_string::<User>(json).unwrap().age == 30;
+}

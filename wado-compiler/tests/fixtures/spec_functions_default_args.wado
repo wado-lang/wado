@@ -1,0 +1,76 @@
+// Default arguments: filled at the call site, evaluated per call, reading
+// earlier parameters and the call's type arguments.
+
+fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) -> String { return `${host}:${port}/${timeout}`; }
+
+test "trailing defaults" {
+    assert connect("localhost") == "localhost:8080/30";           // → connect("localhost", 8080, 30)
+    assert connect("localhost", 3000) == "localhost:3000/30";     // → connect("localhost", 3000, 30)
+    assert connect("localhost", 3000, 60) == "localhost:3000/60";
+}
+
+struct Config {
+    name: String,
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+fn foo(
+    x: i32 = 0,                   // literal
+    y: f64 = f64::PI,             // associated constant
+    z: String = `default`,        // template string
+    w: Option<Config> = null,     // Option::None
+    v: Color = Color::Red,        // enum case
+    u: i32 = i32::max(1, 2),      // pure function call
+) -> String { return `${x} ${y:.2} ${z} ${w matches { None }} ${v} ${u}`; }
+
+test "default expressions" {
+    assert foo() == "0 3.14 default true Red 2";
+    assert foo(1, 0.5, "s", Option::Some(Config { name: "c" }), Color::Green, 7) == "1 0.50 s false Green 7";
+}
+
+struct Rect {
+    width: f64,
+    height: f64,
+}
+
+global mut CALLS: i32 = 0;
+
+fn next() -> i32 {
+    CALLS += 1;
+    return CALLS;
+}
+
+fn make_rect(width: f64, height: f64 = width) -> Rect { return Rect { width, height }; }
+
+fn twice(a: i32, b: i32 = a + a) -> i32 { return b; }
+
+test "a default names an earlier parameter" {
+    assert make_rect(10.0).height == 10.0;   // → make_rect(10.0, 10.0)
+
+    assert twice(next()) == 2;               // `next()` runs once
+    assert CALLS == 1;
+}
+
+struct S {
+    o: Option<i32>,
+}
+
+fn peek(o: &mut Option<i32>) -> i32 { return o.unwrap_or(0); }
+
+fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { *o = Option::Some(v); }
+
+test "a default borrows a `&mut` parameter's place again" {
+    let mut s = S { o: Option::Some(1) };
+    put(&mut s.o);                   // → put(&mut s.o, peek(&mut s.o) + 1)
+    assert s.o == Option::Some(2);
+}
+
+fn info<T: Default>(msg: String, fields: T = T::default()) -> String { return `${msg} ${fields:?}`; }
+
+test "a default names a type parameter" {
+    assert info::<i32>("count") == "count 0";  // → info::<i32>("count", 0)
+}

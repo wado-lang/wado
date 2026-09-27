@@ -1,0 +1,9 @@
+// A `&mut self` method needs a `mut` binding.
+
+test {
+    let xs: List<i32> = [1, 2, 3];
+    xs.push(4);      // Error: `push` takes `&mut self`
+}
+
+__DATA__
+{"compile_error": "cannot call `&mut self` method `push` on immutable 'xs'"}

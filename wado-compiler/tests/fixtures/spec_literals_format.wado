@@ -1,0 +1,83 @@
+// Template strings, interpolation and format specifiers.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "template strings" {
+    let name = "Alice";
+    let greeting = `Hello, ${name}!`;
+    let json = `{"key": "${name}"}`;
+    assert greeting == "Hello, Alice!" && json == "{\"key\": \"Alice\"}";
+
+    let pi = 3.14159;
+    let formatted = `Pi: ${pi:.2}`;
+    let p = Point { x: 10, y: 20 };
+    let debug = `${p:?}`;
+    assert formatted == "Pi: 3.14" && debug == "Point { x: 10, y: 20 }";
+}
+
+test "interpolation" {
+    let x = 41;
+    let p = Point { x: 10, y: 20 };
+    let arr: List<i32> = [1, 2, 3];
+    assert `${x + 1}` == "42";
+    assert `${x * 2:x}` == "52";
+    assert `${p.x + p.y}` == "30";
+    assert `${arr.len()}` == "3";
+}
+
+test "width, fill and alignment" {
+    assert `${42:5}` == "   42";
+    assert `${42:<5}` == "42   ";
+    assert `${42:^5}` == " 42  ";
+    assert `${42:_>5}` == "___42";
+    assert `${"あい":>6}` == "    あい";  // two characters, six bytes
+    assert `${42:€>8}` == "€€€€€€42";
+}
+
+test "sign and zero padding" {
+    assert `${42:+}` == "+42";
+    assert `${42:05}` == "00042";
+    assert `${-42:08}` == "-0000042";
+    assert `${-42:*<08}` == "-0000042";
+    assert `${42:#08x}` == "0x00002a";
+    assert `${-1200.0:012e}` == "-0000001.2e3";
+}
+
+test "precision" {
+    let s = "hello world";
+    assert `${s:.5}` == "hello";
+    assert `${s:.5?}` == "\"hello\"...";
+    assert `${s:.20}` == "hello world";
+
+    let a: List<i32> = [1, 2, 3, 4, 5];
+    assert `${a:.3}` == "[1, 2, 3]";
+    assert `${a:.3?}` == "[1, 2, 3, ...]";
+}
+
+struct Celsius { degrees: i32 }
+
+impl Display for Celsius {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(`${self.degrees}°C`);
+    }
+}
+
+test {
+    assert `${Celsius { degrees: 21 }:>8}` == "    21°C";
+}
+
+test "alternate inspect" {
+    let arr: List<i32> = [1, 2, 3];
+    assert `${arr:#?}` == "[\n  1,\n  2,\n  3,\n]";
+    assert `${Option::Some(42):#?}` == "Option::Some(\n  42,\n)";
+    assert `${Point { x: 1, y: 2 }:#?}` == "Point {\n  x: 1,\n  y: 2,\n}";
+}
+
+test "inspect truncation" {
+    let long = "a".repeat(300);
+    assert `${long}`.len() == 300;
+    assert `${long:?}`.len() == 261;  // two quotes, 256 characters, and "..."
+}

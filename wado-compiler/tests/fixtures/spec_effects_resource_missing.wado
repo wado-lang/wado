@@ -1,0 +1,13 @@
+// Calling a resource's constructor without holding the resource is an error.
+use { TcpSocket, IpAddressFamily } from "wasi:sockets";
+
+fn bad() {
+    let _ = TcpSocket::create(IpAddressFamily::Ipv4);        // ERROR: missing resource 'TcpSocket'
+}
+
+test {
+    bad();
+}
+
+__DATA__
+{"compile_error":"missing resource 'TcpSocket' required by 'TcpSocket::create'"}

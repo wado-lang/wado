@@ -91,14 +91,12 @@ fn "tmpl_hoist_escape_unsafe.wado/run"() with Stdout {
     let start_53: i32;
     let end: i32;
     let ref_val: ref "core:prelude/string.wado//String";
-    let message_72: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
-    let rx_80: i32;
-    let tx_81: i32;
-    let $sroa_$iter_2_repr_90: ref "Array<core:prelude/string.wado/String>";
-    let $sroa_$iter_2_index_91: i32;
-    let $av_113: i32;
+    let rx_79: i32;
+    let tx_80: i32;
+    let $sroa_$iter_2_repr_89: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_$iter_2_index_90: i32;
     elements = array.new_fixed<ref "core:prelude/string.wado//String">();
     kept = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: 0 };
     i_1 = 0;
@@ -152,19 +150,17 @@ fn "tmpl_hoist_escape_unsafe.wado/run"() with Stdout {
         };
     };
     end = kept.used;
-    $sroa_$iter_2_repr_90 = kept.repr;
-    $sroa_$iter_2_index_91 = 0;
+    $sroa_$iter_2_repr_89 = kept.repr;
+    $sroa_$iter_2_index_90 = 0;
     b8: block {
         l9: loop {
-            break_if b8 $sroa_$iter_2_index_91 >= end;
-            ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_2_repr_90, $sroa_$iter_2_index_91);
-            $sroa_$iter_2_index_91 = $sroa_$iter_2_index_91 + 1;
-            $av_113 = ref_val.used;
-            message_72 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = ref_val.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_113); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_113); $array_clone_dst_2), used: $av_113 };
-            rx_80 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-            tx_81 = builtin::i32_wrap_i64(packed >> 32_i64);
-            handle = "tmpl_hoist_escape_unsafe.wado/$cm_binding__Stdout_write_via_stream"(rx_80);
-            "core:rt/write_string_to_stream$spec0"(tx_81, message_72.repr, $av_113);
+            break_if b8 $sroa_$iter_2_index_90 >= end;
+            ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_2_repr_89, $sroa_$iter_2_index_90);
+            $sroa_$iter_2_index_90 = $sroa_$iter_2_index_90 + 1;
+            rx_79 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+            tx_80 = builtin::i32_wrap_i64(packed >> 32_i64);
+            handle = "tmpl_hoist_escape_unsafe.wado/$cm_binding__Stdout_write_via_stream"(rx_79);
+            "core:rt/write_string_to_stream$spec0"(tx_80, ref_val.repr, ref_val.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
             continue l9;
         };

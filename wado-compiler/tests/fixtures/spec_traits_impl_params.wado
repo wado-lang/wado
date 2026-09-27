@@ -1,0 +1,27 @@
+// An impl declares its type parameters in `impl<...>`.
+
+struct Stack<T> { items: List<T> }
+struct Table<K, V> { keys: List<K>, values: List<V> }
+
+impl<T> Stack<T> {                    // inherent
+    fn size(&self) -> i32 { return self.items.len(); }
+}
+impl<T: Ord> Stack<T> {               // with a bound
+    fn is_sorted(&self) -> bool { return self.items == self.items.sorted(); }
+}
+impl<K: Ord, V> Table<K, V> {         // every parameter listed
+    fn len(&self) -> i32 { return self.keys.len(); }
+}
+impl<T> Default for Stack<T> {        // trait implementation
+    fn default() -> Stack<T> { return Stack { items: [] }; }
+}
+impl Display for Stack<i32> {         // one instantiation declares none
+    fn fmt(&self, f: &mut Formatter) { f.write_str(`${self.items.len()} ints`); }
+}
+
+test {
+    let s = Stack { items: [1, 2] };
+    assert s.size() == 2 && s.is_sorted() && `${s}` == "2 ints";
+    assert Stack::<String>::default().size() == 0;
+    assert Table { keys: [1], values: ["one"] }.len() == 1;
+}

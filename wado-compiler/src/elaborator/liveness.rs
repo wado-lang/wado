@@ -12,7 +12,6 @@ use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
     type_head_name,
 };
-use crate::attribute::EXPORT;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::token::Span;
@@ -93,9 +92,8 @@ pub(crate) fn compute(
                     graph.add_function_edges(func, references, &key);
                     // `export` implies `Visibility::Public`, so this subsumes
                     // `is_export`; the other two catch roots with no visibility
-                    // modifier (a raw Wasm export, or a misdeclared entry point).
+                    // modifier (a misdeclared entry point, or a compiler item).
                     if func.visibility.is_public()
-                        || has_export_attr(func)
                         || world_export_names.contains(&func.name)
                         || compiler_named.names_function(source, &func.name)
                     {
@@ -972,8 +970,8 @@ fn union(a: &IndexSet<AstId>, b: &IndexSet<AstId>) -> IndexSet<AstId> {
 struct Graph {
     /// `owner -> called items`.
     edges: IndexMap<AstId, Vec<AstId>>,
-    /// Production roots (world exports, `pub` / `export` items, `#[export]`,
-    /// methods, struct-field defaults) — seeds of the `E` closure.
+    /// Production roots (world exports, `pub` / `export` items, methods,
+    /// struct-field defaults) — seeds of the `E` closure.
     export_seeds: Vec<AstId>,
     /// `test` block roots — seeds of the `T` closure.
     test_seeds: Vec<AstId>,
@@ -1160,11 +1158,6 @@ impl CompilerNamed {
             .get(source)
             .is_some_and(|names| names.contains(name))
     }
-}
-
-/// `#[export]` marks a raw Wasm export — an export-boundary root.
-fn has_export_attr(func: &Function) -> bool {
-    func.attrs.iter().any(|attr| attr.name == EXPORT)
 }
 
 #[cfg(test)]

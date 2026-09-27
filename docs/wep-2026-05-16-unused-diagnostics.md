@@ -109,7 +109,6 @@ The pass runs two independent reachability closures over the same call graph:
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `pub` / `export` items                    | `Visibility::Public` on a function or global (`export ⟹ pub`); the package-external boundary                            |
 | Items satisfying world-export contracts   | Functions whose name and signature satisfy a world export (`command` / `service` / `lib`); identified during `annotate` |
-| `#[export]`-attributed items              | Raw Wasm exports                                                                                                        |
 | Items in `wasm_module_sources` re-exports | Bridged Wasm module exports                                                                                             |
 | impl methods                              | Seeded live as call-graph intermediaries (method-level dead detection deferred)                                         |
 | Declared methods no dispatch fact names   | An `interface` / `resource` operation, or a method carrying a parameter default. See below                              |
@@ -127,7 +126,7 @@ only from a test is therefore reported, not silently kept alive — the behaviou
 Rust's test-build masks. Reify still gates emission on `live_items = E ∪ T`, so
 test-reachable code compiles (in non-test worlds the optimize-time DCE drops it).
 
-The `#[export]` / world-export part of the production root set matches the
+The world-export part of the production root set matches the
 existing optimize-time DCE root set in `optimize/dce.rs`
 (`compute_reachable_from_entries`); the liveness pass restates them at the
 source level so reachability can be computed before TIR is emitted.

@@ -12,7 +12,9 @@ use crate::token::Span;
 use crate::unparse::binary_op_str;
 
 use super::Elaborator;
-use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
+use super::coercion::{
+    is_numeric_literal_expr, is_primitive_literal_target, numeric_literal_pair_order,
+};
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
@@ -111,22 +113,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
 
         if left_is_numeric_literal && !right_is_numeric_literal {
-            // Resolve right first, then coerce left
             let right = self.resolve_expr(right_ast, ctx, expected_type);
-            let coerce_type = if self.tysys.type_table.borrow().is_numeric(right) {
-                // Primitive type: coerce literal to the same type
+            let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), right)
+            {
                 Some(right)
             } else {
-                // Struct type: look up operator trait and use self type for lhs literal
                 self.find_operator_self_type(right, &op)
             };
             let left = self.resolve_expr(left_ast, ctx, coerce_type);
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
-            // Resolve left first, then coerce right
             let left = self.resolve_expr(left_ast, ctx, expected_type);
-            let coerce_type = if self.tysys.type_table.borrow().is_numeric(left) {
-                // Primitive type: coerce literal to the same type
+            let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), left)
+            {
                 Some(left)
             } else {
                 // Struct type: the literal has no type yet, so its class is

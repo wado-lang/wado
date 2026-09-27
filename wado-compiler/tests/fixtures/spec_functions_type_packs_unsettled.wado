@@ -1,0 +1,17 @@
+// A tuple holding two packs settles neither, and is checked against the arity
+// something else fixes.
+
+fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { return 2; }
+
+fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { return 3; }
+
+test {
+    joined([[1], [true]], [1, true, "x"]);    // ERROR: expected `[i32, bool]`
+    middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `K`, `Post`
+}
+
+__DATA__
+{
+    "compile_error": "type mismatch: expected '[i32, bool]', found '[i32, bool, String]'",
+    "compile_errors_contains": ["cannot infer type parameter `Pre`, `K`, `Post` of function `middle`; add a turbofish (`middle::<...>()`) or a type annotation"]
+}

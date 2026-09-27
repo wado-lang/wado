@@ -1,0 +1,54 @@
+// Type parameter defaults on functions and structs.
+use { Serialize } from "core:serde";
+use { to_string } from "core:json";
+
+pub struct NoFields {}
+
+struct Fields {
+    user: i32,
+}
+
+pub fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}) -> String { return `${message} ${to_string(&fields).unwrap()}`; }
+
+test "an omitted turbofish takes the default" {
+    let f = Fields { user: 1 };
+    assert info("started") == "started {}";                         // → info::<NoFields>("started", NoFields {})
+    assert info::<Fields>("started", f) == "started {\"user\":1}";
+}
+
+trait Mark with () {
+    fn bias() -> i32;
+}
+
+impl Mark for Zero {
+    fn bias() -> i32 { return 0; }
+}
+
+struct One {}
+
+impl Mark for One {
+    fn bias() -> i32 { return 100; }
+}
+
+impl<M: Mark> Marked<M> {
+    fn total(&self) -> i32 { return self.value + M::bias(); }
+}
+
+struct Zero {}
+struct Marked<M: Mark = Zero> { value: i32 }
+
+fn f<Zero: Mark>(probe: Zero) -> i32 {
+    let m: Marked = Marked { value: 1 };  // the module's `Zero`, not `f`'s
+    return m.total();
+}
+
+test {
+    assert f(One {}) == 1;                // not 101: `f`'s `Zero` is `One` here
+}
+
+struct Both<A, B = A> { v: A }        // OK: `B` takes `A`'s argument
+
+test {
+    let b: Both<i32> = Both { v: 1 };
+    assert b.v == 1;
+}

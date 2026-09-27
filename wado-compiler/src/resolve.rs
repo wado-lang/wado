@@ -289,7 +289,8 @@ impl Resolutions {
                 effect_binders: &mut effect_binders,
                 pending_binder: None,
                 pattern_site: PatternSite::Test,
-                pattern_start: None,
+                pattern_names: None,
+                reported_in_pattern: hashmap::IndexSet::default(),
                 lint_shadowing: !module.has_generated()
                     && !ast::inner_attrs_allow(module.inner_attributes(), ast::lint::SHADOWED_NAME),
             };
@@ -583,10 +584,12 @@ struct Resolver<'a> {
     lint_shadowing: bool,
     pending_binder: Option<PendingBinder>,
     pattern_site: PatternSite,
-    /// While a pattern is walked, how many names the innermost frame held when
-    /// it started. The names past it are the pattern's own, which reach none of
-    /// its sites.
-    pattern_start: Option<usize>,
+    /// While a pattern is walked, the names it has bound, which reach none of
+    /// its sites. A name it rebinds from the binding it hides is among them.
+    pattern_names: Option<hashmap::IndexSet<String>>,
+    /// The names the pattern being walked has reported as redeclared, once
+    /// each though every alternative of an or-pattern declares them.
+    reported_in_pattern: hashmap::IndexSet<String>,
 }
 
 impl Resolver<'_> {
@@ -701,19 +704,29 @@ impl Resolver<'_> {
         if let Some(frame) = self.bindings.last_mut() {
             frame.insert(name.to_string(), span);
         }
+        if let Some(names) = &mut self.pattern_names {
+            names.insert(name.to_string());
+        }
     }
 
     /// [`Self::bind_name`] for a declaration — a parameter, or a name a `let`,
     /// `for let … of` or tuple comprehension binds — whose names enter the
     /// innermost scope, reporting a redeclaration instead where one is.
     fn declare_name(&mut self, name: &str, span: Span, allowed: bool) {
+        if name == "_" {
+            return;
+        }
         match self.bindings.last().and_then(|frame| frame.get(name)) {
-            Some(&first) if self.redeclares(name) => self.redeclarations.push(Redeclaration {
-                module: self.module.clone(),
-                name: name.to_string(),
-                first,
-                second: span,
-            }),
+            Some(&first) if self.redeclares(name) => {
+                if self.reported_in_pattern.insert(name.to_string()) {
+                    self.redeclarations.push(Redeclaration {
+                        module: self.module.clone(),
+                        name: name.to_string(),
+                        first,
+                        second: span,
+                    });
+                }
+            }
             _ => self.bind_name(name, span, allowed),
         }
     }
@@ -779,10 +792,9 @@ impl Resolver<'_> {
 
     /// Whether the pattern being walked bound `name` itself.
     fn bound_by_pattern(&self, name: &str) -> bool {
-        let (Some(start), Some(innermost)) = (self.pattern_start, self.bindings.last()) else {
-            return false;
-        };
-        innermost.get_index_of(name).is_some_and(|i| i >= start)
+        self.pattern_names
+            .as_ref()
+            .is_some_and(|names| names.contains(name))
     }
 
     /// A condition's bindings reach the `then` block and stop there, so the
@@ -1034,10 +1046,11 @@ impl AstVisitor for Resolver<'_> {
     /// through the `ns$Type` alias when it arrived through a namespace import,
     /// the same spelling a struct *literal*'s name uses.
     fn visit_pattern(&mut self, pat: &ast::Pattern) {
-        if self.pattern_start.is_none() {
-            self.pattern_start = Some(self.bindings.last().map_or(0, IndexMap::len));
+        if self.pattern_names.is_none() {
+            self.pattern_names = Some(hashmap::IndexSet::default());
             self.visit_pattern(pat);
-            self.pattern_start = None;
+            self.pattern_names = None;
+            self.reported_in_pattern.clear();
             return;
         }
         if let ast::Pattern::Struct {
@@ -1054,19 +1067,26 @@ impl AstVisitor for Resolver<'_> {
         // walked against the bindings the whole pattern started from.
         if let ast::Pattern::Or(alternatives) = pat {
             let before = self.bindings.last().cloned().unwrap_or_default();
+            let names_before = self.pattern_names.clone();
             let mut bound = before.clone();
+            let mut names = names_before.clone();
             for alternative in alternatives {
                 if let Some(frame) = self.bindings.last_mut() {
                     frame.clone_from(&before);
                 }
+                self.pattern_names.clone_from(&names_before);
                 self.visit_pattern(alternative);
                 if let Some(frame) = self.bindings.last() {
                     bound.extend(frame.iter().map(|(name, &span)| (name.clone(), span)));
+                }
+                if let (Some(all), Some(these)) = (&mut names, &self.pattern_names) {
+                    all.extend(these.iter().cloned());
                 }
             }
             if let Some(frame) = self.bindings.last_mut() {
                 *frame = bound;
             }
+            self.pattern_names = names;
             return;
         }
         // A bare name that a case answers binds nothing, and neither does one
@@ -1322,6 +1342,38 @@ mod tests {
             other_source,
             modules,
         )
+    }
+
+    fn redeclared_names(entry: &str) -> Vec<String> {
+        let (r, _, _) = resolve(entry, "");
+        r.redeclarations().iter().map(|d| d.name.clone()).collect()
+    }
+
+    /// One mistake, one report: a binder reports a name once however many
+    /// alternatives bind it, and deriving a name from the binding it hides
+    /// does not let the pattern bind it twice.
+    #[test]
+    fn a_binder_reports_each_redeclared_name_once() {
+        assert_eq!(
+            redeclared_names(
+                "variant V { A(i32), B(i32) }\n\
+                 fn f(v: V) { let x = 1; let A(x) | B(x) = v else { return; }; }"
+            ),
+            ["x"]
+        );
+        assert_eq!(
+            redeclared_names("fn f() { let x = 1; let [x, x] = [x, 2]; }"),
+            ["x"]
+        );
+    }
+
+    /// `_` binds nothing, so no parameter list repeats it.
+    #[test]
+    fn underscore_parameters_redeclare_nothing() {
+        assert_eq!(
+            redeclared_names("fn f(_: i32, _: i32) { let g = |_: i32, _: i32| 0; }"),
+            Vec::<String>::new()
+        );
     }
 
     /// The prelude tier is in scope in every module, so only a name that reaches

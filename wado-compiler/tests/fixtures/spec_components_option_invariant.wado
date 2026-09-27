@@ -1,0 +1,19 @@
+// A generic type is invariant: an `Option` of a child is not an `Option` of
+// its parent.
+
+#[cm("example:dom/node", linearity = "unrestricted", classes = "0..=2")]
+resource Node {}
+
+#[cm("example:dom/element", linearity = "unrestricted", classes = "1..=2")]
+resource Element extends Node {}
+
+#[cm("example:dom/html-input-element", linearity = "unrestricted", classes = "2..=2")]
+resource HtmlInputElement extends Element {}
+
+fn widen(input: HtmlInputElement) {
+    let r: Option<HtmlInputElement> = Option::Some(input);
+    let n: Option<Node> = r;                    // ERROR: Option is invariant
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'Option<Node>', found 'Option<HtmlInputElement>'"}

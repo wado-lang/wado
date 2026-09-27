@@ -1,0 +1,16 @@
+// `with _` is sugar for a fresh `<effect E> with E`, one per signature.
+
+global mut TRACE: String = "";
+
+fn wrapper(f: fn() with _) with _ { f(); }      // == fn wrapper<effect E>(f: fn() with E) with E
+
+fn combine(f: fn() with _, g: fn() with _) with _ {
+    f();
+    g();
+}
+
+test {
+    wrapper(|| { TRACE.push_str("w"); });
+    combine(|| { TRACE.push_str("f"); }, || { TRACE.push_str("g"); });
+    assert TRACE == "wfg";
+}

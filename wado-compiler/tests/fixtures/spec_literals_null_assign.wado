@@ -1,0 +1,9 @@
+// A `let` settles a bare `null` to `Option<!>`, which no `Some` fits.
+
+test {
+    let mut x = null;
+    x = Option::Some(1);                 // Error: expected Option<!>
+}
+
+__DATA__
+{"compile_error":"type mismatch: expected 'Option<!>', found 'Option<i32>'"}

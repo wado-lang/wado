@@ -1,0 +1,22 @@
+// A `with ... do` as a closure body goes in parentheses or a block.
+
+interface Log {
+    fn emit(message: String);
+}
+
+struct Sink {
+    lines: List<String> = [],
+}
+
+impl Log for Sink {
+    fn emit(&mut self, message: String) {
+        self.lines.push(message);
+    }
+}
+
+test {
+    let mut sink = Sink {};
+    let mut f = || (with Log => &mut sink do { Log::emit(`hi`); });
+    f();
+    assert sink.lines == ["hi"];
+}

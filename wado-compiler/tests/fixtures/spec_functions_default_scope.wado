@@ -1,0 +1,11 @@
+// A default resolves its names where it was declared, not at the call site.
+
+// sub/spec_functions_default_scope_lib.wado:
+//     global DEFAULT_PORT: i32 = 8080;             // private to that module
+//     pub fn connect(host: String, port: i32 = DEFAULT_PORT) -> i32 { return port; }
+use { connect } from "./sub/spec_functions_default_scope_lib.wado";
+
+test {
+    let DEFAULT_PORT = 1;
+    assert connect("localhost") == 8080;            // port is the library's 8080
+}

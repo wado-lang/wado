@@ -1,0 +1,11 @@
+// `Default` through a static call and through a bound.
+
+fn make_default<T: Default>() -> T { return T::default(); }
+
+test {
+    assert i32::default() == 0;
+    assert String::default() == "";
+
+    assert make_default::<i32>() == 0;
+    assert make_default::<List<String>>() == [];
+}

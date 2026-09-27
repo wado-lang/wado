@@ -1,0 +1,13 @@
+// A resource reached through a borrow cannot be returned.
+use { Fields } from "wasi:http";
+
+struct Holder { f: Fields }
+
+impl Holder {
+    fn peek(&self) -> Fields {
+        return self.f;       // ERROR: cannot move resource `Fields` out of a borrow
+    }
+}
+
+__DATA__
+{"compile_error": "cannot move resource `Fields` out of a borrow"}

@@ -103,16 +103,16 @@ fn "ctfe_fold_view_append_wir.wado/run"() with Stdout {
     let rx_61: i32;
     let tx_62: i32;
     let handle_70: i32;
-    let repr_93: ref Array<u8>;
-    let new_used_109: i32;
-    let start_110: i32;
-    let packed_112: i64;
-    let rx_113: i32;
-    let tx_114: i32;
-    let repr_130: ref Array<u8>;
+    let repr_92: ref Array<u8>;
+    let new_used_108: i32;
+    let start_109: i32;
+    let packed_111: i64;
+    let rx_112: i32;
+    let tx_113: i32;
+    let repr_127: ref Array<u8>;
     built = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
-    repr_130 = global:ctfe_fold_view_append_wir.wado::$const_obj_5;
-    other_8 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_130, start: 0, end: 3 };
+    repr_127 = global:ctfe_fold_view_append_wir.wado::$const_obj_5;
+    other_8 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_127, start: 0, end: 3 };
     built.used = 3;
     builtin::array_copy<u8>(built.repr, 0, other_8.repr, 0, 3);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
@@ -140,20 +140,20 @@ fn "ctfe_fold_view_append_wir.wado/run"() with Stdout {
     $local_2.used = 1;
     builtin::array_copy<u8>($local_2.repr, 0, global:ctfe_fold_view_append_wir.wado::$const_obj_2, 0, 1);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 3, indent: 0, buf: $local_2 };
-    repr_93 = global:ctfe_fold_view_append_wir.wado::$const_obj_1.repr;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>$spec0"($local_3, struct.new "core:prelude/string.wado//StrSlice" { repr: repr_93, start: 0, end: 3 });
-    new_used_109 = $local_2.used + 1;
-    if @unlikely(new_used_109 > builtin::array_len($local_2.repr)) {
+    repr_92 = global:ctfe_fold_view_append_wir.wado::$const_obj_1.repr;
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>$spec0"($local_3, struct.new "core:prelude/string.wado//StrSlice" { repr: repr_92, start: 0, end: 3 });
+    new_used_108 = $local_2.used + 1;
+    if @unlikely(new_used_108 > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_109);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_108);
     }
-    start_110 = $local_2.used;
-    $local_2.used = new_used_109;
-    builtin::array_copy<u8>($local_2.repr, start_110, global:ctfe_fold_view_append_wir.wado::$const_obj_0, 0, 1);
-    rx_113 = builtin::i32_wrap_i64(local.tee packed_112("wasi/stream-new"()));
-    tx_114 = builtin::i32_wrap_i64(packed_112 >> 32_i64);
-    handle_70 = "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(rx_113);
-    "core:rt/write_string_to_stream"(tx_114, $local_2.repr, $local_2.used);
+    start_109 = $local_2.used;
+    $local_2.used = new_used_108;
+    builtin::array_copy<u8>($local_2.repr, start_109, global:ctfe_fold_view_append_wir.wado::$const_obj_0, 0, 1);
+    rx_112 = builtin::i32_wrap_i64(local.tee packed_111("wasi/stream-new"()));
+    tx_113 = builtin::i32_wrap_i64(packed_111 >> 32_i64);
+    handle_70 = "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(rx_112);
+    "core:rt/write_string_to_stream"(tx_113, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_70);
 }
 
