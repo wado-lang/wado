@@ -13,7 +13,8 @@ use crate::unparse::binary_op_str;
 
 use super::Elaborator;
 use super::coercion::{
-    is_numeric_literal_expr, is_primitive_literal_target, numeric_literal_pair_order,
+    is_literal_operation, is_numeric_literal_expr, is_primitive_literal_target,
+    numeric_literal_pair_order,
 };
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
@@ -916,10 +917,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
-            expected_type.and_then(|expected| self.tysys.pointee_of(expected))
-        } else {
-            None
+        let inner_expected = match unary.op {
+            UnaryOp::Ref | UnaryOp::MutRef => {
+                expected_type.and_then(|expected| self.tysys.pointee_of(expected))
+            }
+            // Negating a literal operation keeps its type, as reify reads it.
+            UnaryOp::Neg if is_literal_operation(&unary.expr) => expected_type,
+            _ => None,
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the
         // subscript resolves through `IndexRefMut` and carries the mutability in

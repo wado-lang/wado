@@ -7,7 +7,7 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::AstId;
-use crate::ast::{self, Expr, Literal, LiteralMember, UnaryOp};
+use crate::ast::{self, BinaryOp, Expr, Literal, LiteralMember, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
@@ -126,15 +126,63 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     classify_numeric_literal(expr).is_some()
 }
 
+/// The numeric literals `expr` is built from, where it is one, or an
+/// arithmetic, bitwise or shift operation over such (`1 << 32`,
+/// `-(1 + 2)`): a value whose type is the one its literals take.
+fn literal_operands(expr: &Expr) -> Option<Vec<&Expr>> {
+    if is_numeric_literal_expr(expr) {
+        return Some(vec![expr]);
+    }
+    match expr {
+        Expr::Binary(binary) if is_literal_operator(binary.op) => {
+            let mut operands = literal_operands(&binary.left)?;
+            operands.extend(literal_operands(&binary.right)?);
+            Some(operands)
+        }
+        Expr::Unary(unary) if unary.op == UnaryOp::Neg => literal_operands(&unary.expr),
+        _ => None,
+    }
+}
+
+/// Whether `expr` is a numeric literal or an operation [`literal_operands`]
+/// reads, typed as a whole by the type expected of it.
+pub(super) fn is_literal_operation(expr: &Expr) -> bool {
+    literal_operands(expr).is_some()
+}
+
+/// Whether `op` on two operands of one numeric type yields that type.
+fn is_literal_operator(op: BinaryOp) -> bool {
+    match op {
+        BinaryOp::Add
+        | BinaryOp::Sub
+        | BinaryOp::Mul
+        | BinaryOp::Div
+        | BinaryOp::Mod
+        | BinaryOp::BitAnd
+        | BinaryOp::BitOr
+        | BinaryOp::BitXor
+        | BinaryOp::Shl
+        | BinaryOp::Shr => true,
+        BinaryOp::Eq
+        | BinaryOp::NotEq
+        | BinaryOp::Lt
+        | BinaryOp::LtEq
+        | BinaryOp::Gt
+        | BinaryOp::GtEq
+        | BinaryOp::And
+        | BinaryOp::Or => false,
+    }
+}
+
 /// Whether a call argument takes its type from its context: a numeric literal or
 /// `null`. Inference defers it, so the other arguments bind the parameter first.
 pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
     arg.is_some_and(|arg| is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg))
 }
 
-/// The numeric literals a call's arguments hold, at any depth, where the type
-/// expected of them is one of the call's own open variables:
-/// `second(Pair { a: 1, b: 2 }, x)`. Each answers last, as a literal argument
+/// The numeric literals, and operations over them ([`is_literal_operation`]), a
+/// call's arguments hold, at any depth, where the type expected of them is one
+/// of the call's own open variables: `second(Pair { a: 1, b: 2 }, x)`. Each answers last, as a literal argument
 /// does: it takes what the other arguments answer its variable with, and a
 /// variable none of them answers takes the literals' default. A nested generic
 /// call's literal waits here too where its variable is chained to one of these:
@@ -184,9 +232,9 @@ fn shared_literal_default(literals: &[Expr]) -> TypeId {
     const RANK: [TypeId; 3] = [TypeTable::U8, TypeTable::I32, TypeTable::F64];
     literals
         .iter()
+        .flat_map(|expr| literal_operands(expr).expect("only literal operations are deferred"))
         .map(|expr| {
-            let literal =
-                classify_numeric_literal(expr).expect("only numeric literals are deferred");
+            let literal = classify_numeric_literal(expr).expect("an operand is a numeric literal");
             match literal.kind {
                 NumericLiteralKind::Number(repr) if util::is_float_only_literal(repr) => {
                     TypeTable::F64
@@ -518,7 +566,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// variables [`PendingLiterals`] collects for, answering that variable as
     /// its type until [`Self::settle_pending_literals`].
     pub(super) fn defer_literal_at_var(&mut self, expr: &Expr, expected: TypeId) -> Option<TypeId> {
-        if self.annotate_ctx.pending_literals.is_empty() || !is_numeric_literal_expr(expr) {
+        if self.annotate_ctx.pending_literals.is_empty() || !is_literal_operation(expr) {
             return None;
         }
         let var = self.apply_infer_holes(expected);
@@ -648,7 +696,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::InferVar(_)
             );
             let hint = hints.get(&var).copied();
-            let yields_to_return = open && hint.is_none() && literals.iter().all(is_arg);
+            // An operation's operands take one type only once it is known, so
+            // it cannot wait for the call's own inference as a literal can.
+            let yields_to_return = open
+                && hint.is_none()
+                && literals
+                    .iter()
+                    .all(|expr| is_arg(expr) && is_numeric_literal_expr(expr));
             let mut answer = var;
             if open && !yields_to_return {
                 answer = hint.unwrap_or(default);
