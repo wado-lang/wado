@@ -2453,6 +2453,31 @@ impl WirInstr {
         }
     }
 
+    /// Visit every value type this node itself carries (non-recursive): what a
+    /// local is declared at, what a read yields, what a block or a select
+    /// results in. A pass substituting a type rewrites all of them or leaves
+    /// the node disagreeing with its operands.
+    pub fn for_each_value_type_mut(&mut self, f: &mut impl FnMut(&mut WirType)) {
+        match self {
+            Self::DeclareLocal { ty, .. } => f(ty),
+            Self::LocalGet { result_ty, .. }
+            | Self::GlobalGet { result_ty, .. }
+            | Self::StructGet { result_ty, .. }
+            | Self::ArrayGet { result_ty, .. }
+            | Self::ArrayGetS { result_ty, .. }
+            | Self::ArrayGetU { result_ty, .. } => f(result_ty),
+            Self::Block {
+                result: Some(ty), ..
+            }
+            | Self::If {
+                result: Some(ty), ..
+            }
+            | Self::Select { ty: Some(ty), .. } => f(ty),
+            // No other variant holds a `WirType`; a new one that does belongs above.
+            _ => {}
+        }
+    }
+
     /// Visit all child instructions of this node mutably (non-recursive).
     /// Used by WIR optimization passes for in-place tree rewriting.
     pub fn for_each_boxed_child_mut(&mut self, f: &mut impl FnMut(&mut WirInstr)) {

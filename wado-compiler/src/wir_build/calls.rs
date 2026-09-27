@@ -682,14 +682,11 @@ impl FunctionTranslator<'_, '_> {
                 let cond = self.translate_operand(args[0].expr);
                 let a = self.translate_operand(args[1].expr);
                 let b = self.translate_operand(args[2].expr);
-                let result_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[1].expr));
                 Some(WirInstr::Select {
                     condition: Box::new(cond),
                     if_true: Box::new(a),
                     if_false: Box::new(b),
-                    ty: Some(result_type),
+                    ty: Some(self.wir_type(result_type_id)),
                 })
             }
 

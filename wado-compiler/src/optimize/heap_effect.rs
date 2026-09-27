@@ -807,7 +807,7 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
     let Some(intrinsic) = reference.intrinsic() else {
         return Callee::Opaque;
     };
-    let Some(declaration) = project.builtin_declarations.declaration(&reference) else {
+    let Some(declaration) = project.builtin_declarations.get(&reference) else {
         return Callee::Opaque;
     };
     let array = intrinsic.starts_with("array_");

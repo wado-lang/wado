@@ -308,13 +308,14 @@ impl<'a> SharedEscape<'a> {
 
     /// What a bodyless callee's clauses say about the argument at `pos`.
     fn declared_arg(&self, callee: &NirFunction, pos: usize) -> ArgClauses {
-        // Only `core:builtin` answers, where the value-copy plan already trusts
-        // `#[retain]`. Elsewhere an absent clause is silence, not consent.
-        if !callee.module_source.is_core_builtin() {
-            return ArgClauses::REFUSED;
-        }
+        // Every declaration answers the same way, wherever it comes from: an
+        // absent `#[retain]` keeps nothing, and a silent `#[result]` may hand
+        // any argument back. Only a callee nothing describes is refused.
         let reference = FunctionRef::from_resolved(callee, callee.module_source.clone());
         let declarations = &self.project.builtin_declarations;
+        if declarations.get(&reference).is_none() {
+            return ArgClauses::REFUSED;
+        }
         // `#[retain(elements_of = p)]` leaves `p` alone and re-homes what `p`
         // holds — into another parameter, or into an owned result. Either lands
         // the elements under a name this walk never sees, so a write through

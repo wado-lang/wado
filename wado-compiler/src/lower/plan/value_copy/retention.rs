@@ -7,8 +7,9 @@
 //! [`RetentionFacts::into_result`] reaches the return value, and
 //! [`RetentionFacts::into_param`] reaches a parameter the caller named, which the
 //! caller resolves against its own argument there. Why the first two cannot be
-//! one set is in WEP 2026-05-21; [`compute_retention`] publishes the union,
-//! which is what a reader with no argument list must assume.
+//! one set is in WEP 2026-05-21. [`CallRetention`] answers every direct call:
+//! a body from the fixpoint, a body-less declaration from what it states, and a
+//! callee with neither as one that may keep every argument.
 //!
 //! An indirect call reads [`FunctorRows`], which answers per call site where it
 //! can name the function values that reach one, and per functor type — the join
@@ -22,16 +23,13 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
-    BuiltinDeclarations, FunctionRef, ResolvedType, RetainSpec, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
-    capture_source_locals,
+    BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
+    RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 use std::cell::RefCell;
-
-/// Per-function set of reference-parameter positions the function may retain.
-pub type RetainedParams = FuncKeyMap<IndexSet<u32>>;
 
 /// The destination of a position the callee hands back with its result. The
 /// caller resolves it against the local it binds the result to.
@@ -54,6 +52,17 @@ struct RetentionFacts {
 }
 
 impl RetentionFacts {
+    /// What a call nothing describes may do: keep every argument out of sight,
+    /// and hand every one back in its result.
+    fn every(arity: usize) -> Self {
+        let every: IndexSet<u32> = (0..u32::try_from(arity).unwrap()).collect();
+        RetentionFacts {
+            escapes: every.clone(),
+            into_result: every,
+            ..RetentionFacts::default()
+        }
+    }
+
     /// Whether any channel claims `source`.
     fn claims(&self, source: u32) -> bool {
         self.escapes.contains(&source)
@@ -433,13 +442,7 @@ impl Retained {
 impl FunctorRows {
     fn row(&self, callee_type: TypeId, arity: usize) -> RetentionFacts {
         if !self.minted.contains(&callee_type) {
-            let every: IndexSet<u32> = (0..u32::try_from(arity).unwrap()).collect();
-            return RetentionFacts {
-                escapes: every.clone(),
-                into_result: every,
-                into_param: IndexMap::default(),
-                elements: IndexSet::default(),
-            };
+            return RetentionFacts::every(arity);
         }
         self.facts.get(&callee_type).cloned().unwrap_or_default()
     }
@@ -601,8 +604,7 @@ impl Contributions {
 
 /// A callee's facts, in the current fixpoint iteration.
 struct StoresOracle<'a> {
-    computed: &'a FuncKeyMap<RetentionFacts>,
-    builtins: &'a BuiltinDeclarations,
+    calls: &'a CallRetention,
     rows: &'a FunctorRows,
     call_graph: &'a CallGraph,
     /// Which of each function's parameters take a function value, by the dense
@@ -611,19 +613,6 @@ struct StoresOracle<'a> {
 }
 
 impl StoresOracle<'_> {
-    /// Facts for a directly-called function, falling back to link's snapshot:
-    /// monomorphization drops the generic declaration a builtin's is read from.
-    fn direct(&self, func: &FunctionRef) -> RetentionFacts {
-        if let Some(facts) = self.computed.get(&func.module_source, &func.name) {
-            return facts.clone();
-        }
-        let mut facts = RetentionFacts::default();
-        for retain in self.builtins.retain_specs(func) {
-            declare_retention(&mut facts, retain);
-        }
-        facts
-    }
-
     /// Facts for an indirect (functor) callee: the join over the values the
     /// walk resolved it to, or the callee type's row where it resolved none.
     fn indirect(&self, callees: &Callees, callee: &TirExpr, arity: usize) -> RetentionFacts {
@@ -635,33 +624,50 @@ impl StoresOracle<'_> {
     }
 }
 
-/// Where a retained position lands, for the positions a caller can resolve.
-///
-/// A position is here only when every channel claiming it names a parameter or
-/// the result, so the reference goes nowhere the caller cannot see. One that
-/// also escapes is absent, and a reader takes the union as before.
-#[derive(Default)]
-pub struct BoundedRetention {
-    at: FuncKeyMap<IndexMap<u32, IndexSet<u32>>>,
+/// What a direct call keeps of its arguments, whatever the callee is: a body
+/// answers from the fixpoint, a body-less declaration from what it states, and
+/// a callee with neither — a dispatch stub — may keep every argument.
+pub struct CallRetention {
+    bodies: FuncKeyMap<RetentionFacts>,
+    declared: DeclarationTable<RetentionFacts>,
 }
 
-impl BoundedRetention {
-    /// The parameter positions (or [`RESULT`]) the callee puts position
-    /// `source` in, or `None` where it also keeps it somewhere the caller
-    /// cannot name.
+impl CallRetention {
+    fn facts(&self, func: &FunctionRef, arity: usize) -> RetentionFacts {
+        if let Some(facts) = self.bodies.get(&func.module_source, &func.name) {
+            return facts.clone();
+        }
+        match self.declared.get(func) {
+            Some(facts) => facts.clone(),
+            None => RetentionFacts::every(arity),
+        }
+    }
+
+    /// What a call to `func` with `arity` arguments keeps. A result that cannot
+    /// hold a reference (`result_holds` false) hands nothing back.
     #[must_use]
-    pub fn destinations(&self, func: &FunctionRef, source: usize) -> Option<&IndexSet<u32>> {
-        self.at
-            .get(&func.module_source, &func.name)?
-            .get(&u32::try_from(source).ok()?)
+    pub fn of_call(&self, func: &FunctionRef, arity: usize, result_holds: bool) -> Retained {
+        let mut facts = self.facts(func, arity);
+        if !result_holds {
+            facts.into_result.clear();
+        }
+        Retained::of(&facts)
+    }
+
+    /// What `func`'s body keeps of its parameters, or `None` for a function
+    /// without one.
+    #[must_use]
+    pub fn of_body(&self, func: &TirFunction) -> Option<Retained> {
+        self.bodies
+            .get(&func.module_source, &func.name)
+            .map(Retained::of)
     }
 }
 
-/// What the fixpoint publishes: the positions each function may keep, where the
-/// bounded ones land, and the row each functor type carries.
+/// What the fixpoint publishes: what each direct call keeps, and the row each
+/// functor type carries.
 pub struct RetentionSummary {
-    pub retained_params: RetainedParams,
-    pub bounded: BoundedRetention,
+    pub calls: CallRetention,
     pub rows: FunctorRows,
 }
 
@@ -671,20 +677,19 @@ pub fn compute_retention(
     builtins: &BuiltinDeclarations,
 ) -> RetentionSummary {
     let type_table = project.type_table.borrow();
-    let mut computed: FuncKeyMap<RetentionFacts> = FuncKeyMap::default();
-
+    let mut calls = CallRetention {
+        bodies: FuncKeyMap::default(),
+        declared: builtins.map(declared_facts),
+    };
     for func in &project.functions {
         let func = func.borrow();
-        debug_assert!(
-            func.retains.is_empty() || func.body.is_none(),
-            "`{}` has a body and a `#[retain]`",
-            func.name
-        );
-        computed.insert(
-            func.module_source.clone(),
-            func.name.clone(),
-            declared_facts(&func),
-        );
+        if func.body.is_some() {
+            calls.bodies.insert(
+                func.module_source.clone(),
+                func.name.clone(),
+                RetentionFacts::default(),
+            );
+        }
     }
 
     let carrying = RefCarrying::new(&project.structs, &type_table);
@@ -716,8 +721,7 @@ pub fn compute_retention(
                 .collect();
             let (found, from_body) = {
                 let oracle = StoresOracle {
-                    computed: &computed,
-                    builtins,
+                    calls: &calls,
                     rows: &rows,
                     call_graph,
                     functor_params: &functor_params,
@@ -734,14 +738,17 @@ pub fn compute_retention(
                 )
             };
             round.extend(from_body);
-            let mut merged = computed
+            let mut merged = calls
+                .bodies
                 .get(&func.module_source, &func.name)
                 .cloned()
                 .unwrap_or_default();
             if !merged.absorb(&found) {
                 return false;
             }
-            computed.insert(func.module_source.clone(), func.name.clone(), merged);
+            calls
+                .bodies
+                .insert(func.module_source.clone(), func.name.clone(), merged);
             true
         });
         let mut grew = false;
@@ -768,11 +775,9 @@ pub fn compute_retention(
         }
     }
 
-    let mut retained_params = RetainedParams::default();
-    let mut bounded = BoundedRetention::default();
     for func in &project.functions {
         let func = func.borrow();
-        if let Some(facts) = computed.get(&func.module_source, &func.name) {
+        if let Some(facts) = calls.bodies.get(&func.module_source, &func.name) {
             compiler_trace!(
                 "retention",
                 "{} escapes={:?} into_result={:?} into_param={:?}",
@@ -781,20 +786,10 @@ pub fn compute_retention(
                 facts.into_result,
                 facts.into_param
             );
-            retained_params.insert(func.module_source.clone(), func.name.clone(), facts.union());
-            bounded.at.insert(
-                func.module_source.clone(),
-                func.name.clone(),
-                facts.bounded(),
-            );
         }
     }
 
-    RetentionSummary {
-        retained_params,
-        bounded,
-        rows,
-    }
+    RetentionSummary { calls, rows }
 }
 
 /// What one `#[retain(...)]` clause states, by parameter position. The single
@@ -822,11 +817,27 @@ fn declare_retention(facts: &mut RetentionFacts, retain: &RetainSpec<usize>) {
     }
 }
 
-/// What a declaration's `#[retain(...)]` clauses state, by parameter position.
-fn declared_facts(func: &TirFunction) -> RetentionFacts {
+/// What a body-less declaration states, by parameter position: its
+/// `#[retain(...)]` clauses, and what its result is made of. `part_of = p` is
+/// `p`, and `owned` is nothing a clause does not route there. Silence is any
+/// argument: the rule that makes a declaration state `#[result]` covers only
+/// its reference parameters, so `select` hands back a by-value operand while
+/// stating nothing.
+fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
     let mut facts = RetentionFacts::default();
-    for retain in func.retains_by_position() {
-        declare_retention(&mut facts, &retain);
+    for retain in &declaration.retains {
+        declare_retention(&mut facts, retain);
+    }
+    match declaration.returns {
+        Some(ReturnConvention::PartOf(p)) => {
+            facts.into_result.insert(u32::try_from(p).unwrap());
+        }
+        Some(ReturnConvention::Owned) => {}
+        None => {
+            facts
+                .into_result
+                .extend(0..u32::try_from(declaration.arity).unwrap());
+        }
     }
     facts
 }
@@ -1292,19 +1303,10 @@ impl StoresWalker<'_> {
                     })
                     .collect(),
             ),
-            // Which positions a call routes to its result is read off a body,
-            // and a builtin has none — `a[i]`'s `array_get_ref` hands back a
-            // slot of its first argument while declaring nothing — so a
-            // reference-typed result carries every argument.
             TirExprKind::Call { func, args, .. } => {
-                let routed = if is_reference_type(expr.type_id, self.type_table) {
-                    args.iter()
-                        .flat_map(|a| self.carried(&a.expr).all())
-                        .collect()
-                } else {
-                    let facts = self.oracle.direct(func);
-                    self.carried_args(args.iter().map(|a| &a.expr), &facts.into_result, &facts)
-                };
+                let facts = self.oracle.calls.facts(func, args.len());
+                let routed =
+                    self.carried_args(args.iter().map(|a| &a.expr), &facts.into_result, &facts);
                 self.placed(expr.type_id, routed)
             }
             TirExprKind::IndirectCall { callee, args } => {
@@ -1805,7 +1807,7 @@ impl TirRefVisitor for StoresWalker<'_> {
                 }
             }
             TirExprKind::Call { func, args, .. } => {
-                let facts = self.oracle.direct(func);
+                let facts = self.oracle.calls.facts(func, args.len());
                 let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 self.call_hands_on(&exprs, &facts);
                 let landing = match self.oracle.call_graph.id_of(func) {
@@ -1869,7 +1871,11 @@ impl TirRefVisitor for StoresWalker<'_> {
                     monomorph_info: None,
                     method_info: None,
                 };
-                let facts = self.oracle.direct(&referenced);
+                let ResolvedType::Function { params, .. } = self.type_table.get(expr.type_id)
+                else {
+                    panic!("a function reference `{name}` is not of a function type");
+                };
+                let facts = self.oracle.calls.facts(&referenced, params.len());
                 let (target, functor_params) = match self.oracle.call_graph.id_of(&referenced) {
                     Some(id) => (
                         MintTarget::Named(id),
