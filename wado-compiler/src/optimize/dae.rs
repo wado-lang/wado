@@ -257,9 +257,8 @@ fn validate_call(
         // side-effect-free) argument must keep the param alive. A promoted
         // operand is not exempt: it is pure by construction but `100 / zero`
         // still traps, and the shared predicate answers for either form.
-        let pure = args.get(i).is_some_and(|a| {
-            arena_query::is_pure_nontrapping_operand_typed(body, a.expr, Some(type_table))
-        });
+        let pure =
+            arena_query::is_pure_nontrapping_operand_typed(body, args[i].expr, Some(type_table));
         if !pure {
             rejected.insert(key);
             break;
@@ -335,7 +334,7 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
     };
     // A dropped receiver was verified pure, so discarding it is
     // observation-free.
-    args.retain_positions(|i| !dead.get(i).copied().unwrap_or(false));
+    args.retain_positions(|i| !dead[i]);
     true
 }
 
