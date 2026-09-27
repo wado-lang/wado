@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790494001482,
+  "lastUpdate": 1790500672716,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60689,6 +60689,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7c8929b7416603ff05bfbf2501f324e7ff3cba36"
         },
         "date": 1790494000826,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20200,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288402,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c4dc57c430db6de47d0db229bb178d3f7d82b7ea",
+          "message": "Merge pull request #2187 from wado-lang/claude/spec-docs-organization-1zipp2\n\ndocs(spec): all 423 `wado` blocks quote a checked file, no baseline; 5 compiler fixes found on the way",
+          "timestamp": "2026-09-27T17:49:44+09:00",
+          "tree_id": "89a9a48008bcd50a2fe22c6514c443686199fd06",
+          "url": "https://github.com/wado-lang/wado/commit/c4dc57c430db6de47d0db229bb178d3f7d82b7ea"
+        },
+        "date": 1790500671823,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
