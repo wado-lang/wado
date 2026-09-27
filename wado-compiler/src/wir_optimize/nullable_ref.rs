@@ -237,27 +237,20 @@ fn transform_instr(
     vci: &IndexMap<u32, (u32, u32)>,
     nullable_map: &IndexMap<u32, (u32, WirType)>,
 ) {
+    instr.for_each_value_type_mut(&mut |ty| substitute_type(ty, nullable_map));
     match instr {
-        // Block-structured control flow: update result type and recurse into bodies.
-        WirInstr::Block { result, body, .. } => {
-            if let Some(ty) = result {
-                substitute_type(ty, nullable_map);
-            }
+        WirInstr::Block { body, .. } => {
             transform_body(body, types, vci, nullable_map);
         }
         WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
             transform_body(body, types, vci, nullable_map);
         }
         WirInstr::If {
-            result,
             condition,
             then_body,
             else_body,
             ..
         } => {
-            if let Some(ty) = result {
-                substitute_type(ty, nullable_map);
-            }
             transform_instr(condition, types, vci, nullable_map);
             transform_body(then_body, types, vci, nullable_map);
             if let Some(eb) = else_body {
@@ -265,11 +258,9 @@ fn transform_instr(
             }
         }
 
-        // DeclareLocal: substitute variant base type or case struct type with nullable payload type.
+        // A CASE STRUCT type (pattern match temporaries like $cast_2) takes the
+        // nullable payload type too.
         WirInstr::DeclareLocal { ty, .. } => {
-            // Update if it's the variant BASE type.
-            substitute_type(ty, nullable_map);
-            // Also update if it's a CASE STRUCT type (pattern match temporaries like $cast_2).
             if let WirType::Ref { type_id, .. } = ty
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
                 && let Some(&(payload_case, ref nullable_payload)) = nullable_map.get(&variant_idx)
@@ -520,10 +511,8 @@ fn transform_instr(
             }
         }
 
-        // Keep result_ty up-to-date for get instructions after NullableRef substitution.
         WirInstr::LocalGet { result_ty, .. } | WirInstr::GlobalGet { result_ty, .. } => {
-            substitute_type(result_ty, nullable_map);
-            // Also handle case struct types — same substitution as DeclareLocal special case.
+            // Case struct types — same substitution as the DeclareLocal case.
             // e.g., `$cast_N: Ref { CaseStruct, non-null }` becomes `nullable_payload` after
             // NullableRef, so result_ty must reflect this to avoid stale is_nonnull_result().
             if let WirType::Ref { type_id, .. } = result_ty
