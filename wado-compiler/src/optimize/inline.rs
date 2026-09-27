@@ -1450,18 +1450,24 @@ pub(super) fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
     recursive
 }
 
-/// Collect the store position (`func_id.index()`) of every `Call` callee
-/// reachable in `body`, via the shared `for_each_child`
-/// walk (order is irrelevant — the result is a set feeding the recursion call
-/// graph). Each stamped `func_id` is total and resolves to a position in
-/// `project.functions`, which is exactly the call-graph node index.
-fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(id) = node
+/// The callee of every `Call` site under `node`, once per site.
+fn for_each_call_site(body: &Body, node: NodeRef, mut f: impl FnMut(FuncId)) {
+    body.for_each_live_node_under(node, |n| {
+        if let NodeRef::Expr(id) = n
             && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
         {
-            callees.insert(func_id.index());
+            f(*func_id);
         }
+    });
+}
+
+/// Collect the store position (`func_id.index()`) of every `Call` callee
+/// reachable in `body` (order is irrelevant — the result is a set feeding the
+/// recursion call graph). Each stamped `func_id` is total and resolves to a
+/// position in `project.functions`, which is exactly the call-graph node index.
+fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
+    for_each_call_site(body, NodeRef::Block(body.root), |callee| {
+        callees.insert(callee.index());
     });
 }
 
@@ -1476,13 +1482,8 @@ fn call_site_counts(project: &NirPackage) -> Vec<usize> {
         let Some(body) = func.body.as_ref() else {
             continue;
         };
-        body.for_each_reachable_node(|node| {
-            if let NodeRef::Expr(id) = node
-                && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
-                && let Some(slot) = counts.get_mut(func_id.index())
-            {
-                *slot += 1;
-            }
+        for_each_call_site(body, NodeRef::Block(body.root), |callee| {
+            counts[callee.index()] += 1;
         });
     }
     counts
@@ -2121,16 +2122,10 @@ impl CallerFrame {
 
 /// How many sites under `block` call each function.
 fn call_counts(body: &Body, block: BlockId) -> IndexMap<FuncId, usize> {
-    fn walk(body: &Body, node: NodeRef, out: &mut IndexMap<FuncId, usize>) {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
-        {
-            *out.entry(*func_id).or_default() += 1;
-        }
-        body.for_each_child(node, |c| walk(body, c, out));
-    }
     let mut out = IndexMap::default();
-    walk(body, NodeRef::Block(block), &mut out);
+    for_each_call_site(body, NodeRef::Block(block), |callee| {
+        *out.entry(callee).or_default() += 1;
+    });
     out
 }
 
