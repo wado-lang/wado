@@ -1,0 +1,20 @@
+// `builtin::select` types its result by the call, not by one operand: an
+// `Option<&S>` is a nullable reference, while `Option::Some(r)` alone lowers to
+// the non-null `&S` and `null` to a null reference, which that type rejects.
+
+struct S { v: i32 }
+
+fn pick(c: bool, r: &S) -> Option<&S> {
+    return builtin::select(c, Option::Some(r), null);
+}
+
+test "select between a reference and null" {
+    let x = S { v: 1 };
+    let some = pick(builtin::black_box(true), &x);
+    assert some matches { Some(r) && r.v == 1 };
+    let none = pick(builtin::black_box(false), &x);
+    assert none matches { None };
+}
+
+__DATA__
+{"test": {}}

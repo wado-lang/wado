@@ -6887,6 +6887,8 @@ pub enum LinearMemory {
 /// Link snapshots it because monomorphization drops the generic declarations.
 #[derive(Debug, Clone, Default)]
 pub struct BuiltinDeclaration {
+    /// How many parameters the declaration takes.
+    pub arity: usize,
     /// `#[result(...)]`, or `None` where the declaration states none.
     pub returns: Option<ReturnConvention>,
     /// `#[retain(...)]` — what this call keeps beyond it.
@@ -6938,38 +6940,48 @@ impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
     }
 }
 
-/// What each body-less declaration stated about storage, resolved from a call.
-/// Link snapshots these before monomorphization drops the generic declarations,
-/// and both the lowering plan and the NIR optimizer read them.
-#[derive(Debug, Clone, Default)]
-pub struct BuiltinDeclarations(IndexMap<(ModuleSource, String), BuiltinDeclaration>);
+/// One value per body-less declaration, found from a call to it.
+#[derive(Debug, Clone)]
+pub struct DeclarationTable<V>(IndexMap<(ModuleSource, String), V>);
 
-impl BuiltinDeclarations {
-    pub fn new(declarations: IndexMap<(ModuleSource, String), BuiltinDeclaration>) -> Self {
+impl<V> Default for DeclarationTable<V> {
+    fn default() -> Self {
+        Self(IndexMap::default())
+    }
+}
+
+impl<V> DeclarationTable<V> {
+    /// A table over `declarations`, keyed by module and declared name.
+    pub fn new(declarations: IndexMap<(ModuleSource, String), V>) -> Self {
         Self(declarations)
     }
 
-    /// What `call` declared, or `None` where it declared nothing. Keyed by the
-    /// generic name a monomorphized instance came from, which is the name the
-    /// declaration was snapshot under.
-    fn get(&self, call: DeclarationLookup<'_>) -> Option<&BuiltinDeclaration> {
+    /// The value for the declaration `call` resolves to, or `None` where there
+    /// is none. Keyed by the generic name a monomorphized instance came from,
+    /// which is the name the declaration was snapshot under.
+    pub fn get<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&V> {
+        let call = call.into();
         let key = |name: &str| (call.module_source.clone(), name.to_string());
         if let Some(generic) = call.generic_name
-            && let Some(declaration) = self.0.get(&key(generic))
+            && let Some(value) = self.0.get(&key(generic))
         {
-            return Some(declaration);
+            return Some(value);
         }
         self.0.get(&key(call.name))
     }
 
-    /// Everything `call` declared, or `None` where there is no snapshot.
-    pub fn declaration<'a>(
-        &self,
-        call: impl Into<DeclarationLookup<'a>>,
-    ) -> Option<&BuiltinDeclaration> {
-        self.get(call.into())
+    /// The same declarations, each mapped to `f` of its value.
+    pub fn map<W>(&self, mut f: impl FnMut(&V) -> W) -> DeclarationTable<W> {
+        DeclarationTable(self.0.iter().map(|(k, v)| (k.clone(), f(v))).collect())
     }
+}
 
+/// What each body-less declaration stated about storage, resolved from a call.
+/// Link snapshots these before monomorphization drops the generic declarations,
+/// and both the lowering plan and the NIR optimizer read them.
+pub type BuiltinDeclarations = DeclarationTable<BuiltinDeclaration>;
+
+impl DeclarationTable<BuiltinDeclaration> {
     /// Whether `call` names a body-less declaration that stated a convention or
     /// a retention — the calls that answer from a declaration rather than from
     /// the fixpoint.
