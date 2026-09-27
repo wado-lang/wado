@@ -5310,10 +5310,8 @@ pub fn "core:prelude/string.wado/String::push_str<&core:prelude/string.wado/Stri
     other."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
 }
 
-#[retain(src)]
 pub fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Array<u8>, src_offset: i32, len: i32);
 
-#[retain(value)]
 pub fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
 
 fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64 {
@@ -10505,6 +10503,7 @@ fn "$value_copy$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlic
     };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(v: [StrSlice, StrSlice]) -> [StrSlice, StrSlice] {
     return [core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice] { 0: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.0), 1: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.1) };
 }
@@ -10755,6 +10754,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>"(v: Result<StrSlice, IntErrorKind>) -> Result<StrSlice, IntErrorKind> {
     return match v {
         Ok($vc_payload_0) => Result<StrSlice, IntErrorKind>::Ok("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"($vc_payload_0)),
@@ -10762,6 +10762,7 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>"(v: Result<[bool, StrSlice], IntErrorKind>) -> Result<[bool, StrSlice], IntErrorKind> {
     return match v {
         Ok($vc_payload_0) => Result<[bool, StrSlice], IntErrorKind>::Ok("ops.all_dirty.wado::$value_copy$[bool,core:prelude/string.wado/StrSlice]"($vc_payload_0)),
@@ -10769,6 +10770,7 @@ fn "$value_copy$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 fn "$value_copy$[bool,core:prelude/string.wado/StrSlice]"(v: [bool, StrSlice]) -> [bool, StrSlice] {
     return [bool,core:prelude/string.wado/StrSlice] { 0: v.0, 1: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.1) };
 }
@@ -10954,146 +10956,182 @@ fn "$value_copy$core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/St
     return SliceRefIter<core:prelude/string.wado/String> { repr: v.repr, index: v.index, end: v.end };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterFilter<core:prelude/string.wado/StrUtf8ByteIter>) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
     return IterFilter<core:prelude/string.wado/StrUtf8ByteIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), pred: v.pred };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>) -> IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> {
     return IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), count: v.count };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterTake<core:prelude/string.wado/StrUtf8ByteIter>) -> IterTake<core:prelude/string.wado/StrUtf8ByteIter> {
     return IterTake<core:prelude/string.wado/StrUtf8ByteIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterSkip<core:prelude/string.wado/StrUtf8ByteIter>) -> IterSkip<core:prelude/string.wado/StrUtf8ByteIter> {
     return IterSkip<core:prelude/string.wado/StrUtf8ByteIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterStepBy<core:prelude/string.wado/StrUtf8ByteIter>) -> IterStepBy<core:prelude/string.wado/StrUtf8ByteIter> {
     return IterStepBy<core:prelude/string.wado/StrUtf8ByteIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), gap: v.gap, started: v.started };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>"(v: IterFilter<core:prelude/string.wado/StrCharIter>) -> IterFilter<core:prelude/string.wado/StrCharIter> {
     return IterFilter<core:prelude/string.wado/StrCharIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), pred: v.pred };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIter>"(v: IterEnumerate<core:prelude/string.wado/StrCharIter>) -> IterEnumerate<core:prelude/string.wado/StrCharIter> {
     return IterEnumerate<core:prelude/string.wado/StrCharIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), count: v.count };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIter>"(v: IterTake<core:prelude/string.wado/StrCharIter>) -> IterTake<core:prelude/string.wado/StrCharIter> {
     return IterTake<core:prelude/string.wado/StrCharIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIter>"(v: IterSkip<core:prelude/string.wado/StrCharIter>) -> IterSkip<core:prelude/string.wado/StrCharIter> {
     return IterSkip<core:prelude/string.wado/StrCharIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrCharIter>"(v: IterStepBy<core:prelude/string.wado/StrCharIter>) -> IterStepBy<core:prelude/string.wado/StrCharIter> {
     return IterStepBy<core:prelude/string.wado/StrCharIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), gap: v.gap, started: v.started };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>"(v: IterFilter<core:prelude/string.wado/StrCharIndicesIter>) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter> {
     return IterFilter<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), pred: v.pred };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>"(v: IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>) -> IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> {
     return IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), count: v.count };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIndicesIter>"(v: IterTake<core:prelude/string.wado/StrCharIndicesIter>) -> IterTake<core:prelude/string.wado/StrCharIndicesIter> {
     return IterTake<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIndicesIter>"(v: IterSkip<core:prelude/string.wado/StrCharIndicesIter>) -> IterSkip<core:prelude/string.wado/StrCharIndicesIter> {
     return IterSkip<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrCharIndicesIter>"(v: IterStepBy<core:prelude/string.wado/StrCharIndicesIter>) -> IterStepBy<core:prelude/string.wado/StrCharIndicesIter> {
     return IterStepBy<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), gap: v.gap, started: v.started };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>"(v: IterFilter<core:prelude/string.wado/StrSplitIter>) -> IterFilter<core:prelude/string.wado/StrSplitIter> {
     return IterFilter<core:prelude/string.wado/StrSplitIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), pred: v.pred };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitIter>"(v: IterEnumerate<core:prelude/string.wado/StrSplitIter>) -> IterEnumerate<core:prelude/string.wado/StrSplitIter> {
     return IterEnumerate<core:prelude/string.wado/StrSplitIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), count: v.count };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitIter>"(v: IterTake<core:prelude/string.wado/StrSplitIter>) -> IterTake<core:prelude/string.wado/StrSplitIter> {
     return IterTake<core:prelude/string.wado/StrSplitIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitIter>"(v: IterSkip<core:prelude/string.wado/StrSplitIter>) -> IterSkip<core:prelude/string.wado/StrSplitIter> {
     return IterSkip<core:prelude/string.wado/StrSplitIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitIter>"(v: IterStepBy<core:prelude/string.wado/StrSplitIter>) -> IterStepBy<core:prelude/string.wado/StrSplitIter> {
     return IterStepBy<core:prelude/string.wado/StrSplitIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), gap: v.gap, started: v.started };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>"(v: IterFilter<core:prelude/string.wado/StrSplitNIter>) -> IterFilter<core:prelude/string.wado/StrSplitNIter> {
     return IterFilter<core:prelude/string.wado/StrSplitNIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), pred: v.pred };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitNIter>"(v: IterEnumerate<core:prelude/string.wado/StrSplitNIter>) -> IterEnumerate<core:prelude/string.wado/StrSplitNIter> {
     return IterEnumerate<core:prelude/string.wado/StrSplitNIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), count: v.count };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitNIter>"(v: IterTake<core:prelude/string.wado/StrSplitNIter>) -> IterTake<core:prelude/string.wado/StrSplitNIter> {
     return IterTake<core:prelude/string.wado/StrSplitNIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitNIter>"(v: IterSkip<core:prelude/string.wado/StrSplitNIter>) -> IterSkip<core:prelude/string.wado/StrSplitNIter> {
     return IterSkip<core:prelude/string.wado/StrSplitNIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitNIter>"(v: IterStepBy<core:prelude/string.wado/StrSplitNIter>) -> IterStepBy<core:prelude/string.wado/StrSplitNIter> {
     return IterStepBy<core:prelude/string.wado/StrSplitNIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), gap: v.gap, started: v.started };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> {
     return IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), pred: v.pred };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter> {
     return IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), count: v.count };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterTake<core:prelude/string.wado/StrSplitWhitespaceIter> {
     return IterTake<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> {
     return IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterStepBy<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterStepBy<core:prelude/string.wado/StrSplitWhitespaceIter> {
     return IterStepBy<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), gap: v.gap, started: v.started };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>"(v: IterFilter<core:prelude/string.wado/StrLinesIter>) -> IterFilter<core:prelude/string.wado/StrLinesIter> {
     return IterFilter<core:prelude/string.wado/StrLinesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), pred: v.pred };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrLinesIter>"(v: IterEnumerate<core:prelude/string.wado/StrLinesIter>) -> IterEnumerate<core:prelude/string.wado/StrLinesIter> {
     return IterEnumerate<core:prelude/string.wado/StrLinesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), count: v.count };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrLinesIter>"(v: IterTake<core:prelude/string.wado/StrLinesIter>) -> IterTake<core:prelude/string.wado/StrLinesIter> {
     return IterTake<core:prelude/string.wado/StrLinesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrLinesIter>"(v: IterSkip<core:prelude/string.wado/StrLinesIter>) -> IterSkip<core:prelude/string.wado/StrLinesIter> {
     return IterSkip<core:prelude/string.wado/StrLinesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), remaining: v.remaining };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrLinesIter>"(v: IterStepBy<core:prelude/string.wado/StrLinesIter>) -> IterStepBy<core:prelude/string.wado/StrLinesIter> {
     return IterStepBy<core:prelude/string.wado/StrLinesIter> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), gap: v.gap, started: v.started };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
     return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), f: v.f };
 }
