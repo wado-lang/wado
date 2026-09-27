@@ -130,7 +130,19 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         if (b != 0) {
             let tag: i32 = core::builtin::i32_load(b);
             let block_size: i32 = core::builtin::i32_and(tag, -8);
-            core::allocator::fl_unlink(b);
+            let next: i32 = core::builtin::i32_load((b + 8));
+            let prev: i32 = core::builtin::i32_load((b + 12));
+            if (prev == 0) {
+                let tag: i32 = core::builtin::i32_load(b);
+                let size: i32 = core::builtin::i32_and(tag, -8);
+                let k: i32 = ((size - 32) >> 4);
+                core::builtin::i32_store((8 + (core::builtin::select::<i32>((k < 32), k, 32) * 4)), next);
+            } else {
+                core::builtin::i32_store((prev + 8), next);
+            }
+            if (next != 0) {
+                core::builtin::i32_store((next + 12), prev);
+            }
             let remainder: i32 = (block_size - size);
             if (remainder >= 32) {
                 core::builtin::i32_store(b, $licm_arith_101);
@@ -165,7 +177,19 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         let tag: i32 = core::builtin::i32_load(curr);
         let block_size: i32 = core::builtin::i32_and(tag, -8);
         if (block_size >= size) {
-            core::allocator::fl_unlink(curr);
+            let next: i32 = core::builtin::i32_load((curr + 8));
+            let prev: i32 = core::builtin::i32_load((curr + 12));
+            if (prev == 0) {
+                let tag: i32 = core::builtin::i32_load(curr);
+                let size: i32 = core::builtin::i32_and(tag, -8);
+                let k: i32 = ((size - 32) >> 4);
+                core::builtin::i32_store((8 + (core::builtin::select::<i32>((k < 32), k, 32) * 4)), next);
+            } else {
+                core::builtin::i32_store((prev + 8), next);
+            }
+            if (next != 0) {
+                core::builtin::i32_store((next + 12), prev);
+            }
             let remainder: i32 = (block_size - size);
             if (remainder >= 32) {
                 core::builtin::i32_store(curr, $licm_arith_102);
