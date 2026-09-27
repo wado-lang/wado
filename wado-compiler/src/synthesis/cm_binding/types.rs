@@ -13,6 +13,7 @@ use crate::component_model::{CmInterfaceRegistry, CmTypeKind, cm_layout_with_reg
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
+use crate::stdlib::is_wit_core_module;
 use crate::tir::{
     ResolvedType, TemplateId, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId, TypeTable,
@@ -1348,7 +1349,7 @@ pub(super) fn type_id_to_ast_type(
         let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
         let searchable = match ms {
             ModuleSource::Binding { .. } => true,
-            ModuleSource::Core { name: core } => core == "kiln" || core.starts_with("kiln/"),
+            ModuleSource::Core { name: core } => is_wit_core_module(core),
             _ => false,
         };
         let source = cm_interface_registry

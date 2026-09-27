@@ -425,7 +425,7 @@ cargo build --bin wado --quiet
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
   core:serde core:json core:json_nsd core:jsonc core:args core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:prng core:secure_random core:uuid core:temporal core:log core:jwt \
-  core:icu"
+  core:icu core:eval"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
 cargo run --bin wado --quiet -- doc --format markdown -o 'docs/stdlib-{module}.md' \
@@ -599,17 +599,19 @@ cargo run -p wado-from-idl -- \
     --glue-dir package-web/glue
 """
 
-[tasks.update-stdlib-kiln]
-description = "Regenerate core:kiln stdlib submodules from WIT file (facade is hand-written)"
+[tasks.update-stdlib-core-wit]
+description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval; facades are hand-written)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# Submodules only — the facade `lib/core/kiln.wado` is hand-written.
-rm -f wado-compiler/lib/core/kiln/*.wado
-cargo run -p wado-from-idl -- \
-    --wit-dir wado-compiler/lib/core/kiln \
-    --output-dir wado-compiler/lib/core \
-    --skip-flat-reexport
+# Submodules only — each facade `lib/core/<package>.wado` is hand-written.
+for package in kiln eval; do
+    rm -f "wado-compiler/lib/core/$package/"*.wado
+    cargo run -p wado-from-idl -- \
+        --wit-dir "wado-compiler/lib/core/$package" \
+        --output-dir wado-compiler/lib/core \
+        --skip-flat-reexport
+done
 """
 
 [tasks.update-bundled]
