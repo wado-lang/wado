@@ -31,6 +31,24 @@ pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
     out
 }
 
+/// The locals more than one reachable `Let` binds. A duplicated body (a fused
+/// iterator's loop body copied to each exit of `next`) binds one local in each
+/// copy, so a pass that reads one `Let` as the local's only definition, and
+/// rewrites every `Let` of it alike, must pass these by.
+pub(super) fn rebound_locals(body: &Body) -> IndexSet<u32> {
+    let mut seen = IndexSet::default();
+    let mut out = IndexSet::default();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            && !seen.insert(*local_index)
+        {
+            out.insert(*local_index);
+        }
+    });
+    out
+}
+
 /// Every expression a statement evaluates and throws away. A block's tail is
 /// excluded — it may be the block's value, and a wrong answer there is unsound.
 pub(super) fn discarded_exprs(body: &Body) -> IndexSet<ExprId> {

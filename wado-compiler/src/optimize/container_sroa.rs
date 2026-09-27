@@ -24,7 +24,7 @@ use crate::token::Span;
 use cranelift_entity::EntityRef;
 
 use super::arena_query::{
-    is_pure_operand, operand_read_locals, reachable_blocks, strip_one_value_copy,
+    is_pure_operand, operand_read_locals, reachable_blocks, rebound_locals, strip_one_value_copy,
 };
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::{CompilerItem, SeqField};
@@ -1079,7 +1079,9 @@ fn field_constructor(init: &CandidateInit, elem_ty: TypeId, sig: &MethodSig) -> 
 /// Collect candidate `let` bindings across the whole function body. The escape
 /// analysis and rewriter both walk every reachable block, so a `List<Tuple>` /
 /// `List<Struct>` local bound inside a nested block (an `if` arm, loop body, or
-/// labeled block) is a valid candidate too — locals are function-scoped.
+/// labeled block) is a valid candidate too — locals are function-scoped. The
+/// rewrite replaces every `Let` of a candidate with its initializer, so a local
+/// another `Let` binds is none.
 fn collect_candidates(
     body: &Body,
     type_table: &TypeTable,
@@ -1088,6 +1090,7 @@ fn collect_candidates(
     value_copy_ids: &IndexSet<FuncId>,
 ) -> Vec<Candidate> {
     let mut out = Vec::new();
+    let rebound = rebound_locals(body);
     for block in reachable_blocks(body) {
         for s in &body.blocks[block].stmts {
             let StmtKind::Let {
@@ -1100,6 +1103,9 @@ fn collect_candidates(
             else {
                 continue;
             };
+            if rebound.contains(local_index) {
+                continue;
+            }
             // Type must be List<Tuple<...>> or List<UserStruct>.
             let Some(elem_ty) = type_table.as_list(*type_id) else {
                 continue;
