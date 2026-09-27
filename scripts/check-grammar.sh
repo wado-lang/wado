@@ -15,21 +15,9 @@ out=package-gale-highlight-wado/build/check-grammar
 rm -rf "${out}"
 mkdir -p "${out}"
 
-<<<<<<< HEAD
-cargo build --bin wado --bin wado-dev-tools
-
-./target/debug/wado-dev-tools grammar-corpus --emit-corpus "${out}/corpus.txt"
-# `-O1`, for the reason `check-rust-paths.sh` gives.
-./target/debug/wado run -O1 package-gale-highlight-wado/tools/corpus_check.wado -- \
-||||||| 9b52d7a43
-cargo build --bin wado --bin wado-dev-tools
-
-./target/debug/wado-dev-tools grammar-corpus --emit-corpus "${out}/corpus.txt"
-./target/debug/wado run package-gale-highlight-wado/tools/corpus_check.wado -- \
-=======
 scripts/dev-bin.sh wado-dev-tools grammar-corpus --emit-corpus "${out}/corpus.txt"
-scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/corpus_check.wado -- \
->>>>>>> origin/main
+# `-O1`, for the reason `check-rust-paths.sh` gives.
+scripts/dev-bin.sh wado run -O1 package-gale-highlight-wado/tools/corpus_check.wado -- \
     --paths-from "${out}/corpus.txt" > "${out}/gale.tsv" 2> "${out}/gale.err" \
     || { cat "${out}/gale.err" >&2; exit 1; }
 scripts/dev-bin.sh wado-dev-tools grammar-corpus \

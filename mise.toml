@@ -64,8 +64,9 @@ cargo check -p wado-lsp --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
 """
 
-# check-grammar and check-highlight walk the whole corpus, so they are left to
-# on-task-done and CI's Test (Wado) job.
+# The local entry point; CI spreads these over its jobs by whether they need
+# the `wado` binary. check-grammar and check-highlight walk the whole corpus,
+# so they are left to on-task-done.
 [tasks.check]
 description = "Run the corpus checks that finish in seconds"
 run = """
@@ -113,17 +114,9 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mkdir -p package-wadopoet/build
-<<<<<<< HEAD
-./target/debug/wado syntax --format json -o package-wadopoet/build/syntax.json
-# `-O1`, for the reason `scripts/check-rust-paths.sh` gives.
-./target/debug/wado run -O1 package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
-||||||| 9b52d7a43
-./target/debug/wado syntax --format json -o package-wadopoet/build/syntax.json
-./target/debug/wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
-=======
 scripts/dev-bin.sh wado syntax --format json -o package-wadopoet/build/syntax.json
-scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
->>>>>>> origin/main
+# `-O1`, for the reason `scripts/check-rust-paths.sh` gives.
+scripts/dev-bin.sh wado run -O1 package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
 """
 
 [tasks.check-wadopoet-vocabulary]

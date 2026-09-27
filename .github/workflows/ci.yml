@@ -60,10 +60,10 @@ jobs:
           # `grep -q` exits at the first match, the producer dies of SIGPIPE, and
           # pipefail reports the pipeline as failed — misclassifying a large diff
           # as docs-only and skipping every test job.
-          # `check-spec-examples` reads the specification, so a change to it is
-          # code.
+          # `check-spec-examples` reads the specification and the WEPs, so a
+          # change to either is code.
           if [ -z "$files" ] || grep -qvE '\.md$' <<< "$files" \
-            || grep -qE '^docs/spec-[^/]*\.md$' <<< "$files"; then
+            || grep -qE '^docs/(spec|wep)-[^/]*\.md$' <<< "$files"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "Docs-only change: skipping test jobs."
@@ -154,19 +154,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - run: mise run check-deps
       - run: mise run test-hooks
-<<<<<<< HEAD
-      - run: mise run check
-||||||| 9b52d7a43
-      - run: mise run check-rust-paths
-      - run: mise run check-spec-examples
-      - run: mise run check-wadopoet-vocabulary
       - run: mise run check-internal-names
       - run: mise run check-review-filters
-=======
-      - run: mise run check-internal-names
-      - run: mise run check-review-filters
->>>>>>> origin/main
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
