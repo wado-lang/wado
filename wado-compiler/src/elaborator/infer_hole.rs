@@ -340,15 +340,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Refused where `answer` reaches `var` itself, which no type satisfies.
     pub(super) fn chain_infer_var(&mut self, var: TypeId, answer: TypeId) {
         let answer = self.apply_infer_holes(answer);
-        if matches!(
-            answer,
-            TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR
-        ) || self
-            .tysys
-            .type_table
-            .borrow()
-            .infer_vars_in(answer)
-            .contains(&var)
+        if says_nothing(answer)
+            || self
+                .tysys
+                .type_table
+                .borrow()
+                .infer_vars_in(answer)
+                .contains(&var)
         {
             return;
         }
@@ -656,13 +654,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 impl TypeSystem {
     /// Whether `answer` can stand as a variable's solution: not another variable,
-    /// nor `never` / `unknown` / `error`, which every check accepts anywhere.
+    /// nor one of the [`says_nothing`] types.
     fn is_usable_answer(&self, answer: TypeId) -> bool {
-        answer != TypeTable::NEVER
-            && answer != TypeTable::UNKNOWN
-            && answer != TypeTable::ERROR
-            && !self.type_table.borrow().contains_infer_var(answer)
+        !says_nothing(answer) && !self.type_table.borrow().contains_infer_var(answer)
     }
+}
+
+/// Whether `answer` is `never` / `unknown` / `error`, which every check
+/// accepts anywhere, so it answers no variable.
+fn says_nothing(answer: TypeId) -> bool {
+    matches!(
+        answer,
+        TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR
+    )
 }
 
 /// What an unsolved parameter of the `kind` spelled `name` reports.
