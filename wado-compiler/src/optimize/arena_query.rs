@@ -8,9 +8,11 @@
 //! exactly that, scoped to the *reachable* operands — the pool is append-only, so
 //! seeding from it wholesale would keep long-folded locals alive forever.
 
+use cranelift_entity::EntityRef;
+
 use crate::hashmap;
 use crate::hashmap::IndexSet;
-use crate::nir::{FuncId, NirBinaryOp, NirLocal, NirUnaryOp};
+use crate::nir::{FuncId, FunctionRef, NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -489,6 +491,48 @@ pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
             .then_some(())
     })
     .is_some()
+}
+
+/// The `FuncId` of `builtin::cold_path`, if the package resolved one.
+pub(super) fn cold_path_id(descriptors: &[FunctionRef]) -> Option<FuncId> {
+    descriptors
+        .iter()
+        .position(|d| d.is_builtin_named("cold_path"))
+        .map(FuncId::new)
+}
+
+/// Whether `stmt` is a bare `cold_path()` call.
+pub(super) fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
+    let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
+        return false;
+    };
+    let Some(expr) = op.as_expr() else {
+        return false;
+    };
+    matches!(&body.exprs[expr].kind, ExprKind::Call { func_id, .. } if *func_id == cold)
+}
+
+/// Every expression a `cold_path()` marker makes cold: those under the marker's
+/// statement and the ones after it in its block.
+pub(super) fn cold_exprs(body: &Body, cold: FuncId) -> IndexSet<ExprId> {
+    let mut out = IndexSet::default();
+    body.for_each_reachable_node(|node| {
+        let NodeRef::Block(block) = node else {
+            return;
+        };
+        let stmts = &body.blocks[block].stmts;
+        let Some(marker) = stmts.iter().position(|&s| is_cold_marker(body, s, cold)) else {
+            return;
+        };
+        for &stmt in &stmts[marker..] {
+            body.for_each_live_node_under(NodeRef::Stmt(stmt), |n| {
+                if let NodeRef::Expr(e) = n {
+                    out.insert(e);
+                }
+            });
+        }
+    });
+    out
 }
 
 /// [`is_pure_expr`] for an operand: a promoted constant is pure.

@@ -19,10 +19,14 @@ channels { COMMENTS_CHANNEL }
 
 text : (WORD | NUMBER | PRAGMA)* EOF ;
 
+// Accepts `zero` only as the NUMBER it is re-typed to.
+numbers : NUMBER+ EOF ;
+
 // Two different source forms, one emitted token kind: the spelled-out
-// number 'zero' is re-typed to NUMBER via `-> type(NUMBER)`.
-WORD  : [a-z]+ ;
+// number 'zero' is re-typed to NUMBER via `-> type(NUMBER)`. It comes before
+// WORD, which would otherwise win the tie on the same four characters.
 ZERO  : 'zero' -> type(NUMBER) ;
+WORD  : [a-z]+ ;
 NUMBER : [0-9]+ ;
 
 // Numeric channel argument: routes comments to the custom channel by

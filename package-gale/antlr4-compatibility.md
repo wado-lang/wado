@@ -22,38 +22,54 @@ Compatibility is one-directional, **and then some**: Gale is a
 **superset**. It may also accept grammars ANTLR4 _rejects_, but only
 when the meaning is **uniquely determined** by Gale's existing language
 model — a canonical, forced extension, never an idiosyncratic
-interpretation. The worked example is a `.` / `~X`-led left-recursive
-suffix (`e ~';' e`, `e .`): ANTLR4 errors (no operator token to climb
-on), but precedence climbing fixes the meaning with no remaining choice,
-so Gale accepts it and lets the runtime ATN simulator decide the loop
-entry (fixtures `tests/grammars/lr_complement_op.g4`,
-`lr_wildcard_postfix.g4`). A second example is a lexer `mode` inside a
-combined `grammar`: ANTLR4 restricts modes to a `lexer grammar` (error
-120), but a combined grammar already bundles a lexer, so `mode` there
-desugars to exactly the lexer the combined→(lexer + parser) split would
-produce — Gale accepts it (still rejected in a `parser grammar`, which has
-no lexer). Where accepting a construct would require inventing behavior —
-the result is ambiguous, or context-defined with no single forced answer —
-Gale rejects loudly instead of guessing. The
-canonical statement of this rule is the "Compatibility Principle" in
-[`AGENTS.md`](./AGENTS.md).
+interpretation. Every such grammar is listed under
+[Grammars Gale accepts and ANTLR4 rejects](#grammars-gale-accepts-and-antlr4-rejects).
+Where accepting a construct would require inventing behavior — the result is
+ambiguous, or context-defined with no single forced answer — Gale rejects
+loudly instead of guessing. The canonical statement of this rule is the
+"Compatibility Principle" in [`AGENTS.md`](./AGENTS.md).
 
 The contract binds **capability**, not byte-for-byte output. Parse
 trees, token streams, and semantics must match ANTLR4; an incidental
 rendering difference that carries no structural meaning is allowed to
 diverge.
 
+### Grammars Gale accepts and ANTLR4 rejects
+
+Each entry names the jar's error (4.13.2), the meaning Gale gives the grammar,
+and the test that pins it. A grammar missing from this list that the jar
+rejects and Gale accepts is a Gale bug, on one side or the other.
+
+- **A lexer `mode` in a combined `grammar`** — error 120, "lexical modes are
+  only allowed in lexer grammars". A combined grammar already bundles a lexer,
+  so `mode` there desugars to exactly the lexer the combined → (lexer + parser)
+  split would produce. A `parser grammar` has no lexer and still rejects it.
+  Pinned by "mode declaration is accepted in a combined grammar (superset)" in
+  `src/g4/parser_test.wado`.
+- **A left-recursive alternative that can be followed by nothing** — error
+  148, as in `e : e x | INT ;` with `x : '*'? ;`, or an empty alternative in a
+  suffix group (`e : e ( A | ) | C ;`). Any number of empty iterations derives
+  the same text, and zero is the only number that adds no node, so an
+  iteration whose suffix would consume nothing is never taken. `1*` under
+  `s : e '*' EOF | e '!' EOF ; e : e x | '(' e ')' | INT ;` is `(s (e 1) *)`.
+  Pinned by "an LR loop never takes an iteration that consumes nothing" in
+  `src/codegen_test.wado`.
+
 ### Rejections Gale shares with ANTLR4
 
 Being a superset does not mean accepting everything. A grammar whose meaning
 is not determined is rejected loudly, at the same points ANTLR4 rejects it.
-Both checks read one left-corner fixpoint, built once per grammar by
-`check_rule_shapes` in `finish_grammar`, over the merged grammar and for lexer
-rules as well as parser rules. Like its sibling whole-grammar checks neither
-diagnostic carries a span.
+`check_rule_shapes` in `finish_grammar` runs these checks over the merged
+grammar, for lexer rules as well as parser rules, and the last two read one
+left-corner fixpoint it builds once per grammar. Like its sibling whole-grammar
+checks no diagnostic carries a span.
 
+- **A left-recursive rule with no other alternative** (`f : f 'x' ;`) —
+  `check_left_recursion_ends`, ANTLR4 error 147.
 - **Left recursion** that precedence climbing cannot resolve —
-  `check_left_recursion`, ANTLR4 error 119.
+  `check_left_recursion`, ANTLR4 error 119. That includes a self-reference
+  behind a leading one that can match empty (`e : e x e | A? ;` with `x`
+  nullable).
 - **An epsilon closure** — a `*` or `+` over a body that can match nothing
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
@@ -924,9 +940,22 @@ the compiled fast path:**
    competes with the loop for a shared delimiter (`'between' expr 'and' expr`
    against `expr 'and' expr`; fixture `lr_between.g4`), or when one LR
    alternative's suffix is a proper prefix of another's (`expr 'x' expr`
-   against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). Its mid
-   operand is ANTLR4's `expr[0]`. The loop takes a token an enter edge admits,
-   and the full simulator decides instead in two cases. One is a caller that
+   against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). A rule is
+   also routed here when an LR alternative's suffix can start with a `.` or a
+   `~X`. That start may be the suffix's first element, sit behind a rule or a
+   nullable prefix, or stand beside a named token (`expr (w | 'a')` with
+   `w : .`). Such a suffix admits tokens its first set does not name, so no
+   static first-token check can decide the loop entry. Fixtures:
+   `lr_wildcard_postfix.g4` and `lr_open_ended_rule_suffix.g4`. The last
+   reason is a self-reference nested in a subrule of an LR alternative that a
+   loop operator can follow inside that alternative (`expr (',' expr)* '>>'
+   expr`; fixture `lr_nested_self_ref.g4`). ANTLR4 calls a nested reference as
+   a plain `expr[0]`, so it climbs a `'>>'` exactly when another is left over
+   for the enclosing alternative. No precedence floor says that. A nested
+   reference no loop operator can follow inside its alternative stays static,
+   as a plain call. A routed rule's mid operand is ANTLR4's `expr[0]`. The loop
+   takes a token an enter edge admits, and the full simulator decides instead
+   in two cases. One is a caller that
    must take the token. The other is a caller's loop that can take it through
    an alternative this operand's precedence excludes (`lr_atn_trailing.g4`).
    The same shape inside an LR alternative (SQLite's
@@ -1008,7 +1037,13 @@ rather than by which one matches — strictly weaker than the second-token
 sub-dispatch the static LR path applies to the same question. The simulator is
 there for the enter-or-exit verdict, which needs full context; which member of
 the group to enter does not, and is re-taken from the scan twins by longest
-match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`.
+match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`. A suffix
+that can start with a `.` or `~X` joins no group. Where it and another suffix
+both admit the token, the simulator decides between them with full context, as
+ANTLR4 does: `expr 'd' 'd'` does not take the `d` only `expr .` can complete, and
+the earlier of two suffixes that both reach the end wins
+(`lr_open_ended_rule_suffix.g4`, `lr_complement_op.g4`). The longest scan would
+answer both wrongly.
 
 When the simulator predicts exit, the enclosing invocations of the same loop at
 the same position exit too, unless one of them could enter there on an operator

@@ -6638,7 +6638,7 @@ fn scan_expr_lr_17(tokens: &Array<i32>, pos: i32, follow: i64 = 0, lr_cont: i64 
         sg_151_done: {
             sg_151: {
                 pos += 1;
-                pos = scan_expr(tokens, pos, follow, 5);
+                pos = scan_expr(tokens, pos, follow, 0);
                 if pos < 0 { break sg_151; }
                 break sg_151_done;
             }
@@ -12362,12 +12362,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                                 _parse_select_stmt(p, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                             } else {
                                 p.site = 215;
-                                _parse_expr(p, 0, 0);
+                                _parse_expr(p, 0);
                                 if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
                                 while !p.recovering && (p.peek_kind() == TK_COMMA) {
                                     p.take();
                                     p.site = 216;
-                                    _parse_expr(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+                                    _parse_expr(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                                     if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
                                 }
                             }
@@ -12419,7 +12419,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                     if (p.peek_kind() == TK_K_ESCAPE && _kind_set_9(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                         p.take();
                         p.site = 233;
-                        _parse_expr(p, follow, 5);
+                        _parse_expr(p, follow);
                     }
                     p.b.finish_node(p.last_end());
                 } else {
@@ -12628,12 +12628,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                                     _parse_select_stmt(p, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                                 } else {
                                     p.site = 215;
-                                    _parse_expr(p, 0, 0);
+                                    _parse_expr(p, 0);
                                     if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_11, &EXPECTED_11); }
                                     while !p.recovering && (p.peek_kind() == TK_COMMA) {
                                         p.take();
                                         p.site = 216;
-                                        _parse_expr(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+                                        _parse_expr(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                                         if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
                                     }
                                 }
@@ -12685,7 +12685,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
                         if (p.peek_kind() == TK_K_ESCAPE && _kind_set_9(p.peek_at(1))) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                             p.take();
                             p.site = 233;
-                            _parse_expr(p, follow, 5);
+                            _parse_expr(p, follow);
                         }
                         p.b.finish_node(p.last_end());
                     } else {

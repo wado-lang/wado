@@ -1,7 +1,6 @@
 //! `~X`-led LR suffix: a binary operator over an open operator set (`e ~';'
-//! e`). A canonical superset extension beyond ANTLR4 — the loop-entry admits
-//! any non-`;` token, decided by the runtime ATN simulator. Expected trees are
-//! defined by precedence climbing (no ANTLR4 oracle; ANTLR4 rejects this).
+//! e`). The loop entry admits any non-`;` token, decided by the runtime ATN
+//! simulator. Expected trees are the ANTLR4 jar's.
 
 use co from "./grammars/lr_complement_op.g4"
     with {
@@ -23,6 +22,9 @@ test "complement-op: a higher-precedence '*' wins the overlap" {
 }
 test "complement-op: standard precedence ('*' binds tighter)" {
     chk("1 + 2 * 3", "(prog (e (e 1) + (e (e 2) * (e 3))))");
+    // `*` is also a complement operator, so both suffixes admit it and only
+    // full context says the tighter one climbs.
+    chk("1 * 2 * 3", "(prog (e (e (e 1) * (e 2)) * (e 3)))");
 }
 test "complement-op: the excluded ';' is not an operator" {
     let r = co::parse("1 ; 2");

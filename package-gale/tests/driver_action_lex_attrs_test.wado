@@ -1,6 +1,7 @@
 //! Stage C: the lexer `$`-attribute surface in a `language = Wado` body.
-//! `$type = X` retypes the token the tournament is committing, and `$text`,
-//! `$index` and `$pos` read the match window it is committing over.
+//! `$type = X` retypes the token the tournament is committing, `$channel = N`
+//! moves it to another channel, and `$text`, `$index` and `$pos` read the match
+//! window it is committing over.
 
 use la from "./grammars/wado_lex_attrs.g4"
     with {
@@ -19,6 +20,12 @@ test "$type reads the type the tournament settled on" {
     let out = la::parse_s("r");
     assert out.ok(), "clean parse";
     assert out.output == "b", `the action saw TK_R and retyped, got '${out.output}'`;
+}
+
+test "$channel moves the token off the parser's channel" {
+    let out = la::parse_s("a c a");
+    assert out.ok(), "the hidden token never reaches the parser";
+    assert out.output == "aa", `got '${out.output}'`;
 }
 
 test "$text reads the matched slice" {
