@@ -104,7 +104,6 @@ fn "wir_optimize_unwrap_fresh_elision_edge.wado/run"() with Stdout {
     let $r_89: ref "core:prelude/string.wado//String";
     let new_used_102: i32;
     let start_103: i32;
-    let new_used_126: i32;
     let start_127: i32;
     let $r_266: ref "core:prelude/string.wado//String";
     let new_used_279: i32;
@@ -113,8 +112,8 @@ fn "wir_optimize_unwrap_fresh_elision_edge.wado/run"() with Stdout {
     let packed: i64;
     let rx_328: i32;
     let tx_329: i32;
-    let $sroa_v_y_356: i32;
-    let $tmpl_buf_373: ref "core:prelude/string.wado//String";
+    let $sroa_v_y_365: i32;
+    let $tmpl_buf_445: ref "core:prelude/string.wado//String";
     $r_89 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     new_used_102 = 0 + 5;
     if @unlikely(new_used_102 > builtin::array_len($r_89.repr)) {
@@ -126,25 +125,24 @@ fn "wir_optimize_unwrap_fresh_elision_edge.wado/run"() with Stdout {
     builtin::array_copy<u8>($r_89.repr, start_103, global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_8, 0, 5);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $r_89);
     i_5 = 0;
-    $tmpl_buf_373 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
+    $tmpl_buf_445 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     b1: block {
         l2: loop {
             break_if b1 i_5 >= 3;
-            $sroa_v_y_356 = i_5 * 2;
-            $tmpl_buf_373.used = 0;
-            new_used_126 = $tmpl_buf_373.used + 5;
-            if @unlikely(new_used_126 > builtin::array_len($tmpl_buf_373.repr)) {
+            $sroa_v_y_365 = i_5 * 2;
+            $tmpl_buf_445.used = 0;
+            if @unlikely(5 > builtin::array_len($tmpl_buf_445.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_373, new_used_126);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_445, 5);
             }
-            start_127 = $tmpl_buf_373.used;
-            $tmpl_buf_373.used = new_used_126;
-            builtin::array_copy<u8>($tmpl_buf_373.repr, start_127, global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_8, 0, 5);
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_5, $tmpl_buf_373);
+            start_127 = $tmpl_buf_445.used;
+            $tmpl_buf_445.used = 5;
+            builtin::array_copy<u8>($tmpl_buf_445.repr, start_127, global:wir_optimize_unwrap_fresh_elision_edge.wado::$const_obj_8, 0, 5);
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_5, $tmpl_buf_445);
             $v2 = i_5 * 2;
-            if @unlikely($sroa_v_y_356 != $v2) {
+            if @unlikely($sroa_v_y_365 != $v2) {
                 cold_path;
-                "wir_optimize_unwrap_fresh_elision_edge.wado/run$cold7"(i_5, $sroa_v_y_356, $v2);
+                "wir_optimize_unwrap_fresh_elision_edge.wado/run$cold7"(i_5, $sroa_v_y_365, $v2);
                 unreachable;
             }
             i_5 = i_5 + 1;

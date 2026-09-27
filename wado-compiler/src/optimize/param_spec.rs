@@ -13,9 +13,12 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKi
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
+use crate::niri::{CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{cold_exprs, cold_path_id};
+use super::const_branch_prune::{BranchPruneRule, PruneMode};
+use super::const_folding::ConstFoldRule;
 use super::dae::is_dae_sroa_eligible;
 use super::dce::{DescriptorCache, reachable_function_positions};
 use super::extract::is_place_read;
@@ -963,13 +966,41 @@ fn select_field_bindings(
 
 /// Specialize callees on the constants their callers pass — a scalar argument,
 /// or a field of a struct passed by reference. Returns whether anything changed.
+///
+/// Runs its rounds to a fixpoint: each round's constants reach one call deeper
+/// (a clone seeds its own callees, a propagated scalar becomes its callees'
+/// argument), and a chain deeper than the optimizer's iteration count must
+/// still converge.
 pub(super) fn specialize_const_params(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
     descriptors: &mut DescriptorCache,
 ) -> bool {
-    let constants = collect_call_constants(project, state, descriptors);
+    let cached: Vec<_> = state
+        .clones
+        .values()
+        .chain(project.sroa_param_clones.iter())
+        .copied()
+        .collect();
+    let mut reachable = reachable_function_positions(project, descriptors, cached);
+    let mut changed = false;
+    while specialize_round(project, state, gate, descriptors, &mut reachable) {
+        changed = true;
+    }
+    changed
+}
+
+/// One step deeper. `reachable` holds the callers whose arguments the call
+/// constants are taken over, and gains the clones the round mints.
+fn specialize_round(
+    project: &mut NirPackage,
+    state: &mut ParamSpecState,
+    gate: &mut FunctionGate,
+    descriptors: &mut DescriptorCache,
+    reachable: &mut IndexSet<usize>,
+) -> bool {
+    let constants = collect_call_constants(project, reachable);
     let propagated = propagate_scalar_constants(project, state, &constants, gate);
     let signatures = {
         let types = project.type_table.borrow();
@@ -986,7 +1017,11 @@ pub(super) fn specialize_const_params(
         return propagated;
     }
     retarget_calls(project, &retarget);
+    // A clone is reachable through the call just pointed at it, and reaches
+    // nothing its original did not.
+    let first_minted = project.functions.len();
     project.functions.extend(minted);
+    reachable.extend(first_minted..project.functions.len());
     for (caller, _, _) in retarget {
         gate.mark_changed(FuncId::new(caller));
     }
@@ -998,18 +1033,7 @@ pub(super) fn specialize_const_params(
 /// at — which is what tells `select_sites` a clone is the only way to reach it.
 type CallConsts = IndexMap<FuncId, Vec<Option<FieldConst>>>;
 
-fn collect_call_constants(
-    project: &mut NirPackage,
-    state: &ParamSpecState,
-    descriptors: &mut DescriptorCache,
-) -> CallConsts {
-    let cached: Vec<_> = state
-        .clones
-        .values()
-        .chain(project.sroa_param_clones.iter())
-        .copied()
-        .collect();
-    let reachable = reachable_function_positions(project, descriptors, cached);
+fn collect_call_constants(project: &NirPackage, reachable: &IndexSet<usize>) -> CallConsts {
     let mut constants: CallConsts = IndexMap::default();
     let mut collect = |body: &Body| {
         body.for_each_reachable_node(|node| {
@@ -1037,7 +1061,7 @@ fn collect_call_constants(
             }
         });
     };
-    for pos in reachable {
+    for &pos in reachable {
         let func = &project.functions[pos];
         let func = func.borrow();
         if !func.is_dead
@@ -1154,6 +1178,7 @@ fn mint_clones(
     let mut retarget: Vec<Retarget> = Vec::new();
     let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
+    let settler = BranchSettler::new(project);
     let hot_then_cold = [false, true].into_iter().flat_map(|cold| {
         per_caller.iter().flat_map(move |(caller, sites)| {
             sites
@@ -1187,7 +1212,7 @@ fn mint_clones(
             project.functions[site.callee.index()].borrow().name,
             site.bindings.len()
         );
-        let clone = build_clone(project, site, FuncId::new(next_id), ordinal);
+        let clone = build_clone(project, site, FuncId::new(next_id), ordinal, &settler);
         next_id += 1;
         state.clones.insert(key, clone.id);
         state.per_callee.insert(site.callee, ordinal + 1);
@@ -1212,6 +1237,40 @@ fn retarget_calls(project: &mut NirPackage, retarget: &[Retarget]) {
     }
 }
 
+/// Folds the constants a clone was minted on and prunes the branches they
+/// decide. The next round collects the clone's call sites, and one on a dead
+/// branch would spend the clone budget its live siblings need.
+struct BranchSettler {
+    callees: CalleeMap,
+    ctfe_builtins: CtfeBuiltinMap,
+    pure_builtin_callees: IndexSet<FuncId>,
+}
+
+impl BranchSettler {
+    fn new(project: &NirPackage) -> Self {
+        BranchSettler {
+            callees: build_callee_map(project),
+            ctfe_builtins: build_ctfe_builtin_map(project),
+            pure_builtin_callees: project.pure_builtin_callee_ids(),
+        }
+    }
+
+    fn settle(
+        &self,
+        body: &mut Body,
+        locals: &mut Vec<NirLocal>,
+        buffers: &mut EngineBuffers,
+        types: &TypeTable,
+    ) {
+        let fold = ConstFoldRule::new(types, &self.callees, &self.ctfe_builtins);
+        let prune = BranchPruneRule::new(PruneMode::Fixpoint);
+        let mut engine = Engine::new(body, buffers, locals);
+        engine.set_value_graph_type_table(types);
+        engine.set_pure_builtin_callees(&self.pure_builtin_callees);
+        engine.run(&[&fold, &prune]);
+    }
+}
+
 /// A freshly minted clone and the facts recorded for it.
 struct Clone {
     id: FuncId,
@@ -1225,7 +1284,13 @@ struct Clone {
 /// The clone's identity must differ from the original's along every axis the
 /// call graph keys on, `method_name` included — DCE resolves a method call
 /// through `method_info`, and would prune the clone as unreachable.
-fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize) -> Clone {
+fn build_clone(
+    project: &mut NirPackage,
+    site: &Site,
+    id: FuncId,
+    ordinal: usize,
+    settler: &BranchSettler,
+) -> Clone {
     let mut clone = project.functions[site.callee.index()].borrow().clone();
     let origin = (clone.module_source.clone(), clone.name.clone());
     let name = param_spec_name(&clone.name, ordinal);
@@ -1253,12 +1318,13 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
         }
     }
 
+    let types = project.type_table.borrow();
     let body = clone.body.as_mut().expect("specialized callee has a body");
     let mut buffers = EngineBuffers::default();
     substitute_fields(body, &mut clone.locals, &mut buffers, &bound);
     substitute_locals(body, &mut clone.locals, &mut buffers, &whole);
+    settler.settle(body, &mut clone.locals, &mut buffers, &types);
 
-    let types = project.type_table.borrow();
     let param_consts: IndexMap<String, ParamSeed> = clone
         .params
         .iter()
