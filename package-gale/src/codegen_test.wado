@@ -1504,12 +1504,12 @@ ${rest}`;
 s : e '*' EOF | e '!' EOF ;
 e : e x | e '+' e '+' | e '+' e | '(' e ')' | INT ;
 ${rest}`;
-    let got = parses(atn_lr, "s", ["1*", "1+2!", "1+2+*", "1+2**"]);
-    assert got == "1* => (s (e 1) *)
+    let atn_got = parses(atn_lr, "s", ["1*", "1+2!", "1+2+*", "1+2**"]);
+    assert atn_got == "1* => (s (e 1) *)
 1+2! => (s (e (e 1) + (e 2)) !)
 1+2+* => (s (e (e 1) + (e 2) +) *)
 1+2** => (s (e (e 1) + (e (e 2) (x *))) *)
-", got;
+", atn_got;
 }
 
 // An action or predicate nested inside a group must never vanish: it either
