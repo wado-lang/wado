@@ -86,32 +86,37 @@ fn "closure_mut_capture_after_reify_temp.wado/run"() with Stdout {
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
-    let new_used_56: i32;
-    let start_57: i32;
+    let self_22: ref Array<u8>;
+    let self_26: ref Array<u8>;
+    let offset_27: i32;
+    let new_used_45: i32;
+    let start_46: i32;
     let packed: i64;
-    let rx_65: i32;
-    let tx_66: i32;
+    let rx_54: i32;
+    let tx_55: i32;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
-    $local_5.used = 1;
-    builtin::array_copy<u8>(local.tee $load_0($local_5.repr), 0, global:closure_mut_capture_after_reify_temp.wado::$const_obj_2, 0, 1);
     $local_5.used = 2;
-    builtin::array_copy<u8>($load_0, 1, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
+    self_22 = local.tee $load_0($local_5.repr);
+    builtin::array_copy<u8>(self_22, 0, global:closure_mut_capture_after_reify_temp.wado::$const_obj_2, 0, 1);
+    self_26 = $load_0;
+    offset_27 = 0 + 1;
+    builtin::array_copy<u8>(self_26, offset_27, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $local_6.buf);
-    new_used_56 = $local_5.used + 1;
-    if @unlikely(new_used_56 > builtin::array_len($local_5.repr)) {
+    new_used_45 = $local_5.used + 1;
+    if @unlikely(new_used_45 > builtin::array_len($local_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_56);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_45);
     }
-    start_57 = $local_5.used;
-    $local_5.used = new_used_56;
-    builtin::array_copy<u8>($local_5.repr, start_57, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
+    start_46 = $local_5.used;
+    $local_5.used = new_used_45;
+    builtin::array_copy<u8>($local_5.repr, start_46, global:closure_mut_capture_after_reify_temp.wado::$const_obj_0, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $local_6.buf);
-    rx_65 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_66 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "closure_mut_capture_after_reify_temp.wado/$cm_binding__Stdout_write_via_stream"(rx_65);
-    "core:rt/write_string_to_stream"(tx_66, $local_5.repr, $local_5.used);
+    rx_54 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_55 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "closure_mut_capture_after_reify_temp.wado/$cm_binding__Stdout_write_via_stream"(rx_54);
+    "core:rt/write_string_to_stream"(tx_55, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 

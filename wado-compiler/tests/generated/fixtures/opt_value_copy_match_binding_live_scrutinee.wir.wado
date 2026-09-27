@@ -167,7 +167,7 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     let rx_169: i32;
     let tx_170: i32;
     let $sroa_h_p_179: ref "opt_value_copy_match_binding_live_scrutinee.wado//P";
-    let used_186: i32;
+    let $sroa_xs_used_202: i32;
     a = struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: ref.as_non_null(elements_15 = array.new_fixed<i32>(black_box(7)); struct.new "core:prelude//List<i32>" { repr: elements_15, used: builtin::array_len(elements_15) }) };
     xs_1 = ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(a).payload_0;
     ys_2 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = xs_1.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(xs_1.used); let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
@@ -262,14 +262,14 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     $local_13.used = new_used_155;
     builtin::array_copy<u8>($local_13.repr, start_156, global:opt_value_copy_match_binding_live_scrutinee.wado::$const_obj_3, 0, 2);
     elements_161 = array.new_fixed<i32>(black_box(7));
-    ys_164 = struct.new "core:prelude//List<i32>" { repr: elements_161, used: builtin::array_len(elements_161) };
-    used_186 = ys_164.used;
-    if @unlikely(used_186 >= builtin::array_len(ys_164.repr)) {
+    $sroa_xs_used_202 = builtin::array_len(elements_161);
+    ys_164 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_dst_20: ref Array<i32>; $array_clone_dst_20 = builtin::array_new<i32>($sroa_xs_used_202); builtin::array_copy<i32>($array_clone_dst_20, 0, elements_161, 0, $sroa_xs_used_202); $array_clone_dst_20), used: $sroa_xs_used_202 };
+    if @unlikely($sroa_xs_used_202 >= builtin::array_len(ys_164.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(ys_164);
     }
-    builtin::array_set<i32>(ys_164.repr, used_186, 9);
-    ys_164.used = used_186 + 1;
+    builtin::array_set<i32>(ys_164.repr, $sroa_xs_used_202, 9);
+    ys_164.used = $sroa_xs_used_202 + 1;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(ys_164.used, $local_13);
     rx_169 = builtin::i32_wrap_i64(local.tee packed_168("wasi/stream-new"()));
     tx_170 = builtin::i32_wrap_i64(packed_168 >> 32_i64);

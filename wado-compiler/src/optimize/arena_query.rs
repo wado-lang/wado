@@ -609,6 +609,21 @@ pub(super) fn unary_op_may_trap(op: NirUnaryOp) -> bool {
     matches!(op, NirUnaryOp::Deref)
 }
 
+/// [`unary_op_may_trap`] knowing the operand: `*&x` reads `x` back, and a
+/// reference just taken is never null.
+pub(super) fn unary_may_trap(body: &Body, op: NirUnaryOp, operand: Operand) -> bool {
+    unary_op_may_trap(op)
+        && !operand.as_expr().is_some_and(|e| {
+            matches!(
+                body.exprs[e].kind,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    ..
+                }
+            )
+        })
+}
+
 /// Whether running the value tree at `v` can trap. The [`ValuePool`] counterpart
 /// of [`expr_node_may_trap`], recursive because a value tree has no skeleton
 /// nodes for a walker to descend through.
@@ -678,7 +693,7 @@ pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
 pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&TypeTable>) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Binary { op, .. } => binary_op_may_trap(*op),
-        ExprKind::Unary { op, .. } => unary_op_may_trap(*op),
+        ExprKind::Unary { op, expr } => unary_may_trap(body, *op, *expr),
         ExprKind::FieldAccess { expr, .. } => !field_receiver_nonnull(body, types, *expr),
         // Heap projections on a possibly-null (or case-mismatched, or short)
         // receiver.

@@ -1,0 +1,77 @@
+// A constant bound by `let` whose storage leaves the function must not be
+// hoisted into a shared global: the caller receives the global itself and
+// treats it as its own.
+//
+// `make` returns a constant the optimizer cannot fold away (it holds a
+// function), so `k` survives to the pass. Each getter hands `k.data` out by a
+// different route, and the caller writes what it gets:
+//
+// - `take_field` returns the projection directly.
+// - `take_alias` returns a local bound from it.
+// - `take_wrapped` returns an aggregate built around it.
+// - `write_refilled` fills a local from it by assignment and writes through
+//   that local, which renames the storage rather than copying it.
+//
+// Every getter runs three times: identical lines are the check. A regression
+// grows the list by one on each call, or adds 10 to the element.
+
+use { println, Stdout } from "core:cli";
+
+struct K {
+    data: List<i32>,
+    f: fn(i32) -> i32,
+}
+
+fn inc(x: i32) -> i32 {
+    return x + 1;
+}
+
+#[inline(never)]
+fn make() -> K {
+    return K { data: [1, 2, 3], f: inc };
+}
+
+#[inline(never)]
+fn take_field() -> List<i32> {
+    let k = make();
+    return k.data;
+}
+
+#[inline(never)]
+fn take_alias() -> List<i32> {
+    let k = make();
+    let data = k.data;
+    return data;
+}
+
+#[inline(never)]
+fn take_wrapped() -> Option<List<i32>> {
+    let k = make();
+    return Some(k.data);
+}
+
+#[inline(never)]
+fn write_refilled(i: i32) -> i32 {
+    let k = make();
+    let mut data: List<i32> = [];
+    data = k.data;
+    data[0] = data[0] + i;
+    return data[0];
+}
+
+export fn run() with Stdout {
+    for let _i of 0..<3 {
+        let mut a = take_field();
+        a.push(9);
+        let mut b = take_alias();
+        b.push(9);
+        let mut c = take_wrapped().unwrap();
+        c.push(9);
+        println(`${a.len()} ${b.len()} ${c.len()} ${write_refilled(10)}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "4 4 4 11\n4 4 4 11\n4 4 4 11\n"
+}

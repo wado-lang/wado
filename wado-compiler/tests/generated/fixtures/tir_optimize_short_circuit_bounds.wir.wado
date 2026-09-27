@@ -73,6 +73,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:tir_optimize_short_circuit_bounds.wado::$const_obj_1: ref null "core:prelude//List<char>" = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(104, 101, 108, 108, 111), used: 5 };
+
 fn "tir_optimize_short_circuit_bounds.wado/check_char"(arr, pos) {
     if (if pos >= arr.used -> i32 {
         1;
@@ -85,7 +87,6 @@ fn "tir_optimize_short_circuit_bounds.wado/check_char"(arr, pos) {
 }
 
 fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
-    let a: ref "core:prelude//List<char>";
     let $local_1: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
@@ -114,9 +115,8 @@ fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
     let packed_79: i64;
     let rx_80: i32;
     let tx_81: i32;
-    a = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(104, 101, 108, 108, 111), used: 5 };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_19 = "tir_optimize_short_circuit_bounds.wado/check_char$spec0"(a, black_box(0));
+    self_19 = "tir_optimize_short_circuit_bounds.wado/check_char$spec0"(global:tir_optimize_short_circuit_bounds.wado::$const_obj_1, black_box(0));
     text_21 = (if self_19 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
@@ -129,7 +129,7 @@ fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(tx_24, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_13);
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_38 = "tir_optimize_short_circuit_bounds.wado/check_char$spec1"(a, black_box(4));
+    self_38 = "tir_optimize_short_circuit_bounds.wado/check_char$spec1"(global:tir_optimize_short_circuit_bounds.wado::$const_obj_1, black_box(4));
     text_40 = (if self_38 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
@@ -142,7 +142,7 @@ fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(tx_43, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_32);
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_57 = "tir_optimize_short_circuit_bounds.wado/check_char"(a, black_box(5));
+    self_57 = "tir_optimize_short_circuit_bounds.wado/check_char"(global:tir_optimize_short_circuit_bounds.wado::$const_obj_1, black_box(5));
     text_59 = (if self_57 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
@@ -155,7 +155,7 @@ fn "tir_optimize_short_circuit_bounds.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(tx_62, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_51);
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_76 = "tir_optimize_short_circuit_bounds.wado/check_char"(a, black_box(2));
+    self_76 = "tir_optimize_short_circuit_bounds.wado/check_char"(global:tir_optimize_short_circuit_bounds.wado::$const_obj_1, black_box(2));
     text_78 = (if self_76 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {

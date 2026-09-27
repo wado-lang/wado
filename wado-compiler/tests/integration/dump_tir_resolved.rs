@@ -27,9 +27,14 @@ export fn run() {
 
 /// The resolved TIR of every module `SOURCE` pulls in, unparsed.
 fn resolved_modules() -> Vec<String> {
+    resolved_modules_of(SOURCE)
+}
+
+/// The resolved TIR of every module `source` pulls in, unparsed.
+fn resolved_modules_of(source: &str) -> Vec<String> {
     let host = InMemoryHost::new();
     let dump = block_on(dump_with_host_and_world(
-        SOURCE,
+        source,
         &host,
         Some("entry.wado"),
         OptLevel::O2,
@@ -85,4 +90,46 @@ fn tir_resolved_marks_a_deferred_global_rather_than_printing_its_placeholder() {
         entry.contains("global COUNT: i32 = 42;"),
         "a direct global still prints its value, got:\n{entry}"
     );
+}
+
+/// A destructured binding's mutability lives on its local, so the dump reads
+/// it from there: under `let mut`, and on one binding, a field's included. A
+/// closure numbers its locals afresh, so its body reads its own.
+#[test]
+fn tir_resolved_prints_a_destructured_binding_mutable_where_its_local_is() {
+    let source = r#"
+struct Point { x: i32, y: i32 }
+
+export fn run() {
+    let t = [1, 2];
+    let mut [a, b] = t;
+    let [mut c, d] = t;
+    let { x: mut x, y } = Point { x: 1, y: 2 };
+    a += b + d + y;
+    c += 1;
+    x += 1;
+    let f = |n: i32| {
+        let [p, q, r, mut s] = [n, 4, 5, 6];
+        s += p + q + r;
+        return s;
+    };
+    f(3);
+}
+"#;
+    let entry = resolved_modules_of(source)
+        .into_iter()
+        .find(|text| text.contains("fn run"))
+        .expect("entry module declares run");
+
+    for expected in [
+        "let [mut a, mut b] = ",
+        "let [mut c, d] = ",
+        "let { x: mut x, y } = ",
+        "let [p, q, r, mut s] = ",
+    ] {
+        assert!(
+            entry.contains(expected),
+            "expected `{expected}`, got:\n{entry}"
+        );
+    }
 }

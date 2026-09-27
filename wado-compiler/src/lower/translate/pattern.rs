@@ -736,31 +736,13 @@ impl<'a> PatternLowerer<'a> {
                         span,
                     );
 
-                    match binding {
-                        TirPattern::Binding {
-                            name, local_index, ..
-                        } => {
-                            self.emit_binding_let(
-                                name,
-                                *local_index,
-                                false,
-                                payload_expr,
-                                span,
-                                type_table,
-                                body_prefix_stmts,
-                            );
-                        }
-                        _ => {
-                            self.lower_pattern_to_lets(
-                                binding,
-                                false,
-                                payload_expr,
-                                span,
-                                body_prefix_stmts,
-                                type_table,
-                            );
-                        }
-                    }
+                    self.lower_pattern_to_lets(
+                        binding,
+                        payload_expr,
+                        span,
+                        body_prefix_stmts,
+                        type_table,
+                    );
                 }
 
                 *sub = TirPattern::Binding {
@@ -914,15 +896,7 @@ impl<'a> PatternLowerer<'a> {
                 name, local_index, ..
             } => {
                 let mut stmts = Vec::new();
-                self.emit_binding_let(
-                    name,
-                    *local_index,
-                    false,
-                    value,
-                    span,
-                    type_table,
-                    &mut stmts,
-                );
+                self.emit_binding_let(name, *local_index, value, span, type_table, &mut stmts);
                 stmts.push(TirStmt::new(TirStmtKind::Expr(continuation), span));
                 let block = TirBlock::new(stmts, span);
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
@@ -1597,26 +1571,17 @@ impl<'a> PatternLowerer<'a> {
     /// Lower a statement, potentially expanding it into multiple statements
     fn lower_stmt(&mut self, stmt: TirStmt, out: &mut Vec<TirStmt>, type_table: &TypeTable) {
         match stmt.kind {
-            TirStmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => {
+            TirStmtKind::LetDestructure { pattern, mut value } => {
                 // Don't lower multi-value builtin calls - codegen has a special optimization for them
-                if self.is_multivalue_builtin_pattern(&pattern, &value, type_table) {
-                    let mut value = value;
-                    self.lower_expr(&mut value, type_table);
+                let multivalue = self.is_multivalue_builtin_pattern(&pattern, &value, type_table);
+                self.lower_expr(&mut value, type_table);
+                if multivalue {
                     out.push(TirStmt::new(
-                        TirStmtKind::LetDestructure {
-                            pattern,
-                            is_mut,
-                            value,
-                        },
+                        TirStmtKind::LetDestructure { pattern, value },
                         stmt.span,
                     ));
                 } else {
-                    // Lower LetDestructure to explicit Let statements
-                    self.lower_let_pattern(&pattern, is_mut, value, stmt.span, out, type_table);
+                    self.lower_pattern_to_lets(&pattern, value, stmt.span, out, type_table);
                 }
             }
             TirStmtKind::Let {
@@ -1731,7 +1696,6 @@ impl<'a> PatternLowerer<'a> {
         &self,
         name: &str,
         local_index: u32,
-        is_mut: bool,
         value: TirExpr,
         span: Span,
         type_table: &TypeTable,
@@ -1743,7 +1707,7 @@ impl<'a> PatternLowerer<'a> {
             TirStmtKind::Let {
                 name: name.to_string(),
                 local_index,
-                is_mut,
+                is_mut: self.locals[local_index as usize].is_mut,
                 is_reactive: false,
                 type_id: binding_type,
                 value,
@@ -1789,8 +1753,7 @@ impl<'a> PatternLowerer<'a> {
                     .returns_receiver_alias
                     .contains(&func.module_source, &func.name) =>
             {
-                args.first()
-                    .is_some_and(|a| self.place_is_writable(&a.expr, type_table))
+                self.place_is_writable(place::arg_at(func, args, 0), type_table)
             }
             _ => place::projection_base(expr).is_some_and(|inner| {
                 place::is_reference(inner.type_id, type_table)
@@ -1880,7 +1843,6 @@ impl<'a> PatternLowerer<'a> {
         bindings: &[TirPattern],
         case_index: u32,
         payload_type: TypeId,
-        is_mut: bool,
         value: TirExpr,
         span: Span,
         out: &mut Vec<TirStmt>,
@@ -1911,14 +1873,13 @@ impl<'a> PatternLowerer<'a> {
             payload_type,
             span,
         );
-        self.lower_pattern_to_lets(binding, is_mut, payload, span, out, type_table);
+        self.lower_pattern_to_lets(binding, payload, span, out, type_table);
     }
 
     /// One `Let` per element of a tuple pattern, at any nesting depth.
     fn lower_tuple_pattern(
         &mut self,
         sub_patterns: &[TirPattern],
-        is_mut: bool,
         value: TirExpr,
         span: Span,
         out: &mut Vec<TirStmt>,
@@ -1942,7 +1903,7 @@ impl<'a> PatternLowerer<'a> {
                 *elem_type,
                 span,
             );
-            self.lower_pattern_to_lets(sub_pattern, is_mut, project, span, out, type_table);
+            self.lower_pattern_to_lets(sub_pattern, project, span, out, type_table);
         }
     }
 
@@ -1950,7 +1911,6 @@ impl<'a> PatternLowerer<'a> {
     fn lower_struct_pattern(
         &mut self,
         fields: &[TirStructPatternField],
-        is_mut: bool,
         value: TirExpr,
         span: Span,
         out: &mut Vec<TirStmt>,
@@ -1978,80 +1938,14 @@ impl<'a> PatternLowerer<'a> {
                 field_type,
                 span,
             );
-            self.lower_pattern_to_lets(&field.pattern, is_mut, project, span, out, type_table);
+            self.lower_pattern_to_lets(&field.pattern, project, span, out, type_table);
         }
     }
 
-    /// Lower `LetDestructure` to explicit Let statements
-    fn lower_let_pattern(
-        &mut self,
-        pattern: &TirPattern,
-        is_mut: bool,
-        value: TirExpr,
-        span: Span,
-        out: &mut Vec<TirStmt>,
-        type_table: &TypeTable,
-    ) {
-        let mut value = value;
-        self.lower_expr(&mut value, type_table);
-
-        match pattern {
-            TirPattern::Tuple(sub_patterns, _) => {
-                self.lower_tuple_pattern(sub_patterns, is_mut, value, span, out, type_table);
-            }
-            TirPattern::Binding {
-                name, local_index, ..
-            } => {
-                self.emit_binding_let(name, *local_index, is_mut, value, span, type_table, out);
-            }
-            TirPattern::Wildcard => {
-                // Evaluate value for side effects but discard
-                out.push(TirStmt::new(TirStmtKind::Expr(value), span));
-            }
-            TirPattern::Variant {
-                bindings,
-                case_index,
-                payload_type,
-                ..
-            } => {
-                self.lower_variant_pattern(
-                    bindings,
-                    *case_index,
-                    *payload_type,
-                    is_mut,
-                    value,
-                    span,
-                    out,
-                    type_table,
-                );
-            }
-            TirPattern::Struct { fields, .. } => {
-                self.lower_struct_pattern(fields, is_mut, value, span, out, type_table);
-            }
-            TirPattern::Literal(_)
-            | TirPattern::Enum { .. }
-            | TirPattern::ConstantValue { .. }
-            | TirPattern::Range { .. } => {
-                // Literal/Enum/ConstantValue/Range patterns don't bind anything, just evaluate for side effects
-                out.push(TirStmt::new(TirStmtKind::Expr(value), span));
-            }
-            TirPattern::Narrow { .. } => {
-                panic!("a narrowing pattern is refutable, so no `let` destructures through one")
-            }
-            TirPattern::Or(alternatives) => {
-                // Or patterns in let-destructure: use first alternative's bindings
-                if let Some(first) = alternatives.first() {
-                    self.lower_pattern_to_lets(first, is_mut, value, span, out, type_table);
-                }
-            }
-        }
-    }
-
-    /// Helper to lower a pattern to Let statements given an already-evaluated value
+    /// One `Let` per binding of `pattern`, given an already-evaluated value.
     fn lower_pattern_to_lets(
         &mut self,
         pattern: &TirPattern,
-        is_mut: bool,
         value: TirExpr,
         span: Span,
         out: &mut Vec<TirStmt>,
@@ -2061,10 +1955,10 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Binding {
                 name, local_index, ..
             } => {
-                self.emit_binding_let(name, *local_index, is_mut, value, span, type_table, out);
+                self.emit_binding_let(name, *local_index, value, span, type_table, out);
             }
             TirPattern::Tuple(sub_patterns, _) => {
-                self.lower_tuple_pattern(sub_patterns, is_mut, value, span, out, type_table);
+                self.lower_tuple_pattern(sub_patterns, value, span, out, type_table);
             }
             TirPattern::Wildcard => {
                 // Discard value — emit as expression statement. The WIR
@@ -2084,7 +1978,6 @@ impl<'a> PatternLowerer<'a> {
                     bindings,
                     *case_index,
                     *payload_type,
-                    is_mut,
                     value,
                     span,
                     out,
@@ -2092,7 +1985,7 @@ impl<'a> PatternLowerer<'a> {
                 );
             }
             TirPattern::Struct { fields, .. } => {
-                self.lower_struct_pattern(fields, is_mut, value, span, out, type_table);
+                self.lower_struct_pattern(fields, value, span, out, type_table);
             }
             TirPattern::Literal(_)
             | TirPattern::Enum { .. }
@@ -2105,10 +1998,9 @@ impl<'a> PatternLowerer<'a> {
                 panic!("a narrowing pattern is extracted into a guard before its lets")
             }
             TirPattern::Or(alternatives) => {
-                // Or patterns in lets: use first alternative's bindings
-                if let Some(first) = alternatives.first() {
-                    self.lower_pattern_to_lets(first, is_mut, value, span, out, type_table);
-                }
+                // What reaches here is irrefutable, so the first alternative
+                // matches and binds what every alternative binds.
+                self.lower_pattern_to_lets(&alternatives[0], value, span, out, type_table);
             }
         }
     }
