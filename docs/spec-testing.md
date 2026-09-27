@@ -100,13 +100,15 @@ test {
 }
 ```
 
-A TODO test marks a test for an unimplemented feature:
+A TODO test marks a test for an unimplemented feature. It is reported on a
+separate axis from pass and fail (see Test Outcome Model):
+
+<!-- {"source": "wado-compiler/tests/fixtures/test_todo.wado"} -->
 
 ```wado
-// Reported on a separate axis from pass/fail (see Test Outcome Model).
 #[TODO]
-test "not yet implemented" {
-    panic("TODO: implement this feature");
+test "not yet implemented feature" {
+    panic("TODO: this feature is not yet implemented");
 }
 ```
 
