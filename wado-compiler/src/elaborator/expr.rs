@@ -3710,7 +3710,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let every_slot_written = {
             let tt = self.tysys.type_table.borrow();
             slots.iter().all(|&slot| {
-                let index = tt.param_slot(slot).expect("a struct slot is a type parameter");
+                let index = tt
+                    .param_slot(slot)
+                    .expect("a struct slot is a type parameter");
                 info.fields.iter().any(|(name, declared, _)| {
                     struct_lit.fields.iter().any(|f| &f.name == name)
                         && tt.contains_type_param_index(*declared, index)
@@ -4807,7 +4809,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // leaving one unanswered: `List { … }` inside `impl<T> List<T>`.
         let scope_params = self.scope_type_param_ids();
         let mut names: Vec<String> = Vec::new();
-        for (&decl_param, answer) in struct_info.type_param_type_ids.iter().zip(inferred.iter_mut()) {
+        for (&decl_param, answer) in struct_info
+            .type_param_type_ids
+            .iter()
+            .zip(inferred.iter_mut())
+        {
             // The declaration's own parameter standing as its own answer is what
             // marks a slot unsettled. An answer that is some *other* variable is
             // still open, and a later constraint fills it (`Paired { v: null, k:
@@ -4816,9 +4822,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             *answer = TypeTable::ERROR;
-            if let Some(name) = util::bound_param_name(self.tysys.type_table.borrow().get(decl_param)) {
-                names.push(name.clone());
-            }
+            let tt = self.tysys.type_table.borrow();
+            let name = util::bound_param_name(tt.get(decl_param))
+                .expect("a struct slot is a type parameter");
+            names.push(name.clone());
         }
         if names.is_empty() {
             return;

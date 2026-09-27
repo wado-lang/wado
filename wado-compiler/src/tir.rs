@@ -4424,11 +4424,7 @@ impl TypeTable {
     /// answered are not what a use site is still waiting on. Reading them as
     /// such left `Ok(v)` in `f32::from_str_lenient` with no resolved type.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
-        match self.get(id) {
-            ResolvedType::InferVar(_) => true,
-            ResolvedType::AssocTypeProjection { .. } => false,
-            _ => self.any_constituent(id, &mut |t| self.contains_infer_var(t)),
-        }
+        self.any_infer_var(id, &mut |_| true)
     }
 
     /// Whether `id` is an inference variable itself, not a type naming one.
@@ -4440,24 +4436,22 @@ impl TypeTable {
     /// each once, in the order it meets them.
     pub fn infer_vars_in(&self, id: TypeId) -> Vec<TypeId> {
         let mut out = Vec::new();
-        self.collect_infer_vars(id, &mut out);
+        self.any_infer_var(id, &mut |var| {
+            if !out.contains(&var) {
+                out.push(var);
+            }
+            false
+        });
         out
     }
 
-    fn collect_infer_vars(&self, id: TypeId, out: &mut Vec<TypeId>) {
+    /// Whether `pred` holds of an inference variable
+    /// [`Self::contains_infer_var`] reaches in `id`, visiting them in order.
+    fn any_infer_var(&self, id: TypeId, pred: &mut impl FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
-            ResolvedType::InferVar(_) => {
-                if !out.contains(&id) {
-                    out.push(id);
-                }
-            }
-            ResolvedType::AssocTypeProjection { .. } => {}
-            _ => {
-                self.any_constituent(id, &mut |t| {
-                    self.collect_infer_vars(t, out);
-                    false
-                });
-            }
+            ResolvedType::InferVar(_) => pred(id),
+            ResolvedType::AssocTypeProjection { .. } => false,
+            _ => self.any_constituent(id, &mut |t| self.any_infer_var(t, pred)),
         }
     }
 

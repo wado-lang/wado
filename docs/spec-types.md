@@ -921,8 +921,8 @@ parameter is walked once it is settled, so `pick(Box { value: x }, f(1))` for
 `fn f<T: Default>(a: T, b: T = T::default())` is `u64` throughout, and a field
 default of a struct literal waits the same way. A `..base` settles its struct's
 parameters as an annotation does. A struct literal waits only where the fields
-it writes mention every parameter of its struct; one they leave out is answered
-where the literal stands, by its `= Default` or not at all.
+it writes mention every parameter of its struct. Where they leave one out, the
+literal settles where it stands, as it would outside a call.
 
 A method's receiver waits only where every impl declaring the method is inherent,
 bound-free, and reaches every instance of the receiver's type. Otherwise which

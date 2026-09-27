@@ -331,7 +331,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         for (index, arg_ast) in args_ast.iter().enumerate() {
-            let Some(&arg) = args.get(index) else { continue };
+            let Some(&arg) = args.get(index) else {
+                continue;
+            };
             let arg = self.apply_infer_holes(arg);
             // A literal waiting for an enclosing call has no type to judge yet.
             if arg == TypeTable::ERROR || arg == TypeTable::UNKNOWN || self.awaits_pending_call(arg)

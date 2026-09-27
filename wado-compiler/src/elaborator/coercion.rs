@@ -762,8 +762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 declared: projected,
                 expected,
             });
-            let taken_over = pending.own_vars.clone();
-            self.chain_expected_return(&taken_over, ret);
+            self.chain_expected_return(&pending.own_vars, ret);
             self.settle_pending_literals(pending, &[], ret, ctx);
         }
         self.apply_infer_holes(projected)
