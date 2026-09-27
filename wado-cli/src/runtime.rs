@@ -538,12 +538,11 @@ pub fn create_serve_engine(
 /// A store over `state`. On a metering engine it holds fuel it can never
 /// exhaust, so `--report-fuel` observes the guest without stopping it.
 #[must_use]
-pub fn new_store(engine: &Engine, mut state: WasiState) -> Store<WasiState> {
-    let fuel_start = engine.get_consume_fuel().then_some(u64::MAX);
-    state.fuel_start = fuel_start;
+pub fn new_store(engine: &Engine, state: WasiState) -> Store<WasiState> {
     let mut store = Store::new(engine, state);
-    if let Some(fuel) = fuel_start {
-        store.set_fuel(fuel).expect("the engine meters fuel");
+    if engine.get_consume_fuel() {
+        store.set_fuel(u64::MAX).expect("the engine meters fuel");
+        store.data_mut().fuel_start = Some(u64::MAX);
     }
     store
 }
