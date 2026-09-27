@@ -22,6 +22,9 @@ test "complement-op: a higher-precedence '*' wins the overlap" {
 }
 test "complement-op: standard precedence ('*' binds tighter)" {
     chk("1 + 2 * 3", "(prog (e (e 1) + (e (e 2) * (e 3))))");
+    // `*` is also a complement operator, so both suffixes admit it and only
+    // full context says the tighter one climbs.
+    chk("1 * 2 * 3", "(prog (e (e (e 1) * (e 2)) * (e 3)))");
 }
 test "complement-op: the excluded ';' is not an operator" {
     let r = co::parse("1 ; 2");

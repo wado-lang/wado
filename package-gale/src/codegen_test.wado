@@ -1510,6 +1510,16 @@ ${rest}`;
 1+2+* => (s (e (e 1) + (e 2) +) *)
 1+2** => (s (e (e 1) + (e (e 2) (x *))) *)
 ", atn_got;
+    // The first token admits `(A B)?`, which then matches nothing: recovery skips
+    // the `a` rather than wrapping an empty `e`.
+    let stranded = printed("grammar T;
+s : e EOF ;
+e : e (A B)? | e '+' e '+' | e '+' e | INT ;
+A : 'a' ; B : 'b' ;
+INT : '0'..'9'+ ;
+WS : ' ' -> skip ;
+", "println(to_string_tree(&parse_s(\"1 a\")));");
+    assert stranded == "(s (e 1) <skip a>)\n", stranded;
 }
 
 // An action or predicate nested inside a group must never vanish: it either

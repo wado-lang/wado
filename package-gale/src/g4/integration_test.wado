@@ -735,6 +735,17 @@ test "parse lr_nested_self_ref_atn.g4" {
     assert g.parser_rules[1].alternatives.len() == 4;
 }
 
+test "parse lr_open_ended_rule_suffix.g4" {
+    let input = #include_str("../../tests/grammars/lr_open_ended_rule_suffix.g4");
+    let g = parse(input).unwrap();
+    assert g.name == "LrOpenEndedRuleSuffix";
+    // s e w s2 f v s3 g n s4 s5 h s6 k s7 m s8 q
+    assert g.parser_rules.len() == 18;
+    // `h`'s loop alternative: `h`, `( . | A )`.
+    assert g.parser_rules[11].name == "h";
+    assert g.parser_rules[11].alternatives[0].elements.len() == 2;
+}
+
 test "parse lr_atn_mid_operand.g4" {
     let input = #include_str("../../tests/grammars/lr_atn_mid_operand.g4");
     let g = parse(input).unwrap();

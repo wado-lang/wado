@@ -395,8 +395,27 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
 /// left-corner fixpoint, built here.
 pub fn check_rule_shapes(grammar: &Grammar) -> Result<(), ParseError> {
     let ctx = build_left_corner_ctx(&grammar.parser_rules, false);
+    check_left_recursion_ends(grammar)?;
     check_left_recursion(grammar, &ctx)?;
     check_epsilon_closure(grammar, &ctx)?;
+    return Result::Ok(());
+}
+
+/// Reject a left-recursive rule whose every alternative starts with itself:
+/// nothing ends the recursion. ANTLR4 rejects it too (error 147).
+fn check_left_recursion_ends(grammar: &Grammar) -> Result<(), ParseError> {
+    for let rule of &grammar.parser_rules {
+        let leads = |a: &Alternative| alt_leads_with_self_ref(&a.elements, &rule.name);
+        if rule.alternatives.iter_ref().any(leads) && rule.alternatives.iter_ref().all(leads) {
+            return Result::Err(
+                ParseError::new(
+                    `left-recursive rule "${rule.name}" must have an alternative that does not start with "${rule.name}"`,
+                    Span::new(0, 0),
+                    ["an alternative that does not start with the rule itself"],
+                ),
+            );
+        }
+    }
     return Result::Ok(());
 }
 
@@ -573,10 +592,16 @@ fn build_left_corner_ctx(parser_rules: &List<ParserRule>, scan: bool) -> LeftCor
         let rule = &parser_rules[i];
         let mut out: List<i32> = [];
         for let alt of &rule.alternatives {
-            if alt_leads_with_self_ref(&alt.elements, &rule.name) {
+            // Past a leading self-reference that can match empty, what follows it
+            // starts where the rule does (`e : e x e` with `e`, `x` nullable).
+            let from = if !alt_leads_with_self_ref(&alt.elements, &rule.name) {
+                0;
+            } else if nullable[i] {
+                1;
+            } else {
                 continue;
-            }
-            collect_alt_corners(&alt.elements, &index, &nullable, scan, &mut out);
+            };
+            collect_alt_corners(&alt.elements, &index, &nullable, scan, &mut out, from);
         }
         corners.push(out);
     }
@@ -638,10 +663,11 @@ fn collect_alt_corners(
     nullable: &List<bool>,
     scan: bool,
     out: &mut List<i32>,
+    from: i32 = 0,
 ) {
-    for let e of elements {
-        collect_element_corners(e, index, nullable, scan, out);
-        if !element_nullable(e, index, nullable, scan) {
+    for let mut i = from; i < elements.len(); i += 1 {
+        collect_element_corners(&elements[i], index, nullable, scan, out);
+        if !element_nullable(&elements[i], index, nullable, scan) {
             break;
         }
     }

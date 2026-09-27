@@ -2068,6 +2068,21 @@ test "indirect (mutual) left recursion is rejected" {
     assert parse_checked(g) matches { Err(_) }, "indirect left recursion must be rejected";
 }
 
+test "a self-reference behind a nullable leading self-reference is hidden left recursion" {
+    // ANTLR4 error 119. `e` matches empty, so the leading `e` can be empty and
+    // the one after it starts at the same position.
+    let g = "grammar HS;\nprog : e EOF ;\ne : e x e | A? ;\nx : 'x'? ;\nA : 'a' ;";
+    assert parse_checked(g) matches { Err(_) }, "`e x e` re-enters `e` when `e` and `x` match empty";
+    let plain = "grammar HP;\nprog : e EOF ;\ne : e '+' e | A? ;\nA : 'a' ;";
+    assert parse_checked(plain) matches { Ok(_) }, "`'+'` always separates the two `e`s";
+}
+
+test "a left-recursive rule with no other alternative is rejected" {
+    // ANTLR4 error 147: nothing ends the recursion.
+    let g = "grammar NB;\nprog : e EOF ;\ne : e f | A ;\nf : f 'x' | f 'y' ;\nA : 'a' ;";
+    assert parse_checked(g) matches { Err(_) }, "`f` has no alternative that does not start with `f`";
+}
+
 test "a non-left-recursive grammar with nullable rules is accepted" {
     // `g` is nullable but no rule reaches itself through it, so no cycle.
     let g = "grammar N;\nprog : e EOF ;\ne : g t ('+' t)* ;\ng : A? ;\nt : INT ;\nINT : [0-9]+ ;\nA : 'a' ;\nWS : [ \\t]+ -> skip ;";

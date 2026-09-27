@@ -2,8 +2,8 @@
 //! every token: the loop has to continue on a token no first set names. Each
 //! start rule spells the open end differently (a rule reference, a nullable
 //! prefix, a complement, a wildcard in a group), `s4` runs the loop under a
-//! caller whose continuation the suffix also admits, and `s7` sets the open
-//! suffix against one that names the same token.
+//! caller whose continuation the suffix also admits, and `s7` and `s8` set the
+//! open suffix against one that names the same token, in either order.
 //!
 //! Every tree below was taken from the published ANTLR4 jar
 //! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
@@ -81,6 +81,10 @@ test "open-ended rule suffix: contests a token another suffix names" {
     assert_tree_of(&g::parse_s7("cdda"), "cdda", "(s7 (m (m (m c) d d) (w a)))");
     assert_tree_of(&g::parse_s7("cdad"), "cdad", "(s7 (m (m (m (m c) (w d)) (w a)) (w d)))");
     assert_tree_of(&g::parse_s7("cda"), "cda", "(s7 (m (m (m c) (w d)) (w a)))");
+    // Listed first, the open suffix takes every `d`: both parses of `cdd` reach
+    // the end, and the earlier alternative wins the ambiguity.
+    assert_tree_of(&g::parse_s8("cdd"), "cdd", "(s8 (q (q (q c) (w d)) (w d)))");
+    assert_tree_of(&g::parse_s8("cd"), "cd", "(s8 (q (q c) (w d)))");
 }
 
 test "open-ended rule suffix: no atom to start the loop" {

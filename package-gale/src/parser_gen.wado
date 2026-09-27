@@ -915,19 +915,25 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
         `${decl} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_state_arg()}, ${decision}, tokens, pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, "tokens", "pos", /*parse_launched=*/ false, ctx);
-    emit_lr_progress_snapshot(w, "pos");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
-        let lr_idx = lr_alts[valid[i]].alt_index;
-        let suffix_fn = `${fn_name}_lr_${lr_idx}`;
+        let lr = &lr_alts[valid[i]];
+        let suffix_call = `${fn_name}_lr_${lr.alt_index}(tokens, pos${scan_trailing_args(ctx)})`;
         if is_first {
             w.begin(`if _atn_alt == ${i}`);
             is_first = false;
         } else {
             w.else_begin(`else if _atn_alt == ${i}`);
         }
-        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)});`);
-        w.line("if pos < 0 { return -1; }");
+        if scan_body_can_match_empty(&lr.scan_suffix.elements, ctx) {
+            w.line(`let _lr_end = ${suffix_call};`);
+            w.line("if _lr_end < 0 { return -1; }");
+            w.line("if _lr_end == pos { break; }");
+            w.line("pos = _lr_end;");
+        } else {
+            w.line(`pos = ${suffix_call};`);
+            w.line("if pos < 0 { return -1; }");
+        }
     }
     if !is_first {
         w.else_begin("else");
@@ -936,21 +942,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     } else {
         w.line("break;");
     }
-    emit_lr_progress_check(w, "pos");
     w.end();  // loop
-}
-
-/// Opens an LR loop iteration's no-progress guard on the cursor `pos`. An
-/// iteration whose suffix matched empty would otherwise spin.
-fn emit_lr_progress_snapshot<S: AsStrSlice>(w: &mut CodeWriter, pos: S) {
-    w.line(`let _lr_pos0 = ${pos};`);
-}
-
-/// Closes the guard `emit_lr_progress_snapshot` opened: no progress ends the loop.
-fn emit_lr_progress_check<S: AsStrSlice>(w: &mut CodeWriter, pos: S) {
-    w.begin(`if ${pos} == _lr_pos0`);
-    w.line("break;");
-    w.end();
 }
 
 fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
@@ -1090,25 +1082,8 @@ fn gen_lr_suffix_dispatch<S: AsStrSlice>(
 ) {
     w.begin("loop");
     w.line("let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    // Where every suffix consumes, the guard could never fire.
-    let guard = !lr_suffixes_consume(lr_alts, lr_dispatch, ctx);
-    if guard {
-        emit_lr_progress_snapshot(w, "pos");
-    }
     emit_lr_group_chain(w, &scan_lr_site(fn_name), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
-    if guard {
-        emit_lr_progress_check(w, "pos");
-    }
     w.end();  // loop
-}
-
-fn lr_suffixes_consume(lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData, ctx: &mut GenContext) -> bool {
-    for let v of &lr_dispatch.valid_lr_alts {
-        if scan_body_can_match_empty(&lr_alts[*v].scan_suffix.elements, ctx) {
-            return false;
-        }
-    }
-    return true;
 }
 
 fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
@@ -1116,6 +1091,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     suffix_fn: S,
     prec: i32,
     ctx: &GenContext,
+    may_match_empty: bool,
     mid_operand_gated: bool = false,
     prebound: &Option<String> = &NO_PREBOUND,
 ) {
@@ -1130,8 +1106,8 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     w.begin(`if ${prec} >= min_prec`);
     // A suffix scan runs the suffix's gate actions, so an abandoned climb has
     // to put the gate back with the position. A prebound scan already matched,
-    // so only the continuation check can abandon it.
-    let can_abandon = mid_operand_gated || prebound matches { None };
+    // so only an empty match or the continuation check can abandon it.
+    let can_abandon = may_match_empty || mid_operand_gated || prebound matches { None };
     if can_abandon {
         gen_scan_mark(w, ctx, "lr_saved_pos");
     }
@@ -1141,9 +1117,12 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     // advances it by running.
     if let Some(local) = prebound {
         gen_scan_rewind(w, ctx, local);
+        if may_match_empty {
+            gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos <= lr_saved_pos");
+        }
     } else {
         w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`);
-        gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
+        gen_scan_rewind_break(w, ctx, "lr_saved_pos", if may_match_empty { "pos <= lr_saved_pos" } else { "pos < 0" });
     }
     if mid_operand_gated {
         // Lockstep with the parse loop: the tournament must measure the same
@@ -1216,6 +1195,7 @@ fn emit_lr_overlap_branch(
     prebound: &Option<String> = &NO_PREBOUND,
     proven_first: &List<String> = &EMPTY_SYNC,
 ) {
+    let may_match_empty = scan_body_can_match_empty(&lr.scan_suffix.elements, ctx);
     match &site.branch {
         ScanCall => {
             gen_scan_lr_call_with_prec(
@@ -1223,6 +1203,7 @@ fn emit_lr_overlap_branch(
                 `${site.scan_fn}_lr_${lr.alt_index}`,
                 lr.own_prec,
                 ctx,
+                may_match_empty,
                 mid_operand_gated,
                 prebound,
             );
@@ -1237,6 +1218,7 @@ fn emit_lr_overlap_branch(
                 b.labeled,
                 ctx,
                 nc,
+                may_match_empty,
                 mid_operand_gated,
                 prebound,
                 proven_first,
@@ -4310,16 +4292,21 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
         /*parse_launched=*/ true,
         ctx,
     );
-    emit_lr_progress_snapshot(w, "p.pos");
+    w.line("let _lr_pos0 = p.pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
+        let lr = &lr_alts[valid[i]];
         if is_first {
             w.begin(`if _atn_alt == ${i}`);
             is_first = false;
         } else {
             w.else_begin(`else if _atn_alt == ${i}`);
         }
-        emit_lr_branch_body(w, &lr_alts[valid[i]], rule, rk, labeled, ctx, &mut nc, &lr_alts[valid[i]].suffix_first);
+        if scan_body_can_match_empty(&lr.scan_suffix.elements, ctx) {
+            gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
+            w.line(`if scan_${rule.snake_name}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}) == p.pos { break; }`);
+        }
+        emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, &mut nc, &lr.suffix_first);
     }
     if !is_first {
         w.else_begin("else");
@@ -4328,7 +4315,10 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     } else {
         w.line("break;");
     }
-    emit_lr_progress_check(w, "p.pos");
+    // Single-token insertion can complete a suffix without consuming.
+    w.begin("if p.pos == _lr_pos0");
+    w.line("break;");
+    w.end();
     w.end();
 }
 
@@ -4349,6 +4339,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
     labeled: bool,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
+    may_match_empty: bool,
     mid_operand_gated: bool = false,
     prebound: &Option<String> = &NO_PREBOUND,
     proven_first: &List<String> = &EMPTY_SYNC,
@@ -4364,7 +4355,6 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)})`;
     };
     let matched = prebound matches { Some(_) };
-    let may_match_empty = scan_body_can_match_empty(&lr.scan_suffix.elements, ctx);
     let no_match = lr_suffix_no_match(may_match_empty);
     if mid_operand_gated {
         // A caller that needs this operand to leave a delimiter behind hands
@@ -4390,7 +4380,8 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
 
 /// The test on an LR suffix's scan end that stops the loop. A suffix that can
 /// match empty also stops it where it would consume nothing: any number of empty
-/// iterations derives the same text, and only none of them adds no node.
+/// iterations derives the same text, and zero is the only number that adds no
+/// node.
 fn lr_suffix_no_match(may_match_empty: bool) -> String {
     return if may_match_empty { " <= p.pos" } else { " < 0" };
 }

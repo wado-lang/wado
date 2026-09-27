@@ -23,8 +23,8 @@
 //! `atn_blob_bytes` -> `atn_decode` round-trip.
 
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
-use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt, lr_trailing_prec } from "./gir.wado";
-use { lower, element_is_self_ref } from "./lower.wado";
+use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
+use { lower, element_is_self_ref, lr_operand_prec } from "./lower.wado";
 use { collect_literal_tokens, token_slot_order, LitToken } from "./lexer_gen.wado";
 use {
     ATN_BASIC,
@@ -366,17 +366,6 @@ fn build_lr_body(
     let back = b.new_state(ATN_STAR_LOOP_BACK, r);
     b.mark_decision(entry);
 
-    // Union of every LR alt's suffix-first operator tokens — drives the
-    // follow-aware precedence of nested self-refs in `build_lr_suffix`.
-    let mut lr_first: List<String> = [];
-    for let a of &lr.lr_alts {
-        for let tk of &a.suffix_first {
-            if !lr_first.contains(tk) {
-                lr_first.push(*tk);
-            }
-        }
-    }
-
     // One precedence-guarded enter edge per LR alt with a real suffix
     // (degenerate `expr : expr` skipped). `atn_lr_loop_decision` returns an
     // index over this list, and an ATN-class rule's `valid_lr_alts` is built
@@ -388,7 +377,7 @@ fn build_lr_body(
         if alt.elements.len() <= 1 {
             continue;
         }
-        let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, &lr_first, r, rule_index, lr.atn_class);
+        let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, r, rule_index);
         b.add_trans(entry, AtnTransition { kind: ATN_TR_PRECEDENCE, target: suffix_seg.0, prec: a.own_prec });
         b.add_eps(suffix_seg.1, back);
     }
@@ -399,121 +388,30 @@ fn build_lr_body(
 }
 
 /// Build the suffix of one LR alt (`alt.elements[1..]`, the leading self-ref
-/// stripped) as a sequence, returning `[entry, exit]`. Each operand's
-/// precedence mirrors the static path's `stamp_lr_self_ref_min_prec`, so the
-/// ATN models the same language the parser does.
+/// stripped) as a sequence, returning `[entry, exit]`. Each operand takes the
+/// precedence lowering stamped on it, so the ATN models the language the parser
+/// accepts. A self-reference nested in a subrule is a plain call, `e[0]`.
 fn build_lr_suffix<S: AsStrSlice>(
     b: &mut AtnBuilder,
     alt: &Alternative,
     lr_alt: &LrAlt,
     rule_name: S,
-    lr_first: &List<String>,
     r: i32,
     rule_index: &TreeMap<String, i32>,
-    atn_class: bool,
 ) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
-        // A self-reference nested in a subrule is a plain call, `e[0]`, which
-        // `build_element` makes, as `stamp_lr_self_ref_min_prec` leaves it.
-        let seg = if !element_is_self_ref(elem, rule_name) {
-            build_element(b, elem, r, rule_index);
+        let seg = if element_is_self_ref(elem, rule_name) {
+            self_ref_segment(b, r, lr_operand_prec(lr_alt, i - 1, rule_name), self_ref_call_site(elem));
         } else {
-            let prec = if atn_class {
-                // ANTLR4's `e[0]` mid operand and `e[p+1]` trailing one: the
-                // simulator decides the climb, as `stamp_lr_self_ref_min_prec` has it.
-                if i + 1 < alt.elements.len() {
-                    0;
-                } else {
-                    lr_trailing_prec(lr_alt.own_prec, lr_alt.right_associative);
-                }
-            } else if elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true) {
-                // The LR loop can re-enter on an operator after the suffix, so the
-                // suffix tail conservatively carries one (`tail_has = true`).
-                lr_alt.conflict_min;
-            } else {
-                0;
-            };
-            self_ref_segment(b, r, prec, self_ref_call_site(elem));
+            build_element(b, elem, r, rule_index);
         };
         b.add_eps(cursor, seg.0);
         cursor = seg.1;
     }
     return [entry, cursor];
-}
-
-/// True iff FIRST(`elem`) can contain a token in `lr_first`. Opaque elements
-/// (RuleRef / Wildcard / Not) return true conservatively.
-fn element_first_has_lr(elem: &Element, lr_first: &List<String>) -> bool {
-    return match *elem {
-        TokenRef(t) => lr_first.contains(&`TK_${t.name}`),
-        Literal(l) => lr_first.contains(&l.const_name),
-        RuleRef(_) => true,
-        Wildcard(_) => true,
-        Not(_) => true,
-        Repeat(rep) => element_first_has_lr(&rep.element, lr_first),
-        Group(g) => {
-            for let alt of &g.alternatives {
-                if elements_seq_first_has_lr(&alt.elements, 0, lr_first, false) {
-                    return true;
-                }
-            }
-            false;
-        },
-        Label(lab) => element_first_has_lr(&lab.element, lr_first),
-    };
-}
-
-/// True iff `elem` can match the empty string.
-fn element_nullable(elem: &Element) -> bool {
-    return match *elem {
-        TokenRef(_) => false,
-        Literal(_) => false,
-        RuleRef(_) => false,
-        Wildcard(_) => false,
-        Not(_) => false,
-        Repeat(rep) => match rep.kind {
-            RepeatKind::Star => true,
-            RepeatKind::Optional => true,
-            RepeatKind::Plus => element_nullable(&rep.element),
-        },
-        Group(g) => {
-            for let alt of &g.alternatives {
-                if elements_all_nullable(&alt.elements) {
-                    return true;
-                }
-            }
-            false;
-        },
-        Label(lab) => element_nullable(&lab.element),
-    };
-}
-
-fn elements_all_nullable(elements: &List<Element>) -> bool {
-    for let elem of elements {
-        if !element_nullable(elem) {
-            return false;
-        }
-    }
-    return true;
-}
-
-/// True iff the content of `elements[idx..]`, followed by `tail_has`, can
-/// begin with a token in `lr_first` — the FOLLOW-has-LR-operator test for the
-/// position just before `elements[idx]`.
-fn elements_seq_first_has_lr(elements: &List<Element>, idx: i32, lr_first: &List<String>, tail_has: bool) -> bool {
-    if idx >= elements.len() {
-        return tail_has;
-    }
-    if element_first_has_lr(&elements[idx], lr_first) {
-        return true;
-    }
-    if element_nullable(&elements[idx]) {
-        return elements_seq_first_has_lr(elements, idx + 1, lr_first, tail_has);
-    }
-    return false;
 }
 
 /// The `atn_call_site` id of a self-ref element (unwrapping labels), or -1.
@@ -629,7 +527,7 @@ fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &Tre
             &rep.element,
             rule,
             rep.atn_decision,
-            |bb: &mut AtnBuilder, e: &Element| build_element(bb, e, rule, rule_index),
+            rule_index,
         ),
     };
 }
@@ -676,14 +574,14 @@ fn build_repeat(
     inner: &Element,
     rule: i32,
     site: i32,
-    build_inner: fn(&mut AtnBuilder, &Element) -> [i32, i32],
+    rule_index: &TreeMap<String, i32>,
 ) -> [i32, i32] {
     return match kind {
         Optional => {
             let start = b.new_state(ATN_BLOCK_START, rule);
             let end = b.new_state(ATN_BLOCK_END, rule);
             b.mark_decision_for_site(start, site);
-            let seg = build_inner(b, inner);
+            let seg = build_element(b, inner, rule, rule_index);
             if non_greedy {
                 b.add_eps(start, end);
                 b.add_eps(start, seg.0);
@@ -698,7 +596,7 @@ fn build_repeat(
             let entry = b.new_state(ATN_STAR_LOOP_ENTRY, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
             b.mark_decision_for_site(entry, site);
-            let seg = build_inner(b, inner);
+            let seg = build_element(b, inner, rule, rule_index);
             let back = b.new_state(ATN_STAR_LOOP_BACK, rule);
             if non_greedy {
                 b.add_eps(entry, end);
@@ -712,7 +610,7 @@ fn build_repeat(
             [entry, end];
         },
         Plus => {
-            let seg = build_inner(b, inner);
+            let seg = build_element(b, inner, rule, rule_index);
             let back = b.new_state(ATN_PLUS_LOOP_BACK, rule);
             let end = b.new_state(ATN_LOOP_END, rule);
             b.mark_decision_for_site(back, site);

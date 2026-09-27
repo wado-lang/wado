@@ -49,22 +49,27 @@ rejects and Gale accepts is a Gale bug, on one side or the other.
 - **A left-recursive alternative that can be followed by nothing** — error
   148, as in `e : e x | INT ;` with `x : '*'? ;`, or an empty alternative in a
   suffix group (`e : e ( A | ) | C ;`). Any number of empty iterations derives
-  the same text, and only none of them adds no node, so an iteration whose
-  suffix would consume nothing is never taken. `1*` under
-  `s : e '*' EOF ; e : e x | INT ;` is `(s (e 1) *)`. Pinned by "an LR loop
-  never takes an iteration that consumes nothing" in `src/codegen_test.wado`.
+  the same text, and zero is the only number that adds no node, so an
+  iteration whose suffix would consume nothing is never taken. `1*` under
+  `s : e '*' EOF | e '!' EOF ; e : e x | '(' e ')' | INT ;` is `(s (e 1) *)`.
+  Pinned by "an LR loop never takes an iteration that consumes nothing" in
+  `src/codegen_test.wado`.
 
 ### Rejections Gale shares with ANTLR4
 
 Being a superset does not mean accepting everything. A grammar whose meaning
 is not determined is rejected loudly, at the same points ANTLR4 rejects it.
-Both checks read one left-corner fixpoint, built once per grammar by
-`check_rule_shapes` in `finish_grammar`, over the merged grammar and for lexer
-rules as well as parser rules. Like its sibling whole-grammar checks neither
-diagnostic carries a span.
+`check_rule_shapes` in `finish_grammar` runs these checks over the merged
+grammar, for lexer rules as well as parser rules, and the last two read one
+left-corner fixpoint it builds once per grammar. Like its sibling whole-grammar
+checks no diagnostic carries a span.
 
+- **A left-recursive rule with no other alternative** (`f : f 'x' ;`) —
+  `check_left_recursion_ends`, ANTLR4 error 147.
 - **Left recursion** that precedence climbing cannot resolve —
-  `check_left_recursion`, ANTLR4 error 119.
+  `check_left_recursion`, ANTLR4 error 119. That includes a self-reference
+  behind a leading one that can match empty (`e : e x e | A? ;` with `x`
+  nullable).
 - **An epsilon closure** — a `*` or `+` over a body that can match nothing
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
@@ -1033,9 +1038,12 @@ sub-dispatch the static LR path applies to the same question. The simulator is
 there for the enter-or-exit verdict, which needs full context; which member of
 the group to enter does not, and is re-taken from the scan twins by longest
 match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`. A suffix
-that can start with a `.` or `~X` shares every token, so it joins one group with
-every other suffix. Without that, `expr 'd' 'd'` listed first would take the
-`d` that only `expr .` can complete (`lr_open_ended_rule_suffix.g4`).
+that can start with a `.` or `~X` joins no group. Where it and another suffix
+both admit the token, the simulator decides between them with full context, as
+ANTLR4 does: `expr 'd' 'd'` does not take the `d` only `expr .` can complete, and
+the earlier of two suffixes that both reach the end wins
+(`lr_open_ended_rule_suffix.g4`, `lr_complement_op.g4`). The longest scan would
+answer both wrongly.
 
 When the simulator predicts exit, the enclosing invocations of the same loop at
 the same position exit too, unless one of them could enter there on an operator

@@ -49,6 +49,7 @@ use {
     alt_class_of,
     alt_classes,
     alt_classes_of,
+    compute_overlap_groups,
     compute_overlap_groups_of,
     DecisionBranch,
     decision_partition,
@@ -1174,6 +1175,18 @@ fn rebind_scan_self_ref_min_prec<S: AsStrSlice>(se: ScanElement, rule_snake: S, 
     return se;
 }
 
+/// The precedence `stamp_lr_self_ref_min_prec` gave the self-reference at
+/// `lr.suffix.ops[k]`, the alternative's element `k + 1`.
+pub fn lr_operand_prec<S: AsStrSlice>(lr: &LrAlt, k: i32, rule_name: S) -> i32 {
+    let Some(rc) = find_self_ref_rule_call(&lr.suffix.ops[k], rule_name) else {
+        panic(`suffix op ${k} of LR alt ${lr.alt_index} is not a self-reference`);
+    };
+    let Some(prec) = rc.min_prec_arg else {
+        panic(`self-reference ${k} of LR alt ${lr.alt_index} was never stamped`);
+    };
+    return prec;
+}
+
 fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&RuleCallOp> {
     return match op {
         RuleCall(rc) => if rc.target_name == rule_name.as_str_slice() { Option::Some(rc) } else { null },
@@ -1648,7 +1661,7 @@ fn compute_lr_conflict_min_prec(
 /// overlap-group partition over those alts' suffix classes.
 fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClass>, atn_class: bool) -> LrDispatchData {
     let mut valid_lr_alts: List<i32> = [];
-    let mut valid_classes: List<AltClass> = [];
+    let mut suffix_first_sets: List<List<String>> = [];
     for let mut i = 0; i < lr_alts.len(); i += 1 {
         let lr = &lr_alts[i];
         // Static dispatch gates on a non-empty `suffix_first`, so it drops a
@@ -1659,16 +1672,15 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClas
         // and their `scan_X_lr_N` helpers. `groups` is read by both paths — the
         // static dispatch branches on it, the ATN path re-picks within a
         // multi-member one (`emit_lr_atn_group_repick`). An open-ended suffix
-        // admits every token, so it overlaps every other suffix: the
-        // simulator's first admitting edge is grammar order, and only the
-        // re-pick sees that `e D D` cannot complete where `e .` can.
+        // stays out of every group: the simulator itself decides between it and
+        // another suffix admitting the token, as ANTLR4 does.
         let skip = if atn_class { lr.suffix.ops.is_empty() } else { lr.suffix_first.is_empty() };
         if skip {
             continue;
         }
         assert atn_class || !alt_class_is_open_ended(&suffix_classes[i]), "an open-ended LR suffix makes its rule ATN-class";
         valid_lr_alts.push(i);
-        valid_classes.push(suffix_classes[i]);
+        suffix_first_sets.push(lr.suffix_first);
     }
 
     // Overlap groups are tolerated here: emit's LR-suffix loop
@@ -1677,7 +1689,7 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClas
     // dispatch). The GIR carries the groups as-is; correctness
     // falls out of emit treating `group.len() > 1` as the cue to
     // generate a scan-and-commit cascade across the group's alts.
-    let groups = compute_overlap_groups_of(&valid_classes);
+    let groups = compute_overlap_groups(&suffix_first_sets);
 
     return LrDispatchData {
         valid_lr_alts: valid_lr_alts,

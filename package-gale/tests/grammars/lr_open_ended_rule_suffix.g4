@@ -8,7 +8,7 @@
 // strict subset of what the suffix admits. `s4` puts the loop under a caller
 // whose continuation `d` the suffix also admits, so only the full context
 // tells the loop to stop. In `s7` the open suffix contests `d` with a suffix
-// that names it, and wins where `D D` cannot complete.
+// that names it, and wins where `D D` cannot complete; `s8` lists it first.
 grammar LrOpenEndedRuleSuffix;
 
 s : e EOF ;
@@ -33,6 +33,9 @@ k : k B? . | C ;
 
 s7 : m EOF ;
 m : m D D | m w | C ;
+
+s8 : q EOF ;
+q : q w | q D D | C ;
 
 A : 'a' ;
 B : 'b' ;
