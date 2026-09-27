@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790500672716,
+  "lastUpdate": 1790502385977,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60753,6 +60753,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288402,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8025dd68ab52e136c8b40854c9b1887f0945e13",
+          "message": "Merge pull request #2191 from wado-lang/value-copy-gates\n\nperf(compiler): unwrap() stops deep-copying its Option; hoisted constants and elided copies no longer let writes through",
+          "timestamp": "2026-09-27T17:50:21+09:00",
+          "tree_id": "cada1787ae74f520bd9398aef8731d6cd84f78aa",
+          "url": "https://github.com/wado-lang/wado/commit/d8025dd68ab52e136c8b40854c9b1887f0945e13"
+        },
+        "date": 1790502384965,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20198,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288419,
             "unit": "bytes"
           }
         ]
