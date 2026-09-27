@@ -327,9 +327,9 @@ a single-file script name a dependency with no `wado.toml`:
 <!-- {"source": "wado-cli/tests/fixtures/inline_dependencies.wado"} -->
 
 ```wado
-use {Regexp} from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
-use {Router} from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
-use {Parse}  from "lib:rx"     with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };
+use { Regexp } from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
+use { Router } from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
+use { Parse } from "lib:rx" with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };
 ```
 
 <!-- {"fixture":"spec_modules_type_attribute.wado"} -->
