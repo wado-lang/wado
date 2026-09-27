@@ -646,9 +646,7 @@ impl AttributeFault {
                     known.join("`, `")
                 )
             }
-            Self::StdlibOnly => format!(
-                "`{name}` is a standard library attribute, and is valid only in the standard library"
-            ),
+            Self::StdlibOnly => format!("`{name}` is valid only in the standard library"),
         }
     }
 }

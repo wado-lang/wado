@@ -1,9 +1,5 @@
 // A program cannot claim a compiler item: `#[compiler_item]` is a standard
 // library attribute, so the registry's invariants stay tied to the stdlib.
-//
-// The attribute below is placed on a trait (the kind `eq` expects) so the
-// scope-violation diagnostic is what the test is locking in — not a kind
-// mismatch that happens to fire first.
 
 #[compiler_item("eq")]
 pub trait MyEq with () {
@@ -13,4 +9,4 @@ pub trait MyEq with () {
 export fn run() {}
 
 __DATA__
-{"compile_error": "`compiler_item` is a standard library attribute, and is valid only in the standard library"}
+{"compile_error": "`compiler_item` is valid only in the standard library"}
