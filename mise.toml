@@ -95,7 +95,7 @@ description = "Regenerate package-wadopoet/src/vocabulary.wado from the compiler
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo build --bin wado
+scripts/build-dev-bins.sh wado
 mkdir -p package-wadopoet/build
 ./target/debug/wado syntax --format json -o package-wadopoet/build/syntax.json
 ./target/debug/wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
@@ -239,7 +239,8 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--exclude 'package-gale/**' --exclude 'wado-compiler/**' --format tap)
 fi
-./scripts/exclusive.sh test-wado cargo run -p wado-cli -- test -O2 "${extra_args[@]}"
+scripts/build-dev-bins.sh wado
+./scripts/exclusive.sh test-wado ./target/debug/wado test -O2 "${extra_args[@]}"
 """
 
 [tasks.test-stdlib]
@@ -264,7 +265,8 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)
 fi
-./scripts/exclusive.sh test-stdlib cargo run -p wado-cli -- test "-${level}" wado-compiler "${extra_args[@]}"
+scripts/build-dev-bins.sh wado
+./scripts/exclusive.sh test-stdlib ./target/debug/wado test "-${level}" wado-compiler "${extra_args[@]}"
 """
 
 [tasks.test-log-levels]
@@ -286,8 +288,9 @@ case "${level}" in
         exit 1
         ;;
 esac
-cargo run -p wado-cli -- test "-${level}" -D log.level=trace wado-compiler/lib/core/log_level_test.wado
-cargo run -p wado-cli -- test "-${level}" -D log.level=warn wado-compiler/lib/core/log_warn_test.wado
+scripts/build-dev-bins.sh wado
+./target/debug/wado test "-${level}" -D log.level=trace wado-compiler/lib/core/log_level_test.wado
+./target/debug/wado test "-${level}" -D log.level=warn wado-compiler/lib/core/log_warn_test.wado
 """
 
 [tasks.test-hooks]
@@ -317,7 +320,8 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)
 fi
-./scripts/exclusive.sh test-gale-o2 cargo run -p wado-cli -- test -O2 package-gale "${extra_args[@]}"
+scripts/build-dev-bins.sh wado
+./scripts/exclusive.sh test-gale-o2 ./target/debug/wado test -O2 package-gale "${extra_args[@]}"
 """
 
 [tasks.test-cov]

@@ -15,7 +15,7 @@ out=package-gale-highlight-wado/build/check-grammar
 rm -rf "${out}"
 mkdir -p "${out}"
 
-cargo build --bin wado --bin wado-dev-tools
+scripts/build-dev-bins.sh wado wado-dev-tools
 
 ./target/debug/wado-dev-tools grammar-corpus --emit-corpus "${out}/corpus.txt"
 ./target/debug/wado run package-gale-highlight-wado/tools/corpus_check.wado -- \

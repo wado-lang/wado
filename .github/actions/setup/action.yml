@@ -1,5 +1,7 @@
 name: Set up the CI toolchain
-description: Restore (never save) the shared Rust build cache and install the mise-managed tools.
+description: >-
+  Restore (never save) the shared Rust build cache, or fetch the binaries the
+  build jobs made, and install the mise-managed tools.
 
 # Secrets are not visible inside a composite action, so the caller passes the
 # token mise uses to download tools without hitting the GitHub API rate limit.
@@ -7,14 +9,40 @@ inputs:
   github-token:
     description: Token for mise tool downloads.
     required: true
+  prebuilt:
+    description: >-
+      Build artifacts to place in target/debug instead of compiling: `wado`
+      (`wado` and `wado-dev-tools`) and `e2e` (the e2e test binary). A job
+      naming any compiles nothing, so it skips the Rust cache, and
+      scripts/build-dev-bins.sh builds nothing either.
+    default: ""
 
 runs:
   using: composite
   steps:
-    - uses: Swatinem/rust-cache@v2
+    # The shared key hashes the workflow that fills the cache, so a change to
+    # what it builds starts a new cache: an exact hit is never saved over.
+    - if: inputs.prebuilt == ''
+      uses: Swatinem/rust-cache@v2
       with:
-        shared-key: ci
+        shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml') }}
         save-if: false
+    - if: contains(inputs.prebuilt, 'wado')
+      uses: actions/download-artifact@v8
+      with:
+        name: prebuilt-wado
+        path: target/debug
+    - if: contains(inputs.prebuilt, 'e2e')
+      uses: actions/download-artifact@v8
+      with:
+        name: prebuilt-e2e
+        path: target/debug
+    # An artifact does not keep the executable bit.
+    - if: inputs.prebuilt != ''
+      shell: bash
+      run: |
+        chmod +x target/debug/*
+        echo "WADO_PREBUILT=1" >> "$GITHUB_ENV"
     - uses: jdx/mise-action@v4.3.0
       with:
         cache: true

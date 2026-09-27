@@ -14,8 +14,8 @@ BUILD="$HERE/build"
 rm -rf "$BUILD"
 mkdir -p "$BUILD"
 # V8 has no wide-arithmetic, which float formatting emits.
-cargo run -q -p wado-cli --manifest-path "$ROOT/Cargo.toml" -- \
-  compile -f no-wide-arithmetic -Os -o "$BUILD/main.wasm" "$HERE/src/main.wado"
+"$ROOT/scripts/build-dev-bins.sh" wado
+"$ROOT/target/debug/wado" compile -f no-wide-arithmetic -Os -o "$BUILD/main.wasm" "$HERE/src/main.wado"
 node "$ROOT/scripts/jco/transpile-released.mjs" "$BUILD/main.wasm" "$BUILD"
 echo 'import { run } from "./main.js"; await run.run();' > "$BUILD/boot.js"
 # The bundle sits beside the core modules jco fetches relative to it. jco reads

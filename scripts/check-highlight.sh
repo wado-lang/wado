@@ -16,7 +16,7 @@ out=package-gale-highlight-wado/build/check-highlight
 rm -rf "${out}"
 mkdir -p "${out}"
 
-cargo build --bin wado --bin wado-dev-tools
+scripts/build-dev-bins.sh wado wado-dev-tools
 
 # The vocabulary check is cheap and explains most class divergences, so fail
 # on it first rather than through thousands of corpus rows.

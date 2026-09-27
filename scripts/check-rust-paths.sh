@@ -27,6 +27,6 @@ if [ "${#corpus[@]}" -gt 0 ]; then
     git ls-files '*.rs' > "${list}"
 fi
 
-cargo build --bin wado
+scripts/build-dev-bins.sh wado
 exec ./target/debug/wado run package-gale/tools/rust_inline_paths.wado -- \
     "${corpus[@]}" "$@"
