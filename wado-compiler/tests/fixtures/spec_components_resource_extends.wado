@@ -1,0 +1,25 @@
+// `resource Child extends Parent`: a child handle is usable wherever the
+// parent is.
+
+#[cm("example:ui/target", linearity = "unrestricted", classes = "0..=1")]
+resource Target {
+    #[cm("example:ui/target#add-listener")]
+    fn add_listener(&self, kind: String);
+}
+
+#[cm("example:ui/widget", linearity = "unrestricted", classes = "1..=1")]
+resource Widget extends Target {
+    #[cm("example:ui/widget#label")]
+    fn label(&self) -> Option<String>;
+}
+
+fn use_it(w: Widget) {
+    w.add_listener("click");   // inherited, no cast
+    let t: Target = w;         // upcast is implicit
+}
+
+test {
+    let w = 137438953472.0 as Widget;   // class 1, object 0
+    let t: Target = w;
+    assert t == w && t matches { _: Widget };
+}

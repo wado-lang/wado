@@ -27,7 +27,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinSet;
 use wasmtime::component::{Accessor, AccessorTask, Component};
-use wasmtime::{AsContextMut, Engine, GuestProfiler, Store, UpdateDeadline};
+use wasmtime::{AsContextMut, Engine, GuestProfiler, UpdateDeadline};
 use wasmtime_wasi_http::Error as HttpError;
 use wasmtime_wasi_http::p3::Request as WasiRequest;
 use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
@@ -514,6 +514,49 @@ impl AccessorTask<WasiState> for HandlerTask {
     }
 }
 
+/// The fuel reading of the last request a worker took under `--report-fuel`.
+///
+/// It stays open after the response: wasmtime cannot cancel a guest task, so
+/// one can outlive the response that carried it. What it spends before the next
+/// request opens is still this request's; wasmtime gives no signal that the task
+/// has ended, so what it spends after is charged to the next.
+struct FuelReading {
+    /// The store's meter where the reading's unreported fuel begins.
+    start: u64,
+    /// Method and path. The query is left out: it can carry credentials.
+    target: String,
+    responded: bool,
+}
+
+impl FuelReading {
+    fn open(start: u64, req: &WasiRequest) -> Self {
+        let path = req.path_with_query.as_ref().map_or("", |p| p.path());
+        Self {
+            start,
+            target: format!("{} {path}", req.method),
+            responded: false,
+        }
+    }
+
+    /// Report the fuel spent since the last report. After the response, only
+    /// guest work that actually ran is worth a line.
+    fn report(&mut self, spent: u64, trapped: bool) {
+        let fuel = spent - self.start;
+        if self.responded && fuel == 0 {
+            return;
+        }
+        let after = if self.responded {
+            " (after response)"
+        } else {
+            ""
+        };
+        let trap = if trapped { " (trapped)" } else { "" };
+        eprintln!("fuel {fuel} {}{after}{trap}", self.target);
+        self.start = spent;
+        self.responded = true;
+    }
+}
+
 /// Round-robin dispatcher over a fixed pool of worker instances. Each
 /// worker is one long-lived component instance bound to its own store and
 /// engine task; requests are striped across them so guest execution fans
@@ -736,7 +779,7 @@ async fn worker_loop(
         // `global` initializers, e.g. a router built at startup) runs
         // here — once per generation, not once per request.
         let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &argv);
-        let mut store = Store::new(&engine, state);
+        let mut store = runtime::new_store(&engine, state);
         // Arm the epoch deadline. The dispatch loop refreshes it every
         // turn (see below), so a healthy worker never trips it; a guest
         // that runs away in pure wasm does.
@@ -767,6 +810,9 @@ async fn worker_loop(
             }
         };
 
+        // Outside the dispatch loop, so what ends the loop still leaves the
+        // reading here to report.
+        let mut reading: Option<FuelReading> = None;
         let stop = store
             .run_concurrent(async |accessor| {
                 let mut inflight = FuturesUnordered::new();
@@ -788,8 +834,7 @@ async fn worker_loop(
                         drain_or_tick(&mut inflight, &mut tick_rx).await;
                         Step::Turn
                     } else if inflight.is_empty() {
-                        // Idle — only a new job can wake us. No guest code is
-                        // running, so the epoch deadline cannot trip.
+                        // Idle — only a new job can wake us.
                         job = job_rx.recv().await;
                         Step::Job
                     } else {
@@ -811,10 +856,25 @@ async fn worker_loop(
                         access.as_context_mut().set_epoch_deadline(epoch_ticks);
                     });
 
+                    let spent = accessor.with(|access| runtime::fuel_spent(access));
+                    if inflight.is_empty()
+                        && let Some(reading) = reading.as_mut()
+                    {
+                        let spent = spent.expect("a reading opens on a metered store");
+                        reading.report(spent, false);
+                    }
+
                     match step {
                         Step::Turn => {}
                         Step::Job => match job {
                             Some(job) => {
+                                if let Some(spent) = spent {
+                                    assert!(
+                                        inflight.is_empty(),
+                                        "--report-fuel serves one request at a time"
+                                    );
+                                    reading = Some(FuelReading::open(spent, &job.wasi_req));
+                                }
                                 // The `JoinHandle` is kept in `inflight` so a
                                 // recycle can wait for the request to finish;
                                 // the task itself is driven by `run_concurrent`.
@@ -835,6 +895,11 @@ async fn worker_loop(
             })
             .await
             .and_then(|inner| inner);
+
+        if let Some(mut reading) = reading {
+            let spent = runtime::fuel_spent(&store).expect("a reading opens on a metered store");
+            reading.report(spent, stop.is_err());
+        }
 
         match stop {
             // Drop the old store (returns its pooling slots) and loop to
@@ -1186,11 +1251,18 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     // per-worker default whatever the host's CPU count turned out to be.
     // Held to the same `u32` as an explicit `--max-concurrency`, which is
     // what `run_http_server` converts it back to.
-    let max_concurrency = opts.max_concurrency.unwrap_or_else(|| {
+    let mut max_concurrency = opts.max_concurrency.unwrap_or_else(|| {
         workers
             .saturating_mul(DEFAULT_MAX_CONCURRENCY_PER_WORKER)
             .min(u32::MAX as usize)
     });
+    // A worker's requests share its store's meter, so a reading is one
+    // request's only when that request runs alone.
+    if opts.runtime.report_fuel && (workers, max_concurrency) != (1, 1) {
+        eprintln!("Fuel reporting: forcing --workers 1 --max-concurrency 1");
+        workers = 1;
+        max_concurrency = 1;
+    }
     run_http_server(
         wasm,
         &opts.input,

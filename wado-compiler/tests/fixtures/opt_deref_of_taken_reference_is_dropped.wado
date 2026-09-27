@@ -1,0 +1,27 @@
+// A dead `*&s` reads `s` back through a reference just taken, which is never
+// null, so it cannot trap and goes with the rest of the dead code. What it
+// kept alive here is the field table a derived `Deserialize` builds on every
+// call, only to read a name the optimizer had already folded.
+//
+// Regression: every deref counted as trapping, so the residue an inlined
+// `to_string` left on the missing-field path held `members()` in the hot path.
+
+use { println, Stdout } from "core:cli";
+use { from_string } from "core:json";
+
+struct Size {
+    w: i32,
+    h: i32,
+    resize: String,
+}
+
+export fn run() with Stdout {
+    let s = from_string::<Size>(builtin::black_box("{\"w\":1,\"h\":2,\"resize\":\"fit\"}")).unwrap();
+    println(`${s.w} ${s.h} ${s.resize}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2 fit\n",
+    "wir_not_expect:O2": ["Size^core:prelude/traits.wado/ReflectStruct::members"]
+}

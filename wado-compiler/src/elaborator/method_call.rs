@@ -1440,9 +1440,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .decl_key_at(Some(head.site), &head.name)
                 .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
                 .unwrap_or_default();
+            let trait_arity = ast::written_params(&trait_params).count();
             if self.is_trait_instance_method_at(head.site, &head.name, &static_call.method)
-                && !trait_params.is_empty()
-                && trait_params.len() == head.args.len()
+                && trait_arity != 0
+                && trait_arity == head.args.len()
             {
                 let declared_head = self.declared_trait_name(Some(head.site), &head.name);
                 let trait_args: Vec<TypeId> =
@@ -1479,7 +1480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // then nowhere left to write `Self`.
             if let [self_ty_ast] = head.args
                 && self.is_trait_static_method_at(head.site, &head.name, &static_call.method)
-                && trait_params.is_empty()
+                && trait_arity == 0
                 && self.resolve_type(self_ty_ast) != TypeTable::UNKNOWN
             {
                 let mut on_self = static_call.clone();
@@ -1499,7 +1500,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // turbofish is already spoken for, so say that rather than let the
             // call read as an unknown function.
             if self.is_trait_static_method_at(head.site, &head.name, &static_call.method)
-                && !trait_params.is_empty()
+                && trait_arity != 0
             {
                 let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
                     trait_name: self.declared_trait_name(Some(head.site), &head.name),

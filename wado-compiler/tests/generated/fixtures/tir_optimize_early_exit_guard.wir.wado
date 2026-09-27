@@ -69,6 +69,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:tir_optimize_early_exit_guard.wado::$const_obj_1: ref null "core:prelude//List<char>" = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
+
 fn "tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
     if pos >= arr.used {
         return 63;
@@ -77,7 +79,6 @@ fn "tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
 }
 
 fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
-    let a: ref "core:prelude//List<char>";
     let $local_1: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/string.wado//String";
     let handle_9: i32;
@@ -90,9 +91,8 @@ fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     let tx_41: i32;
     let $sroa_self_value_46: char;
     let $sroa_self_value_49: char;
-    a = struct.new "core:prelude//List<char>" { repr: array.new_fixed<char>(97, 98, 99), used: 3 };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $sroa_self_value_46 = "tir_optimize_early_exit_guard.wado/safe_get"(a, black_box(1));
+    $sroa_self_value_46 = "tir_optimize_early_exit_guard.wado/safe_get"(global:tir_optimize_early_exit_guard.wado::$const_obj_1, black_box(1));
     "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_1, $sroa_self_value_46);
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
@@ -100,7 +100,7 @@ fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(tx_21, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $sroa_self_value_49 = "tir_optimize_early_exit_guard.wado/safe_get"(a, black_box(10));
+    $sroa_self_value_49 = "tir_optimize_early_exit_guard.wado/safe_get"(global:tir_optimize_early_exit_guard.wado::$const_obj_1, black_box(10));
     "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, $sroa_self_value_49);
     rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);

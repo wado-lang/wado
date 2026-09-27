@@ -1,0 +1,20 @@
+// `task return` delivers the result and the function keeps running, here to
+// write the response's trailers.
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Headers::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    assert response.get_status_code() == 200;  // the default status
+
+    task return Result::<Response, ErrorCode>::Ok(response); // deliver result; function continues
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null)); // fulfill trailers
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 200
+    }
+}

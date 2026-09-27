@@ -1,0 +1,14 @@
+// Only a literal converts implicitly, and a variable is never widened.
+
+use { Value } from "core:value";
+
+test {
+    let a = 1;
+    let b = "x";
+    let x: i32 = 1;
+    let v: List<Value> = [a, b];     // Error: write [Value::from(a), Value::from(b)]
+    let w: List<i64> = [x];          // Error: no implicit widening of `x: i32`
+}
+
+__DATA__
+{"compile_error":"cannot use `i32` where `Value` is expected: only a literal converts implicitly; write `Value::from(…)`","compile_errors_contains":["cannot use `String` where `Value` is expected","cannot use `i32` where `i64` is expected: only a literal converts implicitly; write `i64::from(…)`"]}

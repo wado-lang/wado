@@ -1,0 +1,169 @@
+// Boolean, null, character, integer, float, string and byte literals.
+
+test "boolean" {
+    let active = true;
+    let disabled = false;
+    assert active && !disabled;
+}
+
+test "null" {
+    let missing: Option<i32> = null;            // Same as None
+    let also_missing = Option::<i32>::None;
+
+    // Both are equivalent
+    assert missing == also_missing;
+}
+
+fn pair<T>(a: T, b: T) -> T { return a; }
+
+test {
+    let p = pair(null, Option::Some(1));    // Option<i32>
+    let x = null;                           // Option<!>
+    assert p == null && x matches { None };
+}
+
+test "char" {
+    let letter = 'A';
+    let digit = '9';
+    let unicode = '\u0041';  // Unicode escape (same as 'A')
+    let emoji = '😀';        // Direct Unicode character
+    let newline = '\n';
+    assert unicode == letter && digit as u32 == 57;
+    assert emoji as u32 == 0x1F600 && newline as u32 == 10;
+}
+
+test "char escapes" {
+    let a = '\u0041';         // 'A' (BMP)
+    let smiley = '\u{1F600}'; // '😀' (non-BMP)
+    assert a == 'A' && smiley == '😀';
+}
+
+test "char casts" {
+    let c = 'A';
+    let code = c as i32;
+    let ucode = c as u32;
+    let byte = c as u8;     // truncated to low byte
+    assert code == 65 && ucode == 65 && byte == 65;
+
+    let b: u8 = 65;
+    assert b as char == 'A';
+
+    let from_u32 = char::from_u32(65 as u32);
+    let from_i32 = char::from_i32(65);
+    assert from_u32 == Option::Some('A') && from_i32 == Option::Some('A');
+}
+
+test "integer" {
+    let decimal = 42;
+    let negative = -17;
+    let with_separator = 1_000_000;    // Underscores for readability
+    let binary = 0b1010_1100;          // Binary
+    let octal = 0o755;                 // Octal
+    let hex = 0xFF_AA_BB;              // Hexadecimal
+    assert decimal + negative == 25 && with_separator == 1000000;
+    assert binary == 172 && octal == 493 && hex == 16755387;
+}
+
+fn foo(n: i64) -> i64 { return n; }
+
+test {
+    let byte: i8 = 127;
+    let long: i64 = 9_223_372_036_854_775_807;
+    let unsigned: u32 = 4_294_967_295;
+    let big: u128 = 1_000_000_000_000;
+    assert foo(100) == 100;  // literal coerced to i64
+    assert long == i64::MAX && unsigned == u32::MAX;
+}
+
+test "integer range" {
+    let a: i8 = 127;                  // OK: max i8
+    let c: i8 = -128;                 // OK: min i8
+    let f: i8 = 0xFF as i8;           // OK: explicit bit-pattern reinterpretation
+    let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation
+    assert a == i8::MAX && c == i8::MIN && f == -1 && h == -1;
+}
+
+test "integer to float" {
+    let m = 340282350000000000000000000000000000000 as f32;  // OK
+    assert m == f32::MAX;
+}
+
+test "i32 fallback" {
+    let j = 2147483647;               // OK: max i32
+    let l = -2147483648;              // OK: min i32
+    assert j == i32::MAX && l == i32::MIN;
+}
+
+test "integer as" {
+    let byte: i8 = 127 as i8;
+    let long: i64 = 9_223_372_036_854_775_807 as i64;
+    let unsigned: u32 = 4_294_967_295 as u32;
+    assert byte == i8::MAX && long == i64::MAX && unsigned == u32::MAX;
+}
+
+test "float" {
+    let pi = 3.14159;
+    let with_separator = 1_000_000.5;
+    let scientific = 6.022e23;         // 6.022 × 10²³
+    let negative_exp = 1.6e-19;        // 1.6 × 10⁻¹⁹
+    let explicit_positive = 2.5e+10;
+    assert with_separator == 1000000.5 && explicit_positive == 25000000000.0;
+    assert scientific == 602200000000000000000000.0 && negative_exp < 1e-18;
+}
+
+test "float coercion" {
+    let single: f32 = 3.14;
+    let double: f64 = 3.14159265358979;
+    let half: f16 = 0.5;
+    let weights: List<bf16> = [0.5, -1.25, 3.0];
+    assert f32::from(half) == 0.5 && f32::from(weights[1]) == -1.25;
+}
+
+test "float as" {
+    let single: f32 = 3.14 as f32;
+    let double: f64 = 3.14159265358979 as f64;
+    assert single as f64 != double;
+}
+
+test "string" {
+    let name = "Alice";           // Type: String
+    let path = "path/to/file.txt";
+    let escaped = "Line 1\nLine 2\tTabbed";
+    assert escaped.lines().count() == 2 && escaped.len() == 20;
+}
+
+test "byte string" {
+    let magic = b"\x89PNG\r\n";             // Type: ByteList
+    let raw: List<u8> = b"\x89PNG\r\n";     // Also OK: newtype literal coercion to the base
+    assert raw == [137, 80, 78, 71, 13, 10] && magic as List<u8> == raw;
+}
+
+test "byte literal" {
+    let a = b'A';              // u8
+    let hi = b'\xff';          // u8
+    let n: i32 = b'A';         // coerces like an integer literal
+    assert a == 65 && hi == 255 && n == 65;
+}
+
+test "non-BMP" {
+    assert "\uD83D\uDE00" == "😀";   // Surrogate pair
+    assert "\u{1F600}" == "😀";      // Variable-length escape
+}
+
+test "multiline" {
+    // Regular multiline string
+    let poem = "Roses are red,
+Violets are blue,
+Wado is great,
+And so are you!";
+
+    // Multiline template string
+    let name = "Alice";
+    let message = `Dear ${name},
+
+Welcome to Wado!
+
+Best regards`;
+    assert poem.lines().count() == 4;
+    assert message == "Dear Alice,\n\nWelcome to Wado!\n\nBest regards";
+}

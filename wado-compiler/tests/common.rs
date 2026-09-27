@@ -97,11 +97,7 @@ fn assert_diagnostic_is_attributed(diagnostic: &Diagnostic) {
 pub struct FilesystemHost {
     base_path: PathBuf,
     diagnostics: Mutex<Vec<Diagnostic>>,
-    /// Stubbed environment for `#[param(from_env = ...)]` resolution.
-    env: indexmap::IndexMap<String, String>,
-    /// Stubbed `[dependencies]`: name → the dependency's `[package].lib` path,
-    /// relative to `base_path`.
-    dependencies: indexmap::IndexMap<String, String>,
+    stubs: HostStubs,
 }
 
 impl FilesystemHost {
@@ -111,20 +107,13 @@ impl FilesystemHost {
         Self {
             base_path,
             diagnostics: Mutex::new(Vec::new()),
-            env: indexmap::IndexMap::new(),
-            dependencies: indexmap::IndexMap::new(),
+            stubs: HostStubs::default(),
         }
     }
 
-    /// Seed the compile-time environment consulted by `env_var`.
-    pub fn with_env(mut self, env: indexmap::IndexMap<String, String>) -> Self {
-        self.env = env;
-        self
-    }
-
-    /// Seed the `[dependencies]` a bare `use ... from "name"` binds to.
-    pub fn with_dependencies(mut self, dependencies: indexmap::IndexMap<String, String>) -> Self {
-        self.dependencies = dependencies;
+    /// Answer from `stubs` what a real host would ask its environment.
+    pub fn with_stubs(mut self, stubs: HostStubs) -> Self {
+        self.stubs = stubs;
         self
     }
 
@@ -153,12 +142,12 @@ impl CompilerHost for FilesystemHost {
     }
 
     fn env_var(&self, name: &str) -> Option<String> {
-        self.env.get(name).cloned()
+        self.stubs.env.get(name).cloned()
     }
 
     fn dependency_index(&self) -> wado_compiler::DependencyIndex {
         let mut index = wado_compiler::DependencyIndex::default();
-        for (name, lib) in &self.dependencies {
+        for (name, lib) in &self.stubs.dependencies {
             index.resolved.insert(name.clone(), lib.clone());
         }
         index
@@ -491,8 +480,7 @@ pub fn compile_fixture_on_worker(
     path: PathBuf,
     source: String,
     options: CompilerOptions,
-    env: indexmap::IndexMap<String, String>,
-    dependencies: indexmap::IndexMap<String, String>,
+    stubs: HostStubs,
 ) -> CompiledFixture {
     let unparse_wir = options.retain_wir;
     on_compile_worker(move || {
@@ -500,7 +488,7 @@ pub fn compile_fixture_on_worker(
             result,
             warnings,
             errors,
-        } = compile_capturing_diagnostics(&path, &source, options, None, env, dependencies);
+        } = compile_capturing_diagnostics(&path, &source, options, None, stubs);
         let (wasm, wir_text) = match result {
             Ok(compiled) => {
                 let wir_text = unparse_wir.then(|| {
@@ -1248,8 +1236,7 @@ pub fn compile_source_with_compiler_options_and_filename(
         source,
         options,
         display_filename,
-        indexmap::IndexMap::new(),
-        indexmap::IndexMap::new(),
+        HostStubs::default(),
     )
     .result
 }
@@ -1269,6 +1256,16 @@ pub struct CapturedDiagnostic {
     pub message: String,
 }
 
+/// What a test stubs of the host that compiles it.
+#[derive(Default)]
+pub struct HostStubs {
+    /// The compile-time environment `#[param(from_env = ...)]` reads.
+    pub env: indexmap::IndexMap<String, String>,
+    /// The `[dependencies]` a bare `use ... from "name"` binds to: name → the
+    /// dependency's `[package].lib` path, relative to the host's base.
+    pub dependencies: indexmap::IndexMap<String, String>,
+}
+
 /// Compile and return the result alongside every diagnostic message the host
 /// received, on both success and failure — what `warnings_contains` /
 /// `warnings_not_contains` / `compile_errors_contains` assert against.
@@ -1277,14 +1274,11 @@ pub fn compile_capturing_diagnostics(
     source: &str,
     options: CompilerOptions,
     display_filename: Option<&str>,
-    env: indexmap::IndexMap<String, String>,
-    dependencies: indexmap::IndexMap<String, String>,
+    stubs: HostStubs,
 ) -> CapturedCompile {
     use wado_compiler::Severity;
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = FilesystemHost::new(base_path)
-        .with_env(env)
-        .with_dependencies(dependencies);
+    let host = FilesystemHost::new(base_path).with_stubs(stubs);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());
@@ -1321,13 +1315,16 @@ pub fn compile_capturing_diagnostics(
 /// The coordinate `package-web` publishes its bindings under, and the CM package they import.
 pub const WEB_PACKAGE: &str = "wado-lang:web";
 
-/// The `[dependencies]` binding [`WEB_PACKAGE`] to `package-web`, relative to
-/// the repository root.
-fn web_dependency() -> indexmap::IndexMap<String, String> {
-    indexmap::IndexMap::from([(
-        WEB_PACKAGE.to_string(),
-        "package-web/src/lib.wado".to_string(),
-    )])
+/// Stubs binding [`WEB_PACKAGE`] to `package-web`, relative to the repository
+/// root.
+fn web_stubs() -> HostStubs {
+    HostStubs {
+        dependencies: indexmap::IndexMap::from([(
+            WEB_PACKAGE.to_string(),
+            "package-web/src/lib.wado".to_string(),
+        )]),
+        ..HostStubs::default()
+    }
 }
 
 fn repository_root() -> PathBuf {
@@ -1336,7 +1333,7 @@ fn repository_root() -> PathBuf {
 
 /// A host at the repository root with `package-web` as [`WEB_PACKAGE`].
 pub fn web_host() -> FilesystemHost {
-    FilesystemHost::new(repository_root()).with_dependencies(web_dependency())
+    FilesystemHost::new(repository_root()).with_stubs(web_stubs())
 }
 
 /// Compile `source` with `package-web` as its [`WEB_PACKAGE`] dependency.
@@ -1346,8 +1343,7 @@ pub fn compile_against_web(source: &str) -> CapturedCompile {
         source,
         CompilerOptions::default(),
         None,
-        indexmap::IndexMap::new(),
-        web_dependency(),
+        web_stubs(),
     )
 }
 

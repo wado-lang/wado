@@ -1,0 +1,70 @@
+// An operation a handler leaves out goes where the rest clause says: `..forward`
+// to the next handler out, `..trap` nowhere.
+use { TcpSocket, IpAddressFamily, ErrorCode } from "wasi:sockets";
+
+interface Log {
+    fn enabled(level: i32) -> bool;
+    fn emit(message: String);
+}
+
+struct Base {
+    lines: List<String> = [],
+}
+
+impl Log for Base {
+    fn enabled(&self, level: i32) -> bool { resume level >= 1 }
+    fn emit(&mut self, message: String) { self.lines.push(message); }
+}
+
+fn mock_socket() -> TcpSocket with TcpSocket {
+    return TcpSocket::create(IpAddressFamily::Ipv4).unwrap();
+}
+
+struct Filter { min: i32 }
+
+impl Log for Filter {                      // a layer: decorate one operation
+    fn enabled(&self, level: i32) -> bool {
+        resume level >= self.min && Log::enabled(level)
+    }
+    ..forward                              // everything else → the outer `Log`
+}
+
+impl TcpSocket for MinimalTcp {            // a mock: anything unexpected traps
+    fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
+        resume Result::Ok(mock_socket())
+    }
+    ..trap
+}
+
+impl Log for Passthrough {                 // implements nothing, forwards all
+    ..forward
+}
+
+test {
+    let mut base = Base {};
+    with Log => &mut base do {
+        with Log => &Filter { min: 2 } do {
+            assert !Log::enabled(1) && Log::enabled(2);
+            Log::emit("forwarded");
+        }
+        with Log => &Passthrough {} do {
+            assert Log::enabled(1);
+        }
+    }
+    assert base.lines == ["forwarded"];
+    with TcpSocket => &MinimalTcp {} do {
+        assert TcpSocket::create(IpAddressFamily::Ipv4) matches { Ok(_) };
+    }
+}
+
+#[expect_trap]
+test "`..trap` traps on an operation the mock leaves out" {
+    with TcpSocket => &MinimalTcp {} do {
+        let socket = TcpSocket::create(IpAddressFamily::Ipv4).unwrap();
+        socket.get_is_listening();
+    }
+}
+
+struct MinimalTcp {}
+
+struct Passthrough {}

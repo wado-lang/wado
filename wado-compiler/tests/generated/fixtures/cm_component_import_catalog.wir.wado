@@ -4475,6 +4475,7 @@ fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_tuple_record"(v) 
 }
 
 fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_option_list"(v) with CmCatalog {
+    let $load_6: i32;
     let $v_disc: i32;
     let $v_inner0: i32;
     let $v_inner1: i32;
@@ -4494,7 +4495,7 @@ fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_option_list"(v) w
     let $elem_addr: i32;
     let value_33: u8;
     let used: i32;
-    let $licm_repr_40: ref Array<u8>;
+    let $licm_repr_41: ref Array<u8>;
     $v_disc = ref.is_null(v) == 0;
     $v_inner0 = 0;
     $v_inner1 = 0;
@@ -4509,12 +4510,12 @@ fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_option_list"(v) w
             unreachable;
         }; $local_7);
         $local_9 = 0;
-        $licm_repr_40 = $local_5_5.repr;
+        $licm_repr_41 = $local_5_5.repr;
         b218: block {
             l219: loop {
                 break_if b218 $local_9 >= $local_7;
                 $local_10 = $local_8 + $local_9;
-                $local_11 = builtin::array_get_value<u8>($licm_repr_40, $local_9);
+                $local_11 = builtin::array_get_value<u8>($licm_repr_41, $local_9);
                 builtin::store_u8($local_10, $local_11);
                 $local_9 = $local_9 + 1;
                 continue l219;
@@ -4550,7 +4551,7 @@ fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_option_list"(v) w
         if $count > 0 {
             drop("mem/realloc"($base, $count, 1, 0));
         }
-        $option_result = $result;
+        $option_result = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = $result.repr; let $array_clone_len_5: i32; $array_clone_len_5 = local.tee $load_6($result.used); let $array_clone_dst_4: ref Array<u8>; $array_clone_dst_4 = builtin::array_new<u8>($array_clone_len_5); builtin::array_copy<u8>($array_clone_dst_4, 0, $array_clone_src_3, 0, $array_clone_len_5); $array_clone_dst_4), used: $load_6 };
     }
     drop("mem/realloc"($outptr, 12, 4, 0));
     return $option_result;
@@ -5213,6 +5214,8 @@ fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_map_string_u32"(v
 
 fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_option_map"(v) with CmCatalog {
     let $load_11: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,u32>>";
+    let $load_23: i32;
+    let $load_26: i32;
     let $v_disc: i32;
     let $v_inner0: i32;
     let $v_inner1: i32;
@@ -5253,6 +5256,8 @@ fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_option_map"(v) wi
     let self_71: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,u32>>";
     let value_72: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,u32>";
     let used: i32;
+    let v_80: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let v_81: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,u32>>";
     $v_disc = ref.is_null(v) == 0;
     $v_inner0 = 0;
     $v_inner1 = 0;
@@ -5361,7 +5366,7 @@ fn "cm_component_import_catalog.wado/$cm_binding__CmCatalog_id_option_map"(v) wi
         if $count > 0 {
             drop("mem/realloc"($base, $count * 12, 4, 0));
         }
-        $option_result = $map;
+        $option_result = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,u32>" { root: $map.root, nodes: ref.as_non_null(v_80 = $map.nodes; struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(v_80.repr, local.tee $load_23(v_80.used))), used: $load_23 }), entries: ref.as_non_null(v_81 = $map.entries; struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,u32>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,u32>">(v_81.repr, local.tee $load_26(v_81.used))), used: $load_26 }), size: $map.size, deleted_count: $map.deleted_count };
     }
     drop("mem/realloc"($outptr, 12, 4, 0));
     return $option_result;

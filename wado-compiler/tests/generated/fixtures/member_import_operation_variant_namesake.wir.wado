@@ -76,41 +76,37 @@ fn "member_import_operation_variant_namesake.wado/$cm_binding__Stdout_write_via_
 fn "member_import_operation_variant_namesake.wado/$cm_export__run"() {
     let message_7: ref "core:prelude/string.wado//String";
     let handle: i32;
-    let v_12: ref "core:prelude/string.wado//String";
     let $local_0: ref null "member_import_operation_variant_namesake.wado//$Dispatch_Greeting";
     let $local_1: ref "member_import_operation_variant_namesake.wado//$Dispatch_Greeting";
-    let $local_2_15: ref "core:prelude/string.wado//String";
-    let v_16: ref "core:prelude/string.wado//String";
+    let $local_2_14: ref "core:prelude/string.wado//String";
+    let v: ref "core:prelude/string.wado//String";
     let packed: i64;
-    let rx_18: i32;
-    let tx_19: i32;
-    let $av_26: i32;
-    let $av_27: i32;
-    v_12 = $inline__effect_dispatch__Greeting__bye_5: block -> ref "core:prelude/string.wado//String" {
+    let rx_17: i32;
+    let tx_18: i32;
+    let $av_25: i32;
+    message_7 = $inline__effect_dispatch__Greeting__bye_4: block -> ref "core:prelude/string.wado//String" {
         $local_0 = global:member_import_operation_variant_namesake.wado::$effect_Greeting;
         if ref.is_null($local_0) == 0 {
             $local_1 = ref.as_non_null($local_0);
             global:member_import_operation_variant_namesake.wado::$effect_Greeting = $local_1.outer;
-            v_16 = block -> ref "core:prelude/string.wado//String" {
+            v = block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_1";
                 $indirect_call_1 = ref.cast "canonical//CanonicalClosure_1"($local_1.op_bye);
                 call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, $indirect_call_1.env);
             };
-            $av_27 = v_16.used;
-            $local_2_15 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = v_16.repr; let $array_clone_dst_3: ref Array<u8>; $array_clone_dst_3 = builtin::array_new<u8>($av_27); builtin::array_copy<u8>($array_clone_dst_3, 0, $array_clone_src_2, 0, $av_27); $array_clone_dst_3), used: $av_27 };
+            $av_25 = v.used;
+            $local_2_14 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = v.repr; let $array_clone_dst_3: ref Array<u8>; $array_clone_dst_3 = builtin::array_new<u8>($av_25); builtin::array_copy<u8>($array_clone_dst_3, 0, $array_clone_src_2, 0, $av_25); $array_clone_dst_3), used: $av_25 };
             global:member_import_operation_variant_namesake.wado::$effect_Greeting = $local_0;
-            break $inline__effect_dispatch__Greeting__bye_5: $local_2_15;
+            break $inline__effect_dispatch__Greeting__bye_4: $local_2_14;
         } else {
-            break $inline__effect_dispatch__Greeting__bye_5: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 121, 101), used: 3 };
+            break $inline__effect_dispatch__Greeting__bye_4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 121, 101), used: 3 };
         }
         unreachable;
     };
-    $av_26 = v_12.used;
-    message_7 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_5: ref Array<u8>; $array_clone_src_5 = v_12.repr; let $array_clone_dst_6: ref Array<u8>; $array_clone_dst_6 = builtin::array_new<u8>($av_26); builtin::array_copy<u8>($array_clone_dst_6, 0, $array_clone_src_5, 0, $av_26); $array_clone_dst_6), used: $av_26 };
-    rx_18 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_19 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "member_import_operation_variant_namesake.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
-    "core:rt/write_string_to_stream"(tx_19, message_7.repr, $av_26);
+    rx_17 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_18 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "member_import_operation_variant_namesake.wado/$cm_binding__Stdout_write_via_stream"(rx_17);
+    "core:rt/write_string_to_stream"(tx_18, message_7.repr, message_7.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
     "wasi/task-return"(0);
 }

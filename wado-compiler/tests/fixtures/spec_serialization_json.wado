@@ -1,0 +1,17 @@
+// `core:json` writes and reads a value by its field names.
+
+use { to_string, from_string } from "core:json";
+
+struct User { name: String, age: i32 }
+
+test {
+    let user = User { name: "Alice", age: 30 };
+
+    // Serialize to JSON string
+    let json = to_string::<User>(&user).unwrap();
+    assert json == `{"name":"Alice","age":30}`;
+
+    // Deserialize from JSON string
+    let back = from_string::<User>(json).unwrap();
+    assert back.name == "Alice" && back.age == 30;
+}

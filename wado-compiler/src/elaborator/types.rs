@@ -3492,6 +3492,20 @@ impl FunctionContext {
         );
     }
 
+    /// Make local `index` of the current scope mutable, as `let mut [a, b]`
+    /// makes every binding its pattern names.
+    pub(super) fn make_mutable(&mut self, name: &str, index: u32) {
+        self.locals[index as usize].is_mut = true;
+        let local = self
+            .scopes
+            .last_mut()
+            .unwrap()
+            .get_mut(name)
+            .expect("the pattern bound `name` in the current scope");
+        assert_eq!(local.index, index);
+        local.is_mut = true;
+    }
+
     /// Whether a binding written in source took `name`, so a lookup of it that
     /// fails reads it outside the scope it had.
     pub(super) fn declared(&self, name: &str) -> bool {

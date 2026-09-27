@@ -80,34 +80,16 @@ fn report_register_error<H: CompilerHost>(
     );
 }
 
-/// Run the per-attribute validation that applies to every kind:
-///
-/// 1. The attribute is only meaningful inside `core::*` modules; reject
-///    it elsewhere.
-/// 2. The declared kind must match [`CompilerItem::expected_kind`];
-///    otherwise emit a diagnostic and skip registration.
-///
-/// Returns `true` when registration should proceed.
-fn check_compiler_item_placement<H: CompilerHost>(
+/// Whether the declaration is the kind [`CompilerItem::expected_kind`] names,
+/// reporting it when not. Where the attribute may be written is the attribute
+/// schema's rule (`stdlib_only`), checked before elaboration.
+fn check_compiler_item_kind<H: CompilerHost>(
     item: CompilerItem,
     actual_kind: CompilerItemKind,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
 ) -> bool {
-    if !module_source.is_core() {
-        let _ = logger.error_in(
-            module_source,
-            TypeError::CompilerItemAttr {
-                message: format!(
-                    "`#[compiler_item(\"{name}\")]` is only valid inside `core::*` modules",
-                    name = item.attr_name(),
-                ),
-                span,
-            },
-        );
-        return false;
-    }
     if item.expected_kind() != actual_kind {
         let _ = logger.error_in(
             module_source,
@@ -140,7 +122,7 @@ fn register_annotated<H: CompilerHost>(
     let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
-    if !check_compiler_item_placement(item, kind, module_source, span, logger) {
+    if !check_compiler_item_kind(item, kind, module_source, span, logger) {
         return;
     }
     let resolved = resolved();

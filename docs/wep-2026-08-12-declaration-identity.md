@@ -968,3 +968,13 @@ all key by that pair, and so does every per-instantiation key built from it. A
 module declares one item per name, so the pair names one declaration. What it
 admits is a second identity beside the `DefId`: a pass holding a `DefId` has to
 render it into that pair, and nothing checks that the two agree.
+
+## Known gap: a CM operation is bound by its spelling
+
+A call to an interface operation finds its Component Model binding by
+`Interface::operation`, not by the declaration it names. Two interfaces of one
+name that each declare an operation of one name are rejected as a collision,
+whether or not one program reaches both. What it admits is a refusal no scope
+explains: a program's own `Client::send` collides with `wasi:http`'s, which it
+never imports. The pending fixture is
+`cm_interface_name_shared_with_stdlib_todo.wado`.

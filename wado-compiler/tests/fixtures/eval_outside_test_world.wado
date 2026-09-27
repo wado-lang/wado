@@ -1,0 +1,10 @@
+// `core:eval` is linked only by the `wado test` host, so a command that
+// reaches it is rejected at compile time rather than failing to instantiate.
+use { eval } from "core:eval";
+
+export fn run() {
+    let _ = eval("export fn run() {}");
+}
+
+__DATA__
+{"compile_error": "`core:eval` runs only under `wado test`", "compile_error_codes": ["EVAL_OUTSIDE_TEST_WORLD"]}

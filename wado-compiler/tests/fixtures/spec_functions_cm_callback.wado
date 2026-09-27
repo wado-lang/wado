@@ -1,0 +1,33 @@
+// A function type crosses the Component Model boundary as a `#[cm]` import's
+// callback parameter. A Wado handler answering the import receives the closure
+// itself and may call it.
+
+#[cm("example:demo/target", linearity = "unrestricted")]
+resource Target {
+    #[cm("example:demo/target#listen")]
+    #[cm_params("self", "listener")]
+    fn listen(&self, listener: fn mut(i32));
+}
+
+test {
+    let target = mock_target();
+    let mut seen: List<i32> = [];
+    with Target => &mut EchoTarget {} do {
+        target.listen(|v| seen.push(v));
+    }
+    assert seen == [7];                 // `EchoTarget` calls the listener with 7
+}
+
+// A handle no host backs: every call on it reaches `EchoTarget`.
+fn mock_target() -> Target {
+    return 0.0 as Target;
+}
+
+struct EchoTarget {}
+
+impl Target for EchoTarget {
+    fn listen(&mut self, this: &Target, listener: fn mut(i32)) {
+        let mut l = listener;
+        l(7);
+    }
+}

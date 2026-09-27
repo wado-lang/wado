@@ -1,0 +1,43 @@
+// A `mut` binding a pattern introduces owns its value, so writing through it
+// leaves the destructured source alone, whether the `mut` is on the binding or
+// on the whole `let`. Regression: the lowering took the binding's mutability
+// from the statement, so `let [mut s, _]` and a `Some(mut s)` arm shared the
+// source's storage at -O0.
+
+use { println, Stdout } from "core:cli";
+
+struct Shape {
+    axes: List<String>,
+}
+
+struct Wrapper {
+    s: Shape,
+}
+
+export fn run() with Stdout {
+    let t = [Shape { axes: ["P"] }, 1];
+    let [mut a, _] = t;
+    a.axes[0] = "S";
+    println(t.0.axes[0]);
+
+    let w = Wrapper { s: Shape { axes: ["P"] } };
+    let { s: mut b } = w;
+    b.axes[0] = "S";
+    println(w.s.axes[0]);
+
+    let mut [c, _] = t;
+    c.axes[0] = "S";
+    println(t.0.axes[0]);
+
+    let o: Option<Shape> = Option::Some(Shape { axes: ["P"] });
+    match o {
+        Some(mut d) => {
+            d.axes[0] = "S";
+        },
+        None => {},
+    }
+    println(o.unwrap().axes[0]);
+}
+
+__DATA__
+{"stdout": "P\nP\nP\nP\n"}

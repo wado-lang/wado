@@ -1,0 +1,28 @@
+// A trait method's `with` clause is the contract every impl writes to, and a
+// call through a bound requires it.
+use { println, Stdout } from "core:cli";
+
+struct Loud {
+    n: i32,
+}
+
+trait Source {
+    fn next(&mut self) -> i32 with Stdout;
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout {         // matching the declaration
+        println("tick");
+        self.n += 1;
+        return self.n;
+    }
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // required: `s.next()` needs it
+    return s.next();
+}
+
+test {
+    let mut loud = Loud { n: 0 };
+    assert draw(&mut loud) == 1;
+}

@@ -90,6 +90,7 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:match_guard_break.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(32);
+global global:match_guard_break.wado::$const_obj_2: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2, 1, 1, 3, 1, 4), used: 6 };
 
 fn "match_guard_break.wado/later_arm"(xs) {
     let n: i32;
@@ -162,7 +163,6 @@ fn "match_guard_break.wado/first_arm"(xs) {
 }
 
 fn "match_guard_break.wado/run"() with Stdout {
-    let xs: ref "core:prelude//List<i32>";
     let $local_1: ref "core:prelude/string.wado//String";
     let $local_2: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
@@ -173,10 +173,9 @@ fn "match_guard_break.wado/run"() with Stdout {
     let packed: i64;
     let rx_34: i32;
     let tx_35: i32;
-    xs = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2, 1, 1, 3, 1, 4), used: 6 };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_13("match_guard_break.wado/later_arm"(xs)), $local_2.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_13("match_guard_break.wado/later_arm"(global:match_guard_break.wado::$const_obj_2)), $local_2.buf);
     new_used = $local_1.used + 1;
     if @unlikely(new_used > builtin::array_len($local_1.repr)) {
         cold_path;
@@ -186,7 +185,7 @@ fn "match_guard_break.wado/run"() with Stdout {
     $local_1.used = new_used;
     builtin::array_copy<u8>($local_1.repr, start_26, global:match_guard_break.wado::$const_obj_1, 0, 1);
     $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_31("match_guard_break.wado/first_arm"(xs)), $local_2.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_31("match_guard_break.wado/first_arm"(global:match_guard_break.wado::$const_obj_2)), $local_2.buf);
     rx_34 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_35 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "match_guard_break.wado/$cm_binding__Stdout_write_via_stream"(rx_34);

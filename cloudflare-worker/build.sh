@@ -16,8 +16,7 @@ JCO="$ROOT/scripts/jco/node_modules/.bin/jco"
 
 WASM="$(mktemp -d)/service.wasm"
 # V8 has no wide-arithmetic, which float formatting emits.
-cargo run -q -p wado-cli --manifest-path "$ROOT/Cargo.toml" -- \
-  compile --world wasi:http/service -f no-wide-arithmetic -Os -o "$WASM" "$PROGRAM"
+"$ROOT/scripts/dev-bin.sh" wado compile --world wasi:http/service -f no-wide-arithmetic -Os -o "$WASM" "$PROGRAM"
 
 rm -rf "$HERE/gen"
 # `--instantiation` because a Worker rejects the top-level await jco's default

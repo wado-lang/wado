@@ -40,14 +40,16 @@ A code block in the specification is a quotation of an e2e fixture.
 
 ### The rule
 
-1. Every `` ```wado `` block in `docs/spec-*.md` names a fixture.
-2. The named fixture contains the block verbatim: its lines, in order and
+1. Every `` ```wado `` block in `docs/spec-*.md` names a fixture or a
+   source file.
+2. The named file contains the block verbatim: its lines, in order and
    contiguous, each shifted by one indentation prefix shared by all of them. A
    blank line matches a blank line.
-3. Any number of blocks may name one fixture.
+3. Any number of blocks may name one file.
 4. A block whose fixture does not expect a compile error contains at least one
-   `assert`. This rule is provisional: the first migrated file decides whether
-   it holds or is absurd, and it is dropped if absurd.
+   `assert`, unless its reference waives the rule. This rule is provisional:
+   the first migrated file decides whether it holds or is absurd, and it is
+   dropped if absurd.
 
 The reference is an HTML comment holding a JSON object, the block directly
 before the fence in the same container. The formatter puts a blank line between
@@ -66,13 +68,27 @@ assert double(1.5 as Meters) == 3.0 as Meters;
 
 The comment is data, so JSON says what it may hold, and no syntax of its own
 needs a rule. A comment whose body does not open with `{` is no reference, which
-leaves room for a formatter directive. One that does is a reference: `fixture`
-is its only key, and a body that fails to parse or holds another key is an
+leaves room for a formatter directive. One that does is a reference: it holds
+exactly one of `fixture` and `source`, and may hold `"assert": false`. A body
+that fails to parse, holds another key, or gives `assert` any other value is an
 error, so a misspelled key is caught rather than read as no reference.
 
-The path is relative to `wado-compiler/tests/fixtures/` and may name any `.wado`
-file there, a helper module a fixture imports included. A two-file example
-quotes each file.
+A `fixture` path is relative to `wado-compiler/tests/fixtures/` and is read the
+way the suite reads it. A file at the top level is a fixture the suite runs, and
+the block is matched against the code before its `__DATA__`. A file below it is
+a helper module, which the suite compiles only through a fixture that imports
+it, directly, through another helper, or as a `dependencies` entry. The checker
+follows those paths from the top level and requires one to reach the helper.
+The block is matched against the whole file, `__DATA__` included, since a
+helper's data is content that `#data` reads, not an expectation. The `assert`
+rule does not apply, as the fixture importing it states the claims. A two-file
+example quotes each file.
+
+A `source` path is relative to the repository root and names a file outside the
+fixtures: a standard library module, a unit test's input, a package's source.
+The block is matched against the whole file, and the `assert` rule does not
+apply. A `source` naming a fixture is an error, since it would step around both
+rules above.
 
 ### Why a quotation, and not a generated test
 
@@ -98,14 +114,16 @@ example names the test that holds it.
 - A claim an example makes about a value is written as an `assert` in the block,
   not as a comment. The claim is then part of the quoted text and runs. A
   comment such as `// 3.14` is checked by nothing, which is what the assert rule
-  targets.
+  targets. A test's `#[expect_trap]` or `#[TODO]` is a claim too: the runner
+  holds the body to trapping, so a trap example needs no `assert` written for
+  the sake of the rule.
+- An example whose claim is that it compiles has no value to assert: the
+  fixture's run already shows it. Its reference writes `"assert": false`, as
+  the `#[benign]` example's does. The waiver is allowed only on a fixture the
+  suite runs, the one place the rule applies.
 - A compile-error example quotes a fixture declaring `compile_error` or
   `compile_error_codes`. One fixture expects one report, so each rejected
   example has a fixture of its own.
-- A block quoting a fixture marked `#[TODO]` or `#![TODO]` is an example the
-  compiler does not yet honour. That is a known gap, and the specification
-  records no gaps, so the checker requires a WEP to name that fixture in a
-  code span.
 - A fixture is excluded from the formatter (`[format] exclude`), so its layout
   stays as the specification quotes it.
 
@@ -117,10 +135,11 @@ the lexer finds one, not in a comment or a string. It reads the Markdown with
 Marl. `scripts/check-spec-examples.sh` drives it with `wado run`, as
 `scripts/check-rust-paths.sh` drives `package-gale/tools/rust_inline_paths.wado`.
 
-A block that names no fixture is counted against the baseline. A block with a
-reference is migrated, so any rule it breaks fails the check outright. The
-`#[TODO]` rule reads the fixture as a whole: one marked test anywhere in it
-asks for a WEP.
+A block that breaks any rule, naming nothing among them, fails the check.
+
+A `#[TODO]` rule was dropped: it asked a WEP to name every fixture marked
+`#[TODO]` that a block quotes, as a known gap. A marked fixture is not always a
+gap. The example of a `#[TODO]` test is itself marked, by design.
 
 Marl's `fenced_code_blocks` gives the checker what it reads of each fenced
 block: its info string, its text, its source line, and the HTML block directly
@@ -128,9 +147,10 @@ before it. Marl's document tree stays `internal`.
 
 ### Rollout
 
-The baseline, `scripts/spec-examples.json`, counts the blocks of each file that
-have no reference yet, and CI fails when a count grows. It only shrinks, as
-`scripts/rust-inline-paths.json` does.
+During the migration a baseline, `scripts/spec-examples.json`, counted the
+blocks of each file that had no reference yet, and CI failed when a count grew.
+It only shrank, as `scripts/rust-inline-paths.json` does, and was deleted once
+empty.
 
 Migrating a block is triage. Each one is exactly one of:
 
@@ -164,13 +184,21 @@ The last two are what this WEP is for. The migration will find them.
        The migration found one block wrong in the specification: a float
        vector's comparison mask is the integer vector of the same width, not
        the float one.
-5. [ ] Migrate the other twelve spec files, one change per file.
-6. [ ] Delete the baseline once it is empty, so the rule holds with no
-       exceptions.
+5. [x] Migrate the other twelve spec files, one change per file. The migration
+       found compiler bugs, fixed on the way: a trait turbofish counting
+       parameters the trait does not write, an associated type's bound pinning
+       a type to `Self`, the locals of a body other than a function's, and a
+       standard library attribute accepted in a program. It found
+       two gaps, each now a WEP known gap: a CM operation bound by its spelling,
+       and an inline `with { path }`. A block with no fixture to run could
+       still quote a real file, so a reference may name a `source`.
+6. [x] Delete the baseline, so the rule holds with no exceptions.
 
 ## Known gaps
 
 - The match proves the quoted text compiles in its fixture, not that the
   fixture exercises it. A block quoted from a function no test calls passes.
+- A `source` quotation is held to its file alone. Nothing asks that the file is
+  compiled or run.
 - The cheatsheet repeats the specification's examples in a shorter form, and
   nothing holds it to this rule.

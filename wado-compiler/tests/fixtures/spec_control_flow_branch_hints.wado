@@ -1,0 +1,79 @@
+// Quoted by docs/spec-control-flow.md § Branch Hints and § Optimization Barrier.
+
+struct Buffer {
+    data: List<i32>,
+    len: i32,
+}
+
+enum Command {
+    Run,
+    Crash,
+}
+
+fn execute() -> i32 {
+    return 1;
+}
+
+impl Buffer {
+    // Error/abort guard: the taken branch is cold.
+    fn get(&self, i: i32) -> i32 {
+        if i >= self.len {
+            builtin::cold_path();
+            panic("index out of bounds");
+        }
+        return self.data[i];
+    }
+}
+
+// `match` arm with no boolean condition.
+fn run(command: Command) -> i32 {
+    return match command {
+        Command::Run => execute(),
+        Command::Crash => {
+            builtin::cold_path();
+            panic("crashed");
+        },
+    };
+}
+
+test {
+    let b = Buffer { data: [1, 2], len: 2 };
+    assert b.get(1) == 2 && run(Command::Run) == 1;
+}
+
+struct Cache {
+    hot: String,
+}
+
+impl Cache {
+    fn fast_path(&self, key: String) -> Option<i32> {
+        return if key == self.hot { Option::Some(1) } else { null };
+    }
+
+    fn slow_path(&self, key: String) -> i32 {
+        return key.len() + 1;
+    }
+}
+
+impl Cache {
+    fn lookup(&self, key: String) -> i32 {
+        if let Some(v) = self.fast_path(key) {
+            return v;
+        }
+        builtin::cold_path(); // the slow path below is rarely reached
+        return self.slow_path(key);
+    }
+}
+
+test {
+    let cache = Cache { hot: "a" };
+    assert cache.lookup("a") == 1 && cache.lookup("bc") == 3;
+}
+
+fn to_i8(x: i32) -> i32 {
+    return (x << 24) >> 24;
+}
+
+test "sign extension folds the redundant mask" {
+    assert to_i8(builtin::black_box(300)) == 44;
+}

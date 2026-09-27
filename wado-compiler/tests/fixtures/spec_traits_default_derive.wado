@@ -1,0 +1,22 @@
+// `Default` derived from field defaults, and written by hand where a field
+// declares none.
+
+struct Config {
+    host: String = "localhost",
+    port: i32 = 8080,
+}
+
+test "derived" {
+    let c = Config::default();
+    assert c.host == "localhost" && c.port == 8080;
+}
+
+struct Point { x: i32, y: i32 }
+
+impl Default for Point {
+    fn default() -> Point { return Point { x: 0, y: 0 }; }
+}
+
+test "written" {
+    assert Point::default().x == 0;
+}

@@ -1,0 +1,40 @@
+// A closure captures by reference, reads at call time, and shares its captures
+// with every copy.
+
+test "a capture is a reference" {
+    let mut count = 0;
+    let mut inc = || count += 1;   // captures &mut count; type fn mut() -> ()
+    let get = || count;             // captures &count; type fn() -> i32
+    inc();
+    inc();
+    assert get() == 2;
+    count = 10;
+    assert get() == 10;
+}
+
+test "a capture reaches any enclosing frame" {
+    let mut count = 0;
+    let mut outer = || {
+        let mut inner = || count += 1;   // writes the function's `count`
+        inner();
+    };
+    outer();
+    assert count == 1;
+}
+
+test "a snapshot" {
+    let mut original = 1;
+    let snapshot = original;     // a copy, independent of `original`
+    let f = || snapshot * 2;
+    original = 5;
+    assert f() == 2;
+}
+
+test "closures are values" {
+    let mut count = 0;
+    let mut c1 = || count += 1;
+    let mut c2 = c1;             // a copy holding the same `&mut count`
+    c1();
+    c2();
+    assert count == 2;
+}

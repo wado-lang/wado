@@ -1,0 +1,27 @@
+// A Kiln generator module: `Options` and the exported `generate`.
+use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
+
+pub struct Options {
+    namespace: String,
+    emit_comments: bool = true,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let Ok(schema) = read_text(req.primary.content) else {
+        return Result::Err(Error::InvalidSchema("not UTF-8"));
+    };
+    let source = emit(&schema, &req.options);   // the generator's own work
+    return Result::Ok(Response {
+        files: [OutputFile { path: `${req.options.namespace}.wado`, content: source, is_entry: true }],
+    });
+}
+
+test {
+    let options = Options { namespace: "calc" };
+    assert options.emit_comments && emit(&"x", &options) == "// calc\nx";
+}
+
+fn emit(schema: &String, options: &Options) -> String {
+    let header = if options.emit_comments { `// ${options.namespace}\n` } else { "" };
+    return `${header}${*schema}`;
+}

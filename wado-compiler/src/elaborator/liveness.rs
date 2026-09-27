@@ -12,7 +12,6 @@ use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
     type_head_name,
 };
-use crate::attribute::EXPORT;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::token::Span;
@@ -93,9 +92,8 @@ pub(crate) fn compute(
                     graph.add_function_edges(func, references, &key);
                     // `export` implies `Visibility::Public`, so this subsumes
                     // `is_export`; the other two catch roots with no visibility
-                    // modifier (a raw Wasm export, or a misdeclared entry point).
+                    // modifier (a misdeclared entry point, or a compiler item).
                     if func.visibility.is_public()
-                        || has_export_attr(func)
                         || world_export_names.contains(&func.name)
                         || compiler_named.names_function(source, &func.name)
                     {
@@ -329,6 +327,8 @@ fn analyze_body(
     };
     // By-value parameters are move-eligible; borrow (`&T` / `&mut T`) and `self`
     // receivers are not — they name the caller's storage and are never moved.
+    // The planner withdraws a parameter its callers pass uncopied, which only
+    // the whole program shows.
     for param in &func.params {
         if param.self_kind == ast::SelfKind::None
             && !matches!(
@@ -401,6 +401,16 @@ impl AstVisitor for EligibilityPass<'_> {
             self.exclude_destructured(&arm.pattern);
         }
         ast::walk_match_expr(self, m);
+    }
+
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        // `let P = e else { … }` is a match on `e`, as `if let` is.
+        if let ast::Stmt::Let(l) = stmt
+            && l.else_block.is_some()
+        {
+            self.exclude_destructured(&l.pattern);
+        }
+        ast::walk_stmt(self, stmt);
     }
 
     fn visit_condition(&mut self, cond: &ast::Condition) {
@@ -960,8 +970,8 @@ fn union(a: &IndexSet<AstId>, b: &IndexSet<AstId>) -> IndexSet<AstId> {
 struct Graph {
     /// `owner -> called items`.
     edges: IndexMap<AstId, Vec<AstId>>,
-    /// Production roots (world exports, `pub` / `export` items, `#[export]`,
-    /// methods, struct-field defaults) — seeds of the `E` closure.
+    /// Production roots (world exports, `pub` / `export` items, methods,
+    /// struct-field defaults) — seeds of the `E` closure.
     export_seeds: Vec<AstId>,
     /// `test` block roots — seeds of the `T` closure.
     test_seeds: Vec<AstId>,
@@ -1148,11 +1158,6 @@ impl CompilerNamed {
             .get(source)
             .is_some_and(|names| names.contains(name))
     }
-}
-
-/// `#[export]` marks a raw Wasm export — an export-boundary root.
-fn has_export_attr(func: &Function) -> bool {
-    func.attrs.iter().any(|attr| attr.name == EXPORT)
 }
 
 #[cfg(test)]

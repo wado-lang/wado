@@ -1,0 +1,11 @@
+// A program implements `wasi:cli/command`'s `Run` with an `export fn run()`.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let greeting = "Hello, WASI world!";
+    assert greeting.len() == 18;
+    println(greeting);
+}
+
+__DATA__
+{"stdout": "Hello, WASI world!\n"}

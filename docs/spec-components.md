@@ -57,6 +57,8 @@ A Component Model `async func` import is an interface operation declared
 - `.join(&set)` adds the call to a `WaitableSet`, so one wait covers several
   calls and streams.
 
+<!-- {"fixture":"spec_components_async_import.wado"} -->
+
 ```wado
 use { Client, Request, Response, ErrorCode } from "wasi:http";
 
@@ -64,6 +66,12 @@ fn fetch(req: Request) -> Result<Response, ErrorCode> with Client {
     let call = Client::send(req);   // the request starts; nothing waits yet
     // ... work here runs while the host handles the request ...
     return call.wait();             // blocks until the response arrives
+}
+
+test {
+    let mut mock = MockClient {};
+    let response = with Client => &mut mock do { fetch(new_request()) };
+    assert response matches { Ok(_) };
 }
 ```
 
@@ -79,11 +87,21 @@ with a `T`. The caller still receives an
 `AsyncCall<T>`, one that has already completed, so its `.wait()` returns the
 value at once.
 
+<!-- {"fixture":"spec_components_async_import.wado"} -->
+
 ```wado
 impl Client for MockClient {
     fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
         resume Result::<Response, ErrorCode>::Ok(canned_response());
     }
+}
+
+test {
+    let mut mock = MockClient {};
+    with Client => &mut mock do {
+        let call = Client::send(new_request());
+        assert call.wait() matches { Ok(_) };   // completed already
+    };
 }
 ```
 
@@ -121,6 +139,8 @@ This distinction is not part of the Component Model specification, which treats 
 
 A world imports whole interfaces, as a WIT world does, and exports interfaces or functions:
 
+<!-- {"fixture":"spec_components_world_declaration.wado"} -->
+
 ```wado
 #[cm("example:app/plugin@0.1.0")]
 pub world Plugin {
@@ -131,6 +151,10 @@ pub world Plugin {
     export fn transform(input: String) -> String;            // a function
     export async fn fetch(url: String) -> Result<String, String>;
 }
+
+test {
+    assert true;   // a world is a declaration: accepting it is the check
+}
 ```
 
 - `import Iface;` and `export Iface;` name a `pub interface`. The interface's own `#[cm(...)]` gives its Component Model name and version, and an export takes its signatures from the interface.
@@ -140,6 +164,8 @@ pub world Plugin {
 ### WASI CLI World Example
 
 The standard WASI CLI `command` world, as `wasi:cli` declares it:
+
+<!-- {"fixture":"spec_components_command_world.wado"} -->
 
 ```wado
 #[cm("wasi:cli/command@0.3.0")]
@@ -163,15 +189,23 @@ pub world Command {
 
     export Run;
 }
+
+test {
+    assert true;   // a world is a declaration: accepting it is the check
+}
 ```
 
 `Run` declares `async fn run() -> AsyncCall<Result<(), ()>>`. A program implements it with an `export fn run()`:
+
+<!-- {"fixture":"spec_components_run.wado"} -->
 
 ```wado
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    println("Hello, WASI world!");
+    let greeting = "Hello, WASI world!";
+    assert greeting.len() == 18;
+    println(greeting);
 }
 ```
 
@@ -241,11 +275,14 @@ Each hosted world defines its entry point:
 
 HTTP handlers return a `Response` that contains a `Future`-based trailers channel. With a regular `return`, the Wasm function exits immediately, making it impossible to write to that channel. `task return` separates result delivery from function termination:
 
+<!-- {"fixture":"spec_components_task_return.wado"} -->
+
 ```wado
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    assert response.get_status_code() == 200;  // the default status
 
     task return Result::<Response, ErrorCode>::Ok(response); // deliver result; function continues
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null)); // fulfill trailers
@@ -266,20 +303,22 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 Use `#[cm(...)]` attributes to link Wado definitions to Component Model interfaces:
 
+<!-- {"fixture":"spec_components_cm_attributes.wado"} -->
+
 ```wado
 // Link an effect interface to a CM interface
-#[cm("wasi:cli/stdout@0.3.0")]
-pub interface Stdout {
-    #[cm("wasi:cli/stdout@0.3.0#write-via-stream")]
+#[cm("example:cli/console@0.1.0")]
+pub interface Console {
+    #[cm("example:cli/console@0.1.0#write-via-stream")]
     fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
 }
 
 // Link a resource to a CM resource
-#[cm("wasi:cli/terminal-output@0.3.0#terminal-output")]
+#[cm("example:cli/terminal-output@0.1.0#terminal-output")]
 pub resource TerminalOutput;
 
 // Link an enum to a CM enum, and each case to its WIT case
-#[cm("wasi:cli/types@0.3.0#error-code")]
+#[cm("example:cli/types@0.1.0#error-code")]
 pub enum ErrorCode {
     #[cm("io")]
     Io,
@@ -287,6 +326,10 @@ pub enum ErrorCode {
     IllegalByteSequence,
     #[cm("pipe")]
     Pipe,
+}
+
+test {
+    assert ErrorCode::IllegalByteSequence != ErrorCode::Pipe;   // the CM name changes no Wado name
 }
 ```
 
@@ -306,13 +349,15 @@ An unrestricted resource is not a Component Model `resource`. Its operations are
 
 An affine resource is move-only. Assigning it, passing it by value, returning it, placing it in an aggregate, and calling a method that takes `self` by value each move it. Using a binding after it has moved is a compile error.
 
+<!-- {"fixture":"spec_components_use_after_move.wado"} -->
+
 ```wado
 pub resource Counter {
     fn bump(&self);
     fn consume(self);
 }
 
-fn eat(c: Counter) { ... }
+fn eat(c: Counter) { }
 
 fn misuse(c: Counter, d: Counter) {
     eat(c);          // moves `c`
@@ -331,6 +376,8 @@ A method consumes a resource through a bare `self` receiver, and borrows it thro
 
 Returning a resource reached through a `&` or `&mut` parameter, `&self` included, is a compile error. A borrow leaves its referent with its owner, so the returned resource would have a second owner. The rule covers a field read, a dereference, a `match` binding over the borrowed value, and a `let` bound from any of these. A resource the function produces itself may be returned.
 
+<!-- {"fixture":"spec_components_move_out_of_borrow.wado"} -->
+
 ```wado
 struct Holder { f: Fields }
 
@@ -338,10 +385,21 @@ impl Holder {
     fn peek(&self) -> Fields {
         return self.f;       // ERROR: cannot move resource `Fields` out of a borrow
     }
+}
+```
 
+<!-- {"fixture":"spec_components_consume_holder.wado"} -->
+
+```wado
+impl Holder {
     fn into_fields(self) -> Fields {
         return self.f;       // OK: the holder is consumed
     }
+}
+
+test {
+    let holder = Holder { f: Fields::new() };
+    assert holder.into_fields().copy_all().is_empty();
 }
 ```
 
@@ -369,6 +427,8 @@ Rationale: [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 `resource Child extends Parent` declares that a child handle is usable wherever the parent is. The clause stands between the resource's name and its body, and names one resource as the parent. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
+<!-- {"fixture":"spec_components_resource_extends.wado"} -->
+
 ```wado
 #[cm("example:ui/target", linearity = "unrestricted", classes = "0..=1")]
 resource Target {
@@ -386,6 +446,12 @@ fn use_it(w: Widget) {
     w.add_listener("click");   // inherited, no cast
     let t: Target = w;         // upcast is implicit
 }
+
+test {
+    let w = 137438953472.0 as Widget;   // class 1, object 0
+    let t: Target = w;
+    assert t == w && t matches { _: Widget };
+}
 ```
 
 A generic resource takes no part in `extends`, on either side.
@@ -400,10 +466,19 @@ A generic resource takes no part in `extends`, on either side.
 - A function type is invariant in its parameters and its result.
 - Narrowing back to a child is never implicit. It is written as a [type pattern](#type-patterns).
 
+<!-- {"fixture":"spec_components_option_invariant.wado"} -->
+
 ```wado
-let r: Option<HtmlInputElement> = ...;
+let r: Option<HtmlInputElement> = Option::Some(input);
 let n: Option<Node> = r;                    // ERROR: Option is invariant
+```
+
+<!-- {"fixture":"spec_components_type_patterns.wado"} -->
+
+```wado
+let r: Option<HtmlInputElement> = Option::Some(input);
 let n: Option<Node> = r.map(|el| el as Node);  // OK: each element is upcast
+assert n matches { Some(_: HtmlInputElement) };
 ```
 
 #### Methods
@@ -450,18 +525,32 @@ Whether the pattern can fail is decided statically, from the subject's type `S`:
 
 An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal. A refutable one needs a pattern position that admits failure, so `let` and a `for` binding reject it exactly as they reject `Some(x)`:
 
-```wado
-let n: Node = el;                                   // Element <: Node — irrefutable upcast
-let input: HtmlInputElement = el;                   // ERROR: refutable pattern in `let`
-let input: HtmlInputElement = el else { return; };  // the guard form
-if let input: HtmlInputElement = el { ... }
-if node matches { _: Element } { ... }              // the predicate form
+<!-- {"fixture":"spec_components_type_patterns.wado"} -->
 
-match node {
-    input: HtmlInputElement => input.value(),
-    elem: Element => elem.tag_name(),
-    _ => "other",                                   // required: the hierarchy is open
+```wado
+fn check(el: Element, node: Node) {
+    let n: Node = el;                                   // Element <: Node — irrefutable upcast
+    if let input: HtmlInputElement = el { assert input == n; }
+    if node matches { _: Element } { assert kind(node) == "element"; }  // the predicate form
+    let input: HtmlInputElement = el else { return; };  // the guard form
+    assert kind(input) == "input";
 }
+
+fn kind(node: Node) -> String {
+    return match node {
+        input: HtmlInputElement => "input",
+        elem: Element => "element",
+        _ => "other",                                   // required: the hierarchy is open
+    };
+}
+```
+
+A refutable ascription in a plain `let` is rejected:
+
+<!-- {"fixture":"spec_components_let_refutable.wado"} -->
+
+```wado
+let input: HtmlInputElement = el;                   // ERROR: refutable pattern in `let`
 ```
 
 A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An unguarded arm whose type is a supertype of a later arm's makes that later arm unreachable, which is an error, as [any unreachable arm](./spec-control-flow.md#exhaustiveness) is.

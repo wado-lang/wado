@@ -1,0 +1,20 @@
+// `&mut` iteration writes through to the elements; a primitive element list
+// is written by index instead.
+
+struct Point { x: i32, y: i32 }
+
+test "in place" {
+    let mut points: List<Point> = [Point { x: 1, y: 0 }, Point { x: 2, y: 0 }];
+    for let p of &mut points {
+        p.x += 1;  // mutates the element in place
+    }
+    assert points[0].x == 2 && points[1].x == 3;
+}
+
+test "by index" {
+    let mut arr: List<i32> = [1, 2, 3];
+    for let mut i = 0; i < arr.len(); i += 1 {
+        arr[i] = arr[i] * 2;
+    }
+    assert arr == [2, 4, 6];
+}

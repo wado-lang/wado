@@ -8,15 +8,13 @@ set -euo pipefail
 # Every file is overwritten in place; stale files (no matching dirty fixture)
 # are pruned only after all outputs have been regenerated, so the golden set is
 # never wiped mid-run.
-#
-# Expects binaries to be pre-built (on-task-done builds them before calling this).
 
 FIXTURES_DIR="wado-compiler/tests/format.fixtures"
 GOLDEN_DIR="wado-compiler/tests/generated/format.fixtures"
 mkdir -p "$GOLDEN_DIR"
 
-WADO="./target/debug/wado"
-DUMP="./target/debug/wado-dev-tools"
+WADO=$(scripts/dev-bin.sh --path wado)
+DUMP=$(scripts/dev-bin.sh --path wado-dev-tools)
 
 # Generate formatted (clean) versions, collecting the live fixture names.
 # Handwritten inputs use a `_dirty.wado` suffix so they are visually distinct

@@ -1,0 +1,13 @@
+// `#[allow(shadowed_name)]` waives the lint on one binder.
+
+fn twice(#[allow(shadowed_name)] String: i32) -> i32 { return String * 2; }
+
+test {
+    assert twice(21) == 42;
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_not_contains": ["shadows"]
+}

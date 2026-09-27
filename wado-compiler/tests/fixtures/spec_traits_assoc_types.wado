@@ -1,0 +1,30 @@
+// An associated type, declared by a trait and bound by an impl.
+
+trait Container {
+    type Item;  // Associated type declaration
+
+    fn get(&self) -> Self::Item;
+    fn set(&mut self, value: Self::Item);
+}
+
+struct IntBox {
+    value: i32,
+}
+
+impl Container for IntBox {
+    type Item = i32;  // Associated type binding
+
+    fn get(&self) -> Self::Item {
+        return self.value;
+    }
+
+    fn set(&mut self, value: Self::Item) {
+        self.value = value;
+    }
+}
+
+test {
+    let mut b = IntBox { value: 1 };
+    b.set(42);
+    assert b.get() == 42;
+}

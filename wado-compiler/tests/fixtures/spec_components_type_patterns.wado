@@ -1,0 +1,41 @@
+// Type patterns over an `extends` tree: an upcast is irrefutable, a narrowing
+// is a runtime test of the handle's class.
+
+#[cm("example:dom/node", linearity = "unrestricted", classes = "0..=2")]
+resource Node {}
+
+#[cm("example:dom/element", linearity = "unrestricted", classes = "1..=2")]
+resource Element extends Node {}
+
+#[cm("example:dom/html-input-element", linearity = "unrestricted", classes = "2..=2")]
+resource HtmlInputElement extends Element {}
+
+global STRIDE: f64 = 137438953472.0;
+
+test "subtyping" {
+    let input = (2.0 * STRIDE) as HtmlInputElement;
+    let r: Option<HtmlInputElement> = Option::Some(input);
+    let n: Option<Node> = r.map(|el| el as Node);  // OK: each element is upcast
+    assert n matches { Some(_: HtmlInputElement) };
+}
+
+fn check(el: Element, node: Node) {
+    let n: Node = el;                                   // Element <: Node — irrefutable upcast
+    if let input: HtmlInputElement = el { assert input == n; }
+    if node matches { _: Element } { assert kind(node) == "element"; }  // the predicate form
+    let input: HtmlInputElement = el else { return; };  // the guard form
+    assert kind(input) == "input";
+}
+
+fn kind(node: Node) -> String {
+    return match node {
+        input: HtmlInputElement => "input",
+        elem: Element => "element",
+        _ => "other",                                   // required: the hierarchy is open
+    };
+}
+
+test "type patterns" {
+    check((2.0 * STRIDE) as Element, STRIDE as Node);
+    assert kind(0.0 as Node) == "other";
+}

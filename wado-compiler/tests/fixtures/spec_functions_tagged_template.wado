@@ -1,0 +1,55 @@
+// A tag receives the template's holes in their own types, with the literal
+// text around them as constants.
+
+variant SqlParam {
+    Int(i32),
+    Text(String),
+}
+
+struct SqlQuery {
+    query: String,
+    params: List<SqlParam>,
+}
+
+trait ToSqlParam with () {
+    fn to_sql_param(&self) -> SqlParam;
+}
+
+impl ToSqlParam for i32 {
+    fn to_sql_param(&self) -> SqlParam { return SqlParam::Int(*self); }
+}
+
+impl ToSqlParam for String {
+    fn to_sql_param(&self) -> SqlParam { return SqlParam::Text(*self); }
+}
+
+struct User {
+    name: String,
+}
+
+test "a tagged template calls its tag" {
+    let id = 7;
+    let user = User { name: "ann" };
+    let dir = "C:";
+    let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
+    let s = String::raw`${dir}\bin\run.exe`;   // backslashes kept
+    assert q.query == "SELECT * FROM users WHERE id = ? AND name = ?";
+    assert s == "C:\\bin\\run.exe";
+}
+
+fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
+    let mut query = "";
+    let mut params: List<SqlParam> = [];
+    for let h of ReflectTemplate::<T>::members() {
+        query.push_str(h.lit());                // literal text before this hole
+        query.push_str("?");
+        params.push(h.get(&t).to_sql_param());  // the value, storage shared
+    }
+    query.push_str(ReflectTemplate::<T>::tail());
+    return SqlQuery { query, params };
+}
+
+test "the tag sees each hole in its own type" {
+    let q = sql`id = ${7} AND name = ${"ann"}`;
+    assert q.params == [SqlParam::Int(7), SqlParam::Text("ann")];
+}

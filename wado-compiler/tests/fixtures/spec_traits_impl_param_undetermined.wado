@@ -1,0 +1,15 @@
+// A type parameter neither the impl's target nor its trait reference names
+// has no value a use site could give it.
+
+trait Dup {
+    fn dup(&self) -> bool;
+}
+
+impl<A: Eq, T: Eq> Dup for T {  // ERROR: the type parameter `A` is not
+                                //        constrained by the impl target
+                                //        or the trait reference
+    fn dup(&self) -> bool { return true; }
+}
+
+__DATA__
+{"compile_error": "the type parameter `A` is not constrained by the impl target or the trait reference"}

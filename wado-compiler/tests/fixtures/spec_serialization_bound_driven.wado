@@ -1,0 +1,12 @@
+// A struct, or an anonymous struct, serializes with no marker.
+
+use { to_string } from "core:json";
+
+struct Point { x: i32, y: i32 }              // no impl marker needed
+
+test {
+    let json = to_string(&Point { x: 1, y: 2 });
+    assert json.unwrap() == `{"x":1,"y":2}`;
+    let anon = to_string(&{ x: 1, y: 2 });       // the same JSON, from an anonymous struct
+    assert anon.unwrap() == json.unwrap();
+}

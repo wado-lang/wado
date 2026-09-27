@@ -1,0 +1,15 @@
+// A by-value `self` on a type that can never hold a resource is rejected.
+
+struct Point { x: i32, y: i32 }
+
+impl Point {
+    fn consume(self) -> i32 { return self.x; }
+}
+
+test {
+    let p = Point { x: 1, y: 2 };
+    assert p.consume() == 1;
+}
+
+__DATA__
+{"compile_error":"`self` by value is only allowed on a resource; `Point` is a value type — use `&self`"}

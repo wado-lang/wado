@@ -1,0 +1,52 @@
+// Quoted by docs/spec-control-flow.md § Error Handling.
+
+use fs from "core:fs";
+use { FsError, Preopens } from "core:fs";
+
+#[expect_trap]
+test "panic logs the message to stderr, then traps" {
+    panic("Fatal error");
+}
+
+#[expect_trap]
+test "unreachable traps" {
+    unreachable();
+}
+
+#[expect_trap]
+test "assert panics when the condition is false" {
+    let condition = false;
+    assert condition;
+}
+
+struct Config {
+    port: i32,
+}
+
+variant ConfigError {
+    Io(FsError),
+    Parse(ParseIntError),
+}
+
+impl From<ParseIntError> for ConfigError;
+
+fn parse_config(text: String) -> Result<Config, ParseIntError> {
+    return Ok(Config { port: i32::from_str(text.trim())? });
+}
+
+fn read_config(path: String) -> Result<Config, ConfigError> with Preopens {
+    let content = fs::read_to_string(path)
+        .map_err(|e| ConfigError::Io(e))?;
+    let config = parse_config(content)?;
+    return Ok(config);
+}
+
+test {
+    // Handle with pattern matching
+    let message = match read_config("missing.toml") {
+        Ok(config) => `port ${config.port}`,
+        Err(Io(e)) => `cannot read: ${e}`,
+        Err(Parse(e)) => `bad port: ${e}`,
+    };
+    assert message.starts_with("cannot read");
+}

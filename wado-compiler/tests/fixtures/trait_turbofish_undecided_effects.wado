@@ -1,0 +1,37 @@
+// A turbofish on a trait pins one argument list of its overload set, whatever
+// the trait's effect clause says. A trait head writing none reads as `with _`.
+
+struct A { v: i32 }
+struct B { v: i32 }
+
+#[allow(undecided_effects)]
+trait Take<X> {
+    fn take(&self, x: X) -> i32;
+}
+
+impl Take<A> for bool {
+    fn take(&self, x: A) -> i32 { return x.v; }
+}
+
+impl Take<B> for bool {
+    fn take(&self, x: B) -> i32 { return x.v * 10; }
+}
+
+test {
+    let f = true;
+    assert Take::<A>::take(&f, A { v: 1 }) == 1;
+    assert Take::<B>::take(&f, B { v: 1 }) == 10;
+}
+
+// On a trait declaring no parameters, the turbofish writes `Self` instead.
+trait Tagged with _ {
+    fn tag() -> i32;
+}
+
+impl Tagged for A {
+    fn tag() -> i32 { return 7; }
+}
+
+test {
+    assert Tagged::<A>::tag() == 7;
+}
