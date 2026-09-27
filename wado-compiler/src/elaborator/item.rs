@@ -83,7 +83,7 @@ fn report_register_error<H: CompilerHost>(
 /// Whether the declaration is the kind [`CompilerItem::expected_kind`] names,
 /// reporting it when not. Where the attribute may be written is the attribute
 /// schema's rule (`stdlib_only`), checked before elaboration.
-fn check_compiler_item_placement<H: CompilerHost>(
+fn check_compiler_item_kind<H: CompilerHost>(
     item: CompilerItem,
     actual_kind: CompilerItemKind,
     module_source: &ModuleSource,
@@ -122,7 +122,7 @@ fn register_annotated<H: CompilerHost>(
     let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
         return;
     };
-    if !check_compiler_item_placement(item, kind, module_source, span, logger) {
+    if !check_compiler_item_kind(item, kind, module_source, span, logger) {
         return;
     }
     let resolved = resolved();
