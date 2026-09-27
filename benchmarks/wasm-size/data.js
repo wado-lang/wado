@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790464560430,
+  "lastUpdate": 1790468290956,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60513,6 +60513,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/56988813914cc079164e8f217c0a056a480846a1"
         },
         "date": 1790464559671,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20200,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288402,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "97779c530f3d04bbe6bac9007ca65d580d85fc10",
+          "message": "Merge pull request #2184 from wado-lang/claude/elegant-tesla-esoxyy\n\nfix(resolve): one decision for what a pattern name binds, and redeclaration checked there",
+          "timestamp": "2026-09-27T08:50:30+09:00",
+          "tree_id": "6cd747631c1be544eb67574bf6e41893b75b91e8",
+          "url": "https://github.com/wado-lang/wado/commit/97779c530f3d04bbe6bac9007ca65d580d85fc10"
+        },
+        "date": 1790468289946,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
