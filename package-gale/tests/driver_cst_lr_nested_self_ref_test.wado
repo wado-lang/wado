@@ -13,39 +13,34 @@ use ga from "./grammars/lr_nested_self_ref_atn.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_nested_self_ref_atn" },
     };
 
-fn assert_comma<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
-    let result = g::parse_comma(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
-    let actual = g::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+fn assert_tree(input: String, ok: bool, actual: String, expected: String) {
+    assert ok, `unexpected diagnostics for ${input}: ${actual}`;
+    assert actual == expected, `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
-fn assert_send<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
-    let result = g::parse_send(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
-    let actual = g::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+fn assert_comma(input: String, expected: String) {
+    let r = g::parse_comma(&input);
+    assert_tree(input, r.ok(), g::to_string_tree(&r), expected);
 }
 
-fn assert_plus<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
-    let result = g::parse_plus(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
-    let actual = g::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+fn assert_send(input: String, expected: String) {
+    let r = g::parse_send(&input);
+    assert_tree(input, r.ok(), g::to_string_tree(&r), expected);
 }
 
-fn assert_range<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
-    let result = g::parse_range(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
-    let actual = g::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+fn assert_plus(input: String, expected: String) {
+    let r = g::parse_plus(&input);
+    assert_tree(input, r.ok(), g::to_string_tree(&r), expected);
 }
 
-fn assert_bang<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
-    let result = ga::parse_bang(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${ga::to_string_tree(&result)}`;
-    let actual = ga::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+fn assert_range(input: String, expected: String) {
+    let r = g::parse_range(&input);
+    assert_tree(input, r.ok(), g::to_string_tree(&r), expected);
+}
+
+fn assert_bang(input: String, expected: String) {
+    let r = ga::parse_bang(&input);
+    assert_tree(input, r.ok(), ga::to_string_tree(&r), expected);
 }
 
 test "a nested operand at the end of the suffix nests to the right" {

@@ -420,20 +420,22 @@ fn build_lr_suffix<S: AsStrSlice>(
         // `build_element` makes, as `stamp_lr_self_ref_min_prec` leaves it.
         let seg = if !element_is_self_ref(elem, rule_name) {
             build_element(b, elem, r, rule_index);
-        } else if atn_class {
-            // ANTLR4's `e[0]` mid operand and `e[p+1]` trailing one: the
-            // simulator decides the climb, as `stamp_lr_self_ref_min_prec` has it.
-            let prec = if i + 1 < alt.elements.len() {
-                0;
-            } else {
-                lr_trailing_prec(lr_alt.own_prec, lr_alt.right_associative);
-            };
-            self_ref_segment(b, r, prec, self_ref_call_site(elem));
         } else {
-            // The LR loop can re-enter on an operator after the suffix, so the
-            // suffix tail conservatively carries one (`tail_has = true`).
-            let follow_has = elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
-            let prec = if follow_has { lr_alt.conflict_min } else { 0 };
+            let prec = if atn_class {
+                // ANTLR4's `e[0]` mid operand and `e[p+1]` trailing one: the
+                // simulator decides the climb, as `stamp_lr_self_ref_min_prec` has it.
+                if i + 1 < alt.elements.len() {
+                    0;
+                } else {
+                    lr_trailing_prec(lr_alt.own_prec, lr_alt.right_associative);
+                }
+            } else if elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true) {
+                // The LR loop can re-enter on an operator after the suffix, so the
+                // suffix tail conservatively carries one (`tail_has = true`).
+                lr_alt.conflict_min;
+            } else {
+                0;
+            };
             self_ref_segment(b, r, prec, self_ref_call_site(elem));
         };
         b.add_eps(cursor, seg.0);

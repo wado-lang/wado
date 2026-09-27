@@ -931,8 +931,9 @@ the compiled fast path:**
    a plain `expr[0]`, so it climbs a `'>>'` exactly when another is left over
    for the enclosing alternative. No precedence floor says that. A nested
    reference no loop operator can follow inside its alternative stays static,
-   as a plain call. A routed rule's mid operand is ANTLR4's `expr[0]`. The loop takes a token an enter edge admits,
-   and the full simulator decides instead in two cases. One is a caller that
+   as a plain call. A routed rule's mid operand is ANTLR4's `expr[0]`. The loop
+   takes a token an enter edge admits, and the full simulator decides instead
+   in two cases. One is a caller that
    must take the token. The other is a caller's loop that can take it through
    an alternative this operand's precedence excludes (`lr_atn_trailing.g4`).
    The same shape inside an LR alternative (SQLite's

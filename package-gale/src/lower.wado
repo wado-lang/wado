@@ -921,8 +921,8 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
     // A self-reference nested in a subrule is ANTLR4's plain `e[0]`: it climbs
     // every operator, and only full context says whether it must leave one to
     // the rest of its suffix (`e (',' e)* '>>' e`). No precedence floor says
-    // it: a floor high enough to leave the `'>>'` also refuses the `'>>'` a
-    // later one leaves over.
+    // it: one that leaves the suffix its `'>>'` also refuses a `'>>'` when
+    // another is left over.
     for let a of lr_alts {
         if nested_operand_meets_operator_in_suffix(&a.suffix.ops, &rule.name, &suffix_first_tokens) {
             return true;
@@ -1199,7 +1199,7 @@ fn nested_operand_meets_operator<S: AsStrSlice>(
         ListLabel(ll) => nested_operand_meets_operator(&ll.inner, rule_name, operators, follow_has),
         Repeat(r) => {
             // A `*` / `+` body is also followed by its own next iteration.
-            let reiterates = !r.kind matches { Optional } && op_first_has_lr(&r.body, operators);
+            let reiterates = r.kind matches { Star | Plus } && op_first_has_lr(&r.body, operators);
             nested_operand_meets_operator(&r.body, rule_name, operators, reiterates || follow_has);
         },
         Group(g) => {
