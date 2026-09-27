@@ -1133,6 +1133,9 @@ fn generate_struct_default_slot_fn(
         body,
         locals,
     );
+    // A caller keeps one slot of the tuple (`default_slot(i)[i]`), so the
+    // splice folds to that field's default, but the inliner prices the whole
+    // tuple and keeps the call once a struct has a few fields.
     function.inline_hint = InlineHint::Always;
     function
 }

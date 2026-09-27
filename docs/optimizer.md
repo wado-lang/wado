@@ -223,6 +223,9 @@ Architectural work is tracked in
 - [ ] Bounds-check elimination across sequential accesses (`a[0]; a[1]; a[2]`).
 - [ ] Folding an effect-free call on constants whose callee exceeds the inline
       budget.
+- [ ] Pricing a splice by what its call site keeps: one arm of a dispatch
+      every site decides (`$hole_fmt`), or one element of a returned tuple
+      (`default_slot`). Both carry a synthesized `#[inline(always)]` until then.
 - [ ] An array literal's length as a known constant.
 
 ## Tried and Found Ineffective

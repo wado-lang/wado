@@ -906,7 +906,8 @@ fn has_safepoint(
 
         fn children(&self, node: NodeRef) -> bool {
             let mut found = false;
-            self.body.for_each_child(node, |c| found = found || self.node(c));
+            self.body
+                .for_each_child(node, |c| found = found || self.node(c));
             found
         }
 
@@ -2595,9 +2596,7 @@ fn try_inline_call_expr(
     let admitted = match site {
         Site::Cold => candidate.inline_hint == InlineHint::Always,
         Site::Plain => !candidates.loop_only.contains(&func_id),
-        Site::Loop => {
-            !candidates.loop_only.contains(&func_id) || frame.sole_loop_site(func_id)
-        }
+        Site::Loop => !candidates.loop_only.contains(&func_id) || frame.sole_loop_site(func_id),
     };
     if !admitted {
         return None;
