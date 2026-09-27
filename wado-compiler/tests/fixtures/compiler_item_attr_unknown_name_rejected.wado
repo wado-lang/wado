@@ -3,8 +3,8 @@
 // stdlib typos fail loud — without it a renamed `CompilerItem` variant on the
 // Rust side would leave the corresponding stdlib annotation pointing at nothing.
 
-// Served as part of the standard library (`"stdlib": true`), the only place
-// the attribute is valid.
+// Claims a bundled module's identity: the attribute is valid only in the
+// standard library.
 #![stdlib("core:benchmark")]
 
 #[compiler_item("not_a_real_item")]
@@ -13,4 +13,4 @@ pub struct Garbage {}
 export fn run() {}
 
 __DATA__
-{"stdlib": true, "compile_error": "unknown compiler item"}
+{"compile_error": "unknown compiler item"}

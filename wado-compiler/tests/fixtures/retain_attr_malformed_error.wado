@@ -1,8 +1,8 @@
 // A malformed `#[retain(...)]` is reported, never read as silence: silence
 // means the reference does not outlive the call, which is what elides a copy.
 
-// Served as part of the standard library (`"stdlib": true`), the only place
-// the attribute is valid.
+// Claims a bundled module's identity: the attribute is valid only in the
+// standard library.
 #![stdlib("core:benchmark")]
 
 struct Item {
@@ -67,7 +67,6 @@ export fn run() {
 
 __DATA__
 {
-    "stdlib": true,
     "compile_error": "#[retain] names no parameter: nope",
     "compile_errors_contains": [
         "#[retain(elements_of = ...)] takes a parameter name, unquoted",

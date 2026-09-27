@@ -232,11 +232,6 @@ struct TestSpec {
     #[serde(default)]
     dependencies: indexmap::IndexMap<String, String>,
 
-    /// Serve the fixture as part of the standard library, the only place a
-    /// file may declare `#![stdlib]`.
-    #[serde(default)]
-    stdlib: bool,
-
     /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
     #[serde(default)]
     param_unknown: Option<String>,
@@ -850,7 +845,6 @@ fn run_normal_test(
         common::HostStubs {
             env: spec.param_env.clone(),
             dependencies: spec.dependencies.clone(),
-            stdlib: spec.stdlib,
         },
     );
 

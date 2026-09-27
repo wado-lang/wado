@@ -4,8 +4,8 @@
 // Every function here has a body, which each one reports as well as what its
 // arguments got wrong — the last is the case where nothing else is wrong.
 
-// Served as part of the standard library (`"stdlib": true`), the only place
-// the attribute is valid.
+// Claims a bundled module's identity: the attribute is valid only in the
+// standard library.
 #![stdlib("core:benchmark")]
 
 #[trap(outside = nope)]
@@ -50,7 +50,6 @@ export fn run() {
 
 __DATA__
 {
-    "stdlib": true,
     "compile_error": "#[trap(outside = nope)] names no parameter",
     "compile_errors_contains": [
         "#[trap] states one check; repeat the attribute for another",

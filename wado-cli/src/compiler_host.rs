@@ -287,10 +287,6 @@ impl CompilerHost for FilesystemCompilerHost {
         self.inner.source_exists(path).await
     }
 
-    fn is_stdlib_file(&self, path: &str) -> bool {
-        self.inner.is_stdlib_file(path)
-    }
-
     /// Saves into the OS temp directory, which exists on every platform the
     /// CLI runs on and needs no write permission where the sources live. The
     /// name is opaque: a predictable one there is a symlink target (CWE-59).

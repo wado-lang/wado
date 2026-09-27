@@ -136,10 +136,6 @@ impl CompilerHost for FilesystemHost {
         }
     }
 
-    fn is_stdlib_file(&self, _path: &str) -> bool {
-        self.stubs.stdlib
-    }
-
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         assert_diagnostic_is_attributed(&diagnostic);
         self.diagnostics.lock().unwrap().push(diagnostic);
@@ -1268,8 +1264,6 @@ pub struct HostStubs {
     /// The `[dependencies]` a bare `use ... from "name"` binds to: name → the
     /// dependency's `[package].lib` path, relative to the host's base.
     pub dependencies: indexmap::IndexMap<String, String>,
-    /// Whether every file the host serves is part of the standard library.
-    pub stdlib: bool,
 }
 
 /// Compile and return the result alongside every diagnostic message the host

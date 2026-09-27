@@ -1,8 +1,8 @@
 // A malformed `#[result(...)]` is reported, never read as silence: silence
 // means the result is freshly allocated, which is what elides a copy.
 
-// Served as part of the standard library (`"stdlib": true`), the only place
-// the attribute is valid.
+// Claims a bundled module's identity: the attribute is valid only in the
+// standard library.
 #![stdlib("core:benchmark")]
 
 #[result(part_of = nope)]
@@ -47,7 +47,6 @@ export fn run() {
 
 __DATA__
 {
-    "stdlib": true,
     "compile_error": "#[result(part_of = nope)] names no parameter",
     "compile_errors_contains": [
         "unknown #[result] convention: borrowed",
