@@ -453,7 +453,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
         (
             result,
-            pending.expect("the scope is restored only on return"),
+            pending.expect("a walk pushes into the collection, never takes it"),
         )
     }
 

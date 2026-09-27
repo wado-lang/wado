@@ -149,24 +149,26 @@ impl PendingLiterals {
     }
 }
 
-/// The type `literals` take where nothing else answers their variable: `f64`
-/// if one is a float, else `i32` unless every one is a byte literal.
-fn default_literal_type(literals: &[Expr]) -> TypeId {
-    let kinds = literals.iter().map(|expr| {
-        let literal = classify_numeric_literal(expr).expect("only numeric literals are deferred");
-        match literal.kind {
-            NumericLiteralKind::Number(repr) if util::is_float_only_literal(repr) => TypeTable::F64,
-            NumericLiteralKind::Number(_) => TypeTable::I32,
-            NumericLiteralKind::Byte(_) => TypeTable::U8,
-        }
-    });
-    let rank = |t: &TypeId| {
-        [TypeTable::U8, TypeTable::I32, TypeTable::F64]
-            .iter()
-            .position(|r| r == t)
-    };
-    kinds
-        .max_by_key(rank)
+/// The type `literals` take together where nothing else answers their
+/// variable: `f64` if one is a float, else `i32` unless every one is a byte
+/// literal.
+fn shared_literal_default(literals: &[Expr]) -> TypeId {
+    // Least to most general.
+    const RANK: [TypeId; 3] = [TypeTable::U8, TypeTable::I32, TypeTable::F64];
+    literals
+        .iter()
+        .map(|expr| {
+            let literal =
+                classify_numeric_literal(expr).expect("only numeric literals are deferred");
+            match literal.kind {
+                NumericLiteralKind::Number(repr) if util::is_float_only_literal(repr) => {
+                    TypeTable::F64
+                }
+                NumericLiteralKind::Number(_) => TypeTable::I32,
+                NumericLiteralKind::Byte(_) => TypeTable::U8,
+            }
+        })
+        .max_by_key(|t| RANK.iter().position(|r| r == t))
         .expect("a variable is pending only with a literal")
 }
 
@@ -493,7 +495,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return None;
         }
-        let pending = self.annotate_ctx.pending_literals.as_mut()?;
+        let pending = self
+            .annotate_ctx
+            .pending_literals
+            .as_mut()
+            .expect("checked on entry");
         if !pending.own_vars.contains(&var) {
             return None;
         }
@@ -501,14 +507,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(var)
     }
 
-    /// Coerce each literal `pending` deferred to what its variable was answered
-    /// with, answering the variables nothing answered with their literals'
-    /// default first. Answers each literal's type by its id.
+    /// Resolve each literal `pending` deferred against what its variable was
+    /// answered with, answering the variables nothing answered with their
+    /// literals' default first. Answers each literal's type by its id.
     ///
-    /// A literal the answer cannot type keeps its own default. Standing as one
-    /// of `args` it is reported by the argument check, as any argument is;
-    /// nested inside one it is reported here, since the value holding it took
-    /// the answer as its own.
+    /// A variable only literals standing as `args` met stays theirs to answer
+    /// as they did before any deferral: the call's own inference weighs its
+    /// expected return type against them afterwards, and re-coerces them
+    /// (`recoerce_literal_args`).
+    ///
+    /// A literal the answer cannot type is reported by the argument check when
+    /// it is one of `args`, and here when it is nested inside one, since the
+    /// value holding it took the answer as its own.
     pub(super) fn settle_pending_literals(
         &mut self,
         pending: PendingLiterals,
@@ -522,42 +532,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_arg = |expr: &Expr| args.iter().any(|arg| arg.id() == expr.id());
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {
-            let default = default_literal_type(&literals);
+            let default = shared_literal_default(&literals);
             let mut answer = self.apply_infer_holes(var);
-            if answer == var {
+            let yields_to_return = answer == var && literals.iter().all(is_arg);
+            if answer == var && !yields_to_return {
                 self.solve_infer_var(var, default);
                 answer = default;
-                // An argument's own type still yields to the call's expected
-                // return type, which the call's inference weighs after this
-                // walk and re-coerces the argument to (`recoerce_literal_args`).
-                if literals.iter().all(is_arg) {
-                    for expr in &literals {
-                        let own = default_literal_type(std::slice::from_ref(expr));
-                        self.record_expression_type(expr.id(), own);
-                        settled.insert(expr.id(), own);
-                    }
-                    continue;
-                }
             }
             for expr in &literals {
-                let ty = self.try_coerce(expr, ctx, answer).unwrap_or_else(|| {
-                    let own = default_literal_type(std::slice::from_ref(expr));
-                    if !is_arg(expr) {
-                        let (expected, found) = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .type_names_for_mismatch(answer, own);
-                        let _ = self.emit(TypeError::TypeMismatch {
-                            expected,
-                            found,
-                            span: expr.span(),
-                        });
-                    }
-                    self.try_coerce_numeric_literal(expr, own)
-                        .expect("a literal takes its own default")
-                });
+                let ty = self.resolve_expr(expr, ctx, Some(answer));
+                if !yields_to_return && ty != answer && !is_arg(expr) {
+                    let (expected, found) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_names_for_mismatch(answer, ty);
+                    let _ = self.emit(TypeError::TypeMismatch {
+                        expected,
+                        found,
+                        span: expr.span(),
+                    });
+                }
                 settled.insert(expr.id(), ty);
+            }
+            if yields_to_return {
+                self.solve_infer_var(var, default);
             }
         }
         settled

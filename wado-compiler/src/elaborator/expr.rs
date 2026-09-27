@@ -762,9 +762,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// boundary chosen by `negated` — `-NUM` is one literal, so `-2147483648`
     /// fits where the bare `2147483648` does not.
     ///
-    /// Only the defaulted case. An expectation still pending here is one no
-    /// coercion took — a type parameter awaiting inference — and it re-coerces
-    /// the literal afterwards, checking the range against the type it lands on.
+    /// Only the defaulted case. An expectation no coercion took is a type the
+    /// literal cannot be, reported as a mismatch, or a variable a call's
+    /// inference answers and then re-coerces the literal to, checking the range
+    /// against the type it lands on.
     pub(super) fn check_default_int_literal(&mut self, repr: &str, negated: bool, span: Span) {
         let Some(value) = self.check_int_literal_parses(repr, span) else {
             return;
