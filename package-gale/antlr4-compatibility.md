@@ -924,7 +924,13 @@ the compiled fast path:**
    competes with the loop for a shared delimiter (`'between' expr 'and' expr`
    against `expr 'and' expr`; fixture `lr_between.g4`), or when one LR
    alternative's suffix is a proper prefix of another's (`expr 'x' expr`
-   against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). Its mid
+   against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). A rule is
+   also routed here when an LR alternative's suffix can start with a `.` or a
+   `~X`. That start may be the suffix's first element, sit behind a rule or a
+   nullable prefix, or stand beside a named token (`expr (w | 'a')` with
+   `w : .`). Such a suffix admits tokens its first set does not name, so no
+   static first-token check can decide the loop entry. Fixtures:
+   `lr_wildcard_postfix.g4` and `lr_open_ended_rule_suffix.g4`. Its mid
    operand is ANTLR4's `expr[0]`. The loop takes a token an enter edge admits,
    and the full simulator decides instead in two cases. One is a caller that
    must take the token. The other is a caller's loop that can take it through
@@ -1008,7 +1014,10 @@ rather than by which one matches — strictly weaker than the second-token
 sub-dispatch the static LR path applies to the same question. The simulator is
 there for the enter-or-exit verdict, which needs full context; which member of
 the group to enter does not, and is re-taken from the scan twins by longest
-match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`.
+match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`. A suffix
+that can start with a `.` or `~X` shares every token, so it joins one group with
+every other suffix. Without that, `expr 'd' 'd'` listed first would take the
+`d` that only `expr .` can complete (`lr_open_ended_rule_suffix.g4`).
 
 When the simulator predicts exit, the enclosing invocations of the same loop at
 the same position exit too, unless one of them could enter there on an operator

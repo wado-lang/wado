@@ -1,0 +1,95 @@
+//! An LR suffix whose static first set names one token while the suffix admits
+//! every token: the loop has to continue on a token no first set names. Each
+//! start rule spells the open end differently (a rule reference, a nullable
+//! prefix, a complement, a wildcard in a group), `s4` runs the loop under a
+//! caller whose continuation the suffix also admits, and `s7` sets the open
+//! suffix against one that names the same token.
+//!
+//! Every tree below was taken from the published ANTLR4 jar
+//! (`scripts/antlr4-oracle.sh`, `<EOF>` marker dropped).
+
+use g from "./grammars/lr_open_ended_rule_suffix.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_open_ended_rule_suffix" },
+    };
+
+fn assert_tree_of<S: AsStrSlice, S1: AsStrSlice>(result: &g::ParseResult, input: S, expected: S1) {
+    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(result)}`;
+    let actual = g::to_string_tree(result);
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+}
+
+fn assert_rejected_of<S: AsStrSlice>(result: &g::ParseResult, input: S) {
+    assert !result.ok(), `expected diagnostics for ${input}, got ${g::to_string_tree(result)}`;
+}
+
+test "open-ended rule suffix: the wildcard behind a rule continues the loop" {
+    assert_tree_of(&g::parse_s("c"), "c", "(s (e c))");
+    assert_tree_of(&g::parse_s("ca"), "ca", "(s (e (e c) (w a)))");
+    assert_tree_of(&g::parse_s("cc"), "cc", "(s (e (e c) (w c)))");
+    assert_tree_of(&g::parse_s("ccc"), "ccc", "(s (e (e (e c) (w c)) (w c)))");
+    assert_tree_of(&g::parse_s("cac"), "cac", "(s (e (e (e c) (w a)) (w c)))");
+    assert_tree_of(&g::parse_s("cbd"), "cbd", "(s (e (e (e c) (w b)) (w d)))");
+}
+
+test "open-ended rule suffix: a nullable prefix before the wildcard" {
+    assert_tree_of(&g::parse_s2("ca"), "ca", "(s2 (f (f c) (v a)))");
+    assert_tree_of(&g::parse_s2("cc"), "cc", "(s2 (f (f c) (v c)))");
+    assert_tree_of(&g::parse_s2("cbc"), "cbc", "(s2 (f (f c) (v b c)))");
+    assert_tree_of(&g::parse_s2("cbd"), "cbd", "(s2 (f (f c) (v b d)))");
+    assert_tree_of(&g::parse_s2("cab"), "cab", "(s2 (f (f (f c) (v a)) (v b)))");
+    assert_tree_of(&g::parse_s2("cbb"), "cbb", "(s2 (f (f c) (v b b)))");
+}
+
+test "open-ended rule suffix: a complement behind a rule" {
+    assert_tree_of(&g::parse_s3("ca"), "ca", "(s3 (g (g c) a))");
+    assert_tree_of(&g::parse_s3("cc"), "cc", "(s3 (g (g c) (n c)))");
+    assert_tree_of(&g::parse_s3("cac"), "cac", "(s3 (g (g (g c) a) (n c)))");
+    assert_tree_of(&g::parse_s3("cbd"), "cbd", "(s3 (g (g (g c) (n b)) (n d)))");
+    assert_tree_of(&g::parse_s3("caa"), "caa", "(s3 (g (g (g c) a) a))");
+}
+
+test "open-ended rule suffix: the caller's continuation stops the loop" {
+    assert_tree_of(&g::parse_s4("bcd"), "bcd", "(s4 b (e c) d)");
+    assert_tree_of(&g::parse_s4("bccd"), "bccd", "(s4 b (e (e c) (w c)) d)");
+    assert_tree_of(&g::parse_s4("bcdd"), "bcdd", "(s4 b (e (e c) (w d)) d)");
+    assert_tree_of(&g::parse_s4("bcddd"), "bcddd", "(s4 b (e (e (e c) (w d)) (w d)) d)");
+    assert_tree_of(&g::parse_s4("bcad"), "bcad", "(s4 b (e (e c) (w a)) d)");
+}
+
+test "open-ended rule suffix: a wildcard beside a token in a group" {
+    assert_tree_of(&g::parse_s5("c"), "c", "(s5 (h c))");
+    assert_tree_of(&g::parse_s5("ca"), "ca", "(s5 (h (h c) a))");
+    assert_tree_of(&g::parse_s5("cc"), "cc", "(s5 (h (h c) c))");
+    assert_tree_of(&g::parse_s5("cac"), "cac", "(s5 (h (h (h c) a) c))");
+    assert_tree_of(&g::parse_s5("cca"), "cca", "(s5 (h (h (h c) c) a))");
+}
+
+test "open-ended rule suffix: a wildcard behind a nullable prefix in place" {
+    assert_tree_of(&g::parse_s6("cc"), "cc", "(s6 (k (k c) c))");
+    assert_tree_of(&g::parse_s6("cbc"), "cbc", "(s6 (k (k c) b c))");
+    assert_tree_of(&g::parse_s6("cb"), "cb", "(s6 (k (k c) b))");
+    assert_tree_of(&g::parse_s6("cbb"), "cbb", "(s6 (k (k c) b b))");
+    assert_tree_of(&g::parse_s6("ccc"), "ccc", "(s6 (k (k (k c) c) c))");
+    assert_tree_of(&g::parse_s6("cbbb"), "cbbb", "(s6 (k (k (k c) b b) b))");
+}
+
+test "open-ended rule suffix: contests a token another suffix names" {
+    assert_tree_of(&g::parse_s7("cd"), "cd", "(s7 (m (m c) (w d)))");
+    assert_tree_of(&g::parse_s7("cdd"), "cdd", "(s7 (m (m c) d d))");
+    assert_tree_of(&g::parse_s7("cddd"), "cddd", "(s7 (m (m (m c) d d) (w d)))");
+    assert_tree_of(&g::parse_s7("cdda"), "cdda", "(s7 (m (m (m c) d d) (w a)))");
+    assert_tree_of(&g::parse_s7("cdad"), "cdad", "(s7 (m (m (m (m c) (w d)) (w a)) (w d)))");
+    assert_tree_of(&g::parse_s7("cda"), "cda", "(s7 (m (m (m c) (w d)) (w a)))");
+}
+
+test "open-ended rule suffix: no atom to start the loop" {
+    assert_rejected_of(&g::parse_s("ac"), "ac");
+    assert_rejected_of(&g::parse_s("a"), "a");
+    assert_rejected_of(&g::parse_s2("ac"), "ac");
+    assert_rejected_of(&g::parse_s3("ac"), "ac");
+    assert_rejected_of(&g::parse_s4("bc"), "bc");
+    assert_rejected_of(&g::parse_s5("ac"), "ac");
+    assert_rejected_of(&g::parse_s6("ac"), "ac");
+    assert_rejected_of(&g::parse_s7("ac"), "ac");
+}
