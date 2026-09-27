@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790543665199,
+  "lastUpdate": 1790545473830,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60997,6 +60997,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d5d49cf56037ad2fa8223fce00f839f29dc9ecfc"
         },
         "date": 1790543664548,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6728,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20219,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289040,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8223dbf18abb7d6017b4be0bf6a265fae2b471d7",
+          "message": "Merge pull request #2197 from wado-lang/loam-symbolic-seq\n\nfeat(loam): one generated module runs GPT-2 at any sequence length, checked against onnxruntime",
+          "timestamp": "2026-09-28T05:48:49+09:00",
+          "tree_id": "f9085e941b0b7d3a220fa80e976a422604f681eb",
+          "url": "https://github.com/wado-lang/wado/commit/8223dbf18abb7d6017b4be0bf6a265fae2b471d7"
+        },
+        "date": 1790545472891,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
