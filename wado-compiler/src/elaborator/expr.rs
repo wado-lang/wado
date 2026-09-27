@@ -3463,10 +3463,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_expression_type(lit.id, TypeTable::I32);
                 TypeTable::I32
             }
-            // A closure takes its parameter types from the function type it is
-            // cast to, as it would from an annotation.
             None => {
-                let expected = matches!(&cast.expr, ast::Expr::Closure(_)).then_some(target_type);
+                let expected = match &cast.expr {
+                    // A closure takes its parameter types from the function
+                    // type it is cast to, as it would from an annotation.
+                    ast::Expr::Closure(_) => Some(target_type),
+                    // A named literal takes its type arguments from the type it
+                    // is cast to, and from its base where that is a newtype:
+                    // `Pair { a: 1 } as Wide` crosses the boundary a cast may.
+                    named
+                        if matches!(named, ast::Expr::Range(_))
+                            || matches!(named, ast::Expr::StructLiteral(lit) if lit.name.is_some()) =>
+                    {
+                        Some(
+                            self.tysys
+                                .type_table
+                                .borrow()
+                                .representation_head(target_type),
+                        )
+                    }
+                    _ => None,
+                };
                 self.resolve_expr(&cast.expr, ctx, expected)
             }
         };
