@@ -15,11 +15,9 @@ out=package-gale-highlight-wado/build/check-grammar
 rm -rf "${out}"
 mkdir -p "${out}"
 
-cargo build --bin wado --bin wado-dev-tools
-
-./target/debug/wado-dev-tools grammar-corpus --emit-corpus "${out}/corpus.txt"
-./target/debug/wado run package-gale-highlight-wado/tools/corpus_check.wado -- \
+scripts/dev-bin.sh wado-dev-tools grammar-corpus --emit-corpus "${out}/corpus.txt"
+scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/corpus_check.wado -- \
     --paths-from "${out}/corpus.txt" > "${out}/gale.tsv" 2> "${out}/gale.err" \
     || { cat "${out}/gale.err" >&2; exit 1; }
-./target/debug/wado-dev-tools grammar-corpus \
+scripts/dev-bin.sh wado-dev-tools grammar-corpus \
     --compare "${out}/gale.tsv" --report "${out}/divergences.tsv"
