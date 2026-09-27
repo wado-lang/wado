@@ -262,8 +262,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:spec_functions_closures.wado::$const_obj_4: ref null "core:prelude/string.wado//StrSlice" = struct.new "core:prelude/string.wado//StrSlice" { repr: array.new_fixed<u8>(120), start: 0, end: 1 };
-global global:spec_functions_closures.wado::$const_obj_5: ref null "core:prelude/string.wado//StrSlice" = struct.new "core:prelude/string.wado//StrSlice" { repr: array.new_fixed<u8>(52, 49), start: 0, end: 2 };
+global global:spec_functions_closures.wado::$const_obj_4: ref null Array<u8> = array.new_fixed<u8>(120);
+global global:spec_functions_closures.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(52, 49);
 global global:spec_functions_closures.wado::$const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
 global global:spec_functions_closures.wado::$const_obj_8: ref null Array<i32> = array.new_fixed<i32>(2, 4, 6);
 global global:core:prelude/format.wado::$const_obj_11: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
@@ -309,9 +309,11 @@ fn "spec_functions_closures.wado/$test_2_a_declared_return_type"() {
     let self_39: ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>";
     let v_41: i32;
     let e_42: ref "core:prelude/intparse.wado//ParseIntError";
+    let repr_45: ref Array<u8>;
+    let repr_49: ref Array<u8>;
     self_9 = $inline_spec_functions_closures_wado__Closure_4___call_1: block -> ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>" {
         self_23 = $inline_i32_core_prelude_traits_wado_FromStr__from_str_core_prelude_string_wado_String__3: block -> ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>" {
-            break $inline_i32_core_prelude_traits_wado_FromStr__from_str_core_prelude_string_wado_String__3: struct.new "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>::Ok" { discriminant: 0, payload_0: builtin::i32_wrap_i64(let $mv$$vr_3_22$0: i32; let $mv$$vr_3_22$1: i64; let $mv$$vr_3_22$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$$vr_3_22$0, $mv$$vr_3_22$1, $mv$$vr_3_22$2] = "core:prelude/intparse.wado/parse_i64_radix"(global:spec_functions_closures.wado::$const_obj_5); (if $mv$$vr_3_22$0 == 0 -> i64 {
+            break $inline_i32_core_prelude_traits_wado_FromStr__from_str_core_prelude_string_wado_String__3: struct.new "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>::Ok" { discriminant: 0, payload_0: builtin::i32_wrap_i64(let $mv$$vr_3_22$0: i32; let $mv$$vr_3_22$1: i64; let $mv$$vr_3_22$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$$vr_3_22$0, $mv$$vr_3_22$1, $mv$$vr_3_22$2] = "core:prelude/intparse.wado/parse_i64_radix"(repr_45 = global:spec_functions_closures.wado::$const_obj_5; struct.new "core:prelude/string.wado//StrSlice" { repr: repr_45, start: 0, end: 2 }); (if $mv$$vr_3_22$0 == 0 -> i64 {
                 $mv$$vr_3_22$1;
             } else if @unlikely($mv$$vr_3_22$0 == 1) -> i64 {
                 $qm_e_21 = ref.as_non_null($mv$$vr_3_22$2);
@@ -355,7 +357,7 @@ fn "spec_functions_closures.wado/$test_2_a_declared_return_type"() {
     }
     self_27 = $inline_spec_functions_closures_wado__Closure_4___call_6: block -> ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>" {
         self_39 = $inline_i32_core_prelude_traits_wado_FromStr__from_str_core_prelude_string_wado_String__8: block -> ref "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>" {
-            break $inline_i32_core_prelude_traits_wado_FromStr__from_str_core_prelude_string_wado_String__8: struct.new "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>::Ok" { discriminant: 0, payload_0: builtin::i32_wrap_i64(let $mv$$vr_3_38$0: i32; let $mv$$vr_3_38$1: i64; let $mv$$vr_3_38$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$$vr_3_38$0, $mv$$vr_3_38$1, $mv$$vr_3_38$2] = "core:prelude/intparse.wado/parse_i64_radix"(global:spec_functions_closures.wado::$const_obj_4); (if $mv$$vr_3_38$0 == 0 -> i64 {
+            break $inline_i32_core_prelude_traits_wado_FromStr__from_str_core_prelude_string_wado_String__8: struct.new "core:prelude/types.wado//Result<i32,core:prelude/intparse.wado/ParseIntError>::Ok" { discriminant: 0, payload_0: builtin::i32_wrap_i64(let $mv$$vr_3_38$0: i32; let $mv$$vr_3_38$1: i64; let $mv$$vr_3_38$2: ref null "core:prelude/intparse.wado//ParseIntError"; multivalue_bind [$mv$$vr_3_38$0, $mv$$vr_3_38$1, $mv$$vr_3_38$2] = "core:prelude/intparse.wado/parse_i64_radix"(repr_49 = global:spec_functions_closures.wado::$const_obj_4; struct.new "core:prelude/string.wado//StrSlice" { repr: repr_49, start: 0, end: 1 }); (if $mv$$vr_3_38$0 == 0 -> i64 {
                 $mv$$vr_3_38$1;
             } else if @unlikely($mv$$vr_3_38$0 == 1) -> i64 {
                 $qm_e_37 = ref.as_non_null($mv$$vr_3_38$2);
