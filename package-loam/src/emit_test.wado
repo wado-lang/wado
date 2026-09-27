@@ -287,6 +287,18 @@ test "folded tensors of one source keep their own elements, a Cast between them"
     assert out.contains("let C = Tensor::<f32, [Item]> { data: [(0 as f32), (1 as f32), (2 as f32)]");
 }
 
+test "a length the run would compute past i64 for some input stops the build" {
+    let source = `g (float[N, M, 3] X) => (float[?] Y) <int64[1] Flat = {-1}> {
+        Y = Reshape(X, Flat)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Rgb"]),
+        rule("Y", ["All"]),
+    ];
+    let e = generate(source, layout).unwrap_err();
+    assert `${e}` == "3 * M * N: the run computes this in i64, and some input carries it past";
+}
+
 test "two names that sanitize to one identifier stop the build" {
     let source = `
 g (float[N, 2] "a.b", float[N, 2] "a/b") => (float[N, 2] out)
