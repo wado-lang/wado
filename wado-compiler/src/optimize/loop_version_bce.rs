@@ -379,13 +379,7 @@ fn analyze_loop(
     }
     let b_local = match b {
         BoundKey::Local(b) if locals.get(b as usize)?.type_id == ty => Some(b),
-        // The residual spells the constant as raw bits of `ty`, which only a
-        // value in `0..=MAX` reads the same in every integer width.
-        BoundKey::Const(c)
-            if c >= 0 && c as u64 <= type_table.primitive_head(ty)?.int_max()? as u64 =>
-        {
-            None
-        }
+        BoundKey::Const(c) if spells_same(type_table, ty, c)? => None,
         _ => return None,
     };
     let floor = match demanded {
@@ -434,6 +428,14 @@ fn analyze_loop(
     })
 }
 
+/// Whether the residual's raw constant bits of `ty` spell `c`: only a value in
+/// `0..=MAX` reads the same in every integer width. `None` for a type with no
+/// integer maximum.
+fn spells_same(type_table: &TypeTable, ty: TypeId, c: i64) -> Option<bool> {
+    let max = type_table.primitive_head(ty)?.int_max()?;
+    Some(u128::try_from(c).is_ok_and(|c| c <= max))
+}
+
 /// The floor terms for a loop whose entry reads as no constant: a step that
 /// never lowers `var`, and the type maximum the no-wrap term compares against.
 fn runtime_floor(
@@ -445,9 +447,7 @@ fn runtime_floor(
     ty: TypeId,
     demanded: i64,
 ) -> Option<RuntimeFloor> {
-    // The residual spells the floor as raw constant bits, which only a
-    // non-negative value reads the same in every integer width.
-    if demanded < 0 {
+    if !spells_same(type_table, ty, demanded)? {
         return None;
     }
     let step = induction_step(engine, binds, loop_body, var)?;
