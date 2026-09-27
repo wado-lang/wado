@@ -883,7 +883,11 @@ test "a Range over a symbolic start counts a span the build knows, however it di
     }`;
     let graph = read(&source).unwrap();
     let checked = infer(&graph, &Schema {
-        layout: [rule("X", ["Seq"]), rule("Y", ["Pos"]), rule("W", ["Back"])],
+        layout: [
+            rule("X", ["Seq"]),
+            rule("Y", ["Pos"]),
+            rule("W", ["Back"]),
+        ],
     }).unwrap();
     assert checked.shapes["Y"].axes[0].extent.agrees(&Extent::Static(2));
     assert checked.shapes["W"].axes[0].extent.agrees(&Extent::Static(0));
@@ -949,7 +953,10 @@ test "a symbolic integer cast to int32 owes that it fits, where an extent cannot
     }`;
     let graph = read(&source).unwrap();
     let checked = infer(&graph, &Schema {
-        layout: [rule("X", ["Seq"]), rule("Y", ["Pos"])],
+        layout: [
+            rule("X", ["Seq"]),
+            rule("Y", ["Pos"]),
+        ],
     }).unwrap();
     let owed: List<String> = checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
     assert owed == ["Q = Cast: 100000 * N must fit in int32 (-100000 * N + 2147483647 >= 0)"] as List<String>;

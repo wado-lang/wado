@@ -567,7 +567,10 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
             Symbolic(p) => {
                 let stated = Poly::constant(declared as i64);
                 let condition = `axis ${axis.name} must be ${declared}, as the graph declares`;
-                for let slack of [p.sub(&stated), stated.sub(&p)] as List<Poly> {
+                for let slack of [
+                    p.sub(&stated),
+                    stated.sub(&p),
+                ] as List<Poly> {
                     if owe_at(vi.name, owed, slack, condition).is_err() {
                         return Result::Err(conflict());
                     }
@@ -919,7 +922,14 @@ pub fn slice_cuts(
         let dim = x.axes[a].extent.poly();
         let begin = within(node, &starts[i], &dim, owed)?;
         let end = within(node, &ends[i], &dim, owed)?;
-        let count = run_count(node, owed, &begin, &end, &Poly::constant(1), `axis ${a} must not run backwards from ${begin} to ${end}`)?;
+        let count = run_count(
+            node,
+            owed,
+            &begin,
+            &end,
+            &Poly::constant(1),
+            `axis ${a} must not run backwards from ${begin} to ${end}`,
+        )?;
         if begin != Poly::constant(0) || count != dim {
             cuts.push(Cut { axis: a, start: begin, extent: counted(node, count)? });
         }
@@ -981,7 +991,7 @@ pub fn range_count(
 /// int32 only where the value fits. What the extents cannot show fits, the
 /// inputs owe.
 fn owe_int32_fit(node: &Node, folded: &Known, owed: &mut List<Condition>) -> Result<(), InferError> {
-    if node.op != "Cast" || !(data_type(int_attr(node, "to", 0)?) matches { Some(Int32) }) {
+    if node.op != "Cast" || !data_type(int_attr(node, "to", 0)?) matches { Some(Int32) } {
         return Result::Ok(());
     }
     let Symbolic(values) = &folded.elements else {
