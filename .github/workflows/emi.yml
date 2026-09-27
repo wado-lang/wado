@@ -65,10 +65,10 @@ jobs:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
-          shared-key: ci
-          save-if: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mise: false
       - name: Calibrate
         env:
           WADO_EMI_SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.count }}

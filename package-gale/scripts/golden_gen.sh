@@ -23,8 +23,7 @@ gdir="package-gale/tests/grammars"
 
 # Build once, then invoke the binary directly so each grammar skips
 # cargo's per-invocation workspace freshness check.
-cargo build --quiet --bin wado || exit 1
-WADO="$ROOT/../target/debug/wado"
+WADO=$(scripts/dev-bin.sh --path wado) || exit 1
 
 for g in "$gdir"/*.g4; do
     base="$(basename "$g" .g4)"
