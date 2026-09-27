@@ -855,6 +855,114 @@ fn body_has_loop(body: &Body) -> bool {
     arena_query::block_contains_loop(body, body.root)
 }
 
+/// Whether running `body` reaches a safepoint: a call, or an allocation, where
+/// the collector may run. A copying collector moves objects there, so every
+/// reference live across one is spilled and reloaded, and a loop holds more of
+/// them than the callee does. `safepoint_calls` says which calls are one. The
+/// literal a `return` hands back is not: it is the body's last act, so what is
+/// live across it is what was live across the call it replaces, and a caller
+/// that takes it apart deletes it. Code past a `cold_path()` marker is no part
+/// of the run.
+fn has_safepoint(
+    body: &Body,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    safepoint_calls: &[bool],
+) -> bool {
+    struct Walk<'a> {
+        body: &'a Body,
+        type_table: &'a TypeTable,
+        descriptors: &'a [FunctionRef],
+        safepoint_calls: &'a [bool],
+    }
+    impl Walk<'_> {
+        fn block(&self, block: BlockId) -> bool {
+            for &stmt in &self.body.blocks[block].stmts {
+                match block_cut(self.body, stmt, self.type_table, self.descriptors) {
+                    BlockCut::Cold => return false,
+                    BlockCut::Diverges => return self.node(NodeRef::Stmt(stmt)),
+                    BlockCut::None if self.node(NodeRef::Stmt(stmt)) => return true,
+                    BlockCut::None => {}
+                }
+            }
+            false
+        }
+
+        fn node(&self, node: NodeRef) -> bool {
+            match node {
+                NodeRef::Block(b) => return self.block(b),
+                NodeRef::Expr(e) if self.is_safepoint(e) => return true,
+                NodeRef::Stmt(s) => {
+                    if let StmtKind::Return {
+                        value: Some(Operand::Expr(e)),
+                    } = self.body.stmts[s].kind
+                        && allocates(&self.body.exprs[e].kind)
+                    {
+                        return self.children(NodeRef::Expr(e));
+                    }
+                }
+                NodeRef::Expr(_) | NodeRef::Pat(_) => {}
+            }
+            self.children(node)
+        }
+
+        fn children(&self, node: NodeRef) -> bool {
+            let mut found = false;
+            self.body
+                .for_each_child(node, |c| found = found || self.node(c));
+            found
+        }
+
+        fn is_safepoint(&self, e: ExprId) -> bool {
+            match &self.body.exprs[e].kind {
+                ExprKind::Call { func_id, .. } => self.safepoint_calls[func_id.index()],
+                ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
+                kind => allocates(kind),
+            }
+        }
+    }
+    fn allocates(kind: &ExprKind) -> bool {
+        matches!(
+            kind,
+            ExprKind::StructLiteral { .. }
+                | ExprKind::TupleLiteral { .. }
+                | ExprKind::ArrayLiteral { .. }
+                | ExprKind::PackedArray(_)
+                | ExprKind::ClosureToCanonical { .. }
+                | ExprKind::VariantConstruct {
+                    payload: Some(_),
+                    ..
+                }
+        )
+    }
+    Walk {
+        body,
+        type_table,
+        descriptors,
+        safepoint_calls,
+    }
+    .block(body.root)
+}
+
+/// Whether a call to each function, by `FuncId` index, is a safepoint: any call
+/// to a function with a body, a component-model operation (which leaves for the
+/// host), and a builtin whose result is freshly allocated. The other builtins
+/// are Wasm instructions.
+fn safepoint_calls(project: &NirPackage, descriptors: &[FunctionRef]) -> Vec<bool> {
+    descriptors
+        .iter()
+        .map(|callee| {
+            callee.intrinsic().is_none_or(|name| {
+                project
+                    .builtin_registry
+                    .intrinsic(name)
+                    .is_some_and(|info| info.canonical_name.is_some())
+                    || project.builtin_declarations.returns_owned(callee)
+            })
+        })
+        .collect()
+}
+
 /// Locals the body writes, counting a write anywhere in the place (`p.x = f()`
 /// writes `p`) and a mutable hand-out, which is a write the body does not show.
 fn written_locals(body: &Body) -> IndexSet<u32> {
@@ -1045,14 +1153,59 @@ fn constant_params(
     out
 }
 
+/// How much more a callee may cost where its splice pays back than anywhere
+/// else: at a site inside a loop, whose call edge is paid on every iteration,
+/// and at the callee's only site, where the body moves rather than being
+/// copied. Only a callee reaching no safepoint qualifies, so the splice brings
+/// its body alone and none of the spills a safepoint costs the loop. At `-O2`
+/// this admits up to 64, which reaches the stdlib's UTF-8 codec helpers
+/// (`decode_char_at` 50, `encode_char` 61) and the zlib match helpers that once
+/// carried an inline hint each.
+const PAYBACK_FACTOR: usize = 4;
+
+/// Which call sites splice a callee.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Reach {
+    #[default]
+    Nowhere,
+    /// Only a site inside a loop, where it is the callee's only site: a
+    /// callee under [`PAYBACK_FACTOR`] with more than one site.
+    Loops,
+    /// Only the one site the round began with: a callee under
+    /// [`PAYBACK_FACTOR`] with one site. A splice of its caller copies that
+    /// site, and the copy is a second one.
+    Sole,
+    Everywhere,
+}
+
+/// Where a call site sits, as far as the price it may pay goes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Site {
+    Plain,
+    /// Inside a loop of the caller.
+    Loop,
+    /// After a `cold_path()` marker: only `#[inline(always)]` splices here,
+    /// since anything else only bloats the hot caller.
+    Cold,
+}
+
+impl Site {
+    fn entering_loop(self) -> Self {
+        match self {
+            Site::Cold => Site::Cold,
+            Site::Plain | Site::Loop => Site::Loop,
+        }
+    }
+}
+
 /// What the engine decides about one callee.
 #[derive(Clone, Copy, Default)]
 struct Verdict {
     /// The hot price the verdict was reached on, or `0` for a callee turned
     /// down before it was priced at all.
     hot: usize,
-    /// Splice it at its call sites.
-    inline: bool,
+    /// Which of its call sites splice it.
+    reach: Reach,
     /// Keep it as a template: splice nothing *into* it.
     ///
     /// A body whose parameters, were they constant, delete a loop from it is
@@ -1115,6 +1268,8 @@ fn classify_callee(
     descriptors: &[FunctionRef],
     foldable: &[bool],
     loopy: &[bool],
+    safepoint_calls: &[bool],
+    sites: usize,
     spliced: &[usize],
     written: &IndexSet<u32>,
 ) -> Verdict {
@@ -1132,7 +1287,7 @@ fn classify_callee(
     if func.inline_hint == InlineHint::Always {
         return Verdict {
             hot: 0,
-            inline: true,
+            reach: Reach::Everywhere,
             hold: false,
         };
     }
@@ -1144,7 +1299,7 @@ fn classify_callee(
     if net_cost(plain, params) <= effective_threshold {
         return Verdict {
             hot: plain,
-            inline: true,
+            reach: Reach::Everywhere,
             hold: false,
         };
     }
@@ -1184,13 +1339,24 @@ fn classify_callee(
         foldable,
         loopy,
     });
-    let inline = const_view.is_some_and(|view| {
+    let folds = const_view.is_some_and(|view| {
         let (halves, drops_loop) = weigh(view);
         halves || drops_loop
     });
+    let reach = if folds {
+        Reach::Everywhere
+    } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR
+        || has_safepoint(body, type_table, descriptors, safepoint_calls)
+    {
+        Reach::Nowhere
+    } else if sites == 1 {
+        Reach::Sole
+    } else {
+        Reach::Loops
+    };
     Verdict {
         hot: plain,
-        inline,
+        reach,
         hold: optimistic_loop,
     }
 }
@@ -1290,18 +1456,24 @@ pub(super) fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
     recursive
 }
 
-/// Collect the store position (`func_id.index()`) of every `Call` callee
-/// reachable in `body`, via the shared `for_each_child`
-/// walk (order is irrelevant — the result is a set feeding the recursion call
-/// graph). Each stamped `func_id` is total and resolves to a position in
-/// `project.functions`, which is exactly the call-graph node index.
-fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(id) = node
+/// The callee of every `Call` site under `node`, once per site.
+fn for_each_call_site(body: &Body, node: NodeRef, mut f: impl FnMut(FuncId)) {
+    body.for_each_live_node_under(node, |n| {
+        if let NodeRef::Expr(id) = n
             && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
         {
-            callees.insert(func_id.index());
+            f(*func_id);
         }
+    });
+}
+
+/// Collect the store position (`func_id.index()`) of every `Call` callee
+/// reachable in `body` (order is irrelevant — the result is a set feeding the
+/// recursion call graph). Each stamped `func_id` is total and resolves to a
+/// position in `project.functions`, which is exactly the call-graph node index.
+fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
+    for_each_call_site(body, NodeRef::Block(body.root), |callee| {
+        callees.insert(callee.index());
     });
 }
 
@@ -1316,13 +1488,8 @@ fn call_site_counts(project: &NirPackage) -> Vec<usize> {
         let Some(body) = func.body.as_ref() else {
             continue;
         };
-        body.for_each_reachable_node(|node| {
-            if let NodeRef::Expr(id) = node
-                && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
-                && let Some(slot) = counts.get_mut(func_id.index())
-            {
-                *slot += 1;
-            }
+        for_each_call_site(body, NodeRef::Block(body.root), |callee| {
+            counts[callee.index()] += 1;
         });
     }
     counts
@@ -1514,6 +1681,11 @@ fn splice_growth(size: usize, sites: usize) -> usize {
 #[derive(Clone, Copy)]
 struct Candidates<'a> {
     bodies: &'a IndexMap<FuncId, NirFunction>,
+    /// Which sites splice each candidate.
+    reach: &'a IndexMap<FuncId, Reach>,
+    /// Per candidate, the call sites a splice of it brings, its own splices'
+    /// included: what a loop holding a site of it holds once the round ends.
+    carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
     /// Each candidate's written price, net of the call site it replaces.
     net_price: &'a IndexMap<FuncId, usize>,
     rescan_cap: usize,
@@ -1573,6 +1745,7 @@ pub fn inline_functions(
     // `(module, name)` lookup, no entry-point fallback, no collision between two
     // functions that happen to share a name.
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
+    let mut reach: IndexMap<FuncId, Reach> = IndexMap::default();
     let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
 
     // Also collect function_strings for each candidate (to update caller's
@@ -1595,6 +1768,7 @@ pub fn inline_functions(
         })
         .collect();
     let const_params = constant_params(project, &written_by_func);
+    let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = compute_fn_effects(project);
     let foldable: Vec<bool> = project
         .functions
@@ -1611,13 +1785,11 @@ pub fn inline_functions(
     // What the unit holds right now, and what each admitted candidate would add
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
     // Both prices cost a walk over the whole unit per round and no level sets a
-    // growth cap, so they are taken only where something reads them.
+    // growth cap, so they are taken only where something reads them. The site
+    // counts are taken every round, since a callee's only site is one where its
+    // splice pays back.
     let pricing = budget.prices_read();
-    let call_sites = if pricing {
-        call_site_counts(project)
-    } else {
-        Vec::new()
-    };
+    let call_sites = call_site_counts(project);
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
 
@@ -1688,14 +1860,17 @@ pub fn inline_functions(
             descriptors,
             &foldable,
             &loopy,
+            &safepoint_calls,
+            call_sites[i],
             &spliced,
             &written_by_func[i],
         );
         if let Some(id) = func.id {
             holds.settle(id, verdict.hold, gate);
         }
-        if verdict.inline {
+        if verdict.reach != Reach::Nowhere {
             let id = func.id.expect("func_id assigned at lower");
+            reach.insert(id, verdict.reach);
             let string_key = (func.module_source.clone(), func.name.clone());
             // Get the strings used by this function
             if let Some(strings) = project.function_strings.get(&string_key) {
@@ -1707,7 +1882,7 @@ pub fn inline_functions(
                     name: func.name.clone(),
                     hot: verdict.hot,
                     size,
-                    sites: call_sites.get(id.index()).copied().unwrap_or(0),
+                    sites: call_sites[id.index()],
                     forced: func.inline_hint == InlineHint::Always,
                 });
             }
@@ -1794,8 +1969,11 @@ pub fn inline_functions(
     let inline_first_param_types = first_param_types(project);
     let inline_type_table = project.type_table.borrow();
     let inline_call_immutability = CallImmutability::new(project, &inline_type_table);
+    let carried = carried_calls(&inline_candidates);
     let candidates = Candidates {
         bodies: &inline_candidates,
+        reach: &reach,
+        carried: &carried,
         net_price: &net_price,
         // A threshold's worth of threshold-sized callees: a call tree that
         // doubles per level exceeds it within a few levels.
@@ -1823,6 +2001,8 @@ pub fn inline_functions(
                 locals: std::mem::take(&mut func.locals),
                 address_taken: std::mem::take(&mut func.address_taken_locals),
                 stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
+                loop_calls: Vec::new(),
+                original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
             };
             let mut labels = InlineLabels::default();
             // Calls in this body that mutate no caller-reachable state, taken
@@ -1851,7 +2031,7 @@ pub fn inline_functions(
                     &mut inlined_funcs,
                     &mut labels,
                     &mut reval,
-                    false,
+                    Site::Plain,
                 );
             }
             func.locals = frame.locals;
@@ -1933,13 +2113,101 @@ struct CallerFrame {
     locals: Vec<NirLocal>,
     address_taken: IndexSet<u32>,
     stores_aliased: IndexSet<u32>,
+    /// Per enclosing loop, innermost last: how many sites in its body call
+    /// each function, the ones its splices bring included.
+    loop_calls: Vec<IndexMap<FuncId, usize>>,
+    /// How many expressions the body held before this pass spliced into it.
+    /// The arena only appends, so a call below it is one the round's site
+    /// counts saw, and one above it came in with a splice.
+    original_exprs: usize,
+}
+
+impl CallerFrame {
+    /// Whether `call` is a site the round began with.
+    fn original_site(&self, call: ExprId) -> bool {
+        call.index() < self.original_exprs
+    }
+
+    /// Whether `callee` is called from one site of the innermost loop. Several
+    /// sites of one callee in a loop are a dispatch, each running on some
+    /// iterations only, so the per-iteration saving a [`Site::Loop`] price
+    /// counts on is not there, while the growth is paid at every site.
+    fn sole_loop_site(&self, callee: FuncId) -> bool {
+        self.loop_calls
+            .last()
+            .is_none_or(|calls| calls.get(&callee).is_none_or(|&n| n <= 1))
+    }
+}
+
+/// How many sites under `block` call each function, counting the sites a
+/// candidate's splice brings as the block's own.
+fn call_counts(
+    body: &Body,
+    block: BlockId,
+    carried: &IndexMap<FuncId, IndexMap<FuncId, usize>>,
+) -> IndexMap<FuncId, usize> {
+    let mut out = IndexMap::default();
+    for_each_call_site(body, NodeRef::Block(block), |callee| {
+        add_site(&mut out, callee, carried);
+    });
+    out
+}
+
+fn add_site(
+    out: &mut IndexMap<FuncId, usize>,
+    callee: FuncId,
+    carried: &IndexMap<FuncId, IndexMap<FuncId, usize>>,
+) {
+    *out.entry(callee).or_default() += 1;
+    for (&g, &n) in carried.get(&callee).into_iter().flatten() {
+        *out.entry(g).or_default() += n;
+    }
+}
+
+/// [`Candidates::carried`]: per candidate, its body's call sites with each
+/// candidate among them expanded into the sites it carries in turn. No
+/// candidate reaches itself, since a recursive function is never one.
+fn carried_calls(
+    candidates: &IndexMap<FuncId, NirFunction>,
+) -> IndexMap<FuncId, IndexMap<FuncId, usize>> {
+    fn visit(
+        id: FuncId,
+        candidates: &IndexMap<FuncId, NirFunction>,
+        out: &mut IndexMap<FuncId, IndexMap<FuncId, usize>>,
+    ) {
+        if out.contains_key(&id) {
+            return;
+        }
+        let body = candidates[&id]
+            .body
+            .as_ref()
+            .expect("a candidate has a body");
+        let mut callees = Vec::new();
+        for_each_call_site(body, NodeRef::Block(body.root), |g| callees.push(g));
+        for &g in &callees {
+            assert_ne!(g, id, "a candidate is never recursive");
+            if candidates.contains_key(&g) {
+                visit(g, candidates, out);
+            }
+        }
+        let mut sites = IndexMap::default();
+        for g in callees {
+            add_site(&mut sites, g, out);
+        }
+        out.insert(id, sites);
+    }
+    let mut out = IndexMap::default();
+    for &id in candidates.keys() {
+        visit(id, candidates, &mut out);
+    }
+    out
 }
 
 /// Inline function calls in a block, each statement processed in place: a
 /// `Let` / `Expr` / `Return` value gets a top-level attempt that then re-scans
-/// the inlined body, while others recurse. `cold` marks a cold call-site
-/// context, spreading to the rest of the block once a `cold_path()` marker is
-/// seen; a cold call is inlined only when the callee is `#[inline(always)]`.
+/// the inlined body, while others recurse. `site` is the context the block's
+/// calls sit in; a `cold_path()` marker turns it [`Site::Cold`] for the rest of
+/// the block, and a loop body is a [`Site::Loop`].
 #[allow(clippy::too_many_arguments)]
 fn inline_calls_in_block(
     body: &mut Body,
@@ -1951,20 +2219,21 @@ fn inline_calls_in_block(
     inlined_funcs: &mut Vec<FuncId>,
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
-    mut cold: bool,
+    mut site: Site,
 ) {
     enum Shape {
         TopLevel(ExprId),
         Nested(ExprId),
         If(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
+        Loop(BlockId),
         None,
     }
     for stmt_id in body.blocks[block].stmts.clone() {
         if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt_id].kind
             && is_cold_path_call(body, *e, descriptors)
         {
-            cold = true;
+            site = Site::Cold;
         }
         let shape = match &body.stmts[stmt_id].kind {
             StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::TopLevel),
@@ -1975,9 +2244,8 @@ fn inline_calls_in_block(
                 then_block,
                 else_block,
             } => Shape::If(condition.as_expr(), *then_block, *else_block),
-            StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-                Shape::Block(*b)
-            }
+            StmtKind::Loop { body: b } => Shape::Loop(*b),
+            StmtKind::LabeledBlock { block: b, .. } => Shape::Block(*b),
             StmtKind::Break { value: Some(v), .. } => {
                 v.as_expr().map_or(Shape::None, Shape::Nested)
             }
@@ -1998,7 +2266,7 @@ fn inline_calls_in_block(
                     inlined_funcs,
                     labels,
                     reval,
-                    cold,
+                    site,
                 );
                 match &mut body.stmts[stmt_id].kind {
                     StmtKind::Let { value, .. } => *value = new_value.into(),
@@ -2017,7 +2285,7 @@ fn inline_calls_in_block(
                 inlined_funcs,
                 labels,
                 reval,
-                cold,
+                site,
             ),
             Shape::If(cond, tb, eb) => {
                 if let Some(cond) = cond {
@@ -2031,7 +2299,7 @@ fn inline_calls_in_block(
                         inlined_funcs,
                         labels,
                         reval,
-                        cold,
+                        site,
                     );
                 }
                 inline_calls_in_block(
@@ -2044,7 +2312,7 @@ fn inline_calls_in_block(
                     inlined_funcs,
                     labels,
                     reval,
-                    cold,
+                    site,
                 );
                 if let Some(eb) = eb {
                     inline_calls_in_block(
@@ -2057,7 +2325,7 @@ fn inline_calls_in_block(
                         inlined_funcs,
                         labels,
                         reval,
-                        cold,
+                        site,
                     );
                 }
             }
@@ -2071,8 +2339,26 @@ fn inline_calls_in_block(
                 inlined_funcs,
                 labels,
                 reval,
-                cold,
+                site,
             ),
+            Shape::Loop(b) => {
+                frame
+                    .loop_calls
+                    .push(call_counts(body, b, candidates.carried));
+                inline_calls_in_block(
+                    body,
+                    b,
+                    candidates,
+                    descriptors,
+                    frame,
+                    type_table,
+                    inlined_funcs,
+                    labels,
+                    reval,
+                    site.entering_loop(),
+                );
+                frame.loop_calls.pop();
+            }
             Shape::None => {}
         }
     }
@@ -2092,10 +2378,10 @@ fn inline_top_level(
     inlined_funcs: &mut Vec<FuncId>,
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
-    cold: bool,
+    site: Site,
 ) -> ExprId {
     let result = try_inline_call_expr(
-        body, value, candidates, frame, type_table, labels, reval, cold,
+        body, value, candidates, frame, type_table, labels, reval, site,
     );
     if let Some((new_id, inlined_key)) = result {
         if !inlined_funcs.contains(&inlined_key) {
@@ -2112,7 +2398,7 @@ fn inline_top_level(
             inlined_funcs,
             labels,
             reval,
-            cold,
+            site,
         );
         new_id
     } else {
@@ -2126,7 +2412,7 @@ fn inline_top_level(
             inlined_funcs,
             labels,
             reval,
-            cold,
+            site,
         );
         value
     }
@@ -2359,7 +2645,7 @@ fn try_inline_call_expr(
     type_table: &TypeTable,
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
-    cold: bool,
+    site: Site,
 ) -> Option<(ExprId, FuncId)> {
     let (func_id, arg_ops, has_receiver): (FuncId, Vec<Operand>, bool) =
         match &caller.exprs[call_id].kind {
@@ -2378,9 +2664,17 @@ fn try_inline_call_expr(
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
-    // A cold call site keeps the call: inlining there only bloats the hot
-    // caller. An explicit `#[inline(always)]` wins over the suppression.
-    if cold && candidate.inline_hint != InlineHint::Always {
+    let admitted = match (site, candidates.reach[&func_id]) {
+        (Site::Cold, _) => candidate.inline_hint == InlineHint::Always,
+        (Site::Plain | Site::Loop, Reach::Everywhere) => true,
+        (Site::Plain | Site::Loop, Reach::Sole) => frame.original_site(call_id),
+        (Site::Loop, Reach::Loops) => frame.sole_loop_site(func_id),
+        (Site::Plain, Reach::Loops) => false,
+        (Site::Plain | Site::Loop, Reach::Nowhere) => {
+            unreachable!("a candidate is reached somewhere")
+        }
+    };
+    if !admitted {
         return None;
     }
     if !candidates.charge(func_id) {
@@ -3127,7 +3421,7 @@ fn inline_calls_in_expr(
     inlined_funcs: &mut Vec<FuncId>,
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
-    cold: bool,
+    site: Site,
 ) {
     let args: Option<Vec<Operand>> = match &body.exprs[e].kind {
         ExprKind::Call { args, .. } => Some(args.iter().map(|a| a.expr).collect()),
@@ -3146,7 +3440,7 @@ fn inline_calls_in_expr(
                 inlined_funcs,
                 labels,
                 reval,
-                cold,
+                site,
             );
         }
         for b in blocks {
@@ -3160,7 +3454,7 @@ fn inline_calls_in_expr(
                 inlined_funcs,
                 labels,
                 reval,
-                cold,
+                site,
             );
         }
         return;
@@ -3179,11 +3473,11 @@ fn inline_calls_in_expr(
             inlined_funcs,
             labels,
             reval,
-            cold,
+            site,
         );
     }
     if let Some((new_id, inlined_key)) =
-        try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, cold)
+        try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, site)
     {
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);

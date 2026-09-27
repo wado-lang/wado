@@ -4875,8 +4875,6 @@ _Fields are private._
 
 ##### `pub fn next(&mut self) -> Option<Self::Item>`
 
-`#[inline]`
-
 ### `pub struct StrCharIter`
 
 Iterator over the Unicode scalar values (chars) of a String.
@@ -4952,8 +4950,6 @@ Length in bytes.
 
 #### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
 
-`#[inline]`
-
 Read the byte at `index`, counted from the view's start, without bounds
 checks.
 
@@ -4983,8 +4979,6 @@ Panics if the range is out of bounds or either end is off a character
 boundary.
 
 #### `pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice`
-
-`#[inline]`
 
 A sub-view without bounds or UTF-8 boundary checks.
 
@@ -5246,8 +5240,6 @@ Reverses the elements in place.
 Returns a new list containing this list's elements repeated `n` times.
 
 #### `pub fn copy_within_append(&mut self, src_start: i32, count: i32)`
-
-`#[inline(always)]`
 
 Copies `count` elements from `self[src_start..]` and appends them.
 Handles overlapping regions correctly for both non-overlapping and DEFLATE-style

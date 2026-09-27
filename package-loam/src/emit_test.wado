@@ -273,6 +273,32 @@ g (float[N, 2] X) => (float[N, 2] X)
     assert out.contains("return *X;");
 }
 
+test "folded tensors of one source keep their own elements, a Cast between them" {
+    let source = `g (float[3] X) => (float[3] Y) <int64[3] A = {0, 1, 2}> {
+        B = Cast<to = 1>(A)
+        C = Identity(B)
+        D = Identity(A)
+        G = Gather(X, D)
+        Y = Add(G, C)
+    }`;
+    let out = generate(source, [rule("*", ["Item"])]).unwrap();
+
+    assert out.contains("let D = Tensor::<i64, [Item]> { data: [0, 1, 2]");
+    assert out.contains("let C = Tensor::<f32, [Item]> { data: [(0 as f32), (1 as f32), (2 as f32)]");
+}
+
+test "a length the run would compute past i64 for some input stops the build" {
+    let source = `g (float[N, M, 3] X) => (float[?] Y) <int64[1] Flat = {-1}> {
+        Y = Reshape(X, Flat)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Rgb"]),
+        rule("Y", ["All"]),
+    ];
+    let e = generate(source, layout).unwrap_err();
+    assert `${e}` == "3 * M * N: the run computes this in i64, and some input carries it past";
+}
+
 test "two names that sanitize to one identifier stop the build" {
     let source = `
 g (float[N, 2] "a.b", float[N, 2] "a/b") => (float[N, 2] out)
@@ -822,6 +848,52 @@ fn folded_add(value: f32) -> Result<String, EmitError> {
     return emit_graph(&constant_graph(node("Add", "Y", ["X", "C"]), matrix_rank(), value));
 }
 
+test "a symbol is bound from the input axis carrying it, and spelled where an extent needs it" {
+    let source = `g (float[N, 4] X) => (float[N, 2, 2] Y) <int64[3] S = {0, 2, 2}> {
+        Y = Reshape(X, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq", "Wide"]),
+        rule("Y", ["Seq", "Row", "Col"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("let dim_N = X.extents[0] as i64;");
+    assert out.contains("let Y = reshape::<f32, [Seq, Wide], [Seq, Row, Col]>(X, [to_extent(dim_N), 2, 2]);");
+}
+
+test "a symbol nothing spells is not bound" {
+    let out = emitted(&generate(mlp("float"), mlp_layout()).unwrap());
+    assert !out.contains("dim_");
+}
+
+test "a Range over a symbolic length is a kernel call" {
+    let source = `g (int64[N] X) => (int64[N] Y) {
+        S = Shape(X)
+        Z = Constant <value = int64 {0}> ()
+        O = Constant <value = int64 {1}> ()
+        L = Gather <axis = 0> (S, Z)
+        Y = Range(Z, L, O)
+    }`;
+    let out = emitted(&generate(source, [rule("*", ["Seq"])]).unwrap());
+    assert out.contains("let Y = range_i64::<Seq>(0, to_extent(dim_N), 1);");
+}
+
+test "a Slice bound the build cannot show within its axis is checked before any kernel" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        Y = Slice(M, Z, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("Y", ["Seq"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    let check = out.find("refuse(unmet(-dim_N + 8, \"Y = Slice: the bound N must be at most 8\"));").unwrap();
+    let slice = out.find("let Y = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(dim_N));").unwrap();
+    assert check < slice;
+}
+
 test "an int64 input is held as i64 through the layout kernels and Cast converts it" {
     let source = `g (int64[1, 4] M) => (float[1, 1, 4] Y) {
         A = Constant<value_ints = [1]>()
@@ -880,6 +952,19 @@ test "a Cast to the element a tensor already has computes nothing" {
     assert out.contains("let Y = map(X, |v| f32::max(v, 0.0));");
 }
 
+test "a Cast that truncates is spelled apart from the constant it reads" {
+    // Both are held in i64, but the int32 cast keeps only the low half.
+    let source = `g (float[2] M) => (int64[2] Y) {
+        B = Cast<to = 9>(M)
+        Q = Constant<value_ints = [4294967297, 2]>()
+        C = Cast<to = 6>(Q)
+        Y = Where(B, Q, C)
+    }`;
+    let out = emitted(&generate(source, [rule("*", ["Pick"])]).unwrap());
+    assert out.contains("data: [4294967297, 2]");
+    assert out.contains("data: [1, 2]");
+}
+
 test "Identity names its operand again and computes nothing" {
     let source = `g (float[2] X) => (float[2] Y) <float[2] W = {1.0, 2.0}> {
         V = Identity(W)
@@ -904,6 +989,19 @@ test "a scale the graph computes from a shape folds to a literal" {
     let out = emitted(&generate(source, [rule("X", ["Batch", "Feat"])]).unwrap());
     assert out.contains("let Y = map(X, |v| v / (2 as f32));");
     assert !out.contains("let S");
+}
+
+test "a Cast of a length only the run knows converts it at run time" {
+    let source = `g (float[N, 4] X) => (float[N, 4] Y) {
+        S = Shape(X)
+        I = Constant<value_int = 0>()
+        D = Gather(S, I)
+        F = Cast<to = 1>(D)
+        Y = Div(X, F)
+    }`;
+    let out = emitted(&generate(source, [rule("X", ["Seq", "Feat"])]).unwrap());
+    assert out.contains("let D = Tensor::<i64, []> { data: [dim_N], extents: [] };");
+    assert out.contains("let F = map(&D, |v| v as f32);");
 }
 
 test "a constant folds into the operator that reads it" {
@@ -965,4 +1063,23 @@ test "a folded output of several elements is returned as its literal" {
 
     assert out.contains("let Y = Tensor::<i64, [Dim]> { data: [2, 3], extents: [2] };");
     assert out.contains("return Y;");
+}
+
+test "a folded tensor a Cast names again under its own type is spelled once" {
+    let source = `g (float[1, 4] X) => (float[4, 8] Y) <float[16, 8] W, int64[4] Q = {0, 1, 2, 3}> {
+        C = Cast<to = 7>(Q)
+        E = Gather(W, Q)
+        F = Gather(W, C)
+        Y = Add(E, F)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq"]),
+        rule("Q", ["Seq"]),
+        rule("C", ["Seq"]),
+        rule("W", ["Vocab", "Hidden"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("let Q = Tensor::<i64, [Seq]> { data: [0, 1, 2, 3], extents: [4] };");
+    assert !out.contains("let C");
+    assert out.contains("let F = gather_rows(&weights.W, &Q);");
 }

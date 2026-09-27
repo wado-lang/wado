@@ -3,7 +3,7 @@
 | Document               | Holds                                                               |
 | ---------------------- | ------------------------------------------------------------------- |
 | `spec-*.md`            | the specification: the rules, normative                             |
-| `wep-*.md`             | proposals: how a rule came to be, its history, and the work ahead   |
+| `wep-*.md`             | proposals: how a rule came to be, and the work ahead                |
 | `design-philosophy.md` | why the language is shaped this way                                 |
 | `cheatsheet.md`        | a quick reference; it promises nothing the specification does not   |
 | `stdlib-*.md`          | generated from the compiler by `wado doc`; not edited by hand       |

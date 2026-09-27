@@ -130,21 +130,19 @@ type "functype//core:serde/core:serde/DeserializeError::overflow<core:prelude/st
 
 type "functype//core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", i64) -> ref "core:serde//DeserializeError";  // TypeId(44)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice" = fn(ref "core:prelude//List<u8>", ref Array<u8>, i32, i32);  // TypeId(45)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to" = fn(ref "core:prelude//List<u8>", i32);  // TypeId(45)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to" = fn(ref "core:prelude//List<u8>", i32);  // TypeId(46)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(46)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(47)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(47)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(48)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(48)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(49)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(50)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(52)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(51)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -609,7 +607,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:core:prelude/primitive.wado::$const_obj_6, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(338, $local_5.buf);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -956,36 +954,50 @@ fn "core:cbor/core:cbor/CborDeserializer::append_bytes"(self, out, len) {
     let len_9: i32;
     let s: i32;
     let e: i32;
-    let a_18: i32;
-    let a_28: i32;
-    let $av_32: i32;
-    $av_32 = local.tee $load_0(self.pos);
-    if @unlikely(len >u builtin::i64_extend_i32_s((local.tee $load_2(local.tee $load_1(self.input).end) - local.tee $load_3($load_1.start)) - $av_32)) {
+    let other: ref "core:prelude/slice.wado//Slice<u8>";
+    let other_len: i32;
+    let new_used: i32;
+    let a_26: i32;
+    let a_36: i32;
+    let $av_40: i32;
+    let $av_41: i32;
+    $av_40 = local.tee $load_0(self.pos);
+    if @unlikely(len >u builtin::i64_extend_i32_s((local.tee $load_2(local.tee $load_1(self.input).end) - local.tee $load_3($load_1.start)) - $av_40)) {
         cold_path;
-        return ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_32)));
+        return ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_40)));
     }
     n = builtin::i32_wrap_i64(len);
-    let $mv_arg_2: ref "core:prelude/slice.wado//Slice<u8>";
-    start = $load_0;
-    end = $av_32 + n;
-    len_9 = $load_2 - $load_3;
-    if @unlikely(0 > len_9) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$cold0"(0, len_9);
-        unreachable;
-    }
-    a_18 = select i32(start > 0, start, 0);
-    s = select i32(a_18 < len_9, a_18, len_9);
-    if @unlikely(s > len_9) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$cold0"(s, len_9);
-        unreachable;
-    }
-    a_28 = select i32(end > s, end, s);
-    e = select i32(a_28 < len_9, a_28, len_9);
-    $mv_arg_2 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $load_1.repr, start: $load_3 + s, end: $load_3 + e };
-    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(out, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
-    self.pos = $av_32 + n;
+    $inline_core_prelude_list_wado_List_u8___extend_from_slice_0: block {
+        start = $load_0;
+        end = $av_40 + n;
+        len_9 = $load_2 - $load_3;
+        if @unlikely(0 > len_9) {
+            cold_path;
+            "core:prelude/primitive.wado/i32::clamp$cold0"(0, len_9);
+            unreachable;
+        }
+        a_26 = select i32(start > 0, start, 0);
+        s = select i32(a_26 < len_9, a_26, len_9);
+        if @unlikely(s > len_9) {
+            cold_path;
+            "core:prelude/primitive.wado/i32::clamp$cold0"(s, len_9);
+            unreachable;
+        }
+        a_36 = select i32(end > s, end, s);
+        e = select i32(a_36 < len_9, a_36, len_9);
+        other = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $load_1.repr, start: $load_3 + s, end: $load_3 + e };
+        $av_41 = other.start;
+        other_len = other.end - $av_41;
+        break_if $inline_core_prelude_list_wado_List_u8___extend_from_slice_0 other_len == 0;
+        new_used = out.used + other_len;
+        if @unlikely(new_used > builtin::array_len(out.repr)) {
+            cold_path;
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(out, new_used);
+        }
+        builtin::array_copy<u8>(out.repr, out.used, other.repr, $av_41, other_len);
+        out.used = new_used;
+    };
+    self.pos = self.pos + n;
     return ref.null none;
 }
 
@@ -1056,9 +1068,9 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag"(self) {
     $licm_repr_29 = bytes.repr;
     $licm_arith_30 = n - 1;
     if n <= $licm_used_28 {
-        b99: block {
-            l100: loop {
-                break_if b99 i >= n;
+        b100: block {
+            l101: loop {
+                break_if b100 i >= n;
                 b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_29, i));
                 pr = $licm_arith_30 - i;
                 if pr < 8 {
@@ -1067,13 +1079,13 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag"(self) {
                     hi = hi | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
                 }
                 i = i + 1;
-                continue l100;
+                continue l101;
             };
         };
     } else {
-        b102: block {
-            l103: loop {
-                break_if b102 i >= n;
+        b103: block {
+            l104: loop {
+                break_if b103 i >= n;
                 b = builtin::i64_extend_i32_u(if @unlikely(i >= $licm_used_28) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $licm_used_28);
@@ -1086,7 +1098,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag"(self) {
                     hi = hi | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
                 }
                 i = i + 1;
-                continue l103;
+                continue l104;
             };
         };
     }
@@ -1100,7 +1112,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_unsigned_u128"(self) {
     let arg: u64;
     let $pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
     block {
-        l107: loop {
+        l108: loop {
             let $mv$$vr_8$0: i32;
             let $mv$$vr_8$1: ref null "tuple//[u8, u8, u64, bool]";
             let $mv$$vr_8$2: ref null "core:serde//DeserializeError";
@@ -1120,7 +1132,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_unsigned_u128"(self) {
             if major == 0 {
                 return 0, struct.new "core:prelude/int128.wado//u128" { low: arg, high: 0_i64 }, ref.null none;
             } else if major == 6 {
-                continue_if l107 @likely(((((((arg == 0_i64) | (arg == 1_i64)) | (arg == 21_i64)) | (arg == 22_i64)) | (arg == 23_i64)) | (arg == 37_i64)) | (arg == 55799_i64));
+                continue_if l108 @likely(((((((arg == 0_i64) | (arg == 1_i64)) | (arg == 21_i64)) | (arg == 22_i64)) | (arg == 23_i64)) | (arg == 37_i64)) | (arg == 55799_i64));
                 if @likely(arg == 2_i64) {
                     return "core:cbor/core:cbor/CborDeserializer::read_bignum_mag"(self);
                 }
@@ -1130,7 +1142,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_unsigned_u128"(self) {
                 cold_path;
                 return 1, ref.null none, "core:serde/core:serde/DeserializeError::overflow<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected unsigned integer"), used: 25 }, builtin::i64_extend_i32_s(self.pos));
             }
-            continue l107;
+            continue l108;
         };
     };
 }
@@ -1252,22 +1264,6 @@ fn "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/S
     return struct.new "core:serde//DeserializeError" { kind: 6, message: ref.as_non_null($av_4 = msg.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = msg.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_4); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_4); $array_clone_dst_2), used: $av_4 }), offset: offset };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(self, $mv$other$repr, $mv$other$start, $mv$other$end) {
-    let other_len: i32;
-    let new_used: i32;
-    other_len = $mv$other$end - $mv$other$start;
-    if other_len == 0 {
-        return;
-    }
-    new_used = self.used + other_len;
-    if @unlikely(new_used > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(self, new_used);
-    }
-    builtin::array_copy<u8>(self.repr, self.used, $mv$other$repr, $mv$other$start, other_len);
-    self.used = new_used;
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(self, min_capacity) {
     let $load_0: ref Array<u8>;
     let capacity: i32;
@@ -1303,14 +1299,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b128: block {
-        l129: loop {
-            break_if b128 i >= digit_count_4;
+    b127: block {
+        l128: loop {
+            break_if b127 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l129;
+            continue l128;
         };
     };
 }

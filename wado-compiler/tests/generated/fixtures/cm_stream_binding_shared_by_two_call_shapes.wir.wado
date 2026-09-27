@@ -88,33 +88,31 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::members" = fn() -> [ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>", ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>", ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>"];  // TypeId(27)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::extend" = fn(ref "core:prelude//List<u32>", ref "core:prelude//List<u32>");  // TypeId(28)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow" = fn(ref "core:prelude//List<u32>");  // TypeId(28)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow" = fn(ref "core:prelude//List<u32>");  // TypeId(29)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow_to" = fn(ref "core:prelude//List<u32>", i32);  // TypeId(29)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow_to" = fn(ref "core:prelude//List<u32>", i32);  // TypeId(30)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/CopyResult>", ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/CopyResult>", ref "core:prelude/string.wado//String");  // TypeId(31)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(32)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(32)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(33)
+type "functype//wasi/stream-new:val-u32" = fn() -> i64;  // TypeId(33)
 
-type "functype//wasi/stream-new:val-u32" = fn() -> i64;  // TypeId(34)
+type "functype//wasi/stream-drop-writable:val-u32" = fn(i32);  // TypeId(34)
 
-type "functype//wasi/stream-drop-writable:val-u32" = fn(i32);  // TypeId(35)
+type "functype//wasi/stream-drop-readable:val-u32" = fn(i32);  // TypeId(35)
 
-type "functype//wasi/stream-drop-readable:val-u32" = fn(i32);  // TypeId(36)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(37)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(38)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(39)
+type "functype//wasi/stream-read:val-u32" = fn(i32, i32, i32) -> i32;  // TypeId(39)
 
-type "functype//wasi/stream-read:val-u32" = fn(i32, i32, i32) -> i32;  // TypeId(40)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -160,6 +158,8 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/run"() with Stdout {
     let packed_65: i64;
     let rx_66: i32;
     let tx_67: i32;
+    let other_len: i32;
+    let new_used_81: i32;
     rx_11 = builtin::i32_wrap_i64(local.tee packed_10("wasi/stream-new:val-u32"()));
     "wasi/stream-drop-writable:val-u32"(local.tee tx_12(builtin::i32_wrap_i64(packed_10 >> 32_i64)));
     chunk_2 = "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_read_val_u32$spec0"(rx_11, 16);
@@ -172,7 +172,17 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/run"() with Stdout {
         block {
             l1: loop {
                 chunk_18 = "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_read_val_u32$spec1"(rx_14, 4096);
-                "core:prelude/list.wado/core:prelude/list.wado/List<u32>::extend"(all, chunk_18.items);
+                $inline_core_prelude_list_wado_List_u32___extend_0: block {
+                    other_len = chunk_18.items.used;
+                    break_if $inline_core_prelude_list_wado_List_u32___extend_0 other_len == 0;
+                    new_used_81 = all.used + other_len;
+                    if @unlikely(new_used_81 > builtin::array_len(all.repr)) {
+                        cold_path;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow_to"(all, new_used_81);
+                    }
+                    builtin::array_copy<u32>(all.repr, all.used, chunk_18.items.repr, 0, other_len);
+                    all.used = new_used_81;
+                };
                 if chunk_18.result != 0 {
                     break $inline_core_prelude_types_wado_Stream_u32___read_to_end_3: all;
                 }
@@ -247,9 +257,9 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_read_val_u32$spe
     }
     arr = struct.new "core:prelude//List<u32>" { repr: builtin::array_new<u32>(local.tee count_6(result >>u 4)), used: 0 };
     i = 0;
-    b6: block {
-        l7: loop {
-            break_if b6 i >= count_6;
+    b7: block {
+        l8: loop {
+            break_if b7 i >= count_6;
             elem = builtin::load_i32(ptr + (i * 4));
             used = arr.used;
             if @unlikely(used >= builtin::array_len(arr.repr)) {
@@ -259,7 +269,7 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_read_val_u32$spe
             builtin::array_set<u32>(arr.repr, used, elem);
             arr.used = used + 1;
             i = i + 1;
-            continue l7;
+            continue l8;
         };
     };
     drop("mem/realloc"(ptr, 64, 4, 0));
@@ -302,9 +312,9 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_read_val_u32$spe
     }
     arr = struct.new "core:prelude//List<u32>" { repr: builtin::array_new<u32>(local.tee count_6(result >>u 4)), used: 0 };
     i = 0;
-    b12: block {
-        l13: loop {
-            break_if b12 i >= count_6;
+    b13: block {
+        l14: loop {
+            break_if b13 i >= count_6;
             elem = builtin::load_i32(ptr + (i * 4));
             used = arr.used;
             if @unlikely(used >= builtin::array_len(arr.repr)) {
@@ -314,7 +324,7 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_read_val_u32$spe
             builtin::array_set<u32>(arr.repr, used, elem);
             arr.used = used + 1;
             i = i + 1;
-            continue l13;
+            continue l14;
         };
     };
     drop("mem/realloc"(ptr, 16384, 4, 0));
@@ -423,17 +433,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if len_2 == 0 {
         return 0;
     }
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b38: block {
-        l39: loop {
-            break_if b38 i >= len_2;
+    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b39: block {
+        l40: loop {
+            break_if b39 i >= len_2;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l39;
+            continue l40;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(len_2) << 32_i64));
     taken = 0;
     block {
-        l41: loop {
+        l42: loop {
             ptr_15 = ptr_3 + taken;
             count_16 = len_2 - taken;
             result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
@@ -465,7 +475,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_3, len_2, 1, 0));
                 return $sroa_written_result_40;
             }
-            continue l41;
+            continue l42;
         };
     };
 }
@@ -490,22 +500,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 
 fn "core:prelude/types.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::members"() {
     return struct.new "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>" { discriminant: 0, value: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Completed"), used: 9 }, wire_override: ref.null none }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>" { discriminant: 1, value: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Dropped"), used: 7 }, wire_override: ref.null none }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>" { discriminant: 2, value: 2, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Cancelled"), used: 9 }, wire_override: ref.null none };
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::extend"(self, other) {
-    let other_len: i32;
-    let new_used: i32;
-    other_len = other.used;
-    if other_len == 0 {
-        return;
-    }
-    new_used = self.used + other_len;
-    if @unlikely(new_used > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow_to"(self, new_used);
-    }
-    builtin::array_copy<u32>(self.repr, self.used, other.repr, 0, other_len);
-    self.used = new_used;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(self) {
@@ -673,14 +667,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b63: block {
-        l64: loop {
-            break_if b63 i >= digit_count_4;
+    b62: block {
+        l63: loop {
+            break_if b62 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l64;
+            continue l63;
         };
     };
 }

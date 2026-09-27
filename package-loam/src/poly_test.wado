@@ -1,0 +1,129 @@
+use { TreeMap } from "core:collections";
+use { Poly } from "./poly.wado";
+
+fn s(name: String) -> Poly {
+    return Poly::symbol(&name);
+}
+
+fn c(v: i64) -> Poly {
+    return Poly::constant(v);
+}
+
+fn plus(a: Poly, b: Poly) -> Poly {
+    return a.try_add(&b).unwrap();
+}
+
+fn minus(a: Poly, b: Poly) -> Poly {
+    return a.try_sub(&b).unwrap();
+}
+
+fn times(a: Poly, b: Poly) -> Poly {
+    return a.try_mul(&b).unwrap();
+}
+
+test "a length taken from itself is zero, as a causal mask's offset is" {
+    let seq = s("sequence_length");
+    assert minus(seq, seq) == c(0);
+    assert minus(seq, seq).as_constant() == Option::Some(0 as i64);
+}
+
+test "equal polynomials are equal however they were built" {
+    let [a, b] = [
+        s("a"),
+        s("b"),
+    ];
+    assert plus(a, b) == plus(b, a);
+    assert plus(times(a, b), c(1)) == plus(c(1), times(b, a));
+    assert times(plus(a, c(2)), c(3)) == plus(times(a, c(3)), c(6));
+}
+
+test "a monomial divides out of every term" {
+    let [batch, seq] = [
+        s("batch"),
+        s("seq"),
+    ];
+    let total = times(times(batch, seq), c(6));
+    assert total.divided_by(&seq) == Option::Some(times(batch, c(6)));
+    assert total.divided_by(&c(4)) matches { None };
+    assert total.divided_by(&total) == Option::Some(c(1));
+    assert seq.divided_by(&batch) matches { None };
+}
+
+test "a polynomial of no negative coefficient is never negative" {
+    let seq = s("seq");
+    assert plus(seq, c(1)).is_nonnegative();
+    assert !minus(seq, c(1)).is_nonnegative();
+}
+
+test "a negative constant no term can raise is negative for every input" {
+    let seq = s("seq");
+    assert minus(minus(c(0), seq), c(2)).is_negative();
+    assert c(-1).is_negative();
+    assert !minus(c(0), seq).is_negative();
+    assert !minus(seq, c(2)).is_negative();
+}
+
+test "a symbol is an extent, so it is at most i32::MAX" {
+    let [n, m] = [
+        s("n"),
+        s("m"),
+    ];
+    let max = c(i32::MAX as i64);
+    assert minus(max, n).is_nonnegative();
+    assert !minus(minus(max, n), c(1)).is_nonnegative();
+    assert minus(minus(n, max), c(1)).is_negative();
+    assert !minus(times(n, m), max).is_negative();
+}
+
+test "a polynomial renders highest degree first, the constant last" {
+    let [a, b] = [
+        s("a"),
+        s("b"),
+    ];
+    assert `${a}` == "a";
+    assert `${c(0)}` == "0";
+    assert `${c(-3)}` == "-3";
+    assert `${plus(a, c(1))}` == "a + 1";
+    assert `${minus(c(1), a)}` == "-a + 1";
+    assert `${minus(times(times(a, b), c(2)), a)}` == "2 * a * b - a";
+    assert `${times(a, a)}` == "a * a";
+    assert `${c(i64::MIN)}` == "-9223372036854775808";
+}
+
+test "a polynomial spells each symbol as the generated module binds it" {
+    let mut names = TreeMap::<String, String>::new();
+    names["past + 1"] = "past_1";
+    let p = plus(times(s("past + 1"), c(2)), s("seq"));
+    assert p.spelled(&names) == "2 * past_1 + seq";
+}
+
+test "the symbols a polynomial reads are listed once each" {
+    let [a, b] = [
+        s("a"),
+        s("b"),
+    ];
+    assert plus(times(a, b), b).symbols() == ["a", "b"] as List<String>;
+    assert c(4).symbols().is_empty();
+}
+
+test "a polynomial fits i64 where no input carries it, or a step on the way, past i64" {
+    // At N = i32::MAX, 4e9 * N is 8.6e18 and 5e9 * N is 1.07e19.
+    assert times(s("N"), c(4_000_000_000)).fits_i64();
+    assert !times(s("N"), c(5_000_000_000)).fits_i64();
+    // Each term fits, and their sum does not at N = M = i32::MAX.
+    assert !plus(times(s("N"), c(4_000_000_000)), times(s("M"), c(4_000_000_000))).fits_i64();
+    assert !plus(s("N"), c(i64::MAX)).fits_i64();
+    let square = times(s("N"), s("N"));
+    assert times(square, c(2)).fits_i64();
+    assert !times(square, c(3)).fits_i64();
+    assert !times(square, square).fits_i64();
+    // The negative terms answer to i64::MIN and the positive ones to i64::MAX, apart.
+    assert c(i64::MIN).fits_i64();
+    assert plus(s("N"), c(i64::MIN)).fits_i64();
+    assert !minus(c(i64::MIN), s("N")).fits_i64();
+    assert plus(times(s("N"), c(4_000_000_000)), c(-i64::MAX)).fits_i64();
+}
+
+test "a polynomial ending in i64::MIN spells a literal i64 holds" {
+    assert `${plus(s("N"), c(i64::MIN))}` == "N + -9223372036854775808";
+}

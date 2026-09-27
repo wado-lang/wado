@@ -106,14 +106,12 @@ fn encode_impl(data: ByteSlice, table: &ByteList, pad: bool) -> String {
 }
 
 /// Encodes bytes as standard Base64 (RFC 4648 §4, padded).
-#[inline]
 pub fn encode<S: AsByteSlice>(data: &S) -> String {
     return encode_impl(data.as_byte_slice(), &STANDARD_TABLE, true);
 }
 
 /// Encodes bytes as URL-safe Base64 (RFC 4648 §5, no padding).
 /// Equivalent to `encode_with(data, Encoding::UrlSafe | Encoding::NoPadding)`.
-#[inline]
 pub fn encode_url<S: AsByteSlice>(data: &S) -> String {
     return encode_impl(data.as_byte_slice(), &URL_SAFE_TABLE, false);
 }
@@ -200,7 +198,6 @@ fn decode_impl(input: ByteSlice, table: &ByteList, canonical: bool) -> Option<By
 /// Decodes Base64 from text or raw bytes (e.g., HTTP body, file content).
 /// Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
 /// Returns null on invalid input.
-#[inline]
 pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
     return decode_impl(encoded.as_byte_slice(), &DECODE_TABLE, false);
 }
@@ -213,7 +210,6 @@ pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
 /// padding, and a final group whose unused bits are set. One byte string
 /// therefore has exactly one accepted spelling. Use [`decode`] for input from
 /// a producer you do not control.
-#[inline]
 pub fn decode_url_strict<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
     return decode_impl(encoded.as_byte_slice(), &URL_DECODE_TABLE, true);
 }

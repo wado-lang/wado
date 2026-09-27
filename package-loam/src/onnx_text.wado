@@ -239,11 +239,15 @@ fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<Strin
     if !is_build_time(dtype) {
         return Result::Ok(null);
     }
+    let int32 = *dtype == "int32";
     let mut values: List<i64> = [];
     for let text of texts {
         let Ok(v) = i64::from_str(&text) else {
             return Result::Err(`${name}: ${text} is not an integer`);
         };
+        if int32 && !(i32::MIN as i64 <= v <= i32::MAX as i64) {
+            return Result::Err(`${name}: ${text} is not an int32`);
+        }
         values.push(v);
     }
     let elements = if *dtype == "bool" {
@@ -251,7 +255,7 @@ fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<Strin
     } else {
         Elements::Ints(values);
     };
-    return Result::Ok(Option::Some(Known { extents, elements }));
+    return Result::Ok(Option::Some(Known { extents, elements, int32 }));
 }
 
 /// A tensor attribute, which travels whole as the protobuf reader carries it.

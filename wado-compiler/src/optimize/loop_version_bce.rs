@@ -23,8 +23,8 @@ use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, InductionStep, build_copy_bindings, capture_block_binding,
     check_conjuncts, eliminate_condition, induction_entry, induction_step, negated_operand,
-    node_modifies, panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset,
-    peel_capture_block, resolve_panic_ids, stmt_modifies,
+    node_modifies, panic_guard_check, parse_break_guard_head, parse_cmp, parse_const_i64,
+    parse_var_offset, peel_capture_block, resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{DescriptorCache, callee_descriptor};
@@ -39,8 +39,8 @@ use crate::optimize::arena_query::{
 use crate::optimize::mod_ref::compute_fn_effects;
 
 /// A versionable loop: guard `var CMP bound` with in-body panic checks
-/// `var < check_bound`, all three distinct same-typed locals, `bound` /
-/// `check_bound` loop-invariant.
+/// `var < check_bound`, all three distinct same-typed locals (or
+/// `check_bound` a constant), `bound` / `check_bound` loop-invariant.
 struct Plan {
     /// Block holding the `Loop` statement.
     parent: BlockId,
@@ -57,8 +57,8 @@ struct Plan {
     /// `true` for `i <= H` (residual `H < B`), `false` for `i < H`
     /// (residual `H <= B`).
     guard_le: bool,
-    /// Check bound local `B`.
-    check_bound: u32,
+    /// Check bound `B`: a local, or a constant.
+    check_bound: BoundKey,
     /// The floor the checks demand, when it is the residual's to establish.
     floor: Option<RuntimeFloor>,
 }
@@ -259,8 +259,8 @@ fn parse_loop_guard(
 struct Check {
     holder: NodeRef,
     cond: Operand,
-    /// The check's bound local `B`.
-    bound: u32,
+    /// The check's bound `B`: a local, or a constant.
+    bound: BoundKey,
     /// The strongest constant floor the check demands of `var`, or `i64::MIN`
     /// when it demands none.
     floor: i64,
@@ -304,7 +304,7 @@ fn parse_versionable_check(
                 if cvar != var || cj != 0 || bound.is_some() {
                     return None;
                 }
-                bound = Some(parse_raw_local(engine, binds, right)?);
+                bound = Some(parse_check_bound(engine, binds, right)?);
             }
             Conjunct::AtLeast(fvar, foff, f) => {
                 if fvar != var || foff != 0 {
@@ -322,15 +322,20 @@ fn parse_versionable_check(
     })
 }
 
-/// Parse an operand as a direct local read, without resolving through copy
-/// bindings. The check bound must stay the loop-invariant local itself
+/// Parse a check bound as a constant (the length of a list whose size is
+/// known), or else as a direct local read, without resolving through copy
+/// bindings. A local bound must stay the loop-invariant local itself
 /// (typically a licm-hoisted `arr.used` preheader local): the residual
 /// re-reads it before the loop, and a `binds`-resolved form (the underlying
 /// field read) would compare a different representation. A local present as
 /// a `let` initializer target is single-assignment by [`build_copy_bindings`]'
 /// definition; in-loop re-bindings are rejected by `subtree_redefines`.
-fn parse_raw_local(engine: &Engine, binds: &Binds, op: Operand) -> Option<u32> {
-    operand_local(engine.body, peel_capture_block(engine, binds, op))
+fn parse_check_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
+    let op = peel_capture_block(engine, binds, op);
+    if let Some(c) = parse_const_i64(engine, binds, op) {
+        return Some(BoundKey::Const(c));
+    }
+    operand_local(engine.body, op).map(BoundKey::Local)
 }
 
 /// Analyze one loop for versioning. See the module docs for the conditions.
@@ -362,19 +367,21 @@ fn analyze_loop(
     // every collected check before any of them is deleted.
     let demanded = checks.iter().map(|c| c.floor).max()?;
     let b = checks.first()?.bound;
-    if b == h {
+    if b == BoundKey::Local(h) {
         // Same bound as the guard: statically decidable, not our case.
         return None;
     }
     // One consistent signedness for guard, check, and residual comparisons.
     let locals = engine.locals();
     let ty = locals.get(var as usize)?.type_id;
-    if locals.get(h as usize)?.type_id != ty
-        || locals.get(b as usize)?.type_id != ty
-        || !type_table.is_integer(ty)
-    {
+    if locals.get(h as usize)?.type_id != ty || !type_table.is_integer(ty) {
         return None;
     }
+    let b_local = match b {
+        BoundKey::Local(b) if locals.get(b as usize)?.type_id == ty => Some(b),
+        BoundKey::Const(c) if spells_same(type_table, ty, c)? => None,
+        _ => return None,
+    };
     let floor = match demanded {
         i64::MIN => None,
         _ => match induction_entry(engine, binds, parent, loop_stmt, loop_body, var) {
@@ -398,13 +405,14 @@ fn analyze_loop(
     // guard-to-check window scan the same way.
     for &s in &stmts {
         let node = NodeRef::Stmt(s);
-        if node_modifies(engine, node, h, BoundKey::Local(b))
-            || step_local.is_some_and(|sl| node_modifies(engine, node, sl, BoundKey::Local(b)))
+        if node_modifies(engine, node, h, b)
+            || step_local.is_some_and(|sl| node_modifies(engine, node, sl, b))
         {
             return None;
         }
     }
-    if subtree_redefines(engine, loop_body, &[var, h, b, step_local.unwrap_or(h)]) {
+    let watched = [var, h, b_local.unwrap_or(h), step_local.unwrap_or(h)];
+    if subtree_redefines(engine, loop_body, &watched) {
         return None;
     }
     Some(Plan {
@@ -420,6 +428,14 @@ fn analyze_loop(
     })
 }
 
+/// Whether the residual's raw constant bits of `ty` spell `c`: only a value in
+/// `0..=MAX` reads the same in every integer width. `None` for a type with no
+/// integer maximum.
+fn spells_same(type_table: &TypeTable, ty: TypeId, c: i64) -> Option<bool> {
+    let max = type_table.primitive_head(ty)?.int_max()?;
+    Some(u128::try_from(c).is_ok_and(|c| c <= max))
+}
+
 /// The floor terms for a loop whose entry reads as no constant: a step that
 /// never lowers `var`, and the type maximum the no-wrap term compares against.
 fn runtime_floor(
@@ -431,9 +447,7 @@ fn runtime_floor(
     ty: TypeId,
     demanded: i64,
 ) -> Option<RuntimeFloor> {
-    // The residual spells the floor as raw constant bits, which only a
-    // non-negative value reads the same in every integer width.
-    if demanded < 0 {
+    if !spells_same(type_table, ty, demanded)? {
         return None;
     }
     let step = induction_step(engine, binds, loop_body, var)?;
@@ -492,7 +506,14 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     let else_block = engine.alloc_block(vec![slow_stmt], span);
 
     let h_read = local_read(engine, plan.bound, span);
-    let b_read = local_read(engine, plan.check_bound, span);
+    let b_read = match plan.check_bound {
+        BoundKey::Local(b) => local_read(engine, b, span),
+        BoundKey::Const(c) => {
+            let ty = engine.locals()[plan.var as usize].type_id;
+            engine.const_operand(ValueKind::Int(c as u64, ty), ty)
+        }
+        BoundKey::Field(..) => unreachable!("`parse_check_bound` yields a local or a constant"),
+    };
     let op = if plan.guard_le {
         NirBinaryOp::Lt
     } else {

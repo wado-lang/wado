@@ -91,8 +91,10 @@ and cut every sentence a reader would skip.
 ## After opening
 
 Subscribe to the PR with `subscribe_pr_activity`. Handle every event it
-delivers; skipping one is a decision you state. If the tool is unavailable, say
-so when reporting the PR rather than implying you are watching it.
+delivers; skipping one is a decision you state.
+
+If the tool is unavailable, check the PR status and its review comments every
+10 minutes instead. Stop once the review has settled and CI passes.
 
 Keep checking mergeability (`mergeable_state`). If conflicting, resolve it with
 the `git-upstream-sync` skill.

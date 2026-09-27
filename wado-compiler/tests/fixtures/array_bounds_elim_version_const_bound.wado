@@ -1,0 +1,29 @@
+// Loop-versioned BCE against a constant check bound: `xs` is a local list of
+// known length, so the check reads `i < 11` while the guard bound `limit` is
+// opaque. The loop is versioned on `limit < 11`, and the fast arm's constant
+// fill collapses to one `array.fill`, as with a runtime length
+// (`array_bounds_elim_version_fill_wir.wado`).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(11, 0);
+    let limit = builtin::black_box(10);
+    for let mut i = 0; i <= limit; i += 1 {
+        xs[i] = 7;
+    }
+    let mut sum = 0;
+    for let mut n = 0; n <= limit; n += 1 {
+        sum += xs[n];
+    }
+    println(`${sum}`);
+}
+
+__DATA__
+{
+    "stdout": "77\n",
+    "wir_expect:O2": [
+        "limit < 11",
+        "builtin::array_fill<i32>("
+    ]
+}

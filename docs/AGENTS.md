@@ -46,9 +46,6 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - Roadmap: What will be done, in order
 - Known gaps: What is missing, whether or not it will be closed
 
-A WEP keeps its history. Alternatives weighed, how the design changed, and the
-checklist and roadmap entries that landed stay in it.
-
 Once a design settles, its rules move to the specification, and the WEP stops
 being where a reader looks a rule up. Where a WEP and the specification
 disagree, the specification holds.
@@ -65,8 +62,7 @@ however small, for the human to settle.
 A WEP is a policy, not a law. Keep looking for a better way than the one it
 states, and propose one when you find it: adopting it is still the human's
 call. A statement the work shows to be impossible is the WEP's to change, not
-the code's to work around. Correct it to what is true, and keep what it said
-and why it could not hold, as the WEP keeps the rest of its history.
+the code's to work around. Correct it to what is true.
 
 Roadmap and Known gaps split on commitment, not on size. A roadmap item will be
 done, so it is ordered and each entry says what finishing it means. A known gap

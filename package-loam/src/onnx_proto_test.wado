@@ -6,6 +6,11 @@ use onnx from "./onnx.proto"
 use { Elements, Graph, Known, ReadError } from "./graph.wado";
 use { read, read_tensor } from "./onnx_proto.wado";
 
+/// A `data_type` or `elem_type` field naming `t`.
+fn typed(t: onnx::TensorProtoDataType) -> Option<i32> {
+    return Option::Some(t.number());
+}
+
 fn graph_of(bytes: ByteList) -> Graph {
     return match read(bytes) {
         Ok(g) => g,
@@ -96,7 +101,7 @@ test "a bare TensorProto is the shape the backend test data stores" {
 test "a model round-trips through the declarations" {
     let weight = onnx::TensorProto {
         dims: [4, 2],
-        data_type: Option::Some(1),
+        data_type: typed(Float),
         name: Option::Some("W"),
         float_data: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
     };
@@ -104,7 +109,7 @@ test "a model round-trips through the declarations" {
         name: Option::Some("X"),
         type: Option::Some(onnx::TypeProto {
             value: Option::Some(onnx::TypeProtoValue::TensorType(onnx::TypeProtoTensor {
-                elem_type: Option::Some(1),
+                elem_type: typed(Float),
                 shape: Option::Some(
                     onnx::TensorShapeProto {
                         dim: [
@@ -168,7 +173,7 @@ fn read_initializer_of(weight: onnx::TensorProto) -> Result<Graph, ReadError> {
 
 test "a rank-0 tensor is a scalar, as the textual reader reads one" {
     let g = read_initializer_of(onnx::TensorProto {
-        data_type: Option::Some(1),
+        data_type: typed(Float),
         name: Option::Some("S"),
         float_data: [2.0],
     }).unwrap();
@@ -179,7 +184,7 @@ test "a rank-0 tensor is a scalar, as the textual reader reads one" {
 test "a half initializer's elements come out of the low half of int32_data" {
     let g = read_initializer_of(onnx::TensorProto {
         dims: [2],
-        data_type: Option::Some(10),
+        data_type: typed(Float16),
         name: Option::Some("H"),
         int32_data: [0x3c00, 0xc100],
     }).unwrap();
@@ -190,7 +195,7 @@ test "a half initializer's elements come out of the low half of int32_data" {
 test "a half's int32_data entry past sixteen bits names itself" {
     let e = read_initializer_of(onnx::TensorProto {
         dims: [1],
-        data_type: Option::Some(16),
+        data_type: typed(Bfloat16),
         name: Option::Some("H"),
         int32_data: [70000],
     }).unwrap_err().reason;
@@ -201,7 +206,7 @@ test "a half's int32_data entry past sixteen bits names itself" {
 test "an initializer carrying no data is left to the checkpoint" {
     let g = read_initializer_of(onnx::TensorProto {
         dims: [2],
-        data_type: Option::Some(1),
+        data_type: typed(Float),
         name: Option::Some("W"),
     }).unwrap();
 
@@ -211,7 +216,7 @@ test "an initializer carrying no data is left to the checkpoint" {
 test "an initializer whose data disagrees with its shape names itself" {
     let e = read_initializer_of(onnx::TensorProto {
         dims: [2],
-        data_type: Option::Some(1),
+        data_type: typed(Float),
         name: Option::Some("W"),
         float_data: [1.0, 2.0, 3.0],
     }).unwrap_err().reason;
@@ -241,7 +246,7 @@ test "an element type outside the mapping names itself" {
                     name: Option::Some("X"),
                     type: Option::Some(onnx::TypeProto {
                         value: Option::Some(onnx::TypeProtoValue::TensorType(onnx::TypeProtoTensor {
-                            elem_type: Option::Some(21),
+                            elem_type: typed(Uint4),
                         })),
                     }),
                 },

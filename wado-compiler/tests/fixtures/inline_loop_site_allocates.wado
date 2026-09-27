@@ -1,0 +1,40 @@
+// A call inside a loop admits a callee at a higher price only when the callee
+// reaches no safepoint. `store_cell` allocates a `Cell`, where the collector
+// may run and move every reference the loop holds, so `fill` keeps the call
+// although the price alone would admit it (`inline_loop_site.wado`).
+
+struct Cell {
+    code: i32,
+    width: i32,
+}
+
+fn store_cell(out: &mut Array<Cell>, i: i32, b: i32) {
+    let width = if b < 0x80 { 1 } else if b < 0xE0 { 2 } else if b < 0xF0 { 3 } else { 4 };
+    let code = if width == 1 { b } else if width == 2 { b & 0x1F } else if width == 3 { b & 0x0F } else { b & 0x07 };
+    out[i] = Cell { code, width };
+}
+
+#[inline(never)]
+fn fill(bytes: &List<u8>) -> Array<Cell> {
+    let mut out: Array<Cell> = builtin::array_new(bytes.len());
+    for let i of 0..<bytes.len() {
+        store_cell(&mut out, i, bytes[i] as i32);
+    }
+    return out;
+}
+
+export fn run() {
+    let literal: List<u8> = b"A\xC3\xE2\xF0";
+    let cells = fill(&builtin::black_box(literal));
+    assert cells[0].code == 0x41;
+    assert cells[1].width == 2;
+    assert cells[2].code == 0x02;
+    assert cells[3].width == 4;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "inline_loop_site_allocates.wado/fill",
+    "wir_expect:O2": ["\"inline_loop_site_allocates.wado/store_cell\"("]
+}

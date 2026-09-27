@@ -643,29 +643,29 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $load_4 + 4);
     }
-    self.used = local.tee $load_6(self.used) + $inline_encode_char_6: block -> i32 {
+    self.used = local.tee $load_6(self.used) + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         pos = $load_6;
         if c <u 128 {
             builtin::array_set_u8(repr, pos, c & 255);
-            break $inline_encode_char_6: 1;
+            break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
             builtin::array_set_u8(repr, pos, (192 | (c >>u 6)) & 255);
             builtin::array_set_u8(repr, pos + 1, (128 | (c & 63)) & 255);
-            break $inline_encode_char_6: 2;
+            break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
             builtin::array_set_u8(repr, pos, (224 | (c >>u 12)) & 255);
             builtin::array_set_u8(repr, pos + 1, (128 | ((c >>u 6) & 63)) & 255);
             builtin::array_set_u8(repr, pos + 2, (128 | (c & 63)) & 255);
-            break $inline_encode_char_6: 3;
+            break $inline_encode_char_0: 3;
         }
         builtin::array_set_u8(repr, pos, (240 | (c >>u 18)) & 255);
         builtin::array_set_u8(repr, pos + 1, (128 | ((c >>u 12) & 63)) & 255);
         builtin::array_set_u8(repr, pos + 2, (128 | ((c >>u 6) & 63)) & 255);
         builtin::array_set_u8(repr, pos + 3, (128 | (c & 63)) & 255);
-        break $inline_encode_char_6: 4;
+        break $inline_encode_char_0: 4;
     };
 }
 
@@ -720,69 +720,69 @@ fn "spec_traits_parse_decls.wado/spec_traits_parse_decls.wado/Flag^spec_traits_p
 fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(iter) {
     let s: ref "core:prelude/string.wado//String";
     let v_8: ref "core:prelude/string.wado//StrCharIter";
+    let $fused_slot_17: char;
+    let $fused_slot_18: char;
+    let $sroa_$iter_0_f_20: ref struct;
     let b0: u32;
-    let b1_19: u32;
-    let b1_20: u32;
-    let b2_21: u32;
-    let b1_22: u32;
-    let b2_23: u32;
+    let b1_26: u32;
+    let b1_27: u32;
+    let b2_28: u32;
+    let b1_29: u32;
+    let b2_30: u32;
     let b3: u32;
-    let $sroa_slot_40: u32;
-    let $sroa_slot_41: i32;
-    let $fused_slot_42: char;
-    let $fused_slot_43: char;
-    let $sroa_$iter_0_f_45: ref struct;
-    let $sroa_$sroa_$iter_0_inner_44_repr_48: ref Array<u8>;
-    let $sroa_$sroa_$iter_0_inner_44_used_49: i32;
-    let $sroa_$sroa_$iter_0_inner_44_byte_index_50: i32;
+    let $sroa_slot_46: u32;
+    let $sroa_slot_47: i32;
+    let $sroa_$sroa_$iter_0_inner_19_repr_48: ref Array<u8>;
+    let $sroa_$sroa_$iter_0_inner_19_used_49: i32;
+    let $sroa_$sroa_$iter_0_inner_19_byte_index_50: i32;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
     v_8 = iter.inner;
-    $sroa_$sroa_$iter_0_inner_44_repr_48 = v_8.repr;
-    $sroa_$sroa_$iter_0_inner_44_used_49 = v_8.used;
-    $sroa_$sroa_$iter_0_inner_44_byte_index_50 = v_8.byte_index;
-    $sroa_$iter_0_f_45 = iter.f;
+    $sroa_$sroa_$iter_0_inner_19_repr_48 = v_8.repr;
+    $sroa_$sroa_$iter_0_inner_19_used_49 = v_8.used;
+    $sroa_$sroa_$iter_0_inner_19_byte_index_50 = v_8.byte_index;
+    $sroa_$iter_0_f_20 = iter.f;
     b64: block {
         l65: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_char__core_prelude_traits_wado_Iterator__next_4: block {
                 $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_5: block {
-                    break_if $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_5 $sroa_$sroa_$iter_0_inner_44_byte_index_50 >= $sroa_$sroa_$iter_0_inner_44_used_49;
-                    $sroa_slot_40 = 0;
-                    $sroa_slot_41 = 0;
-                    $inline_decode_char_at_6: block {
-                        b0 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_44_repr_48, $sroa_$sroa_$iter_0_inner_44_byte_index_50);
+                    break_if $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_5 $sroa_$sroa_$iter_0_inner_19_byte_index_50 >= $sroa_$sroa_$iter_0_inner_19_used_49;
+                    $sroa_slot_46 = 0;
+                    $sroa_slot_47 = 0;
+                    $inline_decode_char_at_0: block {
+                        b0 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_19_repr_48, $sroa_$sroa_$iter_0_inner_19_byte_index_50);
                         if b0 <u 128 {
-                            $sroa_slot_40 = b0;
-                            $sroa_slot_41 = 1;
-                            break $inline_decode_char_at_6;
+                            $sroa_slot_46 = b0;
+                            $sroa_slot_47 = 1;
+                            break $inline_decode_char_at_0;
                         }
                         if b0 <u 224 {
-                            b1_19 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_44_repr_48, $sroa_$sroa_$iter_0_inner_44_byte_index_50 + 1);
-                            $sroa_slot_40 = ((b0 & 31) << 6) | (b1_19 & 63);
-                            $sroa_slot_41 = 2;
-                            break $inline_decode_char_at_6;
+                            b1_26 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_19_repr_48, $sroa_$sroa_$iter_0_inner_19_byte_index_50 + 1);
+                            $sroa_slot_46 = ((b0 & 31) << 6) | (b1_26 & 63);
+                            $sroa_slot_47 = 2;
+                            break $inline_decode_char_at_0;
                         }
                         if b0 <u 240 {
-                            b1_20 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_44_repr_48, $sroa_$sroa_$iter_0_inner_44_byte_index_50 + 1);
-                            b2_21 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_44_repr_48, $sroa_$sroa_$iter_0_inner_44_byte_index_50 + 2);
-                            $sroa_slot_40 = (((b0 & 15) << 12) | ((b1_20 & 63) << 6)) | (b2_21 & 63);
-                            $sroa_slot_41 = 3;
-                            break $inline_decode_char_at_6;
+                            b1_27 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_19_repr_48, $sroa_$sroa_$iter_0_inner_19_byte_index_50 + 1);
+                            b2_28 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_19_repr_48, $sroa_$sroa_$iter_0_inner_19_byte_index_50 + 2);
+                            $sroa_slot_46 = (((b0 & 15) << 12) | ((b1_27 & 63) << 6)) | (b2_28 & 63);
+                            $sroa_slot_47 = 3;
+                            break $inline_decode_char_at_0;
                         }
-                        b1_22 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_44_repr_48, $sroa_$sroa_$iter_0_inner_44_byte_index_50 + 1);
-                        b2_23 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_44_repr_48, $sroa_$sroa_$iter_0_inner_44_byte_index_50 + 2);
-                        b3 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_44_repr_48, $sroa_$sroa_$iter_0_inner_44_byte_index_50 + 3);
-                        $sroa_slot_40 = ((((b0 & 7) << 18) | ((b1_22 & 63) << 12)) | ((b2_23 & 63) << 6)) | (b3 & 63);
-                        $sroa_slot_41 = 4;
-                        break $inline_decode_char_at_6;
+                        b1_29 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_19_repr_48, $sroa_$sroa_$iter_0_inner_19_byte_index_50 + 1);
+                        b2_30 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_19_repr_48, $sroa_$sroa_$iter_0_inner_19_byte_index_50 + 2);
+                        b3 = builtin::array_get_value<u8>($sroa_$sroa_$iter_0_inner_19_repr_48, $sroa_$sroa_$iter_0_inner_19_byte_index_50 + 3);
+                        $sroa_slot_46 = ((((b0 & 7) << 18) | ((b1_29 & 63) << 12)) | ((b2_30 & 63) << 6)) | (b3 & 63);
+                        $sroa_slot_47 = 4;
+                        break $inline_decode_char_at_0;
                     };
-                    $sroa_$sroa_$iter_0_inner_44_byte_index_50 = $sroa_$sroa_$iter_0_inner_44_byte_index_50 + $sroa_slot_41;
-                    $fused_slot_42 = $sroa_slot_40;
-                    $fused_slot_43 = block -> char {
+                    $sroa_$sroa_$iter_0_inner_19_byte_index_50 = $sroa_$sroa_$iter_0_inner_19_byte_index_50 + $sroa_slot_47;
+                    $fused_slot_17 = $sroa_slot_46;
+                    $fused_slot_18 = block -> char {
                         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"($sroa_$iter_0_f_45);
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, $fused_slot_42);
+                        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"($sroa_$iter_0_f_20);
+                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, $fused_slot_17);
                     };
-                    "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $fused_slot_43);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $fused_slot_18);
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_char__core_prelude_traits_wado_Iterator__next_4;
                 };
                 break b64;

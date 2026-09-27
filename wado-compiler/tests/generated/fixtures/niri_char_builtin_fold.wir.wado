@@ -83,7 +83,7 @@ global global:niri_char_builtin_fold.wado::$const_obj_1: ref null Array<u8> = ar
 fn "niri_char_builtin_fold.wado/run"() with Stdout {
     let c_1: char;
     let eq: bool;
-    let $local_3: ref "core:prelude/string.wado//String";
+    let $local_3_3: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let self_21: ref "core:prelude/string.wado//String";
@@ -91,19 +91,19 @@ fn "niri_char_builtin_fold.wado/run"() with Stdout {
     let rx_43: i32;
     let tx_44: i32;
     eq = (local.tee c_1(black_box(81) & 127) | (((c_1 - 65) <u 26) * 32)) == 113;
-    $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
+    $local_3_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3_3 };
     self_21 = $local_4_4.buf;
     self_21.used = 1;
     builtin::array_set_u8(self_21.repr, 0, 107);
-    $local_3.used = 2;
-    builtin::array_copy<u8>($local_3.repr, 1, global:niri_char_builtin_fold.wado::$const_obj_1, 0, 1);
-    $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
+    $local_3_3.used = 2;
+    builtin::array_copy<u8>($local_3_3.repr, 1, global:niri_char_builtin_fold.wado::$const_obj_1, 0, 1);
+    $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(eq, $local_4_4.buf);
     rx_43 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_44 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "niri_char_builtin_fold.wado/$cm_binding__Stdout_write_via_stream"(rx_43);
-    "core:rt/write_string_to_stream"(tx_44, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream"(tx_44, $local_3_3.repr, $local_3_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 

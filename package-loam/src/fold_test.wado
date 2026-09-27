@@ -2,8 +2,9 @@
 
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
-use { fold } from "./fold.wado";
+use { axis_indices, fold } from "./fold.wado";
 use { Attr, Elements, Known, Node } from "./graph.wado";
+use { Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 
 fn ints(extents: List<i32>, values: List<i64>) -> Known {
@@ -39,7 +40,7 @@ fn knowns(entries: List<[String, Known]>) -> TreeMap<String, Known> {
 fn runtime(extents: List<i32>) -> TreeMap<String, Shape> {
     let mut axes: List<Axis> = [];
     for let [i, e] of extents.into_iter().enumerate() {
-        let extent = if e < 0 { Extent::Symbol("N") } else { Extent::Static(e) };
+        let extent = if e < 0 { Extent::symbol(&"N") } else { Extent::Static(e) };
         axes.push(Axis { name: `A${i}`, extent });
     }
     let mut shapes = TreeMap::<String, Shape>::new();
@@ -63,9 +64,110 @@ test "Shape takes start and end" {
     assert folded(n, knowns([])) == ints([2], [3, 4]);
 }
 
-test "Shape of a symbolic extent is refused" {
-    let e = fold(&node("Shape", ["X"], []), &knowns([]), &runtime([-1, 3])).unwrap_err();
-    assert e == "axis A0 is N, and Shape reads static extents";
+test "Shape of a symbolic extent holds the symbol" {
+    let k = fold(&node("Shape", ["X"], []), &knowns([]), &runtime([-1, 3])).unwrap().unwrap();
+    assert k == Known {
+        extents: [2],
+        elements: Elements::integers([
+            Poly::symbol(&"N"),
+            Poly::constant(3),
+        ]),
+    };
+}
+
+test "shape arithmetic over a symbol folds as a polynomial" {
+    let k = knowns([
+        [
+            "S",
+            Known {
+                extents: [1],
+                elements: Elements::integers([Poly::symbol(&"N")]),
+            },
+        ],
+        ["T", ints([1], [4])],
+    ]);
+    let product = folded(node("Mul", ["S", "T"], []), k);
+    assert product == Known {
+        extents: [1],
+        elements: Elements::integers([Poly::symbol(&"N").try_mul(&Poly::constant(4)).unwrap()]),
+    };
+    let gone = folded(node("Sub", ["S", "S"], []), k);
+    assert gone == ints([1], [0]);
+}
+
+test "a quotient the build cannot show exact stops it" {
+    let k = knowns([
+        [
+            "S",
+            Known {
+                extents: [1],
+                elements: Elements::integers([Poly::symbol(&"N")]),
+            },
+        ],
+        ["T", ints([1], [2])],
+    ]);
+    assert fold(&node("Div", ["S", "T"], []), &k, &runtime([])).unwrap_err() == "N / 2 is not a quotient the build can show exact";
+    // N may be 0, where ONNX divides by zero.
+    assert fold(&node("Div", ["S", "S"], []), &k, &runtime([])).unwrap_err() == "N / N is not a quotient the build can show exact";
+}
+
+test "an axis list naming one axis twice, once from the end, stops the build" {
+    assert axis_indices(&[0, -1], 3).unwrap() == [0, 2];
+    assert axis_indices(&[0, -2], 2).unwrap_err() == "axis -2 is listed twice";
+}
+
+test "integer arithmetic past i64 stops the build rather than wrapping" {
+    let k = knowns([
+        ["S", ints([1], [i64::MAX])],
+        ["T", ints([1], [2])],
+    ]);
+    assert fold(&node("Mul", ["S", "T"], []), &k, &runtime([])).unwrap_err() == "9223372036854775807 Mul 2 leaves i64";
+}
+
+test "numbers beside a symbol divide as numbers do" {
+    let k = knowns([
+        [
+            "S",
+            Known {
+                extents: [2],
+                elements: Elements::integers([
+                    Poly::symbol(&"N"),
+                    Poly::constant(7),
+                ]),
+            },
+        ],
+        ["T", ints([2], [1, 2])],
+    ]);
+    let quotient = folded(node("Div", ["S", "T"], []), k);
+    assert quotient == Known {
+        extents: [2],
+        elements: Elements::integers([
+            Poly::symbol(&"N"),
+            Poly::constant(3),
+        ]),
+    };
+}
+
+test "a Range or Slice bound only the run knows leaves the node to the run" {
+    let k = knowns([
+        ["Zero", ints([], [0])],
+        [
+            "N",
+            Known { extents: [], elements: Elements::integers([Poly::symbol(&"N")]) },
+        ],
+        ["One", ints([], [1])],
+        [
+            "Ends",
+            Known {
+                extents: [1],
+                elements: Elements::integers([Poly::symbol(&"N")]),
+            },
+        ],
+        ["Starts", ints([1], [0])],
+        ["M", ints([4], [1, 2, 3, 4])],
+    ]);
+    assert fold(&node("Range", ["Zero", "N", "One"], []), &k, &runtime([])).unwrap() matches { None };
+    assert fold(&node("Slice", ["M", "Starts", "Ends"], []), &k, &runtime([])).unwrap() matches { None };
 }
 
 test "Gather with a scalar index drops the axis" {
@@ -141,6 +243,17 @@ test "Slice steps backwards" {
     assert folded(node("Slice", ["S", "B", "E", "X0", "St"], []), k) == ints([2], [4, 2]);
 }
 
+test "Slice steps backwards over an empty axis to nothing" {
+    let k = knowns([
+        ["S", ints([0], [])],
+        ["B", ints([1], [-1])],
+        ["E", ints([1], [i64::MIN])],
+        ["X0", ints([1], [0])],
+        ["St", ints([1], [-1])],
+    ]);
+    assert folded(node("Slice", ["S", "B", "E", "X0", "St"], []), k) == ints([0], []);
+}
+
 test "Slice of a bool mask takes the corner the ends name" {
     let mut mask: List<bool> = [];
     for let r of 0..<4 {
@@ -178,6 +291,24 @@ test "Cast turns an extent into a float the scale is computed in" {
     assert folded(node("Pow", ["D", "H"], []), k2) == floats([], [f32::sqrt(8.0)]);
 }
 
+test "Cast to int32 keeps a known integer's low 32 bits beside a symbolic one" {
+    let n = Poly::symbol(&"N");
+    let k = knowns([
+        [
+            "D",
+            Known {
+                extents: [2],
+                elements: Elements::Symbolic([n, Poly::constant(5000000000)]),
+            },
+        ],
+    ]);
+    assert folded(node("Cast", ["D"], [attr("to", ["6"])]), k) == Known {
+        extents: [2],
+        elements: Elements::Symbolic([n, Poly::constant(705032704)]),
+        int32: true,
+    };
+}
+
 test "integer arithmetic broadcasts" {
     let k = knowns([
         ["A", ints([2], [5, 7])],
@@ -193,6 +324,44 @@ test "Range counts from start to limit" {
         ["D", ints([], [1])],
     ]);
     assert folded(node("Range", ["S", "L", "D"], []), k) == ints([4], [0, 1, 2, 3]);
+}
+
+test "a step past the span takes one element, however large the step" {
+    let up = knowns([
+        ["S", ints([], [0])],
+        ["L", ints([], [5])],
+        ["D", ints([], [i64::MAX])],
+    ]);
+    assert folded(node("Range", ["S", "L", "D"], []), up) == ints([1], [0]);
+    let down = knowns([
+        ["S", ints([], [5])],
+        ["L", ints([], [0])],
+        ["D", ints([], [i64::MIN])],
+    ]);
+    assert folded(node("Range", ["S", "L", "D"], []), down) == ints([1], [5]);
+    let sliced = knowns([
+        ["X", ints([5], [0, 1, 2, 3, 4])],
+        ["B", ints([1], [0])],
+        ["E", ints([1], [5])],
+        ["A", ints([1], [0])],
+        ["P", ints([1], [i64::MAX])],
+    ]);
+    assert folded(node("Slice", ["X", "B", "E", "A", "P"], []), sliced) == ints([1], [0]);
+}
+
+test "a Range longer than any list is refused before it is counted out" {
+    let ints_range = knowns([
+        ["S", ints([], [0])],
+        ["L", ints([], [3_000_000_000])],
+        ["D", ints([], [1])],
+    ]);
+    assert fold(&node("Range", ["S", "L", "D"], []), &ints_range, &runtime([])).unwrap_err() == "3000000000 elements are more than a list holds";
+    let floats_range = knowns([
+        ["S", floats([], [0.0])],
+        ["L", floats([], [3.0e9])],
+        ["D", floats([], [1.0])],
+    ]);
+    assert fold(&node("Range", ["S", "L", "D"], []), &floats_range, &runtime([])).unwrap_err() == "3000000000 elements are more than a list holds";
 }
 
 test "Range with a zero float delta is refused" {
@@ -217,6 +386,15 @@ test "Reshape infers the one negative extent" {
         ["T", ints([2], [1, -1])],
     ]);
     assert folded(node("Reshape", ["D", "T"], []), k) == ints([1, 4], [0, 1, 2, 3]);
+}
+
+test "a Reshape -1 beside extents multiplying to 0 is refused, as ONNX leaves it no extent" {
+    let k = knowns([
+        ["D", ints([0, 4], [])],
+        ["T", ints([2], [0, -1])],
+    ]);
+    let e = fold(&node("Reshape", ["D", "T"], []), &k, &runtime([2])).unwrap_err();
+    assert e == "the target shape [0, -1] leaves -1 no extent, since the rest multiply to 0";
 }
 
 test "a Reshape target no list can hold is refused, even where its product wraps to the count" {

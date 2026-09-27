@@ -1,11 +1,12 @@
 ---
 name: git-upstream-sync
-description: Merge origin/main into the current branch and resolve conflicts, regenerating conflicted golden/generated files. Use when a PR has merge conflicts or the branch is behind origin/main.
+description: The only way to merge origin/main into a branch, conflicts or not. Use it every time main comes in — a PR reported conflicting or DIRTY, a branch behind origin/main, a CI failure to reproduce on the merged tree. Never run `git merge origin/main` or `git pull origin main` by hand.
 ---
 
 # Overview
 
-Resolve GitHub PR conflicts by merging origin/main into the current branch.
+Merge origin/main into the current branch. Follow every step whether or not the
+merge conflicts: a clean merge still ends with the sanity check.
 
 ## Procedure
 
