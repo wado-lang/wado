@@ -858,14 +858,8 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // ATN-class detection: the static suffix-first dispatch mis-commits when
     // an atom alt recursively references this rule with a trailing literal
     // that overlaps an LR suffix-first (the `'between' expr 'and' expr`
-<<<<<<< HEAD
-    // shape), or when a suffix can open on a `.` / `~X`.
-||||||| 9b52d7a43
-    // shape), or when a suffix is `.` / `~X`-led (empty static suffix-first).
-=======
-    // shape), when a suffix is `.` / `~X`-led (empty static suffix-first), or
-    // when a self-ref nested in a suffix's subrule can meet a loop operator.
->>>>>>> worktree-agent-a80b3309ceab67b82
+    // shape), when a suffix can open on a `.` / `~X`, or when a self-ref
+    // nested in a suffix's subrule can meet a loop operator.
     // Route such a rule's loop-entry through the runtime simulator.
     let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
     let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes);

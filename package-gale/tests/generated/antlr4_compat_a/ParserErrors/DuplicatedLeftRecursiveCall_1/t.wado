@@ -1427,6 +1427,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
+        let _lr_pos0 = p.pos;
         if _sk == TK_LIT_x {
             if 1 >= min_prec {
                 if scan_expr_lr_1(&p.kinds, p.pos) < 0 {
@@ -1440,6 +1441,9 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 break;
             }
         } else {
+            break;
+        }
+        if p.pos == _lr_pos0 {
             break;
         }
     }
