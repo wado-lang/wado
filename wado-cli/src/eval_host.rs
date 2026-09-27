@@ -9,7 +9,7 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
-use tokio::sync::{OnceCell, OwnedSemaphorePermit, Semaphore, oneshot};
+use tokio::sync::{OnceCell, OwnedSemaphorePermit, Semaphore, TryAcquireError, oneshot};
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Engine, GcHeapOutOfMemory, ResourceLimiter, Store, Trap};
 use wasmtime_wasi::cli::{WasiCli, WasiCliView};
@@ -123,18 +123,24 @@ pub struct EvalHost {
     /// The runner's CPU budget. A compile takes its caller's permit, and the
     /// caller waits here for a fresh one.
     cpu: Arc<Semaphore>,
+    /// How many of `cpu`'s permits compiles past the limit may keep: one fewer
+    /// than the budget, so compiles that never end cannot stall the run.
+    strandable: Arc<Semaphore>,
 }
 
 impl EvalHost {
     /// A host compiling at the test's `-O` and with its `-f` flags, on permits
-    /// of `cpu`. `--no-cache` skips reading the outcome cache.
+    /// of `cpu`, which holds `parallelism` of them. `--no-cache` skips reading
+    /// the outcome cache.
     #[must_use]
-    pub fn new(knobs: &CompileKnobs, cpu: Arc<Semaphore>) -> Self {
+    pub fn new(knobs: &CompileKnobs, cpu: Arc<Semaphore>, parallelism: usize) -> Self {
+        assert!(parallelism > 0, "a CPU budget of zero never runs anything");
         Self {
             knobs: knobs.clone(),
             engine: OnceLock::new(),
             slots: Mutex::new(IndexMap::default()),
             cpu,
+            strandable: Arc::new(Semaphore::new(parallelism - 1)),
         }
     }
 
@@ -227,8 +233,10 @@ impl EvalHost {
     /// the limit that thread is abandoned, not stopped: nothing can interrupt a
     /// compile. It is not one of the runtime's blocking threads, which the
     /// runtime would wait for when `wado test` shuts it down. The thread takes
-    /// the caller's CPU permit and keeps it until it ends, and the caller waits
-    /// for a fresh one, so abandoned threads and running tests share one budget.
+    /// the caller's CPU permit, and the caller waits for a fresh one, so
+    /// abandoned threads and running tests share one budget. An abandoned
+    /// thread keeps the permit while [`Self::strandable`] allows, and gives it
+    /// back past that.
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
     /// the host, so it carries on into the calling test, which reports it.
@@ -238,21 +246,40 @@ impl EvalHost {
             codegen_flags: self.knobs.codegen_flags.clone(),
             ..CompilerOptions::default()
         };
-        let permit = cpu.take().expect("the caller holds its CPU permit");
-        let report =
-            tokio::time::timeout(COMPILE_TIME_LIMIT, spawn_compile(source, options, permit));
-        let compiled = match report.await {
-            Ok(report) => report
-                .expect("the compile thread reports before it exits")
-                .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
-            Err(_) => Compiled::TimedOut,
-        };
+        let held = Arc::new(Mutex::new(vec![
+            cpu.take().expect("the caller holds its CPU permit"),
+        ]));
+        let report = tokio::time::timeout(
+            COMPILE_TIME_LIMIT,
+            spawn_compile(source, options, Arc::clone(&held)),
+        );
+        let compiled = report.await.map_or_else(
+            |_elapsed| {
+                self.abandon(&held);
+                Compiled::TimedOut
+            },
+            |report| {
+                report
+                    .expect("the compile thread reports before it exits")
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            },
+        );
         let permit = Arc::clone(&self.cpu)
             .acquire_owned()
             .await
             .expect("the CPU semaphore is never closed");
         *cpu = Some(permit);
         compiled
+    }
+
+    /// Leave `held` to a compile past the limit, with a strand permit beside its
+    /// CPU permit, or with neither once [`Self::strandable`] runs out.
+    fn abandon(&self, held: &Mutex<Vec<OwnedSemaphorePermit>>) {
+        match Arc::clone(&self.strandable).try_acquire_owned() {
+            Ok(strand) => lock(held).push(strand),
+            Err(TryAcquireError::NoPermits) => lock(held).clear(),
+            Err(TryAcquireError::Closed) => unreachable!("the strand semaphore is never closed"),
+        }
     }
 
     fn engine(&self) -> &(Engine, Linker<Program>) {
@@ -271,19 +298,19 @@ enum Compiled {
     TimedOut,
 }
 
-/// Compile `source` on a thread that holds `permit` until it ends, and report
+/// Compile `source` on a thread that holds `held` until it ends, and report
 /// the outcome, or the panic that ended it, on the returned channel.
 fn spawn_compile(
     source: String,
     options: CompilerOptions,
-    permit: OwnedSemaphorePermit,
+    held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
 ) -> oneshot::Receiver<std::thread::Result<Compiled>> {
     let (report, compiled) = oneshot::channel();
     std::thread::Builder::new()
         .name("eval-compile".to_string())
         .stack_size(COMPILER_STACK_SIZE)
         .spawn(move || {
-            let _permit = permit;
+            let _held = held;
             let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
                 // A host with no sources: the program is one module, and
                 // nothing on the host's disk is read.

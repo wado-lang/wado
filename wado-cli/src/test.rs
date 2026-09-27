@@ -2312,7 +2312,6 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // load workers on top of internal Cranelift threading thrashes
     // more than it helps. The shared cpu semaphore enforces the
     // cross-stage total either way.
-    assert!(jobs > 0, "a CPU budget of zero never runs anything");
     let cpu = Arc::new(Semaphore::new(jobs));
     let compile_jobs = jobs;
     let load_jobs = (jobs / 2).max(1);
@@ -2330,7 +2329,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
-    let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&cpu)));
+    let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&cpu), jobs));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
