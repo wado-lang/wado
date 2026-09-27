@@ -19,6 +19,7 @@ use {
     infer,
 } from "./infer.wado";
 use { read } from "./onnx_text.wado";
+use { Poly } from "./poly.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 use { ExtentConflict } from "./shape.wado";
 
@@ -830,32 +831,61 @@ test "a Reshape target that changes the element count stops the build" {
     assert e == "Y = Reshape: 24 elements cannot take the shape [5, 5]";
 }
 
-/// What the inputs owe a graph whose `Y` slices an axis of 8 from `start` to
-/// `end`, each an expression of `X`'s length `N`.
-fn owed_by_slice(start: String, end: String) -> Result<List<String>, String> {
-    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+/// The axis of `Y`, which slices an axis of 8 from `start` to `end` by `step`,
+/// each an expression of `X`'s length `N`. The inputs owe nothing for it.
+fn sliced(start: String, end: String, step: String = "One") -> String {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[1] Three = {3}, int64[1] Back = {-1}> {
         S = Shape(X)
-        Y = Slice(M, ${start}, ${end})
+        Y = Slice(M, ${start}, ${end}, Z, ${step})
     }`;
     let layout: List<LayoutRule> = [
         rule("X", ["Seq"]),
         rule("M", ["Pos"]),
         rule("Y", ["Part"]),
     ];
-    let graph = read(&source).unwrap();
-    return match infer(&graph, &Schema { layout }) {
-        Ok(checked) => Result::Ok(checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect()),
-        Err(e) => Result::Err(`${e}`),
-    };
+    assert owed_by(source, layout).is_empty();
+    return y_axes(source, layout).unwrap();
 }
 
-test "a Slice bound the build cannot show within its axis is owed by the inputs" {
-    assert owed_by_slice("Z", "S").unwrap() == ["Y = Slice: the bound N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+test "a Slice bound the build cannot decide is clamped by a length the run derives" {
+    assert sliced("Z", "S") == "Part=min(N, 8)";
 }
 
-test "a Slice from a number to a symbol owes that it does not run backwards" {
-    let owed = owed_by_slice("Three", "S").unwrap();
-    assert owed.contains_str("Y = Slice: axis 0 must not run backwards from 3 to N (N - 3 >= 0)");
+test "a Slice from a number to a symbol clamps its count at none" {
+    assert sliced("Three", "S") == "Part=max(min(N, 8) - 3, 0)";
+}
+
+test "a Slice counted from a symbol's negation counts from the end only where it is negative" {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Eight = {8}> {
+        S = Shape(X)
+        B = Sub(Z, S)
+        Y = Slice(M, B, Eight)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("Y", ["Part"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Part=-max(from_end(-N, 8), 0) + 8";
+}
+
+test "a backward Slice starts at the last position a bound reaches" {
+    assert sliced("S", "Z", "Back") == "Part=min(N, 7)";
+}
+
+test "a clamp read as its operand where the graph meets that operand is owed by the inputs" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        Y = Add(A, X)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("A", ["Seq"]),
+    ];
+    assert owed_by(source, layout) == ["A = Slice: N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+    assert y_axes(source, layout).unwrap() == "Seq=N";
 }
 
 test "a Slice running backwards between numbers is empty, as ONNX counts it" {
@@ -966,7 +996,7 @@ test "an output declared static that no symbol value produces stops the build" {
     assert y_axes(source, layout).unwrap_err() == "Y: axis Pos is declared 3 and produced N + 10";
 }
 
-test "a symbolic integer cast to int32 owes that it fits, where an extent cannot show it" {
+test "a symbolic integer cast to int32 wraps as the run does, where an extent cannot show it fits" {
     let source = `g (float[N] X) => (int64[?] Y) <int64[1] Z = {0}, int64[1] Big = {100000}, int64[1] One = {1}> {
         S = Shape(X)
         W = Cast<to = 6>(S)
@@ -974,15 +1004,15 @@ test "a symbolic integer cast to int32 owes that it fits, where an extent cannot
         Q = Cast<to = 6>(P)
         Y = Range(Z, Q, One)
     }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Pos"]),
+    ];
+    assert owed_by(source, layout).is_empty();
+    assert y_axes(source, layout).unwrap() == "Pos=max(wrap32(100000 * N), 0)";
     let graph = read(&source).unwrap();
-    let checked = infer(&graph, &Schema {
-        layout: [
-            rule("X", ["Seq"]),
-            rule("Y", ["Pos"]),
-        ],
-    }).unwrap();
-    let owed: List<String> = checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
-    assert owed == ["Q = Cast: 100000 * N must fit in int32 (-100000 * N + 2147483647 >= 0)"] as List<String>;
+    let checked = infer(&graph, &Schema { layout }).unwrap();
+    assert checked.known["W"].elements == Elements::integers([Poly::symbol(&"N")]);
 }
 
 test "a Range the run computes, longer than any list, stops the build" {
@@ -1000,7 +1030,8 @@ test "a condition every layer repeats is owed once" {
         S = Shape(X)
         A = Slice(M, Z, S)
         B = Slice(M, Z, S)
-        Y = Add(A, B)
+        C = Add(A, X)
+        Y = Add(B, C)
     }`;
     let layout: List<LayoutRule> = [
         rule("X", ["Seq"]),
@@ -1219,12 +1250,20 @@ test "int32 arithmetic the build folds keeps the low 32 bits, as the run's int32
     assert checked.known["Y"].elements == Elements::Ints([-1794967296]);
 }
 
-test "symbolic int32 arithmetic owes that it fits, as a Cast to int32 does" {
+test "symbolic int32 arithmetic wraps as the run does, as a Cast to int32 does" {
     let source = `g (float[N] X) => (int64[1] Y) {
         S = Shape(X)
         W = Cast<to = 6>(S)
         P = Mul(W, W)
         Y = Cast<to = 7>(P)
     }`;
-    assert owed_by(source, [rule("*", ["Seq"])]) == ["P = Mul: N * N must fit in int32 (-N * N + 2147483647 >= 0)"] as List<String>;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("*", ["Seq"])],
+    }).unwrap();
+    assert checked.owed.is_empty();
+    let Symbolic(values) = checked.known["Y"].elements else {
+        unreachable();
+    };
+    assert `${values[0]}` == "wrap32(N * N)";
 }

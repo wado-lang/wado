@@ -5,7 +5,13 @@ use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Elements, Known, Node, data_type } from "./graph.wado";
 use { Poly } from "./poly.wado";
-use { broadcast_extents, checked_element_count, element_count, stretched_strides } from "./runtime/tensor.wado";
+use {
+    broadcast_extents,
+    checked_element_count,
+    element_count,
+    from_end,
+    stretched_strides,
+} from "./runtime/tensor.wado";
 use { Shape } from "./shape.wado";
 
 /// The tensor `node` produces when every operand it reads is known, or `None`
@@ -15,23 +21,20 @@ pub fn fold(
     known: &TreeMap<String, Known>,
     shapes: &TreeMap<String, Shape>,
 ) -> Result<Option<Known>, String> {
-    return evaluated(node, known, shapes).map(|found| found.map(|k| in_width(k)));
+    let site = node.site();
+    return evaluated(node, known, shapes).map(|found| found.map(|k| in_width(k, &site)));
 }
 
 /// `k` as its ONNX element holds it: an int32 keeps the low 32 bits of each
-/// value the build knows. One only the run knows stays whole, and `infer` owes
-/// that it fits.
-fn in_width(k: Known) -> Known {
+/// value, which the run derives where only it knows the value, as the node
+/// `site` names computes it.
+fn in_width(k: Known, site: &String) -> Known {
     if !k.int32 {
         return k;
     }
-    let narrowed = |p: Poly| match p.as_constant() {
-        Some(c) => Poly::constant(c as i32 as i64),
-        None => p,
-    };
     let elements = match k.elements {
         Ints(v) => Elements::Ints(v.into_iter().map(|c| c as i32 as i64).collect()),
-        Symbolic(v) => Elements::integers(v.into_iter().map(narrowed).collect()),
+        Symbolic(v) => Elements::integers(v.into_iter().map(|p| Poly::wrapped32(&p, site)).collect()),
         _ => unreachable(),
     };
     return Known { ..k, elements };
@@ -241,12 +244,7 @@ fn shape_of(node: &Node, known: &TreeMap<String, Known>, shapes: &TreeMap<String
 /// read backwards gives the empty `[0, -1]`, which yields `hi`, so the slice
 /// starts where it ends and holds nothing.
 fn clamped(i: i64, extent: i64, lo: i64, hi: i64) -> i64 {
-    return i64::min(i64::max(resolve_index(i, extent), lo), hi);
-}
-
-/// An ONNX index into `extent` positions, which counts from the end where negative.
-pub fn resolve_index(i: i64, extent: i64) -> i64 {
-    return if i < 0 { i + extent } else { i };
+    return i64::min(i64::max(from_end(i, extent), lo), hi);
 }
 
 fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
@@ -260,7 +258,7 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
     let mut picks: List<i32> = [];
     for let o of 0..<element_count(&leading) {
         for let index of wanted {
-            let i = resolve_index(index, along as i64);
+            let i = from_end(index, along as i64);
             if !(0 <= i < along as i64) {
                 return Result::Err(`index ${index} is outside an axis of ${along}`);
             }
@@ -499,14 +497,14 @@ fn as_int(elements: &Elements, i: i32) -> i64 {
 /// count them: the last may fall short, and a span running against the step
 /// holds none. Wide, since the span and the count of any two `i64` do not fit
 /// one.
-pub fn steps_over(from: i64, to: i64, step: i64) -> i128 {
+fn steps_over(from: i64, to: i64, step: i64) -> i128 {
     assert step != 0;
     let [span, s] = [to as i128 - from as i128, step as i128];
     return i128::max(if s > 0 { (span + s - 1) / s } else { (-span - s - 1) / -s }, 0);
 }
 
 /// The refusal of a tensor of `count` elements, where that is more than a list holds.
-pub fn too_many(count: i128) -> Result<(), String> {
+fn too_many(count: i128) -> Result<(), String> {
     if count > i32::MAX as i128 {
         return Result::Err(`${count} elements are more than a list holds`);
     }
@@ -797,7 +795,7 @@ fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
 }
 
 fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
-    let i = resolve_index(axis, rank as i64);
+    let i = from_end(axis, rank as i64);
     if !(0 <= i < rank as i64) {
         return Result::Err(`axis ${axis} is outside rank ${rank}`);
     }

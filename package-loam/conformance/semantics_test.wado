@@ -104,40 +104,15 @@ export fn run() with Stdout {
     };
 }
 
-/// The lines of the oracle's `onnx` for `lengths`.
-fn at(onnx: String, lengths: List<i32>) -> String {
-    let mut kept = "";
-    for let line of onnx.lines() {
-        for let n of lengths {
-            if line.starts_with(`N = ${n}:`) {
-                kept.push_str(`${line}\n`);
-            }
-        }
-    }
-    return kept;
-}
-
 /// Loam computes from `model` what onnxruntime does, which `onnx` states.
-fn assert_agrees(model: ByteList, onnx: String, output_axes: List<String> = ["Part"], lengths: List<i32> = LENGTHS) {
-    let got = loam(model, output_axes, lengths);
-    let want = at(onnx, lengths);
-    assert got == want;
+fn assert_agrees(model: ByteList, onnx: String, output_axes: List<String> = ["Part"]) {
+    assert loam(model, output_axes, LENGTHS) == onnx;
 }
 
-test "Slice to N within the axis takes the first N" {
-    assert_agrees(#include_bytes("./semantics/SliceToLength.onnx"), #include_str("./semantics/SliceToLength.txt"), [
-        "Part",
-    ], [3]);
+test "Slice to N takes the first N, clamping to the axis's end" {
+    assert_agrees(#include_bytes("./semantics/SliceToLength.onnx"), #include_str("./semantics/SliceToLength.txt"));
 }
 
-#[TODO]
-test "Slice to N past the axis clamps to its end" {
-    assert_agrees(#include_bytes("./semantics/SliceToLength.onnx"), #include_str("./semantics/SliceToLength.txt"), [
-        "Part",
-    ], [10]);
-}
-
-#[TODO]
 test "Slice from -N counts from the end, clamping to the start" {
     assert_agrees(
         #include_bytes("./semantics/SliceFromMinusLength.onnx"),
@@ -157,7 +132,6 @@ test "Slice from -1 to N takes the last" {
     assert_agrees(#include_bytes("./semantics/SliceLast.onnx"), #include_str("./semantics/SliceLast.txt"));
 }
 
-#[TODO]
 test "Slice by -1 from N runs backwards" {
     assert_agrees(
         #include_bytes("./semantics/SliceBackFromLength.onnx"),
@@ -165,12 +139,10 @@ test "Slice by -1 from N runs backwards" {
     );
 }
 
-#[TODO]
 test "Slice by -1 from N to past the start reaches element 0" {
     assert_agrees(#include_bytes("./semantics/SliceBackToFront.onnx"), #include_str("./semantics/SliceBackToFront.txt"));
 }
 
-#[TODO]
 test "Slice by 2 to N takes every other" {
     assert_agrees(
         #include_bytes("./semantics/SliceByTwoToLength.onnx"),
@@ -178,7 +150,6 @@ test "Slice by 2 to N takes every other" {
     );
 }
 
-#[TODO]
 test "Slice by -1 from -1 over a symbolic axis reverses it" {
     assert_agrees(#include_bytes("./semantics/SliceReversed.onnx"), #include_str("./semantics/SliceReversed.txt"));
 }
@@ -187,7 +158,6 @@ test "Range from 0 to N by 1 counts N" {
     assert_agrees(#include_bytes("./semantics/RangeToLength.onnx"), #include_str("./semantics/RangeToLength.txt"));
 }
 
-#[TODO]
 test "Range from 0 to N by 2 counts N / 2 rounded up" {
     assert_agrees(
         #include_bytes("./semantics/RangeByTwoToLength.onnx"),
@@ -195,7 +165,6 @@ test "Range from 0 to N by 2 counts N / 2 rounded up" {
     );
 }
 
-#[TODO]
 test "Range from N to 0 by -1 counts down" {
     assert_agrees(
         #include_bytes("./semantics/RangeBackFromLength.onnx"),
@@ -203,7 +172,6 @@ test "Range from N to 0 by -1 counts down" {
     );
 }
 
-#[TODO]
 test "Range from N to 0 by -2 counts down by two" {
     assert_agrees(#include_bytes("./semantics/RangeBackByTwo.onnx"), #include_str("./semantics/RangeBackByTwo.txt"));
 }
@@ -212,7 +180,6 @@ test "Cast of a known int64 to int32 wraps" {
     assert_agrees(#include_bytes("./semantics/CastWraps.onnx"), #include_str("./semantics/CastWraps.txt"));
 }
 
-#[TODO]
 test "Cast of 3000000000 * N to int32 wraps, as onnxruntime computes it" {
     assert_agrees(#include_bytes("./semantics/CastWrapsLength.onnx"), #include_str("./semantics/CastWrapsLength.txt"));
 }

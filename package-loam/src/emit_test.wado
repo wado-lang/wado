@@ -561,9 +561,9 @@ g (float[1, 4, 24] X) => (float[1, 4, 8] K)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Q = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 0, 8);");
-    assert out.contains("let K = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 8, 8);");
-    assert out.contains("let V = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 16, 8);");
+    assert out.contains("let Q = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 0, 8, 1);");
+    assert out.contains("let K = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 8, 8, 1);");
+    assert out.contains("let V = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 16, 8, 1);");
 }
 
 test "Softmax lowers to the kernel along its axis" {
@@ -878,20 +878,34 @@ test "a Range over a symbolic length is a kernel call" {
     assert out.contains("let Y = range_i64::<Seq>(0, to_extent(dim_N), 1);");
 }
 
-test "a Slice bound the build cannot show within its axis is checked before any kernel" {
+test "a Slice clamp the build cannot decide is computed by the run, and read as its operand checked before any kernel" {
     let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
         S = Shape(X)
-        Y = Slice(M, Z, S)
+        A = Slice(M, Z, S)
+        Y = Add(A, X)
     }`;
     let layout: List<LayoutRule> = [
         rule("X", ["Seq"]),
         rule("M", ["Pos"]),
-        rule("Y", ["Seq"]),
+        rule("A", ["Seq"]),
     ];
     let out = emitted(&generate(source, layout).unwrap());
-    let check = out.find("refuse(unmet(-dim_N + 8, \"Y = Slice: the bound N must be at most 8\"));").unwrap();
-    let slice = out.find("let Y = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(dim_N));").unwrap();
+    let check = out.find("refuse(unmet(-dim_N + 8, \"A = Slice: N must be at most 8\"));").unwrap();
+    let slice = out.find("let A = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(i64::min(dim_N, 8)), 1);").unwrap(
+    );
     assert check < slice;
+}
+
+test "a Slice by a negative step walks back from its start" {
+    let source = `g (float[N] X) => (float[N] Y) <int64[1] B = {-1}, int64[1] E = {-4000000000}, int64[1] Z = {0}, int64[1] Back = {-1}> {
+        Y = Slice(X, B, E, Z, Back)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Rev"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("let Y = slice_axis::<f32, [], Seq, Rev, []>(X, 0, dim_N - 1, to_extent(dim_N), -1);");
 }
 
 test "an int64 input is held as i64 through the layout kernels and Cast converts it" {

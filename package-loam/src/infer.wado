@@ -13,10 +13,7 @@ use {
     fold,
     polys_at,
     regrouped_extents,
-    resolve_index,
     slice_bounds,
-    steps_over,
-    too_many,
 } from "./fold.wado";
 use {
     AttrError,
@@ -32,8 +29,8 @@ use {
     element_of,
     is_binary_elementwise,
 } from "./graph.wado";
-use { Poly } from "./poly.wado";
-use { spatial_extents } from "./runtime/tensor.wado";
+use { Condition, Poly } from "./poly.wado";
+use { from_end, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
 use { Window, ints, window_over } from "./window.wado";
 
@@ -126,7 +123,7 @@ impl Refusal {
     /// `node` refused for `reason`, named as every diagnostic names a node.
     pub fn of(node: &Node, reason: String) -> Refusal {
         builtin::cold_path();
-        return Refusal { node: node_name(node), op: node.op, reason };
+        return Refusal { node: node.name(), op: node.op, reason };
     }
 }
 
@@ -294,21 +291,11 @@ pub struct Checked {
     pub owed: List<Condition>,
 }
 
-/// A condition on the symbols the build relies on and cannot prove, as a
-/// `Slice` bound within its axis is: `slack` is at least 0 for every input
-/// `forward` accepts, since it checks this before any kernel runs.
-/// See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
-pub struct Condition {
-    pub slack: Poly,
-    /// The condition as the refusal states it, at the node that relies on it.
-    pub reason: String,
-}
-
 /// Owe `slack >= 0`, unless every value of the symbols makes it so. A slack
 /// every value makes negative is no condition on the inputs but a graph wrong
 /// for every one of them.
 fn owe(node: &Node, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), InferError> {
-    return owe_at(`${node_name(node)} = ${node.op}`, owed, slack, condition).map_err(|reason| refusal(node, reason));
+    return owe_at(node.site(), owed, slack, condition).map_err(|reason| refusal(node, reason));
 }
 
 /// `owe` at `site`, whatever relies on the condition there.
@@ -347,7 +334,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         if node.outputs.is_empty() || node.outputs.len() != 1 && node.op != "Split" {
             builtin::cold_path();
             return Result::Err(InferError::OutputCount(OutputCountConflict {
-                node: node_name(node),
+                node: node.name(),
                 op: node.op,
                 given: node.outputs.len(),
             }));
@@ -355,7 +342,6 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         operands_given(node, &known, &shapes)?;
         match fold(node, &known, &shapes) {
             Ok(Some(k)) => {
-                owe_int32_fit(node, &k, &mut owed)?;
                 primitives[node.outputs[0]] = known_primitive(&k);
                 known[node.outputs[0]] = k;
                 continue;
@@ -585,15 +571,6 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
     return Result::Ok(merged);
 }
 
-/// What names a node in a message. ONNX identifies one by its first output,
-/// and a node the file gave none falls back to its operator.
-fn node_name(node: &Node) -> String {
-    if node.outputs.is_empty() {
-        return node.op;
-    }
-    return node.outputs[0];
-}
-
 /// The axes a value info declares, named by the schema and given extents by
 /// the graph.
 fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
@@ -666,10 +643,10 @@ fn infer_node(
         return flatten(node, &operand_at(node, shapes, 0), schema);
     }
     if op == "Slice" {
-        return sliced(node, &operand_at(node, shapes, 0), known, schema, owed);
+        return sliced(node, &operand_at(node, shapes, 0), known, schema);
     }
     if op == "Range" {
-        let count = range_count(node, known, owed)?;
+        let count = range_count(node, known)?;
         return Result::Ok(Shape {
             axes: [output_layout_axis(node, &node.outputs[0], schema, 0, 1, count, "is a range")?],
         });
@@ -696,13 +673,13 @@ fn infer_node(
             return Result::Err(attribute_error(node, "group", `is ${group}, and only a single group is read`));
         }
         let window = window_of(node, &x, shapes)?;
-        agree_at(node, &x.axes[1], &w.axes[1])?;
+        agree_at(node, &x.axes[1], &w.axes[1], owed)?;
         if has_bias(node) {
             let b = operand_at(node, shapes, 2);
             if b.rank() != 1 {
                 return Result::Err(operand_rank(node, 2, b.rank(), 1));
             }
-            agree_at(node, &w.axes[0], &b.axes[0])?;
+            agree_at(node, &w.axes[0], &b.axes[0], owed)?;
         }
         return windowed(node, [x.axes[0], w.axes[0]], &window, schema);
     }
@@ -710,19 +687,19 @@ fn infer_node(
         let [a, b] = binary_operands(node, shapes)?;
         if a.rank() == 0 || b.rank() == 0 {
             builtin::cold_path();
-            return Result::Err(InferError::ScalarOperand(node_name(node)));
+            return Result::Err(InferError::ScalarOperand(node.name()));
         }
-        return at_node(node, a.matmul(&b, op));
+        return at_node(node, a.matmul(&b, op, owed));
     }
     if is_binary_elementwise(&op) {
         let [a, b] = binary_operands(node, shapes)?;
-        return at_node(node, a.elementwise(&b, op));
+        return at_node(node, a.elementwise(&b, op, owed));
     }
     if op == "Gemm" {
         let [_, _, trans_a, trans_b] = gemm_options(node)?;
         let a = gemm_matrix(node, shapes, 0, trans_a)?;
         let b = gemm_matrix(node, shapes, 1, trans_b)?;
-        let product = at_node(node, a.matmul(&b, op))?;
+        let product = at_node(node, a.matmul(&b, op, owed))?;
         if !has_bias(node) {
             return Result::Ok(product);
         }
@@ -732,7 +709,7 @@ fn infer_node(
         if c.rank() > product.rank() {
             return Result::Err(operand_rank(node, 2, c.rank(), product.rank()));
         }
-        return at_node(node, product.elementwise(&c, op));
+        return at_node(node, product.elementwise(&c, op, owed));
     }
     if op == "Transpose" {
         let shape = operand_at(node, shapes, 0);
@@ -743,8 +720,8 @@ fn infer_node(
         return Result::Ok(operand_at(node, shapes, 0));
     }
     if op == "Where" {
-        let branches = at_node(node, operand_at(node, shapes, 1).elementwise(&operand_at(node, shapes, 2), op))?;
-        return at_node(node, branches.elementwise(&operand_at(node, shapes, 0), op));
+        let branches = at_node(node, operand_at(node, shapes, 1).elementwise(&operand_at(node, shapes, 2), op, owed))?;
+        return at_node(node, branches.elementwise(&operand_at(node, shapes, 0), op, owed));
     }
     if op == "Softmax" {
         let x = operand_at(node, shapes, 0);
@@ -887,88 +864,72 @@ fn regrouped(node: &Node, operand: &Shape, targets: &List<Extent>, schema: &Sche
 
 /// A `Slice` the run computes, since a bound or the data is only known then.
 /// An axis it narrows is new, for the output layout to name.
-fn sliced(
-    node: &Node,
-    x: &Shape,
-    known: &TreeMap<String, Known>,
-    schema: &Schema,
-    owed: &mut List<Condition>,
-) -> Result<Shape, InferError> {
+fn sliced(node: &Node, x: &Shape, known: &TreeMap<String, Known>, schema: &Schema) -> Result<Shape, InferError> {
     let mut extents: List<Extent> = x.axes.into_iter().map(|axis| axis.extent).collect();
     let mut axes = x.axes;
-    for let cut of slice_cuts(node, known, x, owed)? {
+    for let cut of slice_cuts(node, known, x)? {
         extents[cut.axis] = cut.extent;
         axes[cut.axis] = layout_axis(node, schema, cut.axis, &extents, "is a slice of an axis")?;
     }
     return Result::Ok(Shape { axes });
 }
 
-/// One axis a `Slice` narrows: where it starts, and the extent it keeps.
+/// One axis a `Slice` narrows: where it starts, the extent it keeps, and the
+/// step from one kept position to the next.
 pub struct Cut {
     pub axis: i32,
+    /// At least -1, which only a backward cut of an empty axis starts at, and
+    /// it keeps nothing.
     pub start: Poly,
     pub extent: Extent,
+    pub step: i64,
 }
 
 /// The axes a `Slice` over `x` narrows, leaving out one it keeps whole. A bound
-/// may be symbolic, and where the build cannot show it within the axis, the
-/// inputs owe that.
-pub fn slice_cuts(
-    node: &Node,
-    known: &TreeMap<String, Known>,
-    x: &Shape,
-    owed: &mut List<Condition>,
-) -> Result<List<Cut>, InferError> {
+/// may be symbolic, and a clamp the build cannot decide is a symbol the run
+/// derives.
+pub fn slice_cuts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Result<List<Cut>, InferError> {
     let SliceBounds { starts, ends, axes, steps } = slice_bounds(node, known).map_err(|reason| refusal(node, reason))?;
-    if steps.into_iter().any(|step| step != 1) {
-        return Result::Err(refusal(node, "a step is not 1, and the run slices by 1"));
-    }
     let mut cuts: List<Cut> = [];
     let resolved = axis_indices(&axes, x.rank()).map_err(|reason| refusal(node, reason))?;
     for let [i, a] of resolved.into_iter().enumerate() {
+        let step = steps[i];
+        if step == 0 {
+            return Result::Err(refusal(node, "a step is 0"));
+        }
         let dim = x.axes[a].extent.poly();
-        let begin = within(node, &starts[i], &dim, owed)?;
-        let end = within(node, &ends[i], &dim, owed)?;
-        let count = run_count(
-            node,
-            owed,
-            &begin,
-            &end,
-            &Poly::constant(1),
-            `axis ${a} must not run backwards from ${begin} to ${end}`,
-        )?;
-        if begin != Poly::constant(0) || count != dim {
-            cuts.push(Cut { axis: a, start: begin, extent: counted(node, count)? });
+        // Walking backwards, the first position is the axis's last, and the
+        // end may lie before the axis, at -1.
+        let [top, floor] = if step > 0 {
+            [dim, 0 as i64];
+        } else {
+            [difference(node, &dim, &Poly::constant(1))?, -1 as i64];
+        };
+        let begin = slice_bound(node, &starts[i], &dim, 0, &top)?;
+        let end = slice_bound(node, &ends[i], &dim, floor, &top)?;
+        let count = stepped_count(node, &begin, &end, step)?;
+        if begin != Poly::constant(0) || count != dim || step != 1 {
+            cuts.push(Cut { axis: a, start: begin, extent: counted(node, count)?, step });
         }
     }
     return Result::Ok(cuts);
 }
 
 /// A `Slice` bound as ONNX reads it against an axis of `dim`: counted from the
-/// end where negative, and clamped within `[0, dim]`. The build clamps where it
-/// can decide the clamp for every input, as for a bound past any length a list
-/// holds, which is how an exporter writes "to the end". Elsewhere the inputs
-/// owe that the bound lies within, since a clamp has no polynomial to name the
-/// extent it leaves, and a symbolic bound is read as counted from the start.
-fn within(node: &Node, bound: &Poly, dim: &Poly, owed: &mut List<Condition>) -> Result<Poly, InferError> {
-    // No extent is past `i32::MAX`, so a constant beyond it clamps as that does.
-    let limit = i32::MAX as i64;
-    let constant = bound.as_constant().map(|c| i64::clamp(c, -limit, limit));
-    let from_end = constant matches { Some(c) && c < 0 };
-    let resolved = match constant {
-        Some(c) && c < 0 => difference(node, dim, &Poly::constant(-c))?,
-        Some(c) => Poly::constant(c),
-        None => *bound,
+/// end where negative, then clamped within `[floor, top]`.
+fn slice_bound(node: &Node, written: &Poly, dim: &Poly, floor: i64, top: &Poly) -> Result<Poly, InferError> {
+    // No extent is past `i32::MAX`, so a constant beyond the next number, as an
+    // exporter writes "to the end", clamps as that number does.
+    let limit = i32::MAX as i64 + 1;
+    let bound = match written.as_constant() {
+        Some(c) => Poly::constant(i64::clamp(c, -limit, limit)),
+        None => *written,
     };
-    if difference(node, &resolved, dim)?.is_nonnegative() {
-        return Result::Ok(*dim);
-    }
-    if from_end && difference(node, &Poly::constant(0), &resolved)?.is_nonnegative() {
-        return Result::Ok(Poly::constant(0));
-    }
-    owe(node, owed, resolved, `the bound ${resolved} must not be negative`)?;
-    owe(node, owed, difference(node, dim, &resolved)?, `the bound ${resolved} must be at most ${*dim}`)?;
-    return Result::Ok(resolved);
+    let site = node.site();
+    let Some(resolved) = Poly::from_end(&bound, dim, &site) else {
+        return Result::Err(refusal(node, `${bound} + ${*dim} leaves i64`));
+    };
+    return Result::Ok(Poly::clamped(&resolved, &Poly::constant(floor), top, &site));
 }
 
 /// `a - b`, of integers the graph computed, or the refusal where no polynomial
@@ -985,13 +946,15 @@ fn counted(node: &Node, count: Poly) -> Result<Extent, InferError> {
 
 /// How many elements a `Range` the run computes yields. Its operands are one
 /// element each, and the build knows them, symbolic or not.
-pub fn range_count(
-    node: &Node,
-    known: &TreeMap<String, Known>,
-    owed: &mut List<Condition>,
-) -> Result<Extent, InferError> {
+pub fn range_count(node: &Node, known: &TreeMap<String, Known>) -> Result<Extent, InferError> {
     let [start, limit, delta] = range_bounds(node, known)?;
-    return counted(node, run_count(node, owed, &start, &limit, &delta, `${start} to ${limit} must not run backwards`)?);
+    let Some(step) = delta.as_constant() else {
+        return Result::Err(refusal(node, `delta is ${delta}, and the build counts by a number`));
+    };
+    if step == 0 {
+        return Result::Err(refusal(node, "delta is 0"));
+    }
+    return counted(node, stepped_count(node, &start, &limit, step)?);
 }
 
 /// What a `Reshape` target, read as `targets`, owes where only the run knows
@@ -1033,52 +996,16 @@ fn owe_reshape_target(
     return Result::Ok(());
 }
 
-/// A folded int32 holds a symbolic integer as it stands, which is the run's
-/// int32 only where the value fits. What the extents cannot show fits, the
-/// inputs owe.
-fn owe_int32_fit(node: &Node, folded: &Known, owed: &mut List<Condition>) -> Result<(), InferError> {
-    if !folded.int32 {
-        return Result::Ok(());
-    }
-    let Symbolic(values) = &folded.elements else {
-        return Result::Ok(());
-    };
-    for let v of values {
-        let condition = `${*v} must fit in int32`;
-        owe(node, owed, difference(node, &Poly::constant(i32::MAX as i64), v)?, condition)?;
-        owe(node, owed, difference(node, v, &Poly::constant(i32::MIN as i64))?, condition)?;
-    }
-    return Result::Ok(());
-}
-
-/// The steps of `step` from `from` to `to`, as ONNX counts them: none for a
-/// span running backwards. A symbolic span must divide by the step, and where
-/// it may run either way the inputs owe `condition`, that it runs forwards: a
-/// count clamped at none has no polynomial to name it.
-fn run_count(
-    node: &Node,
-    owed: &mut List<Condition>,
-    from: &Poly,
-    to: &Poly,
-    step: &Poly,
-    condition: String,
-) -> Result<Poly, InferError> {
-    let span = difference(node, to, from)?;
-    if let Some(s) = span.as_constant() && let Some(d) = step.as_constant() && d != 0 {
-        let count = steps_over(0, s, d);
-        too_many(count).map_err(|reason| refusal(node, reason))?;
-        return Result::Ok(Poly::constant(count as i64));
-    }
-    let forwards = step.as_constant() matches { Some(d) && d > 0 };
-    if forwards && span.is_negative() {
-        return Result::Ok(Poly::constant(0));
-    }
-    let count = if forwards { span.divided_by(step) } else { null };
-    let Some(c) = count else {
-        return Result::Err(refusal(node, `${*from} to ${*to} by ${*step} is not a count the build can show exact`));
-    };
-    owe(node, owed, c, condition)?;
-    return Result::Ok(c);
+/// How many steps of `step` fit from `from` to `to`, as ONNX counts them for
+/// `Slice` and `Range`: the last may fall short, and a span running against
+/// the step holds none.
+fn stepped_count(node: &Node, from: &Poly, to: &Poly, step: i64) -> Result<Poly, InferError> {
+    let span = if step > 0 { difference(node, to, from)? } else { difference(node, from, to)? };
+    // `i64::MIN` has no magnitude in `i64`. A span is an `i64`, so a step of
+    // `i64::MAX` counts it as the one step `i64::MIN` would.
+    let magnitude = if step == i64::MIN { i64::MAX } else { i64::abs(step) };
+    let site = node.site();
+    return Result::Ok(Poly::max_of(&Poly::ceil_div(&span, magnitude, &site), &Poly::constant(0), &site));
 }
 
 /// A `Range`'s start, limit and delta, each one integer the build knows.
@@ -1182,10 +1109,10 @@ fn attr_read<T>(node: &Node, read: Result<T, AttrError>) -> Result<T, InferError
     };
 }
 
-fn agree_at(node: &Node, left: &Axis, right: &Axis) -> Result<(), InferError> {
-    return match Shape::agree(left, right, &node.op) {
+fn agree_at(node: &Node, left: &Axis, right: &Axis, owed: &mut List<Condition>) -> Result<(), InferError> {
+    return match Shape::agree(left, right, &node.op, owed) {
         Ok(_) => Result::Ok(()),
-        Err(e) => Result::Err(InferError::Node(NodeConflict { node: node_name(node), error: e })),
+        Err(e) => Result::Err(InferError::Node(NodeConflict { node: node.name(), error: e })),
     };
 }
 
@@ -1213,7 +1140,7 @@ pub fn gemm_options(node: &Node) -> Result<[f32, f32, bool, bool], InferError> {
 fn operand_rank(node: &Node, index: i32, rank: i32, needed: i32) -> InferError {
     builtin::cold_path();
     return InferError::OperandRank(OperandRankConflict {
-        node: node_name(node),
+        node: node.name(),
         op: node.op,
         operand: index,
         rank,
@@ -1288,7 +1215,7 @@ pub fn reduced_axes(node: &Node, known: &TreeMap<String, Known>, rank: i32) -> R
 /// operator reads at most `last`.
 fn axis_attr(node: &Node, fallback: i64, rank: i32, last: i32) -> Result<i32, InferError> {
     let written = int_attr(node, "axis", fallback)?;
-    let resolved = resolve_index(written, rank as i64);
+    let resolved = from_end(written, rank as i64);
     if !(0 <= resolved <= last as i64) {
         return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${rank}`));
     }
@@ -1332,7 +1259,7 @@ pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
 
 fn attribute_error(node: &Node, attr: String, reason: String) -> InferError {
     return InferError::Attribute(AttributeConflict {
-        node: node_name(node),
+        node: node.name(),
         op: node.op,
         attr,
         reason,
@@ -1361,7 +1288,7 @@ fn operands_given(
         if given < needed {
             builtin::cold_path();
             return Result::Err(InferError::OperandCount(OperandCountConflict {
-                node: node_name(node),
+                node: node.name(),
                 op: node.op,
                 given,
                 needed,
@@ -1422,7 +1349,7 @@ fn at_node(node: &Node, result: Result<Shape, ExtentConflict>) -> Result<Shape, 
     return match result {
         Ok(shape) => Result::Ok(shape),
         Err(error) => Result::Err(InferError::Node(NodeConflict {
-            node: node_name(node),
+            node: node.name(),
             error,
         })),
     };

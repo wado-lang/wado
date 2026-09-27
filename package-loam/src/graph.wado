@@ -267,6 +267,20 @@ pub struct Node {
 }
 
 impl Node {
+    /// What names the node in a message. ONNX identifies one by its first
+    /// output, and a node the file gave none falls back to its operator.
+    pub fn name(&self) -> String {
+        if self.outputs.is_empty() {
+            return self.op;
+        }
+        return self.outputs[0];
+    }
+
+    /// The node as a message places something at it: its name and operator.
+    pub fn site(&self) -> String {
+        return `${self.name()} = ${self.op}`;
+    }
+
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
             if a.name.as_str_slice() == name.as_str_slice() {

@@ -5,11 +5,20 @@
 
 use { TreeMap } from "core:collections";
 
+/// A condition on the symbols the build relies on and cannot prove, as a
+/// clamped `Slice` bound read as unclamped is: `slack` is at least 0 for every
+/// input `forward` accepts, since it checks this before any kernel runs.
+pub struct Condition {
+    pub slack: Poly,
+    /// The condition as the refusal states it, at the node that relies on it.
+    pub reason: String,
+}
+
 /// One term of a `Poly`: the product of `symbols`, scaled by `coefficient`.
 struct Term {
     coefficient: i64,
     /// Sorted, a symbol repeated once per power; empty for the constant term.
-    symbols: List<String>,
+    symbols: List<Symbol>,
 }
 
 /// A polynomial with integer coefficients over dimension symbols, held in one
@@ -17,6 +26,200 @@ struct Term {
 pub struct Poly {
     /// No two share `symbols` and none has coefficient 0, ordered by `order`.
     terms: List<Term>,
+}
+
+/// An operation no polynomial expresses, which `forward` computes a derived
+/// symbol by.
+enum Op {
+    /// The lesser of two operands.
+    Min,
+    /// The greater of two operands.
+    Max,
+    /// The first operand divided by the second, a positive number, rounded up.
+    CeilDiv,
+    /// An index into an axis of the second operand's extent, which counts from
+    /// the end where negative.
+    FromEnd,
+    /// The operand's low 32 bits, as an int32 holds it.
+    Wrap32,
+}
+
+/// How `forward` computes a derived symbol from others.
+struct Derivation {
+    op: Op,
+    operands: List<Poly>,
+    /// The node whose operator this is, which a condition reading it names.
+    origin: String,
+}
+
+/// A factor a term multiplies: a length an input carries, or a value `forward`
+/// derives from others by an operation no polynomial expresses.
+struct Symbol {
+    /// The symbol as a message writes it. A derived one is written from its
+    /// operation and its operands, each in canonical form, so the name
+    /// identifies it wherever it was derived.
+    name: String,
+    derivation: Option<Derivation>,
+    /// The least and the greatest value the symbol takes over every input.
+    range: [i128, i128],
+}
+
+impl Eq for Symbol {
+    fn eq(&self, other: &Symbol) -> bool {
+        return self.name == other.name && self.is_derived() == other.is_derived();
+    }
+}
+
+impl Ord for Symbol {
+    fn cmp(&self, other: &Symbol) -> Ordering {
+        let by_name = self.name.cmp(&other.name);
+        if !by_name matches { Equal } {
+            return by_name;
+        }
+        return (self.is_derived() as i32).cmp(&(other.is_derived() as i32));
+    }
+}
+
+impl Symbol {
+    fn is_derived(&self) -> bool {
+        return self.derivation matches { Some(_) };
+    }
+
+    /// The symbol read as `Poly::presumed` reads it.
+    fn presumed(&self, conditions: &mut List<Condition>) -> Option<Poly> {
+        let Some(d) = self.derivation else {
+            return Option::Some(Poly::of(*self));
+        };
+        let mut operands: List<Poly> = [];
+        for let o of &d.operands {
+            operands.push(o.presumed(conditions)?);
+        }
+        let a = operands[0];
+        let presumed = match d.op {
+            Min => owe(conditions, &d.origin, operands[1].try_sub(&a), `${a} must be at most ${operands[1]}`),
+            Max => owe(conditions, &d.origin, a.try_sub(&operands[1]), `${a} must be at least ${operands[1]}`),
+            FromEnd => owe(conditions, &d.origin, Option::Some(a), `${a} must not be negative`),
+            Wrap32 => {
+                let condition = `${a} must fit in int32`;
+                owe(conditions, &d.origin, Poly::constant(i32::MAX as i64).try_sub(&a), condition)
+                    && owe(conditions, &d.origin, a.try_sub(&Poly::constant(i32::MIN as i64)), condition);
+            },
+            CeilDiv => {
+                return Option::Some(Poly::ceil_div(&a, operands[1].as_constant().unwrap(), &d.origin));
+            },
+        };
+        return if presumed { Option::Some(a) } else { null };
+    }
+}
+
+/// Owe `slack >= 0` for the node `origin` names, as `Poly::presumed` does, or
+/// `false` where no input meets it or no polynomial holds it.
+fn owe(conditions: &mut List<Condition>, origin: &String, slack: Option<Poly>, condition: String) -> bool {
+    let Some(s) = slack else {
+        return false;
+    };
+    if s.is_nonnegative() {
+        return true;
+    }
+    if s.is_negative() {
+        return false;
+    }
+    conditions.push(Condition { slack: s, reason: `${*origin}: ${condition}` });
+    return true;
+}
+
+impl Derivation {
+    /// The derived symbol as the generated module computes it, or, where not
+    /// `code`, as a message writes it.
+    fn written(&self, names: &TreeMap<String, String>, code: bool) -> String {
+        let args: List<String> = self.operands.into_iter().map(|o| o.written(names, code)).collect();
+        return match self.op {
+            Min => if code { `i64::min(${args[0]}, ${args[1]})` } else { `min(${args[0]}, ${args[1]})` },
+            Max => if code { `i64::max(${args[0]}, ${args[1]})` } else { `max(${args[0]}, ${args[1]})` },
+            CeilDiv => {
+                if code {
+                    `ceil_div(${args[0]}, ${args[1]})`;
+                } else if self.operands[0].terms.len() > 1 {
+                    `ceil((${args[0]}) / ${args[1]})`;
+                } else {
+                    `ceil(${args[0]} / ${args[1]})`;
+                }
+            },
+            FromEnd => `from_end(${args[0]}, ${args[1]})`,
+            Wrap32 => if code { `((${args[0]}) as i32 as i64)` } else { `wrap32(${args[0]})` },
+        };
+    }
+
+    /// A lower and an upper bound on the value, over every input.
+    fn range(&self) -> [i128, i128] {
+        let [low, high] = self.operands[0].bounds();
+        return match self.op {
+            Min => {
+                let [l, h] = self.operands[1].bounds();
+                [
+                    i128::min(low, l),
+                    i128::min(high, h),
+                ];
+            },
+            Max => {
+                let [l, h] = self.operands[1].bounds();
+                [
+                    i128::max(low, l),
+                    i128::max(high, h),
+                ];
+            },
+            CeilDiv => {
+                let d = self.operands[1].as_constant().unwrap() as i128;
+                [
+                    ceiling(low, d),
+                    ceiling(high, d),
+                ];
+            },
+            // The index where it is not negative, and past it the extent's reach.
+            FromEnd => {
+                let [l, h] = self.operands[1].bounds();
+                [
+                    i128::min(0, low + l),
+                    i128::max(high, h - 1),
+                ];
+            },
+            Wrap32 => [i32::MIN as i128, i32::MAX as i128],
+        };
+    }
+
+    /// Whether every input makes the derived value at least `x`: for one of two
+    /// operands, the one it takes is. `FromEnd` takes either of its index and
+    /// the index past the extent, so both must be.
+    fn at_least(&self, x: &Poly) -> bool {
+        let a = &self.operands[0];
+        return match self.op {
+            Min => x.at_most(a) && x.at_most(&self.operands[1]),
+            Max => x.at_most(a) || x.at_most(&self.operands[1]),
+            // `ceil(a / d) >= x` exactly where `a >= d * x`.
+            CeilDiv => match x.try_mul(&self.operands[1]) {
+                Some(dx) => dx.at_most(a),
+                None => false,
+            },
+            FromEnd => x.at_most(a) && a.try_add(&self.operands[1]).map(|past| x.at_most(&past)).unwrap_or(false),
+            Wrap32 => false,
+        };
+    }
+
+    /// `at_least`'s counterpart: every input makes the value at most `x`.
+    fn at_most(&self, x: &Poly) -> bool {
+        let a = &self.operands[0];
+        return match self.op {
+            Min => a.at_most(x) || self.operands[1].at_most(x),
+            Max => a.at_most(x) && self.operands[1].at_most(x),
+            // `ceil(a / d) <= x` exactly where `a <= d * x`, for an integer `x`.
+            CeilDiv => match x.try_mul(&self.operands[1]) {
+                Some(dx) => a.at_most(&dx),
+                None => false,
+            },
+            FromEnd => a.at_most(x) && a.try_add(&self.operands[1]).map(|past| past.at_most(x)).unwrap_or(false),
+            Wrap32 => false,
+        };
+    }
 }
 
 impl Poly {
@@ -34,14 +237,119 @@ impl Poly {
 
     /// The length the symbol `name` stands for.
     pub fn symbol(name: &String) -> Poly {
+        return Poly::of(Symbol {
+            name: *name,
+            derivation: null,
+            range: [0, i32::MAX as i128],
+        });
+    }
+
+    fn of(s: Symbol) -> Poly {
         return Poly {
             terms: [
                 Term {
                     coefficient: 1,
-                    symbols: [*name],
+                    symbols: [s],
                 },
             ],
         };
+    }
+
+    /// The symbol `forward` computes by `op` over `operands`, for the node
+    /// `origin` names.
+    fn derived(op: Op, operands: List<Poly>, origin: &String) -> Poly {
+        let d = Derivation { op, operands, origin: *origin };
+        return Poly::of(Symbol {
+            name: d.written(&TreeMap::<String, String>::new(), false),
+            range: d.range(),
+            derivation: Option::Some(d),
+        });
+    }
+
+    /// The lesser of `a` and `b`, as the node `origin` names computes it.
+    pub fn min_of(a: &Poly, b: &Poly, origin: &String) -> Poly {
+        if a.at_most(b) {
+            return *a;
+        }
+        if b.at_most(a) {
+            return *b;
+        }
+        return Poly::derived(Op::Min, [*a, *b], origin);
+    }
+
+    /// The greater of `a` and `b`, as `min_of` computes the lesser.
+    pub fn max_of(a: &Poly, b: &Poly, origin: &String) -> Poly {
+        if b.at_most(a) {
+            return *a;
+        }
+        if a.at_most(b) {
+            return *b;
+        }
+        return Poly::derived(Op::Max, [*a, *b], origin);
+    }
+
+    /// `x` raised to `lo`, then lowered to `hi`, as ONNX clamps a `Slice` bound.
+    pub fn clamped(x: &Poly, lo: &Poly, hi: &Poly, origin: &String) -> Poly {
+        // `x` raised to anything is never below `x`, so lowered to `x` it is `x`.
+        if *x == *hi {
+            return *x;
+        }
+        return Poly::min_of(&Poly::max_of(x, lo, origin), hi, origin);
+    }
+
+    /// `a / d` rounded up, for a positive number `d`.
+    pub fn ceil_div(a: &Poly, d: i64, origin: &String) -> Poly {
+        assert d > 0;
+        if let Some(c) = a.as_constant() {
+            return Poly::constant(ceiling(c as i128, d as i128) as i64);
+        }
+        let divisor = Poly::constant(d);
+        if let Some(q) = a.divided_by(&divisor) {
+            return q;
+        }
+        return Poly::derived(Op::CeilDiv, [*a, divisor], origin);
+    }
+
+    /// Index `i` into an axis of `extent`, counted from the end where negative,
+    /// or `None` where no polynomial holds the sum.
+    pub fn from_end(i: &Poly, extent: &Poly, origin: &String) -> Option<Poly> {
+        if i.is_nonnegative() {
+            return Option::Some(*i);
+        }
+        if i.is_negative() {
+            return i.try_add(extent);
+        }
+        return Option::Some(Poly::derived(Op::FromEnd, [*i, *extent], origin));
+    }
+
+    /// What an int32 holds of `a`: its low 32 bits.
+    pub fn wrapped32(a: &Poly, origin: &String) -> Poly {
+        if let Some(c) = a.as_constant() {
+            return Poly::constant(c as i32 as i64);
+        }
+        let [low, high] = a.bounds();
+        if i32::MIN as i128 <= low && high <= i32::MAX as i128 {
+            return *a;
+        }
+        return Poly::derived(Op::Wrap32, [*a], origin);
+    }
+
+    /// The polynomial with each derived symbol read as the operand it takes
+    /// unchanged: a clamp as its bound, a count clamped at none as its span, an
+    /// index counted from the end as counted from the start, and a wrap as the
+    /// value it wraps. `conditions` gains what each reading owes. `None` where
+    /// no input meets one, or no polynomial holds the result. See WEP 2026-09-20
+    /// § "Axis Identity Is a Type, Extents Are Values".
+    pub fn presumed(&self, conditions: &mut List<Condition>) -> Option<Poly> {
+        let mut sum = Poly::constant(0);
+        for let t of &self.terms {
+            let mut factors = Poly::constant(t.coefficient);
+            for let s of &t.symbols {
+                factors = factors.try_mul(&s.presumed(conditions)?)?;
+            }
+            sum = sum.try_add(&factors)?;
+        }
+        return Option::Some(sum);
     }
 
     /// The value, where no symbol remains.
@@ -55,18 +363,39 @@ impl Poly {
         return null;
     }
 
-    /// Every symbol the polynomial reads, each once, in order.
-    pub fn symbols(&self) -> List<String> {
-        let mut names: List<String> = [];
+    /// Whether some term reads a symbol the run derives.
+    pub fn is_derived(&self) -> bool {
         for let t of &self.terms {
             for let s of &t.symbols {
-                if !names.contains_str(s.as_str_slice()) {
-                    names.push(*s);
+                if s.is_derived() {
+                    return true;
                 }
             }
         }
+        return false;
+    }
+
+    /// Every input symbol the polynomial reads, a derived one's operands
+    /// included, each once, in order.
+    pub fn symbols(&self) -> List<String> {
+        let mut names: List<String> = [];
+        self.collect_symbols(&mut names);
         names.sort();
         return names;
+    }
+
+    fn collect_symbols(&self, names: &mut List<String>) {
+        for let t of &self.terms {
+            for let s of &t.symbols {
+                if let Some(d) = s.derivation {
+                    for let o of &d.operands {
+                        o.collect_symbols(names);
+                    }
+                } else if !names.contains_str(s.name.as_str_slice()) {
+                    names.push(s.name);
+                }
+            }
+        }
     }
 
     /// The sum, or `None` where a coefficient leaves `i64`.
@@ -126,48 +455,89 @@ impl Poly {
         return Poly::collected(terms);
     }
 
-    /// Whether every value of the symbols makes this at least 0.
+    /// Whether every input makes this at most `other`.
+    pub fn at_most(&self, other: &Poly) -> bool {
+        return match other.try_sub(self) {
+            Some(d) => d.is_nonnegative(),
+            None => false,
+        };
+    }
+
+    /// Whether every value of the symbols makes this at least 0. Where bounding
+    /// each term apart cannot tell, a derived term is compared with the rest
+    /// through the operation that derives it, as `N - max(N - 1, 0)` is
+    /// compared by `N - 1` and by `0`.
     pub fn is_nonnegative(&self) -> bool {
         let [low, _] = self.bounds();
-        return low >= 0;
+        if low >= 0 {
+            return true;
+        }
+        for let [i, t] of self.terms.into_iter().enumerate() {
+            if t.symbols.len() != 1 || !(t.coefficient == 1 || t.coefficient == -1) {
+                continue;
+            }
+            let Some(d) = t.symbols[0].derivation else {
+                continue;
+            };
+            let mut rest = *self;
+            rest.terms.remove(i);
+            // `rest + v >= 0` is `v >= -rest`, and `rest - v >= 0` is `v <= rest`.
+            let holds = if t.coefficient == 1 {
+                Poly::constant(0).try_sub(&rest).map(|floor| d.at_least(&floor)).unwrap_or(false);
+            } else {
+                d.at_most(&rest);
+            };
+            if holds {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Whether every value of the symbols makes this below 0.
     pub fn is_negative(&self) -> bool {
         let [_, high] = self.bounds();
-        return high < 0;
+        if high < 0 {
+            return true;
+        }
+        return match Poly::constant(-1).try_sub(self) {
+            Some(below) => below.is_nonnegative(),
+            None => false,
+        };
     }
 
     /// A lower and an upper bound on the value, over every value of the
-    /// symbols. A symbol is an extent, within `[0, i32::MAX]`, so a term of
-    /// degree `k` lies between 0 and its coefficient times `i32::MAX` to the `k`.
+    /// symbols, each term bounded apart. An input symbol is an extent, within
+    /// `[0, i32::MAX]`, and a derived one lies within what its operation leaves.
     fn bounds(&self) -> [i128, i128] {
         let [mut low, mut high] = [0 as i128, 0 as i128];
         for let t of &self.terms {
-            let reach = t.reach();
-            if t.symbols.is_empty() || reach < 0 {
-                low += reach;
-            }
-            if t.symbols.is_empty() || reach > 0 {
-                high += reach;
-            }
+            let [l, h] = t.range();
+            low += l;
+            high += h;
         }
         return [low, high];
     }
 
     /// Whether every value of the symbols keeps this within `i64`, and every
-    /// partial product and sum `forward` computes on the way, term by term.
-    /// Stage 0's own algebra is exact however large it grows; this is what a
-    /// value the run computes in `i64` needs. A partial sum lies between the
-    /// negative terms' sum and the positive terms'.
+    /// partial sum `forward` computes on the way, term by term, and every
+    /// derived symbol's operands. Stage 0's own algebra is exact however large
+    /// it grows; this is what a value the run computes in `i64` needs. A
+    /// partial sum lies between the negative terms' sum and the positive terms'.
     pub fn fits_i64(&self) -> bool {
         let [mut low, mut high] = [0 as i128, 0 as i128];
         for let t of &self.terms {
-            let reach = t.reach();
-            if reach < 0 {
-                low += reach;
-            } else {
-                high += reach;
+            let [l, h] = t.range();
+            low += i128::min(l, 0);
+            high += i128::max(h, 0);
+            for let s of &t.symbols {
+                if let Some(d) = s.derivation {
+                    for let o of &d.operands {
+                        if !o.fits_i64() {
+                            return false;
+                        }
+                    }
+                }
             }
         }
         return i64::MIN as i128 <= low && high <= i64::MAX as i128;
@@ -197,14 +567,26 @@ impl Poly {
 }
 
 impl Term {
-    /// The value at every symbol's largest, `i32::MAX`, which bounds the value
-    /// and every partial product at any other. Held within 2^64 either way.
-    fn reach(&self) -> i128 {
-        let mut reach = self.coefficient as i128;
-        for let _ of &self.symbols {
-            reach = saturated(reach * i32::MAX as i128);
+    /// A lower and an upper bound on the term, its symbols' ranges multiplied.
+    /// Held within 2^65 either way.
+    fn range(&self) -> [i128, i128] {
+        let [mut low, mut high] = [self.coefficient as i128, self.coefficient as i128];
+        for let s of &self.symbols {
+            let [a, b] = s.range;
+            let corners: List<i128> = [
+                product(low, a),
+                product(low, b),
+                product(high, a),
+                product(high, b),
+            ];
+            low = corners[0];
+            high = corners[0];
+            for let c of corners {
+                low = i128::min(low, c);
+                high = i128::max(high, c);
+            }
         }
-        return reach;
+        return [low, high];
     }
 }
 
@@ -216,14 +598,31 @@ fn narrowed(value: i128) -> Option<i64> {
     };
 }
 
-/// `reach` held within 2^64 either way. That is past any `i64` constant a sum
-/// adds it to, so the sum keeps the sign and the side of `i32` it would have.
-fn saturated(reach: i128) -> i128 {
-    let limit = (i64::MAX as i128 + 1) * 2;
-    return i128::clamp(reach, -limit, limit);
+/// How far a bound reaches before it is held: 2^65, past any `i64` constant a
+/// sum adds it to, so the sum keeps the sign and the side of `i32` it would have.
+fn reach_limit() -> i128 {
+    return (i64::MAX as i128 + 1) * 2;
 }
 
-/// Higher degree first, then by the symbols' names, so the constant is last.
+/// `a * b` held within `reach_limit` either way, of two already held so.
+fn product(a: i128, b: i128) -> i128 {
+    if a == 0 || b == 0 {
+        return 0;
+    }
+    let limit = reach_limit();
+    if i128::abs(a) > limit / i128::abs(b) {
+        return if (a < 0) == (b < 0) { limit } else { -limit };
+    }
+    return a * b;
+}
+
+/// `a / d` rounded up, for a positive `d`.
+fn ceiling(a: i128, d: i128) -> i128 {
+    assert d > 0;
+    return if a >= 0 { (a + d - 1) / d } else { a / d };
+}
+
+/// Higher degree first, then by the symbols, so the constant is last.
 fn order(a: &Term, b: &Term) -> Ordering {
     if a.symbols.len() != b.symbols.len() {
         return b.symbols.len().cmp(&a.symbols.len());
@@ -232,7 +631,7 @@ fn order(a: &Term, b: &Term) -> Ordering {
 }
 
 /// `whole` with each of `part` taken out once, or `None` where one is missing.
-fn without(whole: &List<String>, part: &List<String>) -> Option<List<String>> {
+fn without(whole: &List<Symbol>, part: &List<Symbol>) -> Option<List<Symbol>> {
     let mut rest = *whole;
     for let s of *part {
         rest.remove(rest.position(|r| r == s)?);
@@ -241,9 +640,14 @@ fn without(whole: &List<String>, part: &List<String>) -> Option<List<String>> {
 }
 
 impl Poly {
-    /// The polynomial as an arithmetic expression, each symbol spelled as
-    /// `names` maps it, or as itself where it maps none.
+    /// The polynomial as an arithmetic expression, each input symbol spelled as
+    /// `names` maps it, or as itself where it maps none, and each derived one
+    /// as the runtime computes it.
     pub fn spelled(&self, names: &TreeMap<String, String>) -> String {
+        return self.written(names, true);
+    }
+
+    fn written(&self, names: &TreeMap<String, String>, code: bool) -> String {
         if self.terms.is_empty() {
             return "0";
         }
@@ -264,7 +668,10 @@ impl Poly {
                 factors.push(`${magnitude}`);
             }
             for let s of t.symbols {
-                factors.push(names.get(s).unwrap_or(s));
+                factors.push(match s.derivation {
+                    Some(d) => d.written(names, code),
+                    None => names.get(s.name).unwrap_or(s.name),
+                });
             }
             out.push_str(&factors.join(" * "));
         }
@@ -274,6 +681,6 @@ impl Poly {
 
 impl Display for Poly {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(self.spelled(&TreeMap::<String, String>::new()));
+        f.write_str(self.written(&TreeMap::<String, String>::new(), false));
     }
 }

@@ -1,7 +1,7 @@
 //! An axis's length as stage 0 knows it, and the one question stage 0 asks of
 //! two of them.
 
-use { Poly } from "./poly.wado";
+use { Condition, Poly } from "./poly.wado";
 
 /// A length the graph states, one only the run knows, or none at all.
 /// See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
@@ -51,9 +51,37 @@ impl Extent {
         return self.is_stated() && other.is_stated() && self.poly() == other.poly();
     }
 
+    /// What the inputs owe for stage 0 to count these as one length: nothing
+    /// where they agree, and where they agree only once a clamp or a wrap in
+    /// either is read as the operand it takes unchanged, what that reading
+    /// owes. `None` where no reading makes them one length.
+    pub fn agreement(&self, other: &Extent) -> Option<List<Condition>> {
+        if self.agrees(other) {
+            return Option::Some([]);
+        }
+        if !self.is_stated() || !other.is_stated() {
+            return null;
+        }
+        let mut conditions: List<Condition> = [];
+        let a = self.poly().presumed(&mut conditions)?;
+        let b = other.poly().presumed(&mut conditions)?;
+        return if a == b { Option::Some(conditions) } else { null };
+    }
+
+    /// Whether the length reads a symbol the run derives.
+    pub fn is_derived(&self) -> bool {
+        return self matches { Symbolic(p) && p.is_derived() };
+    }
+
     /// Whether this is the extent ONNX's broadcasting stretches to any other.
     pub fn is_one(&self) -> bool {
         return self matches { Static(1) };
+    }
+
+    /// `agreement` with 1, which `is_one` asks without reading anything as
+    /// its operand.
+    pub fn oneness(&self) -> Option<List<Condition>> {
+        return self.agreement(&Extent::Static(1));
     }
 }
 

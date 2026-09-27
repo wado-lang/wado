@@ -918,8 +918,7 @@ fn node_call(
     }
     if op == "Range" {
         let [start, _, delta] = settled(range_bounds(node, &checked.known));
-        // Stage 0 kept what the count owes in `checked.owed` already.
-        let count = settled(range_count(node, &checked.known, &mut []));
+        let count = settled(range_count(node, &checked.known));
         let axis = shapes.get(node.outputs[0]).unwrap().axes[0].name;
         return Result::Ok(
             `range_i64::<${axis}>(${symbols.spell(&start)?}, ${symbols.spell_extent(&count.poly())?}, ${symbols.spell(
@@ -1010,7 +1009,7 @@ fn split_calls(node: &Node, checked: &Checked, exprs: &Operands) -> List<String>
     for let [i, part] of parts.into_iter().enumerate() {
         let part_axis = shapes.get(node.outputs[i]).unwrap().axes[axis].name;
         let turbofish = `::<${element}, [${pre}], ${x.axes[axis].name}, ${part_axis}, [${post}]>`;
-        calls.push(`slice_axis${turbofish}(${operand}, ${axis}, ${start}, ${part})`);
+        calls.push(`slice_axis${turbofish}(${operand}, ${axis}, ${start}, ${part}, 1)`);
         start += part;
     }
     return calls;
@@ -1022,8 +1021,7 @@ fn slice_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     let x = checked.shapes.get(node.inputs[0]).unwrap();
     let out = checked.shapes.get(node.outputs[0]).unwrap();
     let element = checked.primitives.get(node.inputs[0]).unwrap();
-    // Stage 0 kept what the bounds owe in `checked.owed` already.
-    let cuts = settled(slice_cuts(node, &checked.known, &x, &mut []));
+    let cuts = settled(slice_cuts(node, &checked.known, &x));
     // A slice that narrows nothing is its operand, read as a value.
     let mut call = exprs.value(&node.inputs[0]);
     let mut operand = exprs.reference(&node.inputs[0]);
@@ -1035,9 +1033,9 @@ fn slice_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
             a + 1,
             current.rank(),
         )}]>`;
-        call = `slice_axis${turbofish}(${operand}, ${a}, ${symbols.spell_extent(&cut.start)?}, ${symbols.spell_extent(
+        call = `slice_axis${turbofish}(${operand}, ${a}, ${symbols.spell(&cut.start)?}, ${symbols.spell_extent(
             &cut.extent.poly(),
-        )?})`;
+        )?}, ${cut.step})`;
         operand = `&${call}`;
         current.axes[a] = out.axes[a];
     }
@@ -1251,14 +1249,17 @@ fn broadcast_error(node: &Node, left: &Shape, right: &Shape) -> EmitError {
 
 /// Whether one axis of a kernel's signature can stand for both of these. Stage
 /// 0 stretches an extent of 1 and `matmul` does not, so the name is not enough.
+/// What stage 0 owed for the two to meet, `forward` checks.
 fn same_axis(left: &Axis, right: &Axis) -> bool {
-    return left.name == right.name && left.extent.agrees(&right.extent);
+    return left.name == right.name && left.extent.agreement(&right.extent) matches { Some(_) };
 }
 
 /// `same_axis` for an elementwise kernel, which stretches an extent of 1.
 fn stretchable_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name
-        && (left.extent.agrees(&right.extent) || left.extent.is_one() || right.extent.is_one());
+        && (same_axis(left, right)
+            || left.extent.oneness() matches { Some(_) }
+            || right.extent.oneness() matches { Some(_) });
 }
 
 /// Whether the axes the two operands share, aligned from the end as every
