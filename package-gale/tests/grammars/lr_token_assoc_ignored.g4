@@ -1,4 +1,4 @@
-// The shape ANTLR4 issue #4841 asks about. `<assoc=right>` on a token reference is the pre-4.2
+// The shape antlr/antlr4#4841 asks about. `<assoc=right>` on a token reference is the pre-4.2
 // spelling. `doc/left-recursion.md` says it is still accepted but ignored, so
 // only the alternative-level option makes `^` right-associative.
 grammar LrTokenAssocIgnored;
