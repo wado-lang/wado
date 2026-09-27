@@ -79,8 +79,8 @@ description = "Fail if a Rust file gained a `crate::` / `super::` path written o
 run = "scripts/check-rust-paths.sh --check"
 
 [tasks.check-spec-examples]
-description = "Fail if a `wado` block in the specification does not quote an e2e fixture, beyond the baseline"
-run = "scripts/check-spec-examples.sh --check"
+description = "Fail if a `wado` block in the specification does not quote an e2e fixture or a source file"
+run = "scripts/check-spec-examples.sh"
 
 [tasks.check-internal-names]
 description = "Fail if a name the compiler mints for itself is spelled `__x` instead of `$x`"
@@ -113,10 +113,6 @@ git diff --exit-code -- package-wadopoet/src/vocabulary.wado
 [tasks.update-rust-paths-baseline]
 description = "Record the inline paths each Rust file still carries, ratcheting the baseline down"
 run = "scripts/check-rust-paths.sh --update"
-
-[tasks.update-spec-examples-baseline]
-description = "Record the specification blocks that quote no fixture yet, ratcheting the baseline down"
-run = "scripts/check-spec-examples.sh --update"
 
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"

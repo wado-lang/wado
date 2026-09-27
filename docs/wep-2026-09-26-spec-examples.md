@@ -121,8 +121,7 @@ the lexer finds one, not in a comment or a string. It reads the Markdown with
 Marl. `scripts/check-spec-examples.sh` drives it with `wado run`, as
 `scripts/check-rust-paths.sh` drives `package-gale/tools/rust_inline_paths.wado`.
 
-A block with a reference is migrated, so any rule it breaks fails the check
-outright.
+A block that breaks any rule, naming nothing among them, fails the check.
 
 A `#[TODO]` rule was dropped: it asked a WEP to name every fixture marked
 `#[TODO]` that a block quotes, as a known gap. A marked fixture is not always a
@@ -134,9 +133,10 @@ before it. Marl's document tree stays `internal`.
 
 ### Rollout
 
-The baseline, `scripts/spec-examples.json`, counts the blocks of each file that
-have no reference yet, and CI fails when a count grows. It only shrinks, as
-`scripts/rust-inline-paths.json` does.
+During the migration a baseline, `scripts/spec-examples.json`, counted the
+blocks of each file that had no reference yet, and CI failed when a count grew.
+It only shrank, as `scripts/rust-inline-paths.json` does, and was deleted once
+empty.
 
 Migrating a block is triage. Each one is exactly one of:
 
@@ -170,9 +170,15 @@ The last two are what this WEP is for. The migration will find them.
        The migration found one block wrong in the specification: a float
        vector's comparison mask is the integer vector of the same width, not
        the float one.
-5. [ ] Migrate the other twelve spec files, one change per file.
-6. [ ] Delete the baseline once it is empty, so the rule holds with no
-       exceptions.
+5. [x] Migrate the other twelve spec files, one change per file. The migration
+       found compiler bugs, fixed on the way: a trait turbofish counting
+       parameters the trait does not write, an associated type's bound pinning
+       a type to `Self`, the locals of a body other than a function's, and a
+       standard library attribute accepted in a program. It found
+       two gaps, each now a WEP known gap: a CM operation bound by its spelling,
+       and an inline `with { path }`. A block with no fixture to run could
+       still quote a real file, so a reference may name a `source`.
+6. [x] Delete the baseline, so the rule holds with no exceptions.
 
 ## Known gaps
 
