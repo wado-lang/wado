@@ -1,17 +1,15 @@
-// Reference equality works even when the inner type does not implement Eq
-struct NoEq {
-    data: &i32,
+// `==` on references asks the pointee's `Eq`, so a pointee without one is
+// rejected; `ref_eq` still compares identity.
+struct Callback {
+    f: fn(),
 }
 
-// NoEq doesn't implement Eq because &i32 field... wait, &i32 now implements Eq.
-// Let's use a closure field which doesn't implement Eq.
-
-test "ref identity works without inner Eq" {
-    let a = 42;
-    let b = 42;
-    let r1 = &a;
-    let r2 = &a;
-    let r3 = &b;
-    assert r1 == r2;
-    assert r1 != r3;
+export fn run() {
+    let a = Callback { f: || {} };
+    let r = &a;
+    assert ref_eq(r, &a);
+    let _ = r == &a;
 }
+
+__DATA__
+{"compile_error": "operator `==` cannot be applied to type `&Callback`"}

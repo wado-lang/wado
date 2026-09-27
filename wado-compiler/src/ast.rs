@@ -732,6 +732,14 @@ fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
 }
 
 pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
+    walk_function_signature(v, func);
+    if let Some(body) = &func.body {
+        v.visit_block(body);
+    }
+}
+
+/// Everything [`walk_function`] visits but the body.
+pub fn walk_function_signature<V: AstVisitor>(v: &mut V, func: &Function) {
     v.visit_id(func.id, func.span);
     v.visit_generic_params(&func.type_params);
     walk_params(v, &func.params);
@@ -739,9 +747,6 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
         v.visit_type(ret);
     }
     walk_effect_names(v, &func.effects);
-    if let Some(body) = &func.body {
-        v.visit_block(body);
-    }
 }
 
 pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {
@@ -886,6 +891,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         Expr::ComparisonChain(e) => {
             v.visit_expr(&e.first);
             for c in &e.comparisons {
+                v.visit_id(c.id, c.op_span);
                 v.visit_expr(&c.right);
             }
         }
@@ -3288,9 +3294,21 @@ pub enum BinaryOp {
     Shr,
 }
 
+impl BinaryOp {
+    /// Whether this is `==`, `!=`, `<`, `<=`, `>` or `>=`.
+    #[must_use]
+    pub fn is_comparison(self) -> bool {
+        matches!(
+            self,
+            Self::Eq | Self::NotEq | Self::Lt | Self::LtEq | Self::Gt | Self::GtEq
+        )
+    }
+}
+
 /// A comparison in a chain (e.g., the `< b` part of `a < b < c`)
 #[derive(Debug, Clone)]
 pub struct ChainedComparison {
+    pub id: AstId,
     pub op: BinaryOp,
     pub right: Expr,
     pub op_span: Span,

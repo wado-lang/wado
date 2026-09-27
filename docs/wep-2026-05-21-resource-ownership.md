@@ -242,7 +242,9 @@ is caller-side and single-phase (`lower::translate` emits `$value_copy$T` only
 where it cannot prove move / share / fresh; no elision pass):
 
 - Move — `last_use::compute_move_eligible` plus `elaborator::liveness`'s
-  `moved_local_spans`. This also covers a **place-level move**: at a struct /
+  `moved_local_spans`. The elaborator reads names only. It sees a `&x`, but a
+  method call borrows its receiver with no `&` written, so its final uses count
+  only for a local the TIR walk finds no kept borrow pinning. This also covers a **place-level move**: at a struct /
   tuple literal, a whole-value or clean-field materialization aliases out of a
   _dead_ aggregate (the root is dead after the literal, sibling reads neither
   mutate nor move it, and the materialized fields are disjoint owners) instead of
@@ -317,6 +319,26 @@ where it cannot prove move / share / fresh; no elision pass):
   pins the scrutinee exactly as `&op` itself would wherever it outlives the
   match — a retaining callee, an aggregate literal, a global, a write through a
   place, the result.
+
+  A borrow stored in a local lasts as long as that local's value can be read.
+  This covers `let r = &a`, a call result a callee hands the borrow back in
+  (`let it = (&a).into_iter()`), and a binding of a `&a` scrutinee. The
+  referent is pinned only at a move where one of those holders is still
+  readable. A holder is readable where it is live, where a copy read out of it
+  is live, or anywhere once its value has gone where no alias chain follows it,
+  such as a literal, a result, or a callee that keeps it. A scalar read out of a
+  holder carries none of its storage, so `P { a: r.a }` hands nothing on. So a
+  double buffer that iterates `&a` and then swaps `a` and `b` moves both lists
+  every step.
+
+  A call result that is not stored is kept by whatever takes it. Passed straight
+  to another call, or borrowed for one, it lasts as long as that call keeps it,
+  so `view.chars().count()` pins nothing past the count.
+
+  The swap also needs flow-sensitive alias chains. `a = b` is an alias edge from
+  `a` to `b`. Where `b` is dead after every binding that reads it, it is
+  rebound before it is read again. A storage-sharing check walks through such
+  an edge but does not count `b` as holding the storage `a` took.
 - Confinement — `confine.rs` per-parameter escape fixpoint. A builtin declares
   no function, so it is absent from the table that walk builds; reading absence
   as an opaque callee made every parameter handed to one escape. `a[i]` is a
@@ -820,6 +842,23 @@ No program reaches the imprecision. For a second read to pay a copy its move mus
 be refused, and a copied local aliases nothing, so only a read that is not the
 last one refuses — and there the second copy is a second live object, which is
 needed.
+
+### Known gap: some resource holders are not move-checked or dropped
+
+Every value holding an affine resource is move-only and dropped, but only a
+struct, a tuple and a `Result` are checked. An `Option`, a user variant or a
+`List` holding one can be moved twice with no diagnostic, and is not dropped at
+scope exit.
+
+### Known gap: a resource field moves out of its holder
+
+`let c = h.c;` over a struct `h` holding a resource compiles, and `h` stays
+usable. Moving `h` afterwards leaves two owners of one handle.
+
+### Known gap: an integer casts to an affine resource
+
+`5 as Counter` compiles for an affine `Counter` in any module. The result is a
+handle nothing minted, which the program then owns and drops.
 
 ## Deferred: the `move` and `unique` keywords
 

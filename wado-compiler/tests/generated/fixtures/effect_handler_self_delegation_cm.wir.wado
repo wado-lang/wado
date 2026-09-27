@@ -567,9 +567,10 @@ fn "effect_handler_self_delegation_cm.wado/effect_handler_self_delegation_cm.wad
     let elements: ref Array<u8>;
     let used: i32;
     let $licm_byte_14: u8;
-    return self_2 = self.$capture_0, elements = array.new_fixed<u8>(), out = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 }, i = 0, $licm_byte_14 = self_2.byte, b45: block {
+    let $licm_arith_15: i32;
+    return self_2 = self.$capture_0, elements = array.new_fixed<u8>(), out = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 }, i = 0, $licm_byte_14 = self_2.byte, $licm_arith_15 = builtin::i32_wrap_i64(max_len), b45: block {
         l46: loop {
-            break_if b45 i >= builtin::i32_wrap_i64(max_len);
+            break_if b45 i >= $licm_arith_15;
             used = out.used;
             if @unlikely(used >= builtin::array_len(out.repr)) {
                 cold_path;

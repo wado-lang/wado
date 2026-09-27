@@ -1,0 +1,46 @@
+// Struct declaration, construction, functional update and anonymous structs.
+
+struct User {
+    name: String,
+    age: i32,
+    active: bool,
+}
+
+// A struct may hold itself through an Option
+struct Node {
+    value: i32,
+    next: Option<Node>,
+}
+
+test {
+    let list = Node { value: 1, next: Option::Some(Node { value: 2, next: null }) };
+    assert list.next.unwrap().value == 2;
+}
+
+test "construction" {
+    let user = User { name: "Alice", age: 30, active: true };
+
+    // Shorthand (variable name matches field)
+    let name = "Bob";
+    let age = 25;
+    let bob: User = { name, age, active: false };
+    assert bob.name == "Bob";
+
+    // Implicit struct literal (requires type annotation)
+    let carol: User = { name: "Carol", age: 30, active: true };
+    assert carol.age == user.age;
+
+    let u2 = User { ..user, age: 31 };  // every field from `user`, age replaced
+    assert u2.name == "Alice" && u2.age == 31;
+}
+
+test "anonymous structs" {
+    let p = { x: 1, y: 2 };
+    let line = { start: p, end: { x: 10, y: 20 } };
+    let { start: { x, y }, end } = line;
+    assert x == 1 && y == 2 && end.x == 10;
+
+    let base = { user_id: 1, ip: "10.0.0.1" };
+    let event = { ..base, level: "warn" };  // { user_id, ip, level }
+    assert event.user_id == 1 && event.level == "warn";
+}

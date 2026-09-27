@@ -293,8 +293,8 @@ therefore a parse error.
 `break` alone leaves the innermost loop. A labeled block around a nest leaves
 all of it at once, and its tail is the path no `break` took. Inside a block,
 `break LABEL` skips the rest, so a chain of guards stays flat instead of nesting
-one inside the next. A `break` may also leave an effect handler's `do` block,
-which restores the outer handler either way.
+one inside the next. A `break` may also leave an effect handler's `do` block
+(see [Handler Scope](./spec-effects.md#handler-scope)).
 
 ```wado
 search: {
@@ -381,6 +381,7 @@ match command {
 | Mut variable  | `mut x`, `Some(mut x)`       | Binds as mutable                             |
 | Literal       | `0`, `"hello"`, `true`       | Matches exact value                          |
 | Constant      | `MAX_LEN`, `i32::MAX`        | Matches an immutable global / const by value |
+| Range         | `0..<60`, `'a'..='z'`        | Matches an integer or `char` in the range    |
 | Variant       | `Some(x)`, `None`            | Matches variant case                         |
 | Tuple         | `[a, b, c]`                  | Destructures tuple                           |
 | Nested tuple  | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple        |
@@ -429,7 +430,11 @@ since `None` may not match, while `let limit = 1` binds even where a
 A refutable pattern reads a bare name that names an immutable global as a
 constant pattern instead. The refutable positions are a `match` arm, `if let`,
 `while let`, and `let ... else`, so `let limit = v else { … }` runs the `else`
-block unless `v == limit`.
+block unless `v == limit`. A local, a parameter, or a closure capture that takes
+the name puts the global out of reach, so the name binds there as it would
+anywhere else. What counts is what is in scope where the pattern starts. A name
+the pattern binds itself reaches none of its own sites, so `[mut limit, limit]`
+binds the first element and tests the second against the global.
 
 An uninitialized `let x: T;` declares a single name, or `_`.
 
@@ -535,6 +540,32 @@ let kind = match token {
 The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
 type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
 `Option` constant matches at the top of an arm or nested in another pattern.
+
+### Range Patterns
+
+A range pattern matches a value between its bounds. It stands wherever a
+refutable pattern may, nested ones included:
+
+```wado
+let grade = match score {
+    0..<60 => "F",
+    60..=100 => "P",
+    _ => "invalid",
+};
+let lower = c matches { 'a'..='z' };
+```
+
+- The scrutinee is an integer or `char`.
+- Each bound is an integer, `char` or byte literal, optionally negated, or a
+  primitive type's associated constant such as `i32::MAX`. A user-defined
+  constant is not a bound.
+- A reversed range pattern is an error, and so is an empty one (`5..<5`).
+- Two arms' range patterns must not overlap. The alternatives of one arm's
+  or-pattern may.
+- Range patterns count toward [exhaustiveness](#exhaustiveness): `0 => …` and
+  `1..=255 => …` together cover a `u8`.
+
+The range operators themselves are in [Ranges](./spec-lexical.md#ranges).
 
 ### Or Patterns
 

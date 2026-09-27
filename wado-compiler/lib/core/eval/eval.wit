@@ -1,0 +1,59 @@
+package core:eval@0.1.0;
+
+/// Host interface behind `core:eval`. It compiles and runs one Wado source
+/// and returns the outcome as raw data; `core:eval` decodes it. Only
+/// `wado test` supplies it. See WEP 2026-09-26 (Eval).
+interface eval-host {
+    /// Compile `source` as a single-module `wasi:cli/command` program and run
+    /// it under `fuel`, linking only stdout, stderr and exit.
+    run: func(source: string, fuel: u64) -> outcome;
+
+    /// Why a run stopped with a trap.
+    enum trap-kind {
+        unreachable,
+        stack-overflow,
+        memory-out-of-bounds,
+        table-out-of-bounds,
+        indirect-call-to-null,
+        bad-signature,
+        integer-overflow,
+        integer-division-by-zero,
+        bad-conversion-to-integer,
+        null-reference,
+        array-out-of-bounds,
+        allocation-too-large,
+        cast-failure,
+        other,
+    }
+
+    /// How a program that ran came to stop.
+    variant status {
+        exited(s32),
+        trapped(trap-kind),
+        out-of-fuel,
+        out-of-memory,
+    }
+
+    /// A program that ran, with everything it wrote before it stopped.
+    record ran {
+        stdout: list<u8>,
+        stderr: list<u8>,
+        status: status,
+    }
+
+    /// A source that did not compile.
+    record compile-failure {
+        /// The report `wado compile` would print.
+        rendered: string,
+        /// The `Code` of each error, in report order.
+        codes: list<string>,
+    }
+
+    variant outcome {
+        ran(ran),
+        compile-failed(compile-failure),
+        compile-timed-out,
+        /// The import the host refused to link.
+        unavailable(string),
+    }
+}

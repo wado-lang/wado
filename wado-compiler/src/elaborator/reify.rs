@@ -4,6 +4,7 @@
 //! only reads them — never re-running inference, resolution, or dispatch.
 
 use super::sig::AssocConstSig;
+use std::ops::ControlFlow;
 use std::rc::Rc;
 
 use crate::ast::{
@@ -18,6 +19,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
+use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
@@ -35,7 +37,7 @@ use super::coercion::{
 use super::expr::UnionSource;
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
-use super::tysys::{Identity, TypeSystem};
+use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
@@ -64,7 +66,7 @@ use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
     is_float_only_literal, parse_i128_literal, parse_int_bits, parse_u128_literal,
-    range_endpoint_to_i128, unpack_i128,
+    range_endpoint_to_i128,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -77,8 +79,16 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
+<<<<<<< HEAD
 use crate::synthesis::common::{builtin_call, deref_expr};
 use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
+||||||| c3a438b9ce7
+use crate::synthesis::common::builtin_call;
+use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
+=======
+use crate::synthesis::common::builtin_call;
+use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64, not_expr};
+>>>>>>> origin/main
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -261,6 +271,23 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
     )
 }
 
+/// `operand` dereferenced through what a cast to `target` reads through.
+fn read_through_for_cast(tt: &TypeTable, operand: TirExpr, target: tir::TypeId) -> TirExpr {
+    tt.cast_read_through(operand.type_id, target)
+        .into_iter()
+        .fold(operand, |operand, referent| {
+            let span = operand.span;
+            TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: Box::new(operand),
+                },
+                referent,
+                span,
+            )
+        })
+}
+
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
 /// one.
 fn cast_to_newtype(built: TirExpr, newtype_cast_to: Option<tir::TypeId>, span: Span) -> TirExpr {
@@ -329,14 +356,7 @@ fn bare_break(span: Span) -> TirStmt {
 
 /// `if !cond { break; }`, a loop's exit test.
 fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
-    let neg_cond = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Not,
-            expr: Box::new(cond),
-        },
-        TypeTable::BOOL,
-        cond_span,
-    );
+    let neg_cond = not_expr(cond, cond_span);
     TirStmt::new(
         TirStmtKind::If {
             condition: neg_cond,
@@ -2640,8 +2660,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let target_type = self
                     .ann_expression_types(cast.id)
                     .unwrap_or(TypeTable::ERROR);
+<<<<<<< HEAD
                 // An integer literal cast to i128/u128 is a constructor call
                 // over its two words, which hold a value past `u64` too.
+||||||| c3a438b9ce7
+                // `i128/u128 as T` lowers to prelude calls rather than a
+                // bare cast, since the 128-bit types are prelude structs:
+                // floats go through the correctly rounded `as_f64` /
+                // `as_f32`, integer targets truncate via `low()`, and
+                // `i128 ↔ u128` reinterprets via `from_u128` / `from_i128`.
+                // Must run before the target-side `try_reify_int128_cast`
+                // so `i128 ↔ u128` is not mis-handled by its non-numeric
+                // bare-cast fallback.
+                if let Some(tir) = self.try_reify_int128_source_cast(cast, target_type, ctx) {
+                    return tir;
+                }
+                // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
+                // / `from_pair` constructor call rather than a bare cast,
+                // since the 128-bit types are prelude structs. Mirrors
+                // `Elaborator::resolve_cast`'s int128 branch.
+                if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
+=======
+                // Mirrors `Elaborator::resolve_cast`'s int128 branch.
+>>>>>>> origin/main
                 if let Some(tir) = self.try_reify_int128_literal_cast(cast, target_type) {
                     return tir;
                 }
@@ -2666,10 +2707,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     _ => self.reify_expr(&cast.expr, ctx, None),
                 };
+<<<<<<< HEAD
                 let inner = self.read_through_reference(inner, target_type);
                 if let Some(wide) = self.int128_cast(inner.type_id, target_type) {
                     return self.build_int128_cast(inner, wide, target_type, span);
                 }
+||||||| c3a438b9ce7
+=======
+                let inner =
+                    read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
+                let inner = match self.lower_int128_cast(inner, target_type, span) {
+                    ControlFlow::Break(lowered) => return lowered,
+                    ControlFlow::Continue(inner) => inner,
+                };
+>>>>>>> origin/main
                 let (from_handle, to_handle) = {
                     let tt = self.tysys.type_table.borrow();
                     (
@@ -3409,14 +3460,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cond_type,
             span,
         );
-        let neg_cond = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(cond_ref),
-            },
-            TypeTable::BOOL,
-            span,
-        );
+        let neg_cond = not_expr(cond_ref, span);
 
         // Header + `condition: <source>` + one `<label>: <text>` line per
         // emitted slot.
@@ -4736,15 +4780,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |expr, hint| self.reify_expr(expr, ctx, hint),
                 |expr| expr.type_id,
             )
-        } else if matches!(
-            binary.op,
-            ast::BinaryOp::Eq
-                | ast::BinaryOp::NotEq
-                | ast::BinaryOp::Lt
-                | ast::BinaryOp::LtEq
-                | ast::BinaryOp::Gt
-                | ast::BinaryOp::GtEq
-        ) && Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
+        } else if binary.op.is_comparison()
+            && Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
             && !Elaborator::<H>::takes_shape_from_expected_type(&binary.right)
         {
             let right = self.reify_expr(&binary.right, ctx, None);
@@ -4755,27 +4792,37 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right = self.reify_expr(&binary.right, ctx, None);
             (left, right)
         };
+        self.reify_binary_op(
+            binary.id,
+            binary.op,
+            left,
+            right,
+            recorded_type,
+            binary.span,
+        )
+    }
 
-        if let Some(identity) = self
-            .tysys
-            .identity_of(binary.op, left.type_id, right.type_id)
-        {
-            return self.identity_comparison(identity, binary.op, left, right, binary.span);
+    /// `left OP right` for the operator node `id`: the trait call the
+    /// elaborator recorded for it, else the native operation.
+    fn reify_binary_op(
+        &mut self,
+        id: ast::AstId,
+        op: ast::BinaryOp,
+        left: TirExpr,
+        right: TirExpr,
+        recorded_type: TypeId,
+        span: Span,
+    ) -> TirExpr {
+        if self.tysys.compares_handles(op, left.type_id, right.type_id) {
+            return handle_comparison(op, left, right, span);
         }
 
-        if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
-            let call = self.binary_operator_call(dispatch, left, right, binary.span);
+        if let Some(dispatch) = self.ann_operator_dispatch(id) {
+            let call = self.binary_operator_call(dispatch, left, right, span);
             // `!=` negates `eq`, and an ordering operator reads `cmp`'s
             // `Ordering`; an `OperatorOrd` method already answers a `bool`.
-            return match binary.op {
-                ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(call),
-                    },
-                    TypeTable::BOOL,
-                    binary.span,
-                ),
+            return match op {
+                ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => not_expr(call, span),
                 ast::BinaryOp::Lt
                 | ast::BinaryOp::Gt
                 | ast::BinaryOp::LtEq
@@ -4787,26 +4834,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .borrow_mut()
                             .make_compiler_enum(CompilerItem::Ordering) =>
                 {
-                    ord_bool_from_cmp(call, binary.op, binary.span, &self.tysys.type_table)
+                    ord_bool_from_cmp(call, op, span, &self.tysys.type_table)
                 }
                 _ => call,
             };
         }
 
-        // Native binary op — primitive path. The op mapping is 1:1 with the
-        // AST. Ref-equality (`RefEq` / `RefNotEq`) is synthesised by the
-        // elaborator after type analysis; until that decision is recorded,
-        // reify emits the source-level op verbatim. That affects only the
-        // `==` / `!=` path on ref types; other ops on refs are already
-        // diagnosed by annotate.
         TirExpr::new(
             TirExprKind::Binary {
                 left: Box::new(left),
-                op: ast_binary_op_to_tir(binary.op),
+                op: ast_binary_op_to_tir(op),
                 right: Box::new(right),
             },
             recorded_type,
-            binary.span,
+            span,
         )
     }
 
@@ -5782,64 +5823,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// One link of a comparison chain. A non-primitive operand stays a
-    /// `Binary`, which monomorphization turns into its `Eq` / `Ord` call.
-    fn chain_comparison(
-        &mut self,
-        op: ast::BinaryOp,
-        left: TirExpr,
-        right: TirExpr,
-        span: Span,
-    ) -> TirExpr {
-        if let Some(identity) = self.tysys.identity_of(op, left.type_id, right.type_id) {
-            return self.identity_comparison(identity, op, left, right, span);
-        }
-        TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(left),
-                op: ast_binary_op_to_tir(op),
-                right: Box::new(right),
-            },
-            TypeTable::BOOL,
-            span,
-        )
-    }
-
-    /// `==` / `!=` by identity: `ref.eq` on references, bit equality on
-    /// resource handles.
-    fn identity_comparison(
-        &mut self,
-        identity: Identity,
-        op: ast::BinaryOp,
-        left: TirExpr,
-        right: TirExpr,
-        span: Span,
-    ) -> TirExpr {
-        let is_eq = op == ast::BinaryOp::Eq;
-        let (op, left, right) = match identity {
-            Identity::Reference if is_eq => (TirBinaryOp::RefEq, left, right),
-            Identity::Reference => (TirBinaryOp::RefNotEq, left, right),
-            Identity::Handle => (
-                if is_eq {
-                    TirBinaryOp::Eq
-                } else {
-                    TirBinaryOp::NotEq
-                },
-                handle_bits(left),
-                handle_bits(right),
-            ),
-        };
-        TirExpr::new(
-            TirExprKind::Binary {
-                op,
-                left: Box::new(left),
-                right: Box::new(right),
-            },
-            TypeTable::BOOL,
-            span,
-        )
-    }
-
     /// Reify a comparison chain `a < b < c …` into
     /// `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c) …`.
     fn reify_comparison_chain(
@@ -5860,8 +5843,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let first_ref = Self::bind_chain_operand(0, first_tir, &mut stmts, chain.span, ctx);
         let right0_ref = Self::bind_chain_operand(1, right0_tir, &mut stmts, chain.span, ctx);
 
-        let mut acc_tir =
-            self.chain_comparison(cmp0.op, first_ref, right0_ref.clone(), cmp0.op_span);
+        let mut acc_tir = self.reify_binary_op(
+            cmp0.id,
+            cmp0.op,
+            first_ref,
+            right0_ref.clone(),
+            TypeTable::BOOL,
+            cmp0.op_span,
+        );
         let mut prev_tir = right0_ref;
 
         let last_idx = chain.comparisons.len() - 1;
@@ -5874,7 +5863,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Self::bind_chain_operand(idx + 1, raw_right, &mut stmts, chain.span, ctx)
             };
             let next_prev = right_tir.clone();
-            let cmp_tir = self.chain_comparison(cmp.op, prev_tir, right_tir, cmp.op_span);
+            let cmp_tir = self.reify_binary_op(
+                cmp.id,
+                cmp.op,
+                prev_tir,
+                right_tir,
+                TypeTable::BOOL,
+                cmp.op_span,
+            );
             acc_tir = TirExpr::new(
                 TirExprKind::Binary {
                     left: Box::new(acc_tir),
@@ -8450,16 +8446,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Replay an `i128` / `u128` numeric-literal coercion recorded by annotate,
     /// returning `None` for every other shape. The 128-bit types are prelude
-    /// structs, so the value is materialized by a `from_u64` / `from_i64` /
-    /// `from_pair` call; every other `NumericLiteral` coercion is free, the
-    /// literal already carrying its coerced type.
+    /// structs, so the value is materialized by a constructor call; every other
+    /// `NumericLiteral` coercion is free, the literal already carrying its
+    /// coerced type.
     fn try_reify_int128_coercion(&self, expr: &ast::Expr) -> Option<TirExpr> {
         let choice = self.ann_coercions(expr.id())?;
         if choice.kind != CoercionKind::NumericLiteral {
             return None;
         }
         let target_type = choice.target_type;
-        let (item, name) = self.tysys.wide_int_of(target_type)?;
+        let item = self.tysys.type_table.borrow().wide_int_item(target_type)?;
 
         // Every shape the coercion admits, the negated `-NUM` among them, whose
         // coercion is keyed on the enclosing `Unary` node. Reading the one
@@ -8480,18 +8476,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             parse_i128_literal(&repr)
         };
         let value = parse_result.ok()?;
-
-        Some(build_int128_literal_call(
+        Some(create_literal(
             item,
-            &name,
             value,
-            &repr,
-            !negated,
             target_type,
+            &self.tysys.type_table.borrow(),
             expr.span(),
         ))
     }
 
+<<<<<<< HEAD
     /// The operand a cast converts: a reference is read through to its
     /// referent, unless the target is itself a reference (`&T as &U`, a newtype
     /// step). A cast converts values, and a reference to a scalar is not one.
@@ -8515,15 +8509,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// constructor call that holds a value past `u64`. `None` for any other cast.
     fn try_reify_int128_literal_cast(
         &self,
+||||||| c3a438b9ce7
+    /// Replay an `expr as i128/u128` cast, modulo newtypes of one. `None` for
+    /// any other target; a non-numeric operand yields the bare cast.
+    fn try_reify_int128_cast(
+        &mut self,
+=======
+    /// `LITERAL as i128/u128`: a `from_pair` constructor carries a literal past
+    /// `u64`, which the numeric path's `from_u64` / `from_i64` cannot.
+    fn try_reify_int128_literal_cast(
+        &mut self,
+>>>>>>> origin/main
         cast: &ast::CastExpr,
         target_type: TypeId,
     ) -> Option<TirExpr> {
-        let target_base = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(target_type);
-        let (item, name) = self.tysys.wide_int_of(target_base)?;
+        let item = {
+            let tt = self.tysys.type_table.borrow();
+            tt.wide_int_item(tt.representation_head(target_type))?
+        };
 
         // Literal operand: `1042 as u128`.
         if let ast::Expr::Literal(lit) = &cast.expr
@@ -8535,13 +8538,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 parse_i128_literal(repr)
             };
             if let Ok(value) = parsed {
-                return Some(build_int128_literal_call(
+                return Some(create_literal(
                     item,
-                    &name,
                     value,
-                    repr,
-                    true,
                     target_type,
+                    &self.tysys.type_table.borrow(),
                     cast.span,
                 ));
             }
@@ -8558,27 +8559,79 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !is_float_only_literal(repr)
             && let Ok(value) = parse_i128_literal(&format!("-{repr}"))
         {
-            return Some(build_int128_literal_call(
+            return Some(create_literal(
                 item,
-                &name,
                 value,
-                repr,
-                false,
                 target_type,
+                &self.tysys.type_table.borrow(),
                 unary.span,
             ));
         }
         None
     }
 
+<<<<<<< HEAD
     /// How a cast to or from i128/u128, modulo newtypes of one, lowers. The
     /// 128-bit types are prelude structs, so a bare `Cast` would leak the boxed
     /// struct ref into a slot expecting a Wasm scalar (issue #1328). `None` is
     /// the bare cast: a same-base newtype step, a non-numeric operand, or a
     /// target `resolve_cast` has already reported as invalid.
     fn int128_cast(&self, source_type: TypeId, target_type: TypeId) -> Option<Int128Cast> {
+||||||| c3a438b9ce7
+    /// `i128/u128 as T` for a wide-int *source*. The 128-bit types are
+    /// prelude structs, so a bare `Cast` would leak the boxed struct ref
+    /// into a slot expecting a Wasm scalar (issue #1328). Lower instead to
+    /// prelude calls: `f64`/`f32` through the correctly rounded
+    /// `as_f64`/`as_f32`, integer targets through `low()` plus a primitive
+    /// cast (truncation), and `i128 ↔ u128` through the bit-reinterpreting
+    /// `from_u128`/`from_i128` constructors. Targets outside that set
+    /// return `None`; `resolve_cast` has already reported them as invalid.
+    fn try_reify_int128_source_cast(
+        &mut self,
+        cast: &ast::CastExpr,
+        target_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> Option<TirExpr> {
+        let source_type = self.ann_expression_types(cast.expr.id())?;
+=======
+    /// A cast with a wide integer on either side, `inner` already read through
+    /// its references. The 128-bit types are prelude structs, so a bare `Cast`
+    /// would leak the boxed struct ref into a slot expecting a Wasm scalar
+    /// (issue #1328), or a scalar into one expecting the struct. `Continue` hands
+    /// `inner` on to the bare cast where neither side needs a lowering.
+    fn lower_int128_cast(
+        &self,
+        inner: TirExpr,
+        target_type: TypeId,
+        span: Span,
+    ) -> ControlFlow<TirExpr, TirExpr> {
+        let tt = self.tysys.type_table.borrow();
+        if tt.is_wide_int(tt.representation_head(inner.type_id)) {
+            drop(tt);
+            return self.lower_int128_source_cast(inner, target_type, span);
+        }
+        let Some(item) = tt.wide_int_item(tt.representation_head(target_type)) else {
+            return ControlFlow::Continue(inner);
+        };
+        ControlFlow::Break(create_conversion(item, inner, target_type, &tt, span))
+    }
+
+    /// `i128/u128 as T`: `f64`/`f32` through the correctly rounded
+    /// `as_f64`/`as_f32`, integer targets through `low()` plus a primitive
+    /// cast (truncation), and `i128 ↔ u128` through the bit-reinterpreting
+    /// `from_u128`/`from_i128` constructors. Any other target hands `inner`
+    /// on; `resolve_cast` has already reported it if it is invalid.
+    fn lower_int128_source_cast(
+        &self,
+        inner: TirExpr,
+        target_type: TypeId,
+        span: Span,
+    ) -> ControlFlow<TirExpr, TirExpr> {
+        let source_type = inner.type_id;
+>>>>>>> origin/main
         // Newtypes share their base's representation, so dispatch on the
         // ultimate base of both sides; explicit repr-compatible `Cast`
+<<<<<<< HEAD
         // nodes bridge the newtype boundaries.
         let tt = self.tysys.type_table.borrow();
         let source_base = tt.representation_head(source_type);
@@ -8589,6 +8642,38 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return tt
                 .is_numeric(source_type)
                 .then_some(Int128Cast::FromNumeric);
+||||||| c3a438b9ce7
+        // nodes bridge the newtype boundaries below.
+        let (source_base, target_base) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.representation_head(source_type),
+                tt.representation_head(target_type),
+            )
+        };
+        let (source_item, target_item) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.wide_int_item(source_base)?,
+                tt.wide_int_item(target_base),
+            )
+=======
+        // nodes bridge the newtype boundaries below.
+        let (source_base, target_base) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.representation_head(source_type),
+                tt.representation_head(target_type),
+            )
+        };
+        let (source_item, target_item) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.wide_int_item(source_base)
+                    .expect("the caller checked the source is a wide integer"),
+                tt.wide_int_item(target_base),
+            )
+>>>>>>> origin/main
         };
         let signed_source = source_item == CompilerItem::I128;
         Some(match tt.get(target_base) {
@@ -8611,6 +8696,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::U16
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
+<<<<<<< HEAD
             ) => Int128Cast::LowThenCast(if signed_source {
                 CompilerItem::I128Low
             } else {
@@ -8621,10 +8707,47 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // repr-compatible reinterpret.
                 item if item == source_item => {
                     return (target_type == source_type).then_some(Int128Cast::Identity);
+||||||| c3a438b9ce7
+            ) => Lowering::LowThenCast,
+            _ => match target_item {
+                Some(item) if item == source_item => {
+                    if target_type == source_type {
+                        Lowering::Identity
+                    } else {
+                        // Same wide base but a newtype on either side: the
+                        // bare `Cast` emitted by the caller is the correct
+                        // repr-compatible reinterpret.
+                        return None;
+                    }
+=======
+            ) => Lowering::LowThenCast,
+            _ => match target_item {
+                Some(item) if item == source_item => {
+                    if target_type == source_type {
+                        Lowering::Identity
+                    } else {
+                        // Same wide base but a newtype on either side: the
+                        // bare `Cast` emitted by the caller is the correct
+                        // repr-compatible reinterpret.
+                        return ControlFlow::Continue(inner);
+                    }
+>>>>>>> origin/main
                 }
+<<<<<<< HEAD
                 CompilerItem::I128 => Int128Cast::Reinterpret(CompilerItem::I128FromU128),
                 CompilerItem::U128 => Int128Cast::Reinterpret(CompilerItem::U128FromI128),
                 other => unreachable!("wide_int_item answered {other:?}"),
+||||||| c3a438b9ce7
+                Some(CompilerItem::I128) => Lowering::Reinterpret(CompilerItem::I128FromU128),
+                Some(CompilerItem::U128) => Lowering::Reinterpret(CompilerItem::U128FromI128),
+                Some(other) => unreachable!("wide_int_item answered {other:?}"),
+                None => return None,
+=======
+                Some(CompilerItem::I128) => Lowering::Reinterpret(CompilerItem::I128FromU128),
+                Some(CompilerItem::U128) => Lowering::Reinterpret(CompilerItem::U128FromI128),
+                Some(other) => unreachable!("wide_int_item answered {other:?}"),
+                None => return ControlFlow::Continue(inner),
+>>>>>>> origin/main
             },
         })
     }
@@ -8649,6 +8772,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         };
 
+<<<<<<< HEAD
         let make_func_ref = |tysys: &TypeSystem, item: CompilerItem| {
             let (owner_head, method_name) = {
                 let tt = tysys.type_table.borrow();
@@ -8667,6 +8791,31 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 method_info: Some(method_info),
             }
         };
+||||||| c3a438b9ce7
+        let make_func_ref = |tysys: &TypeSystem, item: CompilerItem| {
+            let (owner_head, method_name) = {
+                let tt = tysys.type_table.borrow();
+                let (_, _, method_name) = tt.compiler_method(item);
+                (
+                    tt.compiler_items().require_method_owner(item).clone(),
+                    method_name.to_string(),
+                )
+            };
+            let method_info = LocalMethodName::new(owner_head, None, method_name);
+            tir::FunctionRef {
+                module_source: ModuleSource::int128(),
+                name: method_info.to_mangled_name(),
+                template: None,
+                monomorph_info: None,
+                method_info: Some(method_info),
+            }
+        };
+        // Repr-compatible `Cast` bridging a newtype boundary (no-op in
+        // codegen); identity when the types already match.
+=======
+        // Repr-compatible `Cast` bridging a newtype boundary (no-op in
+        // codegen); identity when the types already match.
+>>>>>>> origin/main
         let bridge = |expr: TirExpr, to: TypeId, span: Span| {
             if expr.type_id == to {
                 return expr;
@@ -8684,6 +8833,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // A newtype source first reinterprets to its wide base so the
         // prelude calls below see their declared receiver/argument type.
         let inner = bridge(inner, source_base, span);
+<<<<<<< HEAD
         let method_call = |receiver: TirExpr, item: CompilerItem, returns: TypeId| {
             let receiver = adjust_receiver_for_self_kind(
                 receiver,
@@ -8703,12 +8853,100 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .expect("int128_cast saw a wide target");
                 let intermediate_type = if item == CompilerItem::U128 {
                     TypeTable::U64
+||||||| c3a438b9ce7
+        match lowering {
+            Lowering::Identity => Some(inner),
+            Lowering::Method(item) => {
+                let func = make_func_ref(&self.tysys, item);
+                let receiver = adjust_receiver_for_self_kind(
+                    inner,
+                    ast::SelfKind::Ref,
+                    /* is_ref_impl */ false,
+                    span,
+                    &self.tysys.type_table,
+                );
+                let call = build_tir_method_call(receiver, func, vec![], vec![], target_base, span);
+                Some(bridge(call, target_type, span))
+            }
+            Lowering::LowThenCast => {
+                let item = if signed_source {
+                    CompilerItem::I128Low
+=======
+        match lowering {
+            Lowering::Identity => ControlFlow::Break(inner),
+            Lowering::Method(item) => {
+                let func = method_ref(&self.tysys.type_table.borrow(), item);
+                let receiver = adjust_receiver_for_self_kind(
+                    inner,
+                    ast::SelfKind::Ref,
+                    /* is_ref_impl */ false,
+                    span,
+                    &self.tysys.type_table,
+                );
+                let call = build_tir_method_call(receiver, func, vec![], vec![], target_base, span);
+                ControlFlow::Break(bridge(call, target_type, span))
+            }
+            Lowering::LowThenCast => {
+                let item = if signed_source {
+                    CompilerItem::I128Low
+>>>>>>> origin/main
                 } else {
                     TypeTable::I64
                 };
+<<<<<<< HEAD
                 let casted = bridge(inner, intermediate_type, span);
                 build_int128_from_intermediate(item, &name, casted, target_type, span)
+||||||| c3a438b9ce7
+                let func = make_func_ref(&self.tysys, item);
+                let receiver = adjust_receiver_for_self_kind(
+                    inner,
+                    ast::SelfKind::Ref,
+                    /* is_ref_impl */ false,
+                    span,
+                    &self.tysys.type_table,
+                );
+                let low_call =
+                    build_tir_method_call(receiver, func, vec![], vec![], TypeTable::U64, span);
+                let converted = if target_base == TypeTable::U64 {
+                    low_call
+                } else {
+                    TirExpr::new(
+                        TirExprKind::Cast {
+                            expr: Box::new(low_call),
+                            target_type: target_base,
+                        },
+                        target_base,
+                        span,
+                    )
+                };
+                Some(bridge(converted, target_type, span))
+=======
+                let func = method_ref(&self.tysys.type_table.borrow(), item);
+                let receiver = adjust_receiver_for_self_kind(
+                    inner,
+                    ast::SelfKind::Ref,
+                    /* is_ref_impl */ false,
+                    span,
+                    &self.tysys.type_table,
+                );
+                let low_call =
+                    build_tir_method_call(receiver, func, vec![], vec![], TypeTable::U64, span);
+                let converted = if target_base == TypeTable::U64 {
+                    low_call
+                } else {
+                    TirExpr::new(
+                        TirExprKind::Cast {
+                            expr: Box::new(low_call),
+                            target_type: target_base,
+                        },
+                        target_base,
+                        span,
+                    )
+                };
+                ControlFlow::Break(bridge(converted, target_type, span))
+>>>>>>> origin/main
             }
+<<<<<<< HEAD
             Int128Cast::Identity => inner,
             Int128Cast::Method(item) => {
                 bridge(method_call(inner, item, target_base), target_type, span)
@@ -8719,6 +8957,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             Int128Cast::Reinterpret(item) => {
                 let func = make_func_ref(&self.tysys, item);
+||||||| c3a438b9ce7
+            Lowering::Reinterpret(item) => {
+                let func = make_func_ref(&self.tysys, item);
+=======
+            Lowering::Reinterpret(item) => {
+                let func = method_ref(&self.tysys.type_table.borrow(), item);
+>>>>>>> origin/main
                 let call = TirExpr::new(
                     TirExprKind::Call {
                         func: Box::new(func),
@@ -8729,7 +8974,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     target_base,
                     span,
                 );
+<<<<<<< HEAD
                 bridge(call, target_type, span)
+||||||| c3a438b9ce7
+                Some(bridge(call, target_type, span))
+=======
+                ControlFlow::Break(bridge(call, target_type, span))
+>>>>>>> origin/main
             }
         }
     }
@@ -9891,12 +10142,6 @@ impl TypeSystem {
         (table.base_type_name(recorded) == table.base_type_name(expected)).then_some(expected)
     }
 
-    /// Which wide-integer prelude struct `head` is, with the name its methods mangle under.
-    fn wide_int_of(&self, head: TypeId) -> Option<(CompilerItem, FqTypeName)> {
-        let tt = self.type_table.borrow();
-        Some((tt.wide_int_item(head)?, tt.fq_base_type_name(head)))
-    }
-
     /// `inner` wrapped in the reference kind of `scrutinee_type` for match
     /// ergonomics, as [`Self::peel_scrutinee_refs`] reckons it.
     fn apply_scrutinee_ref_kind(&self, scrutinee_type: TypeId, inner: TypeId) -> TypeId {
@@ -10139,6 +10384,7 @@ fn deref_to_value(
     }
 }
 
+<<<<<<< HEAD
 /// Build the `from_pair` call that materializes a 128-bit value from its
 /// `(low: u64, high: u64/i64)` halves.
 fn build_int128_from_pair(
@@ -10290,11 +10536,41 @@ fn build_int128_from_intermediate(
 ) -> TirExpr {
     let method_name = if item == CompilerItem::U128 {
         "from_u64"
-    } else {
-        "from_i64"
-    };
-    let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
+||||||| c3a438b9ce7
+/// Build the `from_pair` call that materializes a 128-bit value from its
+/// `(low: u64, high: u64/i64)` halves.
+fn build_int128_from_pair(
+    item: CompilerItem,
+    type_name: &FqTypeName,
+    low: u64,
+    high: i64,
+    target_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let low_literal = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: low,
+            repr: low.to_string(),
+        },
+        TypeTable::U64,
+        span,
+    );
+    let high_literal = TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: high.cast_unsigned(),
+            repr: high.to_string(),
+        },
+        if item == CompilerItem::U128 {
+            TypeTable::U64
+        } else {
+            TypeTable::I64
+        },
+        span,
+    );
+
+    let method_info = LocalMethodName::new(type_name.clone(), None, "from_pair".to_string());
     let mangled_func_name = method_info.to_mangled_name();
+
     TirExpr::new(
         TirExprKind::Call {
             func: Box::new(tir::FunctionRef {
@@ -10305,10 +10581,115 @@ fn build_int128_from_intermediate(
                 method_info: Some(method_info),
             }),
             type_args: vec![],
-            args: vec![CallArg::new(intermediate, false)],
+            args: vec![
+                CallArg::new(low_literal, false),
+                CallArg::new(high_literal, false),
+            ],
             has_receiver: false,
         },
         target_type,
+        span,
+    )
+}
+
+/// Materialize an `i128` / `u128` from a parsed numeric literal. `allow_small`
+/// admits the cheaper `from_u64` / `from_i64`; the negated `-NUM` shape denies
+/// it and always takes `from_pair`.
+fn build_int128_literal_call(
+    item: CompilerItem,
+    name: &FqTypeName,
+    value: i128,
+    repr: &str,
+    allow_small: bool,
+    target_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let use_small = allow_small
+        && if item == CompilerItem::U128 {
+            u64::try_from(value).is_ok()
+        } else {
+            i64::try_from(value).is_ok()
+        };
+
+    if use_small {
+        let (inner_type, method_name, store_value) = if item == CompilerItem::U128 {
+            (
+                TypeTable::U64,
+                "from_u64",
+                u64::try_from(value).expect("value fits in u64"),
+            )
+        } else {
+            (
+                TypeTable::I64,
+                "from_i64",
+                i64::try_from(value)
+                    .expect("value fits in i64")
+                    .cast_unsigned(),
+            )
+        };
+
+        let inner_literal = TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: store_value,
+                repr: repr.to_string(),
+            },
+            inner_type,
+            span,
+        );
+
+        let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
+        let mangled_func_name = method_info.to_mangled_name();
+
+        return TirExpr::new(
+            TirExprKind::Call {
+                func: Box::new(tir::FunctionRef {
+                    module_source: ModuleSource::int128(),
+                    name: mangled_func_name,
+                    template: None,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                }),
+                type_args: vec![],
+                args: vec![CallArg::new(inner_literal, false)],
+                has_receiver: false,
+            },
+            target_type,
+            span,
+        );
+    }
+
+    let (low, high) = unpack_i128(value);
+    build_int128_from_pair(item, name, low, high, target_type, span)
+}
+
+/// Build `u128::from_u64(inner)` / `i128::from_i64(inner)` for the general
+/// (non-literal) `expr as i128/u128` cast. `intermediate` is already `u64`/`i64`.
+fn build_int128_from_intermediate(
+    item: CompilerItem,
+    name: &FqTypeName,
+    intermediate: TirExpr,
+    target_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let method_name = if item == CompilerItem::U128 {
+        "from_u64"
+=======
+/// `==` / `!=` on unrestricted resource handles: bit equality, since the host
+/// interns them.
+fn handle_comparison(op: ast::BinaryOp, left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+    let op = if op == ast::BinaryOp::Eq {
+        TirBinaryOp::Eq
+>>>>>>> origin/main
+    } else {
+        TirBinaryOp::NotEq
+    };
+    TirExpr::new(
+        TirExprKind::Binary {
+            op,
+            left: Box::new(handle_bits(left)),
+            right: Box::new(handle_bits(right)),
+        },
+        TypeTable::BOOL,
         span,
     )
 }
@@ -10540,9 +10921,8 @@ fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
 }
 
 /// Map an AST [`ast::BinaryOp`] to its TIR counterpart. The mapping is
-/// 1:1 for the source-level ops; TIR adds `RefEq` / `RefNotEq` as
-/// internal variants that the elaborator only synthesises after
-/// coercion analysis, so reify never produces them from this helper.
+/// 1:1 for the source-level ops; TIR adds `RefNotEq` as an internal
+/// variant that lowering synthesises, so this helper never produces it.
 fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
     match op {
         ast::BinaryOp::Add => TirBinaryOp::Add,

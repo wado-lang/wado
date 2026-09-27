@@ -7,7 +7,7 @@ use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::DependencySource;
 
 use lexopt::Arg::Value;
-use wado_compiler::{Severity, wit_bundle};
+use wado_compiler::{Diagnostic, Severity, wit_bundle};
 
 use crate::args::{self, CliExit};
 use crate::build_dep::{GENERATOR_WORLD_FQ, locked_generator_versions, spec_key};
@@ -418,13 +418,13 @@ pub async fn try_compile_with_run_cache(
         .await
         .map_err(|failure| TryCompileError {
             is_todo_module: failure.is_todo_module,
-            message: render_error_diagnostics(&host),
+            message: render_error_diagnostics(&host.diagnostics()),
         })
 }
 
-fn render_error_diagnostics(host: &FilesystemCompilerHost) -> Option<String> {
-    let rendered: Vec<String> = host
-        .diagnostics()
+/// The errors among `diagnostics`, one per line as `wado compile` prints them.
+pub(crate) fn render_error_diagnostics(diagnostics: &[Diagnostic]) -> Option<String> {
+    let rendered: Vec<String> = diagnostics
         .iter()
         .filter(|d| matches!(d.severity, Severity::Error | Severity::Fatal))
         .map(|d| match &d.span {
@@ -1191,7 +1191,12 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
 /// `<segment>` is `"lib"` or a [`world_path_segment`].
 #[must_use]
 pub fn build_output_path(root: &Path, segment: &str) -> PathBuf {
-    root.join(BUILD_DIR).join(format!("{segment}.wasm"))
+    build_dir(root).join(format!("{segment}.wasm"))
+}
+
+/// The build-output directory of the package rooted at `root`.
+pub fn build_dir(root: &Path) -> PathBuf {
+    root.join(BUILD_DIR)
 }
 
 /// Build one of a package's worlds for publishing.
@@ -1236,7 +1241,7 @@ fn default_output_path(
             } else {
                 world_path_segment(opts.target_world_fq())
             };
-            project.root.join(BUILD_DIR).join(format!("{world}.{ext}"))
+            build_dir(&project.root).join(format!("{world}.{ext}"))
         }
         None => Path::new(&opts.input).with_extension(ext),
     }

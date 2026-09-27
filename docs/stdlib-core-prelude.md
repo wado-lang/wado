@@ -24,6 +24,11 @@ assert decoded matches { Ok(s) && s == "Wado" };
 
 ## Functions
 
+### `pub fn ref_eq<T>(a: &T, b: &T) -> bool`
+
+Whether `a` and `b` point to one place, not merely to equal values. `==`
+on references compares the values.
+
 ### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
 
 The tag an untagged template means: every hole rendered through its
@@ -3628,6 +3633,20 @@ _Fields are private._
 
 Create a u128 from a u64 value (zero-extended)
 
+#### `pub fn from_i64(value: i64) -> u128`
+
+`#[compiler_item("u128_from_i64")]`
+
+Create a u128 from an i64 value (sign-extended, as `value as u128`
+is)
+
+#### `pub fn from_f64(value: f64) -> u128`
+
+`#[compiler_item("u128_from_f64")]`
+
+`value` truncated toward zero and saturated at `u128`'s bounds, NaN as
+0: what `value as u128` is.
+
 #### `pub fn from_pair(low: u64, high: u64) -> u128`
 
 `#[compiler_item("u128_from_pair")]`
@@ -3849,6 +3868,19 @@ _Fields are private._
 `#[compiler_item("i128_from_i64")]`
 
 Create an i128 from an i64 value (sign-extended)
+
+#### `pub fn from_u64(value: u64) -> i128`
+
+`#[compiler_item("i128_from_u64")]`
+
+Create an i128 from a u64 value (zero-extended)
+
+#### `pub fn from_f64(value: f64) -> i128`
+
+`#[compiler_item("i128_from_f64")]`
+
+`value` truncated toward zero and saturated at `i128`'s bounds, NaN as
+0: what `value as i128` is.
 
 #### `pub fn from_pair(low: u64, high: i64) -> i128`
 

@@ -10,12 +10,11 @@ use rust from "../tests/grammars/RustLexer.g4"
         },
     };
 use { parse_rust } from "./rust_corpus.wado";
-use { collect_paths } from "../src/corpus.wado";
+use { collect_paths, ratchet } from "../src/corpus.wado";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { TreeMap } from "core:collections";
-use { from_string, to_string_pretty } from "core:json";
 
 global BASELINE_PATH: String = "scripts/rust-inline-paths.json";
 
@@ -141,70 +140,6 @@ fn census(paths: &List<String>, failed: &mut i32) -> TreeMap<String, i32> with (
     return counts;
 }
 
-fn read_baseline() -> Option<TreeMap<String, i32>> with (Stderr, Preopens) {
-    let text = match fs::read_to_string(&BASELINE_PATH) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln(`error: ${e}`);
-            return null;
-        },
-    };
-    return match from_string::<TreeMap<String, i32>>(text) {
-        Ok(map) => Option::Some(map),
-        Err(e) => {
-            eprintln(`error: ${BASELINE_PATH}: ${e:?}`);
-            return null;
-        },
-    };
-}
-
-fn write_baseline(counts: &TreeMap<String, i32>) -> bool with (Stderr, Preopens) {
-    let text = match to_string_pretty(counts, Option::Some('\n')) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln(`error: cannot serialize the baseline: ${e:?}`);
-            return false;
-        },
-    };
-    if let Err(e) = fs::write(&BASELINE_PATH, &text) {
-        eprintln(`error: ${e}`);
-        return false;
-    }
-    return true;
-}
-
-fn total(counts: &TreeMap<String, i32>) -> i32 {
-    let mut sum = 0;
-    for let [_path, n] of counts.entries() {
-        sum += *n;
-    }
-    return sum;
-}
-
-/// Every file carrying more than its baseline allows, as `[file, was, now]`.
-fn grown(counts: &TreeMap<String, i32>, baseline: &TreeMap<String, i32>) -> List<[String, i32, i32]> {
-    let mut out: List<[String, i32, i32]> = [];
-    for let [path, now] of counts.entries() {
-        let was = match baseline.get(*path) {
-            Some(n) => n,
-            None => 0,
-        };
-        if *now > was {
-            out.push([*path, was, *now]);
-        }
-    }
-    return out;
-}
-
-fn report_grown(rows: &List<[String, i32, i32]>) with Stderr {
-    eprintln("error: inline `crate::` / `super::` paths added; import them with `use`:");
-    for let row of rows {
-        eprintln(`  ${row.0}: ${row.1} -> ${row.2}`);
-    }
-    eprintln("");
-    eprintln("Run `scripts/check-rust-paths.sh <file>` to list them.");
-}
-
 fn list_mode(paths: &List<String>) -> i32 with (Stdout, Stderr, Preopens) {
     let mut found = 0;
     let mut failed = 0;
@@ -225,28 +160,13 @@ fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr,
         eprintln(`error: ${failed} of ${paths.len()} files could not be measured`);
         return 1;
     }
-    let Some(baseline) = read_baseline() else {
-        return 1;
-    };
-    // The baseline only ever ratchets down. Recording a file that grew would
-    // license the paths `--check` is there to refuse.
-    let rows = grown(&counts, &baseline);
-    if rows.len() > 0 {
-        report_grown(&rows);
-        return 1;
-    }
-    if update {
-        if !write_baseline(&counts) {
-            return 1;
-        }
-        println(`baseline: ${total(&counts)} inline paths in ${counts.len()} files`);
-        return 0;
-    }
-    let left = total(&counts);
-    let shrunk = total(&baseline) - left;
-    let ratchet = if shrunk > 0 { `, ${shrunk} fewer than the baseline — run --update` } else { "" };
-    println(`ok: no file gained an inline path (${left} left${ratchet})`);
-    return 0;
+    return ratchet(
+        BASELINE_PATH,
+        &counts,
+        update,
+        "inline `crate::` / `super::` paths",
+        "Import them with `use`. Run `scripts/check-rust-paths.sh <file>` to list them.",
+    );
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {

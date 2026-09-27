@@ -1,5 +1,5 @@
-//! Local name binding within function bodies: duplicate and keyword-spelled
-//! bindings, reads before initialization, and assignments to immutable locals.
+//! Local name binding within bodies: keyword-spelled bindings, reads before
+//! initialization, and assignments to immutable locals.
 
 use crate::hashmap::IndexSet;
 
@@ -18,17 +18,10 @@ use crate::token::Span;
 
 /// Binding information for a local variable
 #[derive(Debug, Clone)]
-pub struct BindingInfo {
-    /// Variable name
-    pub name: String,
-    /// Whether the variable is mutable
-    pub is_mut: bool,
-    /// Whether the variable is reactive
-    pub is_reactive: bool,
-    /// Where the variable was defined
-    pub defined_at: Span,
+struct BindingInfo {
+    is_mut: bool,
     /// Scope depth where the variable was defined
-    pub scope_depth: u32,
+    scope_depth: u32,
 }
 
 /// A scope containing local variable bindings
@@ -48,13 +41,6 @@ impl Scope {
 /// Errors from the bind phase
 #[derive(Debug, Clone)]
 pub enum BindError {
-    /// Duplicate definition in the same scope
-    DuplicateInScope {
-        name: String,
-        first: Span,
-        second: Span,
-    },
-
     /// Assignment to an immutable variable
     AssignToImmutable { name: String, span: Span },
 
@@ -68,31 +54,17 @@ pub enum BindError {
 /// How the names a pattern binds enter the current scope.
 #[derive(Clone, Copy)]
 enum BindingKind {
-    /// A `let` with an initializer, or a `for-of` binding.
-    Initialized { is_mut: bool, is_reactive: bool },
+    /// A `let` with an initializer, a `for-of` binding, or a pattern that may
+    /// not match: `if let`, `while let`, a `match` arm, `matches`.
+    Initialized { is_mut: bool },
     /// A `let x: T;`, which every read before an assignment reports.
-    Uninitialized { is_mut: bool, is_reactive: bool },
-    /// A pattern that may not match: `if let`, `while let`, a `match` arm,
-    /// `matches`. A name the scope already holds is that same binding.
-    Refutable,
+    Uninitialized { is_mut: bool },
 }
 
 impl From<BindError> for Diagnostic {
     fn from(e: BindError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message, span) = match &e {
-            BindError::DuplicateInScope {
-                name,
-                first,
-                second,
-            } => (
-                Code::DuplicateDefinition,
-                format!(
-                    "cannot redeclare '{name}' in the same scope (first defined at {}:{})\n  hint: shadowing is allowed when the new value is derived from the old one (e.g., `let {name} = {name} + 1`)",
-                    first.line, first.column
-                ),
-                *second,
-            ),
             BindError::AssignToImmutable { name, span } => (
                 Code::ImmutableAssignment,
                 format!("cannot assign to immutable variable '{name}'"),
@@ -446,55 +418,56 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind an item (only functions have local scopes)
+    /// Bind every body an item carries: a function's, a method's (a trait's or
+    /// an interface operation's default included), a test's, and a global's
+    /// initializer.
     fn bind_item(&mut self, item: &Item) -> Result<(), Bail> {
-        if let Item::Function(func) = item {
+        match item {
+            Item::Function(func) => self.bind_function(func),
+            Item::Impl(impl_block) => self.bind_functions(&impl_block.methods),
+            Item::Trait(trait_decl) => self.bind_functions(&trait_decl.methods),
+            Item::Interface(interface_decl) => self.bind_functions(&interface_decl.methods),
+            Item::Resource(resource_decl) => self.bind_functions(&resource_decl.methods),
+            Item::Test(test) => self.in_body(|s| s.bind_block_contents(&test.body)),
+            Item::Global(global) => self.in_body(|s| s.bind_expr(&global.initializer)),
+            Item::Struct(_)
+            | Item::Enum(_)
+            | Item::Variant(_)
+            | Item::Flags(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::World(_)
+            | Item::Use(_)
+            | Item::Error(_) => Ok(()),
+        }
+    }
+
+    fn bind_functions(&mut self, functions: &[Function]) -> Result<(), Bail> {
+        for func in functions {
             self.bind_function(func)?;
-        }
-        // Impl blocks contain functions
-        if let Item::Impl(impl_block) = item {
-            for method in &impl_block.methods {
-                self.bind_function(method)?;
-            }
-        }
-        // Trait declarations contain method signatures (with optional bodies)
-        if let Item::Trait(trait_decl) = item {
-            for method in &trait_decl.methods {
-                self.bind_function(method)?;
-            }
-        }
-        // An interface operation's default body is a body like any other, so it
-        // gets the same local-binding pass; a `resource` method never has one,
-        // and `bind_function` returns immediately for a signature.
-        if let Item::Interface(interface_decl) = item {
-            for method in &interface_decl.methods {
-                self.bind_function(method)?;
-            }
-        }
-        if let Item::Resource(resource_decl) = item {
-            for method in &resource_decl.methods {
-                self.bind_function(method)?;
-            }
         }
         Ok(())
     }
 
-    /// Bind a function's local variables
+    /// Bind a function's parameters and body; a signature has no body to bind.
     fn bind_function(&mut self, func: &Function) -> Result<(), Bail> {
+        self.in_body(|s| {
+            for param in &func.params {
+                s.define(&param.name, param.is_mut, param.span)?;
+            }
+            match &func.body {
+                Some(body) => s.bind_block_contents(body),
+                None => Ok(()),
+            }
+        })
+    }
+
+    /// Bind one body in a scope of its own.
+    fn in_body(&mut self, bind: impl FnOnce(&mut Self) -> Result<(), Bail>) -> Result<(), Bail> {
         self.possibly_uninit.clear();
-
         self.enter_scope();
-
-        // Bind parameters as local variables
-        for param in &func.params {
-            self.define(&param.name, param.is_mut, false, param.span)?;
-        }
-
-        // Bind body
-        if let Some(ref body) = func.body {
-            self.bind_block_contents(body)?;
-        }
-
+        bind(self)?;
         self.exit_scope();
         Ok(())
     }
@@ -552,24 +525,10 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_block(else_block)?;
             }
 
-            // `let x = x + 1` and `let Some(x) = x else { … x … }` shadow a
-            // binding both the initializer and the else block may read, so it
-            // leaves scope only here, before `define` would call it a duplicate.
-            for_each_pattern_name(&let_stmt.pattern, &mut |name, _| {
-                let shadowed = self
-                    .scopes
-                    .last()
-                    .is_some_and(|scope| scope.bindings.contains_key(name));
-                if shadowed && expr_references_var(value, name) {
-                    self.scopes.last_mut().unwrap().bindings.shift_remove(name);
-                }
-            });
-
             self.bind_pattern_as(
                 &let_stmt.pattern,
                 BindingKind::Initialized {
                     is_mut: let_stmt.is_mut,
-                    is_reactive: let_stmt.is_reactive,
                 },
                 let_stmt.span,
             )
@@ -579,7 +538,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 &let_stmt.pattern,
                 BindingKind::Uninitialized {
                     is_mut: let_stmt.is_mut,
-                    is_reactive: let_stmt.is_reactive,
                 },
                 let_stmt.span,
             )
@@ -642,23 +600,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         span: Span,
     ) -> Result<(), Bail> {
         match kind {
-            BindingKind::Initialized {
-                is_mut,
-                is_reactive,
-            } => self.define(name, is_mut || pattern_mut, is_reactive, span),
-            BindingKind::Uninitialized {
-                is_mut,
-                is_reactive,
-            } => self.define_uninit(name, is_mut || pattern_mut, is_reactive, span),
-            BindingKind::Refutable => {
-                let taken = self
-                    .scopes
-                    .last()
-                    .is_some_and(|scope| scope.bindings.contains_key(name));
-                if !pattern_mut && taken {
-                    return Ok(());
-                }
-                self.define(name, pattern_mut, false, span)
+            BindingKind::Initialized { is_mut } => self.define(name, is_mut || pattern_mut, span),
+            BindingKind::Uninitialized { is_mut } => {
+                self.define_uninit(name, is_mut || pattern_mut, span)
             }
         }
     }
@@ -776,7 +720,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             &for_of_stmt.binding,
             BindingKind::Initialized {
                 is_mut: for_of_stmt.is_mut,
-                is_reactive: false,
             },
             for_of_stmt.span,
         )?;
@@ -1108,14 +1051,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind a pattern (may introduce variables).
-    /// Bare identifiers are tentatively defined: if the name already exists in the
-    /// current scope, it is silently skipped. This is necessary because the parser
-    /// no longer uses case to distinguish variant case names from variable bindings,
-    /// so duplicate bare names like `[Null, Null]` in a match pattern are valid
-    /// (the elaborator disambiguates them using type information).
+    /// Bind a refutable pattern's names.
     fn bind_pattern(&mut self, pattern: &Pattern, span: Span) -> Result<(), Bail> {
-        self.bind_pattern_as(pattern, BindingKind::Refutable, span)
+        self.bind_pattern_as(pattern, BindingKind::Initialized { is_mut: false }, span)
     }
 
     /// Bind a closure
@@ -1124,7 +1062,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
         // Bind parameters
         for param in &closure.params {
-            self.define(&param.name, param.is_mut, false, closure.span)?;
+            self.define(&param.name, param.is_mut, closure.span)?;
         }
 
         // Bind body
@@ -1152,44 +1090,22 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     }
 
     /// Define a variable in the current scope
-    fn define(
-        &mut self,
-        name: &str,
-        is_mut: bool,
-        is_reactive: bool,
-        span: Span,
-    ) -> Result<(), Bail> {
+    fn define(&mut self, name: &str, is_mut: bool, span: Span) -> Result<(), Bail> {
         if is_expression_keyword(name) {
             return self.emit(BindError::KeywordName {
                 name: name.to_string(),
                 span,
             });
         }
-        // Shared borrow (not `last_mut`) so it ends before `emit` takes `&self`.
-        if let Some(first) = self
-            .scopes
-            .last()
-            .unwrap()
-            .bindings
-            .get(name)
-            .map(|b| b.defined_at)
-        {
-            self.emit(BindError::DuplicateInScope {
-                name: name.to_string(),
-                first,
-                second: span,
-            })?;
-            return Ok(());
-        }
-
+        // A name the scope already holds is replaced; the resolver reports the
+        // redeclarations, since only it knows which bare names bind.
+        self.possibly_uninit
+            .shift_remove(&(self.current_depth, name.to_string()));
         let scope = self.scopes.last_mut().unwrap();
         scope.bindings.insert(
             name.to_string(),
             BindingInfo {
-                name: name.to_string(),
                 is_mut,
-                is_reactive,
-                defined_at: span,
                 scope_depth: self.current_depth,
             },
         );
@@ -1198,14 +1114,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Like `define`, but also marks the variable as possibly uninitialized.
     /// Used for `let x: T;` declarations without an initializer.
-    fn define_uninit(
-        &mut self,
-        name: &str,
-        is_mut: bool,
-        is_reactive: bool,
-        span: Span,
-    ) -> Result<(), Bail> {
-        self.define(name, is_mut, is_reactive, span)?;
+    fn define_uninit(&mut self, name: &str, is_mut: bool, span: Span) -> Result<(), Bail> {
+        self.define(name, is_mut, span)?;
         self.possibly_uninit
             .insert((self.current_depth, name.to_string()));
         Ok(())
@@ -1262,105 +1172,6 @@ mod tests {
             fn run() {
                 let x = 1;
                 let y = x;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(ok);
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_duplicate_in_scope() {
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                let x = 2;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(!ok);
-        assert_eq!(diags.len(), 1);
-        assert!(diags[0].message.contains("cannot redeclare"));
-    }
-
-    #[test]
-    fn test_same_scope_shadow_with_self_ref() {
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                let x = x + 1;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(ok, "shadowing with self-ref should be allowed: {diags:?}");
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_same_scope_shadow_with_self_ref_in_call() {
-        let module = parse(
-            r"
-            fn transform(n: i32) -> i32 { return n; }
-            fn run() {
-                let x = 1;
-                let x = transform(x);
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(
-            ok,
-            "shadowing with self-ref in call should be allowed: {diags:?}"
-        );
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_same_scope_shadow_closure_param_not_self_ref() {
-        // |x| x + 1 — the x inside refers to the closure param, not the outer variable
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                let x = |x: i32| x + 1;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(!ok, "closure param shadowing should NOT count as self-ref");
-        assert!(diags[0].message.contains("cannot redeclare"));
-    }
-
-    #[test]
-    fn test_same_scope_shadow_closure_capture_is_self_ref() {
-        // || x + 1 — captures the outer x, this IS a self-reference
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                let x = || x + 1;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(ok, "closure capture should count as self-ref: {diags:?}");
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_shadowing_in_nested_scope() {
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                if true {
-                    let x = 2;
-                }
             }
         ",
         );
