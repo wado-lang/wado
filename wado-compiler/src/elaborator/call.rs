@@ -2614,8 +2614,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|b| {
                     let type_id = b.settled.type_id();
-                    if type_id.is_some_and(|id| matches!(table.get(id), ResolvedType::InferVar(_)))
-                    {
+                    if type_id.is_some_and(|id| table.is_infer_var(id)) {
                         return None;
                     }
                     if !b.bounds.is_empty() {
@@ -3909,17 +3908,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(args) => args,
             None => {
                 let ret = expected_type.map(|expected| {
-                    let def = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .defs()
-                        .def_at(case.variant.defined_at);
-                    let declared = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_generic_instance(def, inst.vars.clone());
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let def = tt.defs().def_at(case.variant.defined_at);
+                    let declared = tt.make_generic_instance(def, inst.vars.clone());
                     ExpectedReturn { declared, expected }
                 });
                 self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret)

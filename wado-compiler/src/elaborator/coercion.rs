@@ -597,10 +597,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// a variable still open.
     fn pending_owner_of(&mut self, var: TypeId) -> Option<&mut PendingLiterals> {
         // A slot instantiation declined, a pack, stays in `own_vars` rigid.
-        if !matches!(
-            self.tysys.type_table.borrow().get(var),
-            ResolvedType::InferVar(_)
-        ) {
+        if !self.tysys.type_table.borrow().is_infer_var(var) {
             return None;
         }
         self.annotate_ctx
@@ -633,14 +630,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let expected = self.apply_infer_holes(ret.expected);
         let declared = self.apply_infer_holes(ret.declared);
-        let expects_open_var = matches!(
-            self.tysys.type_table.borrow().get(expected),
-            ResolvedType::InferVar(_)
-        ) && self.awaits_pending_call(expected);
+        let expects_open_var = self.tysys.type_table.borrow().is_infer_var(expected)
+            && self.awaits_pending_call(expected);
         let names_own_var = {
             let tt = self.tysys.type_table.borrow();
-            !matches!(tt.get(declared), ResolvedType::InferVar(_))
-                && tt.infer_vars_in(declared).iter().any(|v| own_vars.contains(v))
+            !tt.is_infer_var(declared)
+                && tt
+                    .infer_vars_in(declared)
+                    .iter()
+                    .any(|v| own_vars.contains(v))
         };
         if expects_open_var && names_own_var {
             self.chain_infer_var(expected, declared);
@@ -732,7 +730,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             this.annotate_ctx
                 .pending_literals
                 .last_mut()
-                .expect("the projection's collection is pushed")
+                .expect("the field access's collection is pushed")
                 .awaits_receiver = false;
             read_field(this, receiver_type)
         });
@@ -758,8 +756,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_expr(receiver, ctx, None);
         };
         let collection = PendingLiterals::of_call(&inst.vars);
-        let (receiver_type, pending) = self
-            .collecting_pending_literals(collection, |this| this.resolve_expr(receiver, ctx, Some(open)));
+        let (receiver_type, pending) = self.collecting_pending_literals(collection, |this| {
+            this.resolve_expr(receiver, ctx, Some(open))
+        });
         self.solve_own_infer_holes_against(open, receiver_type, &inst.vars);
         self.settle_pending_literals(pending, &[], None, ctx);
         let mut receiver_type = [receiver_type];
@@ -771,17 +770,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// .v.x`): a field is looked up on a type whose head is known.
     fn settle_bare_receiver(&mut self, receiver_type: TypeId, ctx: &mut FunctionContext) {
         let receiver_type = self.apply_infer_holes(receiver_type);
-        if !matches!(
-            self.tysys.type_table.borrow().get(receiver_type),
-            ResolvedType::InferVar(_)
-        ) {
+        if !self.tysys.type_table.borrow().is_infer_var(receiver_type) {
             return;
         }
         let collection = self
             .annotate_ctx
             .pending_literals
             .last_mut()
-            .expect("the projection's collection is pushed");
+            .expect("the field access's collection is pushed");
         let pending = std::mem::replace(collection, PendingLiterals::of_call(&[]));
         self.settle_pending_literals(pending, &[], None, ctx);
     }
@@ -830,11 +826,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {
             let default = shared_literal_default(&literals);
-            let open = matches!(
-                self.tysys.type_table.borrow().get(var),
-                ResolvedType::InferVar(_)
-            );
-            let hint = hints.get(&var).copied();            if open && hint.is_none() && self.enclosing_takes_over(var) {
+            let open = self.tysys.type_table.borrow().is_infer_var(var);
+            let hint = hints.get(&var).copied();
+            if open && hint.is_none() && self.enclosing_takes_over(var) {
                 let enclosing = self
                     .annotate_ctx
                     .pending_literals

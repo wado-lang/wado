@@ -1598,7 +1598,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve the field `field_access` names on a receiver of `expr_type`.
-    fn resolve_field_of(&mut self, field_access: &ast::FieldAccessExpr, expr_type: TypeId) -> TypeId {
+    fn resolve_field_of(
+        &mut self,
+        field_access: &ast::FieldAccessExpr,
+        expr_type: TypeId,
+    ) -> TypeId {
         // Record use→def reference for the field name, pointing at the field
         // definition's AstId in the struct declaration.
         self.record_field_reference(expr_type, &field_access.field, field_access.field_id);
@@ -1728,16 +1732,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             // An unsolved variable is reported where it stays unsolved, and the
-            // rest say nothing: each is either reported already or accepted
-            // anywhere.
-            ResolvedType::InferVar(_) => return (0, TypeTable::UNKNOWN),
-            _ if matches!(
-                struct_type,
-                TypeTable::UNKNOWN | TypeTable::ERROR | TypeTable::NEVER
-            ) =>
-            {
-                return (0, TypeTable::UNKNOWN);
-            }
+            // rest are either reported already or accepted anywhere.
+            ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error
+            | ResolvedType::Never => return (0, TypeTable::UNKNOWN),
             _ => {}
         }
         let type_name = self.tysys.type_table.borrow().type_name(struct_type);
@@ -3677,13 +3676,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let def = self.tysys.resolutions.declared(struct_lit.name_id?)?;
         let info = self.lookup_struct_fields_of_decl(def)?;
-        let walks_a_default = info
-            .fields
-            .iter()
-            .zip(&info.field_defaults)
-            .any(|((name, _, _), default)| {
-                default.is_some() && !struct_lit.fields.iter().any(|f| &f.name == name)
-            });
+        let walks_a_default =
+            info.fields
+                .iter()
+                .zip(&info.field_defaults)
+                .any(|((name, _, _), default)| {
+                    default.is_some() && !struct_lit.fields.iter().any(|f| &f.name == name)
+                });
         let slots = info.type_param_type_ids.clone();
         if slots.is_empty() || walks_a_default {
             return None;
@@ -5496,9 +5495,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let element = expected_type.and_then(|t| {
             let tt = self.tysys.type_table.borrow();
-            tt.range_element(t, range.kind).filter(|&e| {
-                is_numeric_literal_target(&tt, e) || matches!(tt.get(e), ResolvedType::InferVar(_))
-            })
+            tt.range_element(t, range.kind)
+                .filter(|&e| is_numeric_literal_target(&tt, e) || tt.is_infer_var(e))
         });
         if let Some(element) = element {
             self.sem.types.range_element_hints.insert(range.id, element);
@@ -5539,10 +5537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ord = self.tysys.compiler_trait(CompilerItem::Ord);
         assert!(ord.is_some(), "core:prelude declares Ord");
         // Literal bounds pending at a variable settle to a number, which is `Ord`.
-        let pending = matches!(
-            self.tysys.type_table.borrow().get(element_type),
-            ResolvedType::InferVar(_)
-        );
+        let pending = self.tysys.type_table.borrow().is_infer_var(element_type);
         if element_type != TypeTable::ERROR
             && !pending
             && !self.enforce_single_bound_args(

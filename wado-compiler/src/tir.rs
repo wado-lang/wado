@@ -4431,6 +4431,11 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` is an inference variable itself, not a type naming one.
+    pub fn is_infer_var(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::InferVar(_))
+    }
+
     /// The inference variables [`Self::contains_infer_var`] finds in `id`,
     /// each once, in the order it meets them.
     pub fn infer_vars_in(&self, id: TypeId) -> Vec<TypeId> {
