@@ -1924,15 +1924,15 @@ pub(crate) fn display_test_results(
         let mut sorted_results: Vec<_> = file_results.clone();
         sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
         for result in sorted_results {
-            let dur = result.cost();
+            let cost = result.cost();
             match result.outcome {
                 TestOutcome::Pass => {
-                    println!("  ok   {} ({dur})", result.display_name);
+                    println!("  ok   {} ({cost})", result.display_name);
                     print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.test_passed += 1;
                 }
                 TestOutcome::Fail => {
-                    println!("  \x1b[31mFAILED\x1b[0m {} ({dur})", result.display_name);
+                    println!("  \x1b[31mFAILED\x1b[0m {} ({cost})", result.display_name);
                     report.fail_entries.push(FailEntry {
                         file_path: result.file_path.clone(),
                         display_name: result.display_name.clone(),
@@ -1944,7 +1944,7 @@ pub(crate) fn display_test_results(
                 }
                 TestOutcome::TodoPending => {
                     println!(
-                        "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({dur})",
+                        "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({cost})",
                         result.display_name
                     );
                     print_captured_output(&result.stdout, &result.stderr, "    ");
@@ -1957,7 +1957,7 @@ pub(crate) fn display_test_results(
                 }
                 TestOutcome::TodoResolved => {
                     println!(
-                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({dur})",
+                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({cost})",
                         result.display_name
                     );
                     if let Some(ref error) = result.error {

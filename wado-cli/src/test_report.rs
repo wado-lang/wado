@@ -415,7 +415,7 @@ impl TestReporter for HeartbeatReporter {
             TestOutcome::Pass => {}
             TestOutcome::Fail => {
                 self.state.tests_failed.fetch_add(1, Ordering::Relaxed);
-                let dur = result.cost();
+                let cost = result.cost();
                 let mut detail = result
                     .error
                     .as_ref()
@@ -428,7 +428,7 @@ impl TestReporter for HeartbeatReporter {
                     detail.push_str(&captured);
                 }
                 self.announce(&format!(
-                    "not ok  {} :: {} ({dur}){detail}",
+                    "not ok  {} :: {} ({cost}){detail}",
                     result.file_path, result.display_name
                 ));
             }
@@ -726,12 +726,12 @@ impl TestReporter for TapReporter {
     }
 
     fn on_test_result(&self, result: &TestResult) {
-        let dur = result.cost();
+        let cost = result.cost();
         let name = &result.display_name;
         let (mut lines, failed) = match result.outcome {
-            TestOutcome::Pass => (vec![format!("ok - {name} ({dur})")], false),
+            TestOutcome::Pass => (vec![format!("ok - {name} ({cost})")], false),
             TestOutcome::Fail => {
-                let mut l = vec![format!("not ok - {name} ({dur})")];
+                let mut l = vec![format!("not ok - {name} ({cost})")];
                 let mut fields: Vec<(&str, &str)> = Vec::new();
                 if let Some(ref msg) = result.error {
                     fields.push(("message", msg));
@@ -747,10 +747,10 @@ impl TestReporter for TapReporter {
                 }
                 (l, true)
             }
-            TestOutcome::TodoPending => (vec![format!("not ok - {name} ({dur}) # TODO")], false),
+            TestOutcome::TodoPending => (vec![format!("not ok - {name} ({cost}) # TODO")], false),
             TestOutcome::TodoResolved => (
                 vec![format!(
-                    "ok - {name} ({dur}) # TODO resolved — remove the #[TODO] attribute"
+                    "ok - {name} ({cost}) # TODO resolved — remove the #[TODO] attribute"
                 )],
                 false,
             ),
