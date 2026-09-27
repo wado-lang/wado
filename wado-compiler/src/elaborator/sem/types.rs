@@ -238,6 +238,11 @@ macro_rules! with_body_facts {
             /// The type a type pattern (`p: T`) ascribes, keyed by the
             /// pattern's [`AstId`] — the `LetStmt`'s for a `let … else`.
             ann_pattern_ascription => pattern_ascriptions: $crate::tir::TypeId,
+            /// The element a range's context expected, which typed its
+            /// endpoints, keyed by the [`crate::ast::RangeExpr`]'s [`AstId`]: a
+            /// numeric type, or the variable standing for one until it is
+            /// swept. No entry where the context expected neither.
+            ann_range_element_hint => range_element_hints: $crate::tir::TypeId,
             /// The declaration holding the case a case path constructs, through
             /// any newtype its prefix names: `Some(x)`, `Self::Some`, `ns::V::C`.
             ann_case_owner => case_owners: $crate::defs::DefId,

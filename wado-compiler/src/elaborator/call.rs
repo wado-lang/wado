@@ -454,7 +454,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Resolve a call's arguments, each pinning the variables of `inst` it
     /// answers. A closure whose parameter type is still open waits for the
-    /// arguments that can answer it, and a numeric literal answers last.
+    /// arguments that can answer it, and a numeric literal, at any depth,
+    /// answers last (see [`PendingLiterals`]).
     pub(super) fn resolve_args_against_params(
         &mut self,
         args: &[ast::Expr],
@@ -463,26 +464,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inst: Option<&Instantiated>,
     ) -> Vec<TypeId> {
         let own_vars = inst.map_or(&[][..], |inst| &inst.vars);
-        let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
-        let mut deferred: Vec<usize> = Vec::new();
-        for (i, arg) in args.iter().enumerate() {
-            let param = param_types.get(i).copied();
-            if matches!(arg, ast::Expr::Closure(_)) && self.param_still_open(param) {
-                deferred.push(i);
-                continue;
+        let (mut resolved, pending) = self.collecting_pending_literals(own_vars, |this| {
+            let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
+            let mut deferred: Vec<usize> = Vec::new();
+            for (i, arg) in args.iter().enumerate() {
+                let param = param_types.get(i).copied();
+                if matches!(arg, ast::Expr::Closure(_)) && this.param_still_open(param) {
+                    deferred.push(i);
+                    continue;
+                }
+                resolved[i] = Some(this.resolve_arg_against_param(arg, ctx, param, own_vars));
             }
-            resolved[i] = Some(self.resolve_arg_against_param(arg, ctx, param, own_vars));
-        }
-        for i in deferred {
-            let param = param_types.get(i).copied();
-            resolved[i] = Some(self.resolve_arg_against_param(&args[i], ctx, param, own_vars));
-        }
-        let resolved: Vec<TypeId> = resolved
-            .into_iter()
-            .map(|r| r.expect("every argument is resolved in one of the two passes"))
-            .collect();
+            for i in deferred {
+                let param = param_types.get(i).copied();
+                resolved[i] = Some(this.resolve_arg_against_param(&args[i], ctx, param, own_vars));
+            }
+            resolved
+                .into_iter()
+                .map(|r| r.expect("every argument is resolved in one of the two passes"))
+                .collect::<Vec<TypeId>>()
+        });
+        let settled = self.settle_pending_literals(pending, args, ctx);
         for (i, arg) in args.iter().enumerate() {
-            if answers_last(Some(arg))
+            if let Some(&ty) = settled.get(&arg.id()) {
+                resolved[i] = ty;
+            } else if TypeSystem::is_null_literal(arg)
                 && let Some(param) = param_types.get(i).copied()
             {
                 let expected = self.apply_infer_holes(param);

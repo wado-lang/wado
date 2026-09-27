@@ -1,0 +1,16 @@
+// The element a range's context expects types a computed bound too, as it
+// would the same expression annotated alone.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let shifted: RangeExclusive<u64> = 0..<(1 << 40);
+    let summed: RangeInclusive<u64> = 0x1_0000_0000 + 1..=0x1_0000_0000 * 2;
+    let limit: u64 = 5;
+    let mixed: RangeExclusive<u64> = 0..<limit;
+    println(`${shifted} ${summed} ${mixed}`);
+}
+
+__DATA__
+{
+    "stdout": "0..<1099511627776 4294967297..=8589934592 0..<5\n"
+}

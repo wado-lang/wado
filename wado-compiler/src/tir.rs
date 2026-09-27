@@ -14,14 +14,14 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, NamePolicy, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, NamePolicy, RangeKind, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-    FqTraitName, FqTypeName, LocalMethodName, NEVER_TYPE_NAME, RefKind, TEMPLATE_SHAPE_PREFIX,
-    TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name, mangle_builtin_array_type,
-    mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
+    FqTraitName, FqTypeName, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
+    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
+    mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -1877,7 +1877,6 @@ impl TypeTable {
     /// Matched by declaration, so a user type spelled `StructField` stays
     /// reflectable.
     pub fn is_sealed_reflect_member(&self, decl: AstId) -> bool {
-        use crate::compiler_item::CompilerItem;
         [
             CompilerItem::ReflectStructField,
             CompilerItem::ReflectVariantCase,
@@ -4039,7 +4038,6 @@ impl TypeTable {
     ///
     /// The sealed member handles are the one declared struct it withholds.
     pub fn reflect_kind(&self, id: TypeId) -> Option<CompilerItem> {
-        use crate::compiler_item::CompilerItem;
         if self
             .decl_of_type(id)
             .is_some_and(|decl| self.is_sealed_reflect_member(decl))
@@ -4163,6 +4161,12 @@ impl TypeTable {
     /// The element type of `id` when it is a `List` itself, not a reference to one.
     pub fn list_element(&self, id: TypeId) -> Option<TypeId> {
         self.single_arg_of(id, CompilerItem::List)
+    }
+
+    /// The element type of `id` when it is the range struct a `kind` range
+    /// literal builds.
+    pub fn range_element(&self, id: TypeId, kind: RangeKind) -> Option<TypeId> {
+        self.single_arg_of(id, range_item(kind))
     }
 
     /// Check if a type contains UNKNOWN (undefined type that was not resolved).
@@ -4787,11 +4791,10 @@ impl TypeTable {
     ///
     /// The head carries its declaring module, so two modules declaring the same
     /// simple name index apart. Consumers pick the namespace they need:
-    /// [`crate::name::Receiver::decl_key`] for the name an `impl` header
-    /// writes, [`crate::name::Receiver::head_key`] for the mangled identity.
+    /// [`Receiver::decl_key`] for the name an `impl` header writes,
+    /// [`Receiver::head_key`] for the mangled identity.
     #[must_use]
-    pub fn impl_receiver_key(&self, id: TypeId) -> name::Receiver {
-        use crate::name::{FqTypeName, Receiver};
+    pub fn impl_receiver_key(&self, id: TypeId) -> Receiver {
         let declared = |def: DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
         let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
         // Unerased: which impls a type has is a fact about its identity, and
@@ -4866,7 +4869,6 @@ impl TypeTable {
     /// base's name for a newtype — templates no impl declares.
     #[must_use]
     pub fn fq_base_type_name(&self, id: TypeId) -> FqTypeName {
-        use crate::name::FqTypeName;
         match self.get_unerased(id) {
             ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
             ResolvedType::Enum { def }
@@ -5077,6 +5079,14 @@ impl TypeTable {
             ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
+    }
+}
+
+/// The prelude struct a `kind` range literal builds.
+pub fn range_item(kind: RangeKind) -> CompilerItem {
+    match kind {
+        RangeKind::Exclusive => CompilerItem::RangeExclusive,
+        RangeKind::Inclusive => CompilerItem::RangeInclusive,
     }
 }
 

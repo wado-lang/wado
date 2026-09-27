@@ -11,12 +11,11 @@ use crate::ast::{
     GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
     InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
     LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
-    RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
-    StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
-    TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr,
-    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
-    written_params,
+    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
+    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -1752,10 +1751,7 @@ impl<'a> Unparser<'a> {
             }
             Expr::Range(range) => {
                 self.unparse_expr(&range.start);
-                match range.kind {
-                    RangeKind::Exclusive => self.output.push_str("..<"),
-                    RangeKind::Inclusive => self.output.push_str("..="),
-                }
+                self.output.push_str(range.kind.operator());
                 self.unparse_expr(&range.end);
             }
             Expr::WithHandler(w) => self.unparse_with_handler(w),
@@ -2071,21 +2067,9 @@ impl<'a> Unparser<'a> {
             self.output.push(' ');
         }
 
-        // `matches` and logical `!` bind looser than the value-producing unary
-        // operators, so a value-unary parent must parenthesize them. `!` itself
-        // binds looser than `matches` and is right-associative, so `!x matches
-        // { P }` and `!!x` need no parens.
-        let needs_parens = match &u.expr {
-            Expr::Binary(_)
-            | Expr::Assign(_)
-            | Expr::CompoundAssign(_)
-            | Expr::ComparisonChain(_)
-            | Expr::Cast(_) => true,
-            Expr::Matches(_) => u.op != UnaryOp::Not,
-            Expr::Unary(inner) => inner.op == UnaryOp::Not && u.op != UnaryOp::Not,
-            _ => false,
-        };
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&u.expr));
+        self.with_parens_if(unary_operand_needs_parens(u.op, &u.expr), |s| {
+            s.unparse_expr(&u.expr);
+        });
     }
 
     fn unparse_assign(&mut self, a: &AssignExpr) {
@@ -2486,10 +2470,7 @@ impl<'a> Unparser<'a> {
                 start, end, kind, ..
             } => {
                 self.unparse_pattern(start);
-                match kind {
-                    RangeKind::Exclusive => self.output.push_str("..<"),
-                    RangeKind::Inclusive => self.output.push_str("..="),
-                }
+                self.output.push_str(kind.operator());
                 self.unparse_pattern(end);
             }
             Pattern::Typed { pattern, ty, .. } => {
@@ -3286,6 +3267,49 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
     }
 }
 
+/// Whether the operand of the prefix operator `op` needs parens. Exhaustive, so
+/// a new [`Expr`] is decided here rather than defaulted: a default once printed
+/// `&(0..<5)` as `&0..<5`, a range of `&0`.
+fn unary_operand_needs_parens(op: UnaryOp, expr: &Expr) -> bool {
+    match expr {
+        // Every binary operator, `as`, and `..<` bind looser than a prefix one.
+        Expr::Binary(_)
+        | Expr::Assign(_)
+        | Expr::CompoundAssign(_)
+        | Expr::ComparisonChain(_)
+        | Expr::Cast(_)
+        | Expr::Range(_) => true,
+        // `matches` and logical `!` bind looser than the value-producing prefix
+        // operators. `!` itself binds looser than `matches` and is
+        // right-associative, so `!x matches { P }` and `!!x` need no parens.
+        Expr::Matches(_) => op != UnaryOp::Not,
+        Expr::Unary(inner) => inner.op == UnaryOp::Not && op != UnaryOp::Not,
+        // Each opens with a keyword, delimiter, or operator, or is a postfix form.
+        Expr::Ident(_)
+        | Expr::Literal(_)
+        | Expr::Call(_)
+        | Expr::MethodCall(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::FieldAccess(_)
+        | Expr::Index(_)
+        | Expr::TryOp(_)
+        | Expr::Block(_)
+        | Expr::If(_)
+        | Expr::Match(_)
+        | Expr::Closure(_)
+        | Expr::TemplateString(_)
+        | Expr::TaggedTemplate(_)
+        | Expr::StructLiteral(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::LabeledBlock(_)
+        | Expr::WithHandler(_)
+        | Expr::Spread(..)
+        | Expr::Resume(_)
+        | Expr::Error(_) => false,
+    }
+}
+
 /// The operator an operand is about to be joined to, ordered by how tightly it
 /// binds. Each slot admits what the one above it does, and a little more.
 #[derive(Clone, Copy)]
@@ -3625,10 +3649,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         }
         Expr::Range(range) => {
             unparse_expr_into(&range.start, output);
-            match range.kind {
-                RangeKind::Exclusive => output.push_str("..<"),
-                RangeKind::Inclusive => output.push_str("..="),
-            }
+            output.push_str(range.kind.operator());
             unparse_expr_into(&range.end, output);
         }
         Expr::WithHandler(w) => {
@@ -3927,10 +3948,7 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             start, end, kind, ..
         } => {
             unparse_pattern_into(start, output);
-            match kind {
-                RangeKind::Exclusive => output.push_str("..<"),
-                RangeKind::Inclusive => output.push_str("..="),
-            }
+            output.push_str(kind.operator());
             unparse_pattern_into(end, output);
         }
         Pattern::Typed { pattern, ty, .. } => {

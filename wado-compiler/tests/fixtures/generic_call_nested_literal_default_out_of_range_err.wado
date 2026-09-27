@@ -1,0 +1,17 @@
+// A nested literal nothing else types takes the default, and is checked
+// against it.
+fn second<T>(p: Pair<T>, fallback: T) -> T {
+    return fallback;
+}
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+export fn run() {
+    let x = second(Pair { a: 1, b: 0x1_0000_0000 }, 5);
+}
+
+__DATA__
+{"compile_error": ":13:36: analysis error: literal out of range for `i32`: 0x1_0000_0000"}

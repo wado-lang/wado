@@ -604,8 +604,11 @@ value across a newtype boundary, between any two types sharing an ultimate base.
 It converts a `flags` value to and from `u32`, and coerces a collection literal
 to its target type (see
 [Collection Literal Coercion](./spec-literals.md#collection-literal-coercion)).
-A diverging operand (`!`) casts to any type. References and function types
-follow [Casts](./spec-types.md#casts).
+A named struct literal or a range literal takes its type arguments from the
+target, or from the target's base where that is a newtype, as it would from an
+annotation: `Pair { a: 1, b: 2 } as Wide`, where `type Wide = Pair<u64>`, builds
+a `Pair<u64>`. A diverging operand (`!`) casts to any type. References and
+function types follow [Casts](./spec-types.md#casts).
 
 Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
 direction, and an integer converts to `char` only from `u8` (see
@@ -717,6 +720,14 @@ assert !a.contains(&10) && b.contains(&10) && c.contains(&'q') && d.contains(&0.
 
 Both bounds must have the same type after literal coercion, and that type is
 `T`. `T` must implement `Ord`, so a range over any other type is an error.
+
+An expected range of the same kind over a numeric `T` types both bounds as that
+`T` would type them alone. A `let` annotation supplies it, and so do a parameter
+type and a generic parameter the call's other arguments settle. So
+`let r: RangeExclusive<u64> = 0..<0x1_0000_0000;` types both bounds as `u64`,
+and so does `0..<(1 << 40)`. A range names its own type, as a named struct
+literal does, so an expected newtype over a range supplies nothing; a cast to
+one does (see [Type Cast](#type-cast-as)).
 
 A range whose bounds are both literals must not run backwards. An integer,
 float or `char` literal counts as one, negated or cast too:

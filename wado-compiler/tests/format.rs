@@ -2949,6 +2949,26 @@ fn run() {
 }
 
 #[test]
+fn test_roundtrip_ast_unary_operand_parens() {
+    assert_format_preserves_ast(
+        r"
+fn run() {
+    let r = &(0..<5);
+    let m = &mut (a..=b);
+    let n = -(0..<5);
+    let s = !(a..<b);
+    let t = &(a = b);
+    let u = -(a as i64);
+    let v = &(a < b < c);
+    let w = !(x matches { Some(_) });
+    let y = &if c { 1 } else { 2 };
+    let z = &|x: i32| x + 1;
+}
+",
+    );
+}
+
+#[test]
 fn test_roundtrip_ast_deref_parens() {
     assert_format_preserves_ast(
         r"

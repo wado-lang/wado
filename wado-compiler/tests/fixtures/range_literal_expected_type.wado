@@ -1,0 +1,42 @@
+// Literal bounds take their type from the range type the context expects,
+// annotated or inferred from a generic call's other arguments.
+use { println, Stdout } from "core:cli";
+
+fn end_of(r: RangeExclusive<u64>) -> u64 {
+    return r.end;
+}
+
+fn last<T: Ord>(r: RangeExclusive<T>, fallback: T) -> T {
+    return if r.is_empty() { fallback } else { r.end };
+}
+
+struct Scale {}
+
+impl Scale {
+    fn last<T: Ord>(&self, r: RangeExclusive<T>, fallback: T) -> T {
+        return if r.is_empty() { fallback } else { r.end };
+    }
+
+    fn first<T: Ord>(r: RangeInclusive<T>, fallback: T) -> T {
+        return if r.is_empty() { fallback } else { r.start };
+    }
+}
+
+export fn run() with Stdout {
+    let wide: RangeExclusive<u64> = 0x8000_0000..<0x1_0000_0000;
+    let inclusive: RangeInclusive<i64> = -1..=0x1_0000_0000;
+    let huge: RangeExclusive<u128> = 0..<0x1_0000_0000_0000_0000;
+    let letters: RangeInclusive<u16> = 0..=b'z';
+    println(`${wide} ${inclusive} ${huge} ${letters}`);
+    println(`${end_of(0..<0x1_0000_0000)}`);
+
+    let fallback: u64 = 0;
+    let s = Scale {};
+    println(`${last(0..<0x1_0000_0000, fallback)} ${s.last(1..<0x1_0000_0001, fallback)}`);
+    println(`${Scale::first(0x1_0000_0000..=0x1_0000_0002, fallback)}`);
+}
+
+__DATA__
+{
+    "stdout": "2147483648..<4294967296 -1..=4294967296 0..<18446744073709551616 0..=122\n4294967296\n4294967296 4294967297\n4294967296\n"
+}

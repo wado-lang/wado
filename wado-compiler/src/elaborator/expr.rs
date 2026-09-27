@@ -22,7 +22,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::{CaseSite, DefaultTypeBinding, slot_type_bindings};
-use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
+use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -80,6 +80,13 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
         Literal::Number(repr) if !util::is_float_only_literal(repr) => Some(repr.as_str()),
         _ => None,
     }
+}
+
+/// Whether `expr` is a literal that names its own type — a named struct literal
+/// or a range — and so takes only its type arguments from the type expected of
+/// it.
+fn names_its_type(expr: &Expr) -> bool {
+    matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
 }
 
 /// An integer literal standing as a cast operand, bare or negated, and which of
@@ -612,9 +619,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
-        // Try literal coercion when expected type is known
         if let Some(target_type) = expected_type
-            && let Some(coerced) = self.try_coerce(expr, ctx, target_type)
+            && let Some(coerced) = self
+                .defer_literal_at_var(expr, target_type)
+                .or_else(|| self.try_coerce(expr, ctx, target_type))
         {
             return coerced;
         }
@@ -685,7 +693,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
             }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx, expected_type),
-            Expr::Range(range) => self.resolve_range(range, ctx),
+            Expr::Range(range) => self.resolve_range(range, ctx, expected_type),
             Expr::WithHandler(w) => self.resolve_with_handler(w, ctx, expected_type),
             Expr::Resume(r) => self.resolve_resume(r, ctx),
             // Parser error-recovery placeholder: the syntax error was already
@@ -754,9 +762,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// boundary chosen by `negated` — `-NUM` is one literal, so `-2147483648`
     /// fits where the bare `2147483648` does not.
     ///
-    /// Only the defaulted case. An expectation still pending here is one no
-    /// coercion took — a type parameter awaiting inference — and it re-coerces
-    /// the literal afterwards, checking the range against the type it lands on.
+    /// Only the defaulted case. An expectation no coercion took is a type the
+    /// literal cannot be, reported as a mismatch, or a variable a call's
+    /// inference answers and then re-coerces the literal to, checking the range
+    /// against the type it lands on.
     pub(super) fn check_default_int_literal(&mut self, repr: &str, negated: bool, span: Span) {
         let Some(value) = self.check_int_literal_parses(repr, span) else {
             return;
@@ -3463,10 +3472,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_expression_type(lit.id, TypeTable::I32);
                 TypeTable::I32
             }
-            // A closure takes its parameter types from the function type it is
-            // cast to, as it would from an annotation.
             None => {
-                let expected = matches!(&cast.expr, ast::Expr::Closure(_)).then_some(target_type);
+                let expected = match &cast.expr {
+                    // A closure takes its parameter types from the function
+                    // type it is cast to, as it would from an annotation.
+                    ast::Expr::Closure(_) => Some(target_type),
+                    // Its base where the target is a newtype: `Pair { a: 1 } as
+                    // Wide` crosses the boundary a cast may.
+                    named if names_its_type(named) => Some(
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .representation_head(target_type),
+                    ),
+                    _ => None,
+                };
                 self.resolve_expr(&cast.expr, ctx, expected)
             }
         };
@@ -3511,7 +3531,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the wide-int struct ref into codegen. `char` targets are
         // excluded: the char-cast diagnostic below already covers them.
         {
-            use crate::primitive::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
             let target_supported = !tt.is_wide_int(source_type)
                 || tt.is_wide_int(target_type)
@@ -5389,10 +5408,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a range expression: `a..<b` or `a..=b`
-    pub(super) fn resolve_range(&mut self, range: &RangeExpr, ctx: &mut FunctionContext) -> TypeId {
-        use crate::ast::RangeKind;
-
-        let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
+    pub(super) fn resolve_range(
+        &mut self,
+        range: &RangeExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        let element = expected_type.and_then(|t| {
+            let tt = self.tysys.type_table.borrow();
+            tt.range_element(t, range.kind).filter(|&e| {
+                is_numeric_literal_target(&tt, e) || matches!(tt.get(e), ResolvedType::InferVar(_))
+            })
+        });
+        if let Some(element) = element {
+            self.sem.types.range_element_hints.insert(range.id, element);
+        }
+        let order = range_endpoint_order(range, element);
         let (start, end) = order.resolve(
             &range.start,
             &range.end,
@@ -5400,16 +5431,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |&ty| ty,
         );
 
-        // Check type mismatch between start and end
         if start != end && start != TypeTable::ERROR && end != TypeTable::ERROR {
             let type_table = self.tysys.type_table.borrow();
             let start_name = type_table.type_name(start);
             let end_name = type_table.type_name(end);
             if start_name != end_name {
-                let op_str = match range.kind {
-                    RangeKind::Exclusive => "..<",
-                    RangeKind::Inclusive => "..=",
-                };
+                let op_str = range.kind.operator();
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: start_name,
                     found: format!(
@@ -5423,7 +5450,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let element_type = start;
 
-        // Check that the element type implements Ord
         let ord_trait_name = self
             .tysys
             .type_table
@@ -5432,7 +5458,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let ord = self.tysys.compiler_trait(CompilerItem::Ord);
         assert!(ord.is_some(), "core:prelude declares Ord");
+        // Literal bounds pending at a variable settle to a number, which is `Ord`.
+        let pending = matches!(
+            self.tysys.type_table.borrow().get(element_type),
+            ResolvedType::InferVar(_)
+        );
         if element_type != TypeTable::ERROR
+            && !pending
             && !self.enforce_single_bound_args(
                 element_type,
                 &ord_trait_name,
@@ -5444,16 +5476,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Check for reversed range literals (start > end)
         if let Some(start_val) = self.extract_literal_ord_value(&range.start)
             && let Some(end_val) = self.extract_literal_ord_value(&range.end)
         {
             let is_reversed = start_val.is_greater_than(&end_val);
             if is_reversed {
-                let op_str = match range.kind {
-                    RangeKind::Exclusive => "..<",
-                    RangeKind::Inclusive => "..=",
-                };
+                let op_str = range.kind.operator();
                 let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!(
                         "reversed range `{op_str}` is not supported (start must be less than end)"

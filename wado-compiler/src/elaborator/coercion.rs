@@ -4,6 +4,7 @@ use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
+use crate::ast::AstId;
 use crate::ast::{self, Expr, Literal, LiteralMember, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -15,7 +16,7 @@ use crate::elaborator::sem::types::{
 use crate::elaborator::typecheck::{TypeCheckResult, check_assignable};
 use crate::elaborator::types::FromArrayInfo;
 use crate::escape::{unescape_byte, unescape_bytes};
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -129,6 +130,48 @@ pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
     arg.is_some_and(|arg| is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg))
 }
 
+/// The numeric literals a call's arguments hold, at any depth, where the type
+/// expected of them is one of the call's own open variables:
+/// `second(Pair { a: 1, b: 2 }, x)`. Each answers last, as a literal argument
+/// does: it takes what the other arguments answer its variable with, and a
+/// variable none of them answers takes the literals' default.
+pub(super) struct PendingLiterals {
+    own_vars: Vec<TypeId>,
+    literals: Vec<(Expr, TypeId)>,
+}
+
+impl PendingLiterals {
+    pub(super) fn new(own_vars: &[TypeId]) -> Self {
+        Self {
+            own_vars: own_vars.to_vec(),
+            literals: Vec::new(),
+        }
+    }
+}
+
+/// The type `literals` take together where nothing else answers their
+/// variable: `f64` if one is a float, else `i32` unless every one is a byte
+/// literal.
+fn shared_literal_default(literals: &[Expr]) -> TypeId {
+    // Least to most general.
+    const RANK: [TypeId; 3] = [TypeTable::U8, TypeTable::I32, TypeTable::F64];
+    literals
+        .iter()
+        .map(|expr| {
+            let literal =
+                classify_numeric_literal(expr).expect("only numeric literals are deferred");
+            match literal.kind {
+                NumericLiteralKind::Number(repr) if util::is_float_only_literal(repr) => {
+                    TypeTable::F64
+                }
+                NumericLiteralKind::Number(_) => TypeTable::I32,
+                NumericLiteralKind::Byte(_) => TypeTable::U8,
+            }
+        })
+        .max_by_key(|t| RANK.iter().position(|r| r == t))
+        .expect("a variable is pending only with a literal")
+}
+
 /// Whether `expr` is a byte literal. Among numeric literals it is the one that
 /// arrives with a type of its own, so it settles a pair that has no other
 /// anchor.
@@ -224,12 +267,23 @@ pub(super) fn numeric_literal_pair_order(
     }
 }
 
-/// Order the endpoints of `start..end`. A literal endpoint takes its type from
-/// the other one, and a range carries no expected type, so two literals leave a
-/// byte endpoint as the only thing that can settle `0..=b'z'`.
-pub(super) fn range_endpoint_order(tt: &TypeTable, start: &Expr, end: &Expr) -> LiteralPairOrder {
+/// Order the endpoints of `range`. `element`, the numeric element the context
+/// expects, types both endpoints: `0..<(1 << 40)` at `RangeExclusive<u64>`.
+/// Without it a literal endpoint takes its type from the other one, and two
+/// literals take `u8` from a byte endpoint, as `0..=b'z'` does.
+pub(super) fn range_endpoint_order(
+    range: &ast::RangeExpr,
+    element: Option<TypeId>,
+) -> LiteralPairOrder {
+    if element.is_some() {
+        return LiteralPairOrder::Together(element);
+    }
+    let (start, end) = (&range.start, &range.end);
     match (is_numeric_literal_expr(start), is_numeric_literal_expr(end)) {
-        (true, true) => numeric_literal_pair_order(tt, start, end, None),
+        (true, true) => {
+            let has_byte = is_byte_literal_expr(start) || is_byte_literal_expr(end);
+            LiteralPairOrder::Together(has_byte.then_some(TypeTable::U8))
+        }
         (true, false) => LiteralPairOrder::RightAnchors,
         _ => LiteralPairOrder::LeftAnchors,
     }
@@ -431,6 +485,88 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_coercion(expr.id(), CoercionKind::NullToOption, target_type);
         self.record_expression_type(expr.id(), target_type);
         Some(target_type)
+    }
+
+    /// Defer `expr` where it is a numeric literal meeting one of the open
+    /// variables [`PendingLiterals`] collects for, answering that variable as
+    /// its type until [`Self::settle_pending_literals`].
+    pub(super) fn defer_literal_at_var(&mut self, expr: &Expr, expected: TypeId) -> Option<TypeId> {
+        if self.annotate_ctx.pending_literals.is_none() || !is_numeric_literal_expr(expr) {
+            return None;
+        }
+        let var = self.apply_infer_holes(expected);
+        // A slot instantiation declined, a pack, stays in `own_vars` rigid.
+        if !matches!(
+            self.tysys.type_table.borrow().get(var),
+            ResolvedType::InferVar(_)
+        ) {
+            return None;
+        }
+        let pending = self
+            .annotate_ctx
+            .pending_literals
+            .as_mut()
+            .expect("checked on entry");
+        if !pending.own_vars.contains(&var) {
+            return None;
+        }
+        pending.literals.push((expr.clone(), var));
+        Some(var)
+    }
+
+    /// Resolve each literal `pending` deferred against what its variable was
+    /// answered with, answering the variables nothing answered with their
+    /// literals' default first. Answers each literal's type by its id.
+    ///
+    /// A variable only literals standing as `args` met stays theirs to answer
+    /// as they did before any deferral: the call's own inference weighs its
+    /// expected return type against them afterwards, and re-coerces them
+    /// (`recoerce_literal_args`).
+    ///
+    /// A literal the answer cannot type is reported by the argument check when
+    /// it is one of `args`, and here when it is nested inside one, since the
+    /// value holding it took the answer as its own.
+    pub(super) fn settle_pending_literals(
+        &mut self,
+        pending: PendingLiterals,
+        args: &[Expr],
+        ctx: &mut FunctionContext,
+    ) -> IndexMap<AstId, TypeId> {
+        let mut by_var: IndexMap<TypeId, Vec<Expr>> = IndexMap::default();
+        for (expr, var) in pending.literals {
+            by_var.entry(var).or_default().push(expr);
+        }
+        let is_arg = |expr: &Expr| args.iter().any(|arg| arg.id() == expr.id());
+        let mut settled = IndexMap::default();
+        for (var, literals) in by_var {
+            let default = shared_literal_default(&literals);
+            let mut answer = self.apply_infer_holes(var);
+            let yields_to_return = answer == var && literals.iter().all(is_arg);
+            if answer == var && !yields_to_return {
+                self.solve_infer_var(var, default);
+                answer = default;
+            }
+            for expr in &literals {
+                let ty = self.resolve_expr(expr, ctx, Some(answer));
+                if !yields_to_return && ty != answer && !is_arg(expr) {
+                    let (expected, found) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_names_for_mismatch(answer, ty);
+                    let _ = self.emit(TypeError::TypeMismatch {
+                        expected,
+                        found,
+                        span: expr.span(),
+                    });
+                }
+                settled.insert(expr.id(), ty);
+            }
+            if yields_to_return {
+                self.solve_infer_var(var, default);
+            }
+        }
+        settled
     }
 
     /// Try to coerce an expression to the expected type — numeric literals,
