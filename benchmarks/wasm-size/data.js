@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790507015112,
+  "lastUpdate": 1790510378494,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60865,6 +60865,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/31a184752e183ea05f421ac62e7ab42892bd571b"
         },
         "date": 1790507014049,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20198,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288419,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "09eee0cb212a435d1e58dfda1fb828b6663df236",
+          "message": "Merge pull request #2194 from wado-lang/claude/wado-eval-feature-8je3nk\n\nfix(gale): parse open-ended and nested LR suffixes as the ANTLR4 jar does; test codegen by running the parser",
+          "timestamp": "2026-09-27T20:30:28+09:00",
+          "tree_id": "5947cc24a74b99b31b39e4b89c0de4a4b0476634",
+          "url": "https://github.com/wado-lang/wado/commit/09eee0cb212a435d1e58dfda1fb828b6663df236"
+        },
+        "date": 1790510377698,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
