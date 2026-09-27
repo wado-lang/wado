@@ -314,7 +314,7 @@ fn owe_at(site: String, owed: &mut List<Condition>, slack: Poly, condition: Stri
     if slack.is_nonnegative() {
         return Result::Ok(());
     }
-    if slack.as_constant() matches { Some(_) } {
+    if slack.is_negative() {
         return Result::Err(`${condition}, and it is not`);
     }
     owed.push(Condition { slack, reason: `${site}: ${condition}` });

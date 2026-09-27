@@ -153,6 +153,21 @@ impl Poly {
         return true;
     }
 
+    /// Whether every value of the symbols makes this below 0: a negative
+    /// constant that no term can raise, since a symbol is an extent.
+    pub fn is_negative(&self) -> bool {
+        let mut constant = 0 as i64;
+        for let t of &self.terms {
+            if t.coefficient > 0 {
+                return false;
+            }
+            if t.symbols.is_empty() {
+                constant = t.coefficient;
+            }
+        }
+        return constant < 0;
+    }
+
     /// `terms` summed into canonical form, or `None` where a sum leaves `i64`.
     fn collected(terms: List<Term>) -> Option<Poly> {
         let mut sorted = terms;

@@ -93,7 +93,8 @@ fn tir_resolved_marks_a_deferred_global_rather_than_printing_its_placeholder() {
 }
 
 /// A destructured binding's mutability lives on its local, so the dump reads
-/// it from there: under `let mut`, and on one binding, a field's included.
+/// it from there: under `let mut`, and on one binding, a field's included. A
+/// closure numbers its locals afresh, so its body reads its own.
 #[test]
 fn tir_resolved_prints_a_destructured_binding_mutable_where_its_local_is() {
     let source = r#"
@@ -107,6 +108,12 @@ export fn run() {
     a += b + d + y;
     c += 1;
     x += 1;
+    let f = |n: i32| {
+        let [p, q, r, mut s] = [n, 4, 5, 6];
+        s += p + q + r;
+        return s;
+    };
+    f(3);
 }
 "#;
     let entry = resolved_modules_of(source)
@@ -118,6 +125,7 @@ export fn run() {
         "let [mut a, mut b] = ",
         "let [mut c, d] = ",
         "let { x: mut x, y } = ",
+        "let [p, q, r, mut s] = ",
     ] {
         assert!(
             entry.contains(expected),

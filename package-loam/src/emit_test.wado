@@ -926,6 +926,19 @@ test "a Cast to the element a tensor already has computes nothing" {
     assert out.contains("let Y = map(X, |v| f32::max(v, 0.0));");
 }
 
+test "a Cast that truncates is spelled apart from the constant it reads" {
+    // Both are held in i64, but the int32 cast keeps only the low half.
+    let source = `g (float[2] M) => (int64[2] Y) {
+        B = Cast<to = 9>(M)
+        Q = Constant<value_ints = [4294967297, 2]>()
+        C = Cast<to = 6>(Q)
+        Y = Where(B, Q, C)
+    }`;
+    let out = emitted(&generate(source, [rule("*", ["Pick"])]).unwrap());
+    assert out.contains("data: [4294967297, 2]");
+    assert out.contains("data: [1, 2]");
+}
+
 test "Identity names its operand again and computes nothing" {
     let source = `g (float[2] X) => (float[2] Y) <float[2] W = {1.0, 2.0}> {
         V = Identity(W)

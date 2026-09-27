@@ -166,8 +166,8 @@ test "the same module reproduces them for seven" {
     );
 }
 
-// The causal mask covers 512 positions, so `forward` stops at the first check
-// it owes rather than inside a kernel.
+// The causal mask covers 512 positions. That the owed check traps before any
+// kernel runs is `emit_test`'s to show; a trap is all this one can see.
 #[expect_trap]
 test "a sequence longer than the mask stops forward" {
     let ids = List::<i64>::filled(513, 0);

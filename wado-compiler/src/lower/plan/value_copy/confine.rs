@@ -23,7 +23,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     BuiltinDeclarations, FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
+    TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -61,19 +61,24 @@ struct ParamEscape {
     ret: Vec<bool>,
     side: Vec<bool>,
     taken: Vec<bool>,
+    /// A `mut` parameter, which every caller hands a copy of: the callee owns
+    /// it whatever it does with it.
+    declared_mut: Vec<bool>,
 }
 
 impl ParamEscape {
-    fn new(n: usize) -> Self {
+    fn new(params: &[TirParam]) -> Self {
+        let n = params.len();
         Self {
             ret: vec![false; n],
             side: vec![false; n],
             taken: vec![false; n],
+            declared_mut: params.iter().map(|p| p.is_mut).collect(),
         }
     }
 
     fn confined_at(&self, i: usize) -> bool {
-        !(self.side[i] || self.ret[i] && self.taken[i])
+        !(self.declared_mut[i] || self.side[i] || self.ret[i] && self.taken[i])
     }
 
     fn confined(&self) -> Vec<bool> {
@@ -104,7 +109,7 @@ pub fn compute_confined_params(
             funcs.insert(
                 func.module_source.clone(),
                 func.name.clone(),
-                ParamEscape::new(func.params.len()),
+                ParamEscape::new(&func.params),
             );
         }
     }

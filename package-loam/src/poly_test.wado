@@ -43,6 +43,14 @@ test "a polynomial of no negative coefficient is never negative" {
     assert !seq.sub(&c(1)).is_nonnegative();
 }
 
+test "a negative constant no term can raise is negative for every input" {
+    let seq = s("seq");
+    assert c(0).sub(&seq).sub(&c(2)).is_negative();
+    assert c(-1).is_negative();
+    assert !c(0).sub(&seq).is_negative();
+    assert !seq.sub(&c(2)).is_negative();
+}
+
 test "a polynomial renders highest degree first, the constant last" {
     let [a, b] = [
         s("a"),

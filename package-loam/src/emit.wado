@@ -845,8 +845,11 @@ fn converted(checked: &Checked, held: &TreeMap<String, String>, tensor: &String)
 /// operand: an `Identity`, or a `Cast` to the primitive the operand has.
 fn is_alias(node: &Node, checked: &Checked) -> bool {
     let primitives = &checked.primitives;
+    // An int32 target is held in i64 as well, but keeps only the low half.
     return node.op == "Identity"
-        || node.op == "Cast" && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
+        || node.op == "Cast"
+            && !(node.int_attr("to", 0) matches { Ok(6) })
+            && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
 }
 
 /// A tensor's type, as the axis marker types name it. A tensor the boundary

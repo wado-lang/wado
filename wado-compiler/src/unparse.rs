@@ -4492,8 +4492,8 @@ pub struct TirUnparser<'a> {
     /// rendering exposed to user-facing inspect output. Default
     /// `false` keeps the debug-friendly form for TIR dumps.
     source_form: bool,
-    /// Which locals of the function being printed are mutable, which a pattern
-    /// binding states only through its local.
+    /// Which locals of the function or closure body being printed are mutable,
+    /// which a pattern binding states only through its local.
     mut_locals: Vec<bool>,
 }
 
@@ -5310,9 +5310,15 @@ impl<'a> TirUnparser<'a> {
                 params,
                 body,
                 captures,
+                body_locals,
                 ..
             } => {
+                let closure_mut_locals = std::iter::repeat_n(false, params.len())
+                    .chain(body_locals.iter().map(|l| l.is_mut))
+                    .collect();
+                let enclosing = std::mem::replace(&mut self.mut_locals, closure_mut_locals);
                 self.unparse_closure_form(params, captures, body);
+                self.mut_locals = enclosing;
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.unparse_expr(callee);

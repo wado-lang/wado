@@ -2458,7 +2458,7 @@ impl FunctionTranslator<'_, '_> {
         mut_roots: &[u32],
     ) -> ArenaCallArg {
         let needs_value_copy = self.should_wrap_value_copy(arg)
-            && !self.arg_confined(arg, is_mut, callee, param_index, mut_roots);
+            && !self.arg_confined(arg, callee, param_index, mut_roots);
         let value_type = arg.type_id;
         let converted = self.convert_operand(arg);
         let expr = if needs_value_copy {
@@ -2470,18 +2470,14 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Whether a by-value argument into a confined parameter can skip its copy:
-    /// the parameter is not `mut`-declared and the argument aliases no `mut_root`.
+    /// the argument aliases no `mut_root`.
     fn arg_confined(
         &self,
         arg: &TirExpr,
-        is_mut: bool,
         callee: Option<&FunctionRef>,
         param_index: usize,
         mut_roots: &[u32],
     ) -> bool {
-        if is_mut {
-            return false;
-        }
         let confined = callee.is_some_and(|c| {
             self.base
                 .value_copy
