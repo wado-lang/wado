@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790504626936,
+  "lastUpdate": 1790507015112,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60821,6 +60821,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7a536bf27137ee5f4220423a7a1d44b0be07483b"
         },
         "date": 1790504626015,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20198,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288419,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "31a184752e183ea05f421ac62e7ab42892bd571b",
+          "message": "Merge pull request #2192 from wado-lang/claude/retain-redesign-investigation-pnvt0n\n\nfix(retain): one reading of a body-less callee; WIR goldens 2.1% smaller",
+          "timestamp": "2026-09-27T19:25:43+09:00",
+          "tree_id": "35e2d54eeb875f0e0ae37790bf2df6d19665d1d2",
+          "url": "https://github.com/wado-lang/wado/commit/31a184752e183ea05f421ac62e7ab42892bd571b"
+        },
+        "date": 1790507014049,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
