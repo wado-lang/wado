@@ -4431,6 +4431,31 @@ impl TypeTable {
         }
     }
 
+    /// The inference variables [`Self::contains_infer_var`] finds in `id`,
+    /// each once, in the order it meets them.
+    pub fn infer_vars_in(&self, id: TypeId) -> Vec<TypeId> {
+        let mut out = Vec::new();
+        self.collect_infer_vars(id, &mut out);
+        out
+    }
+
+    fn collect_infer_vars(&self, id: TypeId, out: &mut Vec<TypeId>) {
+        match self.get(id) {
+            ResolvedType::InferVar(_) => {
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+            ResolvedType::AssocTypeProjection { .. } => {}
+            _ => {
+                self.any_constituent(id, &mut |t| {
+                    self.collect_infer_vars(t, out);
+                    false
+                });
+            }
+        }
+    }
+
     /// Get a human-readable name for a type
     pub fn type_name(&self, id: TypeId) -> String {
         self.render_type_name(id, false)

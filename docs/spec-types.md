@@ -903,10 +903,13 @@ assert none == null && ok.unwrap() == 42;
 When both mechanisms apply, they must agree. An untyped literal takes its type from the expected type, so `let x: Option<i64> = Option::Some(42)` is an `Option<i64>`. A value whose type is already fixed must match it: with `y: i32`, `let b: Box<i64> = Box { value: y }` is a type mismatch. Backward inference fills in any parameter the values do not mention.
 
 In a generic call, a numeric literal answers last wherever it stands in an
-argument. It takes the type the call's other arguments settle, so with
-`fn pick<T>(b: Box<T>, fallback: T)` and `x: u64`, `pick(Box { value: 1 }, x)`
-is `pick::<u64>`, as it would be with `&Box { value: 1 }` or with the arguments
-swapped. Only a parameter nothing else settles takes a default from its
+argument, a nested generic call or constructor included. It takes the type the
+call's other arguments settle, so with `fn pick<T>(b: Box<T>, fallback: T)` and
+`x: u64`, `pick(Box { value: 1 }, x)` is `pick::<u64>`, as it would be with
+`&Box { value: 1 }`, with `wrap(1)` for a generic `wrap` returning `Box<U>`, or
+with the arguments swapped. Where no argument settles a parameter, the type
+expected of the call does: `let y: u64 = pick(Box { value: 1 }, 2)` is
+`pick::<u64>`. Only a parameter neither settles takes a default from its
 literals: `f64` if one of them is a float, else `i32`, else `u8` when every one
 is a byte literal.
 

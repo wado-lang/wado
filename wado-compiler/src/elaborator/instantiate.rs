@@ -169,12 +169,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         of: &Instantiation<'_>,
     ) -> Vec<TypeId> {
         if slots.is_empty() {
-            return self.resolve_args_against_params(args_ast, ctx, param_types, None);
+            return self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
         }
         let inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.span);
         let param_types = self.instantiate_types(param_types, &inst);
-        let mut args = self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst));
+        let mut args =
+            self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst), None);
         self.settle_onto_slots(&inst, slots, &mut args);
         args
     }

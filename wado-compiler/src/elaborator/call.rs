@@ -12,7 +12,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
-use super::coercion::answers_last;
+use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
@@ -20,7 +20,7 @@ use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
 use super::sem::types::{BodyFacts, CalleeParams, IndirectCallee, StaticMethodDispatch};
-use super::sig::{MethodSig, Param};
+use super::sig::{DeclSig, MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
@@ -42,6 +42,27 @@ use crate::{Span, token};
 
 /// The builtin that reads an `Array<T>` out of a byte literal.
 pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
+
+/// A callee's declaration as a call site reads it, in the declaration's own
+/// frame.
+#[derive(Default)]
+pub(super) struct CalleeDecl {
+    pub(super) params: Vec<TypeId>,
+    /// The type parameters the parameter and return types mention.
+    pub(super) slots: Vec<TypeId>,
+    /// `None` where no return type is declared or the lookup reads none.
+    pub(super) ret: Option<TypeId>,
+}
+
+impl CalleeDecl {
+    fn of(decl: &DeclSig) -> Self {
+        Self {
+            params: decl.param_types.clone(),
+            slots: decl.type_params.iter().map(|(_, id)| *id).collect(),
+            ret: decl.return_type,
+        }
+    }
+}
 
 /// An expression as a byte literal.
 enum ByteLiteral {
@@ -462,8 +483,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         param_types: &[TypeId],
         inst: Option<&Instantiated>,
+        ret: Option<ExpectedReturn>,
     ) -> Vec<TypeId> {
         let own_vars = inst.map_or(&[][..], |inst| &inst.vars);
+        self.chain_expected_return(own_vars, ret);
         let (mut resolved, pending) = self.collecting_pending_literals(own_vars, |this| {
             let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
             let mut deferred: Vec<usize> = Vec::new();
@@ -484,7 +507,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|r| r.expect("every argument is resolved in one of the two passes"))
                 .collect::<Vec<TypeId>>()
         });
-        let settled = self.settle_pending_literals(pending, args, ctx);
+        let settled = self.settle_pending_literals(pending, args, ret, ctx);
         for (i, arg) in args.iter().enumerate() {
             if let Some(&ty) = settled.get(&arg.id()) {
                 resolved[i] = ty;
@@ -492,7 +515,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(param) = param_types.get(i).copied()
             {
                 let expected = self.apply_infer_holes(param);
-                self.solve_own_infer_holes_against(expected, resolved[i], own_vars);
+                let answerable = self.answerable_vars(own_vars);
+                self.solve_own_infer_holes_against(expected, resolved[i], &answerable);
             }
         }
         resolved
@@ -522,7 +546,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected = self.apply_infer_holes(param_type);
         let resolved = self.resolve_expr(arg, ctx, Some(expected));
         if !answers_last(Some(arg)) {
-            self.solve_own_infer_holes_against(expected, resolved, own_vars);
+            let answerable = self.answerable_vars(own_vars);
+            self.solve_own_infer_holes_against(expected, resolved, &answerable);
         }
         resolved
     }
@@ -1167,7 +1192,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             callee_kind.callee_site(),
         );
         let signature_known = signature.is_some();
-        let (mut param_types, callee_slots) = signature.unwrap_or_default();
+        let CalleeDecl {
+            params: mut param_types,
+            slots: callee_slots,
+            ret: declared_ret,
+        } = signature.unwrap_or_default();
         // The declaration's own frame, before instantiation replaces its slots
         // with inference variables. Inferred type arguments substitute into
         // these, not into the variables.
@@ -1228,7 +1257,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
             None => {
-                self.resolve_args_against_params(&call.args, ctx, &param_types, arg_inst.as_ref())
+                let ret = match (&arg_inst, declared_ret, expected_type) {
+                    (Some(inst), Some(declared), Some(expected)) => Some(ExpectedReturn {
+                        declared: self.instantiate_type(declared, inst),
+                        expected,
+                    }),
+                    _ => None,
+                };
+                self.resolve_args_against_params(
+                    &call.args,
+                    ctx,
+                    &param_types,
+                    arg_inst.as_ref(),
+                    ret,
+                )
             }
         };
 
@@ -2236,9 +2278,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .make_compiler_struct(CompilerItem::String)
     }
 
-    /// A callee's declared parameter types and the slots they mention, by the
-    /// effective callee name (after [`Self::classify_call_callee`]'s `Self::` /
-    /// `T::` rewriting). One lookup answers both: a parameter type is usable as
+    /// A callee's declaration, by the effective callee name (after
+    /// [`Self::classify_call_callee`]'s `Self::` / `T::` rewriting). One lookup
+    /// answers the parameter types and the slots: a parameter type is usable as
     /// an argument's expected type only once its slots are instantiated, and a
     /// rigid slot is opaque — a literal checked against one can only be
     /// rejected. Written qualified, an instance method's receiver is one of the
@@ -2252,12 +2294,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         name: &str,
         effect_op: Option<&EffectOperation>,
         callee_site: Option<ast::AstId>,
-    ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
+    ) -> Option<CalleeDecl> {
         if let Some(op) = effect_op {
-            return Some((
-                self.effect_operation_sig(op).decl.param_types.clone(),
-                Vec::new(),
-            ));
+            return Some(CalleeDecl {
+                slots: Vec::new(),
+                ..CalleeDecl::of(&self.effect_operation_sig(op).decl)
+            });
         }
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
@@ -2274,8 +2316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // branches below to answer, rather than ending the lookup: an
             // expected type is what makes a sequence literal coerce.
             if let Some(sig) = self.unique_qualified_method_sig(prefix, suffix) {
-                let slots = sig.decl.type_params.iter().map(|(_, id)| *id).collect();
-                return Some((sig.decl.param_types, slots));
+                return Some(CalleeDecl::of(&sig.decl));
             }
 
             // Builtin functions resolve through the `core:builtin` module,
@@ -2285,10 +2326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(def) = self.decl_in_module(&ModuleSource::builtin(), suffix)
                 && let Some(sig) = self.tysys.signatures.function_sig(def)
             {
-                return Some((
-                    sig.decl.param_types.clone(),
-                    sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-                ));
+                return Some(CalleeDecl::of(&sig.decl));
             }
 
             // A namespace member's signature lives in that module, which no
@@ -2301,10 +2339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(def) = self.decl_in_module(&ns_source, suffix)
                     && let Some(sig) = self.tysys.signatures.function_sig(def)
                 {
-                    return Some((
-                        sig.decl.param_types.clone(),
-                        sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-                    ));
+                    return Some(CalleeDecl::of(&sig.decl));
                 }
                 // The signature read above declines the `ns::Type::method`
                 // shape, so the receiver resolves through the namespace instead.
@@ -2319,7 +2354,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(&ns_key),
                     ) {
                         let slots = self.lookup_static_method_slots(method_name, &ns_key);
-                        return Some((params, slots));
+                        return Some(CalleeDecl {
+                            params,
+                            slots,
+                            ret: None,
+                        });
                     }
                 }
             }
@@ -2329,10 +2368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // One read for this module's functions, its imports under either
         // spelling, and a default expression's callee scope.
         let sig = callee_site.and_then(|site| self.tysys.free_function_sig_at(site))?;
-        Some((
-            sig.decl.param_types.clone(),
-            sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-        ))
+        Some(CalleeDecl::of(&sig.decl))
     }
 
     /// [`Self::apply_param_defaults`] against the callee's own declaration, for
@@ -2917,8 +2953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     !p.is_effect
                         && p.default.is_none()
                         && !p.has_fn_bound()
-                        && self.tysys.is_unbound_type_param(tid)
-                        && !scope_params.contains(&tid)
+                        && self.slot_unanswered(tid, &scope_params)
                 })
                 .map(|(p, _)| p.name.as_str())
                 .collect()
@@ -2964,10 +2999,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let scope_params = self.scope_type_param_ids();
         let unresolved = |this: &Self, slot: Option<&TypeId>| -> bool {
-            match slot {
-                None => true,
-                Some(&t) => this.tysys.is_unbound_type_param(t) && !scope_params.contains(&t),
-            }
+            slot.is_none_or(|&t| this.slot_unanswered(t, &scope_params))
         };
 
         // `impl_type_args` is indexed by slot, which a parameter nested in the
@@ -3060,8 +3092,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // param (`U = T`) sees `T`'s slot already resolved.
         for i in 0..n {
             let slot = type_args[i];
-            if self.tysys.is_unbound_type_param(slot)
-                && !scope_params.contains(&slot)
+            if self.slot_unanswered(slot, &scope_params)
                 && let Some(default_ty) = defaults[i]
             {
                 let snapshot = type_args.clone();
@@ -3136,11 +3167,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let scope_params = self.scope_type_param_ids();
 
         let unresolved = |this: &Self, i: usize| -> bool {
-            if from_empty {
-                return true;
-            }
-            let t = type_args[i];
-            this.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
+            from_empty || this.slot_unanswered(type_args[i], &scope_params)
         };
 
         let unresolved_names: Vec<String> = space
@@ -3879,7 +3906,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let mut args = match given_args {
             Some(args) => args,
-            None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst)),
+            None => {
+                let ret = expected_type.map(|expected| {
+                    let def = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .defs()
+                        .def_at(case.variant.defined_at);
+                    let declared = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_generic_instance(def, inst.vars.clone());
+                    ExpectedReturn { declared, expected }
+                });
+                self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret)
+            }
         };
         self.settle_onto_slots(&inst, slots, &mut args);
         // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
@@ -4199,10 +4242,14 @@ impl TypeSystem {
 
         let type_args = infer.solve();
 
-        // If unresolved type params remain in concrete code, fall back to bare Variant
-        let has_unresolved = type_args
-            .iter()
-            .any(|&t| self.type_table.borrow().contains_type_param(t));
+        // If unresolved type params remain in concrete code, fall back to bare
+        // Variant. A variable an enclosing call answers is not unresolved.
+        let has_unresolved = {
+            let tt = self.type_table.borrow();
+            type_args
+                .iter()
+                .any(|&t| tt.contains_type_param(t) && !ctx.awaits_pending_call(&tt, t))
+        };
 
         if has_unresolved && ctx.trait_ctx.type_params.is_empty() {
             return self

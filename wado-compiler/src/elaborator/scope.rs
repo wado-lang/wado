@@ -289,8 +289,9 @@ pub(super) struct Scope {
     /// `T: Uses<T::Item>` asks for it again while it is built.
     pub(super) bound_closure_stack: IndexSet<TypeId>,
     /// The numeric literals the arguments being resolved hold at one of their
-    /// call's open variables. See [`PendingLiterals`].
-    pub(super) pending_literals: Option<PendingLiterals>,
+    /// call's open variables, one entry per call nested in another's argument,
+    /// innermost last. See [`PendingLiterals`].
+    pub(super) pending_literals: Vec<PendingLiterals>,
 }
 
 impl Scope {
@@ -445,16 +446,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         own_vars: &[TypeId],
         body: impl FnOnce(&mut Self) -> R,
     ) -> (R, PendingLiterals) {
-        let (result, pending) = util::replaced(
-            self,
-            |e| &mut e.annotate_ctx.pending_literals,
-            Some(PendingLiterals::new(own_vars)),
-            body,
+        let depth = self.annotate_ctx.pending_literals.len();
+        self.annotate_ctx
+            .pending_literals
+            .push(PendingLiterals::new(own_vars));
+        let result = body(self);
+        let pending = self
+            .annotate_ctx
+            .pending_literals
+            .pop()
+            .expect("a walk pushes into the collection, never takes it");
+        assert_eq!(
+            self.annotate_ctx.pending_literals.len(),
+            depth,
+            "a nested collection is popped by the call that pushed it"
         );
-        (
-            result,
-            pending.expect("a walk pushes into the collection, never takes it"),
-        )
+        (result, pending)
     }
 
     /// Run `body` with use→def reference recording suppressed. See

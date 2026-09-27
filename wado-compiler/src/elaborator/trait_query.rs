@@ -2459,7 +2459,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             if self.tysys.type_table.borrow().contains_type_param(type_arg) {
-                // Also covers holes (reserved-index params), re-checked at finalize.
+                // A hole carries its own slot's bounds to finalize; this slot's
+                // go with an answer an enclosing call is still to give.
+                if self.awaits_pending_call(type_arg) {
+                    self.defer_bounds_to_answer(param, type_arg, self_binding, span);
+                }
                 continue;
             }
             // `..T: Foo` binds every element of the pack, not the tuple that

@@ -979,7 +979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let has_fillable = method_type_params
             .iter()
             .zip(inferred.iter())
-            .any(|(p, &tid)| p.default.is_some() && self.tysys.is_unbound_type_param(tid));
+            .any(|(p, &tid)| p.default.is_some() && self.slot_unanswered(tid, &[]));
         if !has_fillable {
             return false;
         }
@@ -997,7 +997,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let mut filled = false;
         for i in 0..inferred.len() {
-            if self.tysys.is_unbound_type_param(inferred[i])
+            if self.slot_unanswered(inferred[i], &[])
                 && let Some(default_ty) = defaults[i]
                 && default_ty != TypeTable::ERROR
                 && !self
@@ -1116,7 +1116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let fillable: Vec<bool> = method_type_params
             .iter()
             .zip(known.iter())
-            .map(|(p, &tid)| p.default.is_some() && self.tysys.is_unbound_type_param(tid))
+            .map(|(p, &tid)| p.default.is_some() && self.slot_unanswered(tid, &[]))
             .collect();
         if !fillable.iter().any(|&f| f) {
             return;
