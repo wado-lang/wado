@@ -897,8 +897,9 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
     }
 }
 
-/// Scan-side twin of `gen_lr_suffix_dispatch`. Emits the precedence-aware
-// No static scan gate is emitted: the simulator's decision is the commit.
+/// ATN-class twin of `gen_lr_suffix_dispatch`: the runtime simulator decides
+/// the loop entry. No static scan gate is emitted, since that decision is the
+/// commit.
 fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     w: &mut CodeWriter,
     fn_name: S,
@@ -914,7 +915,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
         `${decl} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_state_arg()}, ${decision}, tokens, pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, "tokens", "pos", /*parse_launched=*/ false, ctx);
-    w.line("let _lr_pos0 = pos;");
+    emit_lr_progress_snapshot(w, "pos");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr_idx = lr_alts[valid[i]].alt_index;
@@ -935,10 +936,21 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     } else {
         w.line("break;");
     }
-    w.begin("if pos == _lr_pos0");
+    emit_lr_progress_check(w, "pos");
+    w.end();  // loop
+}
+
+/// Opens an LR loop iteration's no-progress guard on the cursor `pos`. An
+/// iteration whose suffix matched empty would otherwise spin.
+fn emit_lr_progress_snapshot<S: AsStrSlice>(w: &mut CodeWriter, pos: S) {
+    w.line(`let _lr_pos0 = ${pos};`);
+}
+
+/// Closes the guard `emit_lr_progress_snapshot` opened: no progress ends the loop.
+fn emit_lr_progress_check<S: AsStrSlice>(w: &mut CodeWriter, pos: S) {
+    w.begin(`if ${pos} == _lr_pos0`);
     w.line("break;");
     w.end();
-    w.end();  // loop
 }
 
 fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
@@ -1078,17 +1090,14 @@ fn gen_lr_suffix_dispatch<S: AsStrSlice>(
 ) {
     w.begin("loop");
     w.line("let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    // No-progress guard, mirroring the ATN twins (`gen_lr_suffix_dispatch_atn`
-    // / `gen_lr_fn_atn`), where some suffix could match empty and spin here.
+    // Where every suffix consumes, the guard could never fire.
     let guard = !lr_suffixes_consume(lr_alts, lr_dispatch, ctx);
     if guard {
-        w.line("let _lr_pos0 = pos;");
+        emit_lr_progress_snapshot(w, "pos");
     }
     emit_lr_group_chain(w, &scan_lr_site(fn_name), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     if guard {
-        w.begin("if pos == _lr_pos0");
-        w.line("break;");
-        w.end();
+        emit_lr_progress_check(w, "pos");
     }
     w.end();  // loop
 }
@@ -4231,20 +4240,18 @@ fn gen_lr_fn<S: AsStrSlice>(
     }
     let scan_fn = `scan_${rule.snake_name}`;
     let labeled = rule_alts_labeled(&rule.alternatives);
-    // The scan twin's no-progress guard (`gen_lr_suffix_dispatch`), where an
-    // empty suffix that yields to the caller would otherwise spin here.
+    // An empty suffix that yields its token to the caller enters on it and
+    // consumes nothing.
     let guard = !lr_suffixes_consume(lr_alts, lr_dispatch, ctx);
     w.begin("loop");
     w.line("if p.recovering { break; }");
     w.line("let _sk = p.peek_kind();");
     if guard {
-        w.line("let _lr_pos0 = p.pos;");
+        emit_lr_progress_snapshot(w, "p.pos");
     }
     emit_lr_group_chain(w, &parse_lr_site(&scan_fn, &rk, labeled), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     if guard {
-        w.begin("if p.pos == _lr_pos0");
-        w.line("break;");
-        w.end();
+        emit_lr_progress_check(w, "p.pos");
     }
     w.end();
     emit_lr_after_return(w, rule, emits_vals, ctx);
@@ -4312,7 +4319,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
         /*parse_launched=*/ true,
         ctx,
     );
-    w.line("let _lr_pos0 = p.pos;");
+    emit_lr_progress_snapshot(w, "p.pos");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         if is_first {
@@ -4330,9 +4337,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     } else {
         w.line("break;");
     }
-    w.begin("if p.pos == _lr_pos0");
-    w.line("break;");
-    w.end();
+    emit_lr_progress_check(w, "p.pos");
     w.end();
 }
 

@@ -960,6 +960,19 @@ impl Lexer {
     }
 }
 
+fn try_ZERO(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'z' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_WORD(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
@@ -976,19 +989,6 @@ fn try_WORD(chars: &List<char>, start: i32) -> i32 {
         pos = rep_saved_0;
         break;
     }
-    return pos;
-}
-
-fn try_ZERO(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'z' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
-    pos += 1;
     return pos;
 }
 
@@ -1167,8 +1167,6 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                     if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
                 },
                 'z' => {
-                    end = try_WORD(&lexer.chars, start);
-                    if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
                     let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                     match second_char {
                         'e' => {
@@ -1178,6 +1176,8 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                         _ => {
                         },
                     }
+                    end = try_WORD(&lexer.chars, start);
+                    if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
                 },
                 _ => {},
             }
@@ -1240,8 +1240,8 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_WORD => "WORD",
         TK_ZERO => "ZERO",
+        TK_WORD => "WORD",
         TK_NUMBER => "NUMBER",
         TK_COMMENT => "COMMENT",
         TK_PRAGMA_OPEN => "PRAGMA_OPEN",
@@ -1256,8 +1256,9 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_TEXT: NodeKind = 0;
+pub global RK_NUMBERS: NodeKind = 1;
 
-global RULE_NAMES: List<String> = ["text"];
+global RULE_NAMES: List<String> = ["text", "numbers"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1624,6 +1625,29 @@ fn _parse_text(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn _parse_numbers__inner(p: &mut Parser) -> () {
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
+    let mut _plus_first = true;
+    while !p.recovering && (_plus_first || p.peek_kind() == TK_NUMBER) {
+        _plus_first = false;
+        p.expect(TK_NUMBER, &SYNC_2, false);
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
+    }
+    p.expect(TK_EOF, &EMPTY_SYNC, true);
+    return;
+}
+
+fn _parse_numbers(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    p.sites.push(p.site);
+    let _start = p.peek_start();
+    p.b.start_node(RK_NUMBERS, _start);
+    _parse_numbers__inner(p);
+    if p.recovering { let _ = p.recover_rule(RK_NUMBERS, "numbers", -1); }
+    p.b.finish_node(p.last_end());
+    p.sites.pop();
+}
+
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
@@ -1644,6 +1668,10 @@ pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult
 
 pub fn parse_text<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_text(p));
+}
+
+pub fn parse_numbers<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_numbers(p));
 }
 
 global CALL_FOLLOW_SETS: List<List<i32>> = [];
@@ -1679,4 +1707,8 @@ fn _kind_set_0(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [547];
 global EXPECTED_0: List<i32> = [TK_EOF, TK_NUMBER, TK_PRAGMA, TK_WORD];
+global SYNC_1: List<i32> = [2];
+global EXPECTED_1: List<i32> = [TK_NUMBER];
+global SYNC_2: List<i32> = [514];
+global EXPECTED_2: List<i32> = [TK_EOF, TK_NUMBER];
 
