@@ -299,7 +299,6 @@ global global:core:prelude/list.wado::$const_obj_35: ref null Array<u8> = array.
 
 fn "wasi_filesystem_append_stream.wado/run"() with Stdout, Stderr, Preopens {
     let $load_0: i32;
-    let $load_5: i32;
     let dirs: ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     let dir: i32;
     let file_result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
@@ -368,7 +367,7 @@ fn "wasi_filesystem_append_stream.wado/run"() with Stdout, Stderr, Preopens {
                 let $mv$chunk$items: ref "core:prelude//List<u8>";
                 let $mv$chunk$result: "core:prelude/types.wado//enum:CopyResult";
                 multivalue_bind [$mv$chunk$items, $mv$chunk$result] = "core:rt/cm_stream_read_u8"(file_rx, 4096);
-                drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_45, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $mv$chunk$items.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_5($mv$chunk$items.used); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_5 }));
+                drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_45, $mv$chunk$items));
                 break_if b4 $mv$chunk$result != 0;
                 continue l5;
             };

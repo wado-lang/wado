@@ -99,6 +99,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:opt_value_copy_void_stores_callee_keeps_copy.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(97, 97);
+
 fn "opt_value_copy_void_stores_callee_keeps_copy.wado/build"() {
     let $load_8: i32;
     let out_0: ref "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>";
@@ -116,7 +118,6 @@ fn "opt_value_copy_void_stores_callee_keeps_copy.wado/build"() {
     let value_39: ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Item";
     let used_40: i32;
     let v_42: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $sroa_other_repr_50: ref Array<u8>;
     elements_4 = array.new_fixed<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Item">();
     out_0 = struct.new "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>" { repr: elements_4, used: 0 };
     elements_5 = array.new_fixed<ref "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink">();
@@ -125,10 +126,10 @@ fn "opt_value_copy_void_stores_callee_keeps_copy.wado/build"() {
     b0: block {
         l1: loop {
             break_if b0 i_2 >= 3;
-            it_3 = struct.new "opt_value_copy_void_stores_callee_keeps_copy.wado//Item" { tags: ref.as_non_null(elements_28 = array.new_fixed<ref "core:prelude/string.wado//String">($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; $sroa_other_repr_50 = array.new_fixed<u8>(97, 97); new_used = 0 + 2; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
+            it_3 = struct.new "opt_value_copy_void_stores_callee_keeps_copy.wado//Item" { tags: ref.as_non_null(elements_28 = array.new_fixed<ref "core:prelude/string.wado//String">($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }; new_used = 0 + 2; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used);
-            }; start_21 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_21, $sroa_other_repr_50, 0, 2); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_2, $local_1); $local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_28, used: builtin::array_len(elements_28) }) };
+            }; start_21 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_21, global:opt_value_copy_void_stores_callee_keeps_copy.wado::$const_obj_2, 0, 2); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_2, $local_1); $local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_28, used: builtin::array_len(elements_28) }) };
             value_32 = struct.new "opt_value_copy_void_stores_callee_keeps_copy.wado//Sink" { r: it_3 };
             used_33 = sinks.used;
             if @unlikely(used_33 >= builtin::array_len(sinks.repr)) {
