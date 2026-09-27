@@ -103,7 +103,7 @@ test {
 A TODO test marks a test for an unimplemented feature. It is reported on a
 separate axis from pass and fail (see Test Outcome Model):
 
-<!-- {"source": "wado-compiler/tests/fixtures/test_todo.wado"} -->
+<!-- {"fixture": "test_todo.wado"} -->
 
 ```wado
 #[TODO]
@@ -147,7 +147,7 @@ This is useful for verifying that invalid operations are correctly rejected at r
 #[expect_trap]
 test "panics on null dereference" {
     let opt: Option<i32> = null;
-    assert opt.unwrap() == 0;
+    opt.unwrap();
 }
 ```
 

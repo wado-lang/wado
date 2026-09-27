@@ -1,6 +1,6 @@
 //! Every `wado` code block in the specification quotes an e2e fixture or a
 //! source file ([WEP: Spec Examples Quote Fixtures](../../docs/wep-2026-09-26-spec-examples.md)).
-//! Marl reads the Markdown, and the `Wado.g4` lexer finds each `assert`.
+//! Marl reads the Markdown, and the `Wado.g4` lexer finds each claim.
 
 use wado from "../grammar/Wado.g4"
     with {
@@ -17,17 +17,24 @@ use { collect_paths } from "lib:gale";
 use { args, eprintln, exit, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { from_string } from "core:json";
 
 global FIXTURE_DIR: String = "wado-compiler/tests/fixtures";
 
+/// The test attributes whose claim is that the body traps.
+global TRAP_EXPECTATIONS: List<String> = ["expect_trap", "TODO"];
+
 /// What a block quotes.
 pub variant Reference {
     /// An e2e fixture, by its path under `FIXTURE_DIR`. The suite runs it, so
-    /// the block asserts or the fixture expects a compile error.
+    /// the block states a claim or the fixture expects a compile error.
     Fixture(String),
-    /// Any file in the repository, by its path from the root, quoted whole.
+    /// A module a fixture imports, by its path under `FIXTURE_DIR`, quoted
+    /// whole. The suite runs only the top level, as `e2e.rs` says, so a file
+    /// below it is compiled by the fixture that reaches it, which checks it.
+    Helper(String),
+    /// Any file outside `FIXTURE_DIR`, by its path from the root, quoted whole.
     Source(String),
 }
 
@@ -35,7 +42,7 @@ impl Reference {
     /// The file's path from the repository root.
     pub fn path(&self) -> String {
         return match self {
-            Fixture(name) => fs::join(&FIXTURE_DIR, name),
+            Fixture(name) | Helper(name) => fs::join(&FIXTURE_DIR, name),
             Source(path) => *path,
         };
     }
@@ -80,7 +87,11 @@ pub fn reference_of(block: &FencedCode) -> Result<Option<Reference>, String> {
         reference.get("fixture"),
         reference.get("source"),
     ] {
+        [Some(name), None] && name.contains("/") => Result::Ok(Option::Some(Reference::Helper(name))),
         [Some(name), None] => Result::Ok(Option::Some(Reference::Fixture(name))),
+        [None, Some(path)] && path.starts_with(`${FIXTURE_DIR}/`) => {
+            Result::Err(`\`${path}\` is under the fixtures, so the reference names it as a \`fixture\``);
+        },
         [None, Some(path)] => Result::Ok(Option::Some(Reference::Source(path))),
         [Some(_), Some(_)] => Result::Err("the reference names both a `fixture` and a `source`"),
         [None, None] => Result::Err("the reference names no `fixture` or `source`"),
@@ -119,17 +130,64 @@ pub fn quotes<S: AsStrSlice>(text: S, code: &String) -> bool {
     return false;
 }
 
-/// How many `assert` keywords `code` holds, as the lexer finds them.
-pub fn assert_count(code: &String) -> i32 {
+/// Whether `code` states a claim its run checks, as the lexer finds one: an
+/// `assert`, or a test's `#[expect_trap]` or `#[TODO]`, which the runner holds
+/// the body's trap to.
+pub fn states_a_claim(code: &String) -> bool {
     let result = wado::parse(code);
     let tokens = &result.tokens;
-    let mut n = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.kind_at(i) == wado::TK_LIT_assert {
-            n += 1;
+            return true;
+        }
+        if i + 2 < tokens.len()
+            && tokens.token_text(i) == "#"
+            && tokens.token_text(i + 1) == "["
+            && TRAP_EXPECTATIONS.contains_str(&tokens.token_text(i + 2)) {
+            return true;
         }
     }
-    return n;
+    return false;
+}
+
+/// Each `.wado` path a string in `text`, the file at `path`, names: a `use`
+/// relative to it, or a `dependencies` entry relative to `FIXTURE_DIR`.
+fn named_files(path: &String, text: &String) -> List<String> {
+    let dir = fs::parent(path).unwrap();
+    let mut out: List<String> = [];
+    for let piece of text.split("\"") {
+        if !piece.ends_with(".wado") || piece.contains("\n") {
+            continue;
+        }
+        let base = if piece.starts_with("./") || piece.starts_with("../") { dir.to_string() } else { FIXTURE_DIR };
+        if let Ok(named) = fs::normalize(fs::join(&base, piece)) {
+            out.push(named);
+        }
+    }
+    return out;
+}
+
+/// The files under `FIXTURE_DIR` a top-level fixture reaches, directly or
+/// through the files it names: the helpers the suite compiles.
+fn reached_helpers(files: &TreeMap<String, String>) -> TreeSet<String> {
+    let mut pending: List<String> = [];
+    for let [path, _text] of files.entries() {
+        if fs::parent(path) matches { Some(dir) && dir == FIXTURE_DIR } {
+            pending.push(*path);
+        }
+    }
+    let mut reached = TreeSet::<String>::new();
+    while let Some(path) = pending.pop() {
+        let Some(text) = files.get_ref_str(&path) else {
+            continue;
+        };
+        for let named of named_files(&path, text) {
+            if reached.insert(named) {
+                pending.push(named);
+            }
+        }
+    }
+    return reached;
 }
 
 /// The expectation keys of a fixture's `__DATA__` this check reads.
@@ -161,8 +219,14 @@ fn expects_rejection(data: &String) -> Result<bool, String> {
 }
 
 /// Why `block`, which names `reference`, breaks a rule, or `null` if it keeps
-/// them all. `files` holds each file that could be read, by its path.
-fn check_block(block: &FencedCode, reference: &Reference, files: &TreeMap<String, String>) -> Option<String> {
+/// them all. `files` holds each file that could be read, by its path, and
+/// `reached` the helpers a fixture reaches.
+fn check_block(
+    block: &FencedCode,
+    reference: &Reference,
+    files: &TreeMap<String, String>,
+    reached: &TreeSet<String>,
+) -> Option<String> {
     let path = reference.path();
     let Some(text) = files.get_ref_str(&path) else {
         return Option::Some(`no file \`${path}\``);
@@ -171,10 +235,12 @@ fn check_block(block: &FencedCode, reference: &Reference, files: &TreeMap<String
         if !quotes(text, &block.code) {
             return Option::Some(`\`${path}\` does not contain the block`);
         }
+        if reference matches { Helper(_) } && !reached.contains(path) {
+            return Option::Some(`no fixture reaches \`${path}\`, so nothing compiles it`);
+        }
         return null;
     };
-    let source = text;
-    let [code, data] = split_data(source);
+    let [code, data] = split_data(text);
     if !quotes(&code, &block.code) {
         return Option::Some(`\`${name}\` does not contain the block`);
     }
@@ -184,18 +250,21 @@ fn check_block(block: &FencedCode, reference: &Reference, files: &TreeMap<String
             return Option::Some(`\`${name}\`: ${why}`);
         },
     };
-    if !rejected && assert_count(&block.code) == 0 {
-        return Option::Some(`the block holds no \`assert\`, and \`${name}\` expects no compile error`);
+    if !rejected && !states_a_claim(&block.code) {
+        return Option::Some(
+            `the block holds no \`assert\`, \`#[expect_trap]\` or \`#[TODO]\`, and \`${name}\` expects no compile error`,
+        );
     }
     return null;
 }
 
-/// Every block of `blocks` that does not comply.
-pub fn audit(blocks: &List<FencedCode>, files: &TreeMap<String, String>) -> List<Finding> {
+/// Every block of `blocks` that does not comply, with `files` and `reached` as
+/// [`check_block`] reads them.
+pub fn audit(blocks: &List<FencedCode>, files: &TreeMap<String, String>, reached: &TreeSet<String>) -> List<Finding> {
     let mut out: List<Finding> = [];
     for let block of blocks {
         let why = match reference_of(block) {
-            Ok(Some(reference)) => check_block(block, &reference, files),
+            Ok(Some(reference)) => check_block(block, &reference, files, reached),
             Ok(None) => Option::Some("names no fixture or source"),
             Err(why) => Option::Some(why),
         };
@@ -222,9 +291,29 @@ fn read_files(blocks: &List<FencedCode>, into: &mut TreeMap<String, String>) wit
     }
 }
 
+/// Every `.wado` file under `FIXTURE_DIR`, by its path.
+fn read_fixtures(into: &mut TreeMap<String, String>) with (Stderr, Preopens) {
+    let entries = match fs::walk_dir(&FIXTURE_DIR) {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            return;
+        },
+    };
+    for let entry of entries {
+        if entry.path.ends_with(".wado") {
+            if let Ok(text) = fs::read_to_string(&entry.path) {
+                into[entry.path] = text;
+            }
+        }
+    }
+}
+
 /// Report each block of `paths` that does not comply, and how many there were.
 fn report(paths: &List<String>) -> i32 with (Stderr, Preopens) {
     let mut files = TreeMap::<String, String>::new();
+    read_fixtures(&mut files);
+    let reached = reached_helpers(&files);
     let mut failed = 0;
     for let path of paths {
         let markdown = match fs::read_to_string(path) {
@@ -237,7 +326,7 @@ fn report(paths: &List<String>) -> i32 with (Stderr, Preopens) {
         };
         let blocks = wado_blocks(&markdown);
         read_files(&blocks, &mut files);
-        for let f of audit(&blocks, &files) {
+        for let f of audit(&blocks, &files, &reached) {
             eprintln(`${*path}:${f.line}: ${f.why}`);
             failed += 1;
         }
@@ -295,9 +384,16 @@ test "a prefix is whitespace" {
     assert !quotes("// let x = 1;\n", &"let x = 1;\n");
 }
 
-test "an assert counts where the lexer finds the keyword" {
-    assert assert_count(&"let x = 1;\nassert x == 1;\n") == 1;
-    assert assert_count(&"// assert x\nlet s = \"assert\";\n") == 0;
+test "a claim counts where the lexer finds it" {
+    assert states_a_claim(&"let x = 1;\nassert x == 1;\n");
+    assert !states_a_claim(&"// assert x\nlet s = \"assert\";\n");
+}
+
+test "a trap expectation is a claim the run checks" {
+    assert states_a_claim(&"#[expect_trap]\ntest {\n    unreachable();\n}\n");
+    assert states_a_claim(&"#[TODO]\ntest \"later\" {\n    panic(\"todo\");\n}\n");
+    assert !states_a_claim(&"#[timeout_ms(10)]\ntest {\n    f();\n}\n");
+    assert !states_a_claim(&"// #[expect_trap]\nlet s = \"#[TODO]\";\n");
 }
 
 /// One file, keyed as a reference to it is: a fixture under `FIXTURE_DIR`.
@@ -315,7 +411,7 @@ fn file_map(path: String, text: String) -> TreeMap<String, String> {
 
 #[allow(dead_code)]
 fn why_of(markdown: String, files: &TreeMap<String, String>) -> Option<String> {
-    let findings = audit(&wado_blocks(&markdown), files);
+    let findings = audit(&wado_blocks(&markdown), files, &reached_helpers(files));
     assert findings.len() <= 1;
     return findings.into_iter().map(|f| f.why).next();
 }
@@ -348,7 +444,7 @@ test "the quotation is read from the code, not the data" {
     assert why_of(quoting(), &fixtures) matches { Some(_) };
 }
 
-test "a block with no assert breaks the rule unless its fixture is rejected" {
+test "a block stating no claim breaks the rule unless its fixture is rejected" {
     let markdown = "<!-- {\"fixture\": \"a.wado\"} -->\n```wado\nlet x: i32 = \"s\";\n```\n";
     let accepted = fixture_map("a.wado", "let x: i32 = \"s\";\n__DATA__\n{\"test\": {}}\n");
     assert why_of(markdown, &accepted) matches { Some(_) };
@@ -365,4 +461,49 @@ test "a source is quoted whole, with no assert asked of it" {
     assert why_of(markdown, &files) == null;
     assert why_of(markdown, &file_map("lib/a.wado", "fn f() {}\n")) matches { Some(_) };
     assert why_of(markdown, &TreeMap::new()) matches { Some(_) };
+}
+
+test "a source never names a fixture" {
+    let markdown = "<!-- {\"source\": \"wado-compiler/tests/fixtures/a.wado\"} -->\n```wado\nf();\n```\n";
+    assert why_of(markdown, &fixture_map("a.wado", "f();\n")) matches { Some(_) };
+}
+
+test "a fixture below the top level is a helper, the reference names it as such" {
+    let blocks = wado_blocks("<!-- {\"fixture\": \"sub/h.wado\"} -->\n```wado\nx\n```\n");
+    assert reference_of(&blocks[0]) == Result::Ok(Option::Some(Reference::Helper("sub/h.wado")));
+}
+
+#[allow(dead_code)]
+fn quoting_helper() -> String {
+    return "<!-- {\"fixture\": \"sub/h.wado\"} -->\n```wado\npub fn f() {}\n\n__DATA__\nraw\n```\n";
+}
+
+#[allow(dead_code)]
+fn helper_files(importer: String) -> TreeMap<String, String> {
+    let mut files = fixture_map("sub/h.wado", "pub fn f() {}\n\n__DATA__\nraw\n");
+    files[fs::join(&FIXTURE_DIR, "a.wado")] = importer;
+    return files;
+}
+
+test "a helper a fixture imports is quoted whole, with no assert asked of it" {
+    let files = helper_files("use { f } from \"./sub/h.wado\";\n\n__DATA__\n{\"test\": {}}\n");
+    assert why_of(quoting_helper(), &files) == null;
+}
+
+test "a helper is reached through another helper or a dependency" {
+    let mut through_helper = helper_files("use { g } from \"./sub/g.wado\";\n");
+    through_helper[fs::join(&FIXTURE_DIR, "sub/g.wado")] = "pub use { f } from \"./h.wado\";\n";
+    assert why_of(quoting_helper(), &through_helper) == null;
+    let dependency = helper_files(
+        "use { f } from \"lib:h\";\n\n__DATA__\n{\"dependencies\": {\"lib:h\": \"sub/h.wado\"}}\n",
+    );
+    assert why_of(quoting_helper(), &dependency) == null;
+}
+
+test "a helper no fixture reaches breaks the rule" {
+    let files = helper_files("fn main() {}\n\n__DATA__\n{\"test\": {}}\n");
+    assert why_of(quoting_helper(), &files) matches { Some(_) };
+    let mut only_helpers = helper_files("fn main() {}\n");
+    only_helpers[fs::join(&FIXTURE_DIR, "sub/g.wado")] = "pub use { f } from \"./h.wado\";\n";
+    assert why_of(quoting_helper(), &only_helpers) matches { Some(_) };
 }

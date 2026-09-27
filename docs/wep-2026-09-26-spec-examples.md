@@ -72,15 +72,22 @@ exactly one of `fixture` and `source`, and a body that fails to parse or holds
 another key is an error, so a misspelled key is caught rather than read as no
 reference.
 
-A `fixture` path is relative to `wado-compiler/tests/fixtures/` and names a
-fixture the suite runs, or a helper module a fixture imports. A two-file example
-quotes each file. The block is matched against the code before the fixture's
-`__DATA__`.
+A `fixture` path is relative to `wado-compiler/tests/fixtures/` and is read the
+way the suite reads it. A file at the top level is a fixture the suite runs, and
+the block is matched against the code before its `__DATA__`. A file below it is
+a helper module, which the suite compiles only through a fixture that imports
+it, directly, through another helper, or as a `dependencies` entry. The checker
+follows those paths from the top level and requires one to reach the helper.
+The block is matched against the whole file, `__DATA__` included, since a
+helper's data is content that `#data` reads, not an expectation. The `assert`
+rule does not apply, as the fixture importing it states the claims. A two-file
+example quotes each file.
 
-A `source` path is relative to the repository root and names any file: a
-standard library module, a unit test's input, a helper module whose own
-`__DATA__` is the example, a fixture whose example has nothing to assert. The
-block is matched against the whole file, and the `assert` rule does not apply.
+A `source` path is relative to the repository root and names a file outside the
+fixtures: a standard library module, a unit test's input, a package's source.
+The block is matched against the whole file, and the `assert` rule does not
+apply. A `source` naming a fixture is an error, since it would step around both
+rules above.
 
 ### Why a quotation, and not a generated test
 
@@ -106,7 +113,9 @@ example names the test that holds it.
 - A claim an example makes about a value is written as an `assert` in the block,
   not as a comment. The claim is then part of the quoted text and runs. A
   comment such as `// 3.14` is checked by nothing, which is what the assert rule
-  targets.
+  targets. A test's `#[expect_trap]` or `#[TODO]` is a claim too: the runner
+  holds the body to trapping, so a trap example needs no `assert` written for
+  the sake of the rule.
 - A compile-error example quotes a fixture declaring `compile_error` or
   `compile_error_codes`. One fixture expects one report, so each rejected
   example has a fixture of its own.
@@ -185,7 +194,6 @@ The last two are what this WEP is for. The migration will find them.
 - The match proves the quoted text compiles in its fixture, not that the
   fixture exercises it. A block quoted from a function no test calls passes.
 - A `source` quotation is held to its file alone. Nothing asks that the file is
-  compiled or run, and naming a fixture as a `source` steps around the `assert`
-  rule.
+  compiled or run.
 - The cheatsheet repeats the specification's examples in a shorter form, and
   nothing holds it to this rule.

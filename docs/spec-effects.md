@@ -74,7 +74,7 @@ test "a default answers with no handler installed" {
 
 #[expect_trap]
 test "an operation without one traps" {
-    assert Log::level() >= 0;
+    Log::level();
 }
 ```
 
@@ -839,7 +839,7 @@ test {
 test "`..trap` traps on an operation the mock leaves out" {
     with TcpSocket => &MinimalTcp {} do {
         let socket = TcpSocket::create(IpAddressFamily::Ipv4).unwrap();
-        assert !socket.get_is_listening();
+        socket.get_is_listening();
     }
 }
 ```
