@@ -1,0 +1,146 @@
+// `param_spec` carries a constant down a call chain of any depth in one run. A
+// clone seeds its own callees' specialization, and a propagated scalar becomes
+// its callees' constant argument, so each takes one call per round. A run that
+// stopped after one round left the next call to the next iteration, and a chain
+// deeper than the `-O2` iteration count never converged. A `${x:?}` over deeply
+// nested types threads its `Formatter` through a chain like `f01`'s.
+
+use { println, Stdout } from "core:cli";
+
+struct Cfg {
+    step: i32,
+    on: bool,
+}
+
+#[inline(never)]
+fn f01(c: &Cfg, n: i32) -> i32 { if c.on { return f02(c, n + c.step); } return n; }
+#[inline(never)]
+fn f02(c: &Cfg, n: i32) -> i32 { if c.on { return f03(c, n + c.step); } return n; }
+#[inline(never)]
+fn f03(c: &Cfg, n: i32) -> i32 { if c.on { return f04(c, n + c.step); } return n; }
+#[inline(never)]
+fn f04(c: &Cfg, n: i32) -> i32 { if c.on { return f05(c, n + c.step); } return n; }
+#[inline(never)]
+fn f05(c: &Cfg, n: i32) -> i32 { if c.on { return f06(c, n + c.step); } return n; }
+#[inline(never)]
+fn f06(c: &Cfg, n: i32) -> i32 { if c.on { return f07(c, n + c.step); } return n; }
+#[inline(never)]
+fn f07(c: &Cfg, n: i32) -> i32 { if c.on { return f08(c, n + c.step); } return n; }
+#[inline(never)]
+fn f08(c: &Cfg, n: i32) -> i32 { if c.on { return f09(c, n + c.step); } return n; }
+#[inline(never)]
+fn f09(c: &Cfg, n: i32) -> i32 { if c.on { return f10(c, n + c.step); } return n; }
+#[inline(never)]
+fn f10(c: &Cfg, n: i32) -> i32 { if c.on { return f11(c, n + c.step); } return n; }
+#[inline(never)]
+fn f11(c: &Cfg, n: i32) -> i32 { if c.on { return f12(c, n + c.step); } return n; }
+#[inline(never)]
+fn f12(c: &Cfg, n: i32) -> i32 { if c.on { return f13(c, n + c.step); } return n; }
+#[inline(never)]
+fn f13(c: &Cfg, n: i32) -> i32 { if c.on { return f14(c, n + c.step); } return n; }
+#[inline(never)]
+fn f14(c: &Cfg, n: i32) -> i32 { if c.on { return f15(c, n + c.step); } return n; }
+#[inline(never)]
+fn f15(c: &Cfg, n: i32) -> i32 { if c.on { return f16(c, n + c.step); } return n; }
+#[inline(never)]
+fn f16(c: &Cfg, n: i32) -> i32 { if c.on { return f17(c, n + c.step); } return n; }
+#[inline(never)]
+fn f17(c: &Cfg, n: i32) -> i32 { if c.on { return f18(c, n + c.step); } return n; }
+#[inline(never)]
+fn f18(c: &Cfg, n: i32) -> i32 { if c.on { return f19(c, n + c.step); } return n; }
+#[inline(never)]
+fn f19(c: &Cfg, n: i32) -> i32 { if c.on { return f20(c, n + c.step); } return n; }
+#[inline(never)]
+fn f20(c: &Cfg, n: i32) -> i32 { return n + c.step; }
+
+#[inline(never)]
+fn g01(k: i32, n: i32) -> i32 { return g02(k, n + k); }
+#[inline(never)]
+fn g02(k: i32, n: i32) -> i32 { return g03(k, n + k); }
+#[inline(never)]
+fn g03(k: i32, n: i32) -> i32 { return g04(k, n + k); }
+#[inline(never)]
+fn g04(k: i32, n: i32) -> i32 { return g05(k, n + k); }
+#[inline(never)]
+fn g05(k: i32, n: i32) -> i32 { return g06(k, n + k); }
+#[inline(never)]
+fn g06(k: i32, n: i32) -> i32 { return g07(k, n + k); }
+#[inline(never)]
+fn g07(k: i32, n: i32) -> i32 { return g08(k, n + k); }
+#[inline(never)]
+fn g08(k: i32, n: i32) -> i32 { return g09(k, n + k); }
+#[inline(never)]
+fn g09(k: i32, n: i32) -> i32 { return g10(k, n + k); }
+#[inline(never)]
+fn g10(k: i32, n: i32) -> i32 { return g11(k, n + k); }
+#[inline(never)]
+fn g11(k: i32, n: i32) -> i32 { return g12(k, n + k); }
+#[inline(never)]
+fn g12(k: i32, n: i32) -> i32 { return g13(k, n + k); }
+#[inline(never)]
+fn g13(k: i32, n: i32) -> i32 { return g14(k, n + k); }
+#[inline(never)]
+fn g14(k: i32, n: i32) -> i32 { return g15(k, n + k); }
+#[inline(never)]
+fn g15(k: i32, n: i32) -> i32 { return g16(k, n + k); }
+#[inline(never)]
+fn g16(k: i32, n: i32) -> i32 { return g17(k, n + k); }
+#[inline(never)]
+fn g17(k: i32, n: i32) -> i32 { return g18(k, n + k); }
+#[inline(never)]
+fn g18(k: i32, n: i32) -> i32 { return g19(k, n + k); }
+#[inline(never)]
+fn g19(k: i32, n: i32) -> i32 { return g20(k, n + k); }
+#[inline(never)]
+fn g20(k: i32, n: i32) -> i32 { return g21(k, n + k); }
+#[inline(never)]
+fn g21(k: i32, n: i32) -> i32 { return g22(k, n + k); }
+#[inline(never)]
+fn g22(k: i32, n: i32) -> i32 { return g23(k, n + k); }
+#[inline(never)]
+fn g23(k: i32, n: i32) -> i32 { return g24(k, n + k); }
+#[inline(never)]
+fn g24(k: i32, n: i32) -> i32 { return g25(k, n + k); }
+#[inline(never)]
+fn g25(k: i32, n: i32) -> i32 { return g26(k, n + k); }
+#[inline(never)]
+fn g26(k: i32, n: i32) -> i32 { return g27(k, n + k); }
+#[inline(never)]
+fn g27(k: i32, n: i32) -> i32 { return g28(k, n + k); }
+#[inline(never)]
+fn g28(k: i32, n: i32) -> i32 { return g29(k, n + k); }
+#[inline(never)]
+fn g29(k: i32, n: i32) -> i32 { return g30(k, n + k); }
+#[inline(never)]
+fn g30(k: i32, n: i32) -> i32 { return g31(k, n + k); }
+#[inline(never)]
+fn g31(k: i32, n: i32) -> i32 { return g32(k, n + k); }
+#[inline(never)]
+fn g32(k: i32, n: i32) -> i32 { return g33(k, n + k); }
+#[inline(never)]
+fn g33(k: i32, n: i32) -> i32 { return g34(k, n + k); }
+#[inline(never)]
+fn g34(k: i32, n: i32) -> i32 { return g35(k, n + k); }
+#[inline(never)]
+fn g35(k: i32, n: i32) -> i32 { return g36(k, n + k); }
+#[inline(never)]
+fn g36(k: i32, n: i32) -> i32 { return g37(k, n + k); }
+#[inline(never)]
+fn g37(k: i32, n: i32) -> i32 { return g38(k, n + k); }
+#[inline(never)]
+fn g38(k: i32, n: i32) -> i32 { return g39(k, n + k); }
+#[inline(never)]
+fn g39(k: i32, n: i32) -> i32 { return g40(k, n + k); }
+#[inline(never)]
+fn g40(k: i32, n: i32) -> i32 { return n + k; }
+
+export fn run() with Stdout {
+    let c = Cfg { step: 2, on: true };
+    println(`${f01(&c, builtin::black_box(0))}`);
+    println(`${g01(3, builtin::black_box(0))}`);
+}
+
+__DATA__
+{
+    "stdout": "40\n120\n"
+}

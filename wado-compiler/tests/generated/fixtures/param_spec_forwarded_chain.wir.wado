@@ -119,18 +119,18 @@ fn "param_spec_forwarded_chain.wado/inner$spec0"(out, word) {
     let b: u8;
     let new_used_28: i32;
     let start_29: i32;
-    let $licm_repr_53: ref Array<u8>;
+    let $licm_repr_52: ref Array<u8>;
     i = 0;
-    $licm_repr_53 = word.repr;
+    $licm_repr_52 = word.repr;
     b2: block {
         l3: loop {
             break_if b2 i >= word.used;
-            b = builtin::array_get_value<u8>($licm_repr_53, i);
+            b = builtin::array_get_value<u8>($licm_repr_52, i);
             new_used_28 = out.used + 1;
             if @unlikely(new_used_28 > builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_28);
-                $licm_repr_53 = word.repr;
+                $licm_repr_52 = word.repr;
             }
             start_29 = out.used;
             out.used = new_used_28;
