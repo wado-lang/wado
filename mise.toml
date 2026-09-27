@@ -64,8 +64,8 @@ cargo check -p wado-lsp --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
 """
 
-# The checks CI's Test (Core) job runs. check-grammar and check-highlight walk
-# the whole corpus, so they are left to on-task-done and CI's Test (Wado) job.
+# check-grammar and check-highlight walk the whole corpus, so they are left to
+# on-task-done and CI's Test (Wado) job.
 [tasks.check]
 description = "Run the corpus checks that finish in seconds"
 run = """
@@ -115,7 +115,8 @@ set -xe -o pipefail
 cargo build --bin wado
 mkdir -p package-wadopoet/build
 ./target/debug/wado syntax --format json -o package-wadopoet/build/syntax.json
-./target/debug/wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+# `-O1`, for the reason `scripts/check-rust-paths.sh` gives.
+./target/debug/wado run -O1 package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
 """
 
 [tasks.check-wadopoet-vocabulary]
