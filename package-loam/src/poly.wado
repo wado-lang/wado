@@ -598,26 +598,25 @@ fn narrowed(value: i128) -> Option<i64> {
     };
 }
 
-/// How far a bound reaches before it is held: 2^65, past any `i64` constant a
-/// sum adds it to, so the sum keeps the sign and the side of `i32` it would have.
-fn reach_limit() -> i128 {
-    return (i64::MAX as i128 + 1) * 2;
-}
+/// How far a term's bound reaches before it is held: 2^65, past any `i64`
+/// constant a sum adds it to, so the sum keeps the sign and the side of `i32`
+/// it would have.
+global REACH_LIMIT: i128 = (i64::MAX as i128 + 1) * 2;
 
-/// `a * b` held within `reach_limit` either way, of two already held so.
+/// `a * b`, held within `REACH_LIMIT` either way.
 fn product(a: i128, b: i128) -> i128 {
     if a == 0 || b == 0 {
         return 0;
     }
-    let limit = reach_limit();
-    if i128::abs(a) > limit / i128::abs(b) {
-        return if (a < 0) == (b < 0) { limit } else { -limit };
+    if i128::abs(a) > REACH_LIMIT / i128::abs(b) {
+        return if (a < 0) == (b < 0) { REACH_LIMIT } else { -REACH_LIMIT };
     }
     return a * b;
 }
 
-/// `a / d` rounded up, for a positive `d`.
-fn ceiling(a: i128, d: i128) -> i128 {
+/// `a / d` rounded up, for a positive `d`. Wide, since a bound on a
+/// polynomial, and the span between any two `i64`, lie past `i64`.
+pub fn ceiling(a: i128, d: i128) -> i128 {
     assert d > 0;
     return if a >= 0 { (a + d - 1) / d } else { a / d };
 }

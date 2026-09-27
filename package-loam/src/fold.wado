@@ -4,7 +4,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Elements, Known, Node, data_type } from "./graph.wado";
-use { Poly } from "./poly.wado";
+use { Poly, ceiling } from "./poly.wado";
 use {
     broadcast_extents,
     checked_element_count,
@@ -500,7 +500,7 @@ fn as_int(elements: &Elements, i: i32) -> i64 {
 fn steps_over(from: i64, to: i64, step: i64) -> i128 {
     assert step != 0;
     let [span, s] = [to as i128 - from as i128, step as i128];
-    return i128::max(if s > 0 { (span + s - 1) / s } else { (-span - s - 1) / -s }, 0);
+    return i128::max(if s > 0 { ceiling(span, s) } else { ceiling(-span, -s) }, 0);
 }
 
 /// The refusal of a tensor of `count` elements, where that is more than a list holds.

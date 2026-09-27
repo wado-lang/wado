@@ -3,6 +3,7 @@
 
 use { AttrError, Node } from "./graph.wado";
 pub use { Window } from "./runtime/tensor.wado";
+use { ceil_div } from "./runtime/tensor.wado";
 
 /// The window of `kernel` extents that `node` slides over the spatial extents
 /// `input`. `ceil` rounds a partial last step up, as `MaxPool`'s `ceil_mode` does.
@@ -19,7 +20,7 @@ pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool
     for let i of 0..<spatial {
         let reach = dilations[i] * (kernel[i] - 1) + 1;
         if mode == "SAME_UPPER" || mode == "SAME_LOWER" {
-            let out = (input[i] + strides[i] - 1) / strides[i];
+            let out = ceil_div(input[i] as i64, strides[i] as i64) as i32;
             let total = i32::max((out - 1) * strides[i] + reach - input[i], 0);
             let upper = if mode == "SAME_UPPER" { total / 2 } else { total - total / 2 };
             pads[i] = upper;
@@ -42,7 +43,7 @@ pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool
                 },
             );
         }
-        let mut out = if ceil { (span + strides[i] - 1) / strides[i] } else { span / strides[i] } + 1;
+        let mut out = if ceil { ceil_div(span as i64, strides[i] as i64) as i32 } else { span / strides[i] } + 1;
         // A last window that would start in the trailing pad covers no input.
         if ceil && (out - 1) * strides[i] >= input[i] + pads[i] {
             out -= 1;

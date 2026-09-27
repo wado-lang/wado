@@ -878,7 +878,7 @@ test "a Range over a symbolic length is a kernel call" {
     assert out.contains("let Y = range_i64::<Seq>(0, to_extent(dim_N), 1);");
 }
 
-test "a Slice clamp the build cannot decide is computed by the run, and read as its operand checked before any kernel" {
+test "a clamp the run computes, read as its operand, is checked before any kernel" {
     let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
         S = Shape(X)
         A = Slice(M, Z, S)

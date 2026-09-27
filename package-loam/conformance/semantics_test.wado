@@ -25,13 +25,13 @@ global INPUTS: TreeMap<String, String> = {
     P: "Tensor { data: iota(0.0, 4 * n), extents: [n, 4] }",
 } as TreeMap<String, String>;
 
-/// What Loam computes from `model` at each of `lengths`, in the oracle's
+/// What Loam computes from `model` at each of `LENGTHS`, in the oracle's
 /// lines, and past them why it computes nothing more: the build's refusal, or
 /// how the run stopped.
-fn loam(model: ByteList, output_axes: List<String>, lengths: List<i32>) -> String {
+fn loam(model: ByteList, output_axes: List<String>) -> String {
     let graph = read(model).unwrap();
     return match built(&graph, output_axes) {
-        Ok(source) => run(source, &graph, lengths),
+        Ok(source) => run(source, &graph),
         Err(reason) => `refused: ${reason}`,
     };
 }
@@ -62,9 +62,9 @@ fn built(graph: &Graph, output_axes: List<String>) -> Result<String, String> {
     return emit(graph, &checked).map_err(|e| `${e}`);
 }
 
-/// `source` with a `run` that calls its `forward` at each of `lengths` and
+/// `source` with a `run` that calls its `forward` at each of `LENGTHS` and
 /// prints what it returns, run under `eval`.
-fn run(source: String, graph: &Graph, lengths: List<i32>) -> String {
+fn run(source: String, graph: &Graph) -> String {
     let mut args = "";
     for let vi of graph.inputs {
         args.push_str(`&${INPUTS[vi.name]}, `);
@@ -86,7 +86,7 @@ fn joined<T: Display>(values: List<T>) -> String {
 }
 
 export fn run() with Stdout {
-    for let n of ${lengths:?} as List<i32> {
+    for let n of ${LENGTHS:?} as List<i32> {
         let got = forward(${args}&Weights {});
         println(\`N = \${n}: extents [\${joined(got.extents)}], data [\${joined(got.data)}]\`);
     }
@@ -106,7 +106,7 @@ export fn run() with Stdout {
 
 /// Loam computes from `model` what onnxruntime does, which `onnx` states.
 fn assert_agrees(model: ByteList, onnx: String, output_axes: List<String> = ["Part"]) {
-    assert loam(model, output_axes, LENGTHS) == onnx;
+    assert loam(model, output_axes) == onnx;
 }
 
 test "Slice to N takes the first N, clamping to the axis's end" {

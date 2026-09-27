@@ -105,9 +105,9 @@ test "two inputs that disagree on one symbol name both" {
 }
 
 test "a condition the build owed is met with slack to spare, and missed by how much" {
-    assert unmet(0, "Y = Slice: the bound N must be at most 8") matches { None };
-    assert unmet(-3, "Y = Slice: the bound N must be at most 8") == Option::Some(
-        "Y = Slice: the bound N must be at most 8, and the inputs miss it by 3",
+    assert unmet(0, "Y = Slice: N must be at most 8") matches { None };
+    assert unmet(-3, "Y = Slice: N must be at most 8") == Option::Some(
+        "Y = Slice: N must be at most 8, and the inputs miss it by 3",
     );
     // A product of two extents, which an `i32` would have wrapped positive.
     assert unmet(8 - 65536 as i64 * 65536, "Y: N * M must be at most 8") == Option::Some(
