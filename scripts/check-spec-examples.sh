@@ -16,9 +16,12 @@ list=package-gale-highlight-wado/build/spec-examples/corpus.txt
 
 # Naming files asks about those files; naming none asks about the corpus.
 corpus=(--paths-from "${list}")
-if [ "$#" -gt 0 ]; then
-    corpus=()
-else
+for arg in "$@"; do
+    case "${arg}" in
+    *.md) corpus=() ;;
+    esac
+done
+if [ "${#corpus[@]}" -gt 0 ]; then
     mkdir -p "$(dirname "${list}")"
     git ls-files 'docs/spec-*.md' > "${list}"
 fi
