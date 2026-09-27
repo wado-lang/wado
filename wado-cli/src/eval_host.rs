@@ -234,9 +234,8 @@ impl EvalHost {
     /// compile. It is not one of the runtime's blocking threads, which the
     /// runtime would wait for when `wado test` shuts it down. The thread takes
     /// the caller's CPU permit, and the caller waits for a fresh one, so
-    /// abandoned threads and running tests share one budget. An abandoned
-    /// thread keeps the permit while [`Self::strandable`] allows, and gives it
-    /// back past that.
+    /// abandoned threads and running tests share one budget, as far as
+    /// [`Self::abandon`] lets them.
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
     /// the host, so it carries on into the calling test, which reports it.
