@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790510378494,
+  "lastUpdate": 1790511959143,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60909,6 +60909,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/09eee0cb212a435d1e58dfda1fb828b6663df236"
         },
         "date": 1790510377698,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20198,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288419,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8f1fecd09fa7222792e29c45834835c6345f23f",
+          "message": "Merge pull request #2193 from wado-lang/claude/wide-int-algorithm-nqoi3e\n\nfeat(elaborator): a numeric literal takes its type from the whole generic call; add a toy RSA example",
+          "timestamp": "2026-09-27T20:47:01+09:00",
+          "tree_id": "a592878ad6a53385ef735cca57a52d3852d5ea4f",
+          "url": "https://github.com/wado-lang/wado/commit/d8f1fecd09fa7222792e29c45834835c6345f23f"
+        },
+        "date": 1790511958493,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
