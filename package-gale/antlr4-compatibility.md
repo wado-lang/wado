@@ -39,8 +39,8 @@ diverge.
 Gale does not reproduce a bug in ANTLR4. A behavior an upstream bug report
 shows to be wrong is pinned in its corrected form, even where the jar still
 gives the wrong answer. Where the jar already answers correctly, its tree is
-the expected one, as it is everywhere else. The open reports that concern
-parsing are pinned in `tests/driver_cst_antlr4_issues_test.wado`, one test per
+the expected one, as it is everywhere else. The open reports about parsing are
+pinned in `tests/driver_cst_antlr4_issues_test.wado`, and each test names its
 issue.
 
 ### Grammars Gale accepts and ANTLR4 rejects
