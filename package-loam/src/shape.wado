@@ -256,7 +256,8 @@ impl Shape {
     }
 
     /// Discharge the one condition an operation places on a pair of axes. What
-    /// stage 0 cannot prove is an error, as no runtime tier re-checks it.
+    /// stage 0 cannot prove is an error: only an inequality over the input
+    /// symbols is owed to the run, and this is none.
     pub fn agree(left: &Axis, right: &Axis, op: &String) -> Result<(), ExtentConflict> {
         if left.extent.agrees(&right.extent) {
             return Result::Ok(());
