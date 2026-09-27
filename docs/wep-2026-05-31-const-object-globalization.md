@@ -155,10 +155,27 @@ Any `&mut self` method, any `&mut` of a projection, and any assignment to the
 binding or a projection disqualifies it.
 
 A bare whole-value read in a consuming position (return, block tail, `let y =
-xs`, an aggregate element, a by-value call argument) is also rejected: the
-value-copy machinery may have elided the copy treating the binding as a movable
-local, which globalizing would break. By-`&` borrows, field / index reads and
-`&self` methods are admitted.
+xs`, an aggregate element) is also rejected: the value-copy machinery may have
+elided the copy treating the binding as a movable local, which globalizing would
+break. A by-value call argument is rejected too, unless the parameter it lands
+in passes the callee-parameter gate below. By-`&` borrows, field / index reads
+and `&self` methods are admitted.
+
+A field or index read may still name the binding's storage. A write through a
+local holding it is a write of the binding, so every local bound or assigned
+from a source containing such a read is followed, and a write through any of
+them rejects the binding too.
+
+#### Gate: storage leaving the function
+
+The value-copy plan elides the copy of a projection it proves fresh, and a
+binding's field is fresh when the binding is. Returning `k.data` therefore
+hands the caller the storage itself, which it treats as its own. Once `k` is a
+global, the caller writes the constant. `storage_leaves_body` rejects a binding
+whose storage a `return`, a `break`, the body's tail, or a store into a
+non-local place delivers. It follows a local bound from such a delivery, and it
+sees through an aggregate built around the storage. A callee that hands an
+argument back out is `local_leaks_through_call`'s to reject.
 
 #### Gate: callee parameter, for a by-value argument
 

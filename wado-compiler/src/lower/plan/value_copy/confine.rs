@@ -73,7 +73,7 @@ impl ParamEscape {
     }
 
     fn confined_at(&self, i: usize) -> bool {
-        !self.side[i] && !(self.ret[i] && self.taken[i])
+        !(self.side[i] || self.ret[i] && self.taken[i])
     }
 
     fn confined(&self) -> Vec<bool> {

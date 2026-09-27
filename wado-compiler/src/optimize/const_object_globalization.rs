@@ -908,6 +908,9 @@ fn let_stmt_qualifies(
     if local_leaks_through_call(body, local_index, gate) {
         return decline("storage leaks through a call");
     }
+    if storage_leaves_body(body, &delivered_alias_roots(body, local_index, gate), gate) {
+        return decline("storage leaves the function");
+    }
     // An unread binding is dead code on its way out, not a hoist target:
     // hoisting it manufactures a live global no WIR cleanup deletes.
     if !read_locals.contains(&local_index) {
@@ -1670,6 +1673,10 @@ impl Gate<'_> {
         if let Some(&cached) = self.param_readonly.borrow().get(&key) {
             return cached;
         }
+        // The callee's own read-only walk asks this of the callees it passes
+        // the parameter on to, so a cycle answers the conservative way while
+        // the verdict is in flight, as `callee_ref_param_leaks` does.
+        self.param_readonly.borrow_mut().insert(key, false);
         let verdict = self.compute_param_readonly(func_id, param_pos);
         self.param_readonly.borrow_mut().insert(key, verdict);
         verdict
@@ -1804,15 +1811,16 @@ fn readonly_body_violation(body: &Body, idx: u32, gate: &Gate<'_>) -> Option<&'s
     // The aliases answer a narrower question. `block_readonly` also rejects a
     // bare whole-value read, which is a consuming use of the constant but
     // ordinary for a local that merely names part of it.
-    projection_alias_roots(body, idx, gate, AliasRoots::Declared)
+    projection_alias_roots(body, idx, gate)
         .into_iter()
         .filter(|&root| root != idx)
         .any(|root| written_through(body, root, gate))
         .then_some("an alias of the binding is written")
 }
 
-/// Whether a write reaches local `idx`: an assignment rooted at it, a `&mut` of
-/// it or of one of its projections, or a call that mutates it as a receiver.
+/// Whether a write reaches the storage local `idx` names: an assignment
+/// through it, a `&mut` of it or of one of its projections, or a call that
+/// mutates it as a receiver. Filling the local itself only renames it.
 fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     let rooted_at_idx = |e: ExprId| projection_root_of(body, e, gate) == Some(idx);
     reachable_nodes(body).into_iter().any(|node| {
@@ -1820,7 +1828,9 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
             return false;
         };
         match &body.exprs[e].kind {
-            ExprKind::Assign { target, .. } => rooted_at_idx(*target),
+            ExprKind::Assign { target, .. } => {
+                assign_target_local(body, *target).is_none() && rooted_at_idx(*target)
+            }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
@@ -1847,39 +1857,52 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// own copy is legitimate and even counts as owned, a premise hoisting
 /// invalidates. A borrow or a scalar projection is not an escape.
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
-    let roots = projection_alias_roots(body, idx, gate, AliasRoots::WithReassigned);
-    let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
+    let roots = projection_alias_roots(body, idx, gate);
+    storage_leaves_body(body, &roots, gate) || storage_passed_on(body, &roots, gate)
+}
+
+/// Whether the storage a root names outlives the body's own locals: delivered
+/// by a `return`, by the body's tail, by a `break` (whose block's value this
+/// walk does not follow further), or stored into a place that is not a root.
+/// A binding hoisted into a global hands the global to whoever receives it.
+fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
+    let delivers = |op: Operand| delivers_projection_operand(body, op, roots, gate);
+    body.block_tail(body.root).is_some_and(delivers)
+        || body
+            .find_in_live_node_under(NodeRef::Block(body.root), |node| {
+                let leaves = match node {
+                    NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                            value.is_some_and(delivers)
+                        }
+                        _ => false,
+                    },
+                    // Assigning into a local is naming, not escaping: that
+                    // local is already one of `roots`, so its own uses are
+                    // walked too. Any other target is a place that outlives
+                    // the borrow.
+                    NodeRef::Expr(e) => match &body.exprs[e].kind {
+                        ExprKind::Assign { target, value } => {
+                            delivers(*value)
+                                && !assign_target_local(body, *target)
+                                    .is_some_and(|l| roots.contains(&l))
+                        }
+                        _ => false,
+                    },
+                    NodeRef::Block(_) | NodeRef::Pat(_) => false,
+                };
+                leaves.then_some(())
+            })
+            .is_some()
+}
+
+/// Whether a call is handed the storage a root names in a way that lets it
+/// keep the storage or hand it back.
+fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
+    let escapes = |op: Operand| delivers_projection_operand(body, op, roots, gate);
     body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
-        match node {
-            NodeRef::Stmt(s) => match &body.stmts[s].kind {
-                StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-                    if value.is_some_and(escapes) {
-                        return Some(());
-                    }
-                }
-                StmtKind::Let { value, .. } => {
-                    // A `let` alias is itself a root, so its own uses are
-                    // covered by this walk.
-                    let _ = value;
-                }
-                StmtKind::Expr(_)
-                | StmtKind::If { .. }
-                | StmtKind::Loop { .. }
-                | StmtKind::LabeledBlock { .. }
-                | StmtKind::LetDestructure { .. }
-                | StmtKind::Continue => {}
-            },
-            NodeRef::Expr(e) => match &body.exprs[e].kind {
-                // Assigning into a local is naming, not escaping: that local is
-                // already one of `roots`, so this walk covers its own uses too.
-                // Any other target is a place that outlives the borrow.
-                ExprKind::Assign { target, value } => {
-                    if escapes(*value)
-                        && !assign_target_local(body, *target).is_some_and(|l| roots.contains(&l))
-                    {
-                        return Some(());
-                    }
-                }
+        if let NodeRef::Expr(e) = node {
+            match &body.exprs[e].kind {
                 // A by-value `self` receiver hands the storage to the callee,
                 // which may return or store it in turn; `&self` only reads it.
                 ExprKind::Call {
@@ -1923,48 +1946,27 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                     }
                 }
                 _ => {}
-            },
-            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            }
         }
         None
     })
     .is_some()
 }
 
-/// `idx` plus every local bound from something that can yield one of their
-/// storages — a `let`, a destructuring `let`, or a `match` arm over such a
-/// scrutinee. All name the same storage, so an escape through any is an escape of
-/// the parameter. The source need only *contain* a reference-typed projection:
-/// `let r = if c { s.a } else { s.b };` binds one of two and nothing says which.
-/// Which aliases [`projection_alias_roots`] collects.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum AliasRoots {
-    /// Only locals *declared* from a projection. A local an assignment fills is
-    /// left out because the assignment filling it reads, to
-    /// [`written_through`], as a write of the storage it names — true of the
-    /// tracked binding, false of a mere alias.
-    Declared,
-    /// Also locals an assignment fills, which name the same storage as a
-    /// declared alias and so must be walked for escapes.
-    WithReassigned,
-}
-
-/// One binding site: the locals it binds, and the roots its source can yield.
-/// Neither depends on the alias set, so the walk that finds them runs once.
+/// One binding site: a source, and the locals it binds or fills.
 struct AliasSite {
-    yields: Vec<u32>,
+    value: Operand,
     binds: Vec<u32>,
 }
 
-fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRoots) -> Vec<u32> {
-    let mut sites: Vec<AliasSite> = Vec::new();
+/// Every place a local is bound or filled from a source that may name existing
+/// storage: a `let`, a destructuring `let`, a `match` arm over its scrutinee,
+/// or an assignment to the whole local.
+fn alias_sites(body: &Body) -> Vec<AliasSite> {
+    let mut sites = Vec::new();
     let mut site = |value: Operand, binds: Vec<u32>| {
-        if binds.is_empty() {
-            return;
-        }
-        let yields = yielded_roots(body, value, gate);
-        if !yields.is_empty() {
-            sites.push(AliasSite { yields, binds });
+        if !binds.is_empty() {
+            sites.push(AliasSite { value, binds });
         }
     };
     body.for_each_reachable_node(|node| {
@@ -1998,7 +2000,7 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRo
                 // as one bound by `let` — the shape `licm` leaves when it
                 // hoists a field read out of a loop and refreshes it after each
                 // call that could have changed it.
-                ExprKind::Assign { target, value } if which == AliasRoots::WithReassigned => {
+                ExprKind::Assign { target, value } => {
                     let binds = assign_target_local(body, *target).into_iter().collect();
                     site(*value, binds);
                 }
@@ -2007,12 +2009,21 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRo
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
     });
+    sites
+}
+
+/// `idx` plus every local a site binds once `reaches` says its source can name
+/// the storage of one already collected, to a fixpoint.
+fn alias_closure(
+    idx: u32,
+    sites: &[AliasSite],
+    mut reaches: impl FnMut(usize, &[u32]) -> bool,
+) -> Vec<u32> {
     let mut roots = vec![idx];
-    let mut i = 0;
-    while i < roots.len() {
-        let root = roots[i];
-        for s in &sites {
-            if s.yields.contains(&root) {
+    loop {
+        let before = roots.len();
+        for (i, s) in sites.iter().enumerate() {
+            if s.binds.iter().any(|b| !roots.contains(b)) && reaches(i, &roots) {
                 for &b in &s.binds {
                     if !roots.contains(&b) {
                         roots.push(b);
@@ -2020,9 +2031,37 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRo
                 }
             }
         }
-        i += 1;
+        if roots.len() == before {
+            return roots;
+        }
     }
-    roots
+}
+
+/// `idx` plus every local bound from a source that *contains* a
+/// reference-typed projection of one of them. All may name the same storage,
+/// so a write through any is one of `idx`'s. Containment is the test because
+/// nothing says which part flows out: `let r = if c { s.a } else { s.b };`
+/// binds one of two, and `let r = f(s.a);` whatever `f` hands back.
+fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
+    let sites = alias_sites(body);
+    let yields: Vec<Vec<u32>> = sites
+        .iter()
+        .map(|s| yielded_roots(body, s.value, gate))
+        .collect();
+    alias_closure(idx, &sites, |i, roots| {
+        yields[i].iter().any(|y| roots.contains(y))
+    })
+}
+
+/// `idx` plus every local bound from a source that *delivers* the storage of
+/// one of them ([`delivers_projection`]). What a call hands back is not
+/// followed: [`local_leaks_through_call`] refuses a callee that returns what it
+/// was given.
+fn delivered_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
+    let sites = alias_sites(body);
+    alias_closure(idx, &sites, |i, roots| {
+        delivers_projection_operand(body, sites[i].value, roots, gate)
+    })
 }
 
 /// The local an assignment targets whole, or `None` for a projection, an index
@@ -2071,20 +2110,25 @@ fn delivers_projection(body: &Body, expr: ExprId, roots: &[u32], gate: &Gate<'_>
                 .any(|&a| block_tail_delivers(body, a, roots, gate))
                 || block_tail_delivers(body, *default, roots, gate)
         }
+        // An aggregate built around the storage hands it out with itself.
+        ExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .any(|f| delivers_projection_operand(body, f.value, roots, gate)),
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
+            .iter()
+            .any(|&e| delivers_projection_operand(body, e, roots, gate)),
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.is_some_and(|p| delivers_projection_operand(body, p, roots, gate))
+        }
         _ => false,
     }
 }
 
-/// The value a block falls off its end with: its tail expression statement.
-/// A `break`-delivered value is checked where the `break` is.
+/// The value a block falls off its end with. A `break`-delivered value is
+/// checked where the `break` is.
 fn block_tail_delivers(body: &Body, block: BlockId, roots: &[u32], gate: &Gate<'_>) -> bool {
-    body.blocks[block]
-        .stmts
-        .last()
-        .is_some_and(|&s| match &body.stmts[s].kind {
-            StmtKind::Expr(op) => delivers_projection_operand(body, *op, roots, gate),
-            _ => false,
-        })
+    body.block_tail(block)
+        .is_some_and(|op| delivers_projection_operand(body, op, roots, gate))
 }
 
 /// Every local whose storage evaluating `op` can produce: the root of each
@@ -2195,10 +2239,18 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             // promoted to `Operand::Value` carries no `ExprId`, so counting
             // surviving expressions would put every later argument against the
             // wrong parameter.
-            let rest: Vec<(Operand, bool)> = args
+            let rest: Vec<(Operand, ArgUse)> = args
                 .iter()
+                .enumerate()
                 .skip(usize::from(has_receiver))
-                .map(|a| (a.expr, a.is_mut))
+                .map(|(pos, a)| {
+                    let arg_use = if a.is_mut {
+                        ArgUse::WritesThrough
+                    } else {
+                        ArgUse::Param(callee_id, pos)
+                    };
+                    (a.expr, arg_use)
+                })
                 .collect();
             if let Some(receiver) = receiver {
                 let recv = receiver.as_expr().map(|e| strip_refs(body, e));
@@ -2220,9 +2272,8 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
                     return false;
                 }
             }
-            rest.iter().all(|&(arg, borrows_mutably)| {
-                call_arg_readonly_operand(body, arg, idx, gate, borrows_mutably)
-            })
+            rest.iter()
+                .all(|&(arg, arg_use)| call_arg_readonly_operand(body, arg, idx, gate, arg_use))
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
@@ -2230,9 +2281,9 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             expr_readonly_operand(body, callee, idx, gate)
                 // An indirect callee's parameters are unknown, so every
                 // argument is treated as one that could be written.
-                && args
-                    .iter()
-                    .all(|&a| call_arg_readonly_operand(body, a, idx, gate, true))
+                && args.iter().all(|&a| {
+                    call_arg_readonly_operand(body, a, idx, gate, ArgUse::WritesThrough)
+                })
         }
 
         // `&mut <…xs…>` — a mutable reference into the binding escapes.
@@ -2321,10 +2372,34 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
                 && block_readonly(body, default, idx, gate)
         }
 
+        // Building an aggregate reads its elements. One holding the binding's
+        // storage aliases it, and [`storage_leaves_body`] and the alias walk
+        // answer for where the aggregate goes.
+        ExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .all(|f| expr_readonly_operand(body, f.value, idx, gate)),
+        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
+            .iter()
+            .all(|&e| expr_readonly_operand(body, e, idx, gate)),
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.is_none_or(|p| expr_readonly_operand(body, p, idx, gate))
+        }
+
         // Any other expression kind: a non-whitelisted use. Reject if it
         // mentions the binding.
         _ => !expr_mentions_local(body, expr, idx),
     }
+}
+
+/// Where an argument lands.
+#[derive(Clone, Copy)]
+enum ArgUse {
+    /// A parameter that writes the caller's storage: the argument's own
+    /// `ArenaCallArg::is_mut`, or any argument of a callee nothing is known
+    /// about.
+    WritesThrough,
+    /// The callee's parameter at this position, which answers for itself.
+    Param(FuncId, usize),
 }
 
 fn call_arg_readonly_operand(
@@ -2332,26 +2407,21 @@ fn call_arg_readonly_operand(
     op: Operand,
     idx: u32,
     gate: &Gate<'_>,
-    borrows_mutably: bool,
+    arg_use: ArgUse,
 ) -> bool {
     op.as_expr()
-        .is_none_or(|e| call_arg_readonly(body, e, idx, gate, borrows_mutably))
+        .is_none_or(|e| call_arg_readonly(body, e, idx, gate, arg_use))
 }
 
 /// A binding handed to a call as an argument. `&` borrow is a read; `&mut`
-/// escapes; passing the binding itself by value is a consuming use (rejected).
-///
-/// `borrows_mutably` is the argument's own `ArenaCallArg::is_mut` — whether it
-/// lands in a parameter that writes the caller's storage.
-fn call_arg_readonly(
-    body: &Body,
-    arg: ExprId,
-    idx: u32,
-    gate: &Gate<'_>,
-    borrows_mutably: bool,
-) -> bool {
+/// escapes; passing the binding itself by value is a read only where the
+/// parameter only reads it.
+fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>, arg_use: ArgUse) -> bool {
     match &body.exprs[arg].kind {
-        ExprKind::Local { index, .. } => *index != idx,
+        ExprKind::Local { index, .. } => {
+            *index != idx
+                || matches!(arg_use, ArgUse::Param(callee, pos) if gate.callee_param_readonly(callee, pos))
+        }
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
@@ -2371,11 +2441,12 @@ fn call_arg_readonly(
         // borrows mutably is not a read: `sroa_param` rewrites a `&mut S`
         // parameter whose struct has a single field into that field, so the
         // write that used to travel through `&mut S` travels through the
-        // projection and lands in the shared global. Value semantics cover
-        // every other parameter — a by-value argument is the callee's own copy,
-        // so what it does with it cannot reach the binding.
+        // projection and lands in the shared global. Any other parameter
+        // cannot write it: a callee that writes a by-value parameter is handed
+        // its own copy, and one that hands the storage back out is
+        // [`local_leaks_through_call`]'s to refuse.
         _ => {
-            if borrows_mutably && expr_mentions_local(body, arg, idx) {
+            if matches!(arg_use, ArgUse::WritesThrough) && expr_mentions_local(body, arg, idx) {
                 return false;
             }
             expr_readonly(body, arg, idx, gate)
