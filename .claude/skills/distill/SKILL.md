@@ -36,6 +36,9 @@ and often a helper the codebase already had.
 
 ## Rules
 
+Distilling keeps what the code does. The only change of behaviour it makes is a
+bug fix, and a bug fix starts from a failing test.
+
 ### Code
 
 - Reuse: don't re-implement what the codebase already has. Grep the shared

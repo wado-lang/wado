@@ -55,10 +55,16 @@ Adding or changing a language feature is the human's call, to adopt and to
 refuse alike. Propose it and wait. Recording a feature that already exists is
 not that call, whoever wrote it.
 
-What an adopted decision already settles is not a second decision. Write out
-what follows from it — the mechanism it implies, the invariant it rests on, the
-case it forces — and say which decision it follows from where that is not
-obvious. A choice the adopted one leaves open is a gap, however small.
+A consequence of an adopted decision needs no new approval. Write it into the
+WEP, and name the decision it follows from where that is not obvious. A choice
+the decision leaves open is not a consequence: record it as a known gap,
+however small, for the human to settle.
+
+A WEP is a policy, not a law. Keep looking for a better way than the one it
+states, and propose one when you find it: adopting it is still the human's
+call. A statement the work shows to be impossible is the WEP's to change, not
+the code's to work around. Correct it to what is true, and keep what it said
+and why it could not hold, as the WEP keeps the rest of its history.
 
 Roadmap and Known gaps split on commitment, not on size. A roadmap item will be
 done, so it is ordered and each entry says what finishing it means. A known gap
