@@ -45,10 +45,10 @@ use {
     GroupElement,
 } from "./ir.wado";
 use {
+    alt_class,
     alt_class_of,
     alt_classes,
     alt_classes_of,
-    compute_overlap_groups,
     compute_overlap_groups_of,
     DecisionBranch,
     decision_partition,
@@ -904,9 +904,10 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // ATN-class detection: the static suffix-first dispatch mis-commits when
     // an atom alt recursively references this rule with a trailing literal
     // that overlaps an LR suffix-first (the `'between' expr 'and' expr`
-    // shape), or when a suffix is `.` / `~X`-led (empty static suffix-first).
+    // shape), or when a suffix can open on a `.` / `~X`.
     // Route such a rule's loop-entry through the runtime simulator.
-    let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts);
+    let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
+    let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes);
     if atn_class {
         ctx.mark_needs_lr_atn();
     }
@@ -914,7 +915,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // `valid_lr_alts` must line up with the ATN precedence-edge list (which
     // covers every real suffix) when the rule dispatches via the simulator, so
     // pass `atn_class` through.
-    let lr_dispatch = compute_lr_dispatch_data(&lr_alts, atn_class);
+    let lr_dispatch = compute_lr_dispatch_data(&lr_alts, &suffix_classes, atn_class);
 
     let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
     if mid_operand_gated {
@@ -932,15 +933,33 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     };
 }
 
+/// The class of each LR alt's suffix (`elements[1..]`), in `lr_alts` order.
+fn lr_suffix_classes(rule: &ParserRule, lr_alts: &List<LrAlt>, ctx: &mut GenContext) -> List<AltClass> {
+    let mut out: List<AltClass> = [];
+    for let a of lr_alts {
+        let alt = &rule.alternatives[a.alt_index];
+        let suffix = Alternative { ..*alt, elements: elements_from(&alt.elements, 1), actions: [] };
+        out.push(alt_class(&suffix, &a.suffix_first, ctx));
+    }
+    return out;
+}
+
 /// True when this LR rule's loop entry needs the runtime simulator's full
 /// context, as with `'between' expr 'and' expr` beside `expr 'and' expr`.
-fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: &List<LrAlt>) -> bool {
-    // A `.` / `~X`-led LR suffix has a real suffix but an empty static
-    // `suffix_first`: the loop-entry can't be decided by a static first-token
-    // check, so the rule must run on the runtime simulator (which admits the
-    // wildcard/complement operator via `atn_first_admits`).
-    for let a of lr_alts {
-        if !a.suffix.ops.is_empty() && a.suffix_first.is_empty() {
+fn lr_rule_is_atn_class(
+    rule: &ParserRule,
+    non_lr_indices: &List<i32>,
+    lr_alts: &List<LrAlt>,
+    suffix_classes: &List<AltClass>,
+) -> bool {
+    // A suffix that can open on a `.` / `~X`, in place or behind a rule, admits
+    // tokens its static `suffix_first` does not name — all of them when that
+    // set is empty, and still the rest in `A? .` or `(w | A)`. No static
+    // first-token check decides such a loop entry; the runtime simulator admits
+    // the open end via `atn_first_admits`.
+    for let mut i = 0; i < lr_alts.len(); i += 1 {
+        let a = &lr_alts[i];
+        if !a.suffix.ops.is_empty() && (a.suffix_first.is_empty() || alt_class_is_open_ended(&suffix_classes[i])) {
             return true;
         }
     }
@@ -1913,10 +1932,10 @@ fn compute_lr_conflict_min_prec(
 /// Build the LR loop's dispatch metadata. `valid_lr_alts` lists the
 /// indices (into `lr_alts`) of alts whose suffix is non-empty —
 /// degenerate `expr : expr` alts are filtered out. `groups` is the
-/// overlap-group partition over those alts' `suffix_first` sets.
-fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatchData {
+/// overlap-group partition over those alts' suffix classes.
+fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClass>, atn_class: bool) -> LrDispatchData {
     let mut valid_lr_alts: List<i32> = [];
-    let mut suffix_first_sets: List<List<String>> = [];
+    let mut valid_classes: List<AltClass> = [];
     for let mut i = 0; i < lr_alts.len(); i += 1 {
         let lr = &lr_alts[i];
         // Static dispatch gates on a non-empty `suffix_first`, so it drops a
@@ -1926,16 +1945,16 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatc
         // builds, so the simulator's edge index lines up with these branches
         // and their `scan_X_lr_N` helpers. `groups` is read by both paths — the
         // static dispatch branches on it, the ATN path re-picks within a
-        // multi-member one (`emit_lr_atn_group_repick`). An empty
-        // `suffix_first` overlaps nothing, so it always lands in a singleton
-        // and no re-pick applies: it has no static first set to compete on,
-        // which is why the rule is ATN-class at all.
+        // multi-member one (`emit_lr_atn_group_repick`). An open-ended suffix
+        // admits every token, so it overlaps every other suffix: the
+        // simulator's first admitting edge is grammar order, and only the
+        // re-pick sees that `e D D` cannot complete where `e .` can.
         let skip = if atn_class { lr.suffix.ops.is_empty() } else { lr.suffix_first.is_empty() };
         if skip {
             continue;
         }
         valid_lr_alts.push(i);
-        suffix_first_sets.push(lr.suffix_first);
+        valid_classes.push(suffix_classes[i]);
     }
 
     // Overlap groups are tolerated here: emit's LR-suffix loop
@@ -1944,7 +1963,7 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatc
     // dispatch). The GIR carries the groups as-is; correctness
     // falls out of emit treating `group.len() > 1` as the cue to
     // generate a scan-and-commit cascade across the group's alts.
-    let groups = compute_overlap_groups(&suffix_first_sets);
+    let groups = compute_overlap_groups_of(&valid_classes);
 
     return LrDispatchData {
         valid_lr_alts: valid_lr_alts,
