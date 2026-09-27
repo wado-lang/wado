@@ -1647,7 +1647,6 @@ async fn run_single_test(
     let start = Instant::now();
     let module = job.module.as_ref();
 
-<<<<<<< HEAD
     let (mut store, stdout_pipe, stderr_pipe) = match runtime::create_test_store(
         &module.engine,
         preopened_dirs,
@@ -1655,23 +1654,8 @@ async fn run_single_test(
         EvalSession::new(Arc::clone(&job.eval_host), &module.path, cpu_permit),
     ) {
         Ok(v) => v,
-        Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
+        Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),
     };
-||||||| 4cf9b655e
-    let (mut store, stdout_pipe, stderr_pipe) =
-        match runtime::create_test_store(&module.engine, preopened_dirs, &module.path) {
-            Ok(v) => v,
-            Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
-        };
-=======
-    let (mut store, stdout_pipe, stderr_pipe) =
-        match runtime::create_test_store(&module.engine, preopened_dirs, &module.path) {
-            Ok(v) => v,
-            Err(e) => {
-                return fail_result(job, format!("failed to set up store: {e:#}"), start, None);
-            }
-        };
->>>>>>> origin/main
 
     // Profiling samples on every epoch tick, so it takes the deadline the
     // timeout was counted in; `parse_args` says so on the flag.

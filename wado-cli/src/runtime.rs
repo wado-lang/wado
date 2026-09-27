@@ -76,14 +76,10 @@ pub struct WasiState {
     http: WasiHttpCtx,
     http_hooks: WadoHttpHooks,
     tls: WasiTlsCtx,
-<<<<<<< HEAD
     /// `wado test` only: the store's handle on `core:eval`.
     eval: Option<EvalSession>,
-||||||| 4cf9b655e
-=======
     /// The fuel [`new_store`] filled the store with, where its engine meters.
     fuel_start: Option<u64>,
->>>>>>> origin/main
 }
 
 /// Per-guest stdout/stderr capacity for [`WasiState::new_capturing_stdio`].
@@ -191,12 +187,8 @@ impl WasiState {
             http,
             http_hooks,
             tls,
-<<<<<<< HEAD
             eval: None,
-||||||| 4cf9b655e
-=======
             fuel_start: None,
->>>>>>> origin/main
         }
     }
 
@@ -248,12 +240,8 @@ impl WasiState {
             http,
             http_hooks,
             tls,
-<<<<<<< HEAD
             eval,
-||||||| 4cf9b655e
-=======
             fuel_start: None,
->>>>>>> origin/main
         })
     }
 
@@ -614,16 +602,8 @@ pub fn create_test_store(
     eval: EvalSession,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
     let (state, stdout, stderr) =
-<<<<<<< HEAD
         WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], eval)?;
-    Ok((Store::new(engine, state), stdout, stderr))
-||||||| 4cf9b655e
-        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()])?;
-    Ok((Store::new(engine, state), stdout, stderr))
-=======
-        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()])?;
     Ok((new_store(engine, state), stdout, stderr))
->>>>>>> origin/main
 }
 
 /// Create a Linker for `component`: WASI P3, HTTP and TLS, and a trap for every
