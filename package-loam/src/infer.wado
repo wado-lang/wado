@@ -303,7 +303,7 @@ pub struct Condition {
 }
 
 /// Owe `slack >= 0`, unless every value of the symbols makes it so. A slack
-/// that is a negative number is no condition on the inputs but a graph wrong
+/// every value makes negative is no condition on the inputs but a graph wrong
 /// for every one of them.
 fn owe(node: &Node, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), InferError> {
     return owe_at(`${node_name(node)} = ${node.op}`, owed, slack, condition).map_err(|reason| refusal(node, reason));

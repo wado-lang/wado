@@ -4476,7 +4476,7 @@ use crate::lexer::is_valid_ident;
 use crate::name::LocalMethodName;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal,
-    TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
+    TirLiteralPattern, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
     TirUnaryOp, TypeId, TypeTable, receiver_value,
 };
 
@@ -4508,8 +4508,8 @@ impl<'a> TirUnparser<'a> {
         }
     }
 
-    /// Whether a pattern binds `local_index` mutably. Outside a function, as a
-    /// closure rendered on its own, no local is.
+    /// Whether a pattern binds `local_index` mutably. A closure `synthesis/`
+    /// builds lists no body locals, so none of its bindings is.
     fn binds_mut(&self, local_index: u32) -> bool {
         self.mut_locals
             .get(local_index as usize)
@@ -5313,12 +5313,7 @@ impl<'a> TirUnparser<'a> {
                 body_locals,
                 ..
             } => {
-                let closure_mut_locals = std::iter::repeat_n(false, params.len())
-                    .chain(body_locals.iter().map(|l| l.is_mut))
-                    .collect();
-                let enclosing = std::mem::replace(&mut self.mut_locals, closure_mut_locals);
-                self.unparse_closure_form(params, captures, body);
-                self.mut_locals = enclosing;
+                self.unparse_closure_form(params, body_locals, captures, body);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.unparse_expr(callee);
@@ -5412,6 +5407,7 @@ impl<'a> TirUnparser<'a> {
     fn unparse_closure_form(
         &mut self,
         params: &[(String, TypeId)],
+        body_locals: &[TirLocal],
         captures: &[TirCapture],
         body: &TirExpr,
     ) {
@@ -5426,7 +5422,12 @@ impl<'a> TirUnparser<'a> {
             self.delimited("[", "]", captures, |s, cap| s.output.push_str(&cap.name));
         }
         self.output.push(' ');
+        let closure_mut_locals = std::iter::repeat_n(false, params.len())
+            .chain(body_locals.iter().map(|l| l.is_mut))
+            .collect();
+        let enclosing = std::mem::replace(&mut self.mut_locals, closure_mut_locals);
         self.unparse_expr(body);
+        self.mut_locals = enclosing;
     }
 }
 
@@ -5508,12 +5509,13 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 /// only a non-capturing closure round-trips through the parser.
 pub fn unparse_tir_closure_source(
     params: &[(String, TypeId)],
+    body_locals: &[TirLocal],
     captures: &[TirCapture],
     body: &TirExpr,
     type_table: &TypeTable,
 ) -> String {
     let mut unparser = TirUnparser::new(type_table).source_form();
-    unparser.unparse_closure_form(params, captures, body);
+    unparser.unparse_closure_form(params, body_locals, captures, body);
     unparser.output
 }
 

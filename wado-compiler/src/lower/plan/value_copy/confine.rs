@@ -10,10 +10,10 @@
 //! Three channels per parameter reach a least fixpoint: `ret` (flows into a
 //! returned value), `side` (written to lasting storage) and `taken` (bound to
 //! an owner the body holds, where borrowing it would move the copy into the
-//! callee rather than save it). A parameter is confined iff `side` is not
-//! raised, and `ret` and `taken` are not both. The analysis over-approximates
-//! escape: unmodelled constructs, a closure's captures, and a handler /
-//! `resume` body mark the parameters they reach.
+//! callee rather than save it). A parameter is confined iff it is not declared
+//! `mut`, `side` is not raised, and `ret` and `taken` are not both. The
+//! analysis over-approximates escape: unmodelled constructs, a closure's
+//! captures, and a handler / `resume` body mark the parameters they reach.
 
 use super::analyze::{collect_pattern_bindings, passes_through};
 use super::callgraph::CallGraph;
@@ -23,7 +23,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     BuiltinDeclarations, FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
+    TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
+    capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 

@@ -2233,11 +2233,8 @@ impl<'a> Moves<'a> {
 /// The reads of locals a walk makes, each at the site that decides whether it
 /// hands the local's storage over: a bare local, a projection straight off one,
 /// or a deeper place that moves. `read` gets the local, its type where the site
-/// names it, and whether the site is a move.
-///
-/// A local reached only as a projection's base is no site of its own: the fold
-/// decides on the projection above it. A closure's body indexes locals of its
-/// own, and a capture reads the one it names without moving it.
+/// names it, and whether the site is a move. A closure's body indexes locals of
+/// its own, and a capture reads the one it names without moving it.
 struct ReadSites<'a, 'b, F> {
     moves: &'b Moves<'a>,
     read: F,
@@ -2260,7 +2257,9 @@ impl<F: FnMut(u32, Option<TypeId>, bool)> TirRefVisitor for ReadSites<'_, '_, F>
             {
                 (self.read)(local, Some(local_type), moved);
             }
-            TirExprKind::Index { expr: base, index } if let Some((local, local_type)) = local_read(base) => {
+            TirExprKind::Index { expr: base, index }
+                if let Some((local, local_type)) = local_read(base) =>
+            {
                 (self.read)(local, Some(local_type), moved);
                 self.visit_expr(index);
             }

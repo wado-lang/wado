@@ -7240,8 +7240,8 @@ impl TirFunction {
 /// A resolved local slot in a function, global initializer, or closure scope.
 /// `FunctionContext::locals` is the single source of truth — every parameter,
 /// `let`, destructure binding and elaborator temporary — and is projected onto
-/// `TirFunction::locals` / `TirGlobal::locals` (keyed by Wasm local index) and
-/// onto `Closure { body_locals }`, whose params stay in `params` instead.
+/// `TirFunction::locals` (keyed by Wasm local index) and onto
+/// `Closure { body_locals }`, whose params stay in `params` instead.
 #[derive(Debug, Clone)]
 pub struct TirLocal {
     /// Source-level name of the binding (or a synthesised `$name` for

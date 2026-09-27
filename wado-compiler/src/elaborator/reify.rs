@@ -77,7 +77,7 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
-use crate::synthesis::common::builtin_call;
+use crate::synthesis::common::{builtin_call, deref_expr};
 use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
@@ -8507,16 +8507,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if referent(target_type).is_some() {
             return operand;
         }
-        drop(tt);
         let span = operand.span;
-        TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr: Box::new(operand),
-            },
-            referent_type,
-            span,
-        )
+        deref_expr(operand, referent_type, span)
     }
 
     /// Replay a literal cast to i128/u128, modulo newtypes of one, as the

@@ -842,13 +842,13 @@ fn converted(checked: &Checked, held: &TreeMap<String, String>, tensor: &String)
 }
 
 /// Whether a node computes nothing, so its output is another name for its
-/// operand: an `Identity`, or a `Cast` to the primitive the operand has.
+/// operand: an `Identity`, or a `Cast` to the primitive the operand has. An
+/// int32 target is held in `i64` too, but keeps only the low half.
 fn is_alias(node: &Node, checked: &Checked) -> bool {
     let primitives = &checked.primitives;
-    // An int32 target is held in i64 as well, but keeps only the low half.
     return node.op == "Identity"
         || node.op == "Cast"
-            && !(node.int_attr("to", 0) matches { Ok(6) })
+            && !node.int_attr("to", 0) matches { Ok(6) }
             && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
 }
 
