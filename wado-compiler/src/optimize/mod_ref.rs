@@ -842,9 +842,10 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
             }
             body.for_each_child(node, |c| stack.push(c));
         }
-        // A declared effect or a retention is a caller-visible promise in its
-        // own right; treat either as opaque rather than re-deriving it.
-        if !f.effects.is_empty() || !f.retains.is_empty() || f.is_async {
+        // A declared effect is a caller-visible promise in its own right; treat
+        // it as opaque rather than re-deriving it. A retention is not: keeping a
+        // reference is a store the body scan sees, or a result the caller holds.
+        if !f.effects.is_empty() || f.is_async {
             own.opaque = true;
         }
         effects[i] = own;
