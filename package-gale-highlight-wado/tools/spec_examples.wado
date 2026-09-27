@@ -19,6 +19,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { TreeMap, TreeSet } from "core:collections";
 use { from_string } from "core:json";
+use { Value } from "core:value";
 
 global FIXTURE_DIR: String = "wado-compiler/tests/fixtures";
 
@@ -59,9 +60,17 @@ pub fn wado_blocks<S: AsStrSlice>(markdown: S) -> List<FencedCode> {
     return fenced_code_blocks(markdown).into_iter().filter(|b| b.tag == "wado").collect();
 }
 
+/// A block's reference, and whether the fixture it quotes must show a claim.
+pub struct Citation {
+    pub reference: Reference,
+    /// `false` where the reference writes `"assert": false`: the example claims
+    /// only that it compiles, which the fixture's run already shows.
+    pub asserts: bool = true,
+}
+
 /// What a block names in the HTML comment before it: `null` when the comment
 /// holds no JSON object, or why the object is no reference.
-pub fn reference_of(block: &FencedCode) -> Result<Option<Reference>, String> {
+pub fn reference_of(block: &FencedCode) -> Result<Option<Citation>, String> {
     let Some(html) = block.html_before else {
         return Result::Ok(null);
     };
@@ -75,27 +84,49 @@ pub fn reference_of(block: &FencedCode) -> Result<Option<Reference>, String> {
     if !body.starts_with("{") {
         return Result::Ok(null);
     }
-    let reference = from_string::<TreeMap<String, String>>(body.to_string()).map_err(
-        |e| `the reference is not a JSON object of strings: ${e:?}`,
+    let object = from_string::<TreeMap<String, Value>>(body.to_string()).map_err(
+        |e| `the reference is not a JSON object: ${e:?}`,
     )?;
-    for let [key, _value] of reference.entries() {
-        if *key != "fixture" && *key != "source" {
+    let mut fixture: Option<String> = null;
+    let mut source: Option<String> = null;
+    let mut asserts = true;
+    for let [key, value] of object.entries() {
+        if *key == "fixture" || *key == "source" {
+            let Value::String(path) = *value else {
+                return Result::Err(`the reference's \`${*key}\` is not a string`);
+            };
+            if *key == "fixture" {
+                fixture = Option::Some(path);
+            } else {
+                source = Option::Some(path);
+            }
+        } else if *key == "assert" {
+            if !*value matches { Bool(false) } {
+                return Result::Err("the reference's `assert` takes only `false`");
+            }
+            asserts = false;
+        } else {
             return Result::Err(`the reference has an unknown key \`${*key}\``);
         }
     }
-    return match [
-        reference.get("fixture"),
-        reference.get("source"),
-    ] {
-        [Some(name), None] && name.contains("/") => Result::Ok(Option::Some(Reference::Helper(name))),
-        [Some(name), None] => Result::Ok(Option::Some(Reference::Fixture(name))),
+    let reference = match [fixture, source] {
+        [Some(name), None] && name.contains("/") => Reference::Helper(name),
+        [Some(name), None] => Reference::Fixture(name),
         [None, Some(path)] && path.starts_with(`${FIXTURE_DIR}/`) => {
-            Result::Err(`\`${path}\` is under the fixtures, so the reference names it as a \`fixture\``);
+            return Result::Err(`\`${path}\` is under the fixtures, so the reference names it as a \`fixture\``);
         },
-        [None, Some(path)] => Result::Ok(Option::Some(Reference::Source(path))),
-        [Some(_), Some(_)] => Result::Err("the reference names both a `fixture` and a `source`"),
-        [None, None] => Result::Err("the reference names no `fixture` or `source`"),
+        [None, Some(path)] => Reference::Source(path),
+        [Some(_), Some(_)] => {
+            return Result::Err("the reference names both a `fixture` and a `source`");
+        },
+        [None, None] => {
+            return Result::Err("the reference names no `fixture` or `source`");
+        },
     };
+    if !asserts && !reference matches { Fixture(_) } {
+        return Result::Err("`\"assert\": false` waives what only a fixture the suite runs owes");
+    }
+    return Result::Ok(Option::Some(Citation { reference, asserts }));
 }
 
 fn is_blank<S: AsStrSlice>(line: S) -> bool {
@@ -218,15 +249,16 @@ fn expects_rejection(data: &String) -> Result<bool, String> {
     };
 }
 
-/// Why `block`, which names `reference`, breaks a rule, or `null` if it keeps
+/// Why `block`, which carries `citation`, breaks a rule, or `null` if it keeps
 /// them all. `files` holds each file that could be read, by its path, and
 /// `reached` the helpers a fixture reaches.
 fn check_block(
     block: &FencedCode,
-    reference: &Reference,
+    citation: &Citation,
     files: &TreeMap<String, String>,
     reached: &TreeSet<String>,
 ) -> Option<String> {
+    let reference = &citation.reference;
     let path = reference.path();
     let Some(text) = files.get_ref_str(&path) else {
         return Option::Some(`no file \`${path}\``);
@@ -250,7 +282,7 @@ fn check_block(
             return Option::Some(`\`${name}\`: ${why}`);
         },
     };
-    if !rejected && !states_a_claim(&block.code) {
+    if citation.asserts && !rejected && !states_a_claim(&block.code) {
         return Option::Some(
             `the block holds no \`assert\`, \`#[expect_trap]\` or \`#[TODO]\`, and \`${name}\` expects no compile error`,
         );
@@ -264,7 +296,7 @@ pub fn audit(blocks: &List<FencedCode>, files: &TreeMap<String, String>, reached
     let mut out: List<Finding> = [];
     for let block of blocks {
         let why = match reference_of(block) {
-            Ok(Some(reference)) => check_block(block, &reference, files, reached),
+            Ok(Some(citation)) => check_block(block, &citation, files, reached),
             Ok(None) => Option::Some("names no fixture or source"),
             Err(why) => Option::Some(why),
         };
@@ -280,8 +312,8 @@ pub fn audit(blocks: &List<FencedCode>, files: &TreeMap<String, String>, reached
 /// Each file `blocks` names that can be read, by its path.
 fn read_files(blocks: &List<FencedCode>, into: &mut TreeMap<String, String>) with Preopens {
     for let block of blocks {
-        if let Ok(Some(reference)) = reference_of(block) {
-            let path = reference.path();
+        if let Ok(Some(citation)) = reference_of(block) {
+            let path = citation.reference.path();
             if !into.contains_key_str(&path) {
                 if let Ok(text) = fs::read_to_string(&path) {
                     into[path] = text;
@@ -345,8 +377,8 @@ test "a block names what it quotes in the JSON comment before it" {
         "<!-- {\"fixture\": \"a.wado\"} -->\n\n```wado\nx\n```\n\n<!-- {\"source\": \"lib/b.wado\"} -->\n\n```wado\ny\n```\n\n```wado\nz\n```\n\n```text\nw\n```\n",
     );
     assert blocks.len() == 3;
-    assert reference_of(&blocks[0]) == Result::Ok(Option::Some(Reference::Fixture("a.wado")));
-    assert reference_of(&blocks[1]) == Result::Ok(Option::Some(Reference::Source("lib/b.wado")));
+    assert reference_of(&blocks[0]) == Result::Ok(Option::Some(Citation { reference: Reference::Fixture("a.wado") }));
+    assert reference_of(&blocks[1]) == Result::Ok(Option::Some(Citation { reference: Reference::Source("lib/b.wado") }));
     assert reference_of(&blocks[2]) == Result::Ok(null);
 }
 
@@ -382,6 +414,22 @@ test "a quotation fails on a changed line, a gap, or two prefixes" {
 
 test "a prefix is whitespace" {
     assert !quotes("// let x = 1;\n", &"let x = 1;\n");
+}
+
+test "a fixture reference may waive the claim" {
+    let markdown = "<!-- {\"fixture\": \"a.wado\", \"assert\": false} -->\n```wado\nfn f() {}\n```\n";
+    let fixtures = fixture_map("a.wado", "fn f() {}\n__DATA__\n{\"test\": {}}\n");
+    assert why_of(markdown, &fixtures) == null;
+}
+
+test "the waiver is `false`, on a fixture the suite runs" {
+    let fixtures = fixture_map("a.wado", "fn f() {}\n");
+    let waived = |reference: String| why_of(`<!-- ${reference} -->\n\`\`\`wado\nfn f() {}\n\`\`\`\n`, &fixtures);
+    assert waived("{\"fixture\": \"a.wado\", \"assert\": true}") matches { Some(_) };
+    assert waived("{\"fixture\": \"a.wado\", \"assert\": \"false\"}") matches { Some(_) };
+    assert waived("{\"fixture\": \"sub/a.wado\", \"assert\": false}") matches { Some(_) };
+    assert waived("{\"source\": \"lib/a.wado\", \"assert\": false}") matches { Some(_) };
+    assert waived("{\"fixture\": 1}") matches { Some(_) };
 }
 
 test "a claim counts where the lexer finds it" {
@@ -470,7 +518,7 @@ test "a source never names a fixture" {
 
 test "a fixture below the top level is a helper, the reference names it as such" {
     let blocks = wado_blocks("<!-- {\"fixture\": \"sub/h.wado\"} -->\n```wado\nx\n```\n");
-    assert reference_of(&blocks[0]) == Result::Ok(Option::Some(Reference::Helper("sub/h.wado")));
+    assert reference_of(&blocks[0]) == Result::Ok(Option::Some(Citation { reference: Reference::Helper("sub/h.wado") }));
 }
 
 #[allow(dead_code)]

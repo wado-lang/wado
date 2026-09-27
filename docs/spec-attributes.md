@@ -33,7 +33,7 @@ Lets a function perform the listed effects without declaring `with E`, and stops
 
 An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
 
-<!-- {"fixture":"spec_attributes_user.wado"} -->
+<!-- {"fixture":"spec_attributes_user.wado","assert":false} -->
 
 ```wado
 pub struct HashIndex {
@@ -50,10 +50,6 @@ impl HashIndex {
 
 fn fresh() -> HashIndex {   // declares no effect, and needs none
     return HashIndex::new();
-}
-
-test {
-    assert fresh() matches { HashIndex { .. } };
 }
 ```
 

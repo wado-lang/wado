@@ -47,8 +47,9 @@ A code block in the specification is a quotation of an e2e fixture.
    blank line matches a blank line.
 3. Any number of blocks may name one file.
 4. A block whose fixture does not expect a compile error contains at least one
-   `assert`. This rule is provisional: the first migrated file decides whether
-   it holds or is absurd, and it is dropped if absurd.
+   `assert`, unless its reference waives the rule. This rule is provisional:
+   the first migrated file decides whether it holds or is absurd, and it is
+   dropped if absurd.
 
 The reference is an HTML comment holding a JSON object, the block directly
 before the fence in the same container. The formatter puts a blank line between
@@ -68,9 +69,9 @@ assert double(1.5 as Meters) == 3.0 as Meters;
 The comment is data, so JSON says what it may hold, and no syntax of its own
 needs a rule. A comment whose body does not open with `{` is no reference, which
 leaves room for a formatter directive. One that does is a reference: it holds
-exactly one of `fixture` and `source`, and a body that fails to parse or holds
-another key is an error, so a misspelled key is caught rather than read as no
-reference.
+exactly one of `fixture` and `source`, and may hold `"assert": false`. A body
+that fails to parse, holds another key, or gives `assert` any other value is an
+error, so a misspelled key is caught rather than read as no reference.
 
 A `fixture` path is relative to `wado-compiler/tests/fixtures/` and is read the
 way the suite reads it. A file at the top level is a fixture the suite runs, and
@@ -116,6 +117,10 @@ example names the test that holds it.
   targets. A test's `#[expect_trap]` or `#[TODO]` is a claim too: the runner
   holds the body to trapping, so a trap example needs no `assert` written for
   the sake of the rule.
+- An example whose claim is that it compiles has no value to assert: the
+  fixture's run already shows it. Its reference writes `"assert": false`, as
+  the `#[benign]` example's does. The waiver is allowed only on a fixture the
+  suite runs, the one place the rule applies.
 - A compile-error example quotes a fixture declaring `compile_error` or
   `compile_error_codes`. One fixture expects one report, so each rejected
   example has a fixture of its own.
