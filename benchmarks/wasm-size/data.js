@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790545473830,
+  "lastUpdate": 1790550133484,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61061,6 +61061,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 289040,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4f75d58c8777ac5cb718ae719dc858b4563ae498",
+          "message": "Merge pull request #2198 from wado-lang/claude/wado-lang-site-maintenance-8dxwx5\n\nfix(gale): make rule recovery always progress, keyed on where the rule failed",
+          "timestamp": "2026-09-28T07:32:07+09:00",
+          "tree_id": "f9331c8eff1a279ba734071af9d25b72ff37f1ea",
+          "url": "https://github.com/wado-lang/wado/commit/4f75d58c8777ac5cb718ae719dc858b4563ae498"
+        },
+        "date": 1790550132688,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6728,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20219,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290120,
             "unit": "bytes"
           }
         ]
