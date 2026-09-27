@@ -442,8 +442,16 @@ fn field_bound_root(body: &nir_arena::Body, expr: ExprId) -> Option<u32> {
 /// a `local.field` read over a by-value local root. Handles both the skeleton
 /// form and a **promoted** `Operand::Value` (the freeze promotes a `FieldAccess`
 /// bound), decomposed through the value **pool** (`body.values`, not `value_of`).
+///
+/// As in [`parse_var_offset`], a local whose binding reads as no bound (`let
+/// limit = black_box(10)`) is a bound in its own right, by its stable index.
 pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
     let op = peel_capture_block(engine, binds, op);
+    parse_resolved_bound(engine, binds, op)
+        .or_else(|| operand_local(engine.body, op).map(BoundKey::Local))
+}
+
+fn parse_resolved_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
     if let Some(c) = parse_const_i64(engine, binds, op) {
         return Some(BoundKey::Const(c));
     }
@@ -506,7 +514,7 @@ fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool {
 
 /// Parse an operand (through copy temps) as a constant `i64`. Constants live in
 /// the value **pool** as `Operand::Value(Int)`, never the `value_of` side-table.
-fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
+pub(super) fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
     match resolve(engine, binds, op) {
         Operand::Value(v) => pool_int_const(engine, v),
         Operand::Expr(_) => None,
