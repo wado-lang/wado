@@ -5,7 +5,6 @@
 //! so the run lists where the two part.
 
 use { TreeMap } from "core:collections";
-use { Graph } from "../src/graph.wado";
 use { infer } from "../src/infer.wado";
 use { read } from "../src/onnx_proto.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
@@ -213,6 +212,9 @@ use reshape_rest_first from "./semantics/ReshapeRestFirst.onnx"
         },
     };
 
+/// The lengths of `X` the oracle ran each case at.
+global LENGTHS: List<i32> = [3, 10];
+
 /// `count` consecutive values from `first`, as the oracle fills its inputs.
 fn iota(first: f32, count: i32) -> List<f32> {
     let mut values: List<f32> = [];
@@ -305,7 +307,7 @@ test "Slice from -N past the axis clamps to its start" {
 }
 
 test "Slice from N + 8 is empty" {
-    for let n of [3, 10] as List<i32> {
+    for let n of LENGTHS {
         let got = slice_from_past_end::forward(
             &slice_from_past_end::Tensor {
                 data: x_of(n),
@@ -323,7 +325,7 @@ test "Slice from N + 8 is empty" {
 }
 
 test "Slice to N - 1 drops the last" {
-    for let n of [3, 10] as List<i32> {
+    for let n of LENGTHS {
         let got = slice_drop_last::forward(
             &slice_drop_last::Tensor {
                 data: x_of(n),
@@ -337,7 +339,7 @@ test "Slice to N - 1 drops the last" {
 }
 
 test "Slice from -1 to N takes the last" {
-    for let n of [3, 10] as List<i32> {
+    for let n of LENGTHS {
         let got = slice_last::forward(
             &slice_last::Tensor {
                 data: x_of(n),
@@ -351,7 +353,7 @@ test "Slice from -1 to N takes the last" {
 }
 
 test "Range from 0 to N by 1 counts N" {
-    for let n of [3, 10] as List<i32> {
+    for let n of LENGTHS {
         let got = range_to_length::forward(
             &range_to_length::Tensor {
                 data: x_of(n),
@@ -392,7 +394,7 @@ test "Cast of 3000000000 * N to int32 wraps, as onnxruntime computes it" {
 }
 
 test "Reshape to -1 flattens" {
-    for let n of [3, 10] as List<i32> {
+    for let n of LENGTHS {
         let got = reshape_flat::forward(
             &reshape_flat::Tensor {
                 data: p_of(n),
@@ -406,7 +408,7 @@ test "Reshape to -1 flattens" {
 }
 
 test "Reshape reads 0 as the operand's extent and -1 as what remains" {
-    for let n of [3, 10] as List<i32> {
+    for let n of LENGTHS {
         let got = reshape_keep_split::forward(
             &reshape_keep_split::Tensor {
                 data: p_of(n),
@@ -420,7 +422,7 @@ test "Reshape reads 0 as the operand's extent and -1 as what remains" {
 }
 
 test "Reshape reads a leading -1 as what the rest leaves" {
-    for let n of [3, 10] as List<i32> {
+    for let n of LENGTHS {
         let got = reshape_rest_first::forward(
             &reshape_rest_first::Tensor {
                 data: p_of(n),
@@ -462,9 +464,8 @@ fn assert_builds(model: ByteList, want: List<List<i32>>) {
     if let Err(e) = infer(&graph, &schema(output)) {
         panic(`${e}`);
     }
-    let lengths: List<i32> = [3, 10];
-    for let [i, n] of lengths.into_iter().enumerate() {
-        let mut bound: Graph = graph;
+    for let [i, n] of LENGTHS.into_iter().enumerate() {
+        let mut bound = graph;
         bind_dims(&mut bound, &({ N: n } as TreeMap<String, i32>)).unwrap();
         let checked = infer(&bound, &schema(output)).unwrap();
         assert checked.shapes[output].static_extents(&output).unwrap() == want[i];

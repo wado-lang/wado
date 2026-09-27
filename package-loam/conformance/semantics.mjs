@@ -10,13 +10,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
+import { FLOAT, INT32, INT64, message, tensorProto, text } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
 
 const lengths = [3, 10];
-const FLOAT = 1;
-const INT64 = 7;
-const INT32 = 6;
 
 // The int64 constants the cases compute from, each of one element.
 const constants = {
@@ -76,35 +74,6 @@ const cases = [
   ]],
 ];
 
-// A protobuf message as its fields: [number, value], where a value is a
-// varint (bigint or number), a Buffer (length-delimited), or an array of
-// fields (a nested message).
-function varint(n) {
-  const out = [];
-  let v = BigInt.asUintN(64, BigInt(n));
-  while (v >= 0x80n) {
-    out.push(Number(v & 0x7fn) | 0x80);
-    v >>= 7n;
-  }
-  out.push(Number(v));
-  return out;
-}
-
-function message(fields) {
-  const bytes = [];
-  for (const [number, value] of fields) {
-    if (Array.isArray(value) || Buffer.isBuffer(value)) {
-      const body = Buffer.isBuffer(value) ? value : message(value);
-      bytes.push(...varint((number << 3) | 2), ...varint(body.length), ...body);
-    } else {
-      bytes.push(...varint(number << 3), ...varint(value));
-    }
-  }
-  return Buffer.from(bytes);
-}
-
-const text = (s) => Buffer.from(s, 'utf8');
-
 // ValueInfoProto: name = 1, type = 2; TypeProto.tensor_type = 1;
 // Tensor: elem_type = 1, shape = 2; TensorShapeProto.dim = 1;
 // Dimension: dim_value = 1, dim_param = 2.
@@ -114,10 +83,8 @@ function valueInfo(name, elemType, dims) {
   return [[1, text(name)], [2, [[1, [[1, elemType], ...shape]]]]];
 }
 
-// TensorProto: dims = 1, data_type = 2, name = 8, raw_data = 9.
 function int64Initializer(name, value) {
-  const raw = Buffer.from(new BigInt64Array([value]).buffer);
-  return [[1, 1], [2, INT64], [8, text(name)], [9, raw]];
+  return tensorProto(name, INT64, [1], new Uint8Array(new BigInt64Array([value]).buffer));
 }
 
 // NodeProto: input = 1, output = 2, op_type = 4, attribute = 5;
