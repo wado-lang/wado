@@ -48,7 +48,7 @@ rejects and Gale accepts is a Gale bug, on one side or the other.
   `src/g4/parser_test.wado`.
 - **A left-recursive alternative that can be followed by nothing** — error
   148, as in `e : e x | INT ;` with `x : '*'? ;`, or an empty alternative in a
-  suffix group (`e : e ( A x | ) | C`). Any number of empty iterations derives
+  suffix group (`e : e ( A | ) | C ;`). Any number of empty iterations derives
   the same text, and only none of them adds no node, so an iteration whose
   suffix would consume nothing is never taken. `1*` under
   `s : e '*' EOF ; e : e x | INT ;` is `(s (e 1) *)`. Pinned by "an LR loop
