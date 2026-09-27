@@ -10,11 +10,15 @@ use predicates::prelude::*;
 
 use crate::common::wado;
 
+// `-O0`: the surface under test is the CLI's, not the optimizer's, and Gale is
+// large enough that the default `-O2` compile of it takes 7x as long (164s
+// against 22s), which made these two the tail of the whole suite.
 #[test]
 fn gale_gen_calculator_emits_generated_parser() {
     wado()
         .args([
             "run",
+            "-O0",
             "package-gale/src/main.wado",
             "gen",
             "package-gale/tests/grammars/calculator.g4",
@@ -38,6 +42,7 @@ fn gale_gen_highlight_emits_highlight_function() {
     wado()
         .args([
             "run",
+            "-O0",
             "package-gale/src/main.wado",
             "gen",
             "package-gale/tests/grammars/calculator.g4",

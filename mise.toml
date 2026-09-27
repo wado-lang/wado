@@ -89,7 +89,7 @@ run = "scripts/check-highlight.sh"
 
 [tasks.check-highlight-vocab]
 description = "Fail if the Gale highlight query drifts from the compiler's syntax registries"
-run = "cargo run --bin wado-dev-tools -- highlight-vocab"
+run = "scripts/dev-bin.sh wado-dev-tools highlight-vocab"
 
 [tasks.check-rust-paths]
 description = "Fail if a Rust file gained a `crate::` / `super::` path written outside a `use` item"
@@ -112,11 +112,18 @@ description = "Regenerate package-wadopoet/src/vocabulary.wado from the compiler
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo build --bin wado
 mkdir -p package-wadopoet/build
+<<<<<<< HEAD
 ./target/debug/wado syntax --format json -o package-wadopoet/build/syntax.json
 # `-O1`, for the reason `scripts/check-rust-paths.sh` gives.
 ./target/debug/wado run -O1 package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+||||||| 9b52d7a43
+./target/debug/wado syntax --format json -o package-wadopoet/build/syntax.json
+./target/debug/wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+=======
+scripts/dev-bin.sh wado syntax --format json -o package-wadopoet/build/syntax.json
+scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+>>>>>>> origin/main
 """
 
 [tasks.check-wadopoet-vocabulary]
@@ -202,13 +209,13 @@ description = "Compile example/hello.wado to WAT and Wasm"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo run -p wado-cli -- compile -O2 -o example/hello.wat  example/hello.wado
-cargo run -p wado-cli -- compile -O2 -o example/hello.wasm example/hello.wado
+scripts/dev-bin.sh wado compile -O2 -o example/hello.wat  example/hello.wado
+scripts/dev-bin.sh wado compile -O2 -o example/hello.wasm example/hello.wado
 """
 
 [tasks.hello-run]
 description = "Run example/hello.wado"
-run = "cargo run -p wado-cli -- run example/hello.wado"
+run = "scripts/dev-bin.sh wado run example/hello.wado"
 
 [tasks.build-wasmtime]
 description = "Build the wasmtime CLI from vendor/wasmtime (matches the embedded crate version)"
@@ -256,7 +263,7 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--exclude 'package-gale/**' --exclude 'wado-compiler/**' --format tap)
 fi
-./scripts/exclusive.sh test-wado cargo run -p wado-cli -- test -O2 "${extra_args[@]}"
+./scripts/exclusive.sh test-wado scripts/dev-bin.sh wado test -O2 "${extra_args[@]}"
 """
 
 [tasks.test-stdlib]
@@ -281,7 +288,7 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)
 fi
-./scripts/exclusive.sh test-stdlib cargo run -p wado-cli -- test "-${level}" wado-compiler "${extra_args[@]}"
+./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test "-${level}" wado-compiler "${extra_args[@]}"
 """
 
 [tasks.test-log-levels]
@@ -303,8 +310,8 @@ case "${level}" in
         exit 1
         ;;
 esac
-cargo run -p wado-cli -- test "-${level}" -D log.level=trace wado-compiler/lib/core/log_level_test.wado
-cargo run -p wado-cli -- test "-${level}" -D log.level=warn wado-compiler/lib/core/log_warn_test.wado
+scripts/dev-bin.sh wado test "-${level}" -D log.level=trace wado-compiler/lib/core/log_level_test.wado
+scripts/dev-bin.sh wado test "-${level}" -D log.level=warn wado-compiler/lib/core/log_warn_test.wado
 """
 
 [tasks.test-hooks]
@@ -334,7 +341,7 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)
 fi
-./scripts/exclusive.sh test-gale-o2 cargo run -p wado-cli -- test -O2 package-gale "${extra_args[@]}"
+./scripts/exclusive.sh test-gale-o2 scripts/dev-bin.sh wado test -O2 package-gale "${extra_args[@]}"
 """
 
 [tasks.test-cov]
@@ -390,14 +397,14 @@ run = "cargo fmt --all"
 [tasks.format-md]
 description = "Format Markdown files"
 wait_for = ["format-rust"]
-run = "cargo run -p wado-dev-tools --quiet -- format-md"
+run = "scripts/dev-bin.sh wado-dev-tools format-md"
 
 # Exclusions come from each package's wado.toml [format] (wado-compiler excludes
 # `tests/**`); generated/, build/, submodules and gitignored paths are automatic.
 [tasks.format-wado]
 description = "Format Wado files"
 wait_for = ["format-rust"]
-run = "cargo run --bin wado -- format -w ."
+run = "scripts/dev-bin.sh wado format -w ."
 
 [tasks.clippy]
 description = "Run clippy checks"
@@ -407,20 +414,15 @@ run = "cargo clippy --all --all-features --all-targets -- -D warnings"
 description = "Run clippy auto-fix"
 run = "cargo clippy --all --all-features --all-targets --fix --allow-dirty --allow-staged"
 
-[tasks.build-golden-tools]
-description = "Build the debug binaries the golden-fixture tasks run"
-run = "cargo build --bin wado --bin wado-dev-tools"
-
 [tasks.update-golden-fixtures]
 description = "Regenerate WIR golden fixtures"
-depends = ["build-golden-tools"]
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mkdir -p wado-compiler/tests/generated/fixtures
 # `--default-world test` matches the e2e harness, which reads a fixture with no
 # __DATA__ section as the test world.
-./target/debug/wado-dev-tools golden-dump \
+scripts/dev-bin.sh wado-dev-tools golden-dump \
     --in 'wado-compiler/tests/fixtures/{name}.wado' \
     --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
     --default-world test \
@@ -429,7 +431,6 @@ mkdir -p wado-compiler/tests/generated/fixtures
 
 [tasks.update-golden-format-fixtures]
 description = "Regenerate format fixture golden files (clean, NIR, lower, optimize, WIR, WAT)"
-depends = ["build-golden-tools"]
 file = "scripts/update-golden-format-fixtures.sh"
 
 [tasks.doc-stdlib]
@@ -437,21 +438,19 @@ description = "Generate stdlib reference docs (one file per core module, combine
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo build --bin wado --quiet
-
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
   core:serde core:json core:json_nsd core:jsonc core:args core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:prng core:secure_random core:uuid core:temporal core:log core:jwt \
   core:icu core:eval"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
-cargo run --bin wado --quiet -- doc --format markdown -o 'docs/stdlib-{module}.md' \
+scripts/dev-bin.sh wado doc --format markdown -o 'docs/stdlib-{module}.md' \
   $CORE_MODULES
-cargo run --bin wado --quiet -- doc --format markdown --title "WASI Standard Library" \
+scripts/dev-bin.sh wado doc --format markdown --title "WASI Standard Library" \
   -o docs/stdlib-wasi.md $WASI_MODULES
 # `wasi:webgpu` is one interface the size of all the others together, so it
 # keeps its own file rather than burying them.
-cargo run --bin wado --quiet -- doc --format markdown --title "WASI WebGPU Standard Library" \
+scripts/dev-bin.sh wado doc --format markdown --title "WASI WebGPU Standard Library" \
   -o docs/stdlib-wasi-webgpu.md wasi:webgpu
 """
 
@@ -545,8 +544,8 @@ description = "Regenerate wado-vscode syntax files from syntax.rs"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo run --bin wado -- syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
-cargo run --bin wado -- syntax --format language-config -o wado-vscode/language-configuration.json
+scripts/dev-bin.sh wado syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
+scripts/dev-bin.sh wado syntax --format language-config -o wado-vscode/language-configuration.json
 """
 
 [tasks.update-json-schema-files]
@@ -593,7 +592,7 @@ cargo run -p wado-from-idl -- \
 cargo run -p wado-from-idl -- \
     --wit-dir vendor/wasi-webgpu/wit \
     --output-dir wado-compiler/lib/wasi
-find wado-compiler/lib/wasi -type f -name '*.wado' -exec cargo run -p wado-cli -- format -w {} +
+find wado-compiler/lib/wasi -type f -name '*.wado' -exec scripts/dev-bin.sh wado format -w {} +
 """
 
 [tasks.webidl-deps]
@@ -658,7 +657,7 @@ COMPONENT="wado-bundled-icu/target/icu.component.wasm"
 # Resolve the relocations into `wado.dataref` and spend them, as libm does. The
 # map's offsets are segment-relative, so they survive the print/reparse that a
 # `reloc` entry's offset into the encoded code section would not.
-cargo run --bin wado-dev-tools -- bundled-asset "$CORE" > "$CORE_WAT"
+scripts/dev-bin.sh wado-dev-tools bundled-asset "$CORE" > "$CORE_WAT"
 # The crate imports nothing, so the wrap needs no WASI adapter.
 wasm-tools component new "$CORE_WAT" -o "$COMPONENT"
 wasm-tools validate "$COMPONENT"
@@ -776,8 +775,8 @@ description = "Count the compile-time regions that survive optimization, by caus
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-cargo build --bin wado
-node scripts/const-region-census.mjs
+wado=$(scripts/dev-bin.sh --path wado)
+node scripts/const-region-census.mjs --bin "$wado"
 """
 
 [tasks.jco-deps]
@@ -802,7 +801,7 @@ run = """
 set -e -o pipefail
 WASM="$(mktemp -d)/hello.wasm"
 OUT="$(mktemp -d)/hello-released"
-cargo run -q -p wado-cli -- compile -O2 -o "$WASM" example/hello.wado
+scripts/dev-bin.sh wado compile -O2 -o "$WASM" example/hello.wado
 node scripts/jco/transpile-released.mjs "$WASM" "$OUT"
 # Node 26 ships stable JSPI (WebAssembly.Suspending), so no flag is needed.
 # The shim flushes stdout after run() resolves, so the loop drains rather than
@@ -831,7 +830,7 @@ run = """
 #!/usr/bin/env bash
 set -e -o pipefail
 example/web-browser/build.sh
-cargo run -q -p wado-cli -- serve --addr 127.0.0.1:8089 --dir example/web-browser example/static_server.wado
+scripts/dev-bin.sh wado serve --addr 127.0.0.1:8089 --dir example/web-browser example/static_server.wado
 """
 
 
@@ -862,7 +861,7 @@ NAME=$(basename "$WADO" .wado)
 WORK=$(mktemp -d)
 # V8 has no wide-arithmetic; -f no-wide-arithmetic keeps float formatting (and
 # any i128 math) off the native ops so the component runs under Node.
-cargo run -q -p wado-cli -- compile -O2 -f no-wide-arithmetic -o "$WORK/$NAME.wasm" "$WADO"
+scripts/dev-bin.sh wado compile -O2 -f no-wide-arithmetic -o "$WORK/$NAME.wasm" "$WADO"
 node scripts/jco/transpile-released.mjs "$WORK/$NAME.wasm" "$WORK/jco" >/dev/null
 echo "# $NAME on Node (jco, self-timed, best of $RUNS):"
 for i in $(seq 1 "$RUNS"); do
@@ -908,7 +907,7 @@ tar tzf "$OUT"
 
 [tasks.playground-web-serve]
 description = "Serve the browser playground on http://127.0.0.1:8088 (run playground-web-build first)"
-run = "cargo run -q -p wado-cli -- serve --addr 127.0.0.1:8088 --dir wado-playground/web example/static_server.wado"
+run = "scripts/dev-bin.sh wado serve --addr 127.0.0.1:8088 --dir wado-playground/web example/static_server.wado"
 
 [tasks.playground-web-test]
 description = "Browser smoke test for the playground (installs playwright-core; needs Chromium 137+)"

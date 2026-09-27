@@ -47,7 +47,7 @@ fi
 echo "==> Phase 1/3: Wado extract"
 # Everything after the input file is forwarded to the guest as-is (no
 # `--` separator — it would reach the guest as a literal argument).
-cargo run --quiet --bin wado -- run \
+scripts/dev-bin.sh wado run \
     package-gale/scripts/extract_antlr4_descriptors.wado "${categories[@]}"
 
 # ----- Phase 2: Stage B′ oracle invocation.
@@ -95,7 +95,7 @@ else
             start_rule=$(cat "$start_path")
 
             stripped_g4="$tmpdir/$name.g4"
-            if ! cargo run --quiet --bin wado -- run \
+            if ! scripts/dev-bin.sh wado run \
                     --dir "$GRAMMARS_ROOT/$category" \
                     -- "$SCRIPT_DIR/strip_grammar.wado" "$name.g4" \
                     > "$stripped_g4" 2> "$tmpdir/strip.err"; then
@@ -158,6 +158,6 @@ if [ -f "$oracle_version_cache" ]; then
     ORACLE_VERSION=$(cat "$oracle_version_cache")
     export ORACLE_VERSION
 fi
-cargo run --quiet --bin wado -- run \
+scripts/dev-bin.sh wado run \
     package-gale/scripts/extract_antlr4_descriptors.wado \
     --finalize-stage-b-oracle

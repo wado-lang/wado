@@ -70,9 +70,70 @@ jobs:
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # The binaries the test jobs run, each compiled once per run and handed over
+  # as an artifact. The runners' concurrency cap, not any one job, is what a run
+  # waits on, so a compile repeated per job is paid for in queue time: `wado`
+  # was compiled nine times a run and the e2e binary five.
+  build-wado:
+    name: Build (wado)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # cargo-cache.yml builds this same command, so only the workspace crates
+      # compile here.
+      - run: cargo build --locked --bin wado --bin wado-dev-tools
+      - uses: actions/upload-artifact@v7
+        with:
+          name: prebuilt-wado
+          path: |
+            target/debug/wado
+            target/debug/wado-dev-tools
+          if-no-files-found: error
+
+  build-e2e:
+    name: Build (E2E)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # The test binary's name carries a hash; cargo reports where it put it.
+      - name: cargo test --locked -p wado-compiler --test e2e --no-run
+        run: |
+          set -euo pipefail
+          exe="$(cargo test --locked -p wado-compiler --test e2e --no-run \
+            --message-format=json-render-diagnostics \
+            | jq -r 'select(.reason == "compiler-artifact" and .target.name == "e2e") | .executable // empty')"
+          cp "${exe}" target/debug/e2e
+      - uses: actions/upload-artifact@v7
+        with:
+          name: prebuilt-e2e
+          path: target/debug/e2e
+          if-no-files-found: error
+
   # The Rust tests, preceded by the static gates: each gate is sub-minute, so a
-  # Cargo.lock drift, a hook break, an inline-path or internal-name regression,
-  # or a wasm32 break fails long before `cargo test` finishes.
+  # Cargo.lock drift, a hook break, an internal-name regression, or a wasm32
+  # break fails long before `cargo test` finishes.
   #
   # wado-compiler, wado-lsp, and wado-manifest must compile for wasm32 so the
   # compiler and the LSP engine can run in the browser (the playground), with
@@ -94,7 +155,18 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: mise run test-hooks
+<<<<<<< HEAD
       - run: mise run check
+||||||| 9b52d7a43
+      - run: mise run check-rust-paths
+      - run: mise run check-spec-examples
+      - run: mise run check-wadopoet-vocabulary
+      - run: mise run check-internal-names
+      - run: mise run check-review-filters
+=======
+      - run: mise run check-internal-names
+      - run: mise run check-review-filters
+>>>>>>> origin/main
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
@@ -107,8 +179,7 @@ jobs:
   # which ones break says where the bug is.
   test-level:
     name: Test (E2E+stdlib ${{ matrix.level }})
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: [build-wado, build-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -126,18 +197,24 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
+          prebuilt: wado e2e
 
-      # The e2e test names are lower case.
-      - run: cargo test --locked -p wado-compiler --test e2e -- "fixture_test_${LEVEL,,}"
+      # From the package, as `cargo test` runs it: a fixture's preopen seed is a
+      # path relative to it. The e2e test names are lower case.
+      - name: e2e "fixture_test_${LEVEL,,}"
+        working-directory: wado-compiler
+        run: ../target/debug/e2e "fixture_test_${LEVEL,,}"
       - run: mise run test-stdlib "$LEVEL"
 
       # Tier 1 is an optimizer fold, so these run at every level like the stdlib.
       - run: mise run test-log-levels "$LEVEL"
 
+  # Every Wado program the repository runs as a tool or a test, outside the
+  # stdlib and Gale, which have jobs of their own.
   test-wado:
     name: Test (Wado)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: build-wado
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -149,21 +226,23 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
+          prebuilt: wado
 
+      - run: mise run check-rust-paths
+      - run: mise run check-spec-examples
+      - run: mise run check-wadopoet-vocabulary
       - run: mise run test-wado
-
-      # The steps below reuse the `wado` binary built above. `--dry-run` builds
-      # every publishable world without pushing, so it needs neither wkg nor
-      # credentials.
       - run: mise run check-grammar
       - run: mise run check-highlight
-      - run: cargo run --locked -p wado-cli -- publish --dry-run
+      # `--dry-run` builds every publishable world without pushing, so it needs
+      # neither wkg nor credentials.
+      - run: scripts/dev-bin.sh wado publish --dry-run
       - run: mise run test-web-glue
 
   test-gale-o2:
     name: Test (Gale O2)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: build-wado
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -175,6 +254,8 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
+          prebuilt: wado
 
       - run: mise run test-gale-o2
 
@@ -182,8 +263,7 @@ jobs:
   # tests it. See `wado-run-webgpu/AGENTS.md`.
   test-webgpu:
     name: Test (WebGPU)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: build-wado
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -195,12 +275,19 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          rust-cache: false
+          prebuilt: wado
+      # Its own workspace, target/ and lockfile, which no other job builds. Only
+      # main saves, as cargo-cache.yml does for the workspace's.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: wado-run-webgpu
+          shared-key: webgpu
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # A runner has no GPU, and wgpu needs a driver to find any adapter at all.
       # mesa-vulkan-drivers supplies lavapipe, which answers in software.
       - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
-
-      - run: cargo build --locked --bin wado
 
       - name: Build and test the runner
         working-directory: wado-run-webgpu
@@ -214,7 +301,7 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [changes, test-core, test-wado, test-gale-o2, test-level, test-webgpu]
+    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-level, test-webgpu]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
