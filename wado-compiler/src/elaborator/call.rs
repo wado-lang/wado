@@ -180,6 +180,28 @@ pub(super) struct DefaultTypeBinding {
     pub(super) settled: SettledAs,
 }
 
+/// The defaults a site left out, walked in the module that wrote them under
+/// the type arguments the site settled on.
+pub(super) struct DefaultWalk {
+    pub(super) site: Option<AstId>,
+    pub(super) home: Option<ModuleSource>,
+    pub(super) bindings: Vec<DefaultTypeBinding>,
+    /// Bound ahead of the first default: the parameters the site wrote.
+    pub(super) written: Vec<(String, TypeId)>,
+    pub(super) defaults: Vec<WalkedDefault>,
+}
+
+/// One default of a [`DefaultWalk`].
+pub(super) struct WalkedDefault {
+    /// The parameter it binds for the defaults after it.
+    pub(super) binds: Option<String>,
+    pub(super) expr: Expr,
+    pub(super) expected: TypeId,
+    /// Where the walk reports a default its expected type does not take; a
+    /// walk with none leaves the check to its site.
+    pub(super) check_at: Option<Span>,
+}
+
 /// Add each of `nearer` to `bindings`, replacing a same-named entry: several
 /// declarations reach one default's scope, and they may share a spelling.
 pub(super) fn bind_nearer(bindings: &mut Vec<DefaultTypeBinding>, nearer: Vec<DefaultTypeBinding>) {
@@ -2496,28 +2518,128 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if args.len() >= param_types.len() || !omits_a_default(args.len(), defaults) {
             return;
         }
-        self.resolving_defaults_at(site, callee_module, type_bindings, |s| {
+        let first = args.len();
+        // A position no default covers is left to the arity check.
+        let walked: Vec<WalkedDefault> = (first..param_types.len())
+            .map_while(|i| match defaults.get(i) {
+                Some((name, Some(expr))) => Some(WalkedDefault {
+                    binds: Some(name.clone()),
+                    expr: expr.clone(),
+                    expected: param_types[i],
+                    check_at: None,
+                }),
+                _ => None,
+            })
+            .collect();
+        let walk = DefaultWalk {
+            site,
+            home: callee_module,
+            bindings: type_bindings.to_vec(),
+            written: args
+                .iter()
+                .zip(defaults)
+                .map(|(arg_type, (name, _))| (name.clone(), *arg_type))
+                .collect(),
+            defaults: walked,
+        };
+        let resolved = self.walk_defaults(walk, ctx);
+        for (i, resolved) in (first..).zip(resolved) {
+            let (_, default_expr) = &defaults[i];
+            let default_expr = default_expr
+                .as_ref()
+                .expect("a walked position has a default");
+            filled(self, i, default_expr, resolved);
+            args.push(resolved);
+        }
+    }
+
+    /// Run `walk`, answering the type of each default it walks. Where a type
+    /// argument it reads is a variable a call pending its literals owns
+    /// (`same(defaulted(1), x)`), the walk waits in that call's collection
+    /// until the variable is answered, and each default answers its expected
+    /// type meanwhile.
+    pub(super) fn walk_defaults(
+        &mut self,
+        walk: DefaultWalk,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TypeId> {
+        let expected: Vec<TypeId> = walk.defaults.iter().map(|d| d.expected).collect();
+        match self.defer_default_walk(walk) {
+            Some(walk) => self.run_default_walk(walk, ctx),
+            None => expected
+                .into_iter()
+                .map(|expected| self.apply_infer_holes(expected))
+                .collect(),
+        }
+    }
+
+    /// Hand `walk` to the collection owning a variable its type arguments
+    /// still read, or back where none does.
+    pub(super) fn defer_default_walk(&mut self, mut walk: DefaultWalk) -> Option<DefaultWalk> {
+        for binding in &mut walk.bindings {
+            if let SettledAs::Type(type_id) = &mut binding.settled {
+                *type_id = self.apply_infer_holes(*type_id);
+            }
+        }
+        let read: Vec<TypeId> = walk
+            .bindings
+            .iter()
+            .filter_map(|binding| binding.settled.type_id())
+            .flat_map(|type_id| self.tysys.type_table.borrow().infer_vars_in(type_id))
+            .collect();
+        let Some(owner) = read
+            .into_iter()
+            .find_map(|var| self.pending_owner_index(var))
+        else {
+            return Some(walk);
+        };
+        // The site checks the types answered meanwhile, so the walk checks
+        // what the defaults really are.
+        for default in &mut walk.defaults {
+            default.check_at.get_or_insert(default.expr.span());
+        }
+        self.annotate_ctx.pending_literals[owner].walks.push(walk);
+        None
+    }
+
+    pub(super) fn run_default_walk(
+        &mut self,
+        walk: DefaultWalk,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TypeId> {
+        let DefaultWalk {
+            site,
+            home,
+            bindings,
+            written,
+            defaults,
+        } = walk;
+        self.resolving_defaults_at(site, home, &bindings, |s| {
             ctx.with_caller_bindings_hidden(|ctx| {
                 let bind = |ctx: &mut FunctionContext, name: &str, type_id: TypeId| {
                     if name != RECEIVER {
                         ctx.add_local(name.to_string(), type_id, false, None);
                     }
                 };
-                for (arg_type, (name, _)) in args.iter().zip(defaults) {
-                    bind(ctx, name, *arg_type);
+                for (name, type_id) in &written {
+                    bind(ctx, name, *type_id);
                 }
-                for i in args.len()..param_types.len() {
-                    // A position no default covers is left to the arity check.
-                    let Some((name, Some(default_expr))) = defaults.get(i) else {
-                        break;
-                    };
-                    let resolved = s.resolve_expr(default_expr, ctx, Some(param_types[i]));
-                    filled(s, i, default_expr, resolved);
-                    args.push(resolved);
-                    bind(ctx, name, resolved);
-                }
-            });
-        });
+                defaults
+                    .iter()
+                    .map(|default| {
+                        let expected = s.apply_infer_holes(default.expected);
+                        let resolved = s.resolve_expr(&default.expr, ctx, Some(expected));
+                        if let Some(span) = default.check_at {
+                            s.typecheck(resolved, expected, span);
+                        }
+                        if let Some(name) = &default.binds {
+                            bind(ctx, name, resolved);
+                        }
+                        resolved
+                    })
+                    .collect()
+            })
+        })
     }
 
     /// Run a walk of the defaults `site` left out, in the module that wrote

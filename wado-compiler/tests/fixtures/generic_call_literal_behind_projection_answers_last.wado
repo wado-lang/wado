@@ -24,11 +24,6 @@ struct Pair<T> {
     b: T,
 }
 
-struct Defaulted<T: Default> {
-    a: T,
-    b: T = T::default(),
-}
-
 fn wrap<U>(u: U) -> Box<U> {
     return Box { v: u };
 }
@@ -81,8 +76,6 @@ export fn run() with Stdout {
     println(`${same(Box { v: wrap(0x1_0000_0008) }.v.v, wide)}`);
     let field: u64 = Pair { a: 0x1_0000_0009, b: 0 }.a;
     println(`${field}`);
-    // A field default is walked in settled types, so it does not wait.
-    println(`${Defaulted { a: 5 }.b}`);
 
     // A method some impl answers for one instance defaults its receiver first.
     println(`${wrap(5).tag()} ${Box { v: 5 }.tag()} ${wrap(5).v.to_string()}`);
@@ -97,5 +90,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "4294967296\n7\n7\n4294967298\n4294967299\n1.5\n3\n4294967300\n4294967301\n4294967302\n4294967303\n4294967304\n4294967305\n0\ni32 i32 5\n4294967306\n4294967307\n4294967308\n4294967309\n5\n"
+    "stdout": "4294967296\n7\n7\n4294967298\n4294967299\n1.5\n3\n4294967300\n4294967301\n4294967302\n4294967303\n4294967304\n4294967305\ni32 i32 5\n4294967306\n4294967307\n4294967308\n4294967309\n5\n"
 }

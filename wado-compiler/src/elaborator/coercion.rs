@@ -1,6 +1,7 @@
 //! Numeric literal coercion and type coercion.
 
 use super::Elaborator;
+use super::call::DefaultWalk;
 use super::infer::unify;
 use super::scope::Scope;
 use super::types::{FunctionContext, TypeError};
@@ -198,6 +199,8 @@ pub(super) struct PendingLiterals {
     /// Collected for a projection whose receiver is resolving: it takes over
     /// every variable the receiver call leaves open.
     awaits_receiver: bool,
+    /// The default walks reading one of `own_vars`, run once it is answered.
+    pub(super) walks: Vec<DefaultWalk>,
 }
 
 impl PendingLiterals {
@@ -206,14 +209,14 @@ impl PendingLiterals {
             own_vars: own_vars.to_vec(),
             literals: Vec::new(),
             awaits_receiver: false,
+            walks: Vec::new(),
         }
     }
 
     fn of_projection() -> Self {
         Self {
-            own_vars: Vec::new(),
-            literals: Vec::new(),
             awaits_receiver: true,
+            ..Self::of_call(&[])
         }
     }
 }
@@ -596,15 +599,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The collection whose call owns `var`, innermost first, where `var` is
     /// a variable still open.
     fn pending_owner_of(&mut self, var: TypeId) -> Option<&mut PendingLiterals> {
+        let owner = self.pending_owner_index(var)?;
+        Some(&mut self.annotate_ctx.pending_literals[owner])
+    }
+
+    /// [`Self::pending_owner_of`], as its place on the stack.
+    pub(super) fn pending_owner_index(&self, var: TypeId) -> Option<usize> {
         // A slot instantiation declined, a pack, stays in `own_vars` rigid.
         if !self.tysys.type_table.borrow().is_infer_var(var) {
             return None;
         }
         self.annotate_ctx
             .pending_literals
-            .iter_mut()
-            .rev()
-            .find(|pending| pending.own_vars.contains(&var))
+            .iter()
+            .rposition(|pending| pending.own_vars.contains(&var))
     }
 
     /// Chain each of `own_vars` that `ret` answers with a type naming only an
@@ -725,7 +733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let collection = PendingLiterals::of_projection();
         let (projected, pending) = self.collecting_pending_literals(collection, |this| {
-            let mut receiver_type = this.resolve_receiver(receiver, ctx);
+            let mut receiver_type = this.resolve_expr(receiver, ctx, None);
             receiver_type = this.apply_infer_holes(receiver_type);
             if !waits(this, receiver_type) {
                 this.settle_receiver(ctx);
@@ -748,26 +756,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.apply_infer_holes(projected)
     }
 
-    /// Resolve a field access's receiver. A generic struct literal naming none
-    /// of its parameters takes a variable for each, as a call does: `Box { v:
-    /// 1 }.v` waits as `wrap(1).v` does.
-    fn resolve_receiver(&mut self, receiver: &Expr, ctx: &mut FunctionContext) -> TypeId {
-        let open = match receiver {
-            Expr::StructLiteral(struct_lit) => self.open_struct_literal_instance(struct_lit),
-            _ => None,
+    /// Resolve a generic struct literal naming none of its parameters over a
+    /// variable for each, as a call's are, where its literals can wait: it is
+    /// a projection's receiver, or meets a pending call's bare variable.
+    /// `Box { v: 1 }.v` and `same(Box { v: 1 }, x)` then wait as `wrap(1).v`
+    /// and `same(wrap(1), x)` do.
+    pub(super) fn resolve_open_struct_literal(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+        expected: Option<TypeId>,
+    ) -> Option<TypeId> {
+        let waits = match expected {
+            None => self
+                .annotate_ctx
+                .pending_literals
+                .last()
+                .is_some_and(|pending| pending.awaits_receiver),
+            Some(expected) => {
+                let expected = self.apply_infer_holes(expected);
+                self.pending_owner_index(expected).is_some()
+            }
         };
-        let Some((open, inst, slots)) = open else {
-            return self.resolve_expr(receiver, ctx, None);
-        };
-        let collection = PendingLiterals::of_call(&inst.vars);
-        let (receiver_type, pending) = self.collecting_pending_literals(collection, |this| {
-            this.resolve_expr(receiver, ctx, Some(open))
+        if !waits {
+            return None;
+        }
+        let (open, inst, slots) = self.open_struct_literal_instance(struct_lit)?;
+        let ret = expected.map(|expected| ExpectedReturn {
+            declared: open,
+            expected,
         });
-        self.solve_own_infer_holes_against(open, receiver_type, &inst.vars);
-        self.settle_pending_literals(pending, &[], None, ctx);
-        let mut receiver_type = [receiver_type];
-        self.settle_onto_slots(&inst, &slots, &mut receiver_type);
-        receiver_type[0]
+        self.chain_expected_return(&inst.vars, ret);
+        let collection = PendingLiterals::of_call(&inst.vars);
+        let (resolved, pending) = self.collecting_pending_literals(collection, |this| {
+            this.resolve_struct_literal(struct_lit, ctx, Some(open))
+        });
+        self.solve_own_infer_holes_against(open, resolved, &inst.vars);
+        self.settle_pending_literals(pending, &[], ret, ctx);
+        let mut resolved = [resolved];
+        self.settle_onto_slots(&inst, &slots, &mut resolved);
+        Some(resolved[0])
     }
 
     /// Answer now the literals the projection's receiver holds.
@@ -869,6 +897,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             if yields_to_return {
                 self.solve_infer_var(var, default);
+            }
+        }
+        for walk in pending.walks {
+            if let Some(walk) = self.defer_default_walk(walk) {
+                self.run_default_walk(walk, ctx);
             }
         }
         settled

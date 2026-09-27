@@ -914,12 +914,18 @@ literals: `f64` if one of them is a float, else `i32`, else `u8` when every one
 is a byte literal.
 
 Arithmetic on literals answers as a literal does (`Box { value: 1 << 32 }`), and
-so does a literal behind a field of a generic call's or constructor's result: in
-`pick(Box { value: x }, wrap(1).value)` the `1` is a `u64`, as it is with
-`Box { value: 1 }.value` there. A method's receiver does not wait, since which
-impl the method comes from can turn on the receiver's type arguments:
-`wrap(1).get()` reads a `Box<i32>`. Nor does a struct literal that fills a field
-from its default or from `..base`, both read in settled types.
+so does a literal behind a field or method of a generic call's or constructor's
+result: in `pick(Box { value: x }, wrap(1).value)` the `1` is a `u64`, as it is
+with `Box { value: 1 }.value` or `wrap(1).get()` there. A default that reads the
+parameter is walked once it is settled, so `pick(Box { value: x }, f(1))` for
+`fn f<T: Default>(a: T, b: T = T::default())` is `u64` throughout, and a field
+default of a struct literal waits the same way. A `..base` settles its struct's
+parameters as an annotation does.
+
+A method's receiver waits only where every impl declaring the method is inherent,
+bound-free, and reaches every instance of the receiver's type. Otherwise which
+impl answers can turn on the receiver's type arguments, so its literals settle
+first: with `impl Tag for Box<i32>`, `wrap(1).tag()` reads a `Box<i32>`.
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says
