@@ -2371,16 +2371,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let ns_key =
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-                    if let Some(params) = self.lookup_static_method_param_types_keyed(
-                        type_name,
-                        method_name,
-                        Some(&ns_key),
-                    ) {
-                        let slots = self.lookup_static_method_slots(method_name, &ns_key);
+                    if let Some(sig) =
+                        self.static_method_sig_keyed(type_name, method_name, Some(&ns_key))
+                    {
                         return Some(CalleeDecl {
-                            params,
-                            slots,
-                            ret: None,
+                            params: sig.value_param_types(),
+                            ..CalleeDecl::of(&sig.decl)
                         });
                     }
                 }

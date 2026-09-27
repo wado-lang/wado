@@ -6355,9 +6355,18 @@ struct ImplTarget {
 pub struct TargetBinding {
     /// The type each of the target's parameter slots takes.
     pub slots: IndexMap<u32, TypeId>,
-    /// Each open receiver variable, beside what the target writes where it
-    /// stands.
-    pub met: Vec<(TypeId, TypeId)>,
+    /// The type each open receiver variable must take for the target to match.
+    pub answers: IndexMap<TypeId, TypeId>,
+}
+
+impl TargetBinding {
+    /// `ty` read through the answers, where it is an answered variable.
+    fn answered(&self, mut ty: TypeId) -> TypeId {
+        while let Some(&answer) = self.answers.get(&ty) {
+            ty = answer;
+        }
+        ty
+    }
 }
 
 impl TypeTable {
@@ -6483,8 +6492,10 @@ impl TypeTable {
     }
 
     /// [`Self::impl_target_binding`] where the receiver's arguments hold
-    /// variables still to be answered, which `open` tells: each meets whatever
-    /// the target writes at its place, and the binding records what it met.
+    /// variables still to be answered, which `open` tells. A variable takes the
+    /// one closed type the target puts at its place; it cannot take two, nor a
+    /// type naming another variable, nor a type naming the impl's parameters,
+    /// where its answer would have to be found first.
     pub fn open_impl_target_binding(
         &self,
         written: &[TypeId],
@@ -6545,12 +6556,17 @@ impl TypeTable {
         binding: &mut TargetBinding,
     ) -> bool {
         if let Some(slot) = self.param_slot(written) {
-            let prior = *binding.slots.entry(slot).or_insert(concrete);
-            return self.type_key(prior) == self.type_key(concrete);
+            return match binding.slots.get(&slot) {
+                Some(&prior) => self.agree(prior, concrete, open, binding),
+                None => {
+                    binding.slots.insert(slot, concrete);
+                    true
+                }
+            };
         }
         if open(concrete) {
-            binding.met.push((concrete, written));
-            return true;
+            return !self.contains_type_param(written)
+                && self.agree(concrete, written, open, binding);
         }
         // An `_` or an unresolvable name: nothing written to match against.
         if matches!(
@@ -6574,6 +6590,33 @@ impl TypeTable {
                 == self.fq_base_type_name(concrete).head();
         }
         self.type_key(written) == self.type_key(concrete)
+    }
+
+    /// Whether two receiver-side types can be one, answering an open variable
+    /// on either side with the other where that settles it.
+    fn agree(
+        &self,
+        a: TypeId,
+        b: TypeId,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
+    ) -> bool {
+        let (a, b) = (binding.answered(a), binding.answered(b));
+        if self.type_key(a) == self.type_key(b) {
+            return true;
+        }
+        let closed = |ty: TypeId| !self.any_infer_var(ty, &mut |var| open(var));
+        for (var, answer) in [(a, b), (b, a)] {
+            if open(var) {
+                if !closed(answer) {
+                    return false;
+                }
+                binding.answers.insert(var, answer);
+                return true;
+            }
+        }
+        self.zip_shapes(a, b, |x, y| self.agree(x, y, open, binding))
+            .unwrap_or(false)
     }
 
     /// Whether `each` holds of every pair of parts `a` and `b` line up, or

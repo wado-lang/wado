@@ -224,7 +224,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_call.receiver,
             ctx,
             expected_type,
-            |this, receiver| this.receiver_waits(receiver, &method_call.method, method_call.span),
+            |this, receiver| {
+                this.receiver_waits(receiver, &method_call.method, method_call.span, |_, _| true)
+            },
             |this, receiver, ctx| {
                 // A `_` resolves to UNKNOWN, so these are their own hole mask.
                 let type_args: Vec<TypeId> = this.resolve_turbofish_args(&method_call.type_args);
@@ -2598,9 +2600,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
     ) -> Option<Vec<TypeId>> {
+        self.static_method_sig_keyed(struct_name, method_name, target_hint)
+            .map(|sig| sig.value_param_types())
+    }
+
+    /// The one signature a static call names, keyed like
+    /// [`Self::lookup_static_method_param_types_keyed`].
+    pub(super) fn static_method_sig_keyed(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        target_hint: Option<&ImplTargetKey>,
+    ) -> Option<sig::MethodSig> {
         let static_key = self.static_receiver_key(struct_name, target_hint);
         if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
-            return Some(sig.value_param_types());
+            return Some(sig.clone());
         }
         // A resource declares its statics in Wado like any other declaration,
         // so they answer from the same signature table at the same point in the
@@ -2610,7 +2624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(sig) = self.tysys.signatures.resource_method_sig(*def, method_name)
             && sig.self_kind == ast::SelfKind::None
         {
-            return Some(sig.value_param_types());
+            return Some(sig.clone());
         }
         // The index holds only the declaring resource's own methods, so an
         // inherited one is reached by walking the chain. Instance methods only:
@@ -2620,7 +2634,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.tysys.declares_resource_static(*def, method_name)
             && let Some((_, sig)) = self.tysys.resource_instance_method(*def, method_name)
         {
-            return Some(sig.value_param_types());
+            return Some(sig);
         }
         None
     }
@@ -2686,18 +2700,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         self.tysys.signatures.method_sig(only.method_id)
-    }
-
-    /// The declared type-param slots of a static method, keyed like
-    /// [`Self::lookup_static_method_param_types_keyed`].
-    pub(super) fn lookup_static_method_slots(
-        &self,
-        method_name: &str,
-        static_key: &ImplTargetKey,
-    ) -> Vec<TypeId> {
-        self.unique_static_method_sig(static_key, method_name)
-            .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
-            .unwrap_or_default()
     }
 
     /// Whether `impl From<from_type> for target;` requests a body-less derivation,

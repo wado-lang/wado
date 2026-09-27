@@ -1,0 +1,40 @@
+// A bound on a parameter the target nests (`Bx<Option<T>>`) is checked on the
+// type a receiver's literal settles to, as a top-level one is.
+struct Bx<T> {
+    v: T,
+}
+
+fn wrap<U>(u: U) -> Bx<U> {
+    return Bx { v: u };
+}
+
+trait Marker with () {}
+
+impl Marker for u64 {}
+
+impl<T: Marker> Bx<Option<T>> {
+    fn get(&self) -> i32 {
+        return 1;
+    }
+}
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl<T: Marker> Tag for Bx<Option<T>> {
+    fn tag(&self) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    let a = wrap(Option::Some(1)).get();
+    let b = wrap(Option::Some(1)).tag();
+}
+
+__DATA__
+{
+    "compile_error": "type 'i32' does not implement trait 'Marker' required by bound on 'T'",
+    "compile_error_count": 2
+}

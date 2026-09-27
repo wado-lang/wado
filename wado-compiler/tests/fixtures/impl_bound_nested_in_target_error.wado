@@ -1,0 +1,39 @@
+// An impl's bound holds of its parameter wherever the target nests it:
+// `impl<T: Small> Bx<Option<T>>` reaches no `Bx<Option<i32>>`.
+struct Bx<T> {
+    v: T,
+}
+
+trait Small with () {}
+
+impl Small for u8 {}
+
+impl<T: Small> Bx<Option<T>> {
+    fn get(&self) -> i32 {
+        return 1;
+    }
+}
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl<T: Small> Tag for Bx<Option<T>> {
+    fn tag(&self) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    let b: Bx<Option<i32>> = Bx { v: Option::Some(5) };
+    let g = b.get();
+    let t = b.tag();
+}
+
+__DATA__
+{
+    "compile_errors_contains": [
+        "no method 'get' found on type 'Bx<Option<i32>>'",
+        "no method 'tag' found on type 'Bx<Option<i32>>'"
+    ]
+}

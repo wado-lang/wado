@@ -231,6 +231,9 @@ impl Scope {
     /// are pending: that call answers them before its arguments settle, so a
     /// type naming them is not left unanswered.
     pub(super) fn awaits_pending_call(&self, tt: &TypeTable, ty: TypeId) -> bool {
+        if self.pending_literals.is_empty() {
+            return false;
+        }
         let vars = tt.infer_vars_in(ty);
         !vars.is_empty()
             && vars.iter().all(|var| {
@@ -731,7 +734,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         if !matches!(
             receiver,
-            Expr::Call(_) | Expr::FieldAccess(_) | Expr::MethodCall(_) | Expr::StructLiteral(_)
+            Expr::Call(_)
+                | Expr::FieldAccess(_)
+                | Expr::Index(_)
+                | Expr::MethodCall(_)
+                | Expr::StructLiteral(_)
         ) {
             let receiver_type = self.resolve_expr(receiver, ctx, None);
             return project(self, receiver_type, ctx);
@@ -829,7 +836,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Scope::awaits_pending_call`] on `ty` with the solved variables
     /// substituted.
-    pub(super) fn awaits_pending_call(&mut self, ty: TypeId) -> bool {
+    pub(super) fn awaits_pending_call(&self, ty: TypeId) -> bool {
         let ty = self.apply_infer_holes(ty);
         self.annotate_ctx
             .awaits_pending_call(&self.tysys.type_table.borrow(), ty)

@@ -360,6 +360,18 @@ impl MethodSig {
         declaring_args: &[TypeId],
         method_args: &[TypeId],
     ) -> InstantiatedSig {
+        let substitution = self.call_slots(type_table, declaring, declaring_args, method_args);
+        self.decl.instantiate_slots(type_table, &substitution)
+    }
+
+    /// The slots [`Self::instantiate_call_with`] fills.
+    pub(crate) fn call_slots(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        declaring: Option<&ImplSig>,
+        declaring_args: &[TypeId],
+        method_args: &[TypeId],
+    ) -> IndexMap<u32, TypeId> {
         let aligned = declaring.and_then(|sig| sig.spelled_slots(type_table, declaring_args));
         let positional = aligned.is_none();
         let mut substitution = aligned.unwrap_or_default();
@@ -380,7 +392,7 @@ impl MethodSig {
                 }
             }
         }
-        self.decl.instantiate_slots(type_table, &substitution)
+        substitution
     }
 }
 

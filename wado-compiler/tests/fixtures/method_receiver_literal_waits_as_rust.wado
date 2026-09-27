@@ -58,6 +58,48 @@ impl Name for Bx<u64> {
     }
 }
 
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+fn mk<U, V>(u: U, v: V) -> Pair<U, V> {
+    return Pair { a: u, b: v };
+}
+
+trait Twin with () {
+    fn twin(&self) -> String;
+}
+
+impl<T> Twin for Pair<T, T> {
+    fn twin(&self) -> String {
+        return "twin";
+    }
+}
+
+trait Seq with () {
+    type Elem;
+
+    fn at(&self) -> Self::Elem;
+
+    fn got(&self) -> Self::Elem {
+        return self.at();
+    }
+}
+
+impl<T> Seq for Bx<T> {
+    type Elem = T;
+
+    fn at(&self) -> T {
+        return self.v;
+    }
+}
+
+fn one<U>(u: U) -> List<U> {
+    let l: List<U> = [u];
+    return l;
+}
+
 export fn run() with Stdout {
     let wide: u64 = 7;
     // A bounded inherent impl.
@@ -68,9 +110,16 @@ export fn run() with Stdout {
     println(`${wrap(5).tag()} ${Bx { v: 0x1_0000_0002 }.tag()}`);
     // Two could, so the literal takes its default first.
     println(wrap(5).name());
+    // `Pair<T, T>` meets `Pair<{integer}, u64>` at `T = u64`.
+    println(mk(1, wide).twin());
+    // A trait's default body reads `Self::Elem` off the impl that answers.
+    println(`${same(wrap(0x1_0000_0003).got(), wide)}`);
+    println(`${same(one(0x1_0000_0004).get(0).unwrap(), wide)}`);
+    // A subscript projects as a method does.
+    println(`${same(one(0x1_0000_0005)[0], wide)}`);
 }
 
 __DATA__
 {
-    "stdout": "4294967296\n4294967297\nu64 u64\ni32\n"
+    "stdout": "4294967296\n4294967297\nu64 u64\ni32\ntwin\n4294967299\n4294967300\n4294967301\n"
 }

@@ -279,13 +279,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.tysys.is_unbound_type_param(t) || scope_params.contains(&t) {
             return false;
         }
-        let mut followed = t;
-        while let Some(Some(answer)) = self.infer_holes.solutions.get(&followed) {
-            followed = *answer;
-        }
+        let answered = self.apply_infer_holes(t);
         !self
             .annotate_ctx
-            .awaits_pending_call(&self.tysys.type_table.borrow(), followed)
+            .awaits_pending_call(&self.tysys.type_table.borrow(), answered)
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
@@ -404,7 +401,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Substitute solved holes into `ty` now — used before a site that records a
     /// mangled name derived from the type, which a later sweep could not fix.
-    pub(super) fn apply_infer_holes(&mut self, ty: TypeId) -> TypeId {
+    pub(super) fn apply_infer_holes(&self, ty: TypeId) -> TypeId {
         if !self.type_has_infer_hole(ty) {
             return ty;
         }

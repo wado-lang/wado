@@ -27,6 +27,7 @@ use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
+use super::synth::ArgClass;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -663,7 +664,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     IndexAccess::Value
                 };
-                self.resolve_index(index, ctx, access)
+                self.resolve_index(index, ctx, access, expected_type)
             }
             Expr::Block(block) => {
                 // Walk the block for its facts; reify rebuilds the `Block`
@@ -1890,7 +1891,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve an index expression
     /// [`Self::resolve_index`] for a subscript reached outside
     /// [`Self::resolve_expr`], which is otherwise the only place a visited
     /// [`AstId`] is annotated. `&xs[i]` and `&mut xs[i]` resolve the subscript
@@ -1901,19 +1901,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         access: IndexAccess,
     ) -> TypeId {
-        let type_id = self.resolve_index(index, ctx, access);
+        let type_id = self.resolve_index(index, ctx, access, None);
         self.record_expression_type(index.id, type_id);
         type_id
     }
 
+    /// Resolve an index expression. A by-value subscript projects as a method
+    /// does: `same(one(1)[0], x)` gives the literal `x`'s type where one
+    /// `IndexValue` impl takes the key.
     pub(super) fn resolve_index(
         &mut self,
         index: &ast::IndexExpr,
         ctx: &mut FunctionContext,
         access: IndexAccess,
+        expected: Option<TypeId>,
     ) -> TypeId {
-        let expr_type = self.resolve_expr(&index.expr, ctx, None);
+        // A subscript selects its impl by key type, so the key is synthesized
+        // before the impl is chosen — the ordering an overloaded method call
+        // has, answered the same way.
+        let key_class = self.synthesize_arg_class(&index.index, ctx);
+        let waiting_key = match access {
+            IndexAccess::Value => self.index_key_type(&key_class),
+            IndexAccess::Shared | IndexAccess::Mutable => None,
+        };
+        self.resolve_projection(
+            &index.expr,
+            ctx,
+            expected,
+            |this, receiver| {
+                waiting_key.is_some_and(|key| {
+                    this.receiver_waits(receiver, "index_value", index.span, |this, def| {
+                        this.impl_takes_key(def, key)
+                    })
+                })
+            },
+            |this, receiver, ctx| this.resolve_index_of(index, receiver, ctx, access, &key_class),
+        )
+    }
 
+    /// Index a receiver of `expr_type` by a key of `key_class`.
+    fn resolve_index_of(
+        &mut self,
+        index: &ast::IndexExpr,
+        expr_type: TypeId,
+        ctx: &mut FunctionContext,
+        access: IndexAccess,
+        key_class: &ArgClass,
+    ) -> TypeId {
         let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
@@ -1969,13 +2003,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
-            // A subscript selects its impl by key type, so the key is
-            // synthesized before the impl is chosen — the ordering an overloaded
-            // method call has, answered the same way. Only a key synthesis
-            // cannot type (a compound literal, whose type the impl supplies)
-            // still falls back to pre-selecting an impl for its expected type.
-            let key_class = self.synthesize_arg_class(&index.index, ctx);
-            let expected_key = self.index_key_type(&key_class).or_else(|| {
+            // Only a key synthesis cannot type (a compound literal, whose type
+            // the impl supplies) falls back to pre-selecting an impl for its
+            // expected type.
+            let expected_key = self.index_key_type(key_class).or_else(|| {
                 self.index_lookup_or_newtype_base(
                     &struct_name,
                     base_type_id,

@@ -1634,14 +1634,7 @@ impl TypeSystem {
                 if header.trait_def() == Some(trait_)
                     && self.header_answers_bound_args(header, wanted)
                     && self.impl_reaches(entry, type_args)
-                    && self.check_impl_block_bounds(
-                        ctx,
-                        scope,
-                        &header.type_params,
-                        &header.ty,
-                        subject,
-                        type_args,
-                    )
+                    && self.check_impl_block_bounds(ctx, scope, entry, subject, type_args)
                 {
                     return true;
                 }
@@ -2322,12 +2315,13 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        type_params: &[ast::GenericParam],
-        impl_ty: &ast::Type,
+        def: DefId,
         receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
     ) -> bool {
-        // No type params with bounds → always OK
+        let trait_env = self.trait_env.clone();
+        let header = &trait_env.impl_headers[&def];
+        let type_params = &header.type_params;
         if type_params.iter().all(|p| p.bounds.is_empty()) {
             return true;
         }
@@ -2351,7 +2345,7 @@ impl TypeSystem {
 
         // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
         // the receiver's pointee rather than for an argument of it.
-        if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_ty
+        if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = &header.ty
             && let ast::Type::Named(inner) = boxed.as_ref()
         {
             let Some(bounds) = bounds_map.get(inner.name.as_str()) else {
@@ -2369,17 +2363,19 @@ impl TypeSystem {
         };
 
         // `&Container<T>` reads the pointee's arguments, as its positions do.
-        let impl_ty = impl_ty.referent();
-        if let ast::Type::Generic(generic) = impl_ty {
-            for (i, arg) in generic.args.iter().enumerate() {
-                if let ast::Type::Named(named) = arg
-                    && let Some(bounds) = bounds_map.get(named.name.as_str())
-                    && let Some(&type_arg) = type_args.get(i)
-                    && !self.bounds_hold(ctx, scope, type_arg, bounds)
-                {
-                    return false;
-                }
-            }
+        let impl_ty = header.ty.referent();
+        if let ast::Type::Generic(_) = impl_ty {
+            let names = ImplParamSlots::of(&header.ty, type_params);
+            let slots = self
+                .signatures
+                .impl_sig(def)
+                .slots(&self.type_table, type_args);
+            return slots.iter().all(|(&slot, &type_arg)| {
+                names
+                    .name_of(slot)
+                    .and_then(|name| bounds_map.get(name))
+                    .is_none_or(|bounds| self.bounds_hold(ctx, scope, type_arg, bounds))
+            });
         } else if let ast::Type::Tuple(elements) = impl_ty {
             // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
             // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry

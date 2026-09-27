@@ -914,9 +914,10 @@ literals: `f64` if one of them is a float, else `i32`, else `u8` when every one
 is a byte literal.
 
 Arithmetic on literals answers as a literal does (`Box { value: 1 << 32 }`), and
-so does a literal behind a field or method of a generic call's or constructor's
-result: in `pick(Box { value: x }, wrap(1).value)` the `1` is a `u64`, as it is
-with `Box { value: 1 }.value` or `wrap(1).get()` there. A default that reads the
+so does a literal behind a field, method or subscript of a generic call's or
+constructor's result: in `pick(Box { value: x }, wrap(1).value)` the `1` is a
+`u64`, as it is with `Box { value: 1 }.value`, `wrap(1).get()` or `one(1)[0]`
+there. A default that reads the
 parameter is walked once it is settled, so `pick(Box { value: x }, f(1))` for
 `fn f<T: Default>(a: T, b: T = T::default())` is `u64` throughout, and a field
 default of a struct literal waits the same way. A `..base` settles its struct's
@@ -925,12 +926,16 @@ it writes mention every parameter of its struct. Where they leave one out, the
 literal settles where it stands, as it would outside a call.
 
 A method's receiver waits as Rust's does. The method is found on the receiver's
-head, and an impl's bounds are checked on the type the literal settles to. Where
-only one impl could answer the method, it settles the literal: with
-`impl Tag for Box<u64>` alone, `wrap(1).tag()` reads a `Box<u64>`. Inherent
-impls are asked first, and trait impls only where no inherent impl could answer.
-Where several could, as `impl Tag for Box<i32>` and `impl Tag for Box<u64>` can,
-the literal takes its default first and the impl for that type answers.
+head, and an impl's bounds are checked on the type the literal settles to,
+wherever its target nests the parameter they bound. Where only one impl could
+answer the method, it settles the literal: with `impl Tag for Box<u64>` alone,
+`wrap(1).tag()` reads a `Box<u64>`. An impl could answer only where one type
+for each literal makes its target the receiver, so `Pair<T, T>` answers
+`mk(1, x)` at `x`'s type and `Pair<u64, i32>` never answers `dup(1)`. Inherent
+impls are asked first, and the impls of the traits in scope only where no
+inherent impl could answer. Where several could, as `impl Tag for Box<i32>` and
+`impl Tag for Box<u64>` can, the literal takes its default first and the impl
+for that type answers. A subscript asks the impls that take its key.
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says

@@ -15,8 +15,8 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
 use crate::tir::{
-    FunctionRef, ResolvedType, SubstitutionContext, TargetBinding, TemplateId, TypeId, TypeTable,
-    positional_substitution,
+    FunctionRef, ResolvedType, SlotProjections, SubstitutionContext, TargetBinding, TemplateId,
+    TypeId, TypeTable, positional_substitution,
 };
 use crate::token::Span;
 
@@ -39,7 +39,6 @@ use super::types::{
     MethodOwner, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
-use super::util;
 use crate::elaborator::callee::CalleeRef;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::scope;
@@ -253,6 +252,14 @@ impl ImplParamSlots {
 
     pub(super) fn of_name(&self, param: &str) -> Option<u32> {
         self.slots.get(param).copied()
+    }
+
+    /// The parameter filling `slot`; `None` for a position the target writes
+    /// concretely.
+    pub(super) fn name_of(&self, slot: u32) -> Option<&str> {
+        self.slots
+            .iter()
+            .find_map(|(name, &at)| (at == slot).then_some(name.as_str()))
     }
 }
 
@@ -834,12 +841,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !targets_receiver {
                     continue;
                 }
-                if !self.inherent_impl_applies(
-                    *entry,
-                    header,
-                    base_type_id,
-                    receiver_type_args.as_deref(),
-                ) {
+                if !self.inherent_impl_applies(*entry, base_type_id, receiver_type_args.as_deref())
+                {
                     continue;
                 }
                 if let Some(info) = self.tysys.inherent_method_info(
@@ -863,7 +866,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.get_type_name(&header.ty) != struct_name
                     || !self.inherent_impl_applies(
                         *entry,
-                        header,
                         base_type_id,
                         receiver_type_args.as_deref(),
                     )
@@ -924,7 +926,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn inherent_impl_applies(
         &mut self,
         def: DefId,
-        header: &ImplHeader,
         receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
@@ -932,8 +933,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
                 &self.type_lookup(),
-                &header.type_params,
-                &header.ty,
+                def,
                 Some(receiver),
                 receiver_type_args,
             )
@@ -944,12 +944,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// method probe lets it. The one impl that may answer the method answers
     /// what its target writes for them now, and its bounds on them are checked
     /// once they are answered. Where several may, or none, the literals behind
-    /// them settle first, as Rust's fall back before it picks one.
+    /// them settle first, as Rust's fall back before it picks one. `admits`
+    /// narrows the impls to those the call can reach at all.
     pub(super) fn receiver_waits(
         &mut self,
         receiver: TypeId,
         method_name: &str,
         span: Span,
+        admits: impl Fn(&Self, DefId) -> bool,
     ) -> bool {
         let base = self.tysys.get_base_type(receiver);
         {
@@ -966,67 +968,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return true;
             }
         }
-        let mut candidates = self.open_receiver_candidates(base, method_name, ImplKind::Inherent);
+        let mut candidates =
+            self.open_receiver_candidates(base, method_name, ImplKind::Inherent, &admits);
         if candidates.is_empty() {
-            candidates = self.open_receiver_candidates(base, method_name, ImplKind::Trait);
+            candidates = self.open_receiver_candidates(base, method_name, ImplKind::Trait, &admits);
         }
         let [(def, binding)] = candidates.as_slice() else {
             return false;
         };
-        if binding
-            .met
-            .iter()
-            .any(|&(_, written)| self.tysys.type_table.borrow().contains_type_param(written))
-        {
-            return false;
+        for (&var, &answer) in &binding.answers {
+            self.solve_infer_var(var, answer);
         }
-        for &(var, written) in &binding.met {
-            self.solve_infer_var(var, written);
-        }
-        self.defer_open_impl_bounds(*def, base, span);
+        self.defer_open_impl_bounds(*def, &binding.slots, span);
         true
     }
 
-    /// Check the bounds impl `def` places on the receiver arguments still
-    /// open, once they are answered.
-    fn defer_open_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        let header = impl_header(&trait_env, &ImplBlockRef(def));
+    /// Whether impl block `def` implements its trait at a first argument
+    /// `key` may take: `impl IndexValue<i32> for …` for an `i32` subscript.
+    pub(super) fn impl_takes_key(&self, def: DefId, key: TypeId) -> bool {
         let written = self
             .tysys
-            .type_table
-            .borrow()
-            .impl_target_args(def)
-            .to_vec();
-        let args = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_type_args(receiver)
-            .expect("an open receiver is a generic instance");
-        for (&written, &arg) in written.iter().zip(&args) {
-            let name = util::bound_param_name(self.tysys.type_table.borrow().get(written)).cloned();
-            let Some(param) =
-                name.and_then(|name| header.type_params.iter().find(|p| p.name == name))
-            else {
-                continue;
-            };
-            if self.awaits_pending_call(arg) {
+            .signatures
+            .impl_sig(def)
+            .trait_type_args
+            .first()
+            .copied();
+        let tt = self.tysys.type_table.borrow();
+        written.is_some_and(|written| {
+            tt.param_slot(written).is_some() || tt.type_key(written) == tt.type_key(key)
+        })
+    }
+
+    /// Check the bounds impl `def` places on its parameters still open, once
+    /// they are answered.
+    fn defer_open_impl_bounds(&mut self, def: DefId, slots: &IndexMap<u32, TypeId>, span: Span) {
+        let trait_env = Arc::clone(&self.tysys.trait_env);
+        let header = impl_header(&trait_env, &ImplBlockRef(def));
+        let names = ImplParamSlots::of(&header.ty, &header.type_params);
+        for (&slot, &arg) in slots {
+            let arg = self.apply_infer_holes(arg);
+            let param = names
+                .name_of(slot)
+                .and_then(|name| header.type_params.iter().find(|p| p.name == name));
+            if let Some(param) = param
+                && self.awaits_pending_call(arg)
+            {
                 self.defer_bounds_to_answer(param, arg, None, span);
             }
         }
     }
 
-    /// The impls of `kind` that may answer `method_name` on `receiver` while
-    /// its arguments hold variables a pending call is still to answer: those
-    /// whose target meets the receiver with the variables standing for
-    /// anything, and whose bounds may hold. Each comes with what its target
-    /// binds there.
+    /// The impls of `kind` that `admits` and that may answer `method_name` on
+    /// `receiver` while its arguments hold variables a pending call is still
+    /// to answer: those whose target meets the receiver
+    /// ([`TypeTable::open_impl_target_binding`]) and whose bounds may hold.
+    /// Each comes with what its target binds there.
     pub(super) fn open_receiver_candidates(
         &self,
         receiver: TypeId,
         method_name: &str,
         kind: ImplKind,
+        admits: &dyn Fn(&Self, DefId) -> bool,
     ) -> Vec<(DefId, TargetBinding)> {
         let (key, args) = {
             let tt = self.tysys.type_table.borrow();
@@ -1043,20 +1045,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let declares = |methods: &[ImplMethodHeader]| methods.iter().any(|m| m.name == method_name);
+        // As the order has it: a trait's methods are candidates only where the
+        // trait is in scope.
+        let in_scope = match kind {
+            ImplKind::Inherent => IndexSet::default(),
+            ImplKind::Trait => self
+                .tysys
+                .resolutions
+                .decls_in_scope(&self.current_module_source),
+        };
         let mut candidates = Vec::new();
         for def in trait_env.all_impl_keys(&key) {
             let header = impl_header(&trait_env, &ImplBlockRef(def));
             let declared = match (kind, header.trait_def()) {
                 (ImplKind::Inherent, None) => declares(&header.methods),
                 (ImplKind::Trait, Some(trait_)) => {
-                    declares(&header.methods)
-                        || trait_env
-                            .decl_header_of(&trait_)
-                            .is_some_and(|decl| declares(&decl.methods))
+                    in_scope.contains(&trait_)
+                        && (declares(&header.methods)
+                            || trait_env
+                                .decl_header_of(&trait_)
+                                .is_some_and(|decl| declares(&decl.methods)))
                 }
                 (ImplKind::Inherent, Some(_)) | (ImplKind::Trait, None) => false,
             };
-            if !declared {
+            if !declared || !admits(self, def) {
                 continue;
             }
             let binding = {
@@ -1070,8 +1082,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
                 &self.type_lookup(),
-                &header.type_params,
-                &header.ty,
+                def,
                 Some(receiver),
                 Some(&args),
             ) {
@@ -2130,10 +2141,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let mut declaring_args = vec![receiver_type_id.unwrap_or(TypeTable::UNKNOWN)];
                 declaring_args.extend(trait_args.iter().copied());
-                let instantiated = default_method.sig.instantiate_call(
-                    &scope.tysys.type_table,
-                    &declaring_args,
-                    &[],
+                let tt = &scope.tysys.type_table;
+                // `Self::X` is what this block binds, which a receiver still
+                // holding a variable cannot be asked for by its type.
+                let own_assoc = impl_sig
+                    .associated_types
+                    .iter()
+                    .map(|(name, &ty)| (trait_decl, name.clone(), ty))
+                    .collect();
+                let instantiated = default_method.sig.decl.instantiate_slots_with(
+                    tt,
+                    &default_method
+                        .sig
+                        .call_slots(tt, None, &declaring_args, &[]),
+                    &SlotProjections::from_iter([(0, own_assoc)]),
                 );
 
                 found_traits.push(TraitMethodMatch {
@@ -2221,7 +2242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && required_trait.is_none()
             && self.tysys.type_table.borrow().contains_infer_var(receiver)
             && let [(def, _)] = self
-                .open_receiver_candidates(receiver, method_name, ImplKind::Trait)
+                .open_receiver_candidates(receiver, method_name, ImplKind::Trait, &|_, _| true)
                 .as_slice()
         {
             return Some(Ordered::One(Some(*def)));
@@ -2708,8 +2729,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !s.tysys.check_impl_block_bounds(
                     &s.annotate_ctx,
                     &s.type_lookup(),
-                    &header.type_params,
-                    &header.ty,
+                    impl_ref.0,
                     Some(receiver),
                     Some(&concrete_type_args),
                 ) {
@@ -2869,15 +2889,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return None;
                 }
-                let impl_type_params = header.type_params.clone();
-                let impl_ty = header.ty.clone();
                 let receiver = s.impl_receiver(header, base_type_id);
                 if !concrete_type_args.is_empty()
                     && !s.tysys.check_impl_block_bounds(
                         &s.annotate_ctx,
                         &s.type_lookup(),
-                        &impl_type_params,
-                        &impl_ty,
+                        impl_ref.0,
                         Some(base_type_id),
                         Some(&concrete_type_args),
                     )
