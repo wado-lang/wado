@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, NamePolicy, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, NamePolicy, RangeKind, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -4163,13 +4163,10 @@ impl TypeTable {
         self.single_arg_of(id, CompilerItem::List)
     }
 
-    /// The element type of `id` when it is the range struct `range` names.
-    pub fn range_element(&self, id: TypeId, range: CompilerItem) -> Option<TypeId> {
-        assert!(matches!(
-            range,
-            CompilerItem::RangeExclusive | CompilerItem::RangeInclusive
-        ));
-        self.single_arg_of(id, range)
+    /// The element type of `id` when it is the range struct a `kind` range
+    /// literal builds.
+    pub fn range_element(&self, id: TypeId, kind: RangeKind) -> Option<TypeId> {
+        self.single_arg_of(id, range_item(kind))
     }
 
     /// Check if a type contains UNKNOWN (undefined type that was not resolved).
@@ -5082,6 +5079,14 @@ impl TypeTable {
             ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
+    }
+}
+
+/// The prelude struct a `kind` range literal builds.
+pub fn range_item(kind: RangeKind) -> CompilerItem {
+    match kind {
+        RangeKind::Exclusive => CompilerItem::RangeExclusive,
+        RangeKind::Inclusive => CompilerItem::RangeInclusive,
     }
 }
 

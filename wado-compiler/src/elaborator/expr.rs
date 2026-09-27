@@ -22,14 +22,14 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::{CaseSite, DefaultTypeBinding, slot_type_bindings};
-use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
+use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::orchestration::first_infer_span;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
-use super::tysys::{TypeSystem, range_item};
+use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
@@ -5413,11 +5413,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let element = expected_type.and_then(|t| {
-            self.tysys
-                .type_table
-                .borrow()
-                .range_element(t, range_item(range.kind))
+            let tt = self.tysys.type_table.borrow();
+            tt.range_element(t, range.kind)
+                .filter(|&e| is_numeric_literal_target(&tt, e))
         });
+        if let Some(element) = element {
+            self.sem.types.range_element_hints.insert(range.id, element);
+        }
         let order = range_endpoint_order(range, element);
         let (start, end) = order.resolve(
             &range.start,

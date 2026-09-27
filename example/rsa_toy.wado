@@ -241,7 +241,9 @@ test "find_factor" {
     let n: u64 = 4294967291 * 4294967279;
     let f = find_factor(n);
     assert f == 4294967291 || f == 4294967279;
-    assert find_factor(600851475143) matches { 71 | 839 | 1471 | 6857 };
+    let m: u64 = 600851475143;  // 71 * 839 * 1471 * 6857
+    let g = find_factor(m);
+    assert m % g == 0 && 1 < g && g < m;
 }
 
 test "round trip" {

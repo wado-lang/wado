@@ -217,21 +217,22 @@ pub(super) fn numeric_literal_pair_order(
     }
 }
 
-/// Order the endpoints of `range`. A literal endpoint takes its type from the
-/// other one. Two literals resolve in source order against one type: `element`,
-/// the element of the range the context expects, else `u8` where a byte
-/// endpoint settles `0..=b'z'`. The order never depends on `element`, so reify,
-/// which knows only the element annotate settled on, walks the endpoints as
-/// annotate did.
+/// Order the endpoints of `range`. `element`, the numeric element the context
+/// expects, types both endpoints: `0..<(1 << 40)` at `RangeExclusive<u64>`.
+/// Without it a literal endpoint takes its type from the other one, and two
+/// literals take `u8` from a byte endpoint, as `0..=b'z'` does.
 pub(super) fn range_endpoint_order(
     range: &ast::RangeExpr,
     element: Option<TypeId>,
 ) -> LiteralPairOrder {
+    if element.is_some() {
+        return LiteralPairOrder::Together(element);
+    }
     let (start, end) = (&range.start, &range.end);
     match (is_numeric_literal_expr(start), is_numeric_literal_expr(end)) {
         (true, true) => {
             let has_byte = is_byte_literal_expr(start) || is_byte_literal_expr(end);
-            LiteralPairOrder::Together(element.or(has_byte.then_some(TypeTable::U8)))
+            LiteralPairOrder::Together(has_byte.then_some(TypeTable::U8))
         }
         (true, false) => LiteralPairOrder::RightAnchors,
         _ => LiteralPairOrder::LeftAnchors,

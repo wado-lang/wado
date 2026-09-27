@@ -5058,11 +5058,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_range(&mut self, range: &ast::RangeExpr, ctx: &mut FunctionContext) -> TirExpr {
         // Annotate has unified the endpoints, so either type is the element
         // type — but only in the order the elaborator resolved them in.
-        let instantiation = self.ann_generic_instantiations(range.id);
-        let element = instantiation
-            .as_ref()
-            .and_then(|gi| gi.type_args.first().copied());
-        let order = range_endpoint_order(range, element);
+        let order = range_endpoint_order(range, self.ann_range_element_hint(range.id));
         let (start, end) = order.resolve(
             &range.start,
             &range.end,
@@ -5071,7 +5067,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let element_type = start.type_id;
 
-        let (struct_name, struct_type) = self.tysys.range_type(range.kind, element_type);
+        let (_, struct_type) = self.tysys.range_type(range.kind, element_type);
 
         let mut fields = vec![
             TirStructField {
@@ -5093,14 +5089,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        // Single source of truth: `resolve_range` recorded the mangled
-        // struct name (`RangeExclusive<i32>` etc.) on the same
-        // `GenericInstantiation` slot reify already consults for struct
-        // literals. Falls back to the bare name on the off chance the
-        // recording is absent (e.g. a recovery path).
-        let mangled_name = instantiation
+        // `resolve_range` recorded the mangled name (`RangeExclusive<i32>`) on
+        // every path that logs no error, and reify walks only clean modules.
+        let mangled_name = self
+            .ann_generic_instantiations(range.id)
             .and_then(|gi| gi.mangled_name)
-            .unwrap_or_else(|| struct_name.clone());
+            .expect("resolve_range records a range's instantiation");
 
         TirExpr::new(
             TirExprKind::StructLiteral {
