@@ -594,11 +594,25 @@ pub(crate) struct TestResult {
     pub(crate) outcome: TestOutcome,
     pub(crate) error: Option<String>,
     pub(crate) duration: Duration,
+    /// Fuel the test's store spent, instantiation included, under
+    /// `--report-fuel`.
+    pub(crate) fuel: Option<u64>,
     /// Captured guest stdout/stderr (see `runtime::create_test_store`).
     /// Empty when nothing was printed, or when the test never got as far
     /// as calling its test function (`fail_result`'s setup-time failures).
     pub(crate) stdout: String,
     pub(crate) stderr: String,
+}
+
+impl TestResult {
+    /// What the test cost: its duration, and its fuel where it was metered.
+    pub(crate) fn cost(&self) -> String {
+        let duration = format_duration(self.duration);
+        match self.fuel {
+            Some(fuel) => format!("{duration}, fuel {fuel}"),
+            None => duration,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1578,7 +1592,7 @@ async fn collect_into_vec<T>(mut rx: mpsc::Receiver<T>) -> Vec<T> {
 }
 
 /// Build a `TestResult` for a setup-time failure (store/linker/instance/etc.).
-fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
+fn fail_result(job: &TestJob, error: String, start: Instant, fuel: Option<u64>) -> TestResult {
     TestResult {
         file_path: job.module.path.clone(),
         test_name: job.test_name.clone(),
@@ -1586,6 +1600,7 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
         outcome: TestOutcome::Fail,
         error: Some(error),
         duration: start.elapsed(),
+        fuel,
         stdout: String::new(),
         stderr: String::new(),
     }
@@ -1601,7 +1616,7 @@ async fn run_single_test_safe(job: TestJob, preopened_dirs: &[(String, String)])
         .await;
     panic_or_result.unwrap_or_else(|payload| {
         let cause = format_panic_payload(&payload);
-        fail_result(&job, format!("test worker panicked: {cause}"), start)
+        fail_result(&job, format!("test worker panicked: {cause}"), start, None)
     })
 }
 
@@ -1613,7 +1628,9 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
     let (mut store, stdout_pipe, stderr_pipe) =
         match runtime::create_test_store(&module.engine, preopened_dirs, &module.path) {
             Ok(v) => v,
-            Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
+            Err(e) => {
+                return fail_result(job, format!("failed to set up store: {e:#}"), start, None);
+            }
         };
 
     // Profiling samples on every epoch tick, so it takes the deadline the
@@ -1637,7 +1654,10 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         .await
     {
         Ok(inst) => inst,
-        Err(e) => return fail_result(job, format!("failed to instantiate: {e:#}"), start),
+        Err(e) => {
+            let fuel = runtime::fuel_spent(&store);
+            return fail_result(job, format!("failed to instantiate: {e:#}"), start, fuel);
+        }
     };
 
     let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &job.test_name);
@@ -1694,6 +1714,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         outcome,
         error,
         duration: start.elapsed(),
+        fuel: runtime::fuel_spent(&store),
         stdout: String::from_utf8_lossy(&stdout_pipe.contents()).into_owned(),
         stderr: String::from_utf8_lossy(&stderr_pipe.contents()).into_owned(),
     }
@@ -1908,15 +1929,15 @@ pub(crate) fn display_test_results(
         let mut sorted_results: Vec<_> = file_results.clone();
         sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
         for result in sorted_results {
-            let dur = format_duration(result.duration);
+            let cost = result.cost();
             match result.outcome {
                 TestOutcome::Pass => {
-                    println!("  ok   {} ({dur})", result.display_name);
+                    println!("  ok   {} ({cost})", result.display_name);
                     print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.test_passed += 1;
                 }
                 TestOutcome::Fail => {
-                    println!("  \x1b[31mFAILED\x1b[0m {} ({dur})", result.display_name);
+                    println!("  \x1b[31mFAILED\x1b[0m {} ({cost})", result.display_name);
                     report.fail_entries.push(FailEntry {
                         file_path: result.file_path.clone(),
                         display_name: result.display_name.clone(),
@@ -1928,7 +1949,7 @@ pub(crate) fn display_test_results(
                 }
                 TestOutcome::TodoPending => {
                     println!(
-                        "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({dur})",
+                        "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({cost})",
                         result.display_name
                     );
                     print_captured_output(&result.stdout, &result.stderr, "    ");
@@ -1941,7 +1962,7 @@ pub(crate) fn display_test_results(
                 }
                 TestOutcome::TodoResolved => {
                     println!(
-                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({dur})",
+                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({cost})",
                         result.display_name
                     );
                     if let Some(ref error) = result.error {

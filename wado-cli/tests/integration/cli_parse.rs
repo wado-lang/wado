@@ -559,10 +559,18 @@ fn serve_rejects_no_dir() {
 /// takes all of them.
 #[test]
 fn test_takes_the_runtime_knobs() {
-    let parser = Parser::from_args(&["--collector", "null", "--gc-heap-initial", "512m", "a.wado"]);
+    let parser = Parser::from_args(&[
+        "--collector",
+        "null",
+        "--gc-heap-initial",
+        "512m",
+        "--report-fuel",
+        "a.wado",
+    ]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
     assert_eq!(opts.runtime.collector, wasmtime::Collector::Null);
     assert_eq!(opts.runtime.gc_heap_initial_size, 512 << 20);
+    assert!(opts.runtime.report_fuel);
 }
 
 #[test]
