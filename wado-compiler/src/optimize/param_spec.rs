@@ -15,6 +15,7 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use super::arena_query::{cold_exprs, cold_path_id};
 use super::dae::is_dae_sroa_eligible;
 use super::dce::{DescriptorCache, reachable_function_positions};
 use super::extract::is_place_read;
@@ -820,6 +821,10 @@ struct Site {
     call: ExprId,
     callee: FuncId,
     bindings: Vec<Binding>,
+    /// On a path a `cold_path()` marker opens. Such a call is pointed at a clone
+    /// other calls pay for, and never has one minted for it: a clone for a call
+    /// that rarely runs buys no time for its size.
+    cold: bool,
 }
 
 fn select_sites(
@@ -901,6 +906,7 @@ fn select_sites(
             call: id,
             callee,
             bindings,
+            cold: false,
         });
     });
     sites
@@ -970,7 +976,8 @@ pub(super) fn specialize_const_params(
         Signatures::build(project, &types)
     };
     let facts = summarize_params(project, &signatures);
-    let per_caller = collect_sites(project, state, &signatures, &facts, &constants);
+    let cold = cold_path_id(descriptors.descriptors(project));
+    let per_caller = collect_sites(project, state, &signatures, &facts, &constants, cold);
     if per_caller.is_empty() {
         return propagated;
     }
@@ -1098,6 +1105,7 @@ fn collect_sites(
     signatures: &Signatures,
     facts: &IndexMap<(FuncId, u32), ParamFacts>,
     constants: &CallConsts,
+    cold: Option<FuncId>,
 ) -> Vec<(usize, Vec<Site>)> {
     let types = project.type_table.borrow();
     let mut per_caller = Vec::new();
@@ -1111,7 +1119,8 @@ fn collect_sites(
         }
         let seed = state.param_consts.get(&FuncId::new(index));
         let roots = collect_roots(&func, body, &types, signatures, facts, seed);
-        let sites = select_sites(
+        let cold_calls = cold.map(|c| cold_exprs(body, c)).unwrap_or_default();
+        let mut sites = select_sites(
             &func.locals,
             body,
             &types,
@@ -1121,6 +1130,9 @@ fn collect_sites(
             constants,
             state,
         );
+        for site in &mut sites {
+            site.cold = cold_calls.contains(&site.call);
+        }
         if !sites.is_empty() {
             per_caller.push((index, sites));
         }
@@ -1132,7 +1144,8 @@ fn collect_sites(
 type Retarget = (usize, ExprId, FuncId);
 
 /// Mint a clone per distinct binding set, reusing one already cached. Returns
-/// the retargets to apply and the clones to append to the store.
+/// the retargets to apply and the clones to append to the store. Hot sites go
+/// first, so a cold one finds the clone a hot one minted this round.
 fn mint_clones(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
@@ -1141,39 +1154,46 @@ fn mint_clones(
     let mut retarget: Vec<Retarget> = Vec::new();
     let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
-    for (caller, sites) in per_caller {
-        for site in sites {
-            let key = SpecKey {
-                callee: site.callee,
-                bindings: site.bindings.clone(),
-            };
-            if let Some(&existing) = state.clones.get(&key) {
-                if signatures_match(project, site.callee, existing) {
-                    retarget.push((*caller, site.call, existing));
-                }
-                continue;
+    let hot_then_cold = [false, true].into_iter().flat_map(|cold| {
+        per_caller.iter().flat_map(move |(caller, sites)| {
+            sites
+                .iter()
+                .filter(move |s| s.cold == cold)
+                .map(move |s| (caller, s))
+        })
+    });
+    for (caller, site) in hot_then_cold {
+        let key = SpecKey {
+            callee: site.callee,
+            bindings: site.bindings.clone(),
+        };
+        if let Some(&existing) = state.clones.get(&key) {
+            if signatures_match(project, site.callee, existing) {
+                retarget.push((*caller, site.call, existing));
             }
-            let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
-            if state.budget_exhausted()
-                || ordinal >= MAX_SPECIALIZATIONS_PER_FUNCTION
-                || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
-            {
-                continue;
-            }
-            compiler_trace!(
-                "param_spec",
-                "specialized {} on {} binding(s)",
-                project.functions[site.callee.index()].borrow().name,
-                site.bindings.len()
-            );
-            let clone = build_clone(project, site, FuncId::new(next_id), ordinal);
-            next_id += 1;
-            state.clones.insert(key, clone.id);
-            state.per_callee.insert(site.callee, ordinal + 1);
-            state.param_consts.insert(clone.id, clone.param_consts);
-            retarget.push((*caller, site.call, clone.id));
-            minted.push(clone.function);
+            continue;
         }
+        let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
+        if site.cold
+            || state.budget_exhausted()
+            || ordinal >= MAX_SPECIALIZATIONS_PER_FUNCTION
+            || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
+        {
+            continue;
+        }
+        compiler_trace!(
+            "param_spec",
+            "specialized {} on {} binding(s)",
+            project.functions[site.callee.index()].borrow().name,
+            site.bindings.len()
+        );
+        let clone = build_clone(project, site, FuncId::new(next_id), ordinal);
+        next_id += 1;
+        state.clones.insert(key, clone.id);
+        state.per_callee.insert(site.callee, ordinal + 1);
+        state.param_consts.insert(clone.id, clone.param_consts);
+        retarget.push((*caller, site.call, clone.id));
+        minted.push(clone.function);
     }
     (retarget, minted)
 }
