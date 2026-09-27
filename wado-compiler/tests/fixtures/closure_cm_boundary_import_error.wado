@@ -2,12 +2,12 @@
 // which takes only scalars and unrestricted handles and returns nothing, so
 // one returning a value is rejected on the import side of the boundary.
 
-// Compiled as a standard library module, the only place the attribute is
-// valid.
+// Served as part of the standard library (`"stdlib": true`), the only place
+// the attribute is valid.
 #![stdlib("core:benchmark")]
 
 #[canonical("test", "bad-import")]
 fn bad_import(f: fn(i32) -> i32);
 
 __DATA__
-{"compile_error": "callback parameter 'f' of `bad_import` cannot cross the Component Model boundary"}
+{"stdlib": true, "compile_error": "callback parameter 'f' of `bad_import` cannot cross the Component Model boundary"}

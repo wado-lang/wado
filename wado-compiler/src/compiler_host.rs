@@ -463,6 +463,13 @@ pub trait CompilerHost: Send + Sync {
         async move { self.load_source(path).await.is_ok() }
     }
 
+    /// Whether `path` is a file of the standard library this host compiles
+    /// against, the only kind of file that may declare `#![stdlib]`. The
+    /// default is no: a host that embeds the stdlib has no file of it to name.
+    fn is_stdlib_file(&self, _path: &str) -> bool {
+        false
+    }
+
     /// Emit a diagnostic (error, warning, etc.)
     ///
     /// This method is called synchronously by the compiler whenever a diagnostic

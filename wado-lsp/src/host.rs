@@ -37,6 +37,28 @@ pub fn install_dev_stdlib() {
 #[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
 pub fn install_dev_stdlib() {}
 
+/// Whether `path` is one of the files [`install_dev_stdlib`] reads. A file
+/// that does not exist, as an editor's unsaved one, is none of them.
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+fn is_dev_stdlib_file(path: &Path) -> bool {
+    use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files};
+
+    let root = Path::new(DEV_STDLIB_ROOT)
+        .canonicalize()
+        .expect("install_dev_stdlib reads the stdlib from this directory");
+    path.canonicalize().is_ok_and(|path| {
+        path.strip_prefix(&root)
+            .is_ok_and(|file| dev_stdlib_files().iter().any(|f| file == Path::new(f)))
+    })
+}
+
+/// A release or `wasm32` build embeds the stdlib, so no file on disk is part
+/// of it.
+#[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
+fn is_dev_stdlib_file(_path: &Path) -> bool {
+    false
+}
+
 #[derive(Debug)]
 pub struct FilesystemCompilerHost {
     base_path: PathBuf,
@@ -110,6 +132,10 @@ impl CompilerHost for FilesystemCompilerHost {
 
     async fn source_exists(&self, path: &str) -> bool {
         self.base_path.join(path).is_file()
+    }
+
+    fn is_stdlib_file(&self, path: &str) -> bool {
+        is_dev_stdlib_file(&self.base_path.join(path))
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {

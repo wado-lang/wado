@@ -102,6 +102,8 @@ pub struct FilesystemHost {
     /// Stubbed `[dependencies]`: name → the dependency's `[package].lib` path,
     /// relative to `base_path`.
     dependencies: indexmap::IndexMap<String, String>,
+    /// Whether every file this host serves is part of the standard library.
+    stdlib: bool,
 }
 
 impl FilesystemHost {
@@ -113,7 +115,14 @@ impl FilesystemHost {
             diagnostics: Mutex::new(Vec::new()),
             env: indexmap::IndexMap::new(),
             dependencies: indexmap::IndexMap::new(),
+            stdlib: false,
         }
+    }
+
+    /// Serve every file as part of the standard library.
+    pub fn with_stdlib(mut self, stdlib: bool) -> Self {
+        self.stdlib = stdlib;
+        self
     }
 
     /// Seed the compile-time environment consulted by `env_var`.
@@ -145,6 +154,10 @@ impl CompilerHost for FilesystemHost {
                 message: e.to_string(),
             })
         }
+    }
+
+    fn is_stdlib_file(&self, _path: &str) -> bool {
+        self.stdlib
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
@@ -491,8 +504,7 @@ pub fn compile_fixture_on_worker(
     path: PathBuf,
     source: String,
     options: CompilerOptions,
-    env: indexmap::IndexMap<String, String>,
-    dependencies: indexmap::IndexMap<String, String>,
+    stubs: HostStubs,
 ) -> CompiledFixture {
     let unparse_wir = options.retain_wir;
     on_compile_worker(move || {
@@ -500,7 +512,7 @@ pub fn compile_fixture_on_worker(
             result,
             warnings,
             errors,
-        } = compile_capturing_diagnostics(&path, &source, options, None, env, dependencies);
+        } = compile_capturing_diagnostics(&path, &source, options, None, stubs);
         let (wasm, wir_text) = match result {
             Ok(compiled) => {
                 let wir_text = unparse_wir.then(|| {
@@ -1248,8 +1260,7 @@ pub fn compile_source_with_compiler_options_and_filename(
         source,
         options,
         display_filename,
-        indexmap::IndexMap::new(),
-        indexmap::IndexMap::new(),
+        HostStubs::default(),
     )
     .result
 }
@@ -1269,6 +1280,17 @@ pub struct CapturedDiagnostic {
     pub message: String,
 }
 
+/// What a fixture stubs of the host that compiles it.
+#[derive(Default)]
+pub struct HostStubs {
+    /// The compile-time environment `env_var` answers from.
+    pub env: indexmap::IndexMap<String, String>,
+    /// The `[dependencies]` a bare `use ... from "name"` binds to.
+    pub dependencies: indexmap::IndexMap<String, String>,
+    /// Whether the fixture is served as part of the standard library.
+    pub stdlib: bool,
+}
+
 /// Compile and return the result alongside every diagnostic message the host
 /// received, on both success and failure — what `warnings_contains` /
 /// `warnings_not_contains` / `compile_errors_contains` assert against.
@@ -1277,14 +1299,14 @@ pub fn compile_capturing_diagnostics(
     source: &str,
     options: CompilerOptions,
     display_filename: Option<&str>,
-    env: indexmap::IndexMap<String, String>,
-    dependencies: indexmap::IndexMap<String, String>,
+    stubs: HostStubs,
 ) -> CapturedCompile {
     use wado_compiler::Severity;
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path)
-        .with_env(env)
-        .with_dependencies(dependencies);
+        .with_env(stubs.env)
+        .with_dependencies(stubs.dependencies)
+        .with_stdlib(stubs.stdlib);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());
@@ -1346,8 +1368,10 @@ pub fn compile_against_web(source: &str) -> CapturedCompile {
         source,
         CompilerOptions::default(),
         None,
-        indexmap::IndexMap::new(),
-        web_dependency(),
+        HostStubs {
+            dependencies: web_dependency(),
+            ..HostStubs::default()
+        },
     )
 }
 

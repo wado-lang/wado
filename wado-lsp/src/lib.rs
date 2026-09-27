@@ -768,6 +768,10 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.source_exists(path).await
     }
 
+    fn is_stdlib_file(&self, path: &str) -> bool {
+        self.inner.is_stdlib_file(path)
+    }
+
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {
         // Capture for the snapshot cache, then forward so the inner host's
         // own side effects (e.g. CLI stderr logging) still happen.

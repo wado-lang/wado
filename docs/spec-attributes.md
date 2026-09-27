@@ -418,18 +418,6 @@ test {
 }
 ```
 
-### `#![stdlib("path")]`
-
-Module-level inner attribute. Names the bundled stdlib module a file is, such as `#![stdlib("core:cbor")]`. The file is that module however it was loaded, so a file an editor opens directly is the same module an import reaches.
-
-<!-- {"source":"wado-compiler/lib/core/allocator.wado"} -->
-
-```wado
-#![wasm_module("mem")]
-#![no_prelude]
-#![stdlib("core:allocator")]
-```
-
 ### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 
 Links Wado definitions (interfaces, worlds, resources, enums) to their Component Model names. See [Attribute Syntax for Component Model Linking](./spec-components.md#attribute-syntax-for-component-model-linking).
@@ -446,6 +434,24 @@ is an error.
 ```wado
 #[canonical("mem", "realloc")]
 fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
+```
+
+### `#![stdlib("path")]`
+
+Module-level inner attribute. Names the bundled stdlib module a file is, such as `#![stdlib("core:cbor")]`. The file is that module however it was loaded, so a file an editor opens directly is the same module an import reaches. It is valid only in a file of the standard library.
+
+<!-- {"source":"wado-compiler/lib/core/allocator.wado"} -->
+
+```wado
+#![wasm_module("mem")]
+#![no_prelude]
+#![stdlib("core:allocator")]
+```
+
+<!-- {"fixture":"spec_attributes_stdlib_identity_outside.wado"} -->
+
+```wado
+#![stdlib("core:cli")]
 ```
 
 ### `#![wasm_module("name")]`

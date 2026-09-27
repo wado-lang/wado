@@ -71,9 +71,10 @@ pub enum LoadError {
         module_source: ModuleSource,
         message: String,
     },
-    /// `#![stdlib("…")]` names no bundled stdlib module, or names nothing.
+    /// `#![stdlib("…")]` is written outside the standard library, or names no
+    /// bundled stdlib module.
     StdlibIdentity {
-        path: Option<String>,
+        fault: StdlibIdentityFault,
         file: String,
         line: usize,
         column: usize,
@@ -161,7 +162,7 @@ impl std::fmt::Display for LoadError {
                 write!(f, "wasm import error in {module_source}: {message}")
             }
             LoadError::StdlibIdentity {
-                path,
+                fault,
                 file,
                 line,
                 column,
@@ -169,24 +170,36 @@ impl std::fmt::Display for LoadError {
                 write!(
                     f,
                     "{file}: line {line}, column {column}: {}",
-                    stdlib_identity_message(path.as_deref())
+                    fault.message()
                 )
             }
         }
     }
 }
 
-/// The one wording the display and the diagnostic share.
-fn stdlib_identity_message(path: Option<&str>) -> String {
-    match path {
-        Some(path) => format!(
-            "#![stdlib({path:?})] does not name a bundled stdlib module; the attribute \
-             declares the identity of a module bundled in the compiler and is not for \
-             use outside it"
-        ),
-        None => "#![stdlib] takes the name of a bundled stdlib module, as \
-                 `#![stdlib(\"core:cli\")]`"
-            .to_string(),
+/// What is wrong with a `#![stdlib]` declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StdlibIdentityFault {
+    /// Written in a file that is no part of the standard library.
+    OutsideStdlib,
+    /// Naming nothing.
+    Unnamed,
+    /// Naming no bundled stdlib module.
+    Unknown(String),
+}
+
+impl StdlibIdentityFault {
+    /// The one wording the display and the diagnostic share.
+    fn message(&self) -> String {
+        match self {
+            Self::OutsideStdlib => "#![stdlib] is valid only in the standard library".to_string(),
+            Self::Unnamed => "#![stdlib] takes the name of a bundled stdlib module, as \
+                              `#![stdlib(\"core:cli\")]`"
+                .to_string(),
+            Self::Unknown(path) => {
+                format!("#![stdlib({path:?})] does not name a bundled stdlib module")
+            }
+        }
     }
 }
 
@@ -250,14 +263,14 @@ impl From<LoadError> for Diagnostic {
                 }),
             },
             LoadError::StdlibIdentity {
-                ref path,
+                ref fault,
                 ref file,
                 line,
                 column,
             } => Self {
                 severity: Severity::Error,
                 code: Code::StdlibAttr,
-                message: stdlib_identity_message(path.as_deref()),
+                message: fault.message(),
                 span: Some(DiagnosticSpan {
                     file: file.clone(),
                     line,
@@ -985,22 +998,30 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
 }
 
 /// The bundled-stdlib identity `module` declares, `Ok(None)` when it declares
-/// none. Naming nothing is an error wherever it is written — a file does not
-/// become well-formed by being imported rather than compiled.
-fn stdlib_identity_of<'a>(module: &'a Module, file: &str) -> Result<Option<&'a str>, LoadError> {
+/// none. `in_stdlib` says the file is part of the standard library, the only
+/// place the declaration is valid. It is checked wherever it is written — a
+/// file does not become well-formed by being imported rather than compiled.
+fn stdlib_identity_of<'a>(
+    module: &'a Module,
+    file: &str,
+    in_stdlib: bool,
+) -> Result<Option<&'a str>, LoadError> {
     let Some(attribute) = module.stdlib_identity_attribute() else {
         return Ok(None);
     };
     let path = module.stdlib_identity();
-    match path.filter(|p| stdlib::get_stdlib_module(p).is_some()) {
-        Some(path) => Ok(Some(path)),
-        None => Err(LoadError::StdlibIdentity {
-            path: path.map(str::to_string),
-            file: file.to_string(),
-            line: attribute.span.line,
-            column: attribute.span.column,
-        }),
-    }
+    let fault = match path {
+        _ if !in_stdlib => StdlibIdentityFault::OutsideStdlib,
+        Some(path) if stdlib::get_stdlib_module(path).is_some() => return Ok(Some(path)),
+        Some(path) => StdlibIdentityFault::Unknown(path.to_string()),
+        None => StdlibIdentityFault::Unnamed,
+    };
+    Err(LoadError::StdlibIdentity {
+        fault,
+        file: file.to_string(),
+        line: attribute.span.line,
+        column: attribute.span.column,
+    })
 }
 
 /// Resolve `module`'s `#![stdlib("…")]` declaration to a canonical
@@ -1010,8 +1031,9 @@ fn parse_stdlib_identity_attribute(
     interner: &mut ModuleSourceInterner,
     module: &Module,
     file: &str,
+    in_stdlib: bool,
 ) -> Result<Option<ModuleSource>, LoadError> {
-    let Some(path) = stdlib_identity_of(module, file)? else {
+    let Some(path) = stdlib_identity_of(module, file, in_stdlib)? else {
         return Ok(None);
     };
     if let Some(name) = path.strip_prefix("core:") {
@@ -1067,7 +1089,7 @@ mod tests {
         let mut interner = ModuleSourceInterner::new();
         let want = interner.core("prelude/types.wado");
         assert_eq!(
-            parse_stdlib_identity_attribute(&mut interner, &module, "types.wado").ok(),
+            parse_stdlib_identity_attribute(&mut interner, &module, "types.wado", true).ok(),
             Some(Some(want))
         );
     }
@@ -1076,7 +1098,7 @@ mod tests {
     fn unregistered_stdlib_identity_attribute_is_an_error() {
         let module = parse_test_module("#![no_prelude]\n#![stdlib(\"core:bogus.wado\")]\n");
         let mut interner = ModuleSourceInterner::new();
-        let err = parse_stdlib_identity_attribute(&mut interner, &module, "bogus.wado")
+        let err = parse_stdlib_identity_attribute(&mut interner, &module, "bogus.wado", true)
             .expect_err("an unregistered path must be rejected");
         assert!(
             err.to_string()
@@ -1088,11 +1110,28 @@ mod tests {
     #[test]
     fn stdlib_identity_attribute_without_a_name_is_an_error() {
         let module = parse_test_module("#![no_prelude]\n#![stdlib]\n");
-        let err = stdlib_identity_of(&module, "nameless.wado")
+        let err = stdlib_identity_of(&module, "nameless.wado", true)
             .expect_err("an omitted name must be rejected");
         assert!(
             err.to_string().contains("#![stdlib] takes the name of"),
             "unexpected message: {err}"
+        );
+    }
+
+    #[test]
+    fn stdlib_identity_attribute_outside_the_stdlib_is_an_error() {
+        let module = parse_test_module("#![no_prelude]\n#![stdlib(\"core:cli\")]\n");
+        let err = stdlib_identity_of(&module, "app.wado", false)
+            .expect_err("a program may not claim a stdlib identity");
+        assert!(
+            matches!(
+                err,
+                LoadError::StdlibIdentity {
+                    fault: StdlibIdentityFault::OutsideStdlib,
+                    ..
+                }
+            ),
+            "unexpected error: {err}"
         );
     }
 }
@@ -1311,10 +1350,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_ast: Module,
         tentative_entry_source: ModuleSource,
     ) -> Result<LoadResult, LoadError> {
+        let entry_in_stdlib = self.in_stdlib(&tentative_entry_source);
         let entry_module_source = parse_stdlib_identity_attribute(
             &mut self.interner,
             &entry_ast,
             &tentative_entry_source.source_path(),
+            entry_in_stdlib,
         )?
         .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
@@ -1453,9 +1494,31 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// is resolved before its imports load; this reaches the rest.
     fn check_stdlib_identities(&self) -> Result<(), LoadError> {
         for (module_source, module) in &self.loaded {
-            stdlib_identity_of(module, &module_source.source_path())?;
+            stdlib_identity_of(
+                module,
+                &module_source.source_path(),
+                self.in_stdlib(module_source),
+            )?;
         }
         Ok(())
+    }
+
+    /// Whether `source` is part of the standard library: bundled, or a file
+    /// the host serves as one. The host takes a path as `load_source` does,
+    /// against its base, where the entry itself sits.
+    fn in_stdlib(&self, source: &ModuleSource) -> bool {
+        match source {
+            ModuleSource::EntryPoint { filename } => {
+                let name = filename
+                    .rsplit_once('/')
+                    .map_or(filename.as_str(), |(_, name)| name);
+                self.host.is_stdlib_file(name)
+            }
+            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+                self.host.is_stdlib_file(path)
+            }
+            other => other.is_core() || other.is_binding(),
+        }
     }
 
     /// Collect import paths from a module's use declarations.

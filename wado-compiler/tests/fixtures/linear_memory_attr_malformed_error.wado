@@ -4,8 +4,8 @@
 // Every function here has a body, which each one reports as well as what its
 // arguments got wrong — the last is the case where nothing else is wrong.
 
-// Compiled as a standard library module, the only place the attribute is
-// valid.
+// Served as part of the standard library (`"stdlib": true`), the only place
+// the attribute is valid.
 #![stdlib("core:benchmark")]
 
 #[linear_memory(modify)]
@@ -32,6 +32,7 @@ export fn run() {
 
 __DATA__
 {
+    "stdlib": true,
     "compile_error": "#[linear_memory] takes `read` or `write`",
     "compile_errors_contains": [
         "#[linear_memory] is written once",
