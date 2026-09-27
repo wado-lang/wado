@@ -465,7 +465,7 @@ fn build_one<C: Collection>(b: C::Builder, e: C::Element) -> C {
 }
 
 test {
-    assert build_one::<Bag>(Bag { items: [] }, 7).items == [7];
+    assert build_one::<Bag>(BagBuilder { items: [] }, 7).items == [7];
 }
 ```
 

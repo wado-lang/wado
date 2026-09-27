@@ -11,17 +11,20 @@ trait CollectionBuilder with () {
 
 struct Bag { items: List<i32> }
 
-impl CollectionBuilder for Bag {
+// The builder is a type of its own, so `Output = Self` must name `Bag`.
+struct BagBuilder { items: List<i32> }
+
+impl CollectionBuilder for BagBuilder {
     type Element = i32;
     type Output = Bag;
 
     fn add(&mut self, e: i32) { self.items.push(e); }
-    fn build(&self) -> Bag { return *self; }
+    fn build(&self) -> Bag { return Bag { items: self.items }; }
 }
 
 impl Collection for Bag {
     type Element = i32;
-    type Builder = Bag;
+    type Builder = BagBuilder;
 }
 
 trait Collection {
@@ -37,5 +40,5 @@ fn build_one<C: Collection>(b: C::Builder, e: C::Element) -> C {
 }
 
 test {
-    assert build_one::<Bag>(Bag { items: [] }, 7).items == [7];
+    assert build_one::<Bag>(BagBuilder { items: [] }, 7).items == [7];
 }

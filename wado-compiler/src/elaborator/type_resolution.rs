@@ -1073,7 +1073,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|b| self.fq_trait_name_of(b))
             .collect();
-        let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
+        let assoc_type_bindings =
+            self.frame_assoc_bindings(base, base_name, owning_trait, assoc, &assoc_bounds);
         self.tysys
             .type_table
             .borrow_mut()
@@ -1158,30 +1159,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_type_params_with(ty, &IndexMap::default(), &answers)
     }
 
-    /// What `bounds` say the bounded type's own associated types are, as this
-    /// frame knows them: `I: IntoIterator<Item = u8>` answers what `I::Item` is.
-    /// `Self` inside a bound names the bounded type, so only a right-hand side
-    /// the frame can answer binds and the rest stay abstract — rebinding `Self`
-    /// and resolving instead lets the frame's own bindings shadow it, and
-    /// recursion through a bound's right-hand side has no fixpoint.
+    /// What `bounds`, declared on `owning_trait`'s associated type `assoc`, say
+    /// that type's own associated types are, as this frame knows them:
+    /// `I: IntoIterator<Item = u8>` answers what `I::Item` is. `Self` inside a
+    /// bound names `base`. A bare `Self::X` is answered by the frame's own
+    /// projection, since resolving it would let the frame's bindings shadow it
+    /// and recurse through a bound's right-hand side with no fixpoint.
     pub(super) fn frame_assoc_bindings(
         &mut self,
         base: TypeId,
         base_name: &str,
+        owning_trait: DefId,
+        assoc: &str,
         bounds: &[TraitBound],
     ) -> Vec<(String, TypeId)> {
         let mut answered = Vec::new();
         let mut projections: Vec<(String, String)> = Vec::new();
         for binding in bounds.iter().flat_map(|bound| &bound.assoc_types) {
             match &binding.ty {
-                // `Output = Self` pins the bounded type itself.
                 ast::Type::Named(named) if named.name == "Self" => {
                     answered.push((binding.name.clone(), base));
                 }
                 ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
                     projections.push((binding.name.clone(), ns.name.clone()));
                 }
-                _ => {}
+                // One naming `base::assoc` again has no finite form, so it
+                // stays abstract: inside itself the projection being built
+                // answers without this binding, and a type holding that one is
+                // not the projection it binds.
+                ty => {
+                    if let Some(answer) = self.unless_on_walk(
+                        |scope| &mut scope.assoc_binding_stack,
+                        (base, assoc.to_string()),
+                        |e| {
+                            let answer =
+                                e.resolve_in_declaring_frame(base, base_name, owning_trait, ty)?;
+                            (!e.names_projection(answer, base, assoc)).then_some(answer)
+                        },
+                    ) {
+                        answered.push((binding.name.clone(), answer));
+                    }
+                }
             }
         }
         answered.extend(projections.into_iter().filter_map(|(name, assoc)| {
@@ -1198,5 +1216,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((name, answer))
         }));
         answered
+    }
+
+    /// Whether `ty` holds the projection `base::assoc`.
+    fn names_projection(&self, ty: TypeId, base: TypeId, assoc: &str) -> bool {
+        let table = self.tysys.type_table.borrow();
+        table.assoc_type_projections(ty).into_iter().any(|p| {
+            matches!(
+                table.get(p),
+                ResolvedType::AssocTypeProjection { param_id, assoc_name, .. }
+                    if *param_id == base && assoc_name == assoc
+            )
+        })
+    }
+
+    /// `ty`, written in `owning_trait`, read at this frame: its parameters as
+    /// `base_name`'s bound on the trait answers them, and `Self` as `base`.
+    /// `None` where no bound reaches the trait or the frame leaves it unanswered.
+    fn resolve_in_declaring_frame(
+        &mut self,
+        base: TypeId,
+        base_name: &str,
+        owning_trait: DefId,
+        ty: &ast::Type,
+    ) -> Option<TypeId> {
+        let (bound, space) = self
+            .bound_closure_of(base_name)?
+            .into_iter()
+            .find(|(bound, _)| self.trait_decl_of(bound) == Some(owning_trait))?;
+        let self_binding = SelfBinding {
+            type_id: base,
+            declaring_trait: Some(owning_trait),
+        };
+        let scoped = ScopedBound::new(bound.bound, Some(self_binding));
+        let resolved = self.in_bound_frame(&scoped, &space, |e| e.resolve_type(ty));
+        (resolved != TypeTable::UNKNOWN).then_some(resolved)
     }
 }
