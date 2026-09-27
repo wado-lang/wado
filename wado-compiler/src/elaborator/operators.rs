@@ -113,19 +113,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
 
         if left_is_numeric_literal && !right_is_numeric_literal {
-            // Resolve right first, then coerce left
             let right = self.resolve_expr(right_ast, ctx, expected_type);
             let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), right)
             {
                 Some(right)
             } else {
-                // Struct type: look up operator trait and use self type for lhs literal
                 self.find_operator_self_type(right, &op)
             };
             let left = self.resolve_expr(left_ast, ctx, coerce_type);
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
-            // Resolve left first, then coerce right
             let left = self.resolve_expr(left_ast, ctx, expected_type);
             let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), left)
             {

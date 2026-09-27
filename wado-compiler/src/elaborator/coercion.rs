@@ -147,7 +147,7 @@ fn is_byte_literal_expr(expr: &Expr) -> bool {
 /// the type of its operands: a comparison's is `bool`, which types neither
 /// side of `b'\n' == 10`.
 pub(super) fn is_numeric_literal_target(tt: &TypeTable, target: TypeId) -> bool {
-    // `i128` / `u128` are structs, so `is_numeric` does not see them.
+    // `i128` / `u128` are structs, which no primitive test sees.
     is_primitive_literal_target(tt, target) || tt.wide_int_item(target).is_some()
 }
 
