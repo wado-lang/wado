@@ -184,7 +184,7 @@ declaration.
 ```wado
 // Single bound
 fn print_all<T: Display>(items: List<T>) with Stdout {
-    for item in items {
+    for let item of items {
         println(item.display());
     }
 }

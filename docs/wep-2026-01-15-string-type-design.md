@@ -108,7 +108,7 @@ let s = "hello" + " world";  // Creates new String
 
 ```wado
 let mut s = String::with_capacity(1000);
-for item in items {
+for let item of items {
     s += item;  // Efficient, no reallocations if within capacity
 }
 ```

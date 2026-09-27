@@ -67,6 +67,13 @@ test "a left-recursive rule syncs on its primary alternatives" {
     assert_tree(&rec::parse_expr("( z z ) + 1"), "(expr (e (e ( (e z z) )) + (e 1)))");
 }
 
+test "a rule failing again where it last failed skips the token its loop re-enters it on" {
+    assert_tree(&rec::parse_stmts("x z end"), "(stmts stmt (stmt x z) end)");
+    assert_tree(&rec::parse_stmts("x z x y end"), "(stmts stmt (stmt x z) (stmt x y) end)");
+    assert_tree(&rec::parse_stmts("x y x z x w end"), "(stmts (stmt x y) stmt (stmt x z) (stmt x w) end)");
+    assert_tree(&rec::parse_stmts("x x y end"), "(stmts stmt (stmt x) (stmt x y) end)");
+}
+
 test "a terminal missing at the end of a rule is inserted where EOF follows" {
     assert_tree(&rec::parse_loop("x y z"), "(loop x y z <missing '!'>)");
     assert_tree(&rec::parse_loop("x y"), "(loop x y <missing '!'>)");

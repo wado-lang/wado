@@ -254,6 +254,13 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     w.line("assert self.b.node_kind(node) == rule, \"recover_rule: the resumed node is the failed rule's\";");
     w.line("self.commit_pending();");
     w.line("self.recovering = false;");
+    w.begin("if self.pos != self.recovery_pos");
+    w.line("self.recovery_pos = self.pos;");
+    w.line("self.recovery_rules = [];");
+    w.else_begin("else if self.recovery_rules.contains(&rule) && self.kinds[self.pos] != TK_EOF");
+    w.line("self.skip_one();");
+    w.end();
+    w.line("self.recovery_rules.push(rule);");
     w.line("self.skip_until(&self.resync_set(&[]));");
     w.line("return true;");
     w.end();
@@ -464,6 +471,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // rule resynchronises on: a call stamps `site`, its entry pushes it.
     s.add_field("site", "i32");
     s.add_field("sites", "List<i32>");
+    // Where rule recovery last ran and which rules recovered there. A rule
+    // failing again at that position, having consumed nothing since, would be
+    // re-entered at the same token by the loop that called it; it skips one
+    // token first, as ANTLR4 does, so recovery always makes progress.
+    s.add_field("recovery_pos", "i32");
+    s.add_field("recovery_rules", "List<NodeKind>");
     // Current recursive-descent depth, used only to indent trace output.
     if trace {
         s.add_field("trace_depth", "i32");
@@ -520,7 +533,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f.emit_begin(w);
     w.line("let kinds = tokens.kinds.to_array();");
     let mut init = String::from(
-        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: []",
+        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], recovery_pos: -1, recovery_rules: []",
     );
     if trace {
         init.push_str(", trace_depth: 0");
