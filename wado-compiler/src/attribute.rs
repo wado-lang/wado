@@ -18,7 +18,6 @@ pub const CM_HOST_IMPORTS: &str = "cm_host_imports";
 pub const CM_PARAMS: &str = "cm_params";
 pub const COMPILER_ITEM: &str = "compiler_item";
 pub const EXPECT_TRAP: &str = "expect_trap";
-pub const EXPORT: &str = "export";
 pub const EXPORT_NAME: &str = "export_name";
 pub const GENERATED: &str = "generated";
 pub const IMMEDIATE: &str = "immediate";
@@ -379,14 +378,6 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         args: AttrArgs::None,
         summary: "the test passes when its body traps",
         stdlib_only: false,
-        bodyless: None,
-    },
-    AttributeSchema {
-        name: EXPORT,
-        targets: FUNCTION_TARGET,
-        args: AttrArgs::None,
-        summary: "a raw Wasm export, and so an export-boundary root",
-        stdlib_only: true,
         bodyless: None,
     },
     AttributeSchema {

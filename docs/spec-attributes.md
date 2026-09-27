@@ -485,10 +485,9 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 }
 ```
 
-### `#[export]` / `#[export_name("name")]`
+### `#[export_name("name")]`
 
-`#[export]` makes a function a raw Wasm export of its core module.
-`#[export_name("name")]` overrides the name it is exported under.
+Overrides the name a function is exported under from its core module.
 
 ### `#[canonical("namespace", "name")]`
 
