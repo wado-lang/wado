@@ -152,11 +152,20 @@ modules are distinct traits: each module's call reaches the one it imported, and
 a module importing both has the two-trait ambiguity below.
 
 A call whose only candidates come from traits out of scope is an error that
-names the trait and the import that would enable it:
+names the trait to import. Here the module imports `Speaker`, whose `shout`
+comes from an impl of `Loud`, and not `Loud` itself:
 
-```text
-no method 'shout' on 'String' in scope: 'Loud' declares it and is not
-imported here; add `use { Loud } from "./lib_a.wado"`
+<!-- {"fixture":"trait_error_unimported_trait_method.wado"} -->
+
+```wado
+use { Speaker } from "./sub/trait_scope_lib.wado";
+
+export fn run() {
+    let s = Speaker { id: 3 };
+    // error: 'Loud' is not imported here: 'Speaker' has 'shout' through it;
+    // import the trait to call it
+    assert s.shout() == "speaker:3";
+}
 ```
 
 A supertrait's method called through a bound is gated the same way: `T: Sub`
@@ -238,10 +247,41 @@ are three shapes, because the fix differs:
 - Two head impls of one trait that both reach the receiver. Neither can be named
   at the call either, and the fix is the same.
 
-```text
-ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and
-'T: ReflectStruct' apply, and nothing ranks them;
-write 'impl Describe for Point'
+The second shape, where `Point` implements `Limit` and, as a struct, satisfies
+`ReflectStruct`:
+
+<!-- {"fixture":"error_ambiguous_value_blankets.wado"} -->
+
+```wado
+impl<T: Limit> Describe for T {
+    fn describe(&self) -> String {
+        return `limit:${T::limit()}`;
+    }
+}
+
+impl<T: ReflectStruct> Describe for T {
+    fn describe(&self) -> String {
+        return `struct:${Reflect::<T>::type_name()}`;
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    // error: ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and
+    // 'T: ReflectStruct' apply, and nothing ranks them; write
+    // 'impl Describe for Point'
+    assert p.describe() == "limit:7";
+}
 ```
 
 Overlapping blankets are not rejected where they are written. Whether two bounds
@@ -869,9 +909,31 @@ No survivor is a different error from ambiguity. Every argument was admitted by
 what it could be, so no candidate admitting it means no impl accepts the
 arguments, and the error lists what the overload set does take:
 
-```text
-no overload of 'take' accepts these arguments: the candidates are 'Take<i32>'
-and 'Take<String>'
+<!-- {"fixture":"error_trait_argument_no_overload.wado"} -->
+
+```wado
+trait Take<T> with () {
+    fn take(&self, v: &T) -> i32;
+}
+
+impl Take<i32> for bool {
+    fn take(&self, v: &i32) -> i32 {
+        return *v;
+    }
+}
+
+impl Take<String> for bool {
+    fn take(&self, v: &String) -> i32 {
+        return v.len() as i32;
+    }
+}
+
+export fn run() {
+    let c = 'x';
+    // error: no overload of 'take' accepts these arguments: the candidates are
+    // 'Take<i32>' and 'Take<String>'
+    assert true.take(&c) == 1;
+}
 ```
 
 A newtype receiver inherits its base's impls as candidates, and the same
