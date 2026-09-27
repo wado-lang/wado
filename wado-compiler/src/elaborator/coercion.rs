@@ -219,6 +219,11 @@ impl PendingLiterals {
             ..Self::of_call(&[])
         }
     }
+
+    /// Whether nothing waits here.
+    fn is_empty(&self) -> bool {
+        self.own_vars.is_empty() && self.literals.is_empty() && self.walks.is_empty()
+    }
 }
 
 impl Scope {
@@ -734,25 +739,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let collection = PendingLiterals::of_projection();
         let (projected, pending) = self.collecting_pending_literals(collection, |this| {
             let mut receiver_type = this.resolve_expr(receiver, ctx, None);
-            receiver_type = this.apply_infer_holes(receiver_type);
-            if !waits(this, receiver_type) {
-                this.settle_receiver(ctx);
+            let receiver_pending = {
+                let collection = this
+                    .annotate_ctx
+                    .pending_literals
+                    .last_mut()
+                    .expect("the projection's collection is pushed");
+                collection.awaits_receiver = false;
+                !collection.is_empty()
+            };
+            if receiver_pending {
                 receiver_type = this.apply_infer_holes(receiver_type);
+                if !waits(this, receiver_type) {
+                    this.settle_receiver(ctx);
+                    receiver_type = this.apply_infer_holes(receiver_type);
+                }
             }
-            this.annotate_ctx
-                .pending_literals
-                .last_mut()
-                .expect("the projection's collection is pushed")
-                .awaits_receiver = false;
             project(this, receiver_type, ctx)
         });
-        let ret = expected.map(|expected| ExpectedReturn {
-            declared: projected,
-            expected,
-        });
-        let taken_over = pending.own_vars.clone();
-        self.chain_expected_return(&taken_over, ret);
-        self.settle_pending_literals(pending, &[], ret, ctx);
+        if !pending.is_empty() {
+            let ret = expected.map(|expected| ExpectedReturn {
+                declared: projected,
+                expected,
+            });
+            let taken_over = pending.own_vars.clone();
+            self.chain_expected_return(&taken_over, ret);
+            self.settle_pending_literals(pending, &[], ret, ctx);
+        }
         self.apply_infer_holes(projected)
     }
 
@@ -781,7 +794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !waits {
             return None;
         }
-        let (open, inst, slots) = self.open_struct_literal_instance(struct_lit)?;
+        let (open, inst) = self.open_struct_literal_instance(struct_lit)?;
         let ret = expected.map(|expected| ExpectedReturn {
             declared: open,
             expected,
@@ -793,9 +806,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         self.solve_own_infer_holes_against(open, resolved, &inst.vars);
         self.settle_pending_literals(pending, &[], ret, ctx);
-        let mut resolved = [resolved];
-        self.settle_onto_slots(&inst, &slots, &mut resolved);
-        Some(resolved[0])
+        // A variable still open is the outer call's to answer, or reported at
+        // finalize; the struct's own parameter would stand for no type there.
+        let solved: Vec<TypeId> = inst
+            .vars
+            .iter()
+            .map(|&var| self.apply_infer_holes(var))
+            .collect();
+        self.blame_unsolved(&inst, &solved);
+        Some(self.apply_infer_holes(resolved))
     }
 
     /// Answer now the literals the projection's receiver holds.

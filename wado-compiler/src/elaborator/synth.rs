@@ -331,8 +331,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         for (index, arg_ast) in args_ast.iter().enumerate() {
-            let Some(arg) = args.get(index) else { continue };
-            if *arg == TypeTable::ERROR || *arg == TypeTable::UNKNOWN {
+            let Some(&arg) = args.get(index) else { continue };
+            let arg = self.apply_infer_holes(arg);
+            // A literal waiting for an enclosing call has no type to judge yet.
+            if arg == TypeTable::ERROR || arg == TypeTable::UNKNOWN || self.awaits_pending_call(arg)
+            {
                 continue;
             }
             let class = match selected_with.get(index).and_then(Clone::clone) {
@@ -340,11 +343,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => self.synthesize_arg_class(arg_ast, ctx),
             };
             assert!(
-                self.class_admits(*arg, &class),
+                self.class_admits(arg, &class),
                 "argument synthesis under-approximated at {span:?}: argument {} elaborated to \
                  `{}`, which the synthesized class {class:?} excludes",
                 index + 1,
-                self.tysys.type_table.borrow().type_name(*arg),
+                self.tysys.type_table.borrow().type_name(arg),
             );
         }
     }

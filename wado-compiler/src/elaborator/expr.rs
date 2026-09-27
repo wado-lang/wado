@@ -25,7 +25,7 @@ use super::call::{CaseSite, DefaultTypeBinding, DefaultWalk, WalkedDefault, slot
 use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
-use super::instantiate::{Instantiated, Instantiation};
+use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
@@ -55,6 +55,17 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{AnonStructId, StructDef};
 use std::cmp::Ordering;
 use std::rc::Rc;
+
+/// How far a branch's type is decided, least first: two branches join on the
+/// more decided.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Decidedness {
+    /// Still unresolved.
+    Indefinite,
+    /// Carrying an inference variable the branches are to answer.
+    Holey,
+    Decided,
+}
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
@@ -714,7 +725,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether a branch's type waits on its siblings: one still unresolved,
     /// or one carrying an inference variable the branches are to answer.
     fn is_undecided_branch(&self, branch: TypeId) -> bool {
-        self.tysys.type_table.borrow().is_indefinite(branch) || self.type_has_infer_hole(branch)
+        self.branch_decidedness(branch) != Decidedness::Decided
     }
 
     /// The type of a labeled block expression: its `break` values and its
@@ -1742,7 +1753,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Unknown
             | ResolvedType::Error
             | ResolvedType::Never => return (0, TypeTable::UNKNOWN),
-            _ => {}
+            // Read on each instance the body is monomorphized at.
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. } => return (0, TypeTable::UNKNOWN),
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Function { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::BuiltinArray(_) => {}
         }
         let type_name = self.tysys.type_table.borrow().type_name(struct_type);
         let _ = self.emit(TypeError::FieldOfFieldless {
@@ -2653,15 +2677,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// How far a branch's type is decided, least first: indefinite, carrying
-    /// an inference variable, decided.
-    fn branch_decidedness(&self, branch: TypeId) -> u8 {
+    /// How far a branch's type is decided.
+    fn branch_decidedness(&self, branch: TypeId) -> Decidedness {
         if self.tysys.type_table.borrow().is_indefinite(branch) {
-            0
+            Decidedness::Indefinite
         } else if self.type_has_infer_hole(branch) {
-            1
+            Decidedness::Holey
         } else {
-            2
+            Decidedness::Decided
         }
     }
 
@@ -3668,29 +3691,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The instance a named literal of a generic struct builds over fresh
-    /// variables, one per parameter, beside the parameters themselves, where
-    /// the literal names none of them. A literal taking its fields from a
-    /// `..base` has none: the base answers them.
+    /// variables, one per parameter, where the literal names none of them and
+    /// a field it writes mentions each. A literal taking its fields from a
+    /// `..base` has none: the base answers them. Nor does one leaving a
+    /// parameter to the declaration (`Phantom { n: 1 }`), which the plain
+    /// path answers or reports.
     pub(super) fn open_struct_literal_instance(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
-    ) -> Option<(TypeId, Instantiated, Vec<TypeId>)> {
+    ) -> Option<(TypeId, Instantiated)> {
         let written = struct_lit.name.as_deref()?;
         if !struct_lit.type_args.is_empty() || !struct_lit.spreads.is_empty() {
             return None;
         }
         let def = self.tysys.resolutions.declared(struct_lit.name_id?)?;
-        let slots = self
-            .lookup_struct_fields_of_decl(def)?
-            .type_param_type_ids
-            .clone();
-        if slots.is_empty() {
+        let info = self.lookup_struct_fields_of_decl(def)?;
+        let slots = info.type_param_type_ids.clone();
+        let every_slot_written = {
+            let tt = self.tysys.type_table.borrow();
+            slots.iter().all(|&slot| {
+                let index = tt.param_slot(slot).expect("a struct slot is a type parameter");
+                info.fields.iter().any(|(name, declared, _)| {
+                    struct_lit.fields.iter().any(|f| &f.name == name)
+                        && tt.contains_type_param_index(*declared, index)
+                })
+            })
+        };
+        if slots.is_empty() || !every_slot_written {
             return None;
         }
         let inst = self.instantiate(
             &slots,
             &Instantiation {
-                kind: "struct",
+                kind: InstanceKind::Struct,
                 name: written,
                 span: struct_lit.span,
                 type_args: &[],
@@ -3702,7 +3735,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .make_generic_instance(def, inst.vars.clone());
-        Some((open, inst, slots))
+        Some((open, inst))
     }
 
     pub(super) fn resolve_struct_literal(
@@ -4643,7 +4676,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(
             &struct_info.type_param_type_ids,
             &Instantiation {
-                kind: "struct",
+                kind: InstanceKind::Struct,
                 name: &struct_info.name,
                 span,
                 // A struct literal has no turbofish; its fields name the slots.
@@ -4755,38 +4788,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|def| self.declared_default_type_arg(def, slot, &inferred[..slot]))
                 .unwrap_or(decl_param);
         }
-        self.report_uninferred_struct_type_args(&struct_info, &inferred, span);
+        self.report_uninferred_struct_type_args(&struct_info, &mut inferred, span);
         self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
         inferred
     }
 
     /// Report a struct literal's type parameter that nothing settled, as a call
-    /// site reports its own.
+    /// site reports its own, and answer it with `error` so no later use
+    /// reports the declaration's own parameter a second time.
     fn report_uninferred_struct_type_args(
         &mut self,
         struct_info: &StructFieldInfo,
-        inferred: &[TypeId],
+        inferred: &mut [TypeId],
         span: Span,
     ) {
         // A body that declares the same parameter is forwarding its own, not
         // leaving one unanswered: `List { … }` inside `impl<T> List<T>`.
         let scope_params = self.scope_type_param_ids();
-        let names: Vec<String> = struct_info
-            .type_param_type_ids
-            .iter()
-            .zip(inferred.iter())
+        let mut names: Vec<String> = Vec::new();
+        for (&decl_param, answer) in struct_info.type_param_type_ids.iter().zip(inferred.iter_mut()) {
             // The declaration's own parameter standing as its own answer is what
             // marks a slot unsettled. An answer that is some *other* variable is
             // still open, and a later constraint fills it (`Paired { v: null, k:
             // 1 }` settles `T` from `k` after `v` left a hole).
-            .filter(|&(&decl_param, &answer)| {
-                answer == decl_param && !scope_params.contains(&answer)
-            })
-            .filter_map(|(&decl_param, _)| {
-                util::bound_param_name(self.tysys.type_table.borrow().get(decl_param)).cloned()
-            })
-            .collect();
+            if *answer != decl_param || scope_params.contains(answer) {
+                continue;
+            }
+            *answer = TypeTable::ERROR;
+            if let Some(name) = util::bound_param_name(self.tysys.type_table.borrow().get(decl_param)) {
+                names.push(name.clone());
+            }
+        }
         if names.is_empty() {
             return;
         }

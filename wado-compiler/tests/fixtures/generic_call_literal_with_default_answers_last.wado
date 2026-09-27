@@ -27,6 +27,26 @@ fn chained<T: Default>(a: T, b: T = a, c: T = T::default()) -> T {
     return b;
 }
 
+trait Twice with () {
+    fn twice(&self) -> Self;
+}
+
+impl Twice for u64 {
+    fn twice(&self) -> u64 {
+        return *self * 2;
+    }
+}
+
+impl Twice for i32 {
+    fn twice(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+fn doubled<T: Twice>(a: T, b: T = a.twice()) -> T {
+    return b;
+}
+
 fn same<T>(a: T, b: T) -> T {
     return a;
 }
@@ -39,6 +59,7 @@ export fn run() with Stdout {
     let wide: u64 = 7;
     println(`${same(defaulted(0x1_0000_0000), wide)}`);
     println(`${same(chained(0x1_0000_0001), wide)}`);
+    println(`${same(doubled(0x1_0000_0000), wide)}`);
     println(`${same(Defaulted { a: 0x1_0000_0002 }.a, wide)}`);
     println(`${same(Defaulted { a: 1 + 0x1_0000_0002 }.b, wide)}`);
     let annotated: u64 = Defaulted { a: 0x1_0000_0004 }.a;
@@ -56,5 +77,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "4294967296\n4294967297\n4294967298\n0\n4294967300\n0\n4294967302\n4294967303\n4294967304\n4294967305\n"
+    "stdout": "4294967296\n4294967297\n8589934592\n4294967298\n0\n4294967300\n0\n4294967302\n4294967303\n4294967304\n4294967305\n"
 }

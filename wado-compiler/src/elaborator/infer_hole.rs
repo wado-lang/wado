@@ -41,9 +41,6 @@ pub(crate) struct InferHoleTable {
     /// spelling alone loses the site, and the re-check then has nothing to
     /// enforce against.
     bounds: IndexMap<TypeId, (String, Vec<DeclaredBound>, Span)>,
-    /// Whether some solution names another variable, so substitution has to
-    /// follow the chain (`?1 := Box<?2>`, `?2 := i32`).
-    chained: bool,
 }
 
 /// A trait bound a slot declared: the trait its reference site names, with the
@@ -352,7 +349,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
             *slot = Some(answer);
-            self.infer_holes.chained |= self.tysys.type_table.borrow().contains_infer_var(answer);
         }
     }
 
@@ -412,7 +408,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.type_has_infer_hole(ty) {
             return ty;
         }
-        let subst = self.solved_hole_subst(false);
+        let mut subst = IndexMap::default();
+        self.reached_answers(ty, &mut subst);
         if subst.is_empty() {
             return ty;
         }
@@ -422,42 +419,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_infer_vars(ty, &subst)
     }
 
-    /// Build the `variable → replacement` map. With `pin_unsolved`, unsolved
-    /// variables map to `error` (used at finalize so nothing leaks); otherwise
-    /// only solved ones are included.
-    ///
-    /// Every replacement is final: one substitution pass reaches the end of
-    /// each chain [`Self::chain_infer_var`] started.
-    fn solved_hole_subst(&self, pin_unsolved: bool) -> IndexMap<InferVarId, TypeId> {
-        let mut tt = self.tysys.type_table.borrow_mut();
-        let mut subst: IndexMap<InferVarId, TypeId> = self
-            .infer_holes
-            .solutions
-            .iter()
-            .filter_map(|(hole, sol)| {
-                let ResolvedType::InferVar(var) = tt.get(*hole) else {
-                    panic!("infer-hole table holds a non-variable type");
-                };
-                match sol {
-                    Some(answer) => Some((*var, *answer)),
-                    None if pin_unsolved => Some((*var, TypeTable::ERROR)),
-                    None => None,
-                }
-            })
-            .collect();
-        // `chain_infer_var`'s occurs check keeps the chains acyclic, so each
-        // pass shortens every one of them and the loop ends.
-        let mut changed = self.infer_holes.chained;
-        while changed {
-            changed = false;
-            for i in 0..subst.len() {
-                let answer = subst[i];
-                let followed = tt.substitute_infer_vars(answer, &subst);
-                if followed != answer {
-                    subst[i] = followed;
-                    changed = true;
-                }
+    /// Add to `subst` the final answer of each solved variable `ty` reaches,
+    /// following each chain [`Self::chain_infer_var`] started to its end.
+    fn reached_answers(&self, ty: TypeId, subst: &mut IndexMap<InferVarId, TypeId>) {
+        let reached = self.tysys.type_table.borrow().infer_vars_in(ty);
+        for hole in reached {
+            let ResolvedType::InferVar(var) = *self.tysys.type_table.borrow().get(hole) else {
+                panic!("infer_vars_in answers variables");
+            };
+            if subst.contains_key(&var) {
+                continue;
             }
+            let Some(&Some(answer)) = self.infer_holes.solutions.get(&hole) else {
+                continue;
+            };
+            // The occurs check keeps chains acyclic, so this recursion ends.
+            self.reached_answers(answer, subst);
+            let answer = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .substitute_infer_vars(answer, subst);
+            subst.insert(var, answer);
+        }
+    }
+
+    /// The final `variable → replacement` map over every variable, an
+    /// unsolved one standing for `error` so nothing leaks past finalize.
+    fn pinned_hole_subst(&self) -> IndexMap<InferVarId, TypeId> {
+        let holes: Vec<TypeId> = self.infer_holes.solutions.keys().copied().collect();
+        let mut subst = IndexMap::default();
+        for &hole in &holes {
+            self.reached_answers(hole, &mut subst);
+        }
+        let mut tt = self.tysys.type_table.borrow_mut();
+        for &hole in &holes {
+            let ResolvedType::InferVar(var) = *tt.get(hole) else {
+                panic!("infer-hole table holds a non-variable type");
+            };
+            subst.entry(var).or_insert(TypeTable::ERROR);
+        }
+        // An unsolved variable an answer still names is now `error`, which
+        // names nothing, so one pass ends every chain.
+        for i in 0..subst.len() {
+            subst[i] = tt.substitute_infer_vars(subst[i], &subst);
         }
         subst
     }
@@ -501,7 +506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: blame.span,
             });
         }
-        let subst = self.solved_hole_subst(true);
+        let subst = self.pinned_hole_subst();
         self.verify_solved_hole_bounds(&subst);
         self.sweep_recorded_facts(&subst);
         self.infer_holes = InferHoleTable::default();

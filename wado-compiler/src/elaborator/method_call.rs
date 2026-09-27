@@ -18,10 +18,10 @@ use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
 };
 use super::callee::StaticMethodRef;
-use super::coercion::answers_last;
+use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
 use super::infer::InferCtx;
-use super::instantiate::Instantiation;
+use super::instantiate::{InstanceKind, Instantiation};
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::scope::ScopedBound;
@@ -716,7 +716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_type_param_ids,
             &method_own_params,
             &Instantiation {
-                kind: "method",
+                kind: InstanceKind::Method,
                 name: method_name,
                 span,
                 type_args: &type_args,
@@ -725,6 +725,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
                 }),
             },
+            expected_type.map(|expected| ExpectedReturn {
+                declared: return_type,
+                expected,
+            }),
         );
 
         // The module that declares this method: the scope its own defaults —

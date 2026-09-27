@@ -25,9 +25,9 @@ use super::call::{
     DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, omits_a_default,
     slot_type_bindings, turbofish_leaves_slot,
 };
-use super::coercion::answers_last;
+use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::InferCtx;
-use super::instantiate::Instantiation;
+use super::instantiate::{InstanceKind, Instantiation};
 use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
@@ -1302,7 +1302,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(
             slots,
             &Instantiation {
-                kind: "method",
+                kind: InstanceKind::Method,
                 name: method_name,
                 span,
                 // The inference pass itself: its caller merges the turbofish in
@@ -3059,7 +3059,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_type_param_ids,
             &method_own_params,
             &Instantiation {
-                kind: "method",
+                kind: InstanceKind::Method,
                 name: &method_call.method,
                 span: method_call.span,
                 type_args: &type_args,
@@ -3068,6 +3068,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_trait_name.as_ref().and_then(FqTraitName::canonical),
                 )),
             },
+            expected_type.map(|expected| ExpectedReturn {
+                declared: return_type,
+                expected,
+            }),
         );
 
         let subst;

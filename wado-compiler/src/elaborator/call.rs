@@ -16,7 +16,7 @@ use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
-use super::instantiate::{Instantiated, Instantiation};
+use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
 use super::sem::types::{BodyFacts, CalleeParams, IndirectCallee, StaticMethodDispatch};
@@ -1238,7 +1238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.instantiate(
                 &callee_slots,
                 &Instantiation {
-                    kind: "function",
+                    kind: InstanceKind::Function,
                     name: effective_name,
                     span: call.span,
                     type_args: &type_args,
@@ -2623,7 +2623,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 };
                 for (name, type_id) in &written {
-                    bind(ctx, name, *type_id);
+                    let type_id = s.apply_infer_holes(*type_id);
+                    bind(ctx, name, type_id);
                 }
                 defaults
                     .iter()
@@ -2881,7 +2882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inst = self.instantiate(
                 &param_ids,
                 &Instantiation {
-                    kind: "builtin",
+                    kind: InstanceKind::Builtin,
                     name: func_name,
                     span,
                     // A builtin has no turbofish to read.
@@ -2965,7 +2966,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(
             &param_ids,
             &Instantiation {
-                kind: "function",
+                kind: InstanceKind::Function,
                 name: func_name,
                 span,
                 // The inference pass itself: its caller merges the turbofish in
@@ -4014,7 +4015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(
             slots,
             &Instantiation {
-                kind: "variant",
+                kind: InstanceKind::Variant,
                 name: case.owner,
                 span: case.span,
                 type_args: &hints,
