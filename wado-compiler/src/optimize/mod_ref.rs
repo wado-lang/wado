@@ -451,9 +451,9 @@ impl ModRef {
                 op: NirUnaryOp::Deref,
                 expr,
             } => {
-                self.heap.writes = true;
-                self.may_trap = true;
                 let expr = *expr;
+                self.heap.writes = true;
+                self.may_trap |= unary_may_trap(body, NirUnaryOp::Deref, expr);
                 self.accumulate_operand(body, expr, scope);
             }
             ExprKind::VariantPayload { expr, .. } => {
