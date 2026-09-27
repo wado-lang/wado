@@ -65,7 +65,6 @@ impl Error for Utf8Error {
 }
 
 /// Byte length (1–4) of the UTF-8 sequence led by `b0`, assuming valid UTF-8.
-#[inline]
 fn utf8_seq_len(b0: u8) -> i32 {
     if b0 < 0x80 {
         return 1;
@@ -130,7 +129,6 @@ fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
 
 /// True when `b` opens a UTF-8 sequence rather than continuing one. A
 /// continuation byte has the form 10xxxxxx (0x80..=0xBF).
-#[inline]
 internal fn is_char_start(b: u8) -> bool {
     return b & 0xC0 != 0x80;
 }
@@ -138,7 +136,6 @@ internal fn is_char_start(b: u8) -> bool {
 /// True when `b1` may follow the lead byte `b0`: a continuation byte, within
 /// the narrower range that rules out an overlong form, a surrogate, or a scalar
 /// above U+10FFFF.
-#[inline]
 fn utf8_second_byte_ok(b0: u8, b1: u8) -> bool {
     if is_char_start(b1) {
         return false;
@@ -216,7 +213,6 @@ fn ceil_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32 {
 
 /// True if `needle[0..needle_len)` equals `haystack[pos..pos+needle_len)`.
 /// Caller ensures `pos + needle_len <= haystack.len()`.
-#[inline]
 fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_at: i32, needle_len: i32) -> bool {
     for let mut j = 0; j < needle_len; j += 1 {
         if haystack[pos + j] != needle[needle_at + j] {
@@ -287,7 +283,6 @@ pub struct StrUtf8ByteIter {
 impl Iterator for StrUtf8ByteIter {
     type Item = u8;
 
-    #[inline]
     pub fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.used {
             return null;
@@ -1318,7 +1313,6 @@ impl StrSlice {
     ///
     /// # Safety (caller-side preconditions)
     /// - `0 <= index < self.len()`.
-    #[inline]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
         return self.repr[self.start + index];
     }
@@ -1361,7 +1355,6 @@ impl StrSlice {
     /// # Safety (caller-side preconditions)
     /// - `0 <= start <= end <= self.len()`.
     /// - `start` and `end` lie on UTF-8 character boundaries.
-    #[inline]
     pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
