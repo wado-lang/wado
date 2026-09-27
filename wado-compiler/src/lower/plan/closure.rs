@@ -270,6 +270,8 @@ struct CollectedClosure {
     id: u32,
     params: Vec<(String, TypeId)>,
     body: TirExpr,
+    /// What the Inspect source reads a binding's mutability from.
+    body_locals: Vec<TirLocal>,
     captures: Vec<TirCapture>,
     /// `body.type_id`, retained for closures whose `func_type_id` resolves
     /// to a non-Function (a fallback path in `generate_functor_items`).
@@ -841,6 +843,7 @@ impl ClosureLowerer {
             // Runtime Dispatch.
             let source = unparse_tir_closure_source(
                 &collected.params,
+                &collected.body_locals,
                 &collected.captures,
                 &collected.body,
                 type_table,
@@ -1363,6 +1366,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
         if let TirExprKind::Closure {
             params,
             body,
+            body_locals,
             captures,
             address_taken_locals,
             ..
@@ -1372,6 +1376,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
                 id: closure_id,
                 params: params.clone(),
                 body: (**body).clone(),
+                body_locals: body_locals.clone(),
                 captures: captures.clone(),
                 return_type: body.type_id,
                 func_type_id,

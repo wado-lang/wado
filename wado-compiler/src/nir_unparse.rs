@@ -30,10 +30,10 @@ pub struct NirUnparser<'a> {
     /// Calls render their callee by the stamped `func_id`; empty when unparsing
     /// a bare module with no package context.
     callees: Vec<nir::FunctionRef>,
-    /// Local names of the function being unparsed. A skeleton `Local` node
-    /// carries its own name; a promoted `Opaque(Local)` carries only the index,
-    /// so it reads the name from here.
-    locals: Vec<String>,
+    /// Locals of the function being unparsed. A skeleton `Local` node carries
+    /// its own name; a promoted `Opaque(Local)` carries only the index, so it
+    /// reads the name from here, as a pattern binding reads its mutability.
+    locals: Vec<nir::NirLocal>,
 }
 
 impl<'a> NirUnparser<'a> {
@@ -45,6 +45,14 @@ impl<'a> NirUnparser<'a> {
             indent_level: 0,
             callees: Vec::new(),
         }
+    }
+
+    /// Whether a pattern binds `local_index` mutably. Outside a function no
+    /// local is.
+    fn binds_mut(&self, local_index: u32) -> bool {
+        self.locals
+            .get(local_index as usize)
+            .is_some_and(|l| l.is_mut)
     }
 
     /// Resolve a call's stamped `func_id` to its callee descriptor.
@@ -267,7 +275,7 @@ impl<'a> NirUnparser<'a> {
     }
 
     fn unparse_function(&mut self, f: &NirFunction) {
-        self.locals = f.locals.iter().map(|l| l.name.clone()).collect();
+        self.locals.clone_from(&f.locals);
         if let Some(attr) = inline_hint_attr(f.inline_hint) {
             self.write_indent();
             self.output.push_str(attr);
@@ -443,17 +451,10 @@ impl<'a> NirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            StmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => {
+            StmtKind::LetDestructure { pattern, value } => {
                 let (pattern, value) = (*pattern, *value);
                 self.write_indent();
                 self.output.push_str("let ");
-                if *is_mut {
-                    self.output.push_str("mut ");
-                }
                 self.unparse_nir_pattern(body, pattern);
                 self.output.push_str(" = ");
                 self.unparse_operand(body, value);
@@ -465,7 +466,14 @@ impl<'a> NirUnparser<'a> {
     fn unparse_nir_pattern(&mut self, body: &Body, pat: PatId) {
         match &body.pats[pat].kind {
             PatKind::Wildcard => self.output.push('_'),
-            PatKind::Binding { name, .. } => self.output.push_str(name),
+            PatKind::Binding {
+                name, local_index, ..
+            } => {
+                if self.binds_mut(*local_index) {
+                    self.output.push_str("mut ");
+                }
+                self.output.push_str(name);
+            }
             PatKind::Literal(lit) => emit_nir_literal_pattern(lit, &mut self.output),
             PatKind::Tuple(patterns, has_rest) => {
                 let patterns = patterns.clone();
@@ -501,7 +509,8 @@ impl<'a> NirUnparser<'a> {
                 self.output.push_str("{ ");
                 self.comma_sep(fields.iter(), |s, field| {
                     s.output.push_str(&field.field_name);
-                    if !matches!(&body.pats[field.pattern].kind, PatKind::Binding { name, .. } if name == &field.field_name)
+                    if !matches!(&body.pats[field.pattern].kind, PatKind::Binding { name, local_index, .. }
+                        if name == &field.field_name && !s.binds_mut(*local_index))
                     {
                         s.output.push_str(": ");
                         s.unparse_nir_pattern(body, field.pattern);
@@ -564,7 +573,7 @@ impl<'a> NirUnparser<'a> {
         match body.values.kind(v).clone() {
             ValueKind::Opaque(oid) => match body.values.opaque_source(oid) {
                 Some(OpaqueSource::Local(idx)) => match self.locals.get(idx as usize) {
-                    Some(name) => self.output.push_str(name),
+                    Some(local) => self.output.push_str(&local.name),
                     None => self.output.push_str(&format!("$local_{idx}")),
                 },
                 _ => self.output.push_str(&format!("%{}", v.index())),

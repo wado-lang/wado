@@ -344,19 +344,8 @@ struct FunctionTranslator<'a, 'p> {
     extra: Option<ExtraLocals>,
     immutable_locals: IndexSet<u32>,
     address_taken: IndexSet<u32>,
-    /// The elaborator's final-use reads (WEP 2026-05-21) of locals no kept
-    /// borrow pins. A `Local` read whose span is present moves.
-    move_eligible_read_spans: IndexSet<Span>,
-    /// TIR-level move-eligible locals for this function (WEP 2026-05-21):
-    /// backward liveness plus a freshness fixpoint proves each read is a final
-    /// use of a local that exclusively owns fresh storage. Reaches synthesized
-    /// bodies the AST-keyed read spans cannot see (serde de/serialize,
-    /// derives). Unioned with the span check.
-    move_eligible_locals: IndexSet<u32>,
-    /// Spans of field / whole-value materializations that alias out of a *dead*
-    /// aggregate at a struct/tuple literal (place-level move): the copy is elided
-    /// exactly as for a whole-local final-use move, but for a projection.
-    move_eligible_place_spans: IndexSet<Span>,
+    /// The reads whose copy is elided because they hand their storage over.
+    moves: value_copy::last_use::MoveEligible,
     /// Whether this function hands a returned variant's payload out uncopied,
     /// so `return Some(place)` delivers the borrow exactly as `return place`
     /// does ([`value_copy::hands_out_payload`]).
@@ -369,7 +358,7 @@ struct FunctionTranslator<'a, 'p> {
     /// asks about the place that owns it rather than the reference.
     ref_targets: value_copy::last_use::RefTargets,
     /// Locals a last-use move can hand to a new owner
-    /// ([`value_copy::last_use::compute_moved_roots`]).
+    /// ([`value_copy::last_use::MoveEligible::roots`]).
     moved_roots: IndexSet<u32>,
     /// May-alias components for this function, so a confined by-value argument
     /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
@@ -429,7 +418,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             );
             let oracle = value_copy::ownership::OwnedCalls::new(
                 &base.value_copy.returns_owned,
-                &base.value_copy.returns_self_projection,
+                &base.value_copy.returns_projection,
                 &base.value_copy.builtins,
             )
             .with_indirect(&base.value_copy.indirect_owned_returns);
@@ -450,16 +439,13 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 value_copy::last_use::RefTargets::default(),
             )
         };
-        let move_eligible = ownership.move_eligible;
         let share_eligible_locals = ownership.share_eligible;
+        let moves = ownership.move_eligible;
         let moved_roots = if needs_copy_analysis {
-            value_copy::last_use::compute_moved_roots(func, &move_eligible)
+            moves.roots(func)
         } else {
             IndexSet::default()
         };
-        let move_eligible_locals = move_eligible.locals;
-        let move_eligible_place_spans = move_eligible.place_spans;
-        let move_eligible_read_spans = move_eligible.read_spans;
         let alias_components = if needs_copy_analysis {
             value_copy::last_use::AliasComponents::build(func)
         } else {
@@ -480,9 +466,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             }),
             immutable_locals,
             address_taken,
-            move_eligible_read_spans,
-            move_eligible_locals,
-            move_eligible_place_spans,
+            moves,
             hands_out_payload,
             share_eligible_locals,
             ref_targets,
@@ -506,9 +490,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             extra: None,
             immutable_locals: IndexSet::default(),
             address_taken: IndexSet::default(),
-            move_eligible_read_spans: IndexSet::default(),
-            move_eligible_locals: IndexSet::default(),
-            move_eligible_place_spans: IndexSet::default(),
+            moves: value_copy::last_use::MoveEligible::default(),
             hands_out_payload: false,
             share_eligible_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
@@ -755,16 +737,22 @@ impl FunctionTranslator<'_, '_> {
         // A move-eligible local at its final use (WEP 2026-05-21) transfers its
         // storage: no defensive copy is needed. Sound because last-use liveness
         // proved the source dead afterward.
-        if self.is_last_use_move(value) {
+        if self.moves.is_move(value) {
             return false;
         }
         let oracle = value_copy::ownership::OwnedCalls::new(
             &self.base.value_copy.returns_owned,
-            &self.base.value_copy.returns_self_projection,
+            &self.base.value_copy.returns_projection,
             &self.base.value_copy.builtins,
         )
         .with_indirect(&self.base.value_copy.indirect_owned_returns);
-        value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
+        let type_table = self.base.type_table.borrow();
+        let wrap = |fresh: &IndexSet<u32>| {
+            value_copy::analyze::should_wrap(value, fresh, &type_table, &oracle)
+        };
+        // `dead.unwrap()` is as fresh as `dead`: a call handing its argument
+        // back hands over whatever the argument's read hands over.
+        wrap(&IndexSet::default()) && wrap(&self.moves.sole_moved_reads(value, &type_table))
     }
 
     /// Whether an immutable binding may alias `value`'s storage instead of
@@ -789,25 +777,6 @@ impl FunctionTranslator<'_, '_> {
         }
         value_copy::analyze::source_root(value, &type_table, &self.ref_targets)
             .is_some_and(|root| !self.moved_roots.contains(&root))
-    }
-
-    /// Whether `value` is a move rather than a copy: a whole-local read at its final
-    /// use, or a materialization aliasing out of a dead aggregate, keyed by span.
-    fn is_last_use_move(&self, value: &TirExpr) -> bool {
-        // A newtype cast hands over the same storage (see
-        // `last_use::strip_casts`), so it must not hide the materialization
-        // underneath it.
-        let value = value_copy::last_use::strip_casts(value);
-        // Place-level move: the literal scan proved this exact materialization
-        // aliases a dead aggregate. Covers both `base.field` and a whole `base`.
-        if self.move_eligible_place_spans.contains(&value.span) {
-            return true;
-        }
-        let TirExprKind::Local { index, .. } = &value.kind else {
-            return false;
-        };
-        self.move_eligible_locals.contains(index)
-            || self.move_eligible_read_spans.contains(&value.span)
     }
 
     /// Apply a boxing-derived rewrite to `expr`, returning `Some` if
@@ -1231,15 +1200,10 @@ impl FunctionTranslator<'_, '_> {
                 block: self.convert_block(block),
                 role: BlockRole::of_label(label),
             },
-            TirStmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => {
+            TirStmtKind::LetDestructure { pattern, value } => {
                 let value = self.convert_stored_operand(value);
                 StmtKind::LetDestructure {
                     pattern: self.convert_pattern(pattern),
-                    is_mut: *is_mut,
                     value,
                 }
             }
@@ -1935,9 +1899,16 @@ impl FunctionTranslator<'_, '_> {
                 .iter()
                 .enumerate()
                 .map(|(i, (e, is_mut))| {
-                    if has_receiver && i == 0 {
-                        self.convert_receiver_arg(e, *is_mut)
-                    } else if self.passes_through(func, i) {
+                    // A receiver the call does not write through is an ordinary
+                    // argument: a by-value `self` is the callee's to return or
+                    // keep.
+                    if has_receiver && i == 0 && *is_mut {
+                        self.convert_mut_receiver_arg(e)
+                    } else if value_copy::analyze::passes_through(
+                        &self.base.value_copy.builtins,
+                        func,
+                        i,
+                    ) {
                         ArenaCallArg {
                             expr: self.convert_operand(e),
                             is_mut: *is_mut,
@@ -2426,25 +2397,21 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// Convert a method call's receiver. It occupies `args[0]` like any other
-    /// argument, but a place receiver takes no `$value_copy$T`: the copy would
-    /// hand the callee a throwaway and discard the mutation the call exists to
-    /// perform (a `String` builder's `push_str` would append to the copy). One
-    /// that is not a place names no storage the caller can reach again, so a
-    /// `&mut self` call must not write through it to whatever it was read out
-    /// of — there it takes the copy every by-value argument takes.
-    ///
-    /// Either way it is never re-wrapped as a canonical closure the way a
-    /// specialized fn-param argument is: the method resolved against the
-    /// receiver's own type, not `fn(...)`.
-    fn convert_receiver_arg(&self, receiver: &TirExpr, is_mut: bool) -> ArenaCallArg {
+    /// Convert the receiver of a call that writes through it. A place receiver
+    /// takes no `$value_copy$T`: the copy would hand the callee a throwaway and
+    /// discard the mutation the call exists to perform (a `String` builder's
+    /// `push_str` would append to the copy). One that is not a place names no
+    /// storage the caller can reach again, so the call must not write through it
+    /// to whatever it was read out of — there it takes the copy every by-value
+    /// argument takes.
+    fn convert_mut_receiver_arg(&self, receiver: &TirExpr) -> ArenaCallArg {
         let value = receiver_value(receiver);
         let names_a_place =
             place::is_source_place(value, self.base.type_table.borrow().compiler_items());
-        if !is_mut || names_a_place || !self.should_wrap_value_copy(value) {
+        if names_a_place || !self.should_wrap_value_copy(value) {
             return ArenaCallArg {
                 expr: self.convert_operand(receiver),
-                is_mut,
+                is_mut: true,
             };
         }
         let copied = self.wrap_value_copy_operand(self.convert_operand(value), value.type_id);
@@ -2471,32 +2438,7 @@ impl FunctionTranslator<'_, '_> {
             },
             _ => copied,
         };
-        ArenaCallArg { expr, is_mut }
-    }
-
-    /// Whether the callee hands parameter `pos` straight back instead of keeping
-    /// it, so the copy that makes the result independent belongs at the result —
-    /// where the freshness analysis puts one only if the caller can still reach
-    /// the argument. Copying here would pay unconditionally, and for `select`
-    /// would pay for both operands where the equivalent `if` pays for one.
-    ///
-    /// `#[result(part_of = p)]` states it for one parameter. `builtin::select`
-    /// merges two, which that clause cannot name.
-    fn passes_through(&self, func: &FunctionRef, pos: usize) -> bool {
-        let declared = if value_copy::analyze::is_select(func) {
-            value_copy::analyze::SELECT_OPERANDS.contains(&pos)
-        } else {
-            self.base.value_copy.builtins.part_of(func) == Some(pos)
-        };
-        // A retained position outlives the call, so the caller's storage would be
-        // the callee's to keep and the result's copy comes too late to defend it.
-        declared
-            && !self
-                .base
-                .value_copy
-                .builtins
-                .retain_specs(func)
-                .any(|r| r.source == pos)
+        ArenaCallArg { expr, is_mut: true }
     }
 
     /// Convert one call argument, wrapping it in `$value_copy$T` unless
@@ -2511,7 +2453,7 @@ impl FunctionTranslator<'_, '_> {
         mut_roots: &[u32],
     ) -> ArenaCallArg {
         let needs_value_copy = self.should_wrap_value_copy(arg)
-            && !self.arg_confined(arg, is_mut, callee, param_index, mut_roots);
+            && !self.arg_confined(arg, callee, param_index, mut_roots);
         let value_type = arg.type_id;
         let converted = self.convert_operand(arg);
         let expr = if needs_value_copy {
@@ -2523,18 +2465,14 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Whether a by-value argument into a confined parameter can skip its copy:
-    /// the parameter is not `mut`-declared and the argument aliases no `mut_root`.
+    /// the argument aliases no `mut_root`.
     fn arg_confined(
         &self,
         arg: &TirExpr,
-        is_mut: bool,
         callee: Option<&FunctionRef>,
         param_index: usize,
         mut_roots: &[u32],
     ) -> bool {
-        if is_mut {
-            return false;
-        }
         let confined = callee.is_some_and(|c| {
             self.base
                 .value_copy

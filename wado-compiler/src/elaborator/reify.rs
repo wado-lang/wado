@@ -2543,14 +2543,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // shared `reify_pattern` adds the sub-pattern bindings
                 // to `ctx`; the value's recorded type drives the
                 // pattern's per-binding type lookups.
-                let pattern = self.reify_pattern(&let_stmt.pattern, type_id, ctx);
-                TirStmt::new(
-                    TirStmtKind::LetDestructure {
-                        pattern,
-                        is_mut: let_stmt.is_mut,
-                        value,
-                    },
+                self.reify_let_destructure(
+                    &let_stmt.pattern,
+                    type_id,
+                    let_stmt.is_mut,
+                    value,
                     let_stmt.span,
+                    ctx,
                 )
             }
             ast::Pattern::Typed { .. } => {
@@ -3873,14 +3872,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         enum_tuple_type,
                         span,
                     );
-                    let tir_pattern = this.reify_pattern(&for_of.binding, enum_tuple_type, ctx);
-                    block_stmts.push(TirStmt::new(
-                        TirStmtKind::LetDestructure {
-                            pattern: tir_pattern,
-                            is_mut: for_of.is_mut,
-                            value: enum_tuple,
-                        },
+                    block_stmts.push(this.reify_let_destructure(
+                        &for_of.binding,
+                        enum_tuple_type,
+                        for_of.is_mut,
+                        enum_tuple,
                         span,
+                        ctx,
                     ));
                 } else {
                     match &for_of.binding {
@@ -3917,14 +3915,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             ));
                         }
                         binding => {
-                            let tir_pattern = this.reify_pattern(binding, bind_elem_type, ctx);
-                            block_stmts.push(TirStmt::new(
-                                TirStmtKind::LetDestructure {
-                                    pattern: tir_pattern,
-                                    is_mut: for_of.is_mut,
-                                    value: bind_value,
-                                },
+                            block_stmts.push(this.reify_let_destructure(
+                                binding,
+                                bind_elem_type,
+                                for_of.is_mut,
+                                bind_value,
                                 span,
+                                ctx,
                             ));
                         }
                     }
@@ -9112,6 +9109,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             type_id: scrutinee_type,
             test: Box::new(test),
         }
+    }
+
+    /// `let [a, b] = value;`. Under `let mut`, every binding is mutable: each
+    /// local carries its own mutability, which is all a later phase reads.
+    fn reify_let_destructure(
+        &mut self,
+        pattern: &ast::Pattern,
+        value_type: TypeId,
+        is_mut: bool,
+        value: TirExpr,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
+        let pattern = self.reify_pattern(pattern, value_type, ctx);
+        if is_mut {
+            for (name, index, _) in collect_pattern_bindings_with_index(&pattern) {
+                ctx.make_mutable(&name, index);
+            }
+        }
+        TirStmt::new(TirStmtKind::LetDestructure { pattern, value }, span)
     }
 
     pub(super) fn reify_pattern(

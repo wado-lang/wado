@@ -1,0 +1,43 @@
+// A field handed to a call that returns its argument is fresh only when the
+// storage it is read out of is: `k` shares `h` read-only, so `id(k.s)` hands
+// back `h`'s field and the mutable binding of it needs a copy.
+//
+// Regression: the read of `k` under `k.s` counted as a move of `k`, which made
+// the call's result fresh, while the share `let k = h` kept aliasing `h`
+// because a projection's base is no move of its own. At -O0 writing through
+// `e` wrote `h`.
+
+use { println, Stdout } from "core:cli";
+
+struct Shape {
+    axes: List<String>,
+}
+
+struct Holder {
+    s: Shape,
+}
+
+fn id(a: Shape) -> Shape {
+    return a;
+}
+
+fn through(h: Holder) -> String {
+    let k = h;
+    let mut e = id(k.s);
+    e.axes[0] = "Z";
+    return h.s.axes[0];
+}
+
+export fn run() with Stdout {
+    let h = Holder { s: Shape { axes: ["H"] } };
+    let k = h;
+    let mut e = id(k.s);
+    e.axes[0] = "Z";
+    println(`${h.s.axes[0]} ${e.axes[0]}`);
+    println(through(Holder { s: Shape { axes: ["P"] } }));
+}
+
+__DATA__
+{
+    "stdout": "H Z\nP\n"
+}

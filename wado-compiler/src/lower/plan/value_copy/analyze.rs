@@ -9,8 +9,8 @@ use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    BuiltinDeclarations, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -80,10 +80,16 @@ impl TirRefVisitor for SeedWalker<'_> {
 
 /// Shape predicate shared with the fold. Site-specific gating — `skip_value_copy`,
 /// an immutable `Let` source, an `Assign` whose target is a local — is the caller's.
-pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable, oracle: &OwnedCalls) -> bool {
+/// `fresh_locals` are the locals `expr` reads storage nothing else reaches from.
+pub fn should_wrap(
+    expr: &TirExpr,
+    fresh_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+    oracle: &OwnedCalls,
+) -> bool {
     value_copy::needs_value_copy(expr.type_id, type_table)
         && !is_copy_value_call(expr)
-        && !is_fresh_value(expr, oracle, type_table)
+        && !is_owned_value(expr, fresh_locals, oracle, type_table)
 }
 
 /// Avoid re-wrapping the `copy_value::<NestedT>(...)` markers
@@ -99,11 +105,9 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
 /// operands rather than calling anything: `wir_build` lowers it to
 /// `WirInstr::Select`. It is a merge wearing a call's spelling, so it is planned
 /// as one — no copy defends an operand, and the result is owned exactly when
-/// both are, the rule `If` and `Match` follow.
-///
-/// Its two readers must agree, or the result aliases an operand undefended:
-/// [`translate`](crate::lower::translate) skips the copy at the operands, and
-/// [`is_owned_value`] is what moves it to the result.
+/// both are, the rule `If` and `Match` follow. [`builtin_projected_params`]
+/// says so for both readers: [`passes_through`] skips the copy at the
+/// operands, and [`OwnedCalls::projected_params`] moves it to the result.
 pub fn is_select(func: &FunctionRef) -> bool {
     func.is_builtin_named("select")
 }
@@ -111,10 +115,32 @@ pub fn is_select(func: &FunctionRef) -> bool {
 /// The operand positions [`is_select`] merges. Position 0 is the condition.
 pub const SELECT_OPERANDS: [usize; 2] = [1, 2];
 
-/// A fresh (owned) expression does not alias existing data, so no defensive
-/// copy is needed. `oracle` decides a call's return convention interprocedurally.
-pub fn is_fresh_value(expr: &TirExpr, oracle: &OwnedCalls, type_table: &TypeTable) -> bool {
-    is_owned_value(expr, &IndexSet::default(), oracle, type_table)
+/// Whether the builtin `func` hands parameter `pos` straight back instead of
+/// keeping it, so the copy that makes the result independent belongs at the
+/// result — where the freshness analysis puts one only if the caller can still
+/// reach the argument. Copying at the argument would pay unconditionally, and
+/// for `select` would pay for both operands where the equivalent `if` pays for
+/// one.
+///
+/// `#[result(part_of = p)]` states it for one parameter. `builtin::select`
+/// merges two, which that clause cannot name.
+pub fn passes_through(builtins: &BuiltinDeclarations, func: &FunctionRef, pos: usize) -> bool {
+    // A retained position outlives the call, so the caller's storage would be
+    // the callee's to keep and the result's copy comes too late to defend it.
+    builtin_projected_params(builtins, func).is_some_and(|ps| ps.contains(&pos))
+        && !builtins.retain_specs(func).any(|r| r.source == pos)
+}
+
+/// The parameters a builtin's result is a projection of: the one
+/// `#[result(part_of = p)]` names, or both operands of `builtin::select`.
+pub fn builtin_projected_params<'a>(
+    builtins: &'a BuiltinDeclarations,
+    func: &FunctionRef,
+) -> Option<&'a [usize]> {
+    if is_select(func) {
+        return Some(&SELECT_OPERANDS);
+    }
+    builtins.part_of_params(func)
 }
 
 /// What a `return` actually delivers. `return` is no wrap site, so
@@ -192,25 +218,16 @@ pub(crate) fn is_owned_value(
         // allocates or computes a fresh result — except `array_get_value`, the element
         // read that aliases its container — handled inside `oracle.is_owned`. A
         // raw CM call lifts a fresh value across the ABI boundary. A callee that
-        // instead returns a projection of its receiver / first argument
+        // instead returns a projection of arguments
         // (`build(&self) -> List { return *self }`) yields a fresh value exactly
-        // when that receiver is itself fresh, so `[1, 2, 3]`'s builder — a fresh
-        // block-local finalized by `.build()` — is not defensively copied.
+        // when those arguments are themselves fresh, so `[1, 2, 3]`'s builder —
+        // a fresh block-local finalized by `.build()` — is not defensively
+        // copied.
         TirExprKind::Call { func, args, .. } => {
-            if is_select(func) {
-                assert!(
-                    args.len() == 3,
-                    "`builtin::select` takes a condition and two operands"
-                );
-                return SELECT_OPERANDS
-                    .iter()
-                    .all(|&p| is_owned_value(&args[p].expr, fresh_locals, oracle, type_table));
-            }
             oracle.is_owned(func)
-                || oracle
-                    .self_projection_param(func)
-                    .and_then(|p| args.get(p))
-                    .is_some_and(|a| is_owned_value(&a.expr, fresh_locals, oracle, type_table))
+                || oracle.projected_args(func, args).is_some_and(|mut handed_back| {
+                    handed_back.all(|a| is_owned_value(a, fresh_locals, oracle, type_table))
+                })
         }
         TirExprKind::CmRawCall { .. } => true,
         // Every callable value is a closure functor by lowering time, so an
@@ -220,10 +237,16 @@ pub(crate) fn is_owned_value(
         TirExprKind::IndirectCall { .. } => oracle.indirect_is_owned(expr.type_id),
         TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
         TirExprKind::Local { index, .. } => fresh_locals.contains(index),
+        // A reference read out of storage names somebody else's, however
+        // fresh the storage holding it: `*c.r` leaves `c` entirely. Only a
+        // reference the fresh set names by itself is one to peel.
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: inner,
-        } => is_owned_value(inner, fresh_locals, oracle, type_table),
+        } => {
+            matches!(inner.kind, TirExprKind::Local { .. })
+                && is_owned_value(inner, fresh_locals, oracle, type_table)
+        }
         TirExprKind::LabeledBlock { label, block, .. } => {
             block_breaks_are_fresh(label, block, fresh_locals, oracle, type_table)
         }
@@ -495,7 +518,7 @@ fn scan_expr_for_breaks(
 ///
 /// Immutability of the *binding* is not immutability of the storage, so the
 /// caller also checks the root against
-/// [`super::last_use::compute_moved_roots`].
+/// [`super::last_use::MoveEligible::roots`].
 pub fn is_source_immutable(
     expr: &TirExpr,
     immutable_locals: &IndexSet<u32>,
