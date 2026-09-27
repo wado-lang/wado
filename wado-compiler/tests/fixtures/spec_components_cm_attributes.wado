@@ -1,0 +1,27 @@
+// `#[cm(...)]` links a Wado declaration to its Component Model name.
+
+// Link an effect interface to a CM interface
+#[cm("example:cli/console@0.1.0")]
+pub interface Console {
+    #[cm("example:cli/console@0.1.0#write-via-stream")]
+    fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>;
+}
+
+// Link a resource to a CM resource
+#[cm("example:cli/terminal-output@0.1.0#terminal-output")]
+pub resource TerminalOutput;
+
+// Link an enum to a CM enum, and each case to its WIT case
+#[cm("example:cli/types@0.1.0#error-code")]
+pub enum ErrorCode {
+    #[cm("io")]
+    Io,
+    #[cm("illegal-byte-sequence")]
+    IllegalByteSequence,
+    #[cm("pipe")]
+    Pipe,
+}
+
+test {
+    assert ErrorCode::IllegalByteSequence != ErrorCode::Pipe;   // the CM name changes no Wado name
+}

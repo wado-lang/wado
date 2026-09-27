@@ -1,0 +1,62 @@
+// The trait-qualified call form `Trait::method(recv, args…)`.
+
+// Two traits declaring `fmt`
+trait Pretty with () {
+    fn fmt(&self, f: &mut Formatter);
+}
+
+struct P { v: i32 }
+
+impl Display for P {
+    fn fmt(&self, f: &mut Formatter) { f.write_str("display"); }
+}
+
+impl Pretty for P {
+    fn fmt(&self, f: &mut Formatter) { f.write_str("pretty"); }
+}
+
+// A supertrait diamond: `Base` reached through `Left` and `Right`
+trait Base with () {
+    fn name(&self) -> String;
+}
+
+trait Left: Base with () { }
+trait Right: Base with () { }
+
+impl Base for P {
+    fn name(&self) -> String { return "base"; }
+}
+impl Left for P { }
+impl Right for P { }
+
+// One trait at two argument lists
+struct A { v: i32 }
+struct B { v: i32 }
+
+trait Take<X> with () {
+    fn take(&self, x: X) -> i32;
+}
+
+impl Take<A> for bool {
+    fn take(&self, x: A) -> i32 { return x.v; }
+}
+
+impl Take<B> for bool {
+    fn take(&self, x: B) -> i32 { return x.v * 10; }
+}
+
+fn show(p: P, f: &mut Formatter) {
+    Display::fmt(&p, f);          // p implements two traits declaring `fmt`
+}
+
+fn name_of<T: Left + Right>(x: T) -> String {
+    return Base::name(&x);        // supertrait diamond inside a generic body
+}
+
+test {
+    let f = true;
+    assert Take::<B>::take(&f, B { v: 1 }) == 10; // one trait's argument list, pinned
+    let mut buf = "";
+    show(P { v: 1 }, &mut Formatter::new(&mut buf));
+    assert buf == "display" && name_of(P { v: 2 }) == "base";
+}

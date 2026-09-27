@@ -93,4 +93,5 @@ mise run format
 ```
 
 Code edits: run the tests covering what you touched (`mise run test`,
-`mise run test-wado`). Comment, doc, and Markdown edits alone need none.
+`mise run test-wado`). Comment, doc, and Markdown edits alone need only
+`mise run check`, which holds the specification's examples to their fixtures.

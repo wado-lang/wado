@@ -1,0 +1,8 @@
+// `provider` compiles a Wado file into a component that satisfies the imported
+// component's guest effect, so the caller needs no handler.
+
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_ext.wado" };
+
+test {
+    assert Hlc::wrap("x", "wado").text == "[wado:x]";
+}

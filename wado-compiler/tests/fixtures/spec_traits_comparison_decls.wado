@@ -1,0 +1,36 @@
+// The prelude's comparison traits, declared here under their own names and
+// implemented for a coin.
+
+struct Coin { cents: i32 }
+
+impl Eq for Coin {
+    fn eq(&self, other: &Coin) -> bool { return self.cents == other.cents; }
+}
+
+impl Ord for Coin {
+    fn cmp(&self, other: &Coin) -> Ordering {
+        if self.cents < other.cents { return Ordering::Less; }
+        if self.cents > other.cents { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+/// Types that can be compared for equality
+pub trait Eq<Rhs = Self> with () {
+    /// Returns true if self equals other
+    fn eq(&self, other: &Rhs) -> bool;
+}
+
+test {
+    assert Coin { cents: 5 }.eq(&Coin { cents: 5 });
+}
+
+/// A total order over the type
+pub trait Ord: Eq with () {
+    /// Compares self with other and returns an Ordering
+    fn cmp(&self, other: &Self) -> Ordering;
+}
+
+test {
+    assert Coin { cents: 1 }.cmp(&Coin { cents: 2 }) == Ordering::Less;
+}

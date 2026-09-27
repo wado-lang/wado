@@ -1,0 +1,12 @@
+// A turbofish spells each type pack as its own tuple.
+
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+
+test {
+    concat::<i32, String>([1], ["x"]);  // ERROR: spell each type pack as a tuple
+}
+
+__DATA__
+{"compile_error":"with more than one type pack, a flat list of type arguments does not say where one pack ends; spell each type pack as a tuple, as in `f::<[i32], [bool]>(...)`"}

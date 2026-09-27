@@ -1,0 +1,48 @@
+// An open trait head hands each impl its own effects; a caller through the
+// bound forwards them with `with _`.
+use { println, Stdout } from "core:cli";
+
+struct Loud {
+    n: i32,
+}
+
+struct Quiet {
+    n: i32,
+}
+
+impl Source for Quiet {
+    fn next(&mut self) -> i32 {
+        self.n += 3;
+        return self.n;
+    }
+}
+
+trait Source with _ {
+    fn next(&mut self) -> i32;
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout {         // E = Stdout
+        println("tick");
+        self.n += 1;
+        return self.n;
+    }
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with _ {       // as effectful as `S`
+    return s.next();
+}
+
+export fn run() with Stdout {
+    let mut loud = Loud { n: 0 };
+    println(`${draw(&mut loud)}`);                  // Stdout, from `Loud`'s impl
+    assert pure_draw() == 3;
+}
+
+fn pure_draw() -> i32 {                             // `Quiet`'s impl declares nothing
+    let mut quiet = Quiet { n: 0 };
+    return draw(&mut quiet);
+}
+
+__DATA__
+{"stdout": "tick\n1\n"}

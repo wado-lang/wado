@@ -1,0 +1,21 @@
+// `panic` and `unreachable` are prelude functions that trap.
+
+fn half(n: i32) -> i32 {
+    if n % 2 != 0 { panic("odd"); } // traps with a message
+    if n < 0 { unreachable(); }     // traps with no message
+    return n / 2;
+}
+
+test {
+    assert half(4) == 2;
+}
+
+#[expect_trap]
+test "panic" {
+    half(3);
+}
+
+#[expect_trap]
+test "unreachable" {
+    half(-2);
+}

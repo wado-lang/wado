@@ -48,7 +48,9 @@ mise run format
 mise run test
 mise run test-wado
 mise run test-hooks
+mise run check
 mise run check-grammar
+mise run check-highlight
 """
 
 [tasks.build]
@@ -60,6 +62,22 @@ cargo check
 cargo check -p wado-compiler --target wasm32-unknown-unknown
 cargo check -p wado-lsp --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
+"""
+
+# The local entry point; CI spreads these over its jobs by whether they need
+# the `wado` binary. check-grammar and check-highlight walk the whole corpus,
+# so they are left to on-task-done.
+[tasks.check]
+description = "Run the corpus checks that finish in seconds"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+mise run check-deps
+mise run check-rust-paths
+mise run check-spec-examples
+mise run check-wadopoet-vocabulary
+mise run check-internal-names
+mise run check-review-filters
 """
 
 [tasks.check-grammar]
@@ -79,8 +97,8 @@ description = "Fail if a Rust file gained a `crate::` / `super::` path written o
 run = "scripts/check-rust-paths.sh --check"
 
 [tasks.check-spec-examples]
-description = "Fail if a `wado` block in the specification does not quote an e2e fixture, beyond the baseline"
-run = "scripts/check-spec-examples.sh --check"
+description = "Fail if a `wado` block in the specification does not quote an e2e fixture or a source file"
+run = "scripts/check-spec-examples.sh"
 
 [tasks.check-internal-names]
 description = "Fail if a name the compiler mints for itself is spelled `__x` instead of `$x`"
@@ -97,7 +115,8 @@ run = """
 set -xe -o pipefail
 mkdir -p package-wadopoet/build
 scripts/dev-bin.sh wado syntax --format json -o package-wadopoet/build/syntax.json
-scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+# `-O1`, for the reason `scripts/check-rust-paths.sh` gives.
+scripts/dev-bin.sh wado run -O1 package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
 """
 
 [tasks.check-wadopoet-vocabulary]
@@ -112,10 +131,6 @@ git diff --exit-code -- package-wadopoet/src/vocabulary.wado
 [tasks.update-rust-paths-baseline]
 description = "Record the inline paths each Rust file still carries, ratcheting the baseline down"
 run = "scripts/check-rust-paths.sh --update"
-
-[tasks.update-spec-examples-baseline]
-description = "Record the specification blocks that quote no fixture yet, ratcheting the baseline down"
-run = "scripts/check-spec-examples.sh --update"
 
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
@@ -211,10 +226,13 @@ depends = ["hello", "build-wasmtime"]
 run = "wasmtime run -S p3=y -W component-model-gc=y -W component-model-async=y -W component-model-more-async-builtins=y -W component-model-async-stackful=y -W gc=y -W function-references=y -W wide-arithmetic=y -W branch-hinting=y --invoke 'run()' example/hello.wasm"
 
 [tasks.test]
-description = "Run Rust crate tests"
+description = "Check the spec examples, then run Rust crate tests"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+# An edit to an e2e fixture can break the spec block quoting it, and this check
+# fails in seconds where the tests take minutes.
+mise run check-spec-examples
 touch wado-compiler/tests/e2e.rs
 # Leave a core for the threads wasmtime spawns per e2e test (codegen, epoch
 # ticker, async I/O). Drop back to a fixed 2 if a constrained sandbox SIGSEGVs.

@@ -144,3 +144,5 @@ Bare names (`from "router"`) are rejected everywhere.
 
 - A remote `http://` / `https://` specifier is not implemented. It passes
   validation, and the import fails as a missing file.
+- An inline `with { path }` is not read, so a single-file script cannot name a
+  path dependency. The import fails as an unknown namespace.

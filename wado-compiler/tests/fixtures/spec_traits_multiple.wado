@@ -1,0 +1,27 @@
+// One struct implementing two traits.
+
+struct Person {
+    name: String,
+    age: i32,
+}
+
+trait Named {
+    fn name(&self) -> String;
+}
+
+trait Aged {
+    fn age(&self) -> i32;
+}
+
+impl Named for Person {
+    fn name(&self) -> String { return self.name; }
+}
+
+impl Aged for Person {
+    fn age(&self) -> i32 { return self.age; }
+}
+
+test {
+    let p = Person { name: "Alice", age: 30 };
+    assert p.name() == "Alice" && p.age() == 30;
+}

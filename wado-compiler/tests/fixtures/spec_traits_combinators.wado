@@ -1,0 +1,24 @@
+// The iterator combinators `map`, `filter` and `fold`.
+
+test {
+    let arr: List<i32> = [1, 2, 3, 4, 5];
+
+    // map - transform each element
+    let doubled = arr.into_iter().map(|x| x * 2).collect();
+    assert doubled == [2, 4, 6, 8, 10];
+
+    // filter - keep elements matching predicate
+    let evens = arr.into_iter().filter(|x| x % 2 == 0).collect();
+    assert evens == [2, 4];
+
+    // fold - reduce to single value
+    let sum = arr.into_iter().fold(0, |acc, x| acc + x);
+    assert sum == 15;
+
+    // Chaining combinators
+    let result = arr.into_iter()
+        .filter(|x| x > 2)
+        .map(|x| x * 10)
+        .collect();
+    assert result == [30, 40, 50];
+}

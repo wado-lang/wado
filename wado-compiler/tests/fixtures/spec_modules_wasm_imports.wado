@@ -1,0 +1,15 @@
+// A core module's exports become free functions; a component's exported
+// interfaces become Wado interfaces.
+
+// Core wasm / wat — exports become free functions.
+use { add_one } from "./sub/wasm_import_user.wat" with { type: "wat" };
+use { twice }   from "./sub/wasm_import_user.wasm" with { type: "wasm" };
+
+// CM component — each exported interface becomes a Wado `interface`,
+// and its functions are called like WASI methods.
+use { CmCatalog } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+
+test {
+    assert add_one(41) == 42 && twice(1.5) == 3.0;
+    assert CmCatalog::id_string("round trip") == "round trip";
+}

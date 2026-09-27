@@ -1,0 +1,29 @@
+// Compile-time location literals, `#data`, and file inclusion.
+
+fn example() -> String {
+    return `Error at ${#file}:${#line} in ${#function}`;
+}
+
+test {
+    assert example().ends_with("spec_literals_location.wado:4 in example");
+}
+
+test {
+    let config = #data;  // contains the __DATA__ section text
+    assert config.starts_with("{\"test\": {}}");
+}
+
+test "include" {
+    let template = #include_str("./testdata/hello.txt");
+    let icon: ByteList = #include_bytes("./testdata/binary.dat");
+    assert template == "Hello, World!\n" && icon.len() == 5;
+}
+
+pub fn log(msg: String, file: String = #file, line: i32 = #line) -> i32 { return line; }
+
+test {
+    assert log("started") == #line; // file/line report this call, not where `log` is defined
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,55 @@
+// Quoted by docs/spec-control-flow.md § Conditional Statements.
+
+test "if, else and else-if chains" {
+    let x = 7;
+    let mut sign = "";
+    if x < 0 {
+        sign = "negative";
+    } else if x == 0 {
+        sign = "zero";
+    } else {
+        sign = "positive";
+    }
+    assert sign == "positive";
+}
+
+test "if as an expression" {
+    let x = -3;
+    let abs = if x < 0 { -x } else { x };
+    assert abs == 3;
+
+    let score = 85;
+    let grade = if score >= 90 { "A" } else if score >= 80 { "B" } else { "C" };
+    assert grade == "B";
+}
+
+test "if let" {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let mut got = 0;
+    if let Some(x) = opt {
+        got = x;
+    } else {
+        got = -1;
+    }
+    assert got == 42;
+}
+
+test "match ergonomics" {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let ro = &opt;
+    if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
+        assert *x == 42;        // dereference to use the value
+    }
+}
+
+fn parse_port(s: String) -> i32 {
+    let Ok(port) = i32::from_str(&s) else {
+        return -1;
+    };
+    return port;                // `port` is in scope here
+}
+
+test {
+    assert parse_port("8080") == 8080;
+    assert parse_port("http") == -1;
+}

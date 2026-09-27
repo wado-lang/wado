@@ -1,0 +1,35 @@
+// A call demands the callee's declared effects; an operation of a user-defined
+// interface demands nothing.
+use { println, Stdout } from "core:cli";
+use { Preopens } from "core:fs";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct Seq {
+    n: i32,
+}
+
+impl Counter for Seq {
+    fn next(&mut self) -> i32 {
+        self.n += 1;
+        resume self.n
+    }
+}
+
+fn next_id() -> i32 {
+    return Counter::next();   // OK: `Counter` is a user-defined interface
+}
+
+pub fn report() with (Stdout, Preopens) {   // `pub` changes nothing
+    println("report");
+}
+
+test {
+    let mut seq = Seq { n: 0 };
+    with Counter => &mut seq do {
+        assert next_id() == 1;
+    }
+    report();
+}

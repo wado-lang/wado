@@ -1,0 +1,7 @@
+// An import's local name must not collide with a declaration in the module.
+
+use {Widget} from "./sub/spec_modules_other.wado";
+pub struct Widget { mine: bool }               // error: collides with the import
+
+__DATA__
+{"compile_error": "import of 'Widget' collides with the declaration at 4:5"}

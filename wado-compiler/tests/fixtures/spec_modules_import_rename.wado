@@ -1,0 +1,8 @@
+// `as` binds an imported name under a local one.
+
+use {to_string as json_string} from "core:json";
+use {Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
+
+test {
+    assert json_string(&42) == Result::Ok("42");
+}

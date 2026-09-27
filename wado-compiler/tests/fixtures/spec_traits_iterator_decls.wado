@@ -1,0 +1,70 @@
+// The prelude's iteration traits, declared here under their own names and
+// implemented for a countdown.
+
+struct Countdown { n: i32 }
+
+impl Iterator for Countdown {
+    type Item = i32;
+    fn next(&mut self) -> Option<i32> {
+        if self.n == 0 { return null; }
+        self.n -= 1;
+        return Option::Some(self.n + 1);
+    }
+}
+
+struct Count { n: i32 }
+
+impl IntoIterator for Count {
+    type Item = i32;
+    type Iter = Countdown;
+    fn into_iter(&self) -> Countdown { return Countdown { n: self.n }; }
+}
+
+struct Total { sum: i32 }
+
+impl FromIterator for Total {
+    type Elem = i32;
+    fn from_iter<I: Iterator<Item = i32>>(iter: &mut I) -> Total {
+        let mut sum = 0;
+        while let Some(x) = iter.next() { sum += x; }
+        return Total { sum };
+    }
+}
+
+/// Types that can yield a sequence of values
+pub trait Iterator with () {
+    type Item;
+
+    /// Advances the iterator and returns the next value.
+    /// Returns None when iteration is complete.
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+test {
+    let mut c = Countdown { n: 1 };
+    assert c.next() == Option::Some(1) && c.next() == null;
+}
+
+/// Types that can be converted into an iterator
+pub trait IntoIterator with () {
+    type Item;
+    type Iter: Iterator<Item = Self::Item>;
+
+    /// Creates an iterator from a value
+    fn into_iter(&self) -> Self::Iter;
+}
+
+test {
+    let mut it = Count { n: 2 }.into_iter();
+    assert it.next() == Option::Some(2);
+}
+
+/// Types that can be constructed from an iterator of `Elem`
+pub trait FromIterator with () {
+    type Elem;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
+}
+
+test {
+    assert Total::from_iter(&mut Countdown { n: 3 }).sum == 6;
+}

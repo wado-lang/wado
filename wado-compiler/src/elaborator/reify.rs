@@ -32,7 +32,7 @@ use crate::tir::{
 
 use super::coercion::{
     NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
-    numeric_literal_pair_order, range_endpoint_order,
+    is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
 };
 use super::expr::UnionSource;
 use super::sem::ModuleSemantics;
@@ -4710,21 +4710,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let right_is_lit = is_numeric_literal_expr(&binary.right);
         let (left, right) = if left_is_lit && !right_is_lit {
             let right = self.reify_expr(&binary.right, ctx, None);
-            let coerce = self
-                .tysys
-                .type_table
-                .borrow()
-                .is_numeric(right.type_id)
-                .then_some(right.type_id);
+            let coerce =
+                is_primitive_literal_target(&self.tysys.type_table.borrow(), right.type_id)
+                    .then_some(right.type_id);
             let left = self.reify_expr(&binary.left, ctx, coerce);
             (left, right)
         } else if right_is_lit && !left_is_lit {
             let left = self.reify_expr(&binary.left, ctx, None);
-            let coerce = self
-                .tysys
-                .type_table
-                .borrow()
-                .is_numeric(left.type_id)
+            let coerce = is_primitive_literal_target(&self.tysys.type_table.borrow(), left.type_id)
                 .then_some(left.type_id);
             let right = self.reify_expr(&binary.right, ctx, coerce);
             (left, right)

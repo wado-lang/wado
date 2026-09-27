@@ -21,7 +21,8 @@ mkdir -p "${out}"
 scripts/dev-bin.sh wado-dev-tools highlight-vocab
 
 scripts/dev-bin.sh wado-dev-tools highlight-corpus --emit-corpus "${out}/corpus.txt"
-scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/highlight_dump.wado -- \
+# `-O1`, for the reason `check-rust-paths.sh` gives.
+scripts/dev-bin.sh wado run -O1 package-gale-highlight-wado/tools/highlight_dump.wado -- \
     --paths-from "${out}/corpus.txt" > "${out}/gale.tsv" 2> "${out}/gale.err" \
     || { cat "${out}/gale.err" >&2; exit 1; }
 scripts/dev-bin.sh wado-dev-tools highlight-corpus \

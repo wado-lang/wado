@@ -1,0 +1,10 @@
+// A `fn` closure is accepted where a `fn mut` is expected.
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 { return f(x); }
+fn apply_twice(mut f: fn mut(i32) -> i32, x: i32) -> i32 { return f(f(x)); }
+
+test {
+    let n = 1;
+    assert apply_twice(|x| x + n, 5) == 7;      // OK: a `fn` where `fn mut` is expected
+    assert apply(|x| x * 2, 5) == 10;
+}

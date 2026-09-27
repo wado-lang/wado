@@ -7,8 +7,10 @@ use { Speaker } from "./sub/trait_scope_lib.wado";
 
 export fn run() {
     let s = Speaker { id: 3 };
+    // error: 'Loud' is not imported here: 'Speaker' has 'shout' through it;
+    // import the trait to call it
     assert s.shout() == "speaker:3";
 }
 
 __DATA__
-{"compile_error": "'Loud' is not imported here", "compile_error_codes": ["TRAIT_NOT_IMPORTED"]}
+{"compile_error": "'Loud' is not imported here: 'Speaker' has 'shout' through it; import the trait to call it", "compile_error_codes": ["TRAIT_NOT_IMPORTED"]}

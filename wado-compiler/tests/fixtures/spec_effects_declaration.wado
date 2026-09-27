@@ -1,0 +1,45 @@
+// A function or method declares the effects it performs with `with`.
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Environment } from "wasi:cli";
+
+struct Logger {
+    prefix: String,
+}
+
+// Declare required effects with `with`
+fn greet(name: String) with Stdout {
+    println(`Hello, ${name}!`);
+}
+
+// Multiple effects
+fn show_env() with (Stdout, Environment) {
+    let args = Environment::get_arguments();
+    println(`Arguments: ${args:?}`);
+}
+
+// A method declares its effects the same way
+impl Logger {
+    fn log(&self, message: String) with Stderr {
+        eprintln(`${self.prefix}${message}`);
+    }
+}
+
+// No effects = pure function
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test {
+    greet("Ann");
+    show_env();
+    Logger { prefix: "> " }.log("hi");
+    assert add(1, 2) == 3;
+}
+
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { return f(x); }
+fn both(f: fn() with (Stdout, Stderr), x: i32) -> i32 { return x; }
+
+test {
+    assert apply(|n| n + 1, 1) == 2;
+    assert both(|| { println("out"); eprintln("err"); }, 3) == 3;
+}

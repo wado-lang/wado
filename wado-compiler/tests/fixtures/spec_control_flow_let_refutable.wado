@@ -1,0 +1,9 @@
+// A `let` pattern that may not match is rejected.
+
+test {
+    let opt: Option<i32> = Option::Some(1);
+    let Some(y) = opt;
+}
+
+__DATA__
+{"compile_error":"invalid pattern: refutable pattern in `let` binding: `Some` may not match; use `let ... else` or `if let` instead"}

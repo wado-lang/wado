@@ -564,6 +564,43 @@ mod tests {
         assert!(err.contains("needs `with { package"), "{err}");
     }
 
+    /// The specification's inline-source example, quoted from this file.
+    const INLINE_SOURCES: &str = include_str!("../tests/fixtures/inline_dependencies.wado");
+
+    #[test]
+    fn the_specification_inline_sources_resolve_as_it_says() {
+        let registry: Vec<_> = collect_inline_deps(INLINE_SOURCES, None)
+            .unwrap()
+            .into_iter()
+            .map(|d| (d.specifier, d.coordinate, d.registry_url, d.version))
+            .collect();
+        let acme = "oci://ghcr.io/acme".to_string();
+        assert_eq!(
+            registry,
+            [
+                (
+                    "docs:regex@1.0.0".into(),
+                    "docs:regex".into(),
+                    acme.clone(),
+                    "1.0.0".into()
+                ),
+                ("lib:rx".into(), "docs:regex".into(), acme, "1.0.0".into()),
+            ]
+        );
+
+        let git = futures::executor::block_on(resolve_inline_git_dependencies(
+            INLINE_SOURCES,
+            Acquisition::Analysis,
+        ))
+        .unwrap();
+        let names: Vec<_> = git
+            .unresolved
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert_eq!(names, ["lib:router"]);
+    }
+
     #[test]
     fn open_coordinate_rejects_package_aliasing() {
         let err = only(

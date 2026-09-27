@@ -1,0 +1,14 @@
+// Without `mut`, a global keeps what its initializer gave it.
+
+global CONSTANT: i32 = 42;
+global TABLE: List<i32> = [1, 2, 3];
+global mut variable: i32 = 0;
+
+fn example() {
+    variable = 10;    // OK: mutable global
+}
+
+test {
+    example();
+    assert variable == 10 && CONSTANT == 42 && TABLE.len() == 3;
+}
