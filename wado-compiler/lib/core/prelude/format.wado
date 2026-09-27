@@ -197,15 +197,13 @@ impl Formatter {
     pub fn apply_padding(&mut self, start_pos: i32) {
         // No width set is the default and covers every JSON/CBOR/plain `${x}`
         // value, so this wrapper stays tiny and inlines to one field compare.
-        // When a width IS set the slow path runs every time — it is not a cold
-        // branch — so the padding logic is merely kept out-of-line via
-        // `#[inline(never)]` rather than hinted cold.
+        // When a width IS set the slow path runs every time, so it is not
+        // hinted cold; its size alone keeps it out of line.
         if self.width > 0 {
             self.apply_padding_slow(start_pos);
         }
     }
 
-    #[inline(never)]
     fn apply_padding_slow(&mut self, start_pos: i32) {
         let content_bytes = self.buf.len() - start_pos;
         let content_len = self.count_chars_from(start_pos);

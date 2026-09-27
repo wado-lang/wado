@@ -1,0 +1,29 @@
+// A `for let part of text.split(";")` loop whose iterator's `next` is spliced
+// into the loop leaves `part` bound twice: once to a `StrSlice` literal and
+// once to another local. SROA took the literal as a candidate and then met the
+// other binding, which it cannot expand (an internal compiler error).
+
+fn statements<S: AsStrSlice>(text: S) -> List<String> {
+    let mut out: List<String> = [];
+    for let part of text.split(";") {
+        let stmt = part.trim();
+        if !stmt.is_empty() {
+            out.push(stmt.to_string());
+        }
+    }
+    return out;
+}
+
+export fn run() {
+    let text: String = builtin::black_box(" a = 1; b ;;c");
+    let parts = statements(&text);
+    assert parts.len() == 3;
+    assert parts[0] == "a = 1";
+    assert parts[1] == "b";
+    assert parts[2] == "c";
+}
+
+__DATA__
+{
+    "stdout": ""
+}

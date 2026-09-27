@@ -87,7 +87,9 @@ Allocation and aggregates:
 
 - `inline` — replace a call to a small, non-recursive function with its body.
   `#[inline]`, `#[inline(always)]`, and `#[inline(never)]` adjust the decision,
-  and a cold call site opts out.
+  and a cold call site opts out. A callee that reaches no safepoint (no call,
+  no allocation) is admitted at four times the threshold where the splice pays
+  back: at its only call site, or at its only site in a loop.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
   own.
 - `sroa` — split a struct, tuple, or array local used only for element access
@@ -221,6 +223,9 @@ Architectural work is tracked in
 - [ ] Bounds-check elimination across sequential accesses (`a[0]; a[1]; a[2]`).
 - [ ] Folding an effect-free call on constants whose callee exceeds the inline
       budget.
+- [ ] Pricing a splice by what its call site keeps: one arm of a dispatch
+      every site decides (`$hole_fmt`), or one element of a returned tuple
+      (`default_slot`). Both carry a synthesized `#[inline(always)]` until then.
 - [ ] An array literal's length as a known constant.
 
 ## Tried and Found Ineffective

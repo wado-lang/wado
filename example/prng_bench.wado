@@ -218,7 +218,6 @@ global PHILOX_W1: u32 = 0xBB67AE85;
 
 global PHILOX_ROUNDS: i32 = 10;
 
-#[inline(always)]
 fn philox4x32(key0: u32, key1: u32, counter: u32) -> [u32, u32, u32, u32] {
     let mut x0 = counter;
     let mut x1: u32 = 0;
@@ -249,7 +248,6 @@ global THREEFRY_PARITY: u64 = 0x1BD11BDAA9FC1A22;
 // Thirteen rounds, unrolled so each rotation is an immediate. The rotation
 // table is Threefish-256's for the 2x64 word size, and a key is injected after
 // every fourth round.
-#[inline(always)]
 fn threefry2x64(key0: u64, key1: u64, ctr0: u64, ctr1: u64) -> [u64, u64] {
     let ks2 = key0 ^ key1 ^ THREEFRY_PARITY;
     let mut x0 = ctr0 + key0;
@@ -295,7 +293,6 @@ fn threefry2x64(key0: u64, key1: u64, ctr0: u64, ctr1: u64) -> [u64, u64] {
 
 // Two counters at once: every word of the scalar form becomes a lane, so the
 // instruction count per call is the scalar one and the output is twice as wide.
-#[inline(always)]
 fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2, u64x2] {
     let parity = u64x2::splat(THREEFRY_PARITY as i64);
     let one = u64x2::splat(1);
@@ -346,7 +343,6 @@ fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2,
 // The high half of four 32x32 products, which is the only part of Philox's
 // round Wasm cannot spell directly: two widening multiplies and one shuffle
 // that takes the upper four bytes of each 64-bit product.
-#[inline(always)]
 fn mulhi_u32x4(a: u32x4, b: u32x4) -> u32x4 {
     let av = a as v128 as i64x2;
     let bv = b as v128 as i64x2;
@@ -375,7 +371,6 @@ fn mulhi_u32x4(a: u32x4, b: u32x4) -> u32x4 {
 }
 
 // Four counters at once, one per 32-bit lane.
-#[inline(always)]
 fn philox4x32x4(key0: u32, key1: u32, counter: u32x4) -> [u32x4, u32x4, u32x4, u32x4] {
     let m0 = u32x4::splat(PHILOX_M0 as i32);
     let m1 = u32x4::splat(PHILOX_M1 as i32);
@@ -499,7 +494,6 @@ global COORD_Y: u64 = 0xC2B2AE3D27D4EB4F;
 // The terrain shape: the counter is two coordinates folded into one word, and
 // the key is the world seed. Every candidate folds the same way, so the gap
 // between these and the counter drains above is the fold and nothing else.
-#[inline(always)]
 fn coord_key(x: i32, y: i32) -> u64 {
     return x as i64 as u64 * COORD_X ^ y as i64 as u64 * COORD_Y;
 }

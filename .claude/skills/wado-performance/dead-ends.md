@@ -574,10 +574,11 @@ when it would not, the marker buys only cold-side bytes.
 
 ## Splitting `encode_char` at the ASCII boundary (2026-08-30)
 
-`encode_char` carries `#[inline]`, so its four-way UTF-8 width dispatch and nine
-stores land at every write site. Keeping the one-byte case and calling out for
-the rest — what the manual-split advice prescribes — lost 2-4% on five serde
-rows and gained nothing, including on json-catalog ser, the row it was aimed at.
+`encode_char` carried `#[inline]` then, so its four-way UTF-8 width dispatch and
+nine stores landed at every write site. Keeping the one-byte case and calling
+out for the rest — what the manual-split advice prescribes — lost 2-4% on five
+serde rows and gained nothing, including on json-catalog ser, the row it was
+aimed at.
 
 The split adds a call in the middle of a byte-writing loop, taking `&mut
 Array<u8>`, so the loop reloads the array and the position across it. What it

@@ -283,7 +283,6 @@ impl<T> List<T> {
     /// Copies `count` elements from `self[src_start..]` and appends them.
     /// Handles overlapping regions correctly for both non-overlapping and DEFLATE-style
     /// run-length expansion (where src < dst). Forward order is correct in both cases.
-    #[inline(always)]
     pub fn copy_within_append(&mut self, src_start: i32, count: i32) {
         let new_used = self.used + count;
         let capacity = self.repr.len();

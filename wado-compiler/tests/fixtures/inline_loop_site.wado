@@ -1,0 +1,59 @@
+// A call inside a loop runs once per iteration, so the inliner admits a callee
+// that reaches no safepoint there at a higher price than anywhere else.
+// `decode_at` is over the plain threshold but under the loop one: `sum_codes`
+// splices it, while `first_code`, which calls it once, keeps the call
+// (`inline_loop_site_outside.wado`). The tuple it returns is no allocation: the
+// caller that splices it takes the tuple apart.
+
+fn decode_at(bytes: &Array<u8>, pos: i32) -> [i32, i32] {
+    let b0 = bytes[pos] as i32;
+    if b0 < 0x80 {
+        return [b0, 1];
+    }
+    if b0 < 0xE0 {
+        return [(b0 & 0x1F) << 6 | bytes[pos + 1] as i32 & 0x3F, 2];
+    }
+    if b0 < 0xF0 {
+        return [(b0 & 0x0F) << 12 | (bytes[pos + 1] as i32 & 0x3F) << 6 | bytes[pos + 2] as i32 & 0x3F, 3];
+    }
+    return [(b0 & 0x07) << 18 | (bytes[pos + 1] as i32 & 0x3F) << 12 | (bytes[pos + 2] as i32 & 0x3F) << 6 | bytes[pos + 3] as i32 & 0x3F, 4];
+}
+
+#[inline(never)]
+fn sum_codes(bytes: &Array<u8>) -> i32 {
+    let mut total = 0;
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let [code, len] = decode_at(bytes, pos);
+        total += code;
+        pos += len;
+    }
+    return total;
+}
+
+#[inline(never)]
+fn first_code(bytes: &Array<u8>) -> i32 {
+    return decode_at(bytes, 0).0;
+}
+
+fn to_array(list: List<u8>) -> Array<u8> {
+    let mut out: Array<u8> = builtin::array_new(list.len());
+    for let i of 0..<list.len() {
+        out[i] = list[i];
+    }
+    return out;
+}
+
+export fn run() {
+    let literal: List<u8> = b"A\xC3\xA9\xE2\x82\xAC";
+    let bytes = to_array(builtin::black_box(literal));
+    assert sum_codes(&bytes) == 0x41 + 0xE9 + 0x20AC;
+    assert first_code(&bytes) == 0x41;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "inline_loop_site.wado/sum_codes",
+    "wir_not_expect:O2": ["\"inline_loop_site.wado/decode_at\"("]
+}

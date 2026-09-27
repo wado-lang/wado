@@ -7,7 +7,7 @@ use std::cell::{Cell, RefCell};
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::strip_one_value_copy;
+use super::arena_query::{rebound_locals, strip_one_value_copy};
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -353,6 +353,9 @@ struct ReconstructInfo {
 // Candidate collection
 // -----------------------------------------------------------------------
 
+/// The literal-bound locals no other `Let` binds. The rewrite expands every
+/// `Let` of a candidate, and one binding something other than a literal cannot
+/// be expanded.
 fn collect_candidates(body: &Body) -> Vec<SroaCandidate> {
     let mut candidates = Vec::new();
     body.for_each_reachable_node(|node| {
@@ -360,6 +363,8 @@ fn collect_candidates(body: &Body) -> Vec<SroaCandidate> {
             candidate_from_stmt(body, s, &mut candidates);
         }
     });
+    let rebound = rebound_locals(body);
+    candidates.retain(|c| !rebound.contains(&c.local_index));
     candidates
 }
 
