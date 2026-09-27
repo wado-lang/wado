@@ -13,9 +13,7 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
-use crate::optimize::arena_query::{
-    cast_truncates_a_float, expr_node_may_trap_typed, field_receiver_nonnull,
-};
+use crate::optimize::arena_query::{expr_node_may_trap_typed, field_receiver_nonnull};
 use crate::optimize::bounds::{self, Builtin};
 use crate::optimize::inline::recursive_scc_members;
 use crate::tir::{BuiltinDeclarations, LinearMemory, TypeTable};
@@ -330,9 +328,8 @@ impl ModRef {
                 let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
             }
-            ExprKind::Cast { expr, target_type } => {
-                let (expr, target_type) = (*expr, *target_type);
-                self.may_trap |= cast_truncates_a_float(body, scope.types, expr, target_type);
+            ExprKind::Cast { expr, .. } => {
+                let expr = *expr;
                 self.accumulate_operand(body, expr, scope);
             }
 
@@ -894,7 +891,7 @@ mod tests {
         StmtNode,
     };
     use crate::nir_value_graph::ValueKind;
-    use crate::tir::{TypeId, TypeTable};
+    use crate::tir::TypeId;
     use crate::token::Span;
 
     /// Build an expression into a fresh arena and summarise it.
@@ -1607,30 +1604,21 @@ mod tests {
         })
     }
 
-    fn cast_traps(from: TypeId, to: TypeId) -> bool {
+    #[test]
+    fn no_cast_traps() {
+        use crate::tir::TypeTable;
         let types = TypeTable::new();
-        let mut body = Body::empty();
-        let c = cast(&mut body, from, to);
-        ModRef::of_expr_typed(&body, c, Some(&types)).may_trap
-    }
-
-    #[test]
-    fn only_a_float_to_integer_cast_traps() {
-        use crate::tir::TypeTable;
-        assert!(cast_traps(TypeTable::F64, TypeTable::I32));
-        assert!(cast_traps(TypeTable::F32, TypeTable::I64));
-        assert!(!cast_traps(TypeTable::I32, TypeTable::I64));
-        assert!(!cast_traps(TypeTable::I64, TypeTable::I32));
-        assert!(!cast_traps(TypeTable::I32, TypeTable::F64));
-        assert!(!cast_traps(TypeTable::F32, TypeTable::F64));
-    }
-
-    #[test]
-    fn a_cast_stays_trap_capable_without_a_type_table() {
-        use crate::tir::TypeTable;
-        let mut body = Body::empty();
-        let c = cast(&mut body, TypeTable::I64, TypeTable::I32);
-        assert!(ModRef::of_expr(&body, c).may_trap);
+        for (from, to) in [
+            (TypeTable::F64, TypeTable::I32),
+            (TypeTable::F32, TypeTable::U64),
+            (TypeTable::I64, TypeTable::I32),
+            (TypeTable::I32, TypeTable::F64),
+        ] {
+            let mut body = Body::empty();
+            let c = cast(&mut body, from, to);
+            assert!(!ModRef::of_expr_typed(&body, c, Some(&types)).may_trap);
+            assert!(!ModRef::of_expr(&body, c).may_trap);
+        }
     }
 
     // -----------------------------------------------------------------

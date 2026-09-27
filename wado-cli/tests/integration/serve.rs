@@ -207,6 +207,49 @@ fn startup_announces_no_build_artifact() {
     );
 }
 
+/// Wait for the server's first `fuel N <what>` line, and split it.
+fn await_fuel_line(stderr: &Mutex<String>, within: Duration) -> (u64, String) {
+    let deadline = Instant::now() + within;
+    loop {
+        let captured = stderr.lock().unwrap().clone();
+        if let Some(line) = captured.lines().find_map(|l| l.strip_prefix("fuel ")) {
+            let (fuel, what) = line.split_once(' ').unwrap();
+            return (fuel.parse().unwrap(), what.to_owned());
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no fuel line; stderr:\n{captured}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Each request reports the fuel its handler spent, once the handler is done.
+/// The query stays out of the log, since it can carry credentials.
+#[test]
+fn report_fuel_logs_each_request() {
+    let (_guard, port, stderr) = start_serve("serve_hello.wado", &["--report-fuel"]);
+    let (status, _body) = http_get(port, "/hello?token=secret", Duration::from_secs(10));
+    assert_eq!(status, 200);
+
+    let (fuel, what) = await_fuel_line(&stderr, Duration::from_secs(10));
+    assert!(fuel > 0);
+    assert_eq!(what, "GET /hello");
+}
+
+/// A request that traps its worker still reports what it spent.
+#[test]
+fn report_fuel_logs_a_request_that_traps() {
+    let (_guard, port, stderr) =
+        start_serve("serve_hang.wado", &["--timeout", "1", "--report-fuel"]);
+    let (status, _body) = http_get(port, "/", Duration::from_mins(1));
+    assert_eq!(status, 504);
+
+    let (fuel, what) = await_fuel_line(&stderr, Duration::from_mins(1));
+    assert!(fuel > 0);
+    assert_eq!(what, "GET / (trapped)");
+}
+
 /// A service has a program name, as `wado run` would give it, and no arguments.
 #[test]
 fn a_service_has_a_program_name() {

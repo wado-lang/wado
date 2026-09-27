@@ -224,10 +224,11 @@ impl CompileKnobs {
 pub enum RuntimeKnobOpt {
     Collector,
     GcHeapInitial,
+    ReportFuel,
 }
 
 impl RuntimeKnobOpt {
-    pub const ALL: &[Self] = &[Self::Collector, Self::GcHeapInitial];
+    pub const ALL: &[Self] = &[Self::Collector, Self::GcHeapInitial, Self::ReportFuel];
 
     #[must_use]
     pub const fn spec(self) -> OptSpec {
@@ -244,6 +245,12 @@ impl RuntimeKnobOpt {
                 value: Some("<size>"),
                 desc: "GC heap a guest starts with (default: 256m)\nBytes, or a k / m / g suffix. The copying collector splits it\ninto two semi-spaces, so a program allocates through half",
             },
+            Self::ReportFuel => OptSpec {
+                long: Some("report-fuel"),
+                short: None,
+                value: None,
+                desc: "Meter the guest in wasmtime fuel (about one unit per Wasm\ninstruction) and report what it spent: per program (run), per\ntest (test), per request (serve, one request at a time).\nPure computation spends the same fuel on every machine; a guest\nwaiting on I/O can loop more or less, as the host answers",
+            },
         }
     }
 }
@@ -254,6 +261,8 @@ impl RuntimeKnobOpt {
 pub struct RuntimeKnobs {
     pub collector: wasmtime::Collector,
     pub gc_heap_initial_size: u64,
+    /// `--report-fuel`: meter the guest in fuel and report what it spent.
+    pub report_fuel: bool,
 }
 
 impl Default for RuntimeKnobs {
@@ -261,6 +270,7 @@ impl Default for RuntimeKnobs {
         Self {
             collector: DEFAULT_COLLECTOR,
             gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
+            report_fuel: false,
         }
     }
 }
@@ -268,14 +278,16 @@ impl Default for RuntimeKnobs {
 impl RuntimeKnobs {
     /// Apply a matched [`RuntimeKnobOpt`], consuming its value from the parser.
     pub fn apply(&mut self, opt: RuntimeKnobOpt, parser: &mut Parser) -> Result<(), CliExit> {
-        let spec = args::require_string(parser)?;
         match opt {
             RuntimeKnobOpt::Collector => {
-                self.collector = parse_collector(&spec).map_err(CliExit::error)?;
+                self.collector =
+                    parse_collector(&args::require_string(parser)?).map_err(CliExit::error)?;
             }
             RuntimeKnobOpt::GcHeapInitial => {
-                self.gc_heap_initial_size = parse_gc_heap_size(&spec).map_err(CliExit::error)?;
+                self.gc_heap_initial_size =
+                    parse_gc_heap_size(&args::require_string(parser)?).map_err(CliExit::error)?;
             }
+            RuntimeKnobOpt::ReportFuel => self.report_fuel = true,
         }
         Ok(())
     }

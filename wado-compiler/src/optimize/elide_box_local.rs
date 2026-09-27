@@ -814,9 +814,10 @@ mod tests {
         assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked);
     }
 
-    /// Use site `(x as i32) + boxed.v` — `Cast` may trap, observable.
+    /// Use site `(x as i32) + boxed.v` — every `Cast` is total, so the
+    /// walk passes it.
     #[test]
-    fn walker_blocks_when_cast_precedes_field() {
+    fn walker_passes_a_cast_before_field() {
         let build = |b: &mut Body| {
             let l2 = local(b, 2);
             let c = cast(b, l2, ty());
@@ -824,7 +825,7 @@ mod tests {
             let f = field(b, l7, "v");
             binary(b, NirBinaryOp::Add, c, f)
         };
-        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Blocked);
+        assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Found);
     }
 
     /// Use site `*p + boxed.v` — `Unary::Deref` may trap, observable.
@@ -872,15 +873,15 @@ mod tests {
         assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Found);
     }
 
-    /// Use site `Cast(boxed.v)` — `FieldAccess` inside an observable
-    /// op. Substitution is safe because the observable op runs
-    /// AFTER the substituted inner.
+    /// Use site `*boxed.v` — `FieldAccess` inside an observable op.
+    /// Substitution is safe because the observable op runs AFTER the
+    /// substituted inner.
     #[test]
     fn walker_finds_when_field_is_inside_observable() {
         let build = |b: &mut Body| {
             let l7 = local(b, 7);
             let f = field(b, l7, "v");
-            cast(b, f, ty())
+            unary(b, NirUnaryOp::Deref, f)
         };
         assert_matches!(leftmost(build, 7, "v"), LeftmostWalk::Found);
     }

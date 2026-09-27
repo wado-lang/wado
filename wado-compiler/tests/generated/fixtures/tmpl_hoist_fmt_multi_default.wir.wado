@@ -144,9 +144,6 @@ fn "tmpl_hoist_fmt_multi_default.wado/run"() with Stdout {
     let i_1: i32;
     let total2: i32;
     let i_5: i32;
-    let a: i32;
-    let b: i32;
-    let c: f64;
     let total3: i32;
     let i_11: i32;
     let $local_15: ref "core:prelude/string.wado//String";
@@ -239,11 +236,8 @@ fn "tmpl_hoist_fmt_multi_default.wado/run"() with Stdout {
     b4: block {
         l5: loop {
             break_if b4 i_5 >= 3;
-            a = i_5;
-            b = i_5 * 2;
-            c = builtin::f64_convert_i32_s(i_5) * 0.5;
             $tmpl_buf_280.used = 0;
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(a, $tmpl_buf_280);
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_5, $tmpl_buf_280);
             new_used_97 = $tmpl_buf_280.used + 1;
             if @unlikely(new_used_97 > builtin::array_len($tmpl_buf_280.repr)) {
                 cold_path;
@@ -252,7 +246,7 @@ fn "tmpl_hoist_fmt_multi_default.wado/run"() with Stdout {
             start_98 = $tmpl_buf_280.used;
             $tmpl_buf_280.used = new_used_97;
             builtin::array_copy<u8>($tmpl_buf_280.repr, start_98, global:tmpl_hoist_fmt_multi_default.wado::$const_obj_22, 0, 1);
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(b, $tmpl_buf_280);
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_5 * 2, $tmpl_buf_280);
             new_used_115 = $tmpl_buf_280.used + 1;
             if @unlikely(new_used_115 > builtin::array_len($tmpl_buf_280.repr)) {
                 cold_path;
@@ -261,7 +255,7 @@ fn "tmpl_hoist_fmt_multi_default.wado/run"() with Stdout {
             start_116 = $tmpl_buf_280.used;
             $tmpl_buf_280.used = new_used_115;
             builtin::array_copy<u8>($tmpl_buf_280.repr, start_116, global:tmpl_hoist_fmt_multi_default.wado::$const_obj_22, 0, 1);
-            "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(c, $tmpl_buf_280);
+            "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(builtin::f64_convert_i32_s(i_5) * 0.5, $tmpl_buf_280);
             total2 = total2 + $tmpl_buf_280.used;
             i_5 = i_5 + 1;
             continue l5;

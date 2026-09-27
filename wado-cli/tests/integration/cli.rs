@@ -644,6 +644,52 @@ fn test_run_hello() {
         .stdout(predicate::str::contains("Hello, world!"));
 }
 
+/// The fuel `wado run --report-fuel` reports on stderr.
+fn reported_fuel(args: &[&str]) -> u64 {
+    let out = wado().args(args).output().unwrap();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("fuel "))
+        .unwrap_or_else(|| panic!("no fuel line on stderr:\n{stderr}"))
+        .parse()
+        .unwrap()
+}
+
+/// Fuel counts Wasm operators, so pure computation spends the same fuel on
+/// every run, whatever the machine and its load.
+#[test]
+fn test_run_report_fuel_is_deterministic() {
+    let args = [
+        "run",
+        "--report-fuel",
+        "wado-cli/tests/fixtures/run_pure.wado",
+    ];
+    let first = reported_fuel(&args);
+    assert!(first > 0);
+    assert_eq!(first, reported_fuel(&args));
+}
+
+/// A guest that exits on purpose still spent fuel getting there.
+#[test]
+fn test_run_reports_fuel_on_guest_exit() {
+    let args = [
+        "run",
+        "--report-fuel",
+        "wado-cli/tests/fixtures/run_exit_code.wado",
+    ];
+    assert!(reported_fuel(&args) > 0);
+}
+
+#[test]
+fn test_run_reports_no_fuel_unasked() {
+    wado()
+        .args(["run", "example/hello.wado"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("fuel").not());
+}
+
 /// The program name is what `wado run` was given, never `wado` itself, and
 /// `args()` holds what follows it.
 #[test]
@@ -863,6 +909,38 @@ fn test_test_verbose_shows_captured_stdout_inline() {
         .stdout(predicate::str::contains("ok   prints and passes"))
         .stdout(predicate::str::contains("stdout:"))
         .stdout(predicate::str::contains("hello from the test body"));
+}
+
+#[test]
+fn test_test_report_fuel_joins_the_duration() {
+    wado()
+        .args([
+            "test",
+            "--format",
+            "verbose",
+            "--report-fuel",
+            "wado-cli/tests/fixtures/test_stdout.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_match(r"ok   prints and passes \(\S+, fuel \d+\)").unwrap());
+}
+
+/// The digest stays quiet about a passing test, but not about a reading the
+/// run asked for.
+#[test]
+fn test_test_heartbeat_shows_a_passing_tests_fuel() {
+    wado()
+        .args([
+            "test",
+            "--report-fuel",
+            "wado-cli/tests/fixtures/test_stdout.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::is_match(r"ok +\S+ :: prints and passes \(\S+, fuel \d+\)").unwrap(),
+        );
 }
 
 #[test]

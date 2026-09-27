@@ -1,8 +1,6 @@
-// A float-to-int cast lowers to the trapping `trunc` family over an i32 or i64
-// intermediate, and reaches a narrower target by wrapping that result. Folding
-// it as a saturating conversion made the constant disagree with the runtime on
-// both counts: `300.7 as i8` gave 127 rather than 44, and a value outside the
-// intermediate's range gave a number where the program traps.
+// A float-to-int cast the compiler folds must agree with the one it runs: both
+// saturate at the target's own bounds, so `300.7 as i8` is 127 and not the 44
+// that wrapping an i32 intermediate gives, and `-1.0 as u8` is 0, not a trap.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]
@@ -30,6 +28,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "44\n-7\n2147483647\n44\n",
-    "trapped": true
+    "stdout": "127\n-7\n2147483647\n255\n0\n"
 }

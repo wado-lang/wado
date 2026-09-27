@@ -1111,12 +1111,13 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     let $licm_input_21: ref "core:prelude/slice.wado//Slice<u8>";
     let $licm_repr_22: ref Array<u8>;
     let $licm_start_23: i32;
-    let $av_26: i32;
+    let $licm_arith_24: i64;
+    let $av_29: i32;
     start = local.tee $load_0(self.pos);
-    $av_26 = $load_0;
-    if @unlikely(($av_26 + 4) > (local.tee $load_1(self.input).end - $load_1.start)) {
+    $av_29 = $load_0;
+    if @unlikely(($av_29 + 4) > (local.tee $load_1(self.input).end - $load_1.start)) {
         cold_path;
-        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_26));
+        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_29));
     }
     code = 0;
     i = 0;
@@ -1124,6 +1125,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     $licm_input_21 = $load_1;
     $licm_repr_22 = $licm_input_21.repr;
     $licm_start_23 = $licm_input_21.start;
+    $licm_arith_24 = builtin::i64_extend_i32_s(start);
     b111: block {
         l112: loop {
             break_if b111 i >= 4;
@@ -1138,7 +1140,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
                 (65 <=u c_4) & (c_4 <=u 70);
             }) == 0) {
                 cold_path;
-                return 1, 0, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode escape"), used: 22 }, builtin::i64_extend_i32_s(start));
+                return 1, 0, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode escape"), used: 22 }, $licm_arith_24);
             }
             code = (code * 16) + $inline_char__hex_digit_value_scalar_3: block -> i32 {
                 if @likely((c_4 - 48) <u 10) {

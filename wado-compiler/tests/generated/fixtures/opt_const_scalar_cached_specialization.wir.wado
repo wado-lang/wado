@@ -152,7 +152,6 @@ fn "opt_const_scalar_cached_specialization.wado/run"() with Stdout {
     let i_5: i32;
     let total2: i32;
     let i_8: i32;
-    let x_9: f64;
     let $local_13: ref "core:prelude/string.wado//String";
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_21: ref "core:prelude/string.wado//String";
@@ -265,7 +264,6 @@ fn "opt_const_scalar_cached_specialization.wado/run"() with Stdout {
     b7: block {
         l8: loop {
             break_if b7 i_8 >= 3;
-            x_9 = builtin::f64_convert_i32_s(i_8);
             $tmpl_buf_184.used = 0;
             new_used_119 = $tmpl_buf_184.used + 2;
             if @unlikely(new_used_119 > builtin::array_len($tmpl_buf_184.repr)) {
@@ -285,7 +283,7 @@ fn "opt_const_scalar_cached_specialization.wado/run"() with Stdout {
             $tmpl_buf_184.used = new_used_137;
             builtin::array_copy<u8>($tmpl_buf_184.repr, start_138, global:opt_const_scalar_cached_specialization.wado::$const_obj_17, 0, 4);
             $inline_f64__fmt_into_scalar_spec1_0: block {
-                "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(x_9, 2, $tmpl_buf_184);
+                "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(builtin::f64_convert_i32_s(i_8), 2, $tmpl_buf_184);
                 break $inline_f64__fmt_into_scalar_spec1_0;
             };
             total2 = total2 + $tmpl_buf_184.used;
@@ -1063,12 +1061,14 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     let pos: i32;
     let temp: i64;
     let digit: i32;
+    let $licm_arith_13: u64;
     mask64 = builtin::i64_extend_i32_s(mask);
     pos = offset + digit_count;
     if val_i64 == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
+        $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
         b96: block {
             l97: loop {
                 break_if b96 temp == 0_i64;
@@ -1079,7 +1079,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
-                temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
+                temp = temp >>u $licm_arith_13;
                 continue l97;
             };
         };
