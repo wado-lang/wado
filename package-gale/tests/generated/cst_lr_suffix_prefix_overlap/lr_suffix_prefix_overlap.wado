@@ -1562,6 +1562,7 @@ fn atn_closure(
     arena: &mut CtxArena,
     seeds: &List<AtnConfig>,
     scratch: &mut ClosureScratch,
+    lr_loop_unconsumed: i32 = -1,
 ) -> List<AtnConfig> {
     scratch.cset.clear();
     scratch.rset.clear();
@@ -1573,6 +1574,9 @@ fn atn_closure(
         guard += 1;
         if guard > ATN_CLOSURE_GUARD {
             break;
+        }
+        if c.state == lr_loop_unconsumed && sim.tr_kind[sim.state_tr_start[c.state] + c.alt] == ATN_TR_PRECEDENCE {
+            continue;
         }
         let res = scratch.cset.add(arena, c.state, c.alt, c.pr, c.pctx);
         let idx = res.0;
@@ -1805,7 +1809,7 @@ pub fn atn_predict_with_stack(
         seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: caller, pr: min_prec });
     }
     let mut scratch = ClosureScratch::new();
-    let mut configs = atn_closure(sim, &mut arena, &seeds, &mut scratch);
+    let mut configs = atn_closure(sim, &mut arena, &seeds, &mut scratch, dstate);
     let mut pos = start_pos;
     let mut prev = atn_unique_alts(&configs);
     let limit = tokens.len() - start_pos + 8;
@@ -1880,10 +1884,22 @@ fn atn_lr_entry_reached(sim: &AtnSim, from: i32) -> i32 {
 
 fn atn_compute_state_cont(sim: &mut AtnSim) {
     let nstates = sim.state_kind.len();
+    let mut entered_from: List<i32> = [];
+    for let mut st = 0; st < nstates; st += 1 {
+        entered_from.push(-1);
+    }
+    for let mut st = 0; st < nstates; st += 1 {
+        let s = sim.state_tr_start[st];
+        for let mut j = s; j < s + sim.state_tr_count[st]; j += 1 {
+            if sim.tr_kind[j] == ATN_TR_PRECEDENCE {
+                entered_from[sim.tr_target[j]] = st;
+            }
+        }
+    }
     for let mut st = 0; st < nstates; st += 1 {
         let mut v1: List<i32> = [];
         let nullable = atn_cont_nullable(sim, st, &mut v1);
-        let mut v2: List<i32> = [];
+        let mut v2: List<i32> = if entered_from[st] >= 0 { [entered_from[st]] } else { [] };
         let mut f: List<i32> = [];
         let mut fneg: List<i32> = [];
         let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
@@ -2037,6 +2053,10 @@ fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     return false;
 }
 
+fn atn_state_cont_open_ended(sim: &AtnSim, state: i32) -> bool {
+    return sim.state_cont_first_open[state] || sim.state_cont_neg_count[state] > 0;
+}
+
 pub fn atn_lr_loop_decision(
     sim: &AtnSim,
     atn: &mut AtnState,
@@ -2052,18 +2072,24 @@ pub fn atn_lr_loop_decision(
     let c = sim.state_tr_count[dstate];
     let exit_alt = c - 1;
     let mut enter = -1;
+    let mut open_contest = false;
     for let mut j = 0; j < c; j += 1 {
         if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE
             && sim.tr_prec[s + j] >= min_prec
             && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
-            enter = j;
-            break;
+            if enter < 0 {
+                enter = j;
+            } else if atn_state_cont_open_ended(sim, sim.tr_target[s + enter])
+                || atn_state_cont_open_ended(sim, sim.tr_target[s + j]) {
+                open_contest = true;
+                break;
+            }
         }
     }
     if enter < 0 {
         return exit_alt;
     }
-    if !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
+    if !open_contest && !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
         return enter;
     }
     let alt = atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
@@ -2698,7 +2724,6 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32 = 0) 
                 _atn_alt = 1;
             }
         }
-        let _lr_pos0 = pos;
         if _atn_alt == 0 {
             pos = scan_e_lr_0(tokens, pos, atn);
             if pos < 0 { return -1; }
@@ -2706,9 +2731,6 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32 = 0) 
             pos = scan_e_lr_1(tokens, pos, atn);
             if pos < 0 { return -1; }
         } else {
-            break;
-        }
-        if pos == _lr_pos0 {
             break;
         }
     }

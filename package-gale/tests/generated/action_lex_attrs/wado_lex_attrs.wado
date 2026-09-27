@@ -985,10 +985,11 @@ pub global TK_A: i32 = 0;
 pub global TK_D: i32 = 1;
 pub global TK_P: i32 = 2;
 pub global TK_R: i32 = 3;
-pub global TK_B: i32 = 4;
-pub global TK_WS: i32 = 5;
-pub global TK_EOF: i32 = 6;
-pub global TK_ERROR: i32 = 7;
+pub global TK_C: i32 = 4;
+pub global TK_B: i32 = 5;
+pub global TK_WS: i32 = 6;
+pub global TK_EOF: i32 = 7;
+pub global TK_ERROR: i32 = 8;
 
 struct Lexer {
     chars: List<char>,
@@ -1105,6 +1106,14 @@ fn apply_R_actions(lx: &mut Lexer, start: i32, end: i32) {
     if lx.act_type == TK_R { lx.act_type = TK_B }
 }
 
+fn apply_C_actions(lx: &mut Lexer, start: i32, end: i32) {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'c' { return; }
+    pos += 1;
+    lx.act_channel = 1;
+}
+
 fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return -1; }
@@ -1163,6 +1172,13 @@ fn try_R(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_C(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn try_B(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
@@ -1206,6 +1222,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 end = try_B(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_B; best_more = false; best_channel = 0; best_act = -1; }
             },
+            'c' => {
+                end = try_C(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_C; best_more = false; best_channel = 0; best_act = 4; }
+            },
             'd' => {
                 end = try_D(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_D; best_more = false; best_channel = 0; best_act = 1; }
@@ -1235,6 +1255,8 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                     apply_P_actions(&mut lexer, start, best_end);
                 } else if best_act == 3 {
                     apply_R_actions(&mut lexer, start, best_end);
+                } else if best_act == 4 {
+                    apply_C_actions(&mut lexer, start, best_end);
                 }
                 best_kind = lexer.act_type;
                 best_channel = lexer.act_channel;
@@ -1270,6 +1292,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_D => "D",
         TK_P => "P",
         TK_R => "R",
+        TK_C => "C",
         TK_B => "B",
         TK_WS => "WS",
         TK_EOF => "Eof",
@@ -1819,11 +1842,11 @@ pub fn parse_t<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResu
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_t(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[31]];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[47]];
 global CALL_FOLLOW: List<i32> = [0];
 global CALL_FOLLOW_ENDS: List<bool> = [true];
 
-global TOKEN_NAMES: List<String> = ["A", "D", "P", "'r'", "'b'", "WS", "Eof", "Error"];
+global TOKEN_NAMES: List<String> = ["A", "D", "P", "'r'", "'c'", "'b'", "WS", "Eof", "Error"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
@@ -1850,7 +1873,7 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [31];
+global SYNC_0: List<i32> = [47];
 global EXPECTED_0: List<i32> = [TK_A, TK_B, TK_D, TK_P, TK_R];
 
 global FOLLOW_SETS: List<List<i32>> = [];

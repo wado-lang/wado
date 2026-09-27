@@ -106,6 +106,10 @@ The K-prefix follow-mask path closes the multi-token tail-greedy gap at the oute
 
 The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.
 
+### Opaque first sets in the LR routing and precedence checks
+
+`op_first_has_lr` in `lower.wado` answers that any rule call may start with a loop operator. So a self-reference nested in a subrule and followed by a call (`e : e '(' (e g)? ')' | e '+' e | ID ; g : ':' ID ;`) routes the whole rule to the runtime simulator, which is exact but slower. The same helper decides the static operands' precedence floor, so reading the callee's first set (`GenContext::first_of_rule`) changes parse behaviour there too, and needs the corpus to confirm it.
+
 ## Performance
 
 Runtime performance — the benchmark state, the live profile, the directions that would move the needle, and measured dead-ends (e.g. data-driven scan) — lives in [`perf.md`](./perf.md).

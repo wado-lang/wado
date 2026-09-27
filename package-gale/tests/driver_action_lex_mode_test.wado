@@ -25,6 +25,14 @@ test "$mode reads the mode the token is matched in, and assigns the switch" {
     assert r.output == "mn", `output: '${r.output}'`;
 }
 
+test "$mode is seeded per token, not carried from the one before" {
+    // `>` is matched in INNER and pops, so `m` is matched in the default mode. A
+    // read that kept INNER from the token before would leave the guard false.
+    let r = m::parse("<1>m12");
+    assert r.ok(), `clean parse of '<1>m12': ${r.diagnostics.len()} diagnostics`;
+    assert r.output == "<n>mn", `output: '${r.output}'`;
+}
+
 test "a mode grammar with no mode switch round-trips in the default mode" {
     let r = m::parse("ab cd");
     assert r.ok(), "two default-mode words";
