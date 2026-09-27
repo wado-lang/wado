@@ -1,0 +1,115 @@
+//! A self-reference nested inside a subrule of a left-recursive alternative is
+//! a plain call, ANTLR4's `e[0]`: it climbs every operator, and it leaves one
+//! to the enclosing alternative only where taking it strands what that
+//! alternative still owes. Expected trees are the published ANTLR4 jar's
+//! (black-box oracle), with the `<EOF>` leaf dropped.
+
+use g from "./grammars/lr_nested_self_ref.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_nested_self_ref" },
+    };
+use ga from "./grammars/lr_nested_self_ref_atn.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_nested_self_ref_atn" },
+    };
+
+fn assert_tree(input: String, ok: bool, actual: String, expected: String) {
+    assert ok, `unexpected diagnostics for ${input}: ${actual}`;
+    assert actual == expected, `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+}
+
+fn assert_comma(input: String, expected: String) {
+    let r = g::parse_comma(&input);
+    assert_tree(input, r.ok(), g::to_string_tree(&r), expected);
+}
+
+fn assert_send(input: String, expected: String) {
+    let r = g::parse_send(&input);
+    assert_tree(input, r.ok(), g::to_string_tree(&r), expected);
+}
+
+fn assert_plus(input: String, expected: String) {
+    let r = g::parse_plus(&input);
+    assert_tree(input, r.ok(), g::to_string_tree(&r), expected);
+}
+
+fn assert_range(input: String, expected: String) {
+    let r = g::parse_range(&input);
+    assert_tree(input, r.ok(), g::to_string_tree(&r), expected);
+}
+
+fn assert_bang(input: String, expected: String) {
+    let r = ga::parse_bang(&input);
+    assert_tree(input, r.ok(), ga::to_string_tree(&r), expected);
+}
+
+test "a nested operand at the end of the suffix nests to the right" {
+    assert_comma("1", "(comma (ce 1))");
+    assert_comma("1,1", "(comma (ce (ce 1) , (ce 1)))");
+    assert_comma("1,1,1", "(comma (ce (ce 1) , (ce (ce 1) , (ce 1))))");
+    assert_comma("1,1,1,1", "(comma (ce (ce 1) , (ce (ce 1) , (ce (ce 1) , (ce 1)))))");
+}
+
+test "a nested operand the suffix can end after takes its own operator again" {
+    assert_plus("a+b", "(plus (pe (pe a) + (pe b)))");
+    assert_plus("a+b+c", "(plus (pe (pe a) + (pe (pe b) + (pe c))))");
+    assert_plus("a+b+c+d", "(plus (pe (pe a) + (pe (pe b) + (pe (pe c) + (pe d)))))");
+}
+
+test "an optional operand climbs a looser operator" {
+    assert_range("a..b+c", "(range (re (re a) .. (re (re b) + (re c))))");
+    assert_range("a..b..c", "(range (re (re a) .. (re (re b) .. (re c))))");
+    assert_range("a+b..c", "(range (re (re a) + (re (re b) .. (re c))))");
+}
+
+test "an absent optional operand leaves the loop to continue" {
+    assert_range("a..", "(range (re (re a) ..))");
+    assert_range("a..+b", "(range (re (re (re a) ..) + (re b)))");
+    assert_range("a+b..", "(range (re (re a) + (re (re b) ..)))");
+}
+
+test "a list operand leaves the enclosing alternative its operator" {
+    assert_send("a,a>>a*a", "(send (se (se a) , (se a) >> (se (se a) * (se a))))");
+    assert_send("a,a,a>>a", "(send (se (se a) , (se a) , (se a) >> (se a)))");
+    assert_send("a*b,c,x*y>>r", "(send (se (se (se a) * (se b)) , (se c) , (se (se x) * (se y)) >> (se r)))");
+}
+
+test "a list operand climbs a tighter operator" {
+    assert_send("a,a*a>>a", "(send (se (se a) , (se (se a) * (se a)) >> (se a)))");
+    assert_send("a,a*a,a>>a", "(send (se (se a) , (se (se a) * (se a)) , (se a) >> (se a)))");
+}
+
+test "a list operand takes the operator when another is left over" {
+    assert_send("a,a>>a,a>>a", "(send (se (se a) , (se (se a) >> (se a)) , (se a) >> (se a)))");
+    assert_send("a,a>>a>>a", "(send (se (se a) , (se (se a) >> (se a)) >> (se a)))");
+    assert_send("a,a>>a*a>>a", "(send (se (se a) , (se (se a) >> (se (se a) * (se a))) >> (se a)))");
+}
+
+test "a list operand holding another list alternative" {
+    assert_send("a,a>>a,a>>a>>a", "(send (se (se a) , (se (se (se a) >> (se a)) , (se a) >> (se a)) >> (se a)))");
+}
+
+test "the operators outside a list chain left-associatively" {
+    assert_send("a*a,a>>a", "(send (se (se (se a) * (se a)) , (se a) >> (se a)))");
+    assert_send("a>>a>>a", "(send (se (se (se a) >> (se a)) >> (se a)))");
+    assert_send("a>>a,a>>a", "(send (se (se (se a) >> (se a)) , (se a) >> (se a)))");
+    assert_send("a*a>>a", "(send (se (se (se a) * (se a)) >> (se a)))");
+    assert_send("a>>a*a>>a", "(send (se (se (se a) >> (se (se a) * (se a))) >> (se a)))");
+}
+
+test "an ATN-class list operand leaves the enclosing alternative its operator" {
+    assert_bang("a,a>>a*a", "(bang (ae (ae a) , (ae a) >> (ae (ae a) * (ae a))))");
+    assert_bang("a*b,c,x*y>>r", "(bang (ae (ae (ae a) * (ae b)) , (ae c) , (ae (ae x) * (ae y)) >> (ae r)))");
+}
+
+test "an ATN-class list operand takes the operator when another is left over" {
+    assert_bang("a,a>>a,a>>a", "(bang (ae (ae a) , (ae (ae a) >> (ae a)) , (ae a) >> (ae a)))");
+    assert_bang("a,a>>a>>a", "(bang (ae (ae a) , (ae (ae a) >> (ae a)) >> (ae a)))");
+}
+
+test "an ATN-class list operand beside the atom that shares its operator" {
+    assert_bang("!a,a>>a>>a", "(bang (ae ! (ae (ae a) , (ae a) >> (ae a)) >> (ae a)))");
+    assert_bang("a,!a>>a>>a", "(bang (ae (ae a) , (ae ! (ae a) >> (ae a)) >> (ae a)))");
+    assert_bang("!a>>a,a>>a", "(bang (ae ! (ae a) >> (ae (ae a) , (ae a) >> (ae a))))");
+    assert_bang("a,!a>>a,a>>a>>a", "(bang (ae (ae a) , (ae ! (ae a) >> (ae (ae a) , (ae a) >> (ae a))) >> (ae a)))");
+}

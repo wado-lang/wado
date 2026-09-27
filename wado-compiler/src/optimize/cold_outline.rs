@@ -31,8 +31,7 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use cranelift_entity::EntityRef;
-
+use super::arena_query::{cold_path_id, is_cold_marker};
 use super::dce::DescriptorCache;
 use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
@@ -82,14 +81,6 @@ pub fn outline_cold_regions(
 struct Exits {
     unit: TypeId,
     never: TypeId,
-}
-
-/// The `FuncId` of `builtin::cold_path`, if the package resolved one.
-fn cold_path_id(descriptors: &[FunctionRef]) -> Option<FuncId> {
-    descriptors
-        .iter()
-        .position(|d| d.is_builtin_named("cold_path"))
-        .map(FuncId::new)
 }
 
 /// A cold region: the statements after a `cold_path()` marker, to the end of
@@ -239,17 +230,6 @@ fn buys_nothing(
 ) -> bool {
     region.is_empty()
         || region_size(body, type_table, descriptors, region) <= call_site_size(param_count)
-}
-
-/// Whether `stmt` is a bare `cold_path()` call.
-fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
-    let StmtKind::Expr(op) = &body.stmts[stmt].kind else {
-        return false;
-    };
-    let Some(expr) = op.as_expr() else {
-        return false;
-    };
-    matches!(&body.exprs[expr].kind, ExprKind::Call { func_id, .. } if *func_id == cold)
 }
 
 /// How one local the region mentions gets to the helper.
@@ -595,6 +575,15 @@ fn build_helper(
         .iter()
         .map(|&i| ctx.local(i))
         .collect();
+    // What the enclosing function keeps of a parameter bounds what the region
+    // keeps of it. What the region does with a lifted local nothing summarized,
+    // so each is taken as kept.
+    helper.retains.extend(
+        region
+            .args
+            .iter()
+            .map(|&idx| parent.locals[idx as usize].name.clone()),
+    );
     helper.id = Some(id);
     helper.name = cold_region_helper_name(&parent.name, ordinal);
     helper.visibility = Visibility::Private;

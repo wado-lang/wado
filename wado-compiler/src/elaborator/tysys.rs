@@ -15,7 +15,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable, range_item};
 
 use super::sem::decls::ModuleDecls;
 use super::trait_env::{NamespaceImports, TraitEnv};
@@ -216,14 +216,6 @@ pub(crate) fn operator_trait_method(op: &BinaryOp) -> Option<(CompilerItem, &'st
 /// The compiler item `op` dispatches through.
 pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
     operator_trait_method(op).map(|(item, _)| item)
-}
-
-/// The prelude struct a `kind` range literal builds.
-pub(super) fn range_item(kind: RangeKind) -> CompilerItem {
-    match kind {
-        RangeKind::Exclusive => CompilerItem::RangeExclusive,
-        RangeKind::Inclusive => CompilerItem::RangeInclusive,
-    }
 }
 
 /// Pure type-shape helpers answerable from the type table alone (peel

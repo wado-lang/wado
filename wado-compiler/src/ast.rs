@@ -2786,8 +2786,18 @@ pub struct TryOpExpr {
 /// Range kind: exclusive (..<) or inclusive (..=)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RangeKind {
-    Exclusive, // ..<
-    Inclusive, // ..=
+    Exclusive,
+    Inclusive,
+}
+
+impl RangeKind {
+    /// The operator that writes this kind: `..<` or `..=`.
+    pub fn operator(self) -> &'static str {
+        match self {
+            RangeKind::Exclusive => "..<",
+            RangeKind::Inclusive => "..=",
+        }
+    }
 }
 
 /// Range expression: `start..<end` or `start..=end`

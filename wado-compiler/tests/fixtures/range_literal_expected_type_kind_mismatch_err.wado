@@ -1,0 +1,8 @@
+// Only a range of the same kind supplies the element type: `..<` against a
+// `RangeInclusive` keeps its bounds `i32`.
+export fn run() {
+    let r: RangeInclusive<u64> = 0..<5;
+}
+
+__DATA__
+{"compile_error": ":4:34: analysis error: type mismatch: expected 'RangeInclusive<u64>', found 'RangeExclusive<i32>'"}

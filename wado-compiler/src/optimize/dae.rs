@@ -173,13 +173,13 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     let kept_locals = &func.address_taken_locals;
     let stores_aliased = &func.stores_aliased_locals;
 
+    // `retains` is not consulted: keeping a parameter takes a read of it.
     let mut dead = Vec::with_capacity(func.params.len());
     for p in &func.params {
         let is_read = reads.contains(&p.local_index);
         let is_kept = kept_locals.contains(&p.local_index);
         let is_aliased = stores_aliased.contains(&p.local_index);
-        let is_retained = func.retains.contains(&p.name);
-        dead.push(!(is_read || is_kept || is_aliased || is_retained));
+        dead.push(!(is_read || is_kept || is_aliased));
     }
     dead
 }

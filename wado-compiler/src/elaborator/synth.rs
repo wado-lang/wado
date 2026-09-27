@@ -10,7 +10,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable, range_item};
 
 use super::Elaborator;
 use super::callee::CalleeRef;
@@ -18,7 +18,7 @@ use super::coercion::is_primitive_literal_target;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
-use super::tysys::{TypeSystem, range_item};
+use super::tysys::TypeSystem;
 use super::util::is_float_only_literal;
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::name::{DeclName, RefKind};

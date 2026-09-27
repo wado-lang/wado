@@ -1,0 +1,24 @@
+// A cast hands its target to a named struct or range literal, so the literal's
+// type arguments come from the target, through a newtype too.
+use { println, Stdout } from "core:cli";
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+type Wide = Pair<u64>;
+type Span = RangeExclusive<u64>;
+
+export fn run() with Stdout {
+    let p = Pair { a: 1, b: 0x1_0000_0000 } as Pair<u64>;
+    let w = Pair { a: 2, b: 0x1_0000_0001 } as Wide;
+    let r = (0..<0x1_0000_0000) as RangeExclusive<u64>;
+    let s = (1..<0x1_0000_0002) as Span;
+    println(`${p.b} ${(w as Pair<u64>).b} ${r.end} ${(s as RangeExclusive<u64>).end}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296 4294967297 4294967296 4294967298\n"
+}

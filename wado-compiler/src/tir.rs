@@ -14,14 +14,14 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, NamePolicy, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, NamePolicy, RangeKind, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-    FqTraitName, FqTypeName, LocalMethodName, NEVER_TYPE_NAME, RefKind, TEMPLATE_SHAPE_PREFIX,
-    TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name, mangle_builtin_array_type,
-    mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
+    FqTraitName, FqTypeName, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
+    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
+    mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -1877,7 +1877,6 @@ impl TypeTable {
     /// Matched by declaration, so a user type spelled `StructField` stays
     /// reflectable.
     pub fn is_sealed_reflect_member(&self, decl: AstId) -> bool {
-        use crate::compiler_item::CompilerItem;
         [
             CompilerItem::ReflectStructField,
             CompilerItem::ReflectVariantCase,
@@ -4039,7 +4038,6 @@ impl TypeTable {
     ///
     /// The sealed member handles are the one declared struct it withholds.
     pub fn reflect_kind(&self, id: TypeId) -> Option<CompilerItem> {
-        use crate::compiler_item::CompilerItem;
         if self
             .decl_of_type(id)
             .is_some_and(|decl| self.is_sealed_reflect_member(decl))
@@ -4163,6 +4161,12 @@ impl TypeTable {
     /// The element type of `id` when it is a `List` itself, not a reference to one.
     pub fn list_element(&self, id: TypeId) -> Option<TypeId> {
         self.single_arg_of(id, CompilerItem::List)
+    }
+
+    /// The element type of `id` when it is the range struct a `kind` range
+    /// literal builds.
+    pub fn range_element(&self, id: TypeId, kind: RangeKind) -> Option<TypeId> {
+        self.single_arg_of(id, range_item(kind))
     }
 
     /// Check if a type contains UNKNOWN (undefined type that was not resolved).
@@ -4787,11 +4791,10 @@ impl TypeTable {
     ///
     /// The head carries its declaring module, so two modules declaring the same
     /// simple name index apart. Consumers pick the namespace they need:
-    /// [`crate::name::Receiver::decl_key`] for the name an `impl` header
-    /// writes, [`crate::name::Receiver::head_key`] for the mangled identity.
+    /// [`Receiver::decl_key`] for the name an `impl` header writes,
+    /// [`Receiver::head_key`] for the mangled identity.
     #[must_use]
-    pub fn impl_receiver_key(&self, id: TypeId) -> name::Receiver {
-        use crate::name::{FqTypeName, Receiver};
+    pub fn impl_receiver_key(&self, id: TypeId) -> Receiver {
         let declared = |def: DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
         let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
         // Unerased: which impls a type has is a fact about its identity, and
@@ -4866,7 +4869,6 @@ impl TypeTable {
     /// base's name for a newtype — templates no impl declares.
     #[must_use]
     pub fn fq_base_type_name(&self, id: TypeId) -> FqTypeName {
-        use crate::name::FqTypeName;
         match self.get_unerased(id) {
             ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
             ResolvedType::Enum { def }
@@ -5077,6 +5079,14 @@ impl TypeTable {
             ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
+    }
+}
+
+/// The prelude struct a `kind` range literal builds.
+pub fn range_item(kind: RangeKind) -> CompilerItem {
+    match kind {
+        RangeKind::Exclusive => CompilerItem::RangeExclusive,
+        RangeKind::Inclusive => CompilerItem::RangeInclusive,
     }
 }
 
@@ -6887,6 +6897,8 @@ pub enum LinearMemory {
 /// Link snapshots it because monomorphization drops the generic declarations.
 #[derive(Debug, Clone, Default)]
 pub struct BuiltinDeclaration {
+    /// How many parameters the declaration takes.
+    pub arity: usize,
     /// `#[result(...)]`, or `None` where the declaration states none.
     pub returns: Option<ReturnConvention>,
     /// `#[retain(...)]` — what this call keeps beyond it.
@@ -6938,38 +6950,48 @@ impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
     }
 }
 
-/// What each body-less declaration stated about storage, resolved from a call.
-/// Link snapshots these before monomorphization drops the generic declarations,
-/// and both the lowering plan and the NIR optimizer read them.
-#[derive(Debug, Clone, Default)]
-pub struct BuiltinDeclarations(IndexMap<(ModuleSource, String), BuiltinDeclaration>);
+/// One value per body-less declaration, found from a call to it.
+#[derive(Debug, Clone)]
+pub struct DeclarationTable<V>(IndexMap<(ModuleSource, String), V>);
 
-impl BuiltinDeclarations {
-    pub fn new(declarations: IndexMap<(ModuleSource, String), BuiltinDeclaration>) -> Self {
+impl<V> Default for DeclarationTable<V> {
+    fn default() -> Self {
+        Self(IndexMap::default())
+    }
+}
+
+impl<V> DeclarationTable<V> {
+    /// A table over `declarations`, keyed by module and declared name.
+    pub fn new(declarations: IndexMap<(ModuleSource, String), V>) -> Self {
         Self(declarations)
     }
 
-    /// What `call` declared, or `None` where it declared nothing. Keyed by the
-    /// generic name a monomorphized instance came from, which is the name the
-    /// declaration was snapshot under.
-    fn get(&self, call: DeclarationLookup<'_>) -> Option<&BuiltinDeclaration> {
+    /// The value for the declaration `call` resolves to, or `None` where there
+    /// is none. Keyed by the generic name a monomorphized instance came from,
+    /// which is the name the declaration was snapshot under.
+    pub fn get<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&V> {
+        let call = call.into();
         let key = |name: &str| (call.module_source.clone(), name.to_string());
         if let Some(generic) = call.generic_name
-            && let Some(declaration) = self.0.get(&key(generic))
+            && let Some(value) = self.0.get(&key(generic))
         {
-            return Some(declaration);
+            return Some(value);
         }
         self.0.get(&key(call.name))
     }
 
-    /// Everything `call` declared, or `None` where there is no snapshot.
-    pub fn declaration<'a>(
-        &self,
-        call: impl Into<DeclarationLookup<'a>>,
-    ) -> Option<&BuiltinDeclaration> {
-        self.get(call.into())
+    /// The same declarations, each mapped to `f` of its value.
+    pub fn map<W>(&self, mut f: impl FnMut(&V) -> W) -> DeclarationTable<W> {
+        DeclarationTable(self.0.iter().map(|(k, v)| (k.clone(), f(v))).collect())
     }
+}
 
+/// What each body-less declaration stated about storage, resolved from a call.
+/// Link snapshots these before monomorphization drops the generic declarations,
+/// and both the lowering plan and the NIR optimizer read them.
+pub type BuiltinDeclarations = DeclarationTable<BuiltinDeclaration>;
+
+impl DeclarationTable<BuiltinDeclaration> {
     /// Whether `call` names a body-less declaration that stated a convention or
     /// a retention — the calls that answer from a declaration rather than from
     /// the fixpoint.

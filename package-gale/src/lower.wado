@@ -45,6 +45,7 @@ use {
     GroupElement,
 } from "./ir.wado";
 use {
+    alt_class,
     alt_class_of,
     alt_classes,
     alt_classes_of,
@@ -540,48 +541,6 @@ fn follow_rule_snakes(grammar: &Grammar, ctx: &GenContext) -> List<String> {
     return snakes;
 }
 
-/// Returns true iff `se` carries a `ScanRuleCall` to `rule_snake`
-/// anywhere reachable through `Repeat` / `Group` / `OptionalLookahead`.
-/// Pre-check for the deep walkers so they skip subtrees with no
-/// self-ref (Wado value semantics make the rebuild a deep clone).
-fn scan_element_contains_self_ref<S: AsStrSlice>(se: &ScanElement, rule_snake: S) -> bool {
-    return match se {
-        RuleCall(rc) => rc.target_snake == rule_snake.as_str_slice(),
-        Repeat(r) => scan_element_contains_self_ref(&r.body, rule_snake),
-        Group(g) => {
-            let mut found = false;
-            for let scan_alt of &g.alts {
-                for let inner of &scan_alt.elements {
-                    if scan_element_contains_self_ref(inner, rule_snake) {
-                        found = true;
-                        break;
-                    }
-                }
-                if found {
-                    break;
-                }
-            }
-            found;
-        },
-        OptionalLookahead(ole) => {
-            let mut found = false;
-            for let body of &ole.bodies {
-                for let inner of &body.elements {
-                    if scan_element_contains_self_ref(inner, rule_snake) {
-                        found = true;
-                        break;
-                    }
-                }
-                if found {
-                    break;
-                }
-            }
-            found;
-        },
-        Token(_) | Wildcard | Excluded(_) => false,
-    };
-}
-
 /// Walk every lowered `Rule` and intern every multi-element
 /// token-kind set into a single `KindSet` registry. The resulting
 /// `List<KindSet>` is keyed by registration order — single-token
@@ -859,17 +818,12 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
 ///   internal self-ref index, suffix first-set, right-associativity.
 /// * `lr_dispatch: LrDispatchData` — the suffix-loop overlap groups
 ///   and the indices of LR alts that have a non-empty suffix.
-///
-/// Only the disjoint-suffix-first case is handled (no overlap groups
-/// beyond singletons); overlapping suffix first-sets would need the
-/// scan-tournament dispatch.
 fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     let header = lower_header(rule);
 
-    // Partition alts into atom (non-LR) and lr (LR). ANTLR4 requires
-    // at least one non-LR alt; we mirror the assertion so the GIR
-    // `atom: MultiAltRule` invariant (header derived from a non-empty
-    // alt set) is honoured.
+    // Partition alts into atom (non-LR) and lr (LR). `check_left_recursion_ends`
+    // has rejected a rule with no non-LR alt, so the GIR `atom: MultiAltRule`
+    // (header derived from a non-empty alt set) always has one.
     let mut non_lr_indices: List<i32> = [];
     let mut lr_indices: List<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
@@ -904,9 +858,11 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // ATN-class detection: the static suffix-first dispatch mis-commits when
     // an atom alt recursively references this rule with a trailing literal
     // that overlaps an LR suffix-first (the `'between' expr 'and' expr`
-    // shape), or when a suffix is `.` / `~X`-led (empty static suffix-first).
+    // shape), when a suffix can open on a `.` / `~X`, or when a self-ref
+    // nested in a suffix's subrule can meet a loop operator.
     // Route such a rule's loop-entry through the runtime simulator.
-    let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts);
+    let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
+    let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes);
     if atn_class {
         ctx.mark_needs_lr_atn();
     }
@@ -914,7 +870,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // `valid_lr_alts` must line up with the ATN precedence-edge list (which
     // covers every real suffix) when the rule dispatches via the simulator, so
     // pass `atn_class` through.
-    let lr_dispatch = compute_lr_dispatch_data(&lr_alts, atn_class);
+    let lr_dispatch = compute_lr_dispatch_data(&lr_alts, &suffix_classes, atn_class);
 
     let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
     if mid_operand_gated {
@@ -932,15 +888,33 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     };
 }
 
+/// The class of each LR alt's suffix (`elements[1..]`), in `lr_alts` order.
+fn lr_suffix_classes(rule: &ParserRule, lr_alts: &List<LrAlt>, ctx: &mut GenContext) -> List<AltClass> {
+    let mut out: List<AltClass> = [];
+    for let a of lr_alts {
+        let alt = &rule.alternatives[a.alt_index];
+        let suffix = Alternative { ..*alt, elements: elements_from(&alt.elements, 1), actions: [] };
+        out.push(alt_class(&suffix, &a.suffix_first, ctx));
+    }
+    return out;
+}
+
 /// True when this LR rule's loop entry needs the runtime simulator's full
 /// context, as with `'between' expr 'and' expr` beside `expr 'and' expr`.
-fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: &List<LrAlt>) -> bool {
-    // A `.` / `~X`-led LR suffix has a real suffix but an empty static
-    // `suffix_first`: the loop-entry can't be decided by a static first-token
-    // check, so the rule must run on the runtime simulator (which admits the
-    // wildcard/complement operator via `atn_first_admits`).
-    for let a of lr_alts {
-        if !a.suffix.ops.is_empty() && a.suffix_first.is_empty() {
+fn lr_rule_is_atn_class(
+    rule: &ParserRule,
+    non_lr_indices: &List<i32>,
+    lr_alts: &List<LrAlt>,
+    suffix_classes: &List<AltClass>,
+) -> bool {
+    // A suffix that can open on a `.` / `~X`, in place or behind a rule, admits
+    // tokens its static `suffix_first` does not name — all of them when that
+    // set is empty, and still the rest in `A? .` or `(w | A)`. No static
+    // first-token check decides such a loop entry; the runtime simulator admits
+    // the open end via `atn_state_cont_admits`.
+    for let mut i = 0; i < lr_alts.len(); i += 1 {
+        let a = &lr_alts[i];
+        if !a.suffix.ops.is_empty() && (a.suffix_first.is_empty() || alt_class_is_open_ended(&suffix_classes[i])) {
             return true;
         }
     }
@@ -955,16 +929,19 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
         }
     }
 
-    let mut suffix_first_tokens: List<String> = [];
-    for let a of lr_alts {
-        for let t of &a.suffix_first {
-            if !suffix_first_tokens.contains(t) {
-                suffix_first_tokens.push(*t);
-            }
-        }
-    }
+    let suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
     if suffix_first_tokens.is_empty() {
         return false;
+    }
+    // A self-reference nested in a subrule is ANTLR4's plain `e[0]`: it climbs
+    // every operator, and only full context says whether it must leave one to
+    // the rest of its suffix (`e (',' e)* '>>' e`). No precedence floor says
+    // it: one that leaves the suffix its `'>>'` also refuses a `'>>'` when
+    // another is left over.
+    for let a of lr_alts {
+        if nested_operand_meets_operator_in_suffix(&a.suffix.ops, &rule.name, &suffix_first_tokens) {
+            return true;
+        }
     }
     // An atom operand followed by a loop delimiter: the static dispatch would
     // commit the loop and starve the atom's own delimiter.
@@ -1018,8 +995,10 @@ fn fixed_token_const_name(elem: &Element) -> Option<String> {
     };
 }
 
-/// Stamps each self-reference in an LR suffix, parse and scan side alike, with its
+/// Stamps each operand of an LR suffix, parse and scan side alike, with its
 /// precedence and continuation gate; returns whether any mid operand is gated.
+/// A self-reference nested in a subrule is not an operand but a plain call,
+/// ANTLR4's `e[0]`, so it keeps the callee's defaults.
 fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
     lr_alts: &mut List<LrAlt>,
     rule_name: S,
@@ -1036,102 +1015,51 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
         let scan_len = lr_alts[i].scan_suffix.elements.len();
         assert scan_len == suffix_len, `LR suffix walk length mismatch: parse-side ${suffix_len}, scan-side ${scan_len}`;
 
-        let mut new_ops: List<Op> = [];
-        let mut new_scan: List<ScanElement> = [];
         let mut alt_gated = false;
         for let mut k = 0; k < suffix_len; k += 1 {
             // suffix.ops[k] / scan_suffix.elements[k] correspond to
-            // alt.elements[k+1].
-            let op_ref = &lr_alts[i].suffix.ops[k];
-            let se_ref = &lr_alts[i].scan_suffix.elements[k];
-
-            // Find the inner parse-side RuleCall, peeling a single
-            // `Op::ListLabel` wrapper (scalar `Label` is collapsed
-            // by `lower_label_op`).
-            let inner_rc_opt = find_self_ref_rule_call(op_ref, rule_name);
-            if let Some(_) = inner_rc_opt {
-                let mut prec = compute_self_ref_prec_from_ops(
-                    &lr_alts[i].suffix.ops,
-                    k,
-                    conflict_min,
-                    &lr_suffix_first_tokens,
-                );
-                // A mid operand is ANTLR4's `e[0]`, a trailing one its own
-                // precedence. An ATN-class loop decides its climb with full
-                // context; the static dispatch hands a mid operand the
-                // continuation it has to leave behind, and its loop gate stops it.
-                let mut cont_mask = -1;
-                let natural_trailing = lr_trailing_prec(lr_alts[i].own_prec, lr_alts[i].right_associative);
-                if atn_class {
-                    prec = if k + 1 < suffix_len { 0 } else { natural_trailing };
-                } else if alt_gated && k + 1 == suffix_len {
-                    prec = natural_trailing;
-                } else if prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
-                    let cont = lr_suffix_continuation_mask(&lr_alts[i].suffix.ops, k + 1, ctx);
-                    if !cont.is_empty() {
-                        if let Some(id) = ctx.intern_follow_mask(&cont) {
-                            prec = 0;
-                            cont_mask = id;
-                            mid_operand_gated = true;
-                            alt_gated = true;
-                        }
+            // alt.elements[k+1]. A scalar `Label` is collapsed by
+            // `lower_label_op`, so only a `ListLabel` wraps an operand.
+            if find_self_ref_rule_call(&lr_alts[i].suffix.ops[k], rule_name) matches { None } {
+                continue;
+            }
+            let mut prec = compute_self_ref_prec_from_ops(
+                &lr_alts[i].suffix.ops,
+                k,
+                conflict_min,
+                &lr_suffix_first_tokens,
+            );
+            // A mid operand is ANTLR4's `e[0]`, a trailing one its own
+            // precedence. An ATN-class loop decides its climb with full
+            // context; the static dispatch hands a mid operand the
+            // continuation it has to leave behind, and its loop gate stops it.
+            let mut cont_mask = -1;
+            let natural_trailing = lr_trailing_prec(lr_alts[i].own_prec, lr_alts[i].right_associative);
+            if atn_class {
+                prec = if k + 1 < suffix_len { 0 } else { natural_trailing };
+            } else if alt_gated && k + 1 == suffix_len {
+                prec = natural_trailing;
+            } else if prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
+                let cont = lr_suffix_continuation_mask(&lr_alts[i].suffix.ops, k + 1, ctx);
+                if !cont.is_empty() {
+                    if let Some(id) = ctx.intern_follow_mask(&cont) {
+                        prec = 0;
+                        cont_mask = id;
+                        mid_operand_gated = true;
+                        alt_gated = true;
                     }
                 }
-                new_ops.push(rebind_self_ref_lr_cont(rebind_self_ref_min_prec(*op_ref, prec), cont_mask));
-                new_scan.push(rebind_scan_self_ref_lr_cont(
-                    rebind_scan_self_ref_min_prec(*se_ref, rule_snake, prec),
-                    rule_snake,
-                    cont_mask,
-                ));
-            } else {
-                // Self-ref nested inside a container (`Repeat`, `Group`,
-                // scan-side `OptionalLookahead`). A nested self-ref is a
-                // primary reference: it takes prec 0 (a full sub-expression)
-                // unless an LR operator can appear in its follow, in which
-                // case `conflict_min` keeps it from stealing that operator.
-                // The container's own follow is whether an LR operator can
-                // follow it in the rest of the suffix (from `k + 1`); the LR
-                // loop can re-enter on an LR operator after the suffix, so the
-                // suffix tail conservatively carries one. The parse (`Op`) and
-                // scan (`ScanElement`) sides each compute the decision over
-                // their OWN tree — they mirror the same surface alt, so they
-                // agree, with no ordinal coupling between the two walks.
-                // Short-circuit when the subtree has no self-ref to avoid a
-                // deep clone.
-                if op_subtree_contains_self_ref(op_ref, rule_name) {
-                    let op_follow = seq_first_has_lr(&lr_alts[i].suffix.ops, k + 1, &lr_suffix_first_tokens, true);
-                    new_ops.push(stamp_op_follow(
-                        *op_ref,
-                        rule_name,
-                        rule_snake,
-                        &lr_suffix_first_tokens,
-                        conflict_min,
-                        op_follow,
-                    ));
-                } else {
-                    new_ops.push(*op_ref);
-                }
-                if scan_element_contains_self_ref(se_ref, rule_snake) {
-                    let scan_follow = scan_seq_first_has_lr(
-                        &lr_alts[i].scan_suffix.elements,
-                        k + 1,
-                        &lr_suffix_first_tokens,
-                        true,
-                    );
-                    new_scan.push(stamp_scan_follow(
-                        *se_ref,
-                        rule_snake,
-                        &lr_suffix_first_tokens,
-                        conflict_min,
-                        scan_follow,
-                    ));
-                } else {
-                    new_scan.push(*se_ref);
-                }
             }
+            lr_alts[i].suffix.ops[k] = rebind_self_ref_lr_cont(
+                rebind_self_ref_min_prec(lr_alts[i].suffix.ops[k], prec),
+                cont_mask,
+            );
+            lr_alts[i].scan_suffix.elements[k] = rebind_scan_self_ref_lr_cont(
+                rebind_scan_self_ref_min_prec(lr_alts[i].scan_suffix.elements[k], rule_snake, prec),
+                rule_snake,
+                cont_mask,
+            );
         }
-        lr_alts[i].suffix.ops = new_ops;
-        lr_alts[i].scan_suffix = ScanBody { ..lr_alts[i].scan_suffix, elements: new_scan };
     }
     if mid_operand_gated {
         forward_lr_cont_to_trailing_operands(lr_alts, rule_name, rule_snake);
@@ -1246,6 +1174,18 @@ fn rebind_scan_self_ref_min_prec<S: AsStrSlice>(se: ScanElement, rule_snake: S, 
     return se;
 }
 
+/// The precedence `stamp_lr_self_ref_min_prec` gave the self-reference at
+/// `lr.suffix.ops[k]`, the alternative's element `k + 1`.
+pub fn lr_operand_prec<S: AsStrSlice>(lr: &LrAlt, k: i32, rule_name: S) -> i32 {
+    let Some(rc) = find_self_ref_rule_call(&lr.suffix.ops[k], rule_name) else {
+        panic(`suffix op ${k} of LR alt ${lr.alt_index} is not a self-reference`);
+    };
+    let Some(prec) = rc.min_prec_arg else {
+        panic(`self-reference ${k} of LR alt ${lr.alt_index} was never stamped`);
+    };
+    return prec;
+}
+
 fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&RuleCallOp> {
     return match op {
         RuleCall(rc) => if rc.target_name == rule_name.as_str_slice() { Option::Some(rc) } else { null },
@@ -1254,21 +1194,46 @@ fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&Rule
     };
 }
 
-/// Returns true iff `op` contains an `Op::RuleCall` targeting
-/// `rule_name`, anywhere reachable through container variants
-/// (`Repeat`, `Group`, `ListLabel`). Used by
-/// `stamp_lr_self_ref_min_prec` to skip the deep-walker rebuild for
-/// subtrees that don't carry a self-ref — Wado's value semantics
-/// turn the rebuild into a deep copy.
-fn op_subtree_contains_self_ref<S: AsStrSlice>(op: &Op, rule_name: S) -> bool {
+/// Whether a self-reference nested in a subrule of the LR suffix `ops` can be
+/// followed, before the suffix ends, by a token in `operators`.
+fn nested_operand_meets_operator_in_suffix<S: AsStrSlice>(
+    ops: &List<Op>,
+    rule_name: S,
+    operators: &List<String>,
+) -> bool {
+    for let mut k = 0; k < ops.len(); k += 1 {
+        if find_self_ref_rule_call(&ops[k], rule_name) matches { Some(_) } {
+            continue;
+        }
+        let follow_has = seq_first_has_lr(ops, k + 1, operators, false);
+        if nested_operand_meets_operator(&ops[k], rule_name, operators, follow_has) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether a self-reference inside `op` can be followed by a token in
+/// `operators`; `follow_has` says whether what follows `op` can start with one.
+fn nested_operand_meets_operator<S: AsStrSlice>(
+    op: &Op,
+    rule_name: S,
+    operators: &List<String>,
+    follow_has: bool,
+) -> bool {
     return match *op {
-        RuleCall(rc) => rc.target_name == rule_name.as_str_slice(),
-        ListLabel(ll) => op_subtree_contains_self_ref(&ll.inner, rule_name),
-        Repeat(r) => op_subtree_contains_self_ref(&r.body, rule_name),
+        RuleCall(rc) => follow_has && rc.target_name == rule_name.as_str_slice(),
+        ListLabel(ll) => nested_operand_meets_operator(&ll.inner, rule_name, operators, follow_has),
+        Repeat(r) => {
+            // A `*` / `+` body is also followed by its own next iteration.
+            let reiterates = r.kind matches { Star | Plus } && op_first_has_lr(&r.body, operators);
+            nested_operand_meets_operator(&r.body, rule_name, operators, reiterates || follow_has);
+        },
         Group(g) => {
             for let alt of &g.alts {
-                for let inner of &alt.ops {
-                    if op_subtree_contains_self_ref(inner, rule_name) {
+                for let mut j = 0; j < alt.ops.len(); j += 1 {
+                    let inner_follow_has = seq_first_has_lr(&alt.ops, j + 1, operators, follow_has);
+                    if nested_operand_meets_operator(&alt.ops[j], rule_name, operators, inner_follow_has) {
                         return true;
                     }
                 }
@@ -1300,8 +1265,7 @@ fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
 
 /// True iff FIRST(`op`) can contain a token in `lr_first` (the union of
 /// the rule's LR-suffix-first operator tokens). Opaque ops (RuleCall /
-/// Wildcard / Excluded) return true conservatively so a nested self-ref
-/// is never wrongly dropped to prec 0 when an operator might follow.
+/// Wildcard / Excluded) return true conservatively.
 fn op_first_has_lr(op: &Op, lr_first: &List<String>) -> bool {
     return match *op {
         Token(t) => first_contains(lr_first, &t.kind),
@@ -1366,223 +1330,6 @@ fn seq_first_has_lr(ops: &List<Op>, idx: i32, lr_first: &List<String>, tail_has:
     return false;
 }
 
-/// Follow-aware stamp of nested self-recursive `RuleCall`s reachable
-/// through `Repeat` / `Group` / `ListLabel`. A nested self-ref is a
-/// PRIMARY reference and takes `min_prec_arg = 0` (a full sub-expression,
-/// e.g. a bracketed call arg `expr '(' (expr ...)? ')'`) UNLESS an LR
-/// operator can appear in its follow, in which case it keeps
-/// `conflict_min` so it cannot steal that operator (the `expr (',' expr)*
-/// '>>' expr` list operand, BETWEEN…AND). `follow_has` is whether an LR
-/// operator can follow THIS op. The scan-side mirror `stamp_scan_follow`
-/// computes the same decision over its own tree (no cross-walk coupling).
-/// Replaces the former blanket-`conflict_min` walk.
-fn stamp_op_follow<S: AsStrSlice, S1: AsStrSlice>(
-    op: Op,
-    rule_name: S,
-    rule_snake: S1,
-    lr_first: &List<String>,
-    conflict_min: i32,
-    follow_has: bool,
-) -> Op {
-    return match op {
-        RuleCall(mut rc) => {
-            if rc.target_name == rule_name.as_str_slice() {
-                rc.min_prec_arg = Option::Some(if follow_has { conflict_min } else { 0 });
-            }
-            Op::RuleCall(rc);
-        },
-        ListLabel(mut ll) => {
-            ll.inner = stamp_op_follow(ll.inner, rule_name, rule_snake, lr_first, conflict_min, follow_has);
-            Op::ListLabel(ll);
-        },
-        Repeat(mut r) => {
-            // For `*` / `+` the body can be followed by another iteration
-            // (its own FIRST) or by the Repeat's follow; `?` never
-            // re-iterates.
-            let iter_has = match r.kind {
-                RepeatKind::Optional => follow_has,
-                RepeatKind::Star => op_first_has_lr(&r.body, lr_first) || follow_has,
-                RepeatKind::Plus => op_first_has_lr(&r.body, lr_first) || follow_has,
-            };
-            r.body = stamp_op_follow(r.body, rule_name, rule_snake, lr_first, conflict_min, iter_has);
-            Op::Repeat(r);
-        },
-        Group(mut g) => {
-            let mut new_alts: List<AltBody> = [];
-            for let alt of &g.alts {
-                let mut new_ops: List<Op> = [];
-                for let mut j = 0; j < alt.ops.len(); j += 1 {
-                    let pos_follow = seq_first_has_lr(&alt.ops, j + 1, lr_first, follow_has);
-                    new_ops.push(stamp_op_follow(alt.ops[j], rule_name, rule_snake, lr_first, conflict_min, pos_follow));
-                }
-                new_alts.push(AltBody {
-                    alt_index: alt.alt_index,
-                    case_name: alt.case_name,
-                    struct_name: alt.struct_name,
-                    ops: new_ops,
-                    fields: alt.fields,
-                    prefix_self_ref_min_prec: alt.prefix_self_ref_min_prec,
-                });
-            }
-            g.alts = new_alts;
-            Op::Group(g);
-        },
-        // Leaves with no nested Op: pass through unchanged. Listed
-        // explicitly so a new Op variant fails to compile here rather
-        // than silently dropping a nested self-ref it might carry.
-        Token(t) => Op::Token(t),
-        Literal(l) => Op::Literal(l),
-        Wildcard(wop) => Op::Wildcard(wop),
-        Excluded(e) => Op::Excluded(e),
-    };
-}
-
-/// True iff FIRST(`se`) can contain a token in `lr_first`. Scan-side mirror
-/// of `op_first_has_lr`; opaque elements return true conservatively.
-fn scan_first_has_lr(se: &ScanElement, lr_first: &List<String>) -> bool {
-    return match *se {
-        Token(t) => first_contains(lr_first, &t.kind),
-        RuleCall(_) | Wildcard | Excluded(_) => true,
-        Repeat(r) => scan_first_has_lr(&r.body, lr_first),
-        Group(g) => {
-            for let alt of &g.alts {
-                if scan_seq_first_has_lr(&alt.elements, 0, lr_first, false) {
-                    return true;
-                }
-            }
-            false;
-        },
-        // `?`-over-group: its body's FIRST.
-        OptionalLookahead(ole) => {
-            for let body of &ole.bodies {
-                if scan_seq_first_has_lr(&body.elements, 0, lr_first, false) {
-                    return true;
-                }
-            }
-            false;
-        },
-    };
-}
-
-/// True iff `se` can match the empty string. Scan-side mirror of `op_nullable`.
-fn scan_nullable(se: &ScanElement) -> bool {
-    return match *se {
-        Token(_) | RuleCall(_) | Wildcard | Excluded(_) => false,
-        Repeat(r) => match r.kind {
-            RepeatKind::Star => true,
-            RepeatKind::Optional => true,
-            RepeatKind::Plus => scan_nullable(&r.body),
-        },
-        Group(g) => {
-            for let alt of &g.alts {
-                if scan_seq_all_nullable(&alt.elements) {
-                    return true;
-                }
-            }
-            false;
-        },
-        // `?`-over-group is itself optional.
-        OptionalLookahead(_) => true,
-    };
-}
-
-fn scan_seq_all_nullable(elements: &List<ScanElement>) -> bool {
-    for let se of elements {
-        if !scan_nullable(se) {
-            return false;
-        }
-    }
-    return true;
-}
-
-/// Scan-side mirror of `seq_first_has_lr`.
-fn scan_seq_first_has_lr(elements: &List<ScanElement>, idx: i32, lr_first: &List<String>, tail_has: bool) -> bool {
-    if idx >= elements.len() {
-        return tail_has;
-    }
-    if scan_first_has_lr(&elements[idx], lr_first) {
-        return true;
-    }
-    if scan_nullable(&elements[idx]) {
-        return scan_seq_first_has_lr(elements, idx + 1, lr_first, tail_has);
-    }
-    return false;
-}
-
-/// Scan-side mirror of `stamp_op_follow`: stamps each nested self-recursive
-/// `ScanRuleCall`'s `min_prec_arg` from its own follow (prec 0 for a primary
-/// reference, `conflict_min` when an LR operator can follow). It walks the
-/// scan tree independently of the parse side — both mirror the same surface
-/// alt, so they agree without any ordinal coupling. Preserves each call's
-/// `follow_arg` (a nested self-ref isn't an LR climb).
-fn stamp_scan_follow<S: AsStrSlice>(
-    se: ScanElement,
-    rule_snake: S,
-    lr_first: &List<String>,
-    conflict_min: i32,
-    follow_has: bool,
-) -> ScanElement {
-    return match se {
-        RuleCall(mut rc) => {
-            if rc.target_snake == rule_snake.as_str_slice() {
-                rc.min_prec_arg = Option::Some(if follow_has { conflict_min } else { 0 });
-            }
-            ScanElement::RuleCall(rc);
-        },
-        Repeat(mut r) => {
-            let iter_has = match r.kind {
-                RepeatKind::Optional => follow_has,
-                RepeatKind::Star => scan_first_has_lr(&r.body, lr_first) || follow_has,
-                RepeatKind::Plus => scan_first_has_lr(&r.body, lr_first) || follow_has,
-            };
-            r.body = stamp_scan_follow(r.body, rule_snake, lr_first, conflict_min, iter_has);
-            ScanElement::Repeat(r);
-        },
-        Group(mut g) => {
-            let mut new_alts: List<ScanBody> = [];
-            for let scan_alt of &g.alts {
-                let mut new_elements: List<ScanElement> = [];
-                for let mut j = 0; j < scan_alt.elements.len(); j += 1 {
-                    let pos_follow = scan_seq_first_has_lr(&scan_alt.elements, j + 1, lr_first, follow_has);
-                    new_elements.push(stamp_scan_follow(
-                        scan_alt.elements[j],
-                        rule_snake,
-                        lr_first,
-                        conflict_min,
-                        pos_follow,
-                    ));
-                }
-                new_alts.push(ScanBody { ..*scan_alt, elements: new_elements });
-            }
-            g.alts = new_alts;
-            ScanElement::Group(g);
-        },
-        OptionalLookahead(mut ole) => {
-            let mut new_bodies: List<ScanBody> = [];
-            for let body of &ole.bodies {
-                let mut new_elements: List<ScanElement> = [];
-                for let mut j = 0; j < body.elements.len(); j += 1 {
-                    let pos_follow = scan_seq_first_has_lr(&body.elements, j + 1, lr_first, follow_has);
-                    new_elements.push(stamp_scan_follow(
-                        body.elements[j],
-                        rule_snake,
-                        lr_first,
-                        conflict_min,
-                        pos_follow,
-                    ));
-                }
-                new_bodies.push(ScanBody { ..*body, elements: new_elements });
-            }
-            ole.bodies = new_bodies;
-            ScanElement::OptionalLookahead(ole);
-        },
-        // Leaves with no nested ScanElement: pass through unchanged.
-        Token(t) => ScanElement::Token(t),
-        Wildcard => ScanElement::Wildcard,
-        Excluded(e) => ScanElement::Excluded(e),
-    };
-}
-
 /// Collect the union of every LR alt's `suffix_first` token set.
 /// Used to decide whether a non-trailing self-ref must keep its
 /// precedence so a shared delimiter binds at the right precedence.
@@ -1604,11 +1351,8 @@ fn collect_lr_suffix_first_tokens_from_lowered(lr_alts: &List<LrAlt>) -> List<St
 /// it drops to `0` — a primary reference — UNLESS the token that
 /// immediately follows it is itself an LR-suffix-first operator, in which
 /// case the ref must keep `conflict_min` so it cannot steal that operator
-/// (BETWEEN…AND, and the `expr (',' expr)* '>>' expr` list operand).
-/// This is why `'(' expr ')'` parses its inner `expr` as a full
-/// expression: the `)` that follows is not an LR operator. Nested
-/// self-refs use the follow-aware container walk in
-/// `stamp_lr_self_ref_min_prec`.
+/// (BETWEEN…AND). This is why `'(' expr ')'` parses its inner `expr` as a
+/// full expression: the `)` that follows is not an LR operator.
 fn compute_self_ref_prec_from_ops(
     ops: &List<Op>,
     k: i32,
@@ -1913,8 +1657,8 @@ fn compute_lr_conflict_min_prec(
 /// Build the LR loop's dispatch metadata. `valid_lr_alts` lists the
 /// indices (into `lr_alts`) of alts whose suffix is non-empty —
 /// degenerate `expr : expr` alts are filtered out. `groups` is the
-/// overlap-group partition over those alts' `suffix_first` sets.
-fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatchData {
+/// overlap-group partition over those alts' suffix first sets.
+fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClass>, atn_class: bool) -> LrDispatchData {
     let mut valid_lr_alts: List<i32> = [];
     let mut suffix_first_sets: List<List<String>> = [];
     for let mut i = 0; i < lr_alts.len(); i += 1 {
@@ -1926,14 +1670,14 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatc
         // builds, so the simulator's edge index lines up with these branches
         // and their `scan_X_lr_N` helpers. `groups` is read by both paths — the
         // static dispatch branches on it, the ATN path re-picks within a
-        // multi-member one (`emit_lr_atn_group_repick`). An empty
-        // `suffix_first` overlaps nothing, so it always lands in a singleton
-        // and no re-pick applies: it has no static first set to compete on,
-        // which is why the rule is ATN-class at all.
+        // multi-member one (`emit_lr_atn_group_repick`). An open-ended suffix
+        // stays out of every group: the simulator itself decides between it and
+        // another suffix admitting the token, as ANTLR4 does.
         let skip = if atn_class { lr.suffix.ops.is_empty() } else { lr.suffix_first.is_empty() };
         if skip {
             continue;
         }
+        assert atn_class || !alt_class_is_open_ended(&suffix_classes[i]), "an open-ended LR suffix makes its rule ATN-class";
         valid_lr_alts.push(i);
         suffix_first_sets.push(lr.suffix_first);
     }

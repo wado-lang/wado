@@ -358,8 +358,6 @@ test "build_atn builds a precedence edge for a `~X`-led LR suffix" {
 }
 
 // An LR suffix whose recursive operand is nested inside a Repeat (`('and' e)+`).
-// The follow-aware builder decides the nested operand's precedence floor from
-// its own follow, so the ATN models the same language as the parser (no trap).
 global LR_NESTED_SELFREF_G4: String = "
 grammar T;
 e : e ('and' e)+
@@ -369,23 +367,22 @@ WS : ' ' -> skip ;
 ";
 
 test "build_atn handles a nested self-reference in an LR suffix" {
-    // `e ('and' e)+` nests a self-ref inside the `+` repeat. The nested
-    // operand is followed by an LR operator (`and`), so it carries a
-    // precedence floor (`conflict_min`) — the follow-aware builder, not the
-    // old loud trap. A bracketed arg (no LR operator in follow) would get
-    // prec 0 instead.
+    // `e ('and' e)+` nests a self-ref inside the `+` repeat. ANTLR4 calls a
+    // nested self-ref as a plain `e[0]`, even with an LR operator (`and`)
+    // after it, so its call carries no precedence floor.
     let g = parse(LR_NESTED_SELFREF_G4).unwrap();
     let atn = build_atn(&g);
     // `e` is parser rule 0; find the self-recursive RULE transition.
-    let mut found_floored_self_ref = false;
+    let mut self_refs = 0;
     for let st of &atn.states {
         for let t of &st.transitions {
-            if t.kind == ATN_TR_RULE && t.target == atn.rule_start[0] && t.prec > 0 {
-                found_floored_self_ref = true;
+            if t.kind == ATN_TR_RULE && t.target == atn.rule_start[0] {
+                self_refs += 1;
+                assert t.prec == 0, `nested self-ref in \`('and' e)+\` carries precedence ${t.prec}`;
             }
         }
     }
-    assert found_floored_self_ref, "nested self-ref in `('and' e)+` should carry a precedence floor";
+    assert self_refs == 1, `expected the one nested self-ref, got ${self_refs}`;
 }
 
 // Two non-greedy `??` in one rule must get distinct ATN decisions.

@@ -54,6 +54,7 @@ fn record_declaration(
     out.insert(
         (module_source.clone(), declaration_key(func)),
         BuiltinDeclaration {
+            arity: func.params.len(),
             returns: func.declared_return_convention,
             retains,
             // Read from the type, which is the only thing that says `&mut` here:
