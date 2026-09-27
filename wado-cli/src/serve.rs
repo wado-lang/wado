@@ -514,12 +514,17 @@ impl AccessorTask<WasiState> for HandlerTask {
     }
 }
 
-/// The fuel reading of the request a worker is serving under `--report-fuel`.
+/// The fuel reading of the last request a worker took under `--report-fuel`.
+///
+/// It stays open after the response: wasmtime cannot cancel a guest task, so
+/// one can outlive the response that carried it, and what it spends then is
+/// still this request's.
 struct FuelReading {
-    /// The store's meter when the request started.
+    /// The store's meter where the reading's unreported fuel begins.
     start: u64,
     /// Method and path. The query is left out: it can carry credentials.
     target: String,
+    responded: bool,
 }
 
 impl FuelReading {
@@ -528,11 +533,26 @@ impl FuelReading {
         Self {
             start,
             target: format!("{} {path}", req.method),
+            responded: false,
         }
     }
 
-    fn close(self, spent: u64, suffix: &str) {
-        eprintln!("fuel {} {}{suffix}", spent - self.start, self.target);
+    /// Report the fuel spent since the last report. After the response, only
+    /// guest work that actually ran is worth a line.
+    fn report(&mut self, spent: u64, trapped: bool) {
+        let fuel = spent - self.start;
+        if self.responded && fuel == 0 {
+            return;
+        }
+        let after = if self.responded {
+            " (after response)"
+        } else {
+            ""
+        };
+        let trap = if trapped { " (trapped)" } else { "" };
+        eprintln!("fuel {fuel} {}{after}{trap}", self.target);
+        self.start = spent;
+        self.responded = true;
     }
 }
 
@@ -789,9 +809,9 @@ async fn worker_loop(
             }
         };
 
-        // Outside the dispatch loop, so a trap that ends the loop still leaves
-        // the reading here to close.
-        let mut open_reading: Option<FuelReading> = None;
+        // Outside the dispatch loop, so what ends the loop still leaves the
+        // reading here to report.
+        let mut reading: Option<FuelReading> = None;
         let stop = store
             .run_concurrent(async |accessor| {
                 let mut inflight = FuturesUnordered::new();
@@ -813,8 +833,7 @@ async fn worker_loop(
                         drain_or_tick(&mut inflight, &mut tick_rx).await;
                         Step::Turn
                     } else if inflight.is_empty() {
-                        // Idle — only a new job can wake us. No guest code is
-                        // running, so the epoch deadline cannot trip.
+                        // Idle — only a new job can wake us.
                         job = job_rx.recv().await;
                         Step::Job
                     } else {
@@ -838,9 +857,10 @@ async fn worker_loop(
 
                     let spent = accessor.with(|access| runtime::fuel_spent(access));
                     if inflight.is_empty()
-                        && let Some(reading) = open_reading.take()
+                        && let Some(reading) = reading.as_mut()
                     {
-                        reading.close(spent.expect("a reading opens on a metered store"), "");
+                        let spent = spent.expect("a reading opens on a metered store");
+                        reading.report(spent, false);
                     }
 
                     match step {
@@ -852,7 +872,7 @@ async fn worker_loop(
                                         inflight.is_empty(),
                                         "--report-fuel serves one request at a time"
                                     );
-                                    open_reading = Some(FuelReading::open(spent, &job.wasi_req));
+                                    reading = Some(FuelReading::open(spent, &job.wasi_req));
                                 }
                                 // The `JoinHandle` is kept in `inflight` so a
                                 // recycle can wait for the request to finish;
@@ -875,13 +895,9 @@ async fn worker_loop(
             .await
             .and_then(|inner| inner);
 
-        if let Some(reading) = open_reading {
-            assert!(
-                stop.is_err(),
-                "the dispatch loop closes every reading it finishes"
-            );
+        if let Some(mut reading) = reading {
             let spent = runtime::fuel_spent(&store).expect("a reading opens on a metered store");
-            reading.close(spent, " (trapped)");
+            reading.report(spent, stop.is_err());
         }
 
         match stop {
