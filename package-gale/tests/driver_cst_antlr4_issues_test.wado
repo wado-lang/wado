@@ -1,0 +1,91 @@
+//! Grammars from open parse bugs in antlr/antlr4, each pinned in the state the
+//! report asks for. Gale does not reproduce an ANTLR4 bug, so where the jar
+//! already answers correctly its tree is the expected one, and where it does
+//! not the report's expectation is.
+
+use lr_optional_close from "./grammars/lr_optional_close_atom.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_optional_close_atom" },
+    };
+use order_by from "./grammars/order_by_nested_list.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_order_by_nested_list" },
+    };
+use checklist from "./grammars/lexer_star_overlaps_next_set.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_star_overlaps_next_set" },
+    };
+use token_assoc from "./grammars/lr_token_assoc_ignored.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_token_assoc_ignored" },
+    };
+
+fn assert_same<S: AsStrSlice>(input: S, ok: bool, actual: String, expected: String) {
+    assert ok, `unexpected diagnostics for ${input}: ${actual}`;
+    assert actual == expected, `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+}
+
+// #4911
+test "an atom with an optional closing token is not a prefix operator" {
+    for let [input, expected] of [
+        ["a==b.c;", "(start (expr (expr a) == (expr (expr b) . c)) ;)"],
+        ["(a).b==c;", "(start (expr (expr (expr ( (expr a) )) . b) == (expr c)) ;)"],
+        ["a.b==c.d==e;", "(start (expr (expr (expr (expr a) . b) == (expr (expr c) . d)) == (expr e)) ;)"],
+        ["(a==b;", "(start (expr ( (expr (expr a) == (expr b))) ;)"],
+    ] as List<[String, String]> {
+        let result = lr_optional_close::parse(input);
+        assert_same(input, result.ok(), lr_optional_close::to_string_tree(&result), expected);
+    }
+}
+
+// #4890
+test "a list rule recursing in its own loop takes each clause" {
+    for let [input, expected] of [
+        ["agent.skill ASC", "(s (orderBy (orderByClause (path (expr (atom agent . skill))) ASC)))"],
+        [
+            "a ASC, b DESC, c ASC",
+            "(s (orderBy (orderByClause (path (expr (atom a))) ASC) , (orderBy (orderByClause (path (expr (atom b))) DESC)) , (orderBy (orderByClause (path (expr (atom c))) ASC))))",
+        ],
+        [
+            "agent.skill ASC, (agent.chat.tasks + agent.email.tasks) ASC",
+            "(s (orderBy (orderByClause (path (expr (atom agent . skill))) ASC) , (orderBy (orderByClause (path (expr (atom ( (expr (atom agent . chat . tasks) + (atom agent . email . tasks)) )))) ASC))))",
+        ],
+    ] as List<[String, String]> {
+        let result = order_by::parse(input);
+        assert_same(input, result.ok(), order_by::to_string_tree(&result), expected);
+    }
+}
+
+// #4890
+test "a list rule anchored by EOF rejects what follows its last clause" {
+    for let input of [
+        "agent.skill ASC DESC", "agent.skill ASC, (agent.chat.tasks + agent.email.tasks) ASC - agent.voice.tasks",
+    ] as List<String> {
+        let result = order_by::parse(input);
+        assert !result.ok(), `accepted ${input}: ${order_by::to_string_tree(&result)}`;
+    }
+}
+
+// #4813
+test "a lexer loop leaves the character the next set needs" {
+    for let [input, expected] of [
+        ["- [ ] Task 1\n", "(checklistFile (itemLine - [ ] Task 1 \\n))"],
+        ["-[x]\n\n", "(checklistFile (itemLine -[x] \\n\\n))"],
+        ["- [  X ] Buy milk\r\n", "(checklistFile (itemLine - [  X ] Buy milk \\r\\n))"],
+    ] as List<[String, String]> {
+        let result = checklist::parse(input);
+        assert_same(input, result.ok(), checklist::to_string_tree(&result), expected);
+    }
+}
+
+// #4841
+test "assoc on a token reference is ignored and on an alternative is not" {
+    for let [input, expected] of [
+        ["1^2^3", "(s (e (e (e 1) ^ (e 2)) ^ (e 3)))"],
+        ["1**2**3", "(s (e (e 1) ** (e (e 2) ** (e 3))))"],
+        ["1^2**3^4", "(s (e (e (e 1) ^ (e 2)) ** (e (e 3) ^ (e 4))))"],
+    ] as List<[String, String]> {
+        let result = token_assoc::parse(input);
+        assert_same(input, result.ok(), token_assoc::to_string_tree(&result), expected);
+    }
+}

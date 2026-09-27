@@ -34,6 +34,15 @@ trees, token streams, and semantics must match ANTLR4; an incidental
 rendering difference that carries no structural meaning is allowed to
 diverge.
 
+### Bugs in ANTLR4 itself
+
+Gale does not reproduce a bug in ANTLR4. A behavior an upstream bug report
+shows to be wrong is pinned in its corrected form, even where the jar still
+gives the wrong answer. Where the jar already answers correctly, its tree is
+the expected one, as it is everywhere else. The open reports that concern
+parsing are pinned in `tests/driver_cst_antlr4_issues_test.wado`, one test per
+issue.
+
 ### Grammars Gale accepts and ANTLR4 rejects
 
 Each entry names the jar's error (4.13.2), the meaning Gale gives the grammar,
