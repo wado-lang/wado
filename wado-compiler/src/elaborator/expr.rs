@@ -685,7 +685,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
             }
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx, expected_type),
-            Expr::Range(range) => self.resolve_range(range, ctx),
+            Expr::Range(range) => self.resolve_range(range, ctx, expected_type),
             Expr::WithHandler(w) => self.resolve_with_handler(w, ctx, expected_type),
             Expr::Resume(r) => self.resolve_resume(r, ctx),
             // Parser error-recovery placeholder: the syntax error was already
@@ -5389,10 +5389,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a range expression: `a..<b` or `a..=b`
-    pub(super) fn resolve_range(&mut self, range: &RangeExpr, ctx: &mut FunctionContext) -> TypeId {
+    pub(super) fn resolve_range(
+        &mut self,
+        range: &RangeExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
         use crate::ast::RangeKind;
 
-        let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
+        let element = expected_type.and_then(|t| self.tysys.range_element(range.kind, t));
+        let order = range_endpoint_order(
+            &self.tysys.type_table.borrow(),
+            &range.start,
+            &range.end,
+            element,
+        );
         let (start, end) = order.resolve(
             &range.start,
             &range.end,

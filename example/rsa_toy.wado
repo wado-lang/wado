@@ -1,0 +1,276 @@
+//! Textbook RSA over a 64-bit modulus, and how quickly it falls.
+//!
+//! Alice picks two 32-bit primes by Miller–Rabin, publishes `n = p * q`, and
+//! decrypts with `d = e⁻¹ mod φ(n)`. Eve factors `n` with Pollard's rho and
+//! reads the message too.
+//!
+//! Every step multiplies two `u64`s modulo a third. The product needs 128
+//! bits, so with `u128` that is one line; without it, a Montgomery or
+//! double-and-add routine.
+//!
+//!     wado run example/rsa_toy.wado
+
+use { println, Stdout } from "core:cli";
+use { Rng, Seed, Seedable, Xoshiro256pp } from "core:prng";
+
+global E: u64 = 65537;
+
+/// Bytes packed into one plaintext block: 56 bits stay below any `n >= 2^62`.
+global BLOCK_BYTES: u64 = 7;
+
+fn mul_mod(a: u64, b: u64, m: u64) -> u64 {
+    return (a as u128 * b as u128 % m as u128) as u64;
+}
+
+fn pow_mod(base: u64, exp: u64, m: u64) -> u64 {
+    let mut result = 1 % m;
+    let mut b = base % m;
+    let mut e = exp;
+    while e > 0 {
+        if e & 1 == 1 {
+            result = mul_mod(result, b, m);
+        }
+        b = mul_mod(b, b, m);
+        e >>= 1;
+    }
+    return result;
+}
+
+fn gcd(a: u64, b: u64) -> u64 {
+    let mut x = a;
+    let mut y = b;
+    while y != 0 {
+        let r = x % y;
+        x = y;
+        y = r;
+    }
+    return x;
+}
+
+/// The strong-probable-prime test of odd `n = d * 2^s + 1` to base `a`.
+fn passes_witness(n: u64, a: u64, d: u64, s: i32) -> bool {
+    let mut x = pow_mod(a, d, n);
+    if x == 1 || x == n - 1 {
+        return true;
+    }
+    for let _ of 1..<s {
+        x = mul_mod(x, x, n);
+        if x == n - 1 {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Deterministic for every `u64`: the first twelve primes as bases decide all
+/// n < 3.18 × 10^23 (Jiang & Deng, 2014).
+fn is_prime(n: u64) -> bool {
+    let bases: List<u64> = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
+    if n < 2 {
+        return false;
+    }
+    for let p of bases {
+        if n % p == 0 {
+            return n == p;
+        }
+    }
+    let mut d = n - 1;
+    let mut s = 0;
+    while d % 2 == 0 {
+        d /= 2;
+        s += 1;
+    }
+    for let a of bases {
+        if !passes_witness(n, a, d, s) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `a⁻¹ mod m` by the extended Euclidean algorithm. The Bézout coefficients
+/// swing between ±m, past `i64` for a 64-bit `m`, so they live in `i128`.
+fn mod_inverse(a: u64, m: u64) -> Option<u64> {
+    let mut old_r = a as i128;
+    let mut r = m as i128;
+    let mut old_s: i128 = 1;
+    let mut s: i128 = 0;
+    while r != 0 {
+        let q = old_r / r;
+        let next_r = old_r - q * r;
+        old_r = r;
+        r = next_r;
+        let next_s = old_s - q * s;
+        old_s = s;
+        s = next_s;
+    }
+    if old_r != 1 {
+        return null;
+    }
+    let wide_m = m as i128;
+    return Option::Some(((old_s % wide_m + wide_m) % wide_m) as u64);
+}
+
+fn private_exponent(p: u64, q: u64) -> Option<u64> {
+    return mod_inverse(E, (p - 1) * (q - 1));
+}
+
+fn random_prime<R: Rng>(rng: &mut R) -> u64 {
+    // The top bit makes `p * q` at least 2^62; the low bit makes it odd.
+    let bits32: RangeExclusive<u64> = 0x8000_0000..<0x1_0000_0000;
+    loop {
+        let candidate = rng.random_range(bits32) | 1;
+        if is_prime(candidate) {
+            return candidate;
+        }
+    }
+}
+
+/// Two distinct primes and the private exponent they admit.
+fn generate_key<R: Rng>(rng: &mut R) -> [u64, u64, u64] {
+    loop {
+        let p = random_prime(rng);
+        let q = random_prime(rng);
+        if p == q {
+            continue;
+        }
+        if let Some(d) = private_exponent(p, q) {
+            return [p, q, d];
+        }
+    }
+}
+
+/// A nontrivial divisor of `n`, or `None` when this walk `x → x² + c` cycles
+/// without splitting it (Pollard's rho, Floyd's cycle detection).
+fn pollard_rho(n: u64, c: u64) -> Option<u64> {
+    let step = |x: u64| ((x as u128 * x as u128 + c as u128) % n as u128) as u64;
+    let mut x: u64 = 2;
+    let mut y: u64 = 2;
+    let mut d: u64 = 1;
+    while d == 1 {
+        x = step(x);
+        y = step(step(y));
+        d = gcd(if x > y { x - y } else { y - x }, n);
+    }
+    if d == n {
+        return null;
+    }
+    return Option::Some(d);
+}
+
+fn find_factor(n: u64) -> u64 {
+    assert n > 3 && !is_prime(n);
+    if n % 2 == 0 {
+        return 2;
+    }
+    let mut c: u64 = 1;
+    loop {
+        if let Some(d) = pollard_rho(n, c) {
+            return d;
+        }
+        c += 1;
+    }
+}
+
+/// Big-endian `BLOCK_BYTES`-byte blocks. The last block is short rather than
+/// padded, so a NUL-free text decodes back unchanged.
+fn encode_blocks(text: &String) -> List<u64> {
+    let mut blocks: List<u64> = [];
+    let mut block: u64 = 0;
+    let mut filled: u64 = 0;
+    for let b of text.bytes() {
+        block = block << 8 | b as u64;
+        filled += 1;
+        if filled == BLOCK_BYTES {
+            blocks.push(block);
+            block = 0;
+            filled = 0;
+        }
+    }
+    if filled > 0 {
+        blocks.push(block);
+    }
+    return blocks;
+}
+
+fn decode_blocks(blocks: List<u64>) -> String {
+    let mut bytes: ByteList = [];
+    for let block of blocks {
+        for let i of 0..<BLOCK_BYTES {
+            let b = (block >> (BLOCK_BYTES - 1 - i) * 8 & 0xFF) as u8;
+            if b != 0 {
+                bytes.push(b);
+            }
+        }
+    }
+    return String::from_utf8_lossy(bytes);
+}
+
+fn encrypt(text: &String, n: u64) -> List<u64> {
+    return encode_blocks(text).into_iter().map(|m| pow_mod(m, E, n)).collect();
+}
+
+fn decrypt(cipher: List<u64>, n: u64, d: u64) -> String {
+    return decode_blocks(cipher.into_iter().map(|c| pow_mod(c, d, n)).collect());
+}
+
+test "mul_mod keeps the full 128-bit product" {
+    let m = u64::MAX;
+    // (m - 1)² ≡ (-1)² ≡ 1 (mod m), which a u64 product would wrap past.
+    assert mul_mod(m - 1, m - 1, m) == 1;
+}
+
+test "is_prime" {
+    assert !is_prime(0);
+    assert !is_prime(1);
+    assert is_prime(2);
+    assert is_prime(37);
+    assert !is_prime(561);  // Carmichael
+    assert !is_prime(3215031751);  // strong pseudoprime to bases 2, 3, 5, 7
+    assert is_prime(4294967291);  // largest prime below 2^32
+    assert is_prime(18446744073709551557);  // largest prime below 2^64
+    assert !is_prime(u64::MAX);
+}
+
+test "mod_inverse" {
+    assert mod_inverse(3, 11) == Option::Some(4);
+    assert mod_inverse(2, 4) == null;
+    let m = u64::MAX;
+    assert mod_inverse(m - 1, m) == Option::Some(m - 1);
+}
+
+test "find_factor" {
+    let n: u64 = 4294967291 * 4294967279;
+    let f = find_factor(n);
+    assert f == 4294967291 || f == 4294967279;
+    assert find_factor(600851475143) matches { 71 | 839 | 1471 | 6857 };
+}
+
+test "round trip" {
+    let p: u64 = 4294967291;
+    let q: u64 = 4294967279;
+    let d = private_exponent(p, q).unwrap();
+    let text = "Hello, Wado!";
+    assert decrypt(encrypt(&text, p * q), p * q, d) == text;
+}
+
+export fn run() with Stdout {
+    let mut rng = Xoshiro256pp::from_seed(Seed::from_u64(2026));
+    let [p, q, d] = generate_key(&mut rng);
+    let n = p * q;
+    println(`Alice's primes:  p = ${p}, q = ${q}`);
+    println(`public key:      n = ${n}, e = ${E}`);
+    println(`private key:     d = ${d}`);
+
+    let message = "Wide ints make modular arithmetic easy!";
+    let cipher = encrypt(&message, n);
+    println(`ciphertext:      ${cipher:?}`);
+    println(`Alice decrypts:  ${decrypt(cipher, n, d)}`);
+
+    // Eve knows only n, e and the ciphertext.
+    let eve_p = find_factor(n);
+    let eve_q = n / eve_p;
+    let eve_d = private_exponent(eve_p, eve_q).unwrap();
+    println(`Eve factors n:   ${eve_p} × ${eve_q}`);
+    println(`Eve decrypts:    ${decrypt(cipher, n, eve_d)}`);
+}

@@ -2860,7 +2860,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::StructLiteral(struct_lit) => {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
-            ast::Expr::Range(range) => self.reify_range(range, ctx),
+            ast::Expr::Range(range) => self.reify_range(range, ctx, recorded_type),
             ast::Expr::TemplateString(template) => self.reify_template_string(template, ctx),
             ast::Expr::TaggedTemplate(tagged) => {
                 self.reify_tagged_template(tagged, ctx, recorded_type)
@@ -5055,10 +5055,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// produces the same shape by reading the element type from
     /// the reified `start` expression and interning the
     /// `GenericInstance` via `make_generic_instance`.
-    fn reify_range(&mut self, range: &ast::RangeExpr, ctx: &mut FunctionContext) -> TirExpr {
+    fn reify_range(
+        &mut self,
+        range: &ast::RangeExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
         // Annotate has unified the endpoints, so either type is the element
-        // type — but only in the order the elaborator resolved them in.
-        let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
+        // type — but only in the order the elaborator resolved them in. Two
+        // literals are the one pair that order cannot tell apart, and the
+        // recorded element type is what the elaborator settled them on.
+        let element = self.tysys.range_element(range.kind, recorded_type);
+        let order = range_endpoint_order(
+            &self.tysys.type_table.borrow(),
+            &range.start,
+            &range.end,
+            element,
+        );
         let (start, end) = order.resolve(
             &range.start,
             &range.end,

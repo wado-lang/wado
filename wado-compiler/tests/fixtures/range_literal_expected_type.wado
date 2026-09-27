@@ -1,0 +1,19 @@
+// Literal bounds take their type from the range type the context expects.
+use { println, Stdout } from "core:cli";
+
+fn end_of(r: RangeExclusive<u64>) -> u64 {
+    return r.end;
+}
+
+export fn run() with Stdout {
+    let wide: RangeExclusive<u64> = 0x8000_0000..<0x1_0000_0000;
+    let inclusive: RangeInclusive<i64> = -1..=0x1_0000_0000;
+    let huge: RangeExclusive<u128> = 0..<0x1_0000_0000_0000_0000;
+    println(`${wide} ${inclusive} ${huge}`);
+    println(`${end_of(0..<0x1_0000_0000)}`);
+}
+
+__DATA__
+{
+    "stdout": "2147483648..<4294967296 -1..=4294967296 0..<18446744073709551616\n4294967296\n"
+}

@@ -218,11 +218,16 @@ pub(super) fn numeric_literal_pair_order(
 }
 
 /// Order the endpoints of `start..end`. A literal endpoint takes its type from
-/// the other one, and a range carries no expected type, so two literals leave a
-/// byte endpoint as the only thing that can settle `0..=b'z'`.
-pub(super) fn range_endpoint_order(tt: &TypeTable, start: &Expr, end: &Expr) -> LiteralPairOrder {
+/// the other one. Two literals take `element`, the element type of the range
+/// the context expects, and failing that a byte endpoint settles `0..=b'z'`.
+pub(super) fn range_endpoint_order(
+    tt: &TypeTable,
+    start: &Expr,
+    end: &Expr,
+    element: Option<TypeId>,
+) -> LiteralPairOrder {
     match (is_numeric_literal_expr(start), is_numeric_literal_expr(end)) {
-        (true, true) => numeric_literal_pair_order(tt, start, end, None),
+        (true, true) => numeric_literal_pair_order(tt, start, end, element),
         (true, false) => LiteralPairOrder::RightAnchors,
         _ => LiteralPairOrder::LeftAnchors,
     }

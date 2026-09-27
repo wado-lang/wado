@@ -566,7 +566,9 @@ A range operator builds a range value from two bounds:
 `..<b` or bare `..` range.
 
 Both bounds must have the same type after literal coercion, and that type is
-`T`. `T` must implement `Ord`, so a range over any other type is an error.
+`T`. `T` must implement `Ord`, so a range over any other type is an error. Where
+both bounds are literals and the context expects a range of the same kind, they
+take its `T`: `let r: RangeExclusive<u64> = 0..<0x1_0000_0000;` is in range.
 
 A range whose bounds are both literals must not run backwards. An integer,
 float or `char` literal counts as one, negated or cast too:
