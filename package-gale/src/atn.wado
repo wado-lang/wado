@@ -399,8 +399,9 @@ fn build_lr_body(
 }
 
 /// Build the suffix of one LR alt (`alt.elements[1..]`, the leading self-ref
-/// stripped) as a sequence, returning `[entry, exit]`. Each element's self-ref
-/// precedence is decided by `build_lr_suffix_element` from its own follow.
+/// stripped) as a sequence, returning `[entry, exit]`. Each operand's
+/// precedence mirrors the static path's `stamp_lr_self_ref_min_prec`, so the
+/// ATN models the same language the parser does.
 fn build_lr_suffix<S: AsStrSlice>(
     b: &mut AtnBuilder,
     alt: &Alternative,
@@ -415,7 +416,11 @@ fn build_lr_suffix<S: AsStrSlice>(
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
-        let seg = if atn_class && element_is_self_ref(elem, rule_name) {
+        // A self-reference nested in a subrule is a plain call, `e[0]`, which
+        // `build_element` makes, as `stamp_lr_self_ref_min_prec` leaves it.
+        let seg = if !element_is_self_ref(elem, rule_name) {
+            build_element(b, elem, r, rule_index);
+        } else if atn_class {
             // ANTLR4's `e[0]` mid operand and `e[p+1]` trailing one: the
             // simulator decides the climb, as `stamp_lr_self_ref_min_prec` has it.
             let prec = if i + 1 < alt.elements.len() {
@@ -428,7 +433,8 @@ fn build_lr_suffix<S: AsStrSlice>(
             // The LR loop can re-enter on an operator after the suffix, so the
             // suffix tail conservatively carries one (`tail_has = true`).
             let follow_has = elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
-            build_lr_suffix_element(b, elem, rule_name, lr_first, lr_alt.conflict_min, follow_has, r, rule_index);
+            let prec = if follow_has { lr_alt.conflict_min } else { 0 };
+            self_ref_segment(b, r, prec, self_ref_call_site(elem));
         };
         b.add_eps(cursor, seg.0);
         cursor = seg.1;
@@ -436,137 +442,8 @@ fn build_lr_suffix<S: AsStrSlice>(
     return [entry, cursor];
 }
 
-/// Build one LR-suffix element. A self-ref carries a precedence floor
-/// (`conflict_min` when an LR operator can follow — `follow_has` — else 0, a
-/// primary reference like a bracketed call arg); a nested self-ref recurses
-/// through its container so each occurrence is decided from its own follow.
-/// Mirrors the static path's `stamp_lr_self_ref_min_prec`, so the ATN models
-/// the same language the parser does. Non-self-ref elements build generically.
-fn build_lr_suffix_element<S: AsStrSlice>(
-    b: &mut AtnBuilder,
-    elem: &Element,
-    rule_name: S,
-    lr_first: &List<String>,
-    conflict_min: i32,
-    follow_has: bool,
-    r: i32,
-    rule_index: &TreeMap<String, i32>,
-) -> [i32, i32] {
-    if element_is_self_ref(elem, rule_name) {
-        let prec = if follow_has { conflict_min } else { 0 };
-        return self_ref_segment(b, r, prec, self_ref_call_site(elem));
-    }
-    if !element_contains_self_ref(elem, rule_name) {
-        return build_element(b, elem, r, rule_index);
-    }
-    return match *elem {
-        Label(lab) => build_lr_suffix_element(
-            b,
-            &lab.element,
-            rule_name,
-            lr_first,
-            conflict_min,
-            follow_has,
-            r,
-            rule_index,
-        ),
-        Group(g) => build_alternation_prec(
-            b,
-            &g.alternatives,
-            rule_name,
-            lr_first,
-            conflict_min,
-            follow_has,
-            r,
-            rule_index,
-            g.atn_decision,
-        ),
-        Repeat(rep) => {
-            // For `*` / `+` the body can be followed by another iteration
-            // (its own FIRST) or by the Repeat's follow; `?` never re-iterates.
-            let iter_has = match rep.kind {
-                RepeatKind::Optional => follow_has,
-                RepeatKind::Star => element_first_has_lr(&rep.element, lr_first) || follow_has,
-                RepeatKind::Plus => element_first_has_lr(&rep.element, lr_first) || follow_has,
-            };
-            build_repeat(
-                b,
-                rep.kind,
-                rep.non_greedy,
-                &rep.element,
-                r,
-                rep.atn_decision,
-                |bb: &mut AtnBuilder, e: &Element| build_lr_suffix_element(
-                    bb,
-                    e,
-                    rule_name,
-                    lr_first,
-                    conflict_min,
-                    iter_has,
-                    r,
-                    rule_index,
-                ),
-            );
-        },
-        // A self-ref nested under `Not` is not a rule operand; build generically.
-        _ => build_element(b, elem, r, rule_index),
-    };
-}
-
-/// Follow-aware mirror of `build_alternation` for an LR suffix subrule.
-fn build_alternation_prec<S: AsStrSlice>(
-    b: &mut AtnBuilder,
-    alts: &List<Alternative>,
-    rule_name: S,
-    lr_first: &List<String>,
-    conflict_min: i32,
-    follow_has: bool,
-    r: i32,
-    rule_index: &TreeMap<String, i32>,
-    site: i32,
-) -> [i32, i32] {
-    let start = b.new_state(ATN_BLOCK_START, r);
-    let end = b.new_state(ATN_BLOCK_END, r);
-    if alts.len() > 1 {
-        b.mark_decision_for_site(start, site);
-    }
-    for let alt of alts {
-        let seg = build_sequence_prec(b, &alt.elements, rule_name, lr_first, conflict_min, follow_has, r, rule_index);
-        b.add_eps(start, seg.0);
-        b.add_eps(seg.1, end);
-    }
-    if alts.is_empty() {
-        b.add_eps(start, end);
-    }
-    return [start, end];
-}
-
-/// Follow-aware mirror of `build_sequence`: each element's follow within the
-/// sequence (and `seq_tail_has` past it) decides its self-refs' precedence.
-fn build_sequence_prec<S: AsStrSlice>(
-    b: &mut AtnBuilder,
-    elements: &List<Element>,
-    rule_name: S,
-    lr_first: &List<String>,
-    conflict_min: i32,
-    seq_tail_has: bool,
-    r: i32,
-    rule_index: &TreeMap<String, i32>,
-) -> [i32, i32] {
-    let entry = b.new_state(ATN_BASIC, r);
-    let mut cursor = entry;
-    for let mut j = 0; j < elements.len(); j += 1 {
-        let follow_has = elements_seq_first_has_lr(elements, j + 1, lr_first, seq_tail_has);
-        let seg = build_lr_suffix_element(b, &elements[j], rule_name, lr_first, conflict_min, follow_has, r, rule_index);
-        b.add_eps(cursor, seg.0);
-        cursor = seg.1;
-    }
-    return [entry, cursor];
-}
-
 /// True iff FIRST(`elem`) can contain a token in `lr_first`. Opaque elements
-/// (RuleRef / Wildcard / Not) return true conservatively so a nested self-ref
-/// is never wrongly dropped to prec 0 when an operator might follow.
+/// (RuleRef / Wildcard / Not) return true conservatively.
 fn element_first_has_lr(elem: &Element, lr_first: &List<String>) -> bool {
     return match *elem {
         TokenRef(t) => lr_first.contains(&`TK_${t.name}`),
@@ -635,30 +512,6 @@ fn elements_seq_first_has_lr(elements: &List<Element>, idx: i32, lr_first: &List
         return elements_seq_first_has_lr(elements, idx + 1, lr_first, tail_has);
     }
     return false;
-}
-
-/// True iff `elem` contains a self-reference to `rule_name` anywhere —
-/// including nested inside a Group / Repeat / Not / Label. Used to detect
-/// a nested self-ref in an LR suffix (the top-level case is
-/// `element_is_self_ref`).
-fn element_contains_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
-    return match *elem {
-        RuleRef(rr) => rr.name == rule_name.as_str_slice(),
-        Label(lab) => element_contains_self_ref(&lab.element, rule_name),
-        Repeat(rep) => element_contains_self_ref(&rep.element, rule_name),
-        Not(n) => element_contains_self_ref(&n.element, rule_name),
-        Group(g) => {
-            for let alt of &g.alternatives {
-                for let inner of &alt.elements {
-                    if element_contains_self_ref(inner, rule_name) {
-                        return true;
-                    }
-                }
-            }
-            false;
-        },
-        _ => false,
-    };
 }
 
 /// The `atn_call_site` id of a self-ref element (unwrapping labels), or -1.

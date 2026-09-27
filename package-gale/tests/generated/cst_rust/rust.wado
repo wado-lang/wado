@@ -8665,7 +8665,7 @@ fn scan_expression_lr_24(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, fol
     if pos < tokens.len() && _kind_set_34(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_expression(tokens, pos, gate, follow, 5);
+        pos = scan_expression(tokens, pos, gate, follow, 0);
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -19278,7 +19278,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                 }
                 if (opt_scan_pos_3 >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                     p.site = 272;
-                    _parse_expression(p, follow, 5);
+                    _parse_expression(p, follow);
                 }
                 p.b.finish_node(p.last_end());
             } else {
