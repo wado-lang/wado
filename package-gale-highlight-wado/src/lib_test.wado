@@ -146,6 +146,20 @@ test "highlight fragment: bare expression recovers interpolation context" {
     assert visible_text(&html) == src, "bare-expression fragment is text-preserving";
 }
 
+test "highlight fragment: a statement that fails where the block loop re-enters it" {
+    let src = "fn f() {\n    for path in paths {\n    }\n}\n";
+    assert !parse(&src).ok(), "`for ... in` is not Wado";
+    let html = highlight(src);
+    assert visible_text(&html) == src, "fragment highlighting is text-preserving";
+}
+
+test "highlight fragment: an item that fails where the file's loop re-enters it" {
+    let src = "#![line = 123]\n#![file = \"x.wado\"]\n";
+    assert !parse(&src).ok(), "an attribute takes no `= value`";
+    let html = highlight(src);
+    assert visible_text(&html) == src, "fragment highlighting is text-preserving";
+}
+
 test "highlight __DATA__ section" {
     let src = "fn f() { }\n\n__DATA__\ndata body\n";
     let html = highlight(src);

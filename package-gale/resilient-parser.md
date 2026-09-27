@@ -92,9 +92,21 @@ where the rule may end at the decision, which leaves the token to the caller.
 A failed rule recovers at its own entry. It reports once, then skips to a token
 the rules under way can continue with. That set is the union of the follows of
 the call sites on the invocation stack, computed from the ATN. The skipped
-tokens stay in the failed rule's node, and the caller carries on. After an
-error, neither a failed rule nor a sync reports again until a token matches, so
-the cascade of one mistake is one diagnostic.
+tokens stay in the failed rule's node, and the caller carries on.
+
+That set can hold the token the rule failed on. A `statement*` whose
+`statement` starts with `for` re-enters the rule at the same `for`. So the same
+failure again at the position where recovery last left off skips that token
+before it resyncs, and recovery always makes progress. A failure is the same
+when it is in the same rule and expected the same tokens, which stands in for
+ANTLR4's ATN state. Which frame failed does not enter into it. In
+`e : '(' e ')' | 'x'`, two frames that both miss the `)` at one token skip it.
+A frame that failed on its first token does not make the frame around it skip,
+because that frame fails on the `)`. The failures compared are those since a
+token last matched.
+
+After an error, neither a failed rule nor a sync reports again until a token
+matches, so the cascade of one mistake is one diagnostic.
 
 ## Diagnostics
 

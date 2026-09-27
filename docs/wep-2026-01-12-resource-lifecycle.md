@@ -521,7 +521,7 @@ fn safe_write(path: String, data: String) -> Result<(), Error> with FileSystem {
 fn open_all(paths: List<String>) -> List<File> with FileSystem {
     let files: List<File> = [];
 
-    for path in paths {
+    for let path of paths {
         files.push(File::open(path)?);
     }
 
@@ -531,7 +531,7 @@ fn open_all(paths: List<String>) -> List<File> with FileSystem {
 fn process() with FileSystem {
     let files = open_all(["a.txt", "b.txt", "c.txt"]);
 
-    for file in files {
+    for let file of files {
         file.write("data");
     }
 
