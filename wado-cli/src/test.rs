@@ -1285,8 +1285,8 @@ async fn run_execute_stage(
                 // but the vast majority of fixtures are CPU-bound
                 // and would otherwise trip the 5 s default timeout
                 // under contention on 2 vCPU CI runners. The test's
-                // `EvalSession` holds it, since an `eval` compile that
-                // outlives the test keeps it.
+                // `EvalSession` holds it, since the test gives it back
+                // while it waits inside `eval`.
                 let cpu_permit = cpu_budget
                     .acquire_owned()
                     .await
