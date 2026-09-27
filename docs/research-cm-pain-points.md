@@ -126,8 +126,7 @@ web bindings add a concrete consumer and the cost of the workaround.
 reenters the component ([Web § Callbacks](./wep-2026-04-01-web.md#callbacks)).
 
 The spec no longer forbids this. WebAssembly/component-model#650 (2026-05-21)
-and WebAssembly/component-model#705
-(2026-08-28) removed the `may_enter` flag and its trap. Concurrency.md,
+and WebAssembly/component-model#705 (2026-08-28) removed the `may_enter` flag and its trap. Concurrency.md,
 "Reentrance", now describes a host reentering the caller's instance through a
 recursive export call as possible, and leaves its hazards to the component's
 documented API.
