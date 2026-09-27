@@ -4231,10 +4231,21 @@ fn gen_lr_fn<S: AsStrSlice>(
     }
     let scan_fn = `scan_${rule.snake_name}`;
     let labeled = rule_alts_labeled(&rule.alternatives);
+    // The scan twin's no-progress guard (`gen_lr_suffix_dispatch`), where an
+    // empty suffix that yields to the caller would otherwise spin here.
+    let guard = !lr_suffixes_consume(lr_alts, lr_dispatch, ctx);
     w.begin("loop");
     w.line("if p.recovering { break; }");
     w.line("let _sk = p.peek_kind();");
+    if guard {
+        w.line("let _lr_pos0 = p.pos;");
+    }
     emit_lr_group_chain(w, &parse_lr_site(&scan_fn, &rk, labeled), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
+    if guard {
+        w.begin("if p.pos == _lr_pos0");
+        w.line("break;");
+        w.end();
+    }
     w.end();
     emit_lr_after_return(w, rule, emits_vals, ctx);
     w.end();
