@@ -67,7 +67,7 @@ A `let` declaration may shadow a same-scope binding of name `N` if and only if t
 
 ### What Counts as a Reference
 
-The check is performed during the bind phase. A "variable reference" is an `Ident` AST node that resolves to the variable being shadowed. The check walks the entire initializer expression, including nested sub-expressions:
+The check is performed during name resolution (`resolve.rs`), the one pass that knows which bare names in a pattern bind. It began in the bind phase, which reads one module's AST alone and so took a case or a constant pattern's name for a binding. A "variable reference" is an `Ident` AST node that resolves to the variable being shadowed. The check walks the entire initializer expression, including nested sub-expressions:
 
 | Expression                                      | References `x`? | Reason                                                      |
 | ----------------------------------------------- | --------------- | ----------------------------------------------------------- |
@@ -110,14 +110,14 @@ let mut x = x + 1;  // OK: new mutable binding from old immutable one
 When same-scope shadowing is rejected (RHS does not reference the variable):
 
 ```
-3:5: error: cannot redeclare 'x' in the same scope (first defined at 2:5)
+3:9: error: cannot redeclare 'x' in the same scope (first defined at 2:9)
   hint: shadowing is allowed when the new value is derived from the old one (e.g., `let x = x + 1`)
 ```
 
 When the user might have intended to reassign instead of redeclare:
 
 ```
-3:5: error: cannot redeclare 'x' in the same scope (first defined at 2:5)
+3:9: error: cannot redeclare 'x' in the same scope (first defined at 2:9)
   hint: shadowing is allowed when the new value is derived from the old one (e.g., `let x = x + 1`)
 ```
 

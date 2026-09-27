@@ -615,19 +615,21 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(218)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(219)
+type "functype//core:prelude/half.wado/f16::from_f32$spec0" = fn() -> u16;  // TypeId(219)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(220)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(220)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(221)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(221)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(222)
+type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(222)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(223)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(223)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(224)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(224)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(225)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(225)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(226)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1936,14 +1938,16 @@ fn "core:prelude/fpfmt.wado/big_mul_add"(n, factor, addend) {
     let used: i32;
     let $licm_used_32: i32;
     let $licm_repr_33: ref Array<u32>;
+    let $licm_arith_34: u64;
     carry = builtin::i64_extend_i32_u(addend);
     k = 0;
     $licm_used_32 = local.tee $load_0(n.used);
     $licm_repr_33 = local.tee $load_1(n.repr);
+    $licm_arith_34 = builtin::i64_extend_i32_u(factor);
     b120: block {
         l121: loop {
             break_if b120 k >= $licm_used_32;
-            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_33, k)) * builtin::i64_extend_i32_u(factor)) + carry;
+            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_33, k)) * $licm_arith_34) + carry;
             builtin::array_set<u32>($licm_repr_33, k, builtin::i32_wrap_i64(v));
             carry = v >>u 32_i64;
             k = k + 1;
@@ -2207,12 +2211,14 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     let pos: i32;
     let temp: i64;
     let digit: i32;
+    let $licm_arith_13: u64;
     mask64 = builtin::i64_extend_i32_s(mask);
     pos = offset + digit_count;
     if val_i64 == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
+        $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
         b171: block {
             l172: loop {
                 break_if b171 temp == 0_i64;
@@ -2223,7 +2229,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
-                temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
+                temp = temp >>u $licm_arith_13;
                 continue l172;
             };
         };
@@ -5803,12 +5809,13 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     let $licm_input_21: ref "core:prelude/slice.wado//Slice<u8>";
     let $licm_repr_22: ref Array<u8>;
     let $licm_start_23: i32;
-    let $av_26: i32;
+    let $licm_arith_24: i64;
+    let $av_29: i32;
     start = local.tee $load_0(self.pos);
-    $av_26 = $load_0;
-    if @unlikely(($av_26 + 4) > (local.tee $load_1(self.input).end - $load_1.start)) {
+    $av_29 = $load_0;
+    if @unlikely(($av_29 + 4) > (local.tee $load_1(self.input).end - $load_1.start)) {
         cold_path;
-        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_26));
+        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_29));
     }
     code = 0;
     i = 0;
@@ -5816,6 +5823,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     $licm_input_21 = $load_1;
     $licm_repr_22 = $licm_input_21.repr;
     $licm_start_23 = $licm_input_21.start;
+    $licm_arith_24 = builtin::i64_extend_i32_s(start);
     b565: block {
         l566: loop {
             break_if b565 i >= 4;
@@ -5830,7 +5838,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
                 (65 <=u c_4) & (c_4 <=u 70);
             }) == 0) {
                 cold_path;
-                return 1, 0, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode escape"), used: 22 }, builtin::i64_extend_i32_s(start));
+                return 1, 0, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode escape"), used: 22 }, $licm_arith_24);
             }
             code = (code * 16) + $inline_char__hex_digit_value_scalar_3: block -> i32 {
                 if @likely((c_4 - 48) <u 10) {
@@ -8140,31 +8148,32 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
     let $sroa_slot_58: i32;
     let $sroa_slot_59: u8;
     let $sroa_slot_60: ref null "core:serde//DeserializeError";
-    let bits_66: u32;
-    let kept_67: u16;
-    let bits_77: u32;
-    let kept_78: u16;
-    let bits_82: u32;
-    let kept_83: u16;
-    let remainder_98: u32;
-    let bits_99: u16;
-    let remainder_114: u32;
-    let bits_115: u16;
-    let remainder_130: u32;
-    let bits_131: u16;
-    let $av_132: i32;
-    let $av_133: i32;
+    let $cse_61: u32;
+    let bits_67: u32;
+    let kept_68: u16;
+    let bits_78: u32;
+    let kept_79: u16;
+    let bits_83: u32;
+    let kept_84: u16;
+    let remainder_101: u32;
+    let bits_102: u16;
+    let remainder_117: u32;
+    let bits_118: u16;
+    let remainder_133: u32;
+    let bits_134: u16;
+    let $av_135: i32;
+    let $av_136: i32;
     fmajor = (local.tee b($sroa_slot_58 = 0; $sroa_slot_59 = 0; $sroa_slot_60 = ref.null none; $inline_core_cbor_CborDeserializer__peek_byte_0: block {
-        $av_133 = self.pos;
-        if @unlikely($av_133 >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start))) {
+        $av_136 = self.pos;
+        if @unlikely($av_136 >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start))) {
             cold_path;
             $sroa_slot_58 = 1;
             $sroa_slot_59 = 0;
-            $sroa_slot_60 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_133)));
+            $sroa_slot_60 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_136)));
             break $inline_core_cbor_CborDeserializer__peek_byte_0;
         }
         $sroa_slot_58 = 0;
-        $sroa_slot_59 = builtin::array_get_value<u8>($load_1.repr, $load_3 + $av_133);
+        $sroa_slot_59 = builtin::array_get_value<u8>($load_1.repr, $load_3 + $av_136);
         $sroa_slot_60 = ref.null none;
         break $inline_core_cbor_CborDeserializer__peek_byte_0;
     }; let $match_scrut_0: i32; $match_scrut_0 = $sroa_slot_58; (if $match_scrut_0 == 0 -> u8 {
@@ -8177,10 +8186,10 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
         unreachable;
     })) >>u 5) & 255;
     fai = b & 31;
-    $av_132 = self.pos;
+    $av_135 = self.pos;
     if fmajor == 7 {
         if fai == 27 {
-            self.pos = $av_132 + 1;
+            self.pos = $av_135 + 1;
             return 0, let $mv$$vr_24$0: i32; let $mv$$vr_24$1: u64; let $mv$$vr_24$2: ref null "core:serde//DeserializeError"; multivalue_bind [$mv$$vr_24$0, $mv$$vr_24$1, $mv$$vr_24$2] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 8); "core:prelude/half.wado/bf16::from_f64"(local.tee v_35(builtin::f64_reinterpret_i64(local.tee bits_34((if $mv$$vr_24$0 == 0 -> u64 {
                 $mv$$vr_24$1;
             } else if @unlikely($mv$$vr_24$0 == 1) -> u64 {
@@ -8191,7 +8200,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                 unreachable;
             }))))), ref.null none;
         } else if fai == 26 {
-            self.pos = $av_132 + 1;
+            self.pos = $av_135 + 1;
             return 0, let $mv$$vr_25$0: i32; let $mv$$vr_25$1: u64; let $mv$$vr_25$2: ref null "core:serde//DeserializeError"; multivalue_bind [$mv$$vr_25$0, $mv$$vr_25$1, $mv$$vr_25$2] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 4); "core:prelude/half.wado/bf16::from_f64"(local.tee v_38(builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64(local.tee bits_37((if $mv$$vr_25$0 == 0 -> u64 {
                 $mv$$vr_25$1;
             } else if @unlikely($mv$$vr_25$0 == 1) -> u64 {
@@ -8202,7 +8211,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                 unreachable;
             }))))))), ref.null none;
         } else if fai == 25 {
-            self.pos = $av_132 + 1;
+            self.pos = $av_135 + 1;
             return 0, let $mv$$vr_26$0: i32; let $mv$$vr_26$1: u64; let $mv$$vr_26$2: ref null "core:serde//DeserializeError"; multivalue_bind [$mv$$vr_26$0, $mv$$vr_26$1, $mv$$vr_26$2] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 2); "core:prelude/half.wado/bf16::from_f64"(local.tee v_41("core:cbor/decode_half"(local.tee bits_40((if $mv$$vr_26$0 == 0 -> u64 {
                 $mv$$vr_26$1;
             } else if @unlikely($mv$$vr_26$0 == 1) -> u64 {
@@ -8219,7 +8228,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
     } else {
         0;
     }) {
-        self.pos = $av_132 + 1;
+        self.pos = $av_135 + 1;
         let $mv$$vr_27$0: i32;
         let $mv$$vr_27$1: u64;
         let $mv$$vr_27$2: ref null "core:serde//DeserializeError";
@@ -8238,16 +8247,16 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                 break $inline_core_cbor_int_item_bf16__9: "core:cbor/bf16^core:cbor/CborFloat::from_int$spec0"(arg_14);
             }
             if arg_14 == -1_i64 {
-                kept_67 = (local.tee bits_66(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
-                local.tee bits_99($inline_round_to_even_4: block -> u16 {
-                    remainder_98 = bits_66 & 65535;
-                    if remainder_98 >u 32768 {
-                        break $inline_round_to_even_4: (kept_67 + 1) & 65535;
+                kept_68 = (local.tee bits_67(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
+                local.tee bits_102($inline_round_to_even_4: block -> u16 {
+                    remainder_101 = bits_67 & 65535;
+                    if remainder_101 >u 32768 {
+                        break $inline_round_to_even_4: (kept_68 + 1) & 65535;
                     }
-                    if (remainder_98 == 32768) & ((kept_67 & 1) == 1) {
-                        break $inline_round_to_even_4: (kept_67 + 1) & 65535;
+                    if (remainder_101 == 32768) & ((kept_68 & 1) == 1) {
+                        break $inline_round_to_even_4: (kept_68 + 1) & 65535;
                     }
-                    break $inline_round_to_even_4: kept_67;
+                    break $inline_round_to_even_4: kept_68;
                 });
                 break $inline_core_cbor_int_item_bf16__9;
             }
@@ -8272,13 +8281,13 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
             });
             major = $pattern_temp_0.0;
             ai_18 = $pattern_temp_0.1;
-            arg_19 = $pattern_temp_0.2;
+            $cse_61 = builtin::i32_wrap_i64(local.tee arg_19($pattern_temp_0.2));
             if major == 7 {
                 if ai_18 == 27 {
                     return 0, "core:prelude/half.wado/bf16::from_f64"(local.tee v_46((if ai_18 == 27 -> f64 {
                         builtin::f64_reinterpret_i64(arg_19);
                     } else if ai_18 == 26 -> f64 {
-                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64(arg_19)));
+                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32($cse_61));
                     } else {
                         "core:cbor/decode_half"(arg_19);
                     }))), ref.null none;
@@ -8286,7 +8295,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                     return 0, "core:prelude/half.wado/bf16::from_f64"(local.tee v_49((if ai_18 == 27 -> f64 {
                         builtin::f64_reinterpret_i64(arg_19);
                     } else if ai_18 == 26 -> f64 {
-                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64(arg_19)));
+                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32($cse_61));
                     } else {
                         "core:cbor/decode_half"(arg_19);
                     }))), ref.null none;
@@ -8294,7 +8303,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                     return 0, "core:prelude/half.wado/bf16::from_f64"(local.tee v_52((if ai_18 == 27 -> f64 {
                         builtin::f64_reinterpret_i64(arg_19);
                     } else if ai_18 == 26 -> f64 {
-                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64(arg_19)));
+                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32($cse_61));
                     } else {
                         "core:cbor/decode_half"(arg_19);
                     }))), ref.null none;
@@ -8306,16 +8315,16 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                         break $inline_core_cbor_int_item_bf16__16: "core:cbor/bf16^core:cbor/CborFloat::from_int$spec0"(arg_19);
                     }
                     if arg_19 == -1_i64 {
-                        kept_78 = (local.tee bits_77(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
-                        local.tee bits_115($inline_round_to_even_10: block -> u16 {
-                            remainder_114 = bits_77 & 65535;
-                            if remainder_114 >u 32768 {
-                                break $inline_round_to_even_10: (kept_78 + 1) & 65535;
+                        kept_79 = (local.tee bits_78(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
+                        local.tee bits_118($inline_round_to_even_10: block -> u16 {
+                            remainder_117 = bits_78 & 65535;
+                            if remainder_117 >u 32768 {
+                                break $inline_round_to_even_10: (kept_79 + 1) & 65535;
                             }
-                            if (remainder_114 == 32768) & ((kept_78 & 1) == 1) {
-                                break $inline_round_to_even_10: (kept_78 + 1) & 65535;
+                            if (remainder_117 == 32768) & ((kept_79 & 1) == 1) {
+                                break $inline_round_to_even_10: (kept_79 + 1) & 65535;
                             }
-                            break $inline_round_to_even_10: kept_78;
+                            break $inline_round_to_even_10: kept_79;
                         });
                         break $inline_core_cbor_int_item_bf16__16;
                     }
@@ -8327,16 +8336,16 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                         break $inline_core_cbor_int_item_bf16__17: "core:cbor/bf16^core:cbor/CborFloat::from_int$spec0"(arg_19);
                     }
                     if arg_19 == -1_i64 {
-                        kept_83 = (local.tee bits_82(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
-                        local.tee bits_131($inline_round_to_even_16: block -> u16 {
-                            remainder_130 = bits_82 & 65535;
-                            if remainder_130 >u 32768 {
-                                break $inline_round_to_even_16: (kept_83 + 1) & 65535;
+                        kept_84 = (local.tee bits_83(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
+                        local.tee bits_134($inline_round_to_even_16: block -> u16 {
+                            remainder_133 = bits_83 & 65535;
+                            if remainder_133 >u 32768 {
+                                break $inline_round_to_even_16: (kept_84 + 1) & 65535;
                             }
-                            if (remainder_130 == 32768) & ((kept_83 & 1) == 1) {
-                                break $inline_round_to_even_16: (kept_83 + 1) & 65535;
+                            if (remainder_133 == 32768) & ((kept_84 & 1) == 1) {
+                                break $inline_round_to_even_16: (kept_84 + 1) & 65535;
                             }
-                            break $inline_round_to_even_16: kept_83;
+                            break $inline_round_to_even_16: kept_84;
                         });
                         break $inline_core_cbor_int_item_bf16__17;
                     }
@@ -8387,28 +8396,29 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
     let $sroa_slot_58: i32;
     let $sroa_slot_59: u8;
     let $sroa_slot_60: ref null "core:serde//DeserializeError";
-    let dropped_83: i64;
-    let mask_84: u64;
-    let magnitude_85: u64;
-    let dropped_99: i64;
-    let mask_100: u64;
-    let magnitude_101: u64;
-    let dropped_115: i64;
-    let mask_116: u64;
-    let magnitude_117: u64;
-    let $av_129: i32;
-    let $av_130: i32;
+    let $cse_61: u32;
+    let dropped_86: i64;
+    let mask_87: u64;
+    let magnitude_88: u64;
+    let dropped_102: i64;
+    let mask_103: u64;
+    let magnitude_104: u64;
+    let dropped_118: i64;
+    let mask_119: u64;
+    let magnitude_120: u64;
+    let $av_133: i32;
+    let $av_134: i32;
     fmajor = (local.tee b($sroa_slot_58 = 0; $sroa_slot_59 = 0; $sroa_slot_60 = ref.null none; $inline_core_cbor_CborDeserializer__peek_byte_0: block {
-        $av_130 = self.pos;
-        if @unlikely($av_130 >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start))) {
+        $av_134 = self.pos;
+        if @unlikely($av_134 >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start))) {
             cold_path;
             $sroa_slot_58 = 1;
             $sroa_slot_59 = 0;
-            $sroa_slot_60 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_130)));
+            $sroa_slot_60 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_134)));
             break $inline_core_cbor_CborDeserializer__peek_byte_0;
         }
         $sroa_slot_58 = 0;
-        $sroa_slot_59 = builtin::array_get_value<u8>($load_1.repr, $load_3 + $av_130);
+        $sroa_slot_59 = builtin::array_get_value<u8>($load_1.repr, $load_3 + $av_134);
         $sroa_slot_60 = ref.null none;
         break $inline_core_cbor_CborDeserializer__peek_byte_0;
     }; let $match_scrut_0: i32; $match_scrut_0 = $sroa_slot_58; (if $match_scrut_0 == 0 -> u8 {
@@ -8421,10 +8431,10 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
         unreachable;
     })) >>u 5) & 255;
     fai = b & 31;
-    $av_129 = self.pos;
+    $av_133 = self.pos;
     if fmajor == 7 {
         if fai == 27 {
-            self.pos = $av_129 + 1;
+            self.pos = $av_133 + 1;
             return 0, let $mv$$vr_24$0: i32; let $mv$$vr_24$1: u64; let $mv$$vr_24$2: ref null "core:serde//DeserializeError"; multivalue_bind [$mv$$vr_24$0, $mv$$vr_24$1, $mv$$vr_24$2] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 8); "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(local.tee v_35(builtin::f64_reinterpret_i64(local.tee bits_34((if $mv$$vr_24$0 == 0 -> u64 {
                 $mv$$vr_24$1;
             } else if @unlikely($mv$$vr_24$0 == 1) -> u64 {
@@ -8435,7 +8445,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                 unreachable;
             })))))), ref.null none;
         } else if fai == 26 {
-            self.pos = $av_129 + 1;
+            self.pos = $av_133 + 1;
             return 0, let $mv$$vr_25$0: i32; let $mv$$vr_25$1: u64; let $mv$$vr_25$2: ref null "core:serde//DeserializeError"; multivalue_bind [$mv$$vr_25$0, $mv$$vr_25$1, $mv$$vr_25$2] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 4); "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(local.tee v_38(builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64(local.tee bits_37((if $mv$$vr_25$0 == 0 -> u64 {
                 $mv$$vr_25$1;
             } else if @unlikely($mv$$vr_25$0 == 1) -> u64 {
@@ -8446,7 +8456,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                 unreachable;
             })))))))), ref.null none;
         } else if fai == 25 {
-            self.pos = $av_129 + 1;
+            self.pos = $av_133 + 1;
             return 0, let $mv$$vr_26$0: i32; let $mv$$vr_26$1: u64; let $mv$$vr_26$2: ref null "core:serde//DeserializeError"; multivalue_bind [$mv$$vr_26$0, $mv$$vr_26$1, $mv$$vr_26$2] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 2); "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(local.tee v_41("core:cbor/decode_half"(local.tee bits_40((if $mv$$vr_26$0 == 0 -> u64 {
                 $mv$$vr_26$1;
             } else if @unlikely($mv$$vr_26$0 == 1) -> u64 {
@@ -8463,7 +8473,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
     } else {
         0;
     }) {
-        self.pos = $av_129 + 1;
+        self.pos = $av_133 + 1;
         let $mv$$vr_27$0: i32;
         let $mv$$vr_27$1: u64;
         let $mv$$vr_27$2: ref null "core:serde//DeserializeError";
@@ -8479,17 +8489,17 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
         });
         return 0, $inline_core_cbor_int_item_f16__9: block -> u16 {
             if fmajor != 1 {
-                break $inline_core_cbor_int_item_f16__9: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u(local.tee magnitude_85($inline_f16_core_cbor_CborFloat__from_int_spec0_0__$inline_round_to_odd_0: block -> u64 {
-                    dropped_83 = 40_i64 - builtin::i64_clz(arg_14);
-                    if dropped_83 <= 0_i64 {
+                break $inline_core_cbor_int_item_f16__9: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u(local.tee magnitude_88($inline_f16_core_cbor_CborFloat__from_int_spec0_0__$inline_round_to_odd_0: block -> u64 {
+                    dropped_86 = 40_i64 - builtin::i64_clz(arg_14);
+                    if dropped_86 <= 0_i64 {
                         break $inline_f16_core_cbor_CborFloat__from_int_spec0_0__$inline_round_to_odd_0: arg_14;
                     }
-                    mask_84 = (1_i64 << dropped_83) - 1_i64;
-                    break $inline_f16_core_cbor_CborFloat__from_int_spec0_0__$inline_round_to_odd_0: select u64((arg_14 & mask_84) == 0_i64, arg_14, (arg_14 & (mask_84 ^ -1_i64)) | (mask_84 + 1_i64));
+                    mask_87 = (1_i64 << dropped_86) - 1_i64;
+                    break $inline_f16_core_cbor_CborFloat__from_int_spec0_0__$inline_round_to_odd_0: select u64((arg_14 & mask_87) == 0_i64, arg_14, (arg_14 & (mask_87 ^ -1_i64)) | (mask_87 + 1_i64));
                 })));
             }
             if arg_14 == -1_i64 {
-                break $inline_core_cbor_int_item_f16__9: "core:prelude/half.wado/f16::from_f32"(-18446744000000000000_f32);
+                break $inline_core_cbor_int_item_f16__9: "core:prelude/half.wado/f16::from_f32$spec0"();
             }
             break $inline_core_cbor_int_item_f16__9: "core:cbor/f16^core:cbor/CborFloat::from_int$spec1"(arg_14 + 1_i64);
         }, ref.null none;
@@ -8512,13 +8522,13 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
             });
             major = $pattern_temp_0.0;
             ai_18 = $pattern_temp_0.1;
-            arg_19 = $pattern_temp_0.2;
+            $cse_61 = builtin::i32_wrap_i64(local.tee arg_19($pattern_temp_0.2));
             if major == 7 {
                 if ai_18 == 27 {
                     return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(local.tee v_46((if ai_18 == 27 -> f64 {
                         builtin::f64_reinterpret_i64(arg_19);
                     } else if ai_18 == 26 -> f64 {
-                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64(arg_19)));
+                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32($cse_61));
                     } else {
                         "core:cbor/decode_half"(arg_19);
                     })))), ref.null none;
@@ -8526,7 +8536,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                     return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(local.tee v_49((if ai_18 == 27 -> f64 {
                         builtin::f64_reinterpret_i64(arg_19);
                     } else if ai_18 == 26 -> f64 {
-                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64(arg_19)));
+                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32($cse_61));
                     } else {
                         "core:cbor/decode_half"(arg_19);
                     })))), ref.null none;
@@ -8534,7 +8544,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                     return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(local.tee v_52((if ai_18 == 27 -> f64 {
                         builtin::f64_reinterpret_i64(arg_19);
                     } else if ai_18 == 26 -> f64 {
-                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64(arg_19)));
+                        builtin::f64_promote_f32(builtin::f32_reinterpret_i32($cse_61));
                     } else {
                         "core:cbor/decode_half"(arg_19);
                     })))), ref.null none;
@@ -8543,34 +8553,34 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
             } else if major == 0 {
                 return 0, $inline_core_cbor_int_item_f16__16: block -> u16 {
                     if major != 1 {
-                        break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u(local.tee magnitude_101($inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: block -> u64 {
-                            dropped_99 = 40_i64 - builtin::i64_clz(arg_19);
-                            if dropped_99 <= 0_i64 {
+                        break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u(local.tee magnitude_104($inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: block -> u64 {
+                            dropped_102 = 40_i64 - builtin::i64_clz(arg_19);
+                            if dropped_102 <= 0_i64 {
                                 break $inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: arg_19;
                             }
-                            mask_100 = (1_i64 << dropped_99) - 1_i64;
-                            break $inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: select u64((arg_19 & mask_100) == 0_i64, arg_19, (arg_19 & (mask_100 ^ -1_i64)) | (mask_100 + 1_i64));
+                            mask_103 = (1_i64 << dropped_102) - 1_i64;
+                            break $inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: select u64((arg_19 & mask_103) == 0_i64, arg_19, (arg_19 & (mask_103 ^ -1_i64)) | (mask_103 + 1_i64));
                         })));
                     }
                     if arg_19 == -1_i64 {
-                        break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32"(-18446744000000000000_f32);
+                        break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32$spec0"();
                     }
                     break $inline_core_cbor_int_item_f16__16: "core:cbor/f16^core:cbor/CborFloat::from_int$spec1"(arg_19 + 1_i64);
                 }, ref.null none;
             } else if major == 1 {
                 return 0, $inline_core_cbor_int_item_f16__17: block -> u16 {
                     if major != 1 {
-                        break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u(local.tee magnitude_117($inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: block -> u64 {
-                            dropped_115 = 40_i64 - builtin::i64_clz(arg_19);
-                            if dropped_115 <= 0_i64 {
+                        break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u(local.tee magnitude_120($inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: block -> u64 {
+                            dropped_118 = 40_i64 - builtin::i64_clz(arg_19);
+                            if dropped_118 <= 0_i64 {
                                 break $inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: arg_19;
                             }
-                            mask_116 = (1_i64 << dropped_115) - 1_i64;
-                            break $inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: select u64((arg_19 & mask_116) == 0_i64, arg_19, (arg_19 & (mask_116 ^ -1_i64)) | (mask_116 + 1_i64));
+                            mask_119 = (1_i64 << dropped_118) - 1_i64;
+                            break $inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: select u64((arg_19 & mask_119) == 0_i64, arg_19, (arg_19 & (mask_119 ^ -1_i64)) | (mask_119 + 1_i64));
                         })));
                     }
                     if arg_19 == -1_i64 {
-                        break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32"(-18446744000000000000_f32);
+                        break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32$spec0"();
                     }
                     break $inline_core_cbor_int_item_f16__17: "core:cbor/f16^core:cbor/CborFloat::from_int$spec1"(arg_19 + 1_i64);
                 }, ref.null none;
@@ -10936,6 +10946,65 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     return;
 }
 
+fn "core:prelude/half.wado/f16::from_f32$spec0"() {
+    let bits_0: u32;
+    let sign: u16;
+    let exp: i32;
+    let mantissa: u32;
+    let half_exp: i32;
+    let full: u32;
+    let shift_7: u32;
+    let kept_8: u16;
+    let rounded_9: u16;
+    let kept_10: u16;
+    let rounded_11: u16;
+    let half_19: u32;
+    let remainder_20: u32;
+    let remainder_26: u32;
+    sign = (local.tee bits_0(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 32768;
+    exp = (bits_0 >>u 23) & 255;
+    mantissa = bits_0 & 8388607;
+    if exp == 255 {
+        return (((sign | 31744) & 65535) | select u16(mantissa == 0, 0, 512)) & 65535;
+    }
+    half_exp = exp - 112;
+    if half_exp >= 31 {
+        return (sign | 31744) & 65535;
+    }
+    if half_exp <= 0 {
+        if half_exp < -10 {
+            return sign;
+        }
+        full = mantissa | 8388608;
+        shift_7 = 14 - half_exp;
+        kept_8 = (full >>u shift_7) & 65535;
+        rounded_9 = $inline_round_to_even_4: block -> u16 {
+            half_19 = 1 << (shift_7 - 1);
+            remainder_20 = full & ((1 << shift_7) - 1);
+            if remainder_20 >u half_19 {
+                break $inline_round_to_even_4: (kept_8 + 1) & 65535;
+            }
+            if (remainder_20 == half_19) & ((kept_8 & 1) == 1) {
+                break $inline_round_to_even_4: (kept_8 + 1) & 65535;
+            }
+            break $inline_round_to_even_4: kept_8;
+        };
+        return (sign | rounded_9) & 65535;
+    }
+    kept_10 = ((half_exp << 10) | (mantissa >>u 13)) & 65535;
+    rounded_11 = $inline_round_to_even_6: block -> u16 {
+        remainder_26 = mantissa & 8191;
+        if remainder_26 >u 4096 {
+            break $inline_round_to_even_6: (kept_10 + 1) & 65535;
+        }
+        if (remainder_26 == 4096) & ((kept_10 & 1) == 1) {
+            break $inline_round_to_even_6: (kept_10 + 1) & 65535;
+        }
+        break $inline_round_to_even_6: kept_10;
+    };
+    return (sign | rounded_11) & 65535;
+}
+
 fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let digit_count_2: i32;
     let offset_3: i32;
@@ -10949,14 +11018,14 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_3 + digit_count_2;
     t = self;
     i = 0;
-    b1206: block {
-        l1207: loop {
-            break_if b1206 i >= digit_count_2;
+    b1214: block {
+        l1215: loop {
+            break_if b1214 i >= digit_count_2;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l1207;
+            continue l1215;
         };
     };
 }
@@ -10978,14 +11047,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b1208: block {
-        l1209: loop {
-            break_if b1208 i >= digit_count_4;
+    b1216: block {
+        l1217: loop {
+            break_if b1216 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l1209;
+            continue l1217;
         };
     };
 }

@@ -1,6 +1,14 @@
+<<<<<<< HEAD
 //! Local name binding within function bodies: keyword-spelled bindings, reads
 //! before initialization, and assignments to immutable locals. A redeclaration
 //! is the resolve pass's to report, which knows a case name from a binding.
+||||||| 4cf9b655e
+//! Local name binding within function bodies: duplicate and keyword-spelled
+//! bindings, reads before initialization, and assignments to immutable locals.
+=======
+//! Local name binding within bodies: keyword-spelled bindings, reads before
+//! initialization, and assignments to immutable locals.
+>>>>>>> origin/main
 
 use crate::hashmap::IndexSet;
 
@@ -55,13 +63,29 @@ pub enum BindError {
 /// How the names a pattern binds enter the current scope.
 #[derive(Clone, Copy)]
 enum BindingKind {
+<<<<<<< HEAD
     /// A `let` with an initializer, or a `for-of` binding.
+||||||| 4cf9b655e
+    /// A `let` with an initializer, or a `for-of` binding.
+    Initialized { is_mut: bool, is_reactive: bool },
+=======
+    /// A `let` with an initializer, a `for-of` binding, or a pattern that may
+    /// not match: `if let`, `while let`, a `match` arm, `matches`.
+>>>>>>> origin/main
     Initialized { is_mut: bool },
     /// A `let x: T;`, which every read before an assignment reports.
     Uninitialized { is_mut: bool },
+<<<<<<< HEAD
     /// A pattern that may not match: `if let`, `while let`, a `match` arm,
     /// `matches`. A name the scope already holds is that same binding.
     Refutable,
+||||||| 4cf9b655e
+    Uninitialized { is_mut: bool, is_reactive: bool },
+    /// A pattern that may not match: `if let`, `while let`, a `match` arm,
+    /// `matches`. A name the scope already holds is that same binding.
+    Refutable,
+=======
+>>>>>>> origin/main
 }
 
 impl From<BindError> for Diagnostic {
@@ -421,10 +445,19 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
+<<<<<<< HEAD
     /// Bind the local names of every body and expression an item holds.
+||||||| 4cf9b655e
+    /// Bind an item (only functions have local scopes)
+=======
+    /// Bind every body an item carries: a function's, a method's (a trait's or
+    /// an interface operation's default included), a test's, and a global's
+    /// initializer.
+>>>>>>> origin/main
     fn bind_item(&mut self, item: &Item) -> Result<(), Bail> {
         match item {
             Item::Function(func) => self.bind_function(func),
+<<<<<<< HEAD
             Item::Impl(impl_block) => {
                 for constant in &impl_block.constants {
                     self.bind_initializer(&constant.value)?;
@@ -456,6 +489,25 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             | Item::TupleTypeDecl(_)
             | Item::BuiltinTypeDecl(_)
             | Item::World(_)
+||||||| 4cf9b655e
+        if let Item::Function(func) = item {
+=======
+            Item::Impl(impl_block) => self.bind_functions(&impl_block.methods),
+            Item::Trait(trait_decl) => self.bind_functions(&trait_decl.methods),
+            Item::Interface(interface_decl) => self.bind_functions(&interface_decl.methods),
+            Item::Resource(resource_decl) => self.bind_functions(&resource_decl.methods),
+            Item::Test(test) => self.in_body(|s| s.bind_block_contents(&test.body)),
+            Item::Global(global) => self.in_body(|s| s.bind_expr(&global.initializer)),
+            Item::Struct(_)
+            | Item::Enum(_)
+            | Item::Variant(_)
+            | Item::Flags(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::World(_)
+            | Item::Use(_)
+>>>>>>> origin/main
             | Item::Error(_) => Ok(()),
         }
     }
@@ -464,6 +516,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         for func in functions {
             self.bind_function(func)?;
         }
+<<<<<<< HEAD
         Ok(())
     }
 
@@ -474,17 +527,62 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         self.enter_scope();
         self.bind_expr(expr)?;
         self.exit_scope();
+||||||| 4cf9b655e
+        // Impl blocks contain functions
+        if let Item::Impl(impl_block) = item {
+            for method in &impl_block.methods {
+                self.bind_function(method)?;
+            }
+        }
+        // Trait declarations contain method signatures (with optional bodies)
+        if let Item::Trait(trait_decl) = item {
+            for method in &trait_decl.methods {
+                self.bind_function(method)?;
+            }
+        }
+        // An interface operation's default body is a body like any other, so it
+        // gets the same local-binding pass; a `resource` method never has one,
+        // and `bind_function` returns immediately for a signature.
+        if let Item::Interface(interface_decl) = item {
+            for method in &interface_decl.methods {
+                self.bind_function(method)?;
+            }
+        }
+        if let Item::Resource(resource_decl) = item {
+            for method in &resource_decl.methods {
+                self.bind_function(method)?;
+            }
+        }
+=======
+>>>>>>> origin/main
         Ok(())
     }
 
-    /// Bind a function's local variables
+    /// Bind a function's parameters and body; a signature has no body to bind.
     fn bind_function(&mut self, func: &Function) -> Result<(), Bail> {
+<<<<<<< HEAD
         for default in func.params.iter().filter_map(|p| p.default.as_ref()) {
             self.bind_initializer(default)?;
         }
-        self.possibly_uninit.clear();
+||||||| 4cf9b655e
+=======
+        self.in_body(|s| {
+            for param in &func.params {
+                s.define(&param.name, param.is_mut, param.span)?;
+            }
+            match &func.body {
+                Some(body) => s.bind_block_contents(body),
+                None => Ok(()),
+            }
+        })
+    }
 
+    /// Bind one body in a scope of its own.
+    fn in_body(&mut self, bind: impl FnOnce(&mut Self) -> Result<(), Bail>) -> Result<(), Bail> {
+>>>>>>> origin/main
+        self.possibly_uninit.clear();
         self.enter_scope();
+<<<<<<< HEAD
 
         // Bind parameters as local variables
         for param in &func.params {
@@ -496,6 +594,21 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             self.bind_block_contents(body)?;
         }
 
+||||||| 4cf9b655e
+
+        // Bind parameters as local variables
+        for param in &func.params {
+            self.define(&param.name, param.is_mut, false, param.span)?;
+        }
+
+        // Bind body
+        if let Some(ref body) = func.body {
+            self.bind_block_contents(body)?;
+        }
+
+=======
+        bind(self)?;
+>>>>>>> origin/main
         self.exit_scope();
         Ok(())
     }
@@ -631,6 +744,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             BindingKind::Initialized { is_mut } => self.define(name, is_mut || pattern_mut, span),
             BindingKind::Uninitialized { is_mut } => {
                 self.define_uninit(name, is_mut || pattern_mut, span)
+<<<<<<< HEAD
             }
             BindingKind::Refutable => {
                 let taken = self
@@ -641,6 +755,26 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     return Ok(());
                 }
                 self.define(name, pattern_mut, span)
+||||||| 4cf9b655e
+            BindingKind::Initialized {
+                is_mut,
+                is_reactive,
+            } => self.define(name, is_mut || pattern_mut, is_reactive, span),
+            BindingKind::Uninitialized {
+                is_mut,
+                is_reactive,
+            } => self.define_uninit(name, is_mut || pattern_mut, is_reactive, span),
+            BindingKind::Refutable => {
+                let taken = self
+                    .scopes
+                    .last()
+                    .is_some_and(|scope| scope.bindings.contains_key(name));
+                if !pattern_mut && taken {
+                    return Ok(());
+                }
+                self.define(name, pattern_mut, false, span)
+=======
+>>>>>>> origin/main
             }
         }
     }
@@ -1089,14 +1223,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind a pattern (may introduce variables).
-    /// Bare identifiers are tentatively defined: if the name already exists in the
-    /// current scope, it is silently skipped. This is necessary because the parser
-    /// no longer uses case to distinguish variant case names from variable bindings,
-    /// so duplicate bare names like `[Null, Null]` in a match pattern are valid
-    /// (the elaborator disambiguates them using type information).
+    /// Bind a refutable pattern's names.
     fn bind_pattern(&mut self, pattern: &Pattern, span: Span) -> Result<(), Bail> {
-        self.bind_pattern_as(pattern, BindingKind::Refutable, span)
+        self.bind_pattern_as(pattern, BindingKind::Initialized { is_mut: false }, span)
     }
 
     /// Bind a closure
@@ -1140,6 +1269,31 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 span,
             });
         }
+<<<<<<< HEAD
+||||||| 4cf9b655e
+        // Shared borrow (not `last_mut`) so it ends before `emit` takes `&self`.
+        if let Some(first) = self
+            .scopes
+            .last()
+            .unwrap()
+            .bindings
+            .get(name)
+            .map(|b| b.defined_at)
+        {
+            self.emit(BindError::DuplicateInScope {
+                name: name.to_string(),
+                first,
+                second: span,
+            })?;
+            return Ok(());
+        }
+
+=======
+        // A name the scope already holds is replaced; the resolver reports the
+        // redeclarations, since only it knows which bare names bind.
+        self.possibly_uninit
+            .shift_remove(&(self.current_depth, name.to_string()));
+>>>>>>> origin/main
         let scope = self.scopes.last_mut().unwrap();
         scope.bindings.insert(
             name.to_string(),

@@ -411,11 +411,22 @@ impl TestReporter for HeartbeatReporter {
 
     fn on_test_result(&self, result: &TestResult) {
         self.state.tests_seen.fetch_add(1, Ordering::Relaxed);
+        // A reading asked for is shown, even where the digest would stay quiet.
+        let announce_metered = |label: &str| {
+            if result.fuel.is_some() {
+                self.announce(&format!(
+                    "{label:<8}{} :: {} ({})",
+                    result.file_path,
+                    result.display_name,
+                    result.cost()
+                ));
+            }
+        };
         match result.outcome {
-            TestOutcome::Pass => {}
+            TestOutcome::Pass => announce_metered("ok"),
             TestOutcome::Fail => {
                 self.state.tests_failed.fetch_add(1, Ordering::Relaxed);
-                let dur = test::format_duration(result.duration);
+                let cost = result.cost();
                 let mut detail = result
                     .error
                     .as_ref()
@@ -428,18 +439,21 @@ impl TestReporter for HeartbeatReporter {
                     detail.push_str(&captured);
                 }
                 self.announce(&format!(
-                    "not ok  {} :: {} ({dur}){detail}",
+                    "not ok  {} :: {} ({cost}){detail}",
                     result.file_path, result.display_name
                 ));
             }
             TestOutcome::TodoPending => {
                 self.state.todo_pending.fetch_add(1, Ordering::Relaxed);
+                announce_metered("todo");
             }
             TestOutcome::TodoResolved => {
                 self.state.todo_resolved.fetch_add(1, Ordering::Relaxed);
                 self.announce(&format!(
-                    "resolved  {} :: {} — remove the #[TODO] attribute",
-                    result.file_path, result.display_name
+                    "resolved  {} :: {} ({}) — remove the #[TODO] attribute",
+                    result.file_path,
+                    result.display_name,
+                    result.cost()
                 ));
             }
         }
@@ -726,12 +740,12 @@ impl TestReporter for TapReporter {
     }
 
     fn on_test_result(&self, result: &TestResult) {
-        let dur = test::format_duration(result.duration);
+        let cost = result.cost();
         let name = &result.display_name;
         let (mut lines, failed) = match result.outcome {
-            TestOutcome::Pass => (vec![format!("ok - {name} ({dur})")], false),
+            TestOutcome::Pass => (vec![format!("ok - {name} ({cost})")], false),
             TestOutcome::Fail => {
-                let mut l = vec![format!("not ok - {name} ({dur})")];
+                let mut l = vec![format!("not ok - {name} ({cost})")];
                 let mut fields: Vec<(&str, &str)> = Vec::new();
                 if let Some(ref msg) = result.error {
                     fields.push(("message", msg));
@@ -747,10 +761,10 @@ impl TestReporter for TapReporter {
                 }
                 (l, true)
             }
-            TestOutcome::TodoPending => (vec![format!("not ok - {name} ({dur}) # TODO")], false),
+            TestOutcome::TodoPending => (vec![format!("not ok - {name} ({cost}) # TODO")], false),
             TestOutcome::TodoResolved => (
                 vec![format!(
-                    "ok - {name} ({dur}) # TODO resolved — remove the #[TODO] attribute"
+                    "ok - {name} ({cost}) # TODO resolved — remove the #[TODO] attribute"
                 )],
                 false,
             ),

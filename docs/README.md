@@ -180,6 +180,7 @@
 - [Grog — Protocol Buffers for Wado](./wep-2026-09-22-grog.md)
 - [Half-Precision Primitives (`f16` / `bf16`)](./wep-2026-09-22-half-precision-primitives.md)
 - [The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)
+- [Eval — Compiling and Running Wado Source from a Test](./wep-2026-09-26-eval.md)
 - [Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md)
 
 ## Standard Library
@@ -191,10 +192,12 @@
 - [core:cli](./stdlib-core-cli.md)
 - [core:collections](./stdlib-core-collections.md)
 - [core:digest](./stdlib-core-digest.md)
+- [core:eval](./stdlib-core-eval.md)
 - [core:fs](./stdlib-core-fs.md)
 - [core:icu](./stdlib-core-icu.md)
 - [core:json](./stdlib-core-json.md)
 - [core:json_nsd](./stdlib-core-json_nsd.md)
+- [core:jsonc](./stdlib-core-jsonc.md)
 - [core:jwt](./stdlib-core-jwt.md)
 - [core:kiln](./stdlib-core-kiln.md)
 - [core:log](./stdlib-core-log.md)

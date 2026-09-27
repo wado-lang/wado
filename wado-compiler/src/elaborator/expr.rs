@@ -2844,17 +2844,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(match pattern {
             ast::Pattern::Error(_) => return None,
             ast::Pattern::Wildcard => Pat::Wild,
-            ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
-                // A bare identifier is a case when it names one, a constant-value
-                // pattern when it names an immutable global, else a binding.
-                let is_mut = matches!(pattern, ast::Pattern::MutIdent { .. });
-                if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
+            ast::Pattern::Ident { id, name, .. } | ast::Pattern::MutIdent { id, name, .. } => {
+                if self.pattern_name_bound(*id) {
+                    Pat::Wild
+                } else if self.is_known_case_of_type(scrutinee_type, name, None) {
                     return self.exh_case(scrutinee_type, name, None);
+                } else {
+                    Pat::Opaque
                 }
-                if !is_mut && self.is_immutable_global(name) {
-                    return Some(Pat::Opaque);
-                }
-                Pat::Wild
             }
             ast::Pattern::Literal(lit) => return self.exh_literal(lit, scrutinee_type),
             ast::Pattern::Variant {
@@ -3387,8 +3384,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return target_type;
         }
 
-        // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
-        // For large literals: 170... as i128 → i128::from_pair(low, high)
+        // A cast to i128/u128 becomes a constructor call in reify
+        // (`lower_int128_cast`); here only a literal operand is checked.
         //
         // Which pair of words the literal has to fit is how the value is
         // stored, so the representation answers: `type Signed = i128` is that
@@ -3441,12 +3438,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return target_type;
             }
 
-            // General expression cast (not a literal)
             let source_type = self.resolve_expr(&cast.expr, ctx, None);
             let tt = self.tysys.type_table.borrow();
             if tt.is_numeric(tt.cast_operand_type(source_type, target_type)) {
-                // Reify emits the two-step form,
-                // `name::from_u64/from_i64(expr as u64/i64)`.
                 return target_type;
             }
         }
@@ -3574,10 +3568,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         // char -> non-integer is invalid (char -> integer extracts code point)
-        if source_base == TypeTable::CHAR
-            && target_base != TypeTable::CHAR
-            && !self.tysys.type_table.borrow().is_integer(target_base)
-        {
+        let integer_target = {
+            let tt = self.tysys.type_table.borrow();
+            tt.is_integer(target_base) || tt.is_wide_int(target_base)
+        };
+        if source_base == TypeTable::CHAR && target_base != TypeTable::CHAR && !integer_target {
             let to_name = self.tysys.type_table.borrow().type_name(target_type);
             let _ = self.emit(TypeError::InvalidCast {
                 from: "char".to_string(),

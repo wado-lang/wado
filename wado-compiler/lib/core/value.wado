@@ -4,7 +4,9 @@
 //! `Value` represents any value the serde data model can carry, shared by
 //! every self-describing format (`core:json`, `core:cbor`). It implements
 //! `Serialize` and `Deserialize`, so it round-trips through `from_bytes` /
-//! `to_bytes` with no per-type work.
+//! `to_bytes` with no per-type work. `to_value` and `from_value` convert
+//! between a typed value and a `Value` directly, and `merge` overlays one
+//! `Value` on another, as layered configuration does.
 //!
 //! It is a general dynamic value, so it deliberately contains no
 //! format-specific concepts (no CBOR `Tag`, no `Simple`): a single opaque
@@ -24,16 +26,21 @@ use {
     SerializeVariant,
     DeserializeSeq,
     DeserializeMap,
+    DeserializeStruct,
+    DeserializeVariant,
+    FieldSchema,
     SerializeError,
     SerializeErrorKind,
     DeserializeError,
+    DeserializeErrorKind,
     Visitor,
     DuplicateKeyPolicy,
     report_duplicate_key,
 } from "core:serde";
 
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeMapEntriesRefIter } from "core:collections";
 use { from_bytes, to_bytes } from "core:json";
+use { decode as base64_decode } from "core:base64";
 
 #[synopsis]
 test {
@@ -663,5 +670,399 @@ impl Serializer for ValueSerializer {
             name: variant_name.to_string(),
             payloads: [],
         });
+    }
+}
+
+/// Build a typed value from a `Value` — the serde `from_value` analog.
+///
+/// It reads what `to_value` and every self-describing format produce: a whole
+/// `Float` reads as an integer, and a string as an integer or a byte string
+/// where `core:json` would write one that way. A `Value` carries no position,
+/// so an error's offset is `-1`.
+pub fn from_value<T: Deserialize>(value: &Value) -> Result<T, DeserializeError> {
+    let mut de = ValueDeserializer { value };
+    return T::deserialize(&mut de);
+}
+
+/// `overlay` laid over `base`: where both are objects, each key of `overlay`
+/// merges into `base`'s value for it, and a key `base` lacks is appended.
+/// Anywhere else `overlay` wins whole, a list and an explicit `Null` included.
+pub fn merge(base: Value, overlay: Value) -> Value {
+    let Object(mut merged) = base else {
+        return overlay;
+    };
+    let Object(layer) = overlay else {
+        return overlay;
+    };
+    merge_fields(&mut merged, &layer);
+    return Value::Object(merged);
+}
+
+/// [`merge`] of two objects' fields, in place, copying only what `layer`
+/// puts into `fields`.
+fn merge_fields(fields: &mut TreeMap<String, Value>, layer: &TreeMap<String, Value>) {
+    for let [key, value] of layer.entries() {
+        if let Object(sub_layer) = value {
+            if fields.contains_key(*key) {
+                if let Object(sub_fields) = &mut fields[*key] {
+                    merge_fields(sub_fields, sub_layer);
+                    continue;
+                }
+            }
+        }
+        fields[*key] = *value;
+    }
+}
+
+/// Reads a typed value out of the `Value` it points at.
+pub struct ValueDeserializer {
+    value: &Value,
+}
+
+/// Reads the elements of a `List` value.
+pub struct ValueSeqAccess {
+    items: &List<Value>,
+    index: i32,
+}
+
+/// Serves both a map and a struct: a `Value` spells them the same way.
+pub struct ValueObjectAccess {
+    entries: TreeMapEntriesRefIter<String, Value>,
+    /// The value of the key just read.
+    pending: Option<&Value>,
+}
+
+/// Reads a variant case: a bare name, or a single-key object holding the
+/// payload.
+pub struct ValueVariantAccess {
+    name: String,
+    /// `null` for a unit case.
+    payload: Option<&Value>,
+}
+
+global TWO_POW_127: f64 = 170141183460469231731687303715884105728.0;
+global TWO_POW_128: f64 = 340282366920938463463374607431768211456.0;
+
+/// The integer `value` holds, as `i128`, the width every narrower target is
+/// range-checked from. A value past `i128` is out of range for `type_name`.
+fn integer_of(value: &Value, type_name: String) -> Result<i128, DeserializeError> {
+    return match value {
+        Int(n) => Result::Ok(*n as i128),
+        UInt(n) => Result::Ok(*n as i128),
+        Int128(n) => Result::Ok(*n),
+        UInt128(n) && *n <= i128::MAX as u128 => Result::Ok(*n as i128),
+        UInt128(_) => Result::Err(out_of_range(type_name)),
+        Float(f) => Result::Ok(whole_float(*f, -TWO_POW_127, TWO_POW_127, type_name)? as i128),
+        String(s) => integer_string(s),
+        _ => Result::Err(DeserializeError::unexpected_type("expected integer")),
+    };
+}
+
+/// The integer a string spells, as `core:json` writes one past 53 bits.
+fn integer_string<T: FromStr>(s: &String) -> Result<T, DeserializeError> {
+    return match T::from_str(s) {
+        Ok(n) => Result::Ok(n),
+        Err(e) => Result::Err(DeserializeError::invalid_value(`invalid integer string: ${e}`)),
+    };
+}
+
+/// `f`, when it is whole and within `[min, max)`.
+fn whole_float(f: f64, min: f64, max: f64, type_name: String) -> Result<f64, DeserializeError> {
+    if f != f64::floor(f) {
+        return Result::Err(DeserializeError::unexpected_type("expected integer, got float"));
+    }
+    if !(min <= f < max) {
+        return Result::Err(out_of_range(type_name));
+    }
+    return Result::Ok(f);
+}
+
+/// The integer `value` holds, when it lies in `[min, max]`.
+fn integer_in(value: &Value, min: i128, max: i128, type_name: String) -> Result<i128, DeserializeError> {
+    let n = integer_of(value, type_name)?;
+    if !(min <= n <= max) {
+        return Result::Err(out_of_range(type_name));
+    }
+    return Result::Ok(n);
+}
+
+fn out_of_range(type_name: String) -> DeserializeError {
+    return DeserializeError::overflow(`value out of range for ${type_name}`);
+}
+
+fn float_of(value: &Value) -> Result<f64, DeserializeError> {
+    return match value {
+        Float(f) => Result::Ok(*f),
+        Int(n) => Result::Ok(*n as f64),
+        UInt(n) => Result::Ok(*n as f64),
+        Int128(n) => Result::Ok(*n as f64),
+        UInt128(n) => Result::Ok(*n as f64),
+        _ => Result::Err(DeserializeError::unexpected_type("expected number")),
+    };
+}
+
+fn object_access(fields: &TreeMap<String, Value>) -> ValueObjectAccess {
+    return ValueObjectAccess { entries: fields.entries(), pending: null };
+}
+
+impl ValueDeserializer {
+    fn string_ref(&self) -> Result<&String, DeserializeError> {
+        let String(s) = self.value else {
+            return Result::Err(DeserializeError::unexpected_type("expected string"));
+        };
+        return Result::Ok(s);
+    }
+
+    fn object(&self) -> Result<ValueObjectAccess, DeserializeError> {
+        let Object(fields) = self.value else {
+            return Result::Err(DeserializeError::unexpected_type("expected object"));
+        };
+        return Result::Ok(object_access(fields));
+    }
+}
+
+impl DeserializeSeq for ValueSeqAccess {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        if self.index >= self.items.len() {
+            return Result::Ok(null);
+        }
+        let mut de = ValueDeserializer { value: &self.items[self.index] };
+        self.index += 1;
+        return Result::Ok(Option::Some(T::deserialize(&mut de)?));
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        if self.index < self.items.len() {
+            return Result::Err(DeserializeError::invalid_value(
+                `${self.items.len() - self.index} elements left unread`,
+            ));
+        }
+        return Result::Ok(());
+    }
+}
+
+impl ValueObjectAccess {
+    /// The next key, leaving its value pending.
+    fn next_key(&mut self) -> Option<&String> {
+        let Some([key, value]) = self.entries.next() else {
+            return null;
+        };
+        self.pending = Option::Some(value);
+        return Option::Some(key);
+    }
+
+    fn pending_value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        let mut de = ValueDeserializer { value: self.pending.expect("a value is read after its key") };
+        return T::deserialize(&mut de);
+    }
+}
+
+impl DeserializeMap for ValueObjectAccess {
+    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
+        return Result::Ok(self.next_key().map(|key| *key));
+    }
+
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        return self.pending_value();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl DeserializeStruct for ValueObjectAccess {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        return Result::Ok(self.next_key().map(|key| S::lookup(key.as_bytes()).unwrap_or(-1)));
+    }
+
+    fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return self.pending_value();
+    }
+
+    fn skip(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl DeserializeVariant for ValueVariantAccess {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        return Result::Ok(self.name);
+    }
+
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        return Result::Err(DeserializeError {
+            kind: DeserializeErrorKind::Custom,
+            message: "Value does not encode discriminants",
+            offset: -1,
+        });
+    }
+
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        let Some(payload) = self.payload else {
+            return Result::Err(DeserializeError::unexpected_type(`expected a payload for ${self.name}`));
+        };
+        let mut de = ValueDeserializer { value: payload };
+        return T::deserialize(&mut de);
+    }
+
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(self.payload matches { None });
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl Deserializer for ValueDeserializer {
+    type SeqAccess = ValueSeqAccess;
+    type MapAccess = ValueObjectAccess;
+    type StructAccess = ValueObjectAccess;
+    type VariantAccess = ValueVariantAccess;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return Result::Ok(integer_in(self.value, i32::MIN as i128, i32::MAX as i128, "i32")? as i32);
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return Result::Ok(integer_in(self.value, i64::MIN as i128, i64::MAX as i128, "i64")? as i64);
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return Result::Ok(integer_in(self.value, 0, u32::MAX as i128, "u32")? as u32);
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return Result::Ok(integer_in(self.value, 0, u64::MAX as i128, "u64")? as u64);
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return integer_of(self.value, "i128");
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return match self.value {
+            UInt128(n) => Result::Ok(*n),
+            String(s) => integer_string(s),
+            Float(f) => Result::Ok(whole_float(*f, 0.0, TWO_POW_128, "u128")? as u128),
+            _ => Result::Ok(integer_in(self.value, 0, i128::MAX, "u128")? as u128),
+        };
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return Result::Ok(float_of(self.value)? as f32);
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return float_of(self.value);
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return Result::Ok(f16::from_f64(float_of(self.value)?));
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return Result::Ok(bf16::from_f64(float_of(self.value)?));
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        let Bool(b) = self.value else {
+            return Result::Err(DeserializeError::unexpected_type("expected bool"));
+        };
+        return Result::Ok(*b);
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        let mut chars = self.string_ref()?.chars();
+        let Some(c) = chars.next() else {
+            return Result::Err(DeserializeError::invalid_value("empty string for char"));
+        };
+        if chars.next() matches { Some(_) } {
+            return Result::Err(DeserializeError::invalid_value("expected single char"));
+        }
+        return Result::Ok(c);
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return Result::Ok(*self.string_ref()?);
+    }
+
+    fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
+        if let Bytes(b) = self.value {
+            return Result::Ok(*b);
+        }
+        let Some(bytes) = base64_decode(self.string_ref()?) else {
+            return Result::Err(DeserializeError::invalid_value("invalid base64 byte string"));
+        };
+        return Result::Ok(bytes);
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(self.value matches { Null | Undefined });
+    }
+
+    fn begin_seq(&mut self) -> Result<ValueSeqAccess, DeserializeError> {
+        let List(items) = self.value else {
+            return Result::Err(DeserializeError::unexpected_type("expected list"));
+        };
+        return Result::Ok(ValueSeqAccess { items, index: 0 });
+    }
+
+    fn begin_map(&mut self) -> Result<ValueObjectAccess, DeserializeError> {
+        return self.object();
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<ValueObjectAccess, DeserializeError> {
+        return self.object();
+    }
+
+    fn begin_variant<S: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        num_cases: i32,
+    ) -> Result<ValueVariantAccess, DeserializeError> {
+        if let String(name) = self.value {
+            return Result::Ok(ValueVariantAccess { name: *name, payload: null });
+        }
+        if let Object(fields) = self.value {
+            if fields.len() == 1 {
+                let Some([name, payload]) = fields.entries().next() else {
+                    unreachable();
+                };
+                return Result::Ok(ValueVariantAccess { name: *name, payload: Option::Some(payload) });
+            }
+        }
+        return Result::Err(DeserializeError::unexpected_type(
+            "expected string or single-key object for variant",
+        ));
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return match self.value {
+            Null => visitor.visit_null(),
+            Bool(b) => visitor.visit_bool(*b),
+            Int(n) => visitor.visit_i64(*n),
+            UInt(n) => visitor.visit_u64(*n),
+            Int128(n) => visitor.visit_i128(*n),
+            UInt128(n) => visitor.visit_u128(*n),
+            Float(f) => visitor.visit_f64(*f),
+            String(s) => visitor.visit_string(s),
+            Bytes(b) => visitor.visit_bytes(*b),
+            List(items) => {
+                let mut seq = ValueSeqAccess { items, index: 0 };
+                visitor.visit_seq(&mut seq);
+            },
+            Object(fields) => {
+                let mut map = object_access(fields);
+                visitor.visit_map(&mut map);
+            },
+            Undefined => visitor.visit_undefined(),
+            Unknown(raw) => visitor.visit_unknown(*raw),
+        };
     }
 }

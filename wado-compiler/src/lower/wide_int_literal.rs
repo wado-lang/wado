@@ -10,8 +10,7 @@ use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::reify::ord_bool_from_cmp;
-use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::LocalMethodName;
 use crate::synthesis::common::not_expr;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId,
@@ -19,51 +18,67 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Snapshot of a wide-int constructor's registry coordinates, taken
-/// before we lock the type table for builders that mutate it.
-struct CtorRef {
-    module_source: ModuleSource,
-    type_name: FqTypeName,
-    method_name: String,
-}
-
-fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> CtorRef {
-    let type_name = type_table.compiler_struct_fq_name(owner);
+/// The wide-int method `method` as a callee, named by the registry so that no
+/// producer spells it.
+pub(crate) fn method_ref(type_table: &TypeTable, method: CompilerItem) -> FunctionRef {
     let items = type_table.compiler_items();
-    let (owner_module, _) = items.require_struct(owner);
-    let (method_module, _, method_name) = items.require_method(ctor);
-    // Production stdlib places i128 / u128 and their constructors in
-    // the same module; assert that invariant so a future split is
-    // diagnosed rather than silently producing mismatched `Call.module_source`
-    // versus `method_info.struct_name` pairs.
-    debug_assert_eq!(owner_module, method_module);
-    CtorRef {
-        module_source: owner_module.clone(),
-        type_name,
-        method_name: method_name.to_string(),
+    let (module_source, _, name) = items.require_method(method);
+    let method_info = LocalMethodName::new(
+        items.require_method_owner(method).clone(),
+        None,
+        name.to_string(),
+    );
+    FunctionRef {
+        module_source: module_source.clone(),
+        name: method_info.to_mangled_name(),
+        template: None,
+        monomorph_info: None,
+        method_info: Some(method_info),
     }
 }
 
+/// A call of the static wide-int constructor `ctor` on `args`.
+fn ctor_call(
+    ctor: CompilerItem,
+    args: Vec<TirExpr>,
+    type_id: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(method_ref(type_table, ctor)),
+            type_args: vec![],
+            args: args.into_iter().map(|a| CallArg::new(a, false)).collect(),
+            has_receiver: false,
+        },
+        type_id,
+        span,
+    )
+}
+
 /// Which wide-int constructor a call names, and how its arguments compose into
-/// the 128-bit pattern. [`classify_ctor`] recognises exactly the calls
-/// [`create_literal`] emits, so a consumer reading a wide-int literal back
-/// cannot drift from the producer.
+/// the 128-bit pattern. [`classify_ctor`] recognises every call
+/// [`create_literal`] or [`create_conversion`] emits from an integer, so a
+/// consumer reading a wide-int constant back cannot drift from the producers.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum WideIntCtor {
-    /// `i128::from_i64(v)` — sign-extends.
+    /// `<i128|u128>::from_i64(v)` — sign-extends.
     FromI64,
-    /// `u128::from_u64(v)` — zero-extends.
+    /// `<i128|u128>::from_u64(v)` — zero-extends.
     FromU64,
     /// `<i128|u128>::from_pair(low, high)` — the halves verbatim.
     FromPair,
 }
 
 impl WideIntCtor {
-    /// Every `(owner, shape)` pair a wide-int literal can take.
-    const ALL: [(CompilerItem, Self); 4] = [
+    /// Every `(owner, shape)` pair a wide-int constant can take.
+    const ALL: [(CompilerItem, Self); 6] = [
         (CompilerItem::I128, Self::FromI64),
+        (CompilerItem::I128, Self::FromU64),
         (CompilerItem::I128, Self::FromPair),
         (CompilerItem::U128, Self::FromU64),
+        (CompilerItem::U128, Self::FromI64),
         (CompilerItem::U128, Self::FromPair),
     ];
 
@@ -73,8 +88,10 @@ impl WideIntCtor {
     fn method(self, item: CompilerItem) -> CompilerItem {
         match (item, self) {
             (CompilerItem::I128, Self::FromI64) => CompilerItem::I128FromI64,
+            (CompilerItem::I128, Self::FromU64) => CompilerItem::I128FromU64,
             (CompilerItem::I128, Self::FromPair) => CompilerItem::I128FromPair,
             (CompilerItem::U128, Self::FromU64) => CompilerItem::U128FromU64,
+            (CompilerItem::U128, Self::FromI64) => CompilerItem::U128FromI64,
             (CompilerItem::U128, Self::FromPair) => CompilerItem::U128FromPair,
             (item, shape) => panic!("{item} has no {shape:?} constructor"),
         }
@@ -95,10 +112,44 @@ impl WideIntCtor {
 /// The wide-int constructor `mangled` names, or `None` for any other callee.
 pub(crate) fn classify_ctor(type_table: &TypeTable, mangled: &str) -> Option<WideIntCtor> {
     WideIntCtor::ALL.into_iter().find_map(|(owner, shape)| {
-        let ctor = ctor_ref(type_table, owner, shape.method(owner));
-        let name = LocalMethodName::new(ctor.type_name, None, ctor.method_name);
-        (name.to_mangled_name() == mangled).then_some(shape)
+        (method_ref(type_table, shape.method(owner)).name == mangled).then_some(shape)
     })
+}
+
+/// `operand as <item>` for an operand that is not itself a wide int, through
+/// the `f64`, `i64` or `u64` whose constructor keeps its value as Rust's `as`
+/// does: a float saturates, a signed integer sign-extends, and anything else
+/// that casts to an integer (unsigned, `bool`, `char`, an enum, flags)
+/// zero-extends.
+pub(crate) fn create_conversion(
+    item: CompilerItem,
+    operand: TirExpr,
+    type_id: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirExpr {
+    let source = operand.type_id;
+    let (ctor, via) = if type_table.is_float(source) {
+        let ctor = match item {
+            CompilerItem::I128 => CompilerItem::I128FromF64,
+            CompilerItem::U128 => CompilerItem::U128FromF64,
+            other => panic!("{other} is not a wide-integer type"),
+        };
+        (ctor, TypeTable::F64)
+    } else if type_table.is_integer(source) && !type_table.is_unsigned_int(source) {
+        (WideIntCtor::FromI64.method(item), TypeTable::I64)
+    } else {
+        (WideIntCtor::FromU64.method(item), TypeTable::U64)
+    };
+    let operand = TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(operand),
+            target_type: via,
+        },
+        via,
+        span,
+    );
+    ctor_call(ctor, vec![operand], type_id, type_table, span)
 }
 
 /// A literal of the wide-integer type `item` carrying the bit pattern `bits`.
@@ -131,39 +182,20 @@ pub(crate) fn create_literal(
         ),
         other => panic!("{other} is not a wide-integer type"),
     };
-    let ctor = ctor_ref(type_table, item, shape.method(item));
-    let method_info = LocalMethodName::new(ctor.type_name, None, ctor.method_name);
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ctor.module_source,
-                name: method_info.to_mangled_name(),
-                template: None,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: args
-                .into_iter()
-                .map(|(value, param_type)| {
-                    // `repr` is the spelling a dump prints, so it follows the
-                    // parameter's own signedness.
-                    let repr = if param_type == TypeTable::I64 {
-                        value.cast_signed().to_string()
-                    } else {
-                        value.to_string()
-                    };
-                    CallArg::new(
-                        TirExpr::new(TirExprKind::IntLiteral { value, repr }, param_type, span),
-                        false,
-                    )
-                })
-                .collect(),
-            has_receiver: false,
-        },
-        type_id,
-        span,
-    )
+    let args = args
+        .into_iter()
+        .map(|(value, param_type)| {
+            // `repr` is the spelling a dump prints, so it follows the
+            // parameter's own signedness.
+            let repr = if param_type == TypeTable::I64 {
+                value.cast_signed().to_string()
+            } else {
+                value.to_string()
+            };
+            TirExpr::new(TirExprKind::IntLiteral { value, repr }, param_type, span)
+        })
+        .collect();
+    ctor_call(shape.method(item), args, type_id, type_table, span)
 }
 
 /// A literal of the wide-integer type `item` read from `repr`, an

@@ -96,7 +96,7 @@ test "a float literal cast to an integer converts, not re-types" {
     let f = builtin::black_box(3.99);
     let n = builtin::black_box(-3.99);
     let runtime = `${f as i32} ${n as i32} ${builtin::black_box(2.0) as i64} ${f as u8} ${builtin::black_box(300.7) as i8}`;
-    assert folded == "3 -3 2 3 44";
+    assert folded == "3 -3 2 3 127";
     assert folded == runtime;
     // The integer-literal path the re-typing exists for still widens first.
     assert -9e15 as i64 == -9000000000000000 as i64;

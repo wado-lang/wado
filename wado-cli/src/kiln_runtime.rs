@@ -584,7 +584,7 @@ pub(crate) fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: Generat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::create_kiln_engine;
+    use crate::runtime::create_fuel_engine;
 
     #[test]
     fn malformed_component_is_host_error() {
@@ -592,7 +592,7 @@ mod tests {
         // (so the host can cache the result across invocations); this
         // is where a malformed module surfaces, not from
         // `run_generator`.
-        let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
+        let engine = create_fuel_engine(wasmtime::OptLevel::Speed).expect("engine");
         match compile_component(&engine, &[0, 1, 2, 3]) {
             Err(GeneratorRunnerError::Host(msg)) => {
                 assert!(msg.contains("component compile"), "msg = {msg}");
@@ -700,7 +700,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             values: vec![("verbose".to_string(), CanonicalValue::Bool(true))],
         };
 
-        let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
+        let engine = create_fuel_engine(wasmtime::OptLevel::Speed).expect("engine");
         let component = compile_component(&engine, &compiled.wasm).expect("component");
         let request = GeneratorRequest {
             primary: GeneratorInputFile {
@@ -792,7 +792,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             ],
         };
 
-        let engine = create_kiln_engine(wasmtime::OptLevel::Speed).expect("engine");
+        let engine = create_fuel_engine(wasmtime::OptLevel::Speed).expect("engine");
         let component = compile_component(&engine, &compiled.wasm).expect("component");
         let request = GeneratorRequest {
             primary: GeneratorInputFile {

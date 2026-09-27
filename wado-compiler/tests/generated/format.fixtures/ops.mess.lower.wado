@@ -3426,6 +3426,27 @@ pub fn "core:prelude/int128.wado/u128::from_u64"(value: u64) -> u128 {
     return u128 { low: value, high: 0 };
 }
 
+pub fn "core:prelude/int128.wado/u128::from_i64"(value: i64) -> u128 {
+    let high: u64 = if (value < 0) {
+        18446744073709551615;
+    } else {
+        0;
+    };
+    return u128 { low: value as u64, high: high };
+}
+
+pub fn "core:prelude/int128.wado/u128::from_f64"(value: f64) -> u128 {
+    if !(value > 0.0) {
+        return "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(0);
+    }
+    if (value >= 340282366920938500000000000000000000000.0) {
+        return "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_pair"(18446744073709551615, 18446744073709551615);
+    }
+    let high: u64 = (value / 18446744073709552000.0) as u64;
+    let low: u64 = (value - (high as f64 * 18446744073709552000.0)) as u64;
+    return u128 { low: low, high: high };
+}
+
 pub fn "core:prelude/int128.wado/u128::from_pair"(low: u64, high: u64) -> u128 {
     return u128 { low: low, high: high };
 }
@@ -3452,7 +3473,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 163 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 188 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: self.high != 0\n", used: 27 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"self.high: ", used: 11 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3505,7 +3526,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 199 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 224 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: a >> (mant_bits - 1) as u64 == 1\n", used: 45 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"a: ", used: 3 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3587,6 +3608,26 @@ pub fn "core:prelude/int128.wado/i128::from_i64"(value: i64) -> i128 {
         0;
     };
     return i128 { low: value as u64, high: high };
+}
+
+pub fn "core:prelude/int128.wado/i128::from_u64"(value: u64) -> i128 {
+    return i128 { low: value, high: 0 };
+}
+
+pub fn "core:prelude/int128.wado/i128::from_f64"(value: f64) -> i128 {
+    if (value >= 170141183460469230000000000000000000000.0) {
+        return "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_pair"(18446744073709551615, 9223372036854775807);
+    }
+    if (value <= -170141183460469230000000000000000000000.0) {
+        return "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_pair"(0, -9223372036854775808);
+    }
+    let magnitude: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_f64"("core::prelude/primitive.wado::f64::abs"(value));
+    let result: i128 = i128 { low: magnitude.low, high: magnitude.high as i64 };
+    return if (value < 0.0) {
+        result."core:prelude/int128.wado/i128^core:prelude/traits.wado/Neg::neg"();
+    } else {
+        result;
+    };
 }
 
 pub fn "core:prelude/int128.wado/i128::from_pair"(low: u64, high: i64) -> i128 {

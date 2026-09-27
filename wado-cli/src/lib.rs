@@ -18,6 +18,7 @@ pub mod dep_component;
 pub mod discover;
 pub mod doc;
 pub mod dump;
+pub mod eval_host;
 pub mod external;
 pub mod fetch;
 pub mod format;
@@ -53,3 +54,7 @@ pub mod update;
 pub mod wit;
 
 pub use compiler_host::FilesystemCompilerHost;
+
+/// The stack of every thread that compiles. The compiler recurses as deep as
+/// the source nests.
+pub const COMPILER_STACK_SIZE: usize = 64 * 1024 * 1024;

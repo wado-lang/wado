@@ -1200,10 +1200,9 @@ pub(super) fn absorbing_short_circuit(body: &Body, e: ExprId) -> Option<bool> {
 /// Whether `e` can be deleted outright: side-effect-free, and trap-free on top
 /// of that.
 ///
-/// A `Cast` and a `FieldAccess` are excluded even though nothing observes them:
-/// a float-to-int cast lowers to the trapping `trunc` family and a field read
-/// traps on a null reference, and deleting either erases a trap the program is
-/// entitled to observe.
+/// A `FieldAccess` is excluded even though nothing observes it: a field read
+/// traps on a null reference, and deleting one erases a trap the program is
+/// entitled to observe. A `Cast` is total, so it goes with its operand.
 pub(super) fn is_discardable(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
@@ -1215,6 +1214,7 @@ pub(super) fn is_discardable(body: &Body, e: ExprId) -> bool {
         ExprKind::Unary { op, expr: inner } => {
             !matches!(op, NirUnaryOp::Deref) && is_discardable_operand(body, *inner)
         }
+        ExprKind::Cast { expr: inner, .. } => is_discardable_operand(body, *inner),
         _ => false,
     }
 }
