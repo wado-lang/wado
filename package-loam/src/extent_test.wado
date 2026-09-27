@@ -14,8 +14,8 @@ test "a symbol agrees only with itself" {
 }
 
 test "a symbol proves nothing about a number" {
-    // Stage 0 has no runtime tier to fall back on, so an undischargeable
-    // condition is a failure rather than a check deferred to the run.
+    // `forward` checks only the inequalities stage 0 owes, so an operation
+    // needing the two equal is a failure rather than a check deferred to the run.
     assert !Extent::symbol(&"seq").agrees(&Extent::Static(4));
     assert !Extent::Static(4).agrees(&Extent::symbol(&"seq"));
 }

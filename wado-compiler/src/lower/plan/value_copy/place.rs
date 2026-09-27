@@ -612,7 +612,8 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
 
 /// Whether this parameter hands the body storage the caller still reaches, to
 /// return or to write. A by-value one was deep-copied at the call, or is
-/// confined: passed uncopied, but never returned and copied before a write.
+/// confined: passed uncopied and copied before a write, and handed back only as
+/// a projection the caller copies where it takes it over.
 pub fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
     param.is_mut_ref || is_reference(param.type_id, type_table)
 }

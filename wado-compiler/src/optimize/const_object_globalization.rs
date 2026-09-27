@@ -1959,9 +1959,9 @@ struct AliasSite {
     binds: Vec<u32>,
 }
 
-/// Every place a local is bound or filled from a source that may name existing
-/// storage: a `let`, a destructuring `let`, a `match` arm over its scrutinee,
-/// or an assignment to the whole local.
+/// Every place locals are bound or filled from a source: a `let`, a
+/// destructuring `let`, a `match` arm over its scrutinee, or an assignment to
+/// the whole local.
 fn alias_sites(body: &Body) -> Vec<AliasSite> {
     let mut sites = Vec::new();
     let mut site = |value: Operand, binds: Vec<u32>| {

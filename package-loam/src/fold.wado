@@ -36,18 +36,27 @@ pub fn fold(
         return Result::Ok(null);
     }
     let x = &operands[0];
-    return match op.as_str_slice() {
-        "Identity" => Result::Ok(Option::Some(*x)),
-        "Gather" => gather(x, &operands[1], int_attr(node, "axis", 0)?).map(|k| Option::Some(k)),
-        "Reshape" | "Unsqueeze" | "Squeeze" => regrouped(node, known, x).map(|k| Option::Some(k)),
-        "Concat" => concat(&operands, int_attr(node, "axis", 0)?).map(|k| Option::Some(k)),
-        "Slice" => slice(x, node, known),
-        "Cast" => cast(x, int_attr(node, "to", 0)?),
-        "Range" => range(x, &operands[1], &operands[2]),
-        "ConstantOfShape" => constant_of_shape(node, x).map(|k| Option::Some(k)),
-        "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(&op, x, &operands[1]).map(|k| Option::Some(k)),
-        _ => Result::Ok(null),
+    let folded = match op.as_str_slice() {
+        "Identity" => *x,
+        "Gather" => gather(x, &operands[1], int_attr(node, "axis", 0)?)?,
+        "Reshape" | "Unsqueeze" | "Squeeze" => regrouped(node, known, x)?,
+        "Concat" => concat(&operands, int_attr(node, "axis", 0)?)?,
+        "ConstantOfShape" => constant_of_shape(node, x)?,
+        "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(&op, x, &operands[1])?,
+        "Slice" => {
+            return slice(x, node, known);
+        },
+        "Cast" => {
+            return cast(x, int_attr(node, "to", 0)?);
+        },
+        "Range" => {
+            return range(x, &operands[1], &operands[2]);
+        },
+        _ => {
+            return Result::Ok(null);
+        },
     };
+    return Result::Ok(Option::Some(folded));
 }
 
 /// A known tensor regrouped. It holds a number of elements, so a target that
@@ -197,7 +206,7 @@ fn shape_of(node: &Node, known: &TreeMap<String, Known>, shapes: &TreeMap<String
 }
 
 /// `i` resolved against `extent`, then held within `[lo, hi]`.
-fn clamped(i: i64, extent: i64, lo: i64, hi: i64) -> i64 {
+pub fn clamped(i: i64, extent: i64, lo: i64, hi: i64) -> i64 {
     return i64::clamp(resolve_index(i, extent), lo, hi);
 }
 
@@ -316,36 +325,45 @@ fn concat(parts: &List<Known>, axis: i64) -> Result<Known, String> {
     return Result::Ok(Known { extents, elements: picked(&joined_elements(parts)?, &picks) });
 }
 
-/// The axes a `Slice` lists, or the first `count` where it lists none.
-pub fn sliced_axes(node: &Node, known: &TreeMap<String, Known>, count: i32) -> Result<List<i64>, String> {
-    if let Some(listed) = axes_of(node, known, 3, "axes")? {
-        return Result::Ok(listed);
+/// A `Slice`'s operands: one start, end, axis and step per axis it lists. A
+/// start or an end may be symbolic.
+pub struct SliceBounds {
+    pub starts: List<Poly>,
+    pub ends: List<Poly>,
+    pub axes: List<i64>,
+    pub steps: List<i64>,
+}
+
+/// The operands of `Slice` `node`, with ONNX's defaults filled in: the leading
+/// axes where it lists none, and a step of 1.
+pub fn slice_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<SliceBounds, String> {
+    let starts = polys_at(node, known, 1, "starts")?.ok_or("starts is absent")?;
+    let ends = polys_at(node, known, 2, "ends")?.ok_or("ends is absent")?;
+    let sliced = starts.len();
+    let axes = match axes_of(node, known, 3, "axes")? {
+        Some(listed) => listed,
+        None => (0..<sliced).map(|i| i as i64).collect(),
+    };
+    let steps = axes_of(node, known, 4, "steps")?.unwrap_or(List::<i64>::filled(sliced, 1));
+    if ends.len() != sliced || axes.len() != sliced || steps.len() != sliced {
+        return Result::Err(
+            `${sliced} starts, ${ends.len()} ends, ${axes.len()} axes and ${steps.len()} steps do not pair up`,
+        );
     }
-    let mut axes: List<i64> = [];
-    for let i of 0..<count {
-        axes.push(i as i64);
-    }
-    return Result::Ok(axes);
+    return Result::Ok(SliceBounds { starts, ends, axes, steps });
 }
 
 /// `Slice` of a known tensor, or `None` where a bound only the run knows
 /// leaves the slice to it.
 fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Option<Known>, String> {
     let rank = x.extents.len();
-    let Some(starts) = numbers(&polys_at(node, known, 1, "starts")?.ok_or("starts is absent")?) else {
+    let SliceBounds { starts, ends, axes, steps } = slice_bounds(node, known)?;
+    let [Some(starts), Some(ends)] = [
+        numbers(&starts),
+        numbers(&ends),
+    ] else {
         return Result::Ok(null);
     };
-    let Some(ends) = numbers(&polys_at(node, known, 2, "ends")?.ok_or("ends is absent")?) else {
-        return Result::Ok(null);
-    };
-    let axes = sliced_axes(node, known, starts.len())?;
-    let steps = axes_of(node, known, 4, "steps")?.unwrap_or(List::<i64>::filled(starts.len(), 1));
-    let sliced = starts.len();
-    if ends.len() != sliced || axes.len() != sliced || steps.len() != sliced {
-        return Result::Err(
-            `${sliced} starts, ${ends.len()} ends, ${axes.len()} axes and ${steps.len()} steps do not pair up`,
-        );
-    }
     let mut begin = List::<i64>::filled(rank, 0);
     let mut step = List::<i64>::filled(rank, 1);
     let mut extents = x.extents;

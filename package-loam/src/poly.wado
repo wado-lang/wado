@@ -200,17 +200,7 @@ fn order(a: &Term, b: &Term) -> Ordering {
 fn without(whole: &List<String>, part: &List<String>) -> Option<List<String>> {
     let mut rest = *whole;
     for let s of *part {
-        let mut at = -1;
-        for let [i, r] of rest.into_iter().enumerate() {
-            if r == s {
-                at = i;
-                break;
-            }
-        }
-        if at < 0 {
-            return null;
-        }
-        rest.remove(at);
+        rest.remove(rest.position(|r| r == s)?);
     }
     return Option::Some(rest);
 }

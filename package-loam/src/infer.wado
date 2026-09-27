@@ -5,15 +5,17 @@ use { TreeMap, TreeSet } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
 use {
+    SliceBounds,
     axes_of,
     axis_indices,
+    clamped,
     count_of,
     fits,
     fold,
     polys_at,
     regrouped_extents,
     resolve_index,
-    sliced_axes,
+    slice_bounds,
 } from "./fold.wado";
 use {
     AttrError,
@@ -897,17 +899,8 @@ pub fn slice_cuts(
     x: &Shape,
     owed: &mut List<Condition>,
 ) -> Result<List<Cut>, InferError> {
-    let starts = required_polys(node, known, 1, "starts")?;
-    let ends = required_polys(node, known, 2, "ends")?;
-    let axes = sliced_axes(node, known, starts.len()).map_err(|reason| refusal(node, reason))?;
-    let steps = axes_of(node, known, 4, "steps").map_err(|reason| refusal(node, reason))?;
-    if ends.len() != starts.len() || axes.len() != starts.len() {
-        return Result::Err(refusal(
-            node,
-            `${starts.len()} starts, ${ends.len()} ends and ${axes.len()} axes do not pair up`,
-        ));
-    }
-    if let Some(s) = steps && s.into_iter().any(|step| step != 1) {
+    let SliceBounds { starts, ends, axes, steps } = slice_bounds(node, known).map_err(|reason| refusal(node, reason))?;
+    if steps.into_iter().any(|step| step != 1) {
         return Result::Err(refusal(node, "a step is not 1, and the run slices by 1"));
     }
     let mut cuts: List<Cut> = [];
@@ -925,20 +918,6 @@ pub fn slice_cuts(
     return Result::Ok(cuts);
 }
 
-/// The integers operand `index` holds, symbolic or not, which the operator
-/// cannot do without.
-fn required_polys(
-    node: &Node,
-    known: &TreeMap<String, Known>,
-    index: i32,
-    attr: String,
-) -> Result<List<Poly>, InferError> {
-    let Some(values) = polys_at(node, known, index, attr).map_err(|reason| refusal(node, reason))? else {
-        return Result::Err(refusal(node, `${attr} is absent`));
-    };
-    return Result::Ok(values);
-}
-
 /// A `Slice` bound as ONNX reads it against an axis of `dim`: counted from the
 /// end where negative, and clamped within `[0, dim]`. A symbolic bound is not
 /// clamped: the inputs owe that it lies within, since a clamp has no
@@ -946,7 +925,7 @@ fn required_polys(
 fn within(node: &Node, bound: &Poly, dim: &Poly, owed: &mut List<Condition>) -> Result<Poly, InferError> {
     let constant = bound.as_constant();
     if let Some(c) = constant && let Some(d) = dim.as_constant() {
-        return Result::Ok(Poly::constant(i64::clamp(resolve_index(c, d), 0, d)));
+        return Result::Ok(Poly::constant(clamped(c, d, 0, d)));
     }
     // Past any extent a list can hold, which is how an exporter writes "to the
     // end", or back from it past the start.
@@ -1000,7 +979,9 @@ pub fn range_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<[Poly
     let mut bounds: List<Poly> = [];
     let operands: List<String> = ["start", "limit", "delta"];
     for let [i, operand] of operands.into_iter().enumerate() {
-        let values = required_polys(node, known, i, operand)?;
+        let Some(values) = polys_at(node, known, i, operand).map_err(|reason| refusal(node, reason))? else {
+            return Result::Err(refusal(node, `${operand} is absent`));
+        };
         if values.len() != 1 {
             return Result::Err(refusal(node, `${operand} is not one integer`));
         }

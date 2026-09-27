@@ -681,14 +681,10 @@ fn emit_forward(
     for let c of &checked.owed {
         owed.push(wado`refuse(unmet(${symbols.spell(&c.slack)?}, "${c.reason}"));`);
     }
-    for let line of symbols.bindings() {
-        w.line(&line);
-    }
-    for let line of owed {
-        w.line(&line);
-    }
-    for let line of body {
-        w.line(&line);
+    for let lines of [symbols.bindings(), owed, body] as List<List<String>> {
+        for let line of lines {
+            w.line(&line);
+        }
     }
     let returned = if converted(checked, held, &result) {
         `narrow(${exprs.reference(&result)})`;
