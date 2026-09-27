@@ -31,7 +31,7 @@ use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::{TypeSystem, range_item};
 use super::util;
-use crate::ast::{RangeExpr, RangeKind, Visibility};
+use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
 use crate::defs::{DefId, DefKind};
@@ -5426,16 +5426,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |&ty| ty,
         );
 
-        // Check type mismatch between start and end
         if start != end && start != TypeTable::ERROR && end != TypeTable::ERROR {
             let type_table = self.tysys.type_table.borrow();
             let start_name = type_table.type_name(start);
             let end_name = type_table.type_name(end);
             if start_name != end_name {
-                let op_str = match range.kind {
-                    RangeKind::Exclusive => "..<",
-                    RangeKind::Inclusive => "..=",
-                };
+                let op_str = range.kind.operator();
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: start_name,
                     found: format!(
@@ -5449,7 +5445,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let element_type = start;
 
-        // Check that the element type implements Ord
         let ord_trait_name = self
             .tysys
             .type_table
@@ -5470,16 +5465,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Check for reversed range literals (start > end)
         if let Some(start_val) = self.extract_literal_ord_value(&range.start)
             && let Some(end_val) = self.extract_literal_ord_value(&range.end)
         {
             let is_reversed = start_val.is_greater_than(&end_val);
             if is_reversed {
-                let op_str = match range.kind {
-                    RangeKind::Exclusive => "..<",
-                    RangeKind::Inclusive => "..=",
-                };
+                let op_str = range.kind.operator();
                 let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!(
                         "reversed range `{op_str}` is not supported (start must be less than end)"

@@ -11,12 +11,11 @@ use crate::ast::{
     GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
     InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
     LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
-    RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
-    StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
-    TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr,
-    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
-    written_params,
+    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
+    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -1752,10 +1751,7 @@ impl<'a> Unparser<'a> {
             }
             Expr::Range(range) => {
                 self.unparse_expr(&range.start);
-                match range.kind {
-                    RangeKind::Exclusive => self.output.push_str("..<"),
-                    RangeKind::Inclusive => self.output.push_str("..="),
-                }
+                self.output.push_str(range.kind.operator());
                 self.unparse_expr(&range.end);
             }
             Expr::WithHandler(w) => self.unparse_with_handler(w),
@@ -2486,10 +2482,7 @@ impl<'a> Unparser<'a> {
                 start, end, kind, ..
             } => {
                 self.unparse_pattern(start);
-                match kind {
-                    RangeKind::Exclusive => self.output.push_str("..<"),
-                    RangeKind::Inclusive => self.output.push_str("..="),
-                }
+                self.output.push_str(kind.operator());
                 self.unparse_pattern(end);
             }
             Pattern::Typed { pattern, ty, .. } => {
@@ -3625,10 +3618,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         }
         Expr::Range(range) => {
             unparse_expr_into(&range.start, output);
-            match range.kind {
-                RangeKind::Exclusive => output.push_str("..<"),
-                RangeKind::Inclusive => output.push_str("..="),
-            }
+            output.push_str(range.kind.operator());
             unparse_expr_into(&range.end, output);
         }
         Expr::WithHandler(w) => {
@@ -3927,10 +3917,7 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
             start, end, kind, ..
         } => {
             unparse_pattern_into(start, output);
-            match kind {
-                RangeKind::Exclusive => output.push_str("..<"),
-                RangeKind::Inclusive => output.push_str("..="),
-            }
+            output.push_str(kind.operator());
             unparse_pattern_into(end, output);
         }
         Pattern::Typed { pattern, ty, .. } => {
