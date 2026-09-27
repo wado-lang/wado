@@ -19,6 +19,10 @@ fn inner<T>(o: Outer<T>, fallback: T) -> T {
     return second(o.p, fallback);
 }
 
+fn doubled<T: Add<Output = T>>(f: fn(T) -> T, p: Pair<T>, fallback: T) -> T {
+    return f(second(p, fallback));
+}
+
 struct Picker {}
 
 impl Picker {
@@ -39,9 +43,10 @@ export fn run() with Stdout {
     println(`${picker.second(Pair { a: 1, b: 0x1_0000_0002 }, fallback)}`);
     println(`${Picker::first(Pair { a: 0x1_0000_0003, b: 1 }, fallback)}`);
     println(`${second(Pair { a: 1, b: 2 }, 5)}`);
+    println(`${doubled(|x| x + x, Pair { a: 1, b: 0x1_0000_0000 }, fallback)}`);
 }
 
 __DATA__
 {
-    "stdout": "4294967296\n4294967297\n4294967298\n4294967299\n2\n"
+    "stdout": "4294967296\n4294967297\n4294967298\n4294967299\n2\n8589934592\n"
 }

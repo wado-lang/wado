@@ -464,8 +464,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Resolve a call's arguments, each pinning the variables of `inst` it
     /// answers. An argument that [waits for its siblings](waits_for_siblings)
-    /// resolves after them while its parameter type is still open, and a
-    /// numeric literal answers last.
+    /// resolves after them while its parameter type is still open, a closure
+    /// last among those, and a numeric literal answers last.
     pub(super) fn resolve_args_against_params(
         &mut self,
         args: &[ast::Expr],
@@ -484,6 +484,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             resolved[i] = Some(self.resolve_arg_against_param(arg, ctx, param, own_vars));
         }
+        // A waiting literal still settles its own type, which a closure's
+        // parameters may need: `apply(|a, b| a + b, Cents { v: 3 })`.
+        deferred.sort_by_key(|&i| matches!(args[i], ast::Expr::Closure(_)));
         for i in deferred {
             let param = param_types.get(i).copied();
             resolved[i] = Some(self.resolve_arg_against_param(&args[i], ctx, param, own_vars));
