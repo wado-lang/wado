@@ -4794,8 +4794,8 @@ impl TypeTable {
     ///
     /// The head carries its declaring module, so two modules declaring the same
     /// simple name index apart. Consumers pick the namespace they need:
-    /// [`crate::name::Receiver::decl_key`] for the name an `impl` header
-    /// writes, [`crate::name::Receiver::head_key`] for the mangled identity.
+    /// [`Receiver::decl_key`] for the name an `impl` header writes,
+    /// [`Receiver::head_key`] for the mangled identity.
     #[must_use]
     pub fn impl_receiver_key(&self, id: TypeId) -> Receiver {
         let declared = |def: DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
