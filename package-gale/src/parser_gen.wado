@@ -4240,19 +4240,10 @@ fn gen_lr_fn<S: AsStrSlice>(
     }
     let scan_fn = `scan_${rule.snake_name}`;
     let labeled = rule_alts_labeled(&rule.alternatives);
-    // An empty suffix that yields its token to the caller enters on it and
-    // consumes nothing.
-    let guard = !lr_suffixes_consume(lr_alts, lr_dispatch, ctx);
     w.begin("loop");
     w.line("if p.recovering { break; }");
     w.line("let _sk = p.peek_kind();");
-    if guard {
-        emit_lr_progress_snapshot(w, "p.pos");
-    }
     emit_lr_group_chain(w, &parse_lr_site(&scan_fn, &rk, labeled), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
-    if guard {
-        emit_lr_progress_check(w, "p.pos");
-    }
     w.end();
     emit_lr_after_return(w, rule, emits_vals, ctx);
     w.end();
@@ -4373,19 +4364,21 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)})`;
     };
     let matched = prebound matches { Some(_) };
+    let may_match_empty = scan_body_can_match_empty(&lr.scan_suffix.elements, ctx);
+    let no_match = lr_suffix_no_match(may_match_empty);
     if mid_operand_gated {
         // A caller that needs this operand to leave a delimiter behind hands
         // it down as `lr_cont`. Take the operator only while that
         // continuation is still there — climbing past it strands the caller.
         w.line(`let _lr_end = ${scan_call};`);
-        if !matched {
-            w.line("if _lr_end < 0 { break; }");
+        if !matched || may_match_empty {
+            w.line(`if _lr_end${no_match} { break; }`);
         }
         w.line(
             `if !(lr_cont == 0 || ${follow_yields_call_of("&p.kinds", "_lr_end", "lr_cont")}) { break; }`,
         );
-    } else if !matched {
-        w.begin(`if ${scan_call} < 0`);
+    } else if !matched || may_match_empty {
+        w.begin(`if ${scan_call}${no_match}`);
         w.line("break;");
         w.end();
     }
@@ -4393,6 +4386,13 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
     w.else_begin("else");
     w.line("break;");
     w.end();
+}
+
+/// The test on an LR suffix's scan end that stops the loop. A suffix that can
+/// match empty also stops it where it would consume nothing: any number of empty
+/// iterations derives the same text, and only none of them adds no node.
+fn lr_suffix_no_match(may_match_empty: bool) -> String {
+    return if may_match_empty { " <= p.pos" } else { " < 0" };
 }
 
 /// The left-associative wrap + suffix ops shared by the static and ATN LR

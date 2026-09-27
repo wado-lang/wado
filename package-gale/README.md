@@ -17,10 +17,10 @@ _accept_ the grammars ANTLR4 accepts, but to _parse like ANTLR4 does_ — same
 precedence, same ambiguity resolution, same parse trees. A `.g4` that the
 upstream `antlr4` tool accepts should parse identically through Gale. Gale also
 accepts a few grammars ANTLR4 _rejects_, but only where the meaning is fixed
-with no remaining choice — e.g. a `.`- or `~X`-led left-recursive suffix like
-`e ~';' e`, which ANTLR4 errors on (no operator token to climb); or a lexer
-`mode` inside a combined `grammar`, which ANTLR4 restricts to a `lexer grammar`
-but which is unambiguous since a combined grammar already bundles a lexer. Where
+with no remaining choice — e.g. a lexer `mode` inside a combined `grammar`,
+which ANTLR4 restricts to a `lexer grammar` but which is unambiguous since a
+combined grammar already bundles a lexer. [`antlr4-compatibility.md`](./antlr4-compatibility.md#grammars-gale-accepts-and-antlr4-rejects)
+lists them all. Where
 the meaning is not uniquely determined, Gale rejects loudly rather than guessing.
 That costs it one grammar ANTLR4 accepts, `import Foo = Bar;`, carved out under
 claim (a) in [`antlr4-compatibility.md`](./antlr4-compatibility.md).

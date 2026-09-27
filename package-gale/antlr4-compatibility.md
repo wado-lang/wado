@@ -22,26 +22,37 @@ Compatibility is one-directional, **and then some**: Gale is a
 **superset**. It may also accept grammars ANTLR4 _rejects_, but only
 when the meaning is **uniquely determined** by Gale's existing language
 model — a canonical, forced extension, never an idiosyncratic
-interpretation. The worked example is a `.` / `~X`-led left-recursive
-suffix (`e ~';' e`, `e .`): ANTLR4 errors (no operator token to climb
-on), but precedence climbing fixes the meaning with no remaining choice,
-so Gale accepts it and lets the runtime ATN simulator decide the loop
-entry (fixtures `tests/grammars/lr_complement_op.g4`,
-`lr_wildcard_postfix.g4`). A second example is a lexer `mode` inside a
-combined `grammar`: ANTLR4 restricts modes to a `lexer grammar` (error
-120), but a combined grammar already bundles a lexer, so `mode` there
-desugars to exactly the lexer the combined→(lexer + parser) split would
-produce — Gale accepts it (still rejected in a `parser grammar`, which has
-no lexer). Where accepting a construct would require inventing behavior —
-the result is ambiguous, or context-defined with no single forced answer —
-Gale rejects loudly instead of guessing. The
-canonical statement of this rule is the "Compatibility Principle" in
-[`AGENTS.md`](./AGENTS.md).
+interpretation. Every such grammar is listed under
+[Grammars Gale accepts and ANTLR4 rejects](#grammars-gale-accepts-and-antlr4-rejects).
+Where accepting a construct would require inventing behavior — the result is
+ambiguous, or context-defined with no single forced answer — Gale rejects
+loudly instead of guessing. The canonical statement of this rule is the
+"Compatibility Principle" in [`AGENTS.md`](./AGENTS.md).
 
 The contract binds **capability**, not byte-for-byte output. Parse
 trees, token streams, and semantics must match ANTLR4; an incidental
 rendering difference that carries no structural meaning is allowed to
 diverge.
+
+### Grammars Gale accepts and ANTLR4 rejects
+
+Each entry names the jar's error (4.13.2), the meaning Gale gives the grammar,
+and the test that pins it. A grammar missing from this list that the jar
+rejects and Gale accepts is a Gale bug, on one side or the other.
+
+- **A lexer `mode` in a combined `grammar`** — error 120, "lexical modes are
+  only allowed in lexer grammars". A combined grammar already bundles a lexer,
+  so `mode` there desugars to exactly the lexer the combined → (lexer + parser)
+  split would produce. A `parser grammar` has no lexer and still rejects it.
+  Pinned by "mode declaration is accepted in a combined grammar (superset)" in
+  `src/g4/parser_test.wado`.
+- **A left-recursive alternative that can be followed by nothing** — error
+  148, as in `e : e x | INT ;` with `x : '*'? ;`, or an empty alternative in a
+  suffix group (`e : e ( A x | ) | C`). Any number of empty iterations derives
+  the same text, and only none of them adds no node, so an iteration whose
+  suffix would consume nothing is never taken. `1*` under
+  `s : e '*' EOF ; e : e x | INT ;` is `(s (e 1) *)`. Pinned by "an LR loop
+  never takes an iteration that consumes nothing" in `src/codegen_test.wado`.
 
 ### Rejections Gale shares with ANTLR4
 

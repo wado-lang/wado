@@ -492,6 +492,7 @@ fn atn_closure(
     arena: &mut CtxArena,
     seeds: &List<AtnConfig>,
     scratch: &mut ClosureScratch,
+    lr_loop_unconsumed: i32 = -1,
 ) -> List<AtnConfig> {
     scratch.cset.clear();
     scratch.rset.clear();
@@ -503,6 +504,9 @@ fn atn_closure(
         guard += 1;
         if guard > ATN_CLOSURE_GUARD {
             break;
+        }
+        if c.state == lr_loop_unconsumed && sim.tr_kind[sim.state_tr_start[c.state] + c.alt] == ATN_TR_PRECEDENCE {
+            continue;
         }
         let res = scratch.cset.add(arena, c.state, c.alt, c.pr, c.pctx);
         let idx = res.0;
@@ -735,7 +739,7 @@ pub fn atn_predict_with_stack(
         seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: caller, pr: min_prec });
     }
     let mut scratch = ClosureScratch::new();
-    let mut configs = atn_closure(sim, &mut arena, &seeds, &mut scratch);
+    let mut configs = atn_closure(sim, &mut arena, &seeds, &mut scratch, dstate);
     let mut pos = start_pos;
     let mut prev = atn_unique_alts(&configs);
     let limit = tokens.len() - start_pos + 8;

@@ -1482,23 +1482,33 @@ WS : ' ' -> skip ;
 
 // "a prebound LR suffix scan is neither re-tested nor re-seeded" pins the guard's
 // absence where every suffix consumes.
-test "an LR loop ends on a suffix that matched empty, in the scan and the parse" {
-    // ANTLR rejects the grammar (error 148). `x` yields a `*` the caller takes, so
-    // the loop enters on `*` and consumes nothing.
-    let g4 = "grammar T;
-s : e '*' EOF | e '!' EOF ;
-e : e x
-  | '(' e ')'
-  | INT
-  ;
-x : '*'? ;
+test "an LR loop never takes an iteration that consumes nothing" {
+    // ANTLR rejects both grammars (error 148); `antlr4-compatibility.md` gives the
+    // meaning Gale takes. `x` yields a `*` the caller takes, and `+` is reached
+    // through an empty `x` as well as directly. The second grammar routes the
+    // loop to the ATN.
+    let rest = "x : '*'? ;
 INT : '0'..'9'+ ;
 WS : (' '|'\\n') -> skip ;
 ";
-    let got = parses(g4, "s", ["1*", "1**", "1*!"]);
-    assert got == "1* => (s (e (e 1) x) *)
-1** => (s (e (e (e 1) (x *)) x) *)
+    let static_lr = `grammar T;
+s : e '*' EOF | e '!' EOF ;
+e : e x | '(' e ')' | INT ;
+${rest}`;
+    let got = parses(static_lr, "s", ["1*", "1**", "1*!"]);
+    assert got == "1* => (s (e 1) *)
+1** => (s (e (e 1) (x *)) *)
 1*! => (s (e (e 1) (x *)) !)
+", got;
+    let atn_lr = `grammar T;
+s : e '*' EOF | e '!' EOF ;
+e : e x | e '+' e '+' | e '+' e | '(' e ')' | INT ;
+${rest}`;
+    let got = parses(atn_lr, "s", ["1*", "1+2!", "1+2+*", "1+2**"]);
+    assert got == "1* => (s (e 1) *)
+1+2! => (s (e (e 1) + (e 2)) !)
+1+2+* => (s (e (e 1) + (e 2) +) *)
+1+2** => (s (e (e 1) + (e (e 2) (x *))) *)
 ", got;
 }
 
