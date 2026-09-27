@@ -13,7 +13,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::answers_last;
-use super::expr::BareCase;
+use super::expr::{BareCase, names_its_type};
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
 use super::instantiate::{Instantiated, Instantiation};
@@ -363,6 +363,16 @@ impl CalleeIdentKind<'_> {
     }
 }
 
+/// Whether an argument takes from its parameter type what it cannot settle
+/// itself, and so waits for the arguments that can: a closure its parameter
+/// types, a range or a named struct literal without a turbofish its type
+/// arguments.
+fn waits_for_siblings(arg: &ast::Expr) -> bool {
+    matches!(arg, ast::Expr::Closure(_))
+        || names_its_type(arg)
+            && !matches!(arg, ast::Expr::StructLiteral(lit) if !lit.type_args.is_empty())
+}
+
 /// An operation of an `interface` or resource, as a callee names it.
 pub(super) struct EffectOperation {
     pub(super) decl: DefId,
@@ -453,8 +463,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a call's arguments, each pinning the variables of `inst` it
-    /// answers. A closure whose parameter type is still open waits for the
-    /// arguments that can answer it, and a numeric literal answers last.
+    /// answers. An argument that [waits for its siblings](waits_for_siblings)
+    /// resolves after them while its parameter type is still open, and a
+    /// numeric literal answers last.
     pub(super) fn resolve_args_against_params(
         &mut self,
         args: &[ast::Expr],
@@ -467,7 +478,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut deferred: Vec<usize> = Vec::new();
         for (i, arg) in args.iter().enumerate() {
             let param = param_types.get(i).copied();
-            if matches!(arg, ast::Expr::Closure(_)) && self.param_still_open(param) {
+            if waits_for_siblings(arg) && self.param_still_open(param) {
                 deferred.push(i);
                 continue;
             }

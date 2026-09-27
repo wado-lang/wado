@@ -85,7 +85,7 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 /// Whether `expr` is a literal that names its own type — a named struct literal
 /// or a range — and so takes only its type arguments from the type expected of
 /// it.
-fn names_its_type(expr: &Expr) -> bool {
+pub(super) fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
 }
 
@@ -5490,23 +5490,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        self.record_range_instance(range, element_type)
-    }
-
-    /// Record `range` as the range struct over `element`, and return that type.
-    pub(super) fn record_range_instance(&mut self, range: &RangeExpr, element: TypeId) -> TypeId {
-        let (struct_name, struct_type) = self.tysys.range_type(range.kind, element);
+        let (struct_name, struct_type) = self.tysys.range_type(range.kind, element_type);
 
         // Mangled name for the resulting `TirExprKind::StructLiteral`.
         // The monomorphizer keys instantiation lookup on this form
         // (`RangeExclusive<i32>`), so there is one spelling of it: the body
         // walk mangles it here and records it, and reify reads it back instead
         // of running its own `type_name(t)` + `mangle_generic_name`.
-        let arg_names = vec![self.tysys.type_table.borrow().type_name(element)];
+        let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
         let mangled_name = mangle_generic_name(&struct_name, &arg_names);
         self.record_generic_instantiation_with_mangle(
             range.id,
-            vec![element],
+            vec![element_type],
             struct_type,
             Some(mangled_name),
         );

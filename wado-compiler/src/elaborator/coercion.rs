@@ -2,7 +2,7 @@
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-use super::tysys::{TypeSystem, range_item};
+use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{self, Expr, Literal, LiteralMember, UnaryOp};
 use crate::compiler_host::CompilerHost;
@@ -123,13 +123,10 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     classify_numeric_literal(expr).is_some()
 }
 
-/// Whether a call argument takes its type from its context: a numeric literal,
-/// `null`, or a range of two numeric literals. Inference defers it, so the other
-/// arguments bind the parameter first.
+/// Whether a call argument takes its type from its context: a numeric literal or
+/// `null`. Inference defers it, so the other arguments bind the parameter first.
 pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
-    arg.is_some_and(|arg| {
-        is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg) || is_literal_range(arg)
-    })
+    arg.is_some_and(|arg| is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg))
 }
 
 /// Whether `expr` is a byte literal. Among numeric literals it is the one that
@@ -239,12 +236,6 @@ pub(super) fn range_endpoint_order(
         (true, false) => LiteralPairOrder::RightAnchors,
         _ => LiteralPairOrder::LeftAnchors,
     }
-}
-
-/// Whether `expr` is a range whose bounds are both numeric literals: the one
-/// range that takes its element type from its context.
-fn is_literal_range(expr: &Expr) -> bool {
-    matches!(expr, Expr::Range(r) if is_numeric_literal_expr(&r.start) && is_numeric_literal_expr(&r.end))
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -422,8 +413,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 self.try_coerce_numeric_literal(raw, expected)
-            } else if let Expr::Range(range) = raw {
-                self.try_coerce_literal_range(range, expected)
             } else {
                 self.try_coerce_null(raw, expected)
             };
@@ -431,26 +420,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *arg = coerced;
             }
         }
-    }
-
-    /// A range of two numeric literals at a range of its kind over a type the
-    /// literals can be is that range.
-    fn try_coerce_literal_range(
-        &mut self,
-        range: &ast::RangeExpr,
-        target_type: TypeId,
-    ) -> Option<TypeId> {
-        let element = {
-            let tt = self.tysys.type_table.borrow();
-            tt.range_element(target_type, range_item(range.kind))
-                .filter(|&t| is_numeric_literal_target(&tt, t))?
-        };
-        for bound in [&range.start, &range.end] {
-            self.try_coerce_numeric_literal(bound, element)?;
-        }
-        let range_type = self.record_range_instance(range, element);
-        self.record_expression_type(range.id, range_type);
-        Some(range_type)
     }
 
     /// `null` at an `Option<T>`, or at a newtype over one, is that type.
