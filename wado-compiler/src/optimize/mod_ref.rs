@@ -13,17 +13,9 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
-<<<<<<< HEAD
 use crate::optimize::arena_query::{
-    cast_truncates_a_float, expr_node_may_trap_typed, field_receiver_nonnull, unary_may_trap,
+    expr_node_may_trap_typed, field_receiver_nonnull, unary_may_trap,
 };
-||||||| c3a438b9ce7
-use crate::optimize::arena_query::{
-    cast_truncates_a_float, expr_node_may_trap_typed, field_receiver_nonnull,
-};
-=======
-use crate::optimize::arena_query::{expr_node_may_trap_typed, field_receiver_nonnull};
->>>>>>> origin/main
 use crate::optimize::bounds::{self, Builtin};
 use crate::optimize::inline::recursive_scc_members;
 use crate::tir::{BuiltinDeclarations, LinearMemory, TypeTable};

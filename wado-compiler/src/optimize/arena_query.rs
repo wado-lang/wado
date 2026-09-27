@@ -693,19 +693,7 @@ pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
 pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&TypeTable>) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Binary { op, .. } => binary_op_may_trap(*op),
-<<<<<<< HEAD
         ExprKind::Unary { op, expr } => unary_may_trap(body, *op, *expr),
-        ExprKind::Cast { expr, target_type } => {
-            cast_truncates_a_float(body, types, *expr, *target_type)
-        }
-||||||| c3a438b9ce7
-        ExprKind::Unary { op, .. } => unary_op_may_trap(*op),
-        ExprKind::Cast { expr, target_type } => {
-            cast_truncates_a_float(body, types, *expr, *target_type)
-        }
-=======
-        ExprKind::Unary { op, .. } => unary_op_may_trap(*op),
->>>>>>> origin/main
         ExprKind::FieldAccess { expr, .. } => !field_receiver_nonnull(body, types, *expr),
         // Heap projections on a possibly-null (or case-mismatched, or short)
         // receiver.

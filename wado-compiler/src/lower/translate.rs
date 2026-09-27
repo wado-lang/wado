@@ -344,38 +344,8 @@ struct FunctionTranslator<'a, 'p> {
     extra: Option<ExtraLocals>,
     immutable_locals: IndexSet<u32>,
     address_taken: IndexSet<u32>,
-<<<<<<< HEAD
     /// The reads whose copy is elided because they hand their storage over.
-    moves: value_copy::last_use::Moves<'a>,
-||||||| c3a438b9ce7
-    /// Last-use spans for this function's module (WEP 2026-05-21). A `Local`
-    /// read whose span is present is a final use, so its copy is elided.
-    func_moved_spans: Option<&'a IndexSet<Span>>,
-    /// TIR-level move-eligible locals for this function (WEP 2026-05-21):
-    /// backward liveness plus a freshness fixpoint proves each read is a final
-    /// use of a local that exclusively owns fresh storage. Reaches synthesized
-    /// bodies the AST-keyed `func_moved_spans` cannot see (serde de/serialize,
-    /// derives). Unioned with the span check.
-    move_eligible_locals: IndexSet<u32>,
-    /// Spans of field / whole-value materializations that alias out of a *dead*
-    /// aggregate at a struct/tuple literal (place-level move): the copy is elided
-    /// exactly as for a whole-local final-use move, but for a projection.
-    move_eligible_place_spans: IndexSet<Span>,
-=======
-    /// The elaborator's final-use reads (WEP 2026-05-21) of locals no kept
-    /// borrow pins. A `Local` read whose span is present moves.
-    move_eligible_read_spans: IndexSet<Span>,
-    /// TIR-level move-eligible locals for this function (WEP 2026-05-21):
-    /// backward liveness plus a freshness fixpoint proves each read is a final
-    /// use of a local that exclusively owns fresh storage. Reaches synthesized
-    /// bodies the AST-keyed read spans cannot see (serde de/serialize,
-    /// derives). Unioned with the span check.
-    move_eligible_locals: IndexSet<u32>,
-    /// Spans of field / whole-value materializations that alias out of a *dead*
-    /// aggregate at a struct/tuple literal (place-level move): the copy is elided
-    /// exactly as for a whole-local final-use move, but for a projection.
-    move_eligible_place_spans: IndexSet<Span>,
->>>>>>> origin/main
+    moves: value_copy::last_use::MoveEligible,
     /// Whether this function hands a returned variant's payload out uncopied,
     /// so `return Some(place)` delivers the borrow exactly as `return place`
     /// does ([`value_copy::hands_out_payload`]).
@@ -423,12 +393,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
         let address_taken = func.address_taken_locals.clone();
-<<<<<<< HEAD
         let borrowed_params = base.value_copy.confined_params.borrowed_locals(func);
-||||||| c3a438b9ce7
-        let func_moved_spans = Some(&base.moved_local_spans);
-=======
->>>>>>> origin/main
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
@@ -465,12 +430,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &type_table,
                     &resolver,
                     base.value_copy,
-<<<<<<< HEAD
                     &borrowed_params,
-||||||| c3a438b9ce7
-=======
                     &base.moved_local_spans,
->>>>>>> origin/main
                 ),
                 value_copy::last_use::compute_ref_targets(func, &resolver),
             )
@@ -481,31 +442,12 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             )
         };
         let share_eligible_locals = ownership.share_eligible;
-        let moves = value_copy::last_use::Moves::new(
-            ownership.move_eligible,
-            &base.moved_local_spans,
-            borrowed_params,
-        );
+        let moves = ownership.move_eligible;
         let moved_roots = if needs_copy_analysis {
-<<<<<<< HEAD
             moves.roots(func)
-||||||| c3a438b9ce7
-            value_copy::last_use::compute_moved_roots(func, &move_eligible, func_moved_spans)
-=======
-            value_copy::last_use::compute_moved_roots(func, &move_eligible)
->>>>>>> origin/main
         } else {
             IndexSet::default()
         };
-<<<<<<< HEAD
-||||||| c3a438b9ce7
-        let move_eligible_locals = move_eligible.locals;
-        let move_eligible_place_spans = move_eligible.place_spans;
-=======
-        let move_eligible_locals = move_eligible.locals;
-        let move_eligible_place_spans = move_eligible.place_spans;
-        let move_eligible_read_spans = move_eligible.read_spans;
->>>>>>> origin/main
         let alias_components = if needs_copy_analysis {
             value_copy::last_use::AliasComponents::build(func)
         } else {
@@ -526,17 +468,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             }),
             immutable_locals,
             address_taken,
-<<<<<<< HEAD
             moves,
-||||||| c3a438b9ce7
-            func_moved_spans,
-            move_eligible_locals,
-            move_eligible_place_spans,
-=======
-            move_eligible_read_spans,
-            move_eligible_locals,
-            move_eligible_place_spans,
->>>>>>> origin/main
             hands_out_payload,
             share_eligible_locals,
             ref_targets,
@@ -560,17 +492,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             extra: None,
             immutable_locals: IndexSet::default(),
             address_taken: IndexSet::default(),
-<<<<<<< HEAD
-            moves: value_copy::last_use::Moves::default(),
-||||||| c3a438b9ce7
-            func_moved_spans: None,
-            move_eligible_locals: IndexSet::default(),
-            move_eligible_place_spans: IndexSet::default(),
-=======
-            move_eligible_read_spans: IndexSet::default(),
-            move_eligible_locals: IndexSet::default(),
-            move_eligible_place_spans: IndexSet::default(),
->>>>>>> origin/main
+            moves: value_copy::last_use::MoveEligible::default(),
             hands_out_payload: false,
             share_eligible_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
@@ -859,50 +781,6 @@ impl FunctionTranslator<'_, '_> {
             .is_some_and(|root| !self.moved_roots.contains(&root))
     }
 
-<<<<<<< HEAD
-||||||| c3a438b9ce7
-    /// Whether `value` is a move rather than a copy: a whole-local read at its final
-    /// use, or a materialization aliasing out of a dead aggregate, keyed by span.
-    fn is_last_use_move(&self, value: &TirExpr) -> bool {
-        // A newtype cast hands over the same storage (see
-        // `last_use::strip_casts`), so it must not hide the materialization
-        // underneath it.
-        let value = value_copy::last_use::strip_casts(value);
-        // Place-level move: the literal scan proved this exact materialization
-        // aliases a dead aggregate. Covers both `base.field` and a whole `base`.
-        if self.move_eligible_place_spans.contains(&value.span) {
-            return true;
-        }
-        let TirExprKind::Local { index, .. } = &value.kind else {
-            return false;
-        };
-        self.move_eligible_locals.contains(index)
-            || self
-                .func_moved_spans
-                .is_some_and(|spans| spans.contains(&value.span))
-    }
-
-=======
-    /// Whether `value` is a move rather than a copy: a whole-local read at its final
-    /// use, or a materialization aliasing out of a dead aggregate, keyed by span.
-    fn is_last_use_move(&self, value: &TirExpr) -> bool {
-        // A newtype cast hands over the same storage (see
-        // `last_use::strip_casts`), so it must not hide the materialization
-        // underneath it.
-        let value = value_copy::last_use::strip_casts(value);
-        // Place-level move: the literal scan proved this exact materialization
-        // aliases a dead aggregate. Covers both `base.field` and a whole `base`.
-        if self.move_eligible_place_spans.contains(&value.span) {
-            return true;
-        }
-        let TirExprKind::Local { index, .. } = &value.kind else {
-            return false;
-        };
-        self.move_eligible_locals.contains(index)
-            || self.move_eligible_read_spans.contains(&value.span)
-    }
-
->>>>>>> origin/main
     /// Apply a boxing-derived rewrite to `expr`, returning `Some` if
     /// one fires. Matches raw TIR shapes — see the per-case helpers
     /// for the four rewrites (`Local` retag, `&local` collapse, `&x`
