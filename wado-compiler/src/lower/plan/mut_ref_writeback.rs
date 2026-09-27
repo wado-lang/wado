@@ -20,7 +20,7 @@ use crate::token::Span;
 pub fn insert_write_backs(
     flat: &mut FlatPackage,
     call_graph: &CallGraph,
-    escaping: &CallRetention,
+    calls: &CallRetention,
     functor_rows: &FunctorRows,
     errors: &dyn ErrorSink,
 ) -> Result<(), Bail> {
@@ -46,7 +46,7 @@ pub fn insert_write_backs(
         let mut pass = WriteBack {
             type_table: &type_table,
             carrying: &carrying,
-            escaping,
+            calls,
             functor_rows,
             replaced: &replaced,
             replaced_locals,
@@ -89,7 +89,8 @@ pub fn insert_write_backs(
 struct WriteBack<'a> {
     type_table: &'a TypeTable,
     carrying: &'a RefCarrying<'a>,
-    escaping: &'a CallRetention,
+    /// What a direct call keeps of its arguments.
+    calls: &'a CallRetention,
     /// What a call through a function value of each functor type keeps. Read
     /// where no callee name is available, so an indirect call is refused on the
     /// same ground a direct one is rather than on a different reading.
@@ -232,7 +233,7 @@ impl WriteBack<'_> {
         let mut inner = WriteBack {
             type_table: self.type_table,
             carrying: self.carrying,
-            escaping: self.escaping,
+            calls: self.calls,
             functor_rows: self.functor_rows,
             replaced: self.replaced,
             // A closure body's slots are its own, so what it replaces through
@@ -453,7 +454,7 @@ impl WriteBack<'_> {
                     ..
                 } => (
                     func.name.clone(),
-                    self.escaping
+                    self.calls
                         .of_call(func, args.len(), self.carrying.holds(call.type_id))
                         .positions(),
                     self.replaced

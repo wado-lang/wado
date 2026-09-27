@@ -175,6 +175,16 @@ Silence is the safe reading for `#[retain]` and not for `#[result]`: a missing
 declaration that does hand out an argument's storage. A declaration that owes
 one is reported at the declaration, wherever it lives.
 
+"Allocates" speaks of the result's storage, not of what the result holds. The
+rule covers only the reference parameters, so a silent declaration may still
+build its result from a by-value argument, as `builtin::select` returns one of
+its operands. Retention therefore reads silence as a result that may hold what
+any argument holds. `owned` is the stronger statement: the result holds nothing
+it was handed except what a `#[retain]` routes there. Before issue #2179, each
+reader took silence its own way. Retention read it as holding nothing,
+confinement as keeping every argument, and the shared-escape walk refused the
+call. The first of these was a miscompile.
+
 These two are not the whole family a body-less declaration carries.
 `#[immediate(p)]` sits beside them and answers a different question — how
 codegen lowers the call, not what the call keeps. See

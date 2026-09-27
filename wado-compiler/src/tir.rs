@@ -6953,6 +6953,7 @@ impl<V> Default for DeclarationTable<V> {
 }
 
 impl<V> DeclarationTable<V> {
+    /// A table over `declarations`, keyed by module and declared name.
     pub fn new(declarations: IndexMap<(ModuleSource, String), V>) -> Self {
         Self(declarations)
     }

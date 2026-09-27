@@ -43,7 +43,7 @@ struct ParamEscape {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
-    /// A body-less function whose declaration link snapshot.
+    /// A body-less function with a declaration link snapshot.
     Declared,
     ValueCopy,
     HasBody,

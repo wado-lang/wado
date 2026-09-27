@@ -613,10 +613,6 @@ struct StoresOracle<'a> {
 }
 
 impl StoresOracle<'_> {
-    fn direct(&self, func: &FunctionRef, arity: usize) -> RetentionFacts {
-        self.calls.facts(func, arity)
-    }
-
     /// Facts for an indirect (functor) callee: the join over the values the
     /// walk resolved it to, or the callee type's row where it resolved none.
     fn indirect(&self, callees: &Callees, callee: &TirExpr, arity: usize) -> RetentionFacts {
@@ -1308,7 +1304,7 @@ impl StoresWalker<'_> {
                     .collect(),
             ),
             TirExprKind::Call { func, args, .. } => {
-                let facts = self.oracle.direct(func, args.len());
+                let facts = self.oracle.calls.facts(func, args.len());
                 let routed =
                     self.carried_args(args.iter().map(|a| &a.expr), &facts.into_result, &facts);
                 self.placed(expr.type_id, routed)
@@ -1811,7 +1807,7 @@ impl TirRefVisitor for StoresWalker<'_> {
                 }
             }
             TirExprKind::Call { func, args, .. } => {
-                let facts = self.oracle.direct(func, args.len());
+                let facts = self.oracle.calls.facts(func, args.len());
                 let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 self.call_hands_on(&exprs, &facts);
                 let landing = match self.oracle.call_graph.id_of(func) {
@@ -1879,7 +1875,7 @@ impl TirRefVisitor for StoresWalker<'_> {
                 else {
                     panic!("a function reference `{name}` is not of a function type");
                 };
-                let facts = self.oracle.direct(&referenced, params.len());
+                let facts = self.oracle.calls.facts(&referenced, params.len());
                 let (target, functor_params) = match self.oracle.call_graph.id_of(&referenced) {
                     Some(id) => (
                         MintTarget::Named(id),
