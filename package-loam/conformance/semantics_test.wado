@@ -1,221 +1,71 @@
 //! ONNX's shape arithmetic over a length only the run knows, against Loam's.
-//! Each model under `semantics/` is one case, and what onnxruntime computes for
-//! it at `N` = 3 and 10 is the expectation: `semantics.mjs` writes the models
-//! and prints those numbers. A case Loam does not match yet is a `#[TODO]` test,
-//! so the run lists where the two part.
+//! Each model under `semantics/` is one case, and `semantics.mjs`, which wrote
+//! it, wrote beside it what onnxruntime computes from it at each length of `X`.
+//! Here the case builds as the generator would build it and runs under `eval`,
+//! printing the same lines, so a refused build, a trap and a wrong answer each
+//! show as a difference from them. A case Loam does not match yet is a
+//! `#[TODO]` test, so the run lists where the two part.
 
 use { TreeMap } from "core:collections";
+use { eval } from "core:eval";
+use { emit } from "../src/emit.wado";
 use { infer } from "../src/infer.wado";
 use { read } from "../src/onnx_proto.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
-use { bind_dims } from "../src/specialize.wado";
-use slice_to_length from "./semantics/SliceToLength.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "M",
-                        axes: ["Pos"],
-                    },
-                    {
-                        pattern: "X",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "SliceToLength",
-                        axes: ["Part"],
-                    },
-                ],
-            },
-        },
-    };
-use slice_from_minus_length from "./semantics/SliceFromMinusLength.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "M",
-                        axes: ["Pos"],
-                    },
-                    {
-                        pattern: "X",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "SliceFromMinusLength",
-                        axes: ["Part"],
-                    },
-                ],
-            },
-        },
-    };
-use slice_from_past_end from "./semantics/SliceFromPastEnd.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "M",
-                        axes: ["Pos"],
-                    },
-                    {
-                        pattern: "X",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "SliceFromPastEnd",
-                        axes: ["Part"],
-                    },
-                ],
-            },
-        },
-    };
-use slice_drop_last from "./semantics/SliceDropLast.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "SliceDropLast",
-                        axes: ["Part"],
-                    },
-                ],
-            },
-        },
-    };
-use slice_last from "./semantics/SliceLast.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "SliceLast",
-                        axes: ["Part"],
-                    },
-                ],
-            },
-        },
-    };
-use range_to_length from "./semantics/RangeToLength.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "RangeToLength",
-                        axes: ["Part"],
-                    },
-                ],
-            },
-        },
-    };
-use cast_wraps from "./semantics/CastWraps.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "CastWraps",
-                        axes: ["Part"],
-                    },
-                ],
-            },
-        },
-    };
-use cast_wraps_length from "./semantics/CastWrapsLength.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "CastWrapsLength",
-                        axes: ["Part"],
-                    },
-                ],
-            },
-        },
-    };
-use reshape_flat from "./semantics/ReshapeFlat.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "P",
-                        axes: ["Seq", "Wide"],
-                    },
-                ],
-            },
-        },
-    };
-use reshape_keep_split from "./semantics/ReshapeKeepSplit.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "P",
-                        axes: ["Seq", "Wide"],
-                    },
-                    {
-                        pattern: "ReshapeKeepSplit",
-                        axes: ["Seq", "Half", "Pair"],
-                    },
-                ],
-            },
-        },
-    };
-use reshape_rest_first from "./semantics/ReshapeRestFirst.onnx"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            options: {
-                layout: [
-                    {
-                        pattern: "P",
-                        axes: ["Seq", "Wide"],
-                    },
-                    {
-                        pattern: "ReshapeRestFirst",
-                        axes: ["Rows", "Pair"],
-                    },
-                ],
-            },
-        },
-    };
 
 /// The lengths of `X` the oracle ran each case at.
 global LENGTHS: List<i32> = [3, 10];
 
-/// `count` consecutive values from `first`, as the oracle fills its inputs.
+/// Each input a case reads, as the driver passes it at length `n`. The oracle
+/// fills its own the same way.
+global INPUTS: TreeMap<String, String> = {
+    X: "Tensor { data: iota(10.0, n), extents: [n] }",
+    M: "Tensor { data: iota(0.0, 8), extents: [8] }",
+    P: "Tensor { data: iota(0.0, 4 * n), extents: [n, 4] }",
+} as TreeMap<String, String>;
+
+/// What Loam computes from `model` at each of `lengths`, in the oracle's
+/// lines, and past them why it computes nothing more: the build's refusal, or
+/// how the run stopped.
+fn loam(model: ByteList, output_axes: List<String>, lengths: List<i32>) -> String {
+    let graph = read(model).unwrap();
+    let output = graph.outputs[0].name;
+    let schema = Schema {
+        layout: [
+            LayoutRule {
+                pattern: "X",
+                axes: ["Seq"],
+            },
+            LayoutRule {
+                pattern: "M",
+                axes: ["Pos"],
+            },
+            LayoutRule {
+                pattern: "P",
+                axes: ["Seq", "Wide"],
+            },
+            LayoutRule { pattern: output, axes: output_axes },
+        ],
+    };
+    let checked = match infer(&graph, &schema) {
+        Ok(c) => c,
+        Err(e) => {
+            return `refused: ${e}`;
+        },
+    };
+    let source = match emit(&graph, &checked) {
+        Ok(s) => s,
+        Err(e) => {
+            return `refused: ${e}`;
+        },
+    };
+    let mut args = "";
+    for let vi of graph.inputs {
+        args.push_str(`&${INPUTS[vi.name]}, `);
+    }
+    let program = `${source}
+use { println, Stdout } from "core:cli";
+
 fn iota(first: f32, count: i32) -> List<f32> {
     let mut values: List<f32> = [];
     for let i of 0..<count {
@@ -224,320 +74,159 @@ fn iota(first: f32, count: i32) -> List<f32> {
     return values;
 }
 
-/// `X`, of length `n`.
-fn x_of(n: i32) -> List<f32> {
-    return iota(10.0, n);
+fn joined<T: Display>(values: List<T>) -> String {
+    let parts: List<String> = values.into_iter().map(|v| \`\${v}\`).collect();
+    return parts.join(",");
 }
 
-/// `M`, of the 8 elements a symbolic bound runs past.
-fn m_of() -> List<f32> {
-    return iota(0.0, 8);
+export fn run() with Stdout {
+    for let n of ${lengths:?} as List<i32> {
+        let got = forward(${args}&Weights {});
+        println(\`N = \${n}: extents [\${joined(got.extents)}], data [\${joined(got.data)}]\`);
+    }
+}
+`;
+    return match eval(program) {
+        Ok(out) => {
+            if out.status matches { Exited(0) } {
+                out.stdout;
+            } else {
+                `${out.stdout}${out.status:?}: ${out.stderr}`;
+            }
+        },
+        Err(e) => `${e:?}`,
+    };
 }
 
-/// `P`, of `n` rows of 4.
-fn p_of(n: i32) -> List<f32> {
-    return iota(0.0, 4 * n);
+/// The lines of the oracle's `onnx` for `lengths`.
+fn at(onnx: String, lengths: List<i32>) -> String {
+    let mut kept = "";
+    for let line of onnx.lines() {
+        for let n of lengths {
+            if line.starts_with(`N = ${n}:`) {
+                kept.push_str(`${line}\n`);
+            }
+        }
+    }
+    return kept;
+}
+
+/// Loam computes from `model` what onnxruntime does, which `onnx` states.
+fn assert_agrees(model: ByteList, onnx: String, output_axes: List<String> = ["Part"], lengths: List<i32> = LENGTHS) {
+    let got = loam(model, output_axes, lengths);
+    let want = at(onnx, lengths);
+    assert got == want;
 }
 
 test "Slice to N within the axis takes the first N" {
-    let got = slice_to_length::forward(
-        &slice_to_length::Tensor {
-            data: x_of(3),
-            extents: [3],
-        },
-        &slice_to_length::Tensor {
-            data: m_of(),
-            extents: [8],
-        },
-        &slice_to_length::Weights {},
-    );
-    assert got.extents == [3];
-    assert got.data == [0.0, 1.0, 2.0];
+    assert_agrees(#include_bytes("./semantics/SliceToLength.onnx"), #include_str("./semantics/SliceToLength.txt"), [
+        "Part",
+    ], [3]);
 }
 
 #[TODO]
 test "Slice to N past the axis clamps to its end" {
-    let got = slice_to_length::forward(
-        &slice_to_length::Tensor {
-            data: x_of(10),
-            extents: [10],
-        },
-        &slice_to_length::Tensor {
-            data: m_of(),
-            extents: [8],
-        },
-        &slice_to_length::Weights {},
-    );
-    assert got.extents == [8];
-    assert got.data == m_of();
+    assert_agrees(#include_bytes("./semantics/SliceToLength.onnx"), #include_str("./semantics/SliceToLength.txt"), [
+        "Part",
+    ], [10]);
 }
 
 #[TODO]
-test "Slice from -N counts from the end" {
-    let got = slice_from_minus_length::forward(
-        &slice_from_minus_length::Tensor {
-            data: x_of(3),
-            extents: [3],
-        },
-        &slice_from_minus_length::Tensor {
-            data: m_of(),
-            extents: [8],
-        },
-        &slice_from_minus_length::Weights {},
+test "Slice from -N counts from the end, clamping to the start" {
+    assert_agrees(
+        #include_bytes("./semantics/SliceFromMinusLength.onnx"),
+        #include_str("./semantics/SliceFromMinusLength.txt"),
     );
-    assert got.extents == [3];
-    assert got.data == [5.0, 6.0, 7.0];
-}
-
-#[TODO]
-test "Slice from -N past the axis clamps to its start" {
-    let got = slice_from_minus_length::forward(
-        &slice_from_minus_length::Tensor {
-            data: x_of(10),
-            extents: [10],
-        },
-        &slice_from_minus_length::Tensor {
-            data: m_of(),
-            extents: [8],
-        },
-        &slice_from_minus_length::Weights {},
-    );
-    assert got.extents == [8];
-    assert got.data == m_of();
 }
 
 test "Slice from N + 8 is empty" {
-    for let n of LENGTHS {
-        let got = slice_from_past_end::forward(
-            &slice_from_past_end::Tensor {
-                data: x_of(n),
-                extents: [n],
-            },
-            &slice_from_past_end::Tensor {
-                data: m_of(),
-                extents: [8],
-            },
-            &slice_from_past_end::Weights {},
-        );
-        assert got.extents == [0];
-        assert got.data.is_empty();
-    }
+    assert_agrees(#include_bytes("./semantics/SliceFromPastEnd.onnx"), #include_str("./semantics/SliceFromPastEnd.txt"));
 }
 
 test "Slice to N - 1 drops the last" {
-    for let n of LENGTHS {
-        let got = slice_drop_last::forward(
-            &slice_drop_last::Tensor {
-                data: x_of(n),
-                extents: [n],
-            },
-            &slice_drop_last::Weights {},
-        );
-        assert got.extents == [n - 1];
-        assert got.data == iota(10.0, n - 1);
-    }
+    assert_agrees(#include_bytes("./semantics/SliceDropLast.onnx"), #include_str("./semantics/SliceDropLast.txt"));
 }
 
 test "Slice from -1 to N takes the last" {
-    for let n of LENGTHS {
-        let got = slice_last::forward(
-            &slice_last::Tensor {
-                data: x_of(n),
-                extents: [n],
-            },
-            &slice_last::Weights {},
-        );
-        assert got.extents == [1];
-        assert got.data == [9.0 + n as f32];
-    }
-}
-
-test "Range from 0 to N by 1 counts N" {
-    for let n of LENGTHS {
-        let got = range_to_length::forward(
-            &range_to_length::Tensor {
-                data: x_of(n),
-                extents: [n],
-            },
-            &range_to_length::Weights {},
-        );
-        assert got.extents == [n];
-        let want: List<i64> = (0..<n).map(|i| i as i64).collect();
-        assert got.data == want;
-    }
-}
-
-test "Cast of a known int64 to int32 wraps" {
-    let got = cast_wraps::forward(&cast_wraps::Weights {});
-    assert got.extents == [1];
-    assert got.data == [-1294967296] as List<i64>;
-}
-
-#[TODO]
-test "Cast of 3000000000 * N to int32 wraps, as onnxruntime computes it" {
-    let three = cast_wraps_length::forward(
-        &cast_wraps_length::Tensor {
-            data: x_of(3),
-            extents: [3],
-        },
-        &cast_wraps_length::Weights {},
-    );
-    assert three.data == [410065408] as List<i64>;
-    let ten = cast_wraps_length::forward(
-        &cast_wraps_length::Tensor {
-            data: x_of(10),
-            extents: [10],
-        },
-        &cast_wraps_length::Weights {},
-    );
-    assert ten.data == [-64771072] as List<i64>;
-}
-
-test "Reshape to -1 flattens" {
-    for let n of LENGTHS {
-        let got = reshape_flat::forward(
-            &reshape_flat::Tensor {
-                data: p_of(n),
-                extents: [n, 4],
-            },
-            &reshape_flat::Weights {},
-        );
-        assert got.extents == [4 * n];
-        assert got.data == p_of(n);
-    }
-}
-
-test "Reshape reads 0 as the operand's extent and -1 as what remains" {
-    for let n of LENGTHS {
-        let got = reshape_keep_split::forward(
-            &reshape_keep_split::Tensor {
-                data: p_of(n),
-                extents: [n, 4],
-            },
-            &reshape_keep_split::Weights {},
-        );
-        assert got.extents == [n, 2, 2];
-        assert got.data == p_of(n);
-    }
-}
-
-test "Reshape reads a leading -1 as what the rest leaves" {
-    for let n of LENGTHS {
-        let got = reshape_rest_first::forward(
-            &reshape_rest_first::Tensor {
-                data: p_of(n),
-                extents: [n, 4],
-            },
-            &reshape_rest_first::Weights {},
-        );
-        assert got.extents == [2 * n, 2];
-        assert got.data == p_of(n);
-    }
-}
-
-/// The layout the imports above give a case whose one output is `output`.
-fn schema(output: String) -> Schema {
-    return Schema {
-        layout: [
-            LayoutRule {
-                pattern: "M",
-                axes: ["Pos"],
-            },
-            LayoutRule {
-                pattern: "X",
-                axes: ["Seq"],
-            },
-            LayoutRule {
-                pattern: output,
-                axes: ["Part"],
-            },
-        ],
-    };
-}
-
-/// Stage 0 over the case `model` as the generator would build it: with `N`
-/// left symbolic, and then fixed at each length the oracle ran, where its
-/// output's extents must be what `want` lists for that length.
-fn assert_builds(model: ByteList, want: List<List<i32>>) {
-    let graph = read(model).unwrap();
-    let output = graph.outputs[0].name;
-    if let Err(e) = infer(&graph, &schema(output)) {
-        panic(`${e}`);
-    }
-    for let [i, n] of LENGTHS.into_iter().enumerate() {
-        let mut bound = graph;
-        bind_dims(&mut bound, &({ N: n } as TreeMap<String, i32>)).unwrap();
-        let checked = infer(&bound, &schema(output)).unwrap();
-        assert checked.shapes[output].static_extents(&output).unwrap() == want[i];
-    }
-}
-
-test "the build check passes a case Loam builds" {
-    assert_builds(#include_bytes("./semantics/SliceDropLast.onnx"), [
-        [2],
-        [9],
-    ]);
+    assert_agrees(#include_bytes("./semantics/SliceLast.onnx"), #include_str("./semantics/SliceLast.txt"));
 }
 
 #[TODO]
 test "Slice by -1 from N runs backwards" {
-    // [3, 2, 1] and [7, 6, 5, 4, 3, 2, 1]
-    assert_builds(#include_bytes("./semantics/SliceBackFromLength.onnx"), [
-        [3],
-        [7],
-    ]);
+    assert_agrees(
+        #include_bytes("./semantics/SliceBackFromLength.onnx"),
+        #include_str("./semantics/SliceBackFromLength.txt"),
+    );
 }
 
 #[TODO]
 test "Slice by -1 from N to past the start reaches element 0" {
-    // [3, 2, 1, 0] and [7, 6, 5, 4, 3, 2, 1, 0]
-    assert_builds(#include_bytes("./semantics/SliceBackToFront.onnx"), [
-        [4],
-        [8],
-    ]);
+    assert_agrees(#include_bytes("./semantics/SliceBackToFront.onnx"), #include_str("./semantics/SliceBackToFront.txt"));
 }
 
 #[TODO]
 test "Slice by 2 to N takes every other" {
-    // [0, 2] and [0, 2, 4, 6]
-    assert_builds(#include_bytes("./semantics/SliceByTwoToLength.onnx"), [
-        [2],
-        [4],
-    ]);
+    assert_agrees(
+        #include_bytes("./semantics/SliceByTwoToLength.onnx"),
+        #include_str("./semantics/SliceByTwoToLength.txt"),
+    );
 }
 
 #[TODO]
 test "Slice by -1 from -1 over a symbolic axis reverses it" {
-    // X reversed
-    assert_builds(#include_bytes("./semantics/SliceReversed.onnx"), [
-        [3],
-        [10],
-    ]);
+    assert_agrees(#include_bytes("./semantics/SliceReversed.onnx"), #include_str("./semantics/SliceReversed.txt"));
+}
+
+test "Range from 0 to N by 1 counts N" {
+    assert_agrees(#include_bytes("./semantics/RangeToLength.onnx"), #include_str("./semantics/RangeToLength.txt"));
 }
 
 #[TODO]
 test "Range from 0 to N by 2 counts N / 2 rounded up" {
-    // [0, 2] and [0, 2, 4, 6, 8]
-    assert_builds(#include_bytes("./semantics/RangeByTwoToLength.onnx"), [
-        [2],
-        [5],
-    ]);
+    assert_agrees(
+        #include_bytes("./semantics/RangeByTwoToLength.onnx"),
+        #include_str("./semantics/RangeByTwoToLength.txt"),
+    );
 }
 
 #[TODO]
 test "Range from N to 0 by -1 counts down" {
-    // [3, 2, 1] and [10, 9, ..., 1]
-    assert_builds(#include_bytes("./semantics/RangeBackFromLength.onnx"), [
-        [3],
-        [10],
-    ]);
+    assert_agrees(
+        #include_bytes("./semantics/RangeBackFromLength.onnx"),
+        #include_str("./semantics/RangeBackFromLength.txt"),
+    );
 }
 
 #[TODO]
 test "Range from N to 0 by -2 counts down by two" {
-    // [3, 1] and [10, 8, 6, 4, 2]
-    assert_builds(#include_bytes("./semantics/RangeBackByTwo.onnx"), [
-        [2],
-        [5],
-    ]);
+    assert_agrees(#include_bytes("./semantics/RangeBackByTwo.onnx"), #include_str("./semantics/RangeBackByTwo.txt"));
+}
+
+test "Cast of a known int64 to int32 wraps" {
+    assert_agrees(#include_bytes("./semantics/CastWraps.onnx"), #include_str("./semantics/CastWraps.txt"));
+}
+
+#[TODO]
+test "Cast of 3000000000 * N to int32 wraps, as onnxruntime computes it" {
+    assert_agrees(#include_bytes("./semantics/CastWrapsLength.onnx"), #include_str("./semantics/CastWrapsLength.txt"));
+}
+
+test "Reshape to -1 flattens" {
+    assert_agrees(#include_bytes("./semantics/ReshapeFlat.onnx"), #include_str("./semantics/ReshapeFlat.txt"));
+}
+
+test "Reshape reads 0 as the operand's extent and -1 as what remains" {
+    assert_agrees(
+        #include_bytes("./semantics/ReshapeKeepSplit.onnx"),
+        #include_str("./semantics/ReshapeKeepSplit.txt"),
+        ["Seq", "Half", "Pair"],
+    );
+}
+
+test "Reshape reads a leading -1 as what the rest leaves" {
+    assert_agrees(
+        #include_bytes("./semantics/ReshapeRestFirst.onnx"),
+        #include_str("./semantics/ReshapeRestFirst.txt"),
+        ["Rows", "Pair"],
+    );
 }

@@ -1,8 +1,8 @@
 // Writes semantics/<case>.onnx beside this script, one model per case of
 // ONNX's shape arithmetic over a length only the run knows, `N` = the length of
-// `X`. Then runs each through onnxruntime at each of `lengths` and prints what
-// it computed, which semantics_test.wado states as the expectation. `M` holds
-// 8 elements, so the second length runs past it.
+// `X`. Beside each goes <case>.txt: what onnxruntime computes from it at each
+// of `lengths`, a line each, which semantics_test.wado holds Loam to. `M`
+// holds 8 elements, so the second length runs past it.
 //
 //   npm install onnxruntime-node@1.30.0
 //   node semantics.mjs <this directory>
@@ -126,13 +126,11 @@ for (const [name, nodes] of cases) {
   const path = join(here, 'semantics', `${name}.onnx`);
   writeFileSync(path, model(name, nodes));
   const session = await ort.InferenceSession.create(path);
+  const lines = [];
   for (const n of lengths) {
     const feeds = Object.fromEntries(session.inputNames.map((i) => [i, inputs[i].feed(n)]));
-    try {
-      const out = (await session.run(feeds, [name]))[name];
-      console.log(`N = ${n}, ${name}: extents [${out.dims}], data [${Array.from(out.data)}]`);
-    } catch (e) {
-      console.log(`N = ${n}, ${name}: ${e.message}`);
-    }
+    const out = (await session.run(feeds, [name]))[name];
+    lines.push(`N = ${n}: extents [${out.dims}], data [${Array.from(out.data)}]\n`);
   }
+  writeFileSync(join(here, 'semantics', `${name}.txt`), lines.join(''));
 }
