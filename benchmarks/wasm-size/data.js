@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790468290956,
+  "lastUpdate": 1790475004163,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60557,6 +60557,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/97779c530f3d04bbe6bac9007ca65d580d85fc10"
         },
         "date": 1790468289946,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20200,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288402,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4b3bec4b990d8c43ab8199401932b2b58562a7b8",
+          "message": "Merge pull request #2186 from wado-lang/claude/wasmtime-fuel-design-o08woa\n\nfeat(cli): report guest fuel from `wado run`, `test` and `serve`",
+          "timestamp": "2026-09-27T10:41:53+09:00",
+          "tree_id": "7d68c49adb3bddea7af58de87ee871cafdf111e2",
+          "url": "https://github.com/wado-lang/wado/commit/4b3bec4b990d8c43ab8199401932b2b58562a7b8"
+        },
+        "date": 1790475003461,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
