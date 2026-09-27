@@ -263,6 +263,9 @@ impl EvalHost {
                     .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
             },
         );
+        // Only the thread may hold its permits now, or waiting below for a
+        // fresh one would keep the old one out of circulation.
+        drop(held);
         let permit = Arc::clone(&self.cpu)
             .acquire_owned()
             .await

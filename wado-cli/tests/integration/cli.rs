@@ -3,6 +3,8 @@
 //! Tests the CLI interface including argument parsing, subcommands,
 //! and integration with the compiler.
 
+use std::time::Duration;
+
 use predicates::prelude::*;
 
 use crate::common::{custom_sections, wado, wado_in};
@@ -761,6 +763,24 @@ fn test_test_installs_the_stdlib_before_anything_reaches_it() {
         .assert()
         .success()
         .stderr(predicate::str::contains("panicked").not());
+}
+
+#[test]
+fn test_test_evaluates_on_a_single_cpu_permit() {
+    // An `eval` compile takes its test's only permit, so the test must be able
+    // to take it back once the compile ends.
+    wado()
+        .args([
+            "test",
+            "--parallel",
+            "1",
+            "--no-cache",
+            "wado-compiler/lib/core/eval_test.wado",
+        ])
+        .timeout(Duration::from_secs(300))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(" 0 failed"));
 }
 
 #[test]
