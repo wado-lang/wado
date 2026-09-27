@@ -185,10 +185,11 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             return;
         },
     };
-    // The model reads at most one position per row of `wpe`.
-    let positions = weights.transformer_wpe_weight.extents[0];
-    if ids.len() + STEPS > positions {
-        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${positions - STEPS}`);
+    // The model reads at most one position per row of `wpe`, and never the
+    // last token it picks.
+    let longest = weights.transformer_wpe_weight.extents[0] - STEPS + 1;
+    if ids.len() > longest {
+        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${longest}`);
         return;
     }
     for let _ of 0..<STEPS {

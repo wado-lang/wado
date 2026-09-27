@@ -16,7 +16,8 @@ const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
 
 const lengths = [3, 10];
 
-// The int64 constants the cases compute from, each of one element.
+// The int64 constants the cases compute from, each a one-element list, and
+// those `Range` reads, each a scalar as ONNX defines its operands.
 const constants = {
   Zero: 0n,
   One: 1n,
@@ -28,9 +29,18 @@ const constants = {
   MinusFar: -4000000000n,
   Big: 3000000000n,
 };
+const scalars = {
+  ScalarZero: 0n,
+  ScalarOne: 1n,
+  ScalarTwo: 2n,
+  ScalarMinusOne: -1n,
+  ScalarMinusTwo: -2n,
+};
 
 // Every case reads `S = Shape(X)`, and the nodes it lists after that.
 const node = (op, inputs, output, attrs = []) => ({ op, inputs, output, attrs });
+// `N` as a scalar: a scalar index gathers one element out of `S`, dropping the axis.
+const length = node('Gather', ['S', 'ScalarZero'], 'N');
 const cases = [
   ['SliceToLength', [node('Slice', ['M', 'Zero', 'S'], 'SliceToLength')]],
   ['SliceFromMinusLength', [
@@ -50,10 +60,10 @@ const cases = [
   ]],
   ['SliceLast', [node('Slice', ['X', 'MinusOne', 'S'], 'SliceLast')]],
   ['SliceReversed', [node('Slice', ['X', 'MinusOne', 'MinusFar', 'Zero', 'MinusOne'], 'SliceReversed')]],
-  ['RangeToLength', [node('Range', ['Zero', 'S', 'One'], 'RangeToLength')]],
-  ['RangeByTwoToLength', [node('Range', ['Zero', 'S', 'Two'], 'RangeByTwoToLength')]],
-  ['RangeBackFromLength', [node('Range', ['S', 'Zero', 'MinusOne'], 'RangeBackFromLength')]],
-  ['RangeBackByTwo', [node('Range', ['S', 'Zero', 'MinusTwo'], 'RangeBackByTwo')]],
+  ['RangeToLength', [length, node('Range', ['ScalarZero', 'N', 'ScalarOne'], 'RangeToLength')]],
+  ['RangeByTwoToLength', [length, node('Range', ['ScalarZero', 'N', 'ScalarTwo'], 'RangeByTwoToLength')]],
+  ['RangeBackFromLength', [length, node('Range', ['N', 'ScalarZero', 'ScalarMinusOne'], 'RangeBackFromLength')]],
+  ['RangeBackByTwo', [length, node('Range', ['N', 'ScalarZero', 'ScalarMinusTwo'], 'RangeBackByTwo')]],
   ['CastWraps', [
     node('Cast', ['Big'], 'BigInt32', [['to', INT32]]),
     node('Cast', ['BigInt32'], 'CastWraps', [['to', INT64]]),
@@ -83,8 +93,8 @@ function valueInfo(name, elemType, dims) {
   return [[1, text(name)], [2, [[1, [[1, elemType], ...shape]]]]];
 }
 
-function int64Initializer(name, value) {
-  return tensorProto(name, INT64, [1], new Uint8Array(new BigInt64Array([value]).buffer));
+function int64Initializer(name, value, dims) {
+  return tensorProto(name, INT64, dims, new Uint8Array(new BigInt64Array([value]).buffer));
 }
 
 // NodeProto: input = 1, output = 2, op_type = 4, attribute = 5;
@@ -114,7 +124,8 @@ function model(name, nodes) {
   const graph = [
     ...all.map((n) => [1, nodeProto(n)]),
     [2, text(name)],
-    ...Object.entries(constants).filter(([c]) => read.has(c)).map(([c, v]) => [5, int64Initializer(c, v)]),
+    ...Object.entries(constants).filter(([c]) => read.has(c)).map(([c, v]) => [5, int64Initializer(c, v, [1])]),
+    ...Object.entries(scalars).filter(([c]) => read.has(c)).map(([c, v]) => [5, int64Initializer(c, v, [])]),
     ...Object.entries(inputs).filter(([i]) => all.some((n) => n.inputs.includes(i))).map(([i, { dims }]) => [11, valueInfo(i, FLOAT, dims)]),
     [12, valueInfo(name, elemType, null)],
   ];

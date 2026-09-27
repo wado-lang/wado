@@ -94,7 +94,7 @@ fn initializer(vi: &ValueInfo) -> Result<String, PrintError> {
 /// stage 0's folding does, and it prints nothing.
 fn known_type(known: &Known) -> String {
     let dtype = match &known.elements {
-        Ints(_) => "int64",
+        Ints(_) => if known.int32 { "int32" } else { "int64" },
         Symbolic(_) => unreachable(),
         Floats(_) => "float",
         Bools(_) => "bool",

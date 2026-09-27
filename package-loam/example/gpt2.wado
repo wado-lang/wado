@@ -138,9 +138,15 @@ fn positions(weights: &gpt2::Weights) -> i32 {
     return weights.transformer_wpe_weight.extents[0];
 }
 
+/// The longest prompt `greedy` extends by `steps`. The last token it picks is
+/// never read, so the model reads one fewer than it returns.
+fn longest_prompt(steps: i32, weights: &gpt2::Weights) -> i32 {
+    return positions(weights) - steps + 1;
+}
+
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
 fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
-    assert !prompt.is_empty() && prompt.len() + steps <= positions(weights);
+    assert 1 <= prompt.len() <= longest_prompt(steps, weights);
     let mut ids = *prompt;
     for let _ of 0..<steps {
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
@@ -171,8 +177,9 @@ export fn run() with (Stdout, Stderr, Environment) {
     let tokenizer = tiny();
     let ids = tokenizer.encode(&prompt);
     let weights = gpt2::Weights::embedded();
-    if ids.is_empty() || ids.len() + STEPS > positions(&weights) {
-        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${positions(&weights) - STEPS}`);
+    let longest = longest_prompt(STEPS, &weights);
+    if !(1 <= ids.len() <= longest) {
+        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${longest}`);
         return;
     }
     println(tokenizer.decode(&greedy(&ids, STEPS, &weights)));
@@ -202,4 +209,11 @@ test "each prompt continues with the tokens onnxruntime picks greedily" {
         assert got == want;
         assert tokenizer.decode(&got) == case.text;
     }
+}
+
+#[timeout_ms(30000)]
+test "the longest prompt fills every position the model reads" {
+    let weights = gpt2::Weights::embedded();
+    let prompt = List::<i32>::filled(longest_prompt(2, &weights), 0);
+    assert greedy(&prompt, 2, &weights).len() == positions(&weights) + 1;
 }
