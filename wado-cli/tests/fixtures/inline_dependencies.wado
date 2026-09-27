@@ -1,0 +1,5 @@
+// Inline dependency sources, one per kind. Read by the `dep_component` unit
+// tests, which resolve nothing over the network.
+use {Regexp} from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
+use {Router} from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
+use {Parse}  from "lib:rx"     with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };

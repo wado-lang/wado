@@ -321,11 +321,12 @@ test {
 
 ## Import Attributes (`with`)
 
-Use `with { ... }` to specify import metadata:
+Use `with { ... }` to specify import metadata. An inline dependency source lets
+a single-file script name a dependency with no `wado.toml`:
+
+<!-- {"source": "wado-cli/tests/fixtures/inline_dependencies.wado"} -->
 
 ```wado
-// Inline dependency source (single-file scripts; no wado.toml needed).
-// Same vocabulary as a [dependencies] value, with an exact version.
 use {Regexp} from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
 use {Router} from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
 use {Parse}  from "lib:rx"     with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };
@@ -343,7 +344,7 @@ test {
 ```
 
 An inline source takes the same keys as a `[dependencies]` value: `git`, `ref`,
-`registry`, `package`, `path`, and an exact `version`. An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive.
+`directory`, `registry`, `package`, `path`, and an exact `version`. An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive.
 
 Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them. The specifier's `@ver` and an inline `with` take an exact version, and a range there is an error.
 
@@ -375,21 +376,33 @@ A `use` clause whose source is neither a `.wado` module nor a Wasm asset (`.wasm
 The examples use Gale, a generator that builds a parser from an ANTLR4 grammar
 ([WEP: Gale](./wep-2026-03-02-gale.md)):
 
-```wado
-// Gale generates a parser from an ANTLR4 grammar
-use { Parser } from "./Calc.g4" with {
-    generator: {
-        module: "wado-lang:gale",
-    },
-};
+<!-- {"source": "example/hello-packages/src/main.wado"} -->
 
-// With supplementary input files (paths relative to the source file)
-use { RustParser } from "./Rust.g4" with {
-    generator: {
-        module: "wado-lang:gale",
-        inputs: ["./RustLexer.g4"],
-    },
-};
+```wado
+use calc from "./Calc.g4"
+    with {
+        generator: {
+            module: "wado-lang:gale",
+            options: { highlight: false, trace: false },
+        },
+    };
+```
+
+This one also hands the generator a supplementary input:
+
+<!-- {"source": "package-gale-highlight-wado/src/lib.wado"} -->
+
+```wado
+use { highlight as highlight_impl } from "../grammar/Wado.g4"
+    with {
+        generator: {
+            module: "lib:gale",
+            inputs: ["../grammar/Wado.highlights.scm"],
+            options: {
+                fragment_entries: ["statement"],
+            },
+        },
+    };
 ```
 
 The literal after `from` is the primary input. It is a `./` or `../` path
