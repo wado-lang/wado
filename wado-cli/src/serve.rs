@@ -27,7 +27,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinSet;
 use wasmtime::component::{Accessor, AccessorTask, Component};
-use wasmtime::{AsContextMut, Engine, GuestProfiler, Store, UpdateDeadline};
+use wasmtime::{AsContextMut, Engine, GuestProfiler, UpdateDeadline};
 use wasmtime_wasi_http::Error as HttpError;
 use wasmtime_wasi_http::p3::Request as WasiRequest;
 use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
@@ -377,6 +377,15 @@ impl AccessorTask<WasiState> for HandlerTask {
             resp_tx,
         } = job;
 
+        // The store's meter is shared by every request in flight on the worker,
+        // so a reading covers this request alone only when it ran alone.
+        let fuel_meter = accessor
+            .with(|store| runtime::fuel_spent(store))
+            .map(|start| {
+                let path = wasi_req.path_with_query.as_ref().map_or("", |p| p.as_str());
+                (start, format!("{} {path}", wasi_req.method))
+            });
+
         let mut resp_tx = Some(resp_tx);
         let (frame_tx, frame_rx) = mpsc::channel::<Frame<Bytes>>(8);
         let mut frame_rx_holder = Some(frame_rx);
@@ -509,6 +518,12 @@ impl AccessorTask<WasiState> for HandlerTask {
                 Err(e) => HandlerOutcome::Trapped(format!("Handler error: {e:?}")),
             };
             let _ = tx.send(outcome);
+        }
+        if let Some((start, target)) = fuel_meter {
+            let now = accessor
+                .with(|store| runtime::fuel_spent(store))
+                .expect("the store metered at the start of the request");
+            eprintln!("fuel {} {target}", now - start);
         }
         Ok(())
     }
@@ -736,7 +751,7 @@ async fn worker_loop(
         // `global` initializers, e.g. a router built at startup) runs
         // here — once per generation, not once per request.
         let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &argv);
-        let mut store = Store::new(&engine, state);
+        let mut store = runtime::new_store(&engine, state);
         // Arm the epoch deadline. The dispatch loop refreshes it every
         // turn (see below), so a healthy worker never trips it; a guest
         // that runs away in pure wasm does.

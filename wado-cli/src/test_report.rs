@@ -415,7 +415,7 @@ impl TestReporter for HeartbeatReporter {
             TestOutcome::Pass => {}
             TestOutcome::Fail => {
                 self.state.tests_failed.fetch_add(1, Ordering::Relaxed);
-                let dur = test::format_duration(result.duration);
+                let dur = result.cost();
                 let mut detail = result
                     .error
                     .as_ref()
@@ -726,7 +726,7 @@ impl TestReporter for TapReporter {
     }
 
     fn on_test_result(&self, result: &TestResult) {
-        let dur = test::format_duration(result.duration);
+        let dur = result.cost();
         let name = &result.display_name;
         let (mut lines, failed) = match result.outcome {
             TestOutcome::Pass => (vec![format!("ok - {name} ({dur})")], false),

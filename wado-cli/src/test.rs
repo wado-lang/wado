@@ -594,11 +594,25 @@ pub(crate) struct TestResult {
     pub(crate) outcome: TestOutcome,
     pub(crate) error: Option<String>,
     pub(crate) duration: Duration,
+    /// Fuel the test's store spent, instantiation included, under
+    /// `--report-fuel`.
+    pub(crate) fuel: Option<u64>,
     /// Captured guest stdout/stderr (see `runtime::create_test_store`).
     /// Empty when nothing was printed, or when the test never got as far
     /// as calling its test function (`fail_result`'s setup-time failures).
     pub(crate) stdout: String,
     pub(crate) stderr: String,
+}
+
+impl TestResult {
+    /// What the test cost: its duration, and its fuel where it was metered.
+    pub(crate) fn cost(&self) -> String {
+        let duration = format_duration(self.duration);
+        match self.fuel {
+            Some(fuel) => format!("{duration}, fuel {fuel}"),
+            None => duration,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1586,6 +1600,7 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
         outcome: TestOutcome::Fail,
         error: Some(error),
         duration: start.elapsed(),
+        fuel: None,
         stdout: String::new(),
         stderr: String::new(),
     }
@@ -1694,6 +1709,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         outcome,
         error,
         duration: start.elapsed(),
+        fuel: runtime::fuel_spent(&store),
         stdout: String::from_utf8_lossy(&stdout_pipe.contents()).into_owned(),
         stderr: String::from_utf8_lossy(&stderr_pipe.contents()).into_owned(),
     }
@@ -1908,7 +1924,7 @@ pub(crate) fn display_test_results(
         let mut sorted_results: Vec<_> = file_results.clone();
         sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
         for result in sorted_results {
-            let dur = format_duration(result.duration);
+            let dur = result.cost();
             match result.outcome {
                 TestOutcome::Pass => {
                     println!("  ok   {} ({dur})", result.display_name);

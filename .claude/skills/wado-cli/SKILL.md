@@ -170,6 +170,25 @@ wado serve file.wado                        # serve on 0.0.0.0:8080 (default)
 wado serve --addr 127.0.0.1:3000 file.wado  # serve on a custom address
 ```
 
+## Fuel
+
+`--report-fuel` meters the guest in wasmtime fuel, about one unit per Wasm
+instruction, and reports what it spent. It counts instructions, not time, so the
+same build spends the same fuel on every machine. A different `-O` level or
+compiler change is a different build and spends differently. Host calls and GC
+spend none.
+
+```sh
+wado run --report-fuel prog.wado                 # stderr: fuel 477
+wado test --format verbose --report-fuel f.wado  # ok   name (2ms, fuel 890)
+wado serve --report-fuel svc.wado                # stderr per request: fuel 1234 GET /path
+```
+
+A test's reading includes its instantiation. A serve worker's requests share one
+meter, so a reading covers one request alone only when nothing else was in
+flight; `--workers 1 --max-concurrency 1` makes sure of that. Metering slows the
+guest by up to 2-3x, so leave it off when timing.
+
 ## Dump
 
 Use `wado dump` to inspect compiler internal state for debugging.

@@ -207,6 +207,31 @@ fn startup_announces_no_build_artifact() {
     );
 }
 
+/// Each request reports the fuel its handler spent, once the handler is done.
+#[test]
+fn report_fuel_logs_each_request() {
+    let (_guard, port, stderr) = start_serve("serve_hello.wado", &["--report-fuel"]);
+    let (status, _body) = http_get(port, "/hello", Duration::from_secs(10));
+    assert_eq!(status, 200);
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let captured = stderr.lock().unwrap().clone();
+        let line = captured.lines().find(|l| l.starts_with("fuel "));
+        if let Some(line) = line {
+            let (fuel, target) = line["fuel ".len()..].split_once(' ').unwrap();
+            assert!(fuel.parse::<u64>().unwrap() > 0, "{line}");
+            assert_eq!(target, "GET /hello");
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no fuel line; stderr:\n{captured}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
 /// A service has a program name, as `wado run` would give it, and no arguments.
 #[test]
 fn a_service_has_a_program_name() {

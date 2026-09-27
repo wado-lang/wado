@@ -4,8 +4,8 @@ use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{
-    Collector, Config, Engine, InstanceAllocationStrategy, OptLevel, PoolingAllocationConfig,
-    ProfilingStrategy, Store,
+    AsContext, Collector, Config, Engine, InstanceAllocationStrategy, OptLevel,
+    PoolingAllocationConfig, ProfilingStrategy, Store,
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
@@ -421,6 +421,7 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: RuntimeK
     // way up to the working set and pays a full trace at every rung. The 4 GiB
     // of address space is reserved either way: this commits, it does not map.
     config.gc_heap_initial_size(knobs.gc_heap_initial_size);
+    config.consume_fuel(knobs.report_fuel);
 
     config.cranelift_opt_level(opt_level);
 
@@ -530,6 +531,27 @@ pub fn create_serve_engine(
     Ok(Engine::new(&config)?)
 }
 
+/// A store over `state`. On a metering engine it holds fuel it can never
+/// exhaust, so `--report-fuel` observes the guest without stopping it.
+#[must_use]
+pub fn new_store(engine: &Engine, state: WasiState) -> Store<WasiState> {
+    let mut store = Store::new(engine, state);
+    if engine.get_consume_fuel() {
+        store.set_fuel(u64::MAX).expect("the engine meters fuel");
+    }
+    store
+}
+
+/// The fuel `store` has spent since [`new_store`], or `None` when its engine
+/// does not meter.
+pub fn fuel_spent(store: impl AsContext) -> Option<u64> {
+    let store = store.as_context();
+    store
+        .engine()
+        .get_consume_fuel()
+        .then(|| u64::MAX - store.get_fuel().expect("the engine meters fuel"))
+}
+
 /// Create a Store with WASI state, preopened directories, and program arguments.
 /// `preopened_dirs`: `(host_path, guest_path)` pairs.
 /// `args`: what `wasi:cli/environment.get-arguments` answers, the program name first.
@@ -542,7 +564,7 @@ pub fn create_store(
     preopened_dirs: &[(String, String)],
     args: &[String],
 ) -> Result<Store<WasiState>> {
-    Ok(Store::new(engine, WasiState::new(preopened_dirs, args)?))
+    Ok(new_store(engine, WasiState::new(preopened_dirs, args)?))
 }
 
 /// Like [`create_store`], but the guest's stdout/stderr are captured into
@@ -560,7 +582,7 @@ pub fn create_test_store(
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
     let (state, stdout, stderr) =
         WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()])?;
-    Ok((Store::new(engine, state), stdout, stderr))
+    Ok((new_store(engine, state), stdout, stderr))
 }
 
 /// Create a Linker for `component`: WASI P3, HTTP and TLS, and a trap for every

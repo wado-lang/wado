@@ -264,6 +264,10 @@ async fn run_cli_component(
         .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
         .await;
 
+    if let Some(fuel) = runtime::fuel_spent(&store) {
+        eprintln!("fuel {fuel}");
+    }
+
     if let Some((profiler_arc, stop)) = profiler {
         stop.store(true, Ordering::Relaxed);
 
