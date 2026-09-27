@@ -92,8 +92,15 @@ where the rule may end at the decision, which leaves the token to the caller.
 A failed rule recovers at its own entry. It reports once, then skips to a token
 the rules under way can continue with. That set is the union of the follows of
 the call sites on the invocation stack, computed from the ATN. The skipped
-tokens stay in the failed rule's node, and the caller carries on. After an
-error, neither a failed rule nor a sync reports again until a token matches, so
+tokens stay in the failed rule's node, and the caller carries on.
+
+That set can hold the token the rule failed on. A `statement*` whose
+`statement` starts with `for` re-enters the rule at the same `for`. So a rule
+that fails again at the position where it last recovered, with nothing
+consumed in between, skips that token before it resyncs. Recovery therefore
+always makes progress.
+
+After an error, neither a failed rule nor a sync reports again until a token matches, so
 the cascade of one mistake is one diagnostic.
 
 ## Diagnostics

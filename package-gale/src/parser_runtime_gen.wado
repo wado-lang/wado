@@ -471,10 +471,10 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // rule resynchronises on: a call stamps `site`, its entry pushes it.
     s.add_field("site", "i32");
     s.add_field("sites", "List<i32>");
-    // Where rule recovery last ran and which rules recovered there. A rule
-    // failing again at that position, having consumed nothing since, would be
-    // re-entered at the same token by the loop that called it; it skips one
-    // token first, as ANTLR4 does, so recovery always makes progress.
+    // Where rule recovery last ran and which rules recovered there, so a rule
+    // failing again at that position skips a token instead of letting its loop
+    // re-enter it at the same one ("Building: TreeBuilder + recovery" in
+    // `resilient-parser.md`).
     s.add_field("recovery_pos", "i32");
     s.add_field("recovery_rules", "List<NodeKind>");
     // Current recursive-descent depth, used only to indent trace output.
