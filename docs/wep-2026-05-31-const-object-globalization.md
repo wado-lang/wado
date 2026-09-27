@@ -172,10 +172,11 @@ The value-copy plan elides the copy of a projection it proves fresh, and a
 binding's field is fresh when the binding is. Returning `k.data` therefore
 hands the caller the storage itself, which it treats as its own. Once `k` is a
 global, the caller writes the constant. `storage_leaves_body` rejects a binding
-whose storage a `return`, a `break`, the body's tail, or a store into a
-non-local place delivers. It follows a local bound from such a delivery, and it
-sees through an aggregate built around the storage. A callee that hands an
-argument back out is `local_leaks_through_call`'s to reject.
+whose storage leaves the body: through a `return`, a `break` or the body's
+tail, or through a store into a place that is not a local. A local bound from
+that storage is followed the same way, and an aggregate built around the
+storage carries it out with itself. A callee that hands an argument back out is
+`local_leaks_through_call`'s to reject.
 
 #### Gate: callee parameter, for a by-value argument
 

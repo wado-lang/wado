@@ -358,7 +358,7 @@ struct FunctionTranslator<'a, 'p> {
     /// asks about the place that owns it rather than the reference.
     ref_targets: value_copy::last_use::RefTargets,
     /// Locals a last-use move can hand to a new owner
-    /// ([`value_copy::last_use::Moves::roots`]).
+    /// ([`value_copy::last_use::MoveEligible::roots`]).
     moved_roots: IndexSet<u32>,
     /// May-alias components for this function, so a confined by-value argument
     /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
@@ -393,7 +393,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
         let address_taken = func.address_taken_locals.clone();
-        let borrowed_params = base.value_copy.confined_params.borrowed_locals(func);
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
@@ -430,7 +429,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &type_table,
                     &resolver,
                     base.value_copy,
-                    &borrowed_params,
                     &base.moved_local_spans,
                 ),
                 value_copy::last_use::compute_ref_targets(func, &resolver),

@@ -518,7 +518,7 @@ fn scan_expr_for_breaks(
 ///
 /// Immutability of the *binding* is not immutability of the storage, so the
 /// caller also checks the root against
-/// [`super::last_use::Moves::roots`].
+/// [`super::last_use::MoveEligible::roots`].
 pub fn is_source_immutable(
     expr: &TirExpr,
     immutable_locals: &IndexSet<u32>,

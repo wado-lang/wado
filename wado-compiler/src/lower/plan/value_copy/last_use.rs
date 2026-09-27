@@ -143,14 +143,13 @@ pub struct Ownership {
 /// liveness this walk computes. `final_reads` are the elaborator's final-use
 /// spans, which read names only: a borrow a call takes of its receiver without
 /// a `&` is out of their sight, so this walk's pins veto them, and so is a
-/// parameter the callers pass uncopied, which `borrowed_params` lists.
+/// parameter the callers pass uncopied.
 pub fn analyze_ownership(
     func: &TirFunction,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
     resolver: &Resolver<'_>,
     plan: &ValueCopyPlan,
-    borrowed_params: &IndexSet<u32>,
     final_reads: &IndexSet<Span>,
 ) -> Ownership {
     let Some(body) = &func.body else {
@@ -161,6 +160,7 @@ pub fn analyze_ownership(
     }
     let retained_params = &plan.retained_params;
     let mut_receiver_methods = &plan.mut_receiver_methods;
+    let borrowed_params = plan.confined_params.borrowed_locals(func);
 
     let mut all_locals: IndexSet<u32> = (0..func.local_count).collect();
     // Guard against a local_count that lags a grown local set.
@@ -174,7 +174,7 @@ pub fn analyze_ownership(
         retained_params,
         bounded: &plan.bounded_retention,
         params: func.params.iter().map(|p| p.local_index).collect(),
-        borrowed_params,
+        borrowed_params: &borrowed_params,
         pending_bounded: Vec::new(),
         value_holds: Vec::new(),
         handed_away: IndexSet::default(),
@@ -687,7 +687,7 @@ impl Analyzer<'_> {
                     .returns_receiver_alias
                     .contains(&func.module_source, &func.name) =>
             {
-                match self.resolver.names(&args.first()?.expr) {
+                match self.resolver.names(place::arg_at(func, args, 0)) {
                     Names::Place(p) => Some(p),
                     Names::Value | Names::Unknown => None,
                 }

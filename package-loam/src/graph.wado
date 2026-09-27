@@ -2,7 +2,6 @@
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
 use { TreeMap } from "core:collections";
-use grog from "lib:grog";
 use onnx from "./onnx.proto"
     with {
         generator: { module: "lib:grog" },
@@ -81,13 +80,13 @@ pub struct Element {
 /// an `i64` or `bool` tensor, and every other kernel reads and produces this.
 pub global KERNEL_ELEMENT: String = "f32";
 
-/// The `TensorProto.DataType` a number names, as `Cast`'s `to` and a tensor's
-/// `data_type` carry one. `None` for a number the enum does not declare.
+/// The `TensorProto.DataType` an attribute's number names, as `Cast`'s `to`
+/// carries one. `None` for a number the enum does not declare.
 pub fn data_type(number: i64) -> Option<onnx::TensorProtoDataType> {
-    if !(0 <= number <= i32::MAX as i64) {
+    let Ok(n) = i32::try_from(number) else {
         return null;
-    }
-    return onnx::TensorProtoDataType::from_number(number as i32);
+    };
+    return onnx::TensorProtoDataType::from_number(n);
 }
 
 /// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not

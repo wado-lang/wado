@@ -1753,8 +1753,7 @@ impl<'a> PatternLowerer<'a> {
                     .returns_receiver_alias
                     .contains(&func.module_source, &func.name) =>
             {
-                args.first()
-                    .is_some_and(|a| self.place_is_writable(&a.expr, type_table))
+                self.place_is_writable(place::arg_at(func, args, 0), type_table)
             }
             _ => place::projection_base(expr).is_some_and(|inner| {
                 place::is_reference(inner.type_id, type_table)

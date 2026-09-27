@@ -11,8 +11,8 @@ use crate::lower::plan::value_copy::analyze::{carries_no_storage, returned_value
 use crate::lower::plan::value_copy::callgraph;
 use crate::name::LocalMethodName;
 use crate::tir::{
-    BuiltinDeclarations, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    BuiltinDeclarations, CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -289,8 +289,7 @@ impl<'a> Resolver<'a> {
         };
         self.builtins
             .part_of(&**func)
-            .and_then(|p| args.get(p))
-            .is_some_and(|a| !is_reference(a.expr.type_id, self.type_table))
+            .is_some_and(|p| !is_reference(arg_at(func, args, p).type_id, self.type_table))
     }
 
     /// What `expr` names. Total over the expression kinds: a shape with no arm
@@ -355,8 +354,8 @@ impl<'a> Resolver<'a> {
             // further in. `Index` is the honest selector: the index is a runtime
             // value, so which component it lands on is not known here.
             TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {
-                match self.builtins.part_of(&**func).and_then(|p| args.get(p)) {
-                    Some(arg) => self.project(&arg.expr, Selector::Index),
+                match self.builtins.part_of(&**func) {
+                    Some(p) => self.project(arg_at(func, args, p), Selector::Index),
                     // `builtin::select` names no component and still hands one
                     // back, so a storage-carrying result is no value of its own.
                     None if carries_storage(expr.type_id, self.type_table) => Names::Unknown,
@@ -365,16 +364,15 @@ impl<'a> Resolver<'a> {
             }
             TirExprKind::Call { func, args, .. } => {
                 match self.return_paths.get(&func.module_source, &func.name) {
-                    Some(path) => match args.get(path.param).map(|r| self.names(&r.expr)) {
-                        Some(Names::Place(mut place)) => {
+                    Some(path) => match self.names(arg_at(func, args, path.param)) {
+                        Names::Place(mut place) => {
                             place.selectors.extend(path.selectors.iter().copied());
                             place.through_borrow |= path.through_borrow;
                             Names::Place(place)
                         }
                         // A fresh receiver does not own what it borrows.
-                        Some(Names::Value) if path.through_borrow => Names::Unknown,
-                        Some(other) => other,
-                        None => Names::Unknown,
+                        Names::Value if path.through_borrow => Names::Unknown,
+                        other => other,
                     },
                     None if self.returns_owned.contains(&func.module_source, &func.name) => {
                         Names::Value
@@ -622,6 +620,20 @@ pub fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
 #[must_use]
 pub fn param_position(params: &[TirParam], local: u32) -> Option<usize> {
     params.iter().position(|p| p.local_index == local)
+}
+
+/// The argument a call to `func` passes for parameter `param`, a position
+/// something declared or derived about `func` names. One past the arguments
+/// is that answer's defect, not a call handing nothing back.
+#[must_use]
+pub fn arg_at<'e>(func: &FunctionRef, args: &'e [CallArg], param: usize) -> &'e TirExpr {
+    assert!(
+        param < args.len(),
+        "`{}` names parameter {param}, past its {} arguments",
+        func.name,
+        args.len()
+    );
+    &args[param].expr
 }
 
 /// Whether a value of this type could name storage someone else still reaches:

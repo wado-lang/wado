@@ -190,18 +190,22 @@ impl Ctx<'_> {
             })
     }
 
-    /// One escape channel of a callee's parameter. A callee with no entry has
-    /// no body this scan read, so every channel of it is raised.
+    /// The fixpoint's entry for a callee [`Self::kind`] answers `HasBody` for:
+    /// every function with a body has one.
+    fn escape_of(&self, func: &FunctionRef) -> &ParamEscape {
+        self.funcs
+            .get(&func.module_source, &func.name)
+            .expect("a callee with a body has a fixpoint entry")
+    }
+
+    /// One escape channel of a `HasBody` callee's parameter.
     fn callee_escape(
         &self,
         func: &FunctionRef,
         param_index: usize,
         channel: impl Fn(&ParamEscape) -> &[bool],
     ) -> bool {
-        match self.funcs.get(&func.module_source, &func.name) {
-            Some(pe) => channel(pe).get(param_index).copied().unwrap_or(true),
-            None => true,
-        }
+        channel(self.escape_of(func))[param_index]
     }
 
     /// Whether `operand`, at `param_index`, outlives this call. A value-copy
@@ -226,10 +230,7 @@ impl Ctx<'_> {
         match self.kind(func) {
             Kind::ValueCopy => true,
             Kind::Builtin => passes_through(self.builtins, func, param_index),
-            Kind::HasBody => self
-                .funcs
-                .get(&func.module_source, &func.name)
-                .is_some_and(|pe| pe.confined_at(param_index)),
+            Kind::HasBody => self.escape_of(func).confined_at(param_index),
             Kind::Opaque => false,
         }
     }

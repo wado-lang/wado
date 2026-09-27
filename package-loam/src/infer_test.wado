@@ -906,6 +906,20 @@ test "Slice bounds past either end of a symbolic axis keep it whole and owe noth
     assert checked.shapes["Y"].axes[0].name == "Seq";
 }
 
+test "a symbolic Slice bound past the end for every input clamps there and owes nothing" {
+    let source = `g (float[N] X) => (float[N] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+        S = Shape(X)
+        E = Add(S, Three)
+        Y = Slice(X, Z, E)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("X", ["Seq"])],
+    }).unwrap();
+    assert checked.owed.is_empty();
+    assert checked.shapes["Y"].axes[0].name == "Seq";
+}
+
 test "Slice listing an axis twice stops the build rather than guessing" {
     let source = `g (float[4] X) => (float[1] Y) <int64[2] B = {0, 1}, int64[2] E = {3, 2}, int64[2] P = {0, 0}> {
         Y = Slice(X, B, E, P)

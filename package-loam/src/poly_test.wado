@@ -51,18 +51,17 @@ test "a negative constant no term can raise is negative for every input" {
     assert !seq.sub(&c(2)).is_negative();
 }
 
-test "a polynomial is within i32 where every extent keeps it there" {
+test "a symbol is an extent, so it is at most i32::MAX" {
     let [n, m] = [
         s("n"),
         s("m"),
     ];
-    assert n.is_within_i32();
-    assert n.sub(&c(1)).is_within_i32();
-    assert c(-1).sub(&n).is_within_i32();
-    assert !n.mul(&c(2)).is_within_i32();
-    assert !n.mul(&m).is_within_i32();
-    assert !n.add(&c(1)).is_within_i32();
-    assert !n.mul(&n).mul(&n).mul(&n).mul(&n).is_within_i32();
+    let max = c(i32::MAX as i64);
+    assert max.sub(&n).is_nonnegative();
+    assert !max.sub(&n).sub(&c(1)).is_nonnegative();
+    assert n.sub(&max).sub(&c(1)).is_negative();
+    assert !n.mul(&m).sub(&max).is_negative();
+    assert !n.mul(&n).mul(&n).mul(&n).mul(&n).add(&c(i64::MIN)).is_negative();
 }
 
 test "a polynomial renders highest degree first, the constant last" {

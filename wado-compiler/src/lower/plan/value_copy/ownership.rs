@@ -11,7 +11,7 @@
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{carries_storage, is_reference, may_carry_storage, param_position};
+use super::place::{arg_at, carries_storage, is_reference, may_carry_storage, param_position};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze::{
@@ -137,15 +137,7 @@ impl<'a> OwnedCalls<'a> {
         args: &'e [CallArg],
     ) -> Option<impl Iterator<Item = &'e TirExpr>> {
         let params = self.projected_params(func)?;
-        Some(params.iter().map(move |&p| {
-            assert!(
-                p < args.len(),
-                "`{}` projects parameter {p}, past its {} arguments",
-                func.name,
-                args.len()
-            );
-            &args[p].expr
-        }))
+        Some(params.iter().map(move |&p| arg_at(func, args, p)))
     }
 }
 
@@ -176,7 +168,7 @@ pub fn compute_receiver_alias(
             return false;
         }
         // Nothing to alias means no conflicts to track.
-        if !carries_storage(func.return_type, type_table) {
+        if func.params.is_empty() || !carries_storage(func.return_type, type_table) {
             return false;
         }
         let Some(body) = &func.body else { return false };
@@ -265,10 +257,9 @@ fn is_receiver_projection(
         // which need not be the first: `struct_field_get(v, i)` reads `v`.
         TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => builtins
             .part_of(&**func)
-            .and_then(|p| args.get(p))
-            .is_some_and(|a| recurse(&a.expr)),
+            .is_some_and(|p| recurse(arg_at(func, args, p))),
         TirExprKind::Call { func, args, .. } if set.contains(&func.module_source, &func.name) => {
-            args.first().is_some_and(|a| recurse(&a.expr))
+            recurse(arg_at(func, args, 0))
         }
         _ => false,
     }

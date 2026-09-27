@@ -8,7 +8,6 @@ use {
     SliceBounds,
     axes_of,
     axis_indices,
-    clamped,
     count_of,
     fits,
     fold,
@@ -547,38 +546,28 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
             continue;
         };
         let axis = &merged.axes[i];
-        let conflict = || {
-            builtin::cold_path();
-            return InferError::Declared(DeclaredConflict {
-                tensor: vi.name,
-                axis: axis.name,
-                declared: Extent::Static(declared),
-                produced: axis.extent,
-            });
-        };
-        match axis.extent {
-            Static(found) => {
-                if declared != found {
-                    return Result::Err(conflict());
-                }
-            },
+        let agrees = match axis.extent {
+            Static(found) => declared == found,
             // The graph states a length the nodes only carried a polynomial
             // for, and a consumer of the shape table is owed the constant.
             Symbolic(p) => {
                 let stated = Poly::constant(declared as i64);
                 let condition = `axis ${axis.name} must be ${declared}, as the graph declares`;
-                for let slack of [
-                    p.sub(&stated),
-                    stated.sub(&p),
-                ] as List<Poly> {
-                    if owe_at(vi.name, owed, slack, condition).is_err() {
-                        return Result::Err(conflict());
-                    }
-                }
-                merged.axes[i].extent = Extent::Static(declared);
+                owe_at(vi.name, owed, p.sub(&stated), condition).is_ok()
+                    && owe_at(vi.name, owed, stated.sub(&p), condition).is_ok();
             },
             Unstated => unreachable(),
+        };
+        if !agrees {
+            builtin::cold_path();
+            return Result::Err(InferError::Declared(DeclaredConflict {
+                tensor: vi.name,
+                axis: axis.name,
+                declared: Extent::Static(declared),
+                produced: axis.extent,
+            }));
         }
+        merged.axes[i].extent = Extent::Static(declared);
     }
     return Result::Ok(merged);
 }
@@ -938,27 +927,27 @@ pub fn slice_cuts(
 }
 
 /// A `Slice` bound as ONNX reads it against an axis of `dim`: counted from the
-/// end where negative, and clamped within `[0, dim]`. A symbolic bound is not
-/// clamped: the inputs owe that it lies within, since a clamp has no
-/// polynomial to name the extent it leaves.
+/// end where negative, and clamped within `[0, dim]`. The build clamps where it
+/// can decide the clamp for every input, as for a bound past any length a list
+/// holds, which is how an exporter writes "to the end". Elsewhere the inputs
+/// owe that the bound lies within, since a clamp has no polynomial to name the
+/// extent it leaves, and a symbolic bound is read as counted from the start.
 fn within(node: &Node, bound: &Poly, dim: &Poly, owed: &mut List<Condition>) -> Result<Poly, InferError> {
-    let constant = bound.as_constant();
-    if let Some(c) = constant && let Some(d) = dim.as_constant() {
-        return Result::Ok(Poly::constant(clamped(c, d, 0, d)));
-    }
-    // Past any extent a list can hold, which is how an exporter writes "to the
-    // end", or back from it past the start.
-    if let Some(c) = constant && c >= i32::MAX as i64 {
+    // No extent is past `i32::MAX`, so a constant beyond it clamps as that does.
+    let limit = i32::MAX as i64;
+    let constant = bound.as_constant().map(|c| i64::clamp(c, -limit, limit));
+    let from_end = constant matches { Some(c) && c < 0 };
+    let resolved = match constant {
+        Some(c) && c < 0 => dim.add(&Poly::constant(c)),
+        Some(c) => Poly::constant(c),
+        None => *bound,
+    };
+    if difference(node, &resolved, dim)?.is_nonnegative() {
         return Result::Ok(*dim);
     }
-    if let Some(c) = constant && c <= -(i32::MAX as i64) {
+    if from_end && difference(node, &Poly::constant(0), &resolved)?.is_nonnegative() {
         return Result::Ok(Poly::constant(0));
     }
-    let resolved = if let Some(c) = constant && c < 0 {
-        dim.add(bound);
-    } else {
-        *bound;
-    };
     owe(node, owed, resolved, `the bound ${resolved} must not be negative`)?;
     owe(node, owed, difference(node, dim, &resolved)?, `the bound ${resolved} must be at most ${*dim}`)?;
     return Result::Ok(resolved);
@@ -998,12 +987,9 @@ fn owe_int32_fit(node: &Node, folded: &Known, owed: &mut List<Condition>) -> Res
         return Result::Ok(());
     };
     for let v of values {
-        if v.is_within_i32() {
-            continue;
-        }
         let condition = `${*v} must fit in int32`;
-        owe(node, owed, Poly::constant(i32::MAX as i64).sub(v), condition)?;
-        owe(node, owed, v.sub(&Poly::constant(i32::MIN as i64)), condition)?;
+        owe(node, owed, difference(node, &Poly::constant(i32::MAX as i64), v)?, condition)?;
+        owe(node, owed, difference(node, v, &Poly::constant(i32::MIN as i64))?, condition)?;
     }
     return Result::Ok(());
 }

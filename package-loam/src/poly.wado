@@ -142,54 +142,36 @@ impl Poly {
         return Poly::collected(terms);
     }
 
-    /// Whether every value of the symbols makes this at least 0. A symbol is an
-    /// extent, so a polynomial of no negative coefficient is.
+    /// Whether every value of the symbols makes this at least 0.
     pub fn is_nonnegative(&self) -> bool {
-        for let t of &self.terms {
-            if t.coefficient < 0 {
-                return false;
-            }
-        }
-        return true;
+        let [low, _] = self.bounds();
+        return low >= 0;
     }
 
-    /// Whether every value of the symbols makes this below 0: a negative
-    /// constant that no term can raise, since a symbol is an extent.
+    /// Whether every value of the symbols makes this below 0.
     pub fn is_negative(&self) -> bool {
-        let mut constant = 0 as i64;
-        for let t of &self.terms {
-            if t.coefficient > 0 {
-                return false;
-            }
-            if t.symbols.is_empty() {
-                constant = t.coefficient;
-            }
-        }
-        return constant < 0;
+        let [_, high] = self.bounds();
+        return high < 0;
     }
 
-    /// Whether every value of the symbols keeps this within `i32`. A symbol is
-    /// an extent, at most `i32::MAX`, so a term of degree `k` lies between 0 and
-    /// its coefficient times `i32::MAX` to the `k`.
-    pub fn is_within_i32(&self) -> bool {
+    /// A lower and an upper bound on the value, over every value of the
+    /// symbols. A symbol is an extent, within `[0, i32::MAX]`, so a term of
+    /// degree `k` lies between 0 and its coefficient times `i32::MAX` to the `k`.
+    fn bounds(&self) -> [i128, i128] {
         let [mut low, mut high] = [0 as i128, 0 as i128];
         for let t of &self.terms {
             let mut reach = t.coefficient as i128;
             for let _ of &t.symbols {
-                reach *= i32::MAX as i128;
-                // The bound has left i32 already, and one more factor could
-                // leave i128.
-                if i128::abs(reach) > i64::MAX as i128 {
-                    return false;
-                }
+                reach = saturated(reach * i32::MAX as i128);
             }
-            if reach < 0 {
+            if t.symbols.is_empty() || reach < 0 {
                 low += reach;
-            } else {
+            }
+            if t.symbols.is_empty() || reach > 0 {
                 high += reach;
             }
         }
-        return i32::MIN as i128 <= low && high <= i32::MAX as i128;
+        return [low, high];
     }
 
     /// `terms` summed into canonical form, or `None` where a sum leaves `i64`.
@@ -225,6 +207,19 @@ fn narrowed(value: i128) -> Option<i64> {
 
 fn within_i64(p: Option<Poly>) -> Poly {
     return p.expect("a polynomial over extents left i64");
+}
+
+/// `reach` held within 2^64 either way. That is past any `i64` constant a sum
+/// adds it to, so the sum keeps the sign and the side of `i32` it would have.
+fn saturated(reach: i128) -> i128 {
+    let limit = (i64::MAX as i128 + 1) * 2;
+    if reach > limit {
+        return limit;
+    }
+    if reach < -limit {
+        return -limit;
+    }
+    return reach;
 }
 
 /// Higher degree first, then by the symbols' names, so the constant is last.

@@ -922,8 +922,8 @@ fn let_stmt_qualifies(
     let Some((used_siblings, lets)) = confined_sibling_lets(body, value, siblings) else {
         return decline("a sibling const is read from outside the initializer");
     };
-    // `local_leaks_through_call` above already declined anything a callee keeps,
-    // so a binding reaching here dies with its body.
+    // The gates above declined anything a callee keeps and anything the body
+    // delivers, so a binding reaching here dies with its body.
     let pays = worth_hoisting_operand(body, value, gate, Reach::Transient)
         || used_siblings.iter().any(|l| {
             siblings
@@ -1798,7 +1798,7 @@ impl Gate<'_> {
 /// A reference-typed projection bound out of the aggregate aliases it: `let s =
 /// writer.buf;` hands `writer`'s array handle to `s`, and a write through `s`
 /// is a write to `writer` that no use of `writer` shows. [`param_storage_escapes`]
-/// reads the callee side through the same [`projection_alias_roots`].
+/// follows the same aliases, [`projection_alias_roots`], to where they go.
 fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     readonly_body_violation(body, idx, gate).is_none()
 }
