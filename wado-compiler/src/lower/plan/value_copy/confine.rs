@@ -43,9 +43,11 @@ struct ParamEscape {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
-    Builtin,
+    /// A body-less function whose declaration link snapshot.
+    Declared,
     ValueCopy,
     HasBody,
+    /// A body-less function nothing describes: a dispatch stub.
     Opaque,
 }
 
@@ -111,18 +113,18 @@ pub fn compute_confined_params(
     ConfinedParams { map }
 }
 
+/// The functions this scan reads a body of, or knows to keep nothing. A
+/// body-less one is classified at the call, off its declaration.
 fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
     let mut kinds = FuncKeyMap::default();
     for func in &project.functions {
         let func = func.borrow();
         let kind = if matches!(func.kind, FunctionKind::ValueCopy { .. }) {
             Kind::ValueCopy
-        } else if func.module_source.is_builtin() {
-            Kind::Builtin
         } else if func.body.is_some() {
             Kind::HasBody
         } else {
-            Kind::Opaque
+            continue;
         };
         kinds.insert(func.module_source.clone(), func.name.clone(), kind);
     }
@@ -137,20 +139,18 @@ struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    /// A builtin declares no function, so it is absent from the table — and
-    /// absence read as `Opaque` leaks every parameter handed to one, which
-    /// `a[i]`'s `array_get_value` makes every element read there is.
+    /// A body-less callee reads its declaration wherever it comes from — a
+    /// `core:builtin`, a CM import, a Wasm asset — so a monomorphized instance
+    /// absent from the table is found by the generic name link snapshot.
     fn kind(&self, func: &FunctionRef) -> Kind {
-        self.kinds
-            .get(&func.module_source, &func.name)
-            .copied()
-            .unwrap_or_else(|| {
-                if func.module_source.is_builtin() {
-                    Kind::Builtin
-                } else {
-                    Kind::Opaque
-                }
-            })
+        if let Some(kind) = self.kinds.get(&func.module_source, &func.name) {
+            return *kind;
+        }
+        if self.builtins.get(func).is_some() {
+            Kind::Declared
+        } else {
+            Kind::Opaque
+        }
     }
 
     /// One escape channel of a callee's parameter. A callee with no entry has
@@ -168,12 +168,12 @@ impl Ctx<'_> {
     }
 
     /// Whether the operand at `param_index` outlives this call. A value-copy
-    /// helper keeps nothing, a builtin keeps what `#[retain(p)]` names, a body
-    /// answers from the fixpoint, and a callee this scan cannot read keeps all.
+    /// helper keeps nothing, a declaration keeps what `#[retain(p)]` names, a
+    /// body answers from the fixpoint, and a callee nothing describes keeps all.
     fn callee_keeps(&self, func: &FunctionRef, param_index: usize) -> bool {
         match self.kind(func) {
             Kind::ValueCopy => false,
-            Kind::Builtin => self
+            Kind::Declared => self
                 .builtins
                 .retained_params(func)
                 .any(|p| p == param_index),
@@ -426,7 +426,7 @@ fn call_result_taint(
             .first()
             .map(|op| taint_of(ctx, taint, op))
             .unwrap_or_default(),
-        Kind::Builtin | Kind::Opaque => operands.iter().fold(Taint::default(), |acc, op| {
+        Kind::Declared | Kind::Opaque => operands.iter().fold(Taint::default(), |acc, op| {
             union(acc, taint_of(ctx, taint, op))
         }),
         Kind::HasBody => operands

@@ -597,17 +597,13 @@ impl Translator<'_> {
     /// declares no `#[retain(...)]`, so reading the declaration here would tell
     /// every NIR pass that every bodied function keeps nothing.
     fn retained_param_names(&self, func: &TirFunction) -> Vec<String> {
-        let Some(positions) = self
-            .value_copy
-            .retained_params
-            .get(&func.module_source, &func.name)
-        else {
+        let Some(retained) = self.value_copy.retention.of_body(func) else {
             return Vec::new();
         };
         func.params
             .iter()
             .enumerate()
-            .filter(|(i, _)| positions.contains(&u32::try_from(*i).unwrap()))
+            .filter(|(i, _)| retained.keeps(u32::try_from(*i).unwrap()))
             .map(|(_, p)| p.name.clone())
             .collect()
     }

@@ -6,7 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::is_reference_type;
 use super::ownership::OwnedCalls;
-use super::retention::{BoundedRetention, FunctorRows, RESULT, Retained, RetainedParams};
+use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
@@ -157,7 +157,6 @@ pub fn analyze_ownership(
     if has_unsupported_form(body) {
         return Ownership::default();
     }
-    let retained_params = &plan.retained_params;
     let mut_receiver_methods = &plan.mut_receiver_methods;
 
     let mut all_locals: IndexSet<u32> = (0..func.local_count).collect();
@@ -169,8 +168,7 @@ pub fn analyze_ownership(
     }
 
     let mut a = Analyzer {
-        retained_params,
-        bounded: &plan.bounded_retention,
+        calls: &plan.retention,
         params: func.params.iter().map(|p| p.local_index).collect(),
         pending_bounded: Vec::new(),
         value_holds: Vec::new(),
@@ -859,12 +857,11 @@ struct Exit {
 }
 
 struct Analyzer<'a> {
-    /// Which parameter positions each callee may persist a reference to
-    /// (position 0 is the receiver). Elsewhere a `&`/`&mut` is transient.
-    retained_params: &'a RetainedParams,
-    /// Where a callee puts the positions it keeps nowhere else, so an argument
-    /// list on hand resolves the retention to locals this body owns.
-    bounded: &'a BoundedRetention,
+    /// Which parameter positions each named callee may persist a reference to
+    /// (position 0 is the receiver), and where it puts the ones it bounds, so
+    /// an argument list on hand resolves the retention to locals this body
+    /// owns. Elsewhere a `&`/`&mut` is transient.
+    calls: &'a CallRetention,
     /// This body's parameter locals. A retention landing in one leaves the
     /// frame, whatever the callee does with it.
     params: IndexSet<u32>,
@@ -1047,25 +1044,14 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Whether the callee may persist a reference passed at position `pos`. One
-    /// this walk has no entry for keeps nothing.
-    fn callee_retains(&self, callee: &FunctionRef, pos: usize) -> bool {
-        self.retained_params
-            .get(&callee.module_source, &callee.name)
-            .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
-    }
-
-    /// What a named call keeps at each argument position, resolved against the
-    /// arguments it is given and what keeps its result.
-    fn kept_at(&self, callee: &FunctionRef, args: &[&TirExpr], result: &Kept) -> Vec<Kept> {
-        (0..args.len())
-            .map(|pos| {
-                if !self.callee_retains(callee, pos) {
-                    return Kept::Transient;
-                }
-                self.landing(args, result, self.bounded.destinations(callee, pos))
-            })
-            .collect()
+    /// What `call`, a named call of `arity` arguments, keeps of them. A result
+    /// that cannot hold a reference hands none back.
+    fn retained_by(&self, callee: &FunctionRef, arity: usize, call: &TirExpr) -> Retained {
+        self.calls.of_call(
+            callee,
+            arity,
+            !is_scalar_type(call.type_id, self.type_table),
+        )
     }
 
     /// The same for a call through a function value, off the row the site
@@ -1569,6 +1555,7 @@ impl Analyzer<'_> {
                 let Some((receiver, rest)) = args.split_first() else {
                     return;
                 };
+                let retained = self.retained_by(func, args.len(), expr);
                 let receiver = &receiver.expr;
                 let (recv_place, recv_ref) = match &receiver.kind {
                     TirExprKind::Unary {
@@ -1583,7 +1570,7 @@ impl Analyzer<'_> {
                             && !self
                                 .mut_receiver_methods
                                 .contains(&func.module_source, &func.name)
-                            && !self.callee_retains(func, 0);
+                            && !retained.keeps(0);
                         if !read_only {
                             conflict.insert(base);
                         }
@@ -1591,12 +1578,13 @@ impl Analyzer<'_> {
                     None => self.scan_place_uses(recv_place, conflict),
                 }
                 for (pos, a) in rest.iter().enumerate() {
-                    self.scan_call_arg_place_use(&a.expr, Some(func), pos + 1, conflict);
+                    self.scan_call_arg_place_use(&a.expr, Some(&retained), pos + 1, conflict);
                 }
             }
             TirExprKind::Call { func, args, .. } => {
+                let retained = self.retained_by(func, args.len(), expr);
                 for (pos, a) in args.iter().enumerate() {
-                    self.scan_call_arg_place_use(&a.expr, Some(func), pos, conflict);
+                    self.scan_call_arg_place_use(&a.expr, Some(&retained), pos, conflict);
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
@@ -1633,7 +1621,7 @@ impl Analyzer<'_> {
     fn scan_call_arg_place_use(
         &self,
         arg: &TirExpr,
-        callee: Option<&FunctionRef>,
+        retained: Option<&Retained>,
         pos: usize,
         conflict: &mut IndexSet<u32>,
     ) {
@@ -1652,7 +1640,7 @@ impl Analyzer<'_> {
                 expr: place,
             } => match clean_root(place) {
                 Some(base) => {
-                    if callee.is_some_and(|c| self.callee_retains(c, pos)) {
+                    if retained.is_some_and(|r| r.keeps(u32::try_from(pos).unwrap())) {
                         conflict.insert(base);
                     }
                 }
@@ -2022,7 +2010,7 @@ impl Analyzer<'_> {
                         .contains(&func.module_source, &func.name);
                 let kept = if record {
                     let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                    self.kept_at(func, &exprs, &result)
+                    self.kept_through(&self.retained_by(func, args.len(), expr), &exprs, &result)
                 } else {
                     Vec::new()
                 };

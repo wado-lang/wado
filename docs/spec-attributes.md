@@ -415,11 +415,17 @@ pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_of
 ```
 
 `#[result(owned)]` says the result is freshly allocated; `#[result(part_of = p)]`
-says it is part of `p`. `#[result]` takes exactly one of the two. Silence reads
-as `owned`. So a declaration with a reference parameter whose result can share
-storage must state one, and leaving it out is an error. A Component Model import
-needs none, since the boundary copies and its result is always owned. Nor does
-an [`#[unavailable]`](#unavailablereason) declaration, which is never called.
+says it is part of `p`. `#[result]` takes exactly one of the two. An `owned`
+result holds nothing it was handed, except what a `#[retain(...)]` clause says.
+A declaration with a reference parameter whose result can share storage must
+state one, and leaving it out is an error. A Component Model import needs none,
+since the boundary copies and its result is always owned. Nor does an
+[`#[unavailable]`](#unavailablereason) declaration, which is never called.
+
+Silence reads as `owned` storage that may hold what any argument holds. A result
+built from a by-value argument, as `builtin::select` returns one of its
+operands, is a new value, but a reference inside that argument is now inside
+the result as well.
 
 `#[retain(...)]` names one retained thing and repeats where there is more than
 one, so each carries its own destination. A bare name is the parameter itself

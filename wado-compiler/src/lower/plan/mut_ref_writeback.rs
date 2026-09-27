@@ -2,8 +2,7 @@
 //! call. See `docs/wep-2026-06-13-reference-representation.md`.
 
 use super::value_copy::callgraph::CallGraph;
-use super::value_copy::funcset::FuncKeyMap;
-use super::value_copy::retention::{FunctorRows, RefCarrying, RetainedParams};
+use super::value_copy::retention::{CallRetention, FunctorRows, RefCarrying};
 use super::whole_value_writes::{self, WholeValueWrites};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
@@ -21,7 +20,7 @@ use crate::token::Span;
 pub fn insert_write_backs(
     flat: &mut FlatPackage,
     call_graph: &CallGraph,
-    escaping: &RetainedParams,
+    escaping: &CallRetention,
     functor_rows: &FunctorRows,
     errors: &dyn ErrorSink,
 ) -> Result<(), Bail> {
@@ -90,7 +89,7 @@ pub fn insert_write_backs(
 struct WriteBack<'a> {
     type_table: &'a TypeTable,
     carrying: &'a RefCarrying<'a>,
-    escaping: &'a FuncKeyMap<IndexSet<u32>>,
+    escaping: &'a CallRetention,
     /// What a call through a function value of each functor type keeps. Read
     /// where no callee name is available, so an indirect call is refused on the
     /// same ground a direct one is rather than on a different reading.
@@ -455,9 +454,8 @@ impl WriteBack<'_> {
                 } => (
                     func.name.clone(),
                     self.escaping
-                        .get(&func.module_source, &func.name)
-                        .cloned()
-                        .unwrap_or_default(),
+                        .of_call(func, args.len(), self.carrying.holds(call.type_id))
+                        .positions(),
                     self.replaced
                         .get(&func.module_source, &func.name)
                         .cloned()

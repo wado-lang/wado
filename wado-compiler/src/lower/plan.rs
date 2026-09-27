@@ -77,7 +77,7 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     mut_ref_writeback::insert_write_backs(
         flat,
         &pre_boxing_calls,
-        &retained.retained_params,
+        &retained.calls,
         &retained.rows,
         errors,
     )?;
