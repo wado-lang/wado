@@ -2602,6 +2602,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// Run `walk` now, answering the type of each default it walks.
     pub(super) fn run_default_walk(
         &mut self,
         walk: DefaultWalk,

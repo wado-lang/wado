@@ -689,7 +689,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether the innermost enclosing collection takes over the open `var`
-    /// a call's arguments left unanswered: the call is a field access's
+    /// a call's arguments left unanswered: the call is a projection's
     /// receiver, or an answer of one of its variables names `var`.
     fn enclosing_takes_over(&mut self, var: TypeId) -> bool {
         let Some(enclosing) = self.annotate_ctx.pending_literals.last() else {

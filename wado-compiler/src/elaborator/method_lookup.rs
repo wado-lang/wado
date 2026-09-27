@@ -949,17 +949,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut declaring = trait_env
             .inherent_impl_keys(&key)
             .into_iter()
-            .filter(|&def| {
-                impl_header(&trait_env, &ImplBlockRef(def))
-                    .methods
-                    .iter()
-                    .any(|m| m.name == method_name)
-            })
+            .map(|def| (def, impl_header(&trait_env, &ImplBlockRef(def))))
+            .filter(|(_, header)| header.methods.iter().any(|m| m.name == method_name))
             .peekable();
         declaring.peek().is_some()
-            && declaring.all(|def| {
+            && declaring.all(|(def, header)| {
                 tt.impl_covers_every_instance(def)
-                    && impl_header(&trait_env, &ImplBlockRef(def))
+                    && header
                         .type_params
                         .iter()
                         .all(|param| param.bounds.is_empty())
