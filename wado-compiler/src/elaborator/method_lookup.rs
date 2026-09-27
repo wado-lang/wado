@@ -34,12 +34,12 @@ use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{
     ImplHeader, ImplMethodHeader, TraitEnv, receiver_as_written, written_type_source,
 };
-use super::util;
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, MethodInfo,
     MethodOwner, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
+use super::util;
 use crate::elaborator::callee::CalleeRef;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::scope;
@@ -945,7 +945,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// what its target writes for them now, and its bounds on them are checked
     /// once they are answered. Where several may, or none, the literals behind
     /// them settle first, as Rust's fall back before it picks one.
-    pub(super) fn receiver_waits(&mut self, receiver: TypeId, method_name: &str, span: Span) -> bool {
+    pub(super) fn receiver_waits(
+        &mut self,
+        receiver: TypeId,
+        method_name: &str,
+        span: Span,
+    ) -> bool {
         let base = self.tysys.get_base_type(receiver);
         {
             let tt = self.tysys.type_table.borrow();
@@ -956,7 +961,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !tt
                 .infer_vars_in(base)
                 .iter()
-                .any(|&var| self.annotate_ctx.awaits_pending_call(&tt, var))
+                .any(|&var| self.pending_owner_index(var).is_some())
             {
                 return true;
             }
@@ -987,7 +992,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn defer_open_impl_bounds(&mut self, def: DefId, receiver: TypeId, span: Span) {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, &ImplBlockRef(def));
-        let written = self.tysys.type_table.borrow().impl_target_args(def).to_vec();
+        let written = self
+            .tysys
+            .type_table
+            .borrow()
+            .impl_target_args(def)
+            .to_vec();
         let args = self
             .tysys
             .type_table
@@ -996,7 +1006,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("an open receiver is a generic instance");
         for (&written, &arg) in written.iter().zip(&args) {
             let name = util::bound_param_name(self.tysys.type_table.borrow().get(written)).cloned();
-            let Some(param) = name.and_then(|name| header.type_params.iter().find(|p| p.name == name))
+            let Some(param) =
+                name.and_then(|name| header.type_params.iter().find(|p| p.name == name))
             else {
                 continue;
             };
@@ -1050,7 +1061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let binding = {
                 let tt = self.tysys.type_table.borrow();
-                let open = |ty: TypeId| tt.is_infer_var(ty) && self.annotate_ctx.awaits_pending_call(&tt, ty);
+                let open = |ty: TypeId| self.pending_owner_index(ty).is_some();
                 tt.open_impl_target_binding(tt.impl_target_args(def), &args, &open)
             };
             let Some(binding) = binding else {

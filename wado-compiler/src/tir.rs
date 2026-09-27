@@ -6502,8 +6502,13 @@ impl TypeTable {
         if receiver_args.len() < written.len() && fixed == written.len() {
             return None;
         }
-        self.bind_all(&written[..fixed], receiver_args.get(..fixed)?, open, &mut binding)
-            .then_some(binding)
+        self.bind_all(
+            &written[..fixed],
+            receiver_args.get(..fixed)?,
+            open,
+            &mut binding,
+        )
+        .then_some(binding)
     }
 
     /// The type-parameter slots `concrete` fills in `written`, at any depth;
