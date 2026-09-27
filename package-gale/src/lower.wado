@@ -859,10 +859,6 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
 ///   internal self-ref index, suffix first-set, right-associativity.
 /// * `lr_dispatch: LrDispatchData` — the suffix-loop overlap groups
 ///   and the indices of LR alts that have a non-empty suffix.
-///
-/// Only the disjoint-suffix-first case is handled (no overlap groups
-/// beyond singletons); overlapping suffix first-sets would need the
-/// scan-tournament dispatch.
 fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     let header = lower_header(rule);
 
@@ -1953,6 +1949,7 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClas
         if skip {
             continue;
         }
+        assert atn_class || !alt_class_is_open_ended(&suffix_classes[i]), "an open-ended LR suffix makes its rule ATN-class";
         valid_lr_alts.push(i);
         valid_classes.push(suffix_classes[i]);
     }
