@@ -86,18 +86,17 @@ export fn run() {
 
 ## Data Section
 
-The `__DATA__` marker separates source code from embedded data. Everything after `__DATA__` on its own line is captured as raw text and is not parsed as Wado code.
+The `__DATA__` marker separates source code from embedded data. Everything after `__DATA__` on its own line is captured as raw text and is not parsed as Wado code. `#data` reads it.
+
+<!-- {"source": "wado-compiler/tests/fixtures/sub/location_submodule_helper.wado"} -->
 
 ```wado
-use {println} from "core:cli";
-
-export fn run() with Stdout {
-    println("Hello!");
+pub fn show_data() with Stdout {
+    println(#data);
 }
 
 __DATA__
-This is raw data, not Wado code.
-It can contain any text, including JSON, YAML, or test expectations.
+SUBMODULE_DATA_MARKER
 ```
 
 ### Syntax Rules
