@@ -1095,6 +1095,8 @@ struct Parser {
     max_errors: i32,
     site: i32,
     sites: List<i32>,
+    recovery_pos: i32,
+    recovery_rules: List<NodeKind>,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     line_starts: List<i32>,
@@ -1111,7 +1113,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], recovery_pos: -1, recovery_rules: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
     }
 
     fn emit(&mut self, s: String) {
@@ -1247,6 +1249,13 @@ impl Parser {
         assert self.b.node_kind(node) == rule, "recover_rule: the resumed node is the failed rule's";
         self.commit_pending();
         self.recovering = false;
+        if self.pos != self.recovery_pos {
+            self.recovery_pos = self.pos;
+            self.recovery_rules = [];
+        } else if self.recovery_rules.contains(&rule) && self.kinds[self.pos] != TK_EOF {
+            self.skip_one();
+        }
+        self.recovery_rules.push(rule);
         self.skip_until(&self.resync_set(&[]));
         return true;
     }
