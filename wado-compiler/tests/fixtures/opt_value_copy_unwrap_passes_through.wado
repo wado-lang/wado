@@ -1,0 +1,42 @@
+// `unwrap` hands its receiver's payload back and keeps nothing, so a caller
+// passes the receiver uncopied and copies the result only where it takes
+// ownership of it. Reading a field of `o.unwrap()` copies nothing, and an
+// `Option` dead after the call hands its payload over.
+//
+// Regression: a by-value receiver the caller still reached was deep-copied
+// into the call, so reading one field paid for the whole `Option`.
+
+use { println, Stdout } from "core:cli";
+
+struct Shape {
+    axes: List<String>,
+}
+
+fn rank(o: &Option<Shape>) -> i32 {
+    return o.unwrap().axes.len();
+}
+
+fn first(o: &Option<Shape>) -> String {
+    return o.expect("a shape").axes[0];
+}
+
+fn take(o: Option<Shape>) -> Shape {
+    let s = o.unwrap();
+    return s;
+}
+
+export fn run() with Stdout {
+    let o = Option::Some(Shape { axes: [builtin::black_box("a"), "b"] });
+    println(`${rank(&o)} ${first(&o)}`);
+    let s = take(o);
+    println(s.axes[1]);
+}
+
+__DATA__
+{
+    "stdout": "2 a\nb\n",
+    "wir_not_expect:O0": [
+        "$value_copy$core:prelude/types.wado/Option<opt_value_copy_unwrap_passes_through.wado/Shape>",
+        "$value_copy$opt_value_copy_unwrap_passes_through.wado/Shape"
+    ]
+}

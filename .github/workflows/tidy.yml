@@ -53,43 +53,32 @@ jobs:
             echo "should-run=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         if: steps.precheck.outputs.should-run == 'true'
         with:
-          shared-key: ci
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: jdx/mise-action@v4.3.0
-        if: steps.precheck.outputs.should-run == 'true'
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
-
-      # One compile serves every binary-dependent step below.
+      # One compile serves every binary-dependent step below. WADO_PREBUILT
+      # keeps scripts/dev-bin.sh from building again, so no step after this
+      # one takes the cargo lock until clippy.
       - name: Build wado binaries
         if: steps.precheck.outputs.should-run == 'true'
-        run: cargo build --bin wado --bin wado-dev-tools
+        run: |
+          cargo build --bin wado --bin wado-dev-tools
+          echo "WADO_PREBUILT=1" >> "$GITHUB_ENV"
 
       # Disjoint output trees → run concurrently via the `parallel` group, which
-      # waits for all of its steps before the next step. Each calls the prebuilt
-      # binary directly so only `doc-stdlib` touches the cargo lock (itself).
+      # waits for all of its steps before the next step.
       - parallel:
           - name: Regenerate WIR golden fixtures
             if: steps.precheck.outputs.should-run == 'true'
-            run: |
-              mkdir -p wado-compiler/tests/generated/fixtures
-              ./target/debug/wado-dev-tools golden-dump \
-                --in 'wado-compiler/tests/fixtures/{name}.wado' \
-                --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
-                --default-world test \
-                -O2
+            run: mise run update-golden-fixtures
           - name: Regenerate format golden fixtures
             if: steps.precheck.outputs.should-run == 'true'
-            run: bash scripts/update-golden-format-fixtures.sh
+            run: mise run update-golden-format-fixtures
           - name: Refresh Gale kiln caches
             if: steps.precheck.outputs.should-run == 'true'
-            run: ./target/debug/wado test --no-run package-gale
+            run: scripts/dev-bin.sh wado test --no-run package-gale
           - name: Regenerate stdlib docs
             if: steps.precheck.outputs.should-run == 'true'
             run: mise run doc-stdlib
@@ -105,10 +94,10 @@ jobs:
       - parallel:
           - name: Format Markdown
             if: steps.precheck.outputs.should-run == 'true'
-            run: ./target/debug/wado-dev-tools format-md
+            run: scripts/dev-bin.sh wado-dev-tools format-md
           - name: Format Wado sources
             if: steps.precheck.outputs.should-run == 'true'
-            run: ./target/debug/wado format -w .
+            run: scripts/dev-bin.sh wado format -w .
 
       # Last: a second compile, and rustfmt has to follow clippy-fix's rewrites.
       - name: Clippy autofix and rustfmt

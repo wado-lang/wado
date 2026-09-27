@@ -1,0 +1,31 @@
+// A numeric literal argument admits a half-precision parameter, so it selects
+// the overload that takes one, as it would an `f32` one.
+
+trait Take<T> with () {
+    fn take(&self, v: T) -> i32;
+}
+
+impl Take<f16> for bool {
+    fn take(&self, v: f16) -> i32 {
+        return 1;
+    }
+}
+
+impl Take<String> for bool {
+    fn take(&self, v: String) -> i32 {
+        return 2;
+    }
+}
+
+struct Gauge {}
+
+impl Gauge {
+    fn at(&self, v: bf16) -> bool {
+        return v == 2.0;
+    }
+}
+
+test {
+    assert true.take(0.5) == 1 && true.take(3) == 1;
+    assert Gauge {}.at(2.0) && Gauge {}.at(2);
+}

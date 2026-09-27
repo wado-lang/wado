@@ -1,0 +1,45 @@
+// An async import returns an `AsyncCall<T>` at once; a handler that resumes
+// with a `T` hands the caller one that has already completed.
+use { Headers, Trailers } from "wasi:http";
+
+use { Client, Request, Response, ErrorCode } from "wasi:http";
+
+fn fetch(req: Request) -> Result<Response, ErrorCode> with Client {
+    let call = Client::send(req);   // the request starts; nothing waits yet
+    // ... work here runs while the host handles the request ...
+    return call.wait();             // blocks until the response arrives
+}
+
+test {
+    let mut mock = MockClient {};
+    let response = with Client => &mut mock do { fetch(new_request()) };
+    assert response matches { Ok(_) };
+}
+
+struct MockClient {}
+
+fn new_request() -> Request {
+    let [trailers, _tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [req, _done] = Request::new(Headers::new(), null, trailers, null);
+    return req;
+}
+
+fn canned_response() -> Response {
+    let [trailers, _tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [resp, _done] = Response::new(Headers::new(), null, trailers);
+    return resp;
+}
+
+impl Client for MockClient {
+    fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
+        resume Result::<Response, ErrorCode>::Ok(canned_response());
+    }
+}
+
+test {
+    let mut mock = MockClient {};
+    with Client => &mut mock do {
+        let call = Client::send(new_request());
+        assert call.wait() matches { Ok(_) };   // completed already
+    };
+}

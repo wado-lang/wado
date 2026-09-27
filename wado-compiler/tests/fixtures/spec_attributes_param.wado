@@ -1,0 +1,23 @@
+// Quoted by docs/spec-attributes.md § `#[param]`. `-D` sets `API_URL`, the
+// environment sets `PORT`, and `build.id` is left to its initializer.
+
+#[param]
+global API_URL: String = "http://localhost";   // -D API_URL=...
+
+#[param(from_env = "PORT")]
+global PORT: i32 = 8080;                        // read from an env var
+
+#[param(name = "build.id")]
+global BUILD_ID: String = "dev";                // -D build.id=...
+
+test {
+    assert API_URL == "https://example.com" && PORT == 80;
+    assert BUILD_ID == "dev";                   // nothing set it
+}
+
+__DATA__
+{
+    "test": {},
+    "params": { "API_URL": "https://example.com" },
+    "param_env": { "PORT": "80" }
+}

@@ -18,7 +18,6 @@ pub const CM_HOST_IMPORTS: &str = "cm_host_imports";
 pub const CM_PARAMS: &str = "cm_params";
 pub const COMPILER_ITEM: &str = "compiler_item";
 pub const EXPECT_TRAP: &str = "expect_trap";
-pub const EXPORT: &str = "export";
 pub const EXPORT_NAME: &str = "export_name";
 pub const GENERATED: &str = "generated";
 pub const IMMEDIATE: &str = "immediate";
@@ -189,6 +188,9 @@ pub struct AttributeSchema {
     pub args: AttrArgs,
     /// What the attribute declares, as a diagnostic spells it.
     pub summary: &'static str,
+    /// Set for an attribute that wires the standard library to Wasm and the
+    /// Component Model, which a program has no business writing.
+    pub stdlib_only: bool,
     /// Set for an attribute that describes a declaration with no body.
     pub bodyless: Option<Bodyless>,
 }
@@ -303,6 +305,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the allocator this entry point installs",
+        stdlib_only: true,
         bodyless: None,
     },
     AttributeSchema {
@@ -310,6 +313,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: EVERY_TARGET,
         args: AttrArgs::Idents,
         summary: "waive a lint here",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -317,6 +321,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::None,
         summary: "perform this declaration's effects without declaring them",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -324,6 +329,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::Words,
         summary: "effects a caller need not declare onward",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -331,6 +337,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("a namespace and a name, as two strings"),
         summary: "the Component Model canonical built-in this lowers to",
+        stdlib_only: true,
         bodyless: None,
     },
     AttributeSchema {
@@ -338,6 +345,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: CM_TARGET,
         args: AttrArgs::Read("the CM-side identifier, with an optional `linearity = \"…\"`"),
         summary: "this declaration's identity at the Component Model boundary",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -345,6 +353,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: MODULE_TARGET,
         args: AttrArgs::Strings,
         summary: "the host capabilities an imported component itself imports",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -352,6 +361,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::OptionalStrings,
         summary: "the CM-side parameter names",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -359,6 +369,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: COMPILER_ITEM_TARGET,
         args: AttrArgs::OneString,
         summary: "bind this stdlib declaration to the compiler item of that name",
+        stdlib_only: true,
         bodyless: None,
     },
     AttributeSchema {
@@ -366,13 +377,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: TEST_TARGET,
         args: AttrArgs::None,
         summary: "the test passes when its body traps",
-        bodyless: None,
-    },
-    AttributeSchema {
-        name: EXPORT,
-        targets: FUNCTION_TARGET,
-        args: AttrArgs::None,
-        summary: "a raw Wasm export, and so an export-boundary root",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -380,6 +385,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the name this function is exported under",
+        stdlib_only: true,
         bodyless: None,
     },
     AttributeSchema {
@@ -387,6 +393,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: MODULE_TARGET,
         args: AttrArgs::Read("`by = \"…\"` and `sources = [\"…\"]` metadata"),
         summary: "the file is machine-generated",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -394,6 +401,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("one parameter name, unquoted"),
         summary: "the parameter lowers to a Wasm immediate",
+        stdlib_only: true,
         bodyless: Some(Bodyless {
             on_body: "it describes how codegen lowers the call, and a body is called \
                       rather than lowered",
@@ -406,6 +414,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::OptionalWords,
         summary: "how the inliner should treat this function",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -413,6 +422,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("`read` or `write`"),
         summary: "how a call to this declaration touches linear memory",
+        stdlib_only: true,
         bodyless: Some(Bodyless {
             on_body: "a body states what it touches",
             on_requirement: "the impl it dispatches to has the body that says what it \
@@ -425,6 +435,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: MODULE_TARGET,
         args: AttrArgs::None,
         summary: "the file imports no prelude",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -432,6 +443,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: &[AttrTarget::Global],
         args: AttrArgs::Read("`name = \"…\"` and `from_env = \"…\"`"),
         summary: "the global is a build input",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -439,6 +451,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("`owned`, or `part_of = param`"),
         summary: "what the returned storage belongs to",
+        stdlib_only: true,
         bodyless: Some(Bodyless {
             on_body: "a body states what it returns",
             on_requirement: "the impl it dispatches to has the body that says what its \
@@ -451,6 +464,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::Read("a parameter name, with an optional `into = param`"),
         summary: "what this declaration retains a reference to",
+        stdlib_only: true,
         bodyless: Some(Bodyless {
             on_body: "a body states what it retains",
             on_requirement: "the impl it dispatches to has the body that says what it \
@@ -463,6 +477,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: &[AttrTarget::StructField],
         args: AttrArgs::None,
         summary: "the field's value stays out of debug output",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -470,6 +485,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: MODULE_TARGET,
         args: AttrArgs::OneString,
         summary: "the bundled stdlib path this file is",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -477,6 +493,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: TEST_TARGET,
         args: AttrArgs::None,
         summary: "`wado doc` renders this test as the module's synopsis",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -484,6 +501,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: TEST_TARGET,
         args: AttrArgs::OneNumber,
         summary: "how long the test may run",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -491,6 +509,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: &[AttrTarget::Module, AttrTarget::Test],
         args: AttrArgs::None,
         summary: "the tests are expected to fail until the work lands",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -501,6 +520,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
              with an optional `result_len = p`",
         ),
         summary: "when a call to this declaration traps",
+        stdlib_only: true,
         bodyless: Some(Bodyless {
             on_body: "a body states when it traps",
             on_requirement: "the impl it dispatches to has the body that says when it \
@@ -513,6 +533,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: FUNCTION_TARGET,
         args: AttrArgs::OneString,
         summary: "the name is reserved, and why a call cannot have it",
+        stdlib_only: false,
         bodyless: None,
     },
     AttributeSchema {
@@ -520,6 +541,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: MODULE_TARGET,
         args: AttrArgs::OneString,
         summary: "the core wasm module name this file imports memory from",
+        stdlib_only: true,
         bodyless: None,
     },
     AttributeSchema {
@@ -527,6 +549,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         targets: WIRE_TARGET,
         args: AttrArgs::Read("`name = \"…\"`, `name_policy = \"…\"`, `positional`, or `default`"),
         summary: "how serialization spells this declaration",
+        stdlib_only: false,
         bodyless: None,
     },
 ];
@@ -568,6 +591,8 @@ pub enum AttributeFault {
     Repeated { key: String },
     /// A `name_policy` naming no policy.
     NamePolicy { value: String },
+    /// A standard library attribute written in a program.
+    StdlibOnly,
 }
 
 impl AttributeFault {
@@ -612,6 +637,7 @@ impl AttributeFault {
                     known.join("`, `")
                 )
             }
+            Self::StdlibOnly => format!("`{name}` is valid only in the standard library"),
         }
     }
 }
@@ -636,15 +662,19 @@ fn list_targets(targets: &[AttrTarget]) -> String {
 }
 
 /// What is wrong with an attribute as written, where a central rule decides.
-/// `None` means the schema admits it.
+/// `None` means the schema admits it. `in_program` says the attribute sits in
+/// a program rather than the standard library or a Wasm asset's bindings.
 #[must_use]
-pub fn check(written: &WrittenAttribute<'_>) -> Option<AttributeFault> {
+pub fn check(written: &WrittenAttribute<'_>, in_program: bool) -> Option<AttributeFault> {
     let WrittenAttribute {
         name, args, target, ..
     } = *written;
     let Some(schema) = lookup(name) else {
         return Some(AttributeFault::Unknown);
     };
+    if schema.stdlib_only && in_program {
+        return Some(AttributeFault::StdlibOnly);
+    }
     if !schema.targets.is_empty() && !schema.targets.contains(&target) {
         // An attribute that belongs only in the other position is written in
         // the wrong one, which says what to write instead of where.
@@ -863,13 +893,30 @@ mod tests {
     use super::*;
 
     fn check_args(name: &str, args: &[AttrArg], target: AttrTarget) -> Option<AttributeFault> {
-        check(&WrittenAttribute {
-            name,
-            args,
-            target,
+        check(
+            &WrittenAttribute {
+                name,
+                args,
+                target,
+                span: Span::default(),
+                earlier: &[],
+            },
+            false,
+        )
+    }
+
+    #[test]
+    fn a_stdlib_attribute_is_refused_in_a_program_alone() {
+        let args = [AttrArg::Str("mem".to_string())];
+        let written = WrittenAttribute {
+            name: WASM_MODULE,
+            args: &args,
+            target: AttrTarget::Module,
             span: Span::default(),
             earlier: &[],
-        })
+        };
+        assert_eq!(check(&written, true), Some(AttributeFault::StdlibOnly));
+        assert_eq!(check(&written, false), None);
     }
 
     #[test]

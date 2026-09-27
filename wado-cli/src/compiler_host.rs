@@ -17,7 +17,7 @@ use crate::args::DEFAULT_LOG_LEVEL;
 use crate::kiln_driver::KilnSpan;
 use crate::kiln_runtime::{self, KilnRunPolicy};
 use crate::run_cache::RunCache;
-use crate::runtime::create_kiln_engine;
+use crate::runtime::create_fuel_engine;
 use crate::sync::lock;
 
 /// AOT-compiled generator [`Component`]s, keyed by wasm SHA-256.
@@ -53,7 +53,7 @@ impl KilnComponentCache {
         if let Some(engine) = self.engine.get() {
             return Ok(engine.clone());
         }
-        let engine = create_kiln_engine(wasmtime::OptLevel::Speed).map_err(|error| {
+        let engine = create_fuel_engine(wasmtime::OptLevel::Speed).map_err(|error| {
             GeneratorRunnerError::Host(format!("failed to create kiln wasmtime engine: {error}"))
         })?;
         // First `set` wins; always clone from the stored value.

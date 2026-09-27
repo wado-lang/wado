@@ -1,0 +1,30 @@
+// The visibility ladder on top-level items and on inherent members.
+
+// Private to this file (default)
+fn helper() -> i32 { return 1; }
+
+// Package-internal - accessible from other files in this package
+internal fn build_ast() -> List<String> { return ["doc"]; }
+
+// Library API - accessible from other Wado packages (Wado-native)
+pub fn map<T, U>(f: fn(T) -> U, xs: List<T>) -> List<U> { return xs.into_iter().map(f).collect(); }
+
+// Library API + CM boundary export
+export fn run() { }
+
+test {
+    assert helper() == 1 && build_ast().len() == 1;
+    assert map(|x: i32| x * 2, [1, 2]) == [2, 4];
+}
+
+pub struct Config {}
+
+impl Config {
+    fn parse_raw() -> i32 { return 1; }         // this file only
+    internal fn reload() -> i32 { return 2; }   // other files in this package
+    pub fn get() -> i32 { return 3; }           // other packages
+}
+
+test {
+    assert Config::parse_raw() + Config::reload() + Config::get() == 6;
+}

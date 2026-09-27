@@ -1,0 +1,26 @@
+// A reference read out of storage names somebody else's storage, however fresh
+// the storage holding it is. Dereferencing one is a borrowed value.
+//
+// Regression: freshness read `*c.r` as fresh because `c` was, so a function
+// returning it counted as returning owned, and its caller kept the referent
+// uncopied.
+
+struct Cell {
+    r: &mut List<i32>,
+}
+
+fn leak(xs: &mut List<i32>) -> List<i32> {
+    let c = Cell { r: xs };
+    return *c.r;
+}
+
+test "a referent returned out of a fresh holder is copied by the caller" {
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
+    let v = leak(&mut xs);
+    xs.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
+__DATA__
+{"test": {}}

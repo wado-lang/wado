@@ -1,0 +1,48 @@
+// The serde trait pair, declared here under their own names. `Celsius`
+// implements them, and `Reading` hands the real `core:serde` traits over to
+// them, so JSON drives them.
+
+use serde from "core:serde";
+use json from "core:json";
+use { Serializer, Deserializer, SerializeError, DeserializeError } from "core:serde";
+
+struct Celsius { deg: i32 }
+
+impl Serialize for Celsius {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i32(self.deg);
+    }
+}
+
+impl Deserialize for Celsius {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Celsius, DeserializeError> {
+        return Result::Ok(Celsius { deg: d.deserialize_i32()? });
+    }
+}
+
+struct Reading { c: Celsius }
+
+impl serde::Serialize for Reading {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return Serialize::serialize(&self.c, s);
+    }
+}
+
+impl serde::Deserialize for Reading {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Reading, DeserializeError> {
+        return Result::Ok(Reading { c: Celsius::deserialize(d)? });
+    }
+}
+
+pub trait Serialize with () {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
+}
+
+pub trait Deserialize with () {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
+}
+
+test {
+    assert json::to_string(&Reading { c: Celsius { deg: 21 } }).unwrap() == "21";
+    assert json::from_string::<Reading>("21").unwrap().c.deg == 21;
+}

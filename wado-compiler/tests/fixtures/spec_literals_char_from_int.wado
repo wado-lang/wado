@@ -1,0 +1,12 @@
+// Only `u8` casts to `char`.
+
+test {
+    let x: i32 = 65;
+    let c = x as char;  // compile error
+
+    let y: i8 = 65;
+    let d = y as char;  // compile error (i8 can be negative)
+}
+
+__DATA__
+{"compile_error":"cannot cast 'i32' to 'char': use char::from_u32() or char::from_i32() for checked conversion","compile_errors_contains":["cannot cast 'i8' to 'char'"]}

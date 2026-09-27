@@ -130,6 +130,15 @@ the bound is all it may rely on. `FromStr::Err` and `TryFrom::Err` are both
 - [x] Impl conformance: every declared type bound, and no other
 - [ ] Default associated types
 
+## Known gaps
+
+### A bound naming its own associated type stays abstract
+
+`type Child: Node<Out = Option<Self::Child>>` binds `Out` through `Child` itself.
+A generic body then sees `T::Child::Out` rather than `Option<T::Child>`, and
+returning one as the other is a type mismatch. The binding refers to the
+projection it is part of, so the projection has no finite form to carry it.
+
 ## Related
 
 - [Indexing Traits](./wep-2026-01-20-indexing-traits.md) - Primary use case for associated types

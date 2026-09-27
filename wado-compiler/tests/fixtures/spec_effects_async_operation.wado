@@ -1,0 +1,20 @@
+// An operation mapping to a WIT `async func` is `async fn` and returns
+// `AsyncCall<T>`. A handler answers it with the `T`.
+
+#[cm("example:demo/fetch")]
+pub interface Fetch {
+    #[cm("example:demo/fetch#get")]
+    async fn get(url: String) -> AsyncCall<Result<String, i32>>;
+}
+
+struct Canned {}
+
+impl Fetch for Canned {
+    fn get(&self, url: String) -> Result<String, i32> { resume Result::Ok(`body of ${url}`); }
+}
+
+test {
+    with Fetch => &Canned {} do {
+        assert Fetch::get("/a").wait() == Result::Ok("body of /a");
+    }
+}

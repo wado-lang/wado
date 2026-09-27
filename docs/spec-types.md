@@ -39,13 +39,19 @@ test {
 
 Primitive types are built into the language (no import required):
 
-```text
-i8, i16, i32, i64
-u8, u16, u32, u64
-f32, f64
-f16, bf16   half precision: storage only, no arithmetic
-bool
-char
+<!-- {"fixture":"spec_types_primitives.wado"} -->
+
+```wado
+test {
+    let signed: [i8, i16, i32, i64] = [-1, -2, -3, -4];
+    let unsigned: [u8, u16, u32, u64] = [1, 2, 3, 4];
+    let float: [f32, f64] = [0.5, 0.25];
+    let half: [f16, bf16] = [0.5, 0.5];   // storage only, no arithmetic
+    let flag: bool = true;
+    let letter: char = 'a';
+    assert signed.3 == -4 && unsigned.3 == 4 && float.1 == 0.25;
+    assert half.0 == 0.5 && half.1 == 0.5 && flag && letter == 'a';
+}
 ```
 
 ### Half Precision (`f16`, `bf16`)

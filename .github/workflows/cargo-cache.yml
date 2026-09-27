@@ -2,7 +2,7 @@
 #
 #   cargo/registry/linux-x86_64.tar.gz     registry index, .crate files, unpacked sources (GCS)
 #   cargo/target-deps/linux-x86_64.tar.gz  the dependency half of target/ (GCS)
-#   v0-rust-ci-Linux-x64-*                 ci.yml's target/ and registry (Actions cache)
+#   v0-rust-ci-<this file's hash>-*        ci.yml's target/ and registry (Actions cache)
 #
 # A session becomes warm by unpacking these, never by rebuilding. See
 # .claude/hooks/cargo-cache-restore.mts (consumer) and
@@ -162,8 +162,23 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
           df -h /
 
+      # The same key `.github/actions/setup` restores.
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci
+          shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml') }}
 
-      - run: cargo build --workspace --locked --all-targets
+      # One command per ci.yml job that compiles: each resolves features its
+      # own way, so each needs its own artifact set (see the configuration
+      # note at the top).
+      - name: Build what ci.yml builds
+        run: |
+          # build-wado
+          cargo build --locked --bin wado --bin wado-dev-tools
+          # build-e2e
+          cargo test --locked -p wado-compiler --test e2e --no-run
+          # test-core
+          cargo build --workspace --locked --all-targets
+          cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
+          cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
+          cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
+          df -h /

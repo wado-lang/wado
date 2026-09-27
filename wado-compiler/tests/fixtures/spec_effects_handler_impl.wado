@@ -1,0 +1,49 @@
+// `impl E for T` makes values of `T` handlers for the effect or resource `E`.
+use { Fields, FieldName } from "wasi:http";
+
+struct CountingFields {
+    calls: i32,
+}
+
+interface Stdin {
+    fn read_line() -> String;
+}
+
+struct MockStdin {
+    responses: List<String>,
+    index: i32,
+}
+
+impl Stdin for MockStdin {
+    fn read_line(&mut self) -> String {
+        let line = self.responses[self.index];
+        self.index += 1;
+        resume line
+    }
+}
+
+impl Fields for CountingFields {
+    fn new(&mut self) -> Fields {                                 // answers `Fields::new()`
+        self.calls += 1;
+        resume Fields::new()
+    }
+    fn has(&mut self, this: &Fields, name: FieldName) -> bool {   // answers `f.has(name)`
+        self.calls += 1;
+        resume this.has(name)
+    }
+    ..trap
+}
+
+test {
+    let mut mock = MockStdin { responses: ["a", "b"], index: 0 };
+    with Stdin => &mut mock do {
+        assert Stdin::read_line() == "a";
+        assert Stdin::read_line() == "b";
+    }
+    let mut counting = CountingFields { calls: 0 };
+    with Fields => &mut counting do {
+        let f = Fields::new();
+        assert !f.has("x-id" as FieldName);
+    }
+    assert counting.calls == 2;
+}

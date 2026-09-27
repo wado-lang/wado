@@ -1,0 +1,32 @@
+// A function holds every resource its own signature mentions.
+use { Headers, FieldName } from "wasi:http";
+use { TreeMap } from "core:collections";
+
+fn consume(s: Stream<u8>) {                     // holds Stream, and StreamWritable
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+    s.drop();
+}
+
+fn make_pair() -> [Stream<u8>, StreamWritable<u8>] {
+    return Stream::<u8>::new();
+}
+
+// `Headers` is a newtype of the `Fields` resource: no `with Fields` needed.
+fn headers_to_map(headers: &Headers) -> TreeMap<String, String> {
+    let mut map = TreeMap::<String, String>::new();
+    for let [name, value] of headers.copy_all() {
+        map[name as String] = String::from_utf8_lossy(&value);
+    }
+    return map;
+}
+
+test {
+    let [rx, tx] = make_pair();
+    tx.drop();
+    consume(rx);
+    let headers = Headers::new();
+    let _ = headers.append("x-id" as FieldName, [55]);
+    assert headers_to_map(&headers)["x-id"] == "7";
+}

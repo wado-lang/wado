@@ -1,0 +1,48 @@
+// A binding without `E =>` installs its handler for every effect its type
+// implements, sharing the one value among them.
+
+interface Greeting {
+    fn hello() -> String;
+}
+
+interface Counter {
+    fn tick() -> i32;
+}
+
+interface Stdout {
+    fn write(line: String);
+}
+
+struct MultiMock {
+    count: i32,
+}
+
+impl Greeting for MultiMock {
+    fn hello(&mut self) -> String {
+        self.count += 1;
+        resume "hello"
+    }
+}
+
+impl Counter for MultiMock {
+    fn tick(&mut self) -> i32 {
+        self.count += 1;
+        resume self.count
+    }
+}
+
+struct Capture {
+    lines: List<String> = [],
+}
+
+impl Stdout for Capture {
+    fn write(&mut self, line: String) { self.lines.push(line); }
+}
+
+test {
+    let mut cm = MultiMock { count: 0 };
+    let mut stdout = Capture {};
+    with &mut cm do { assert Counter::tick() == 1; }                               // every effect `cm`'s type implements
+    with &mut cm, Stdout => &mut stdout do { Stdout::write(Greeting::hello()); }   // mixed with explicit bindings
+    assert cm.count == 2 && stdout.lines == ["hello"];
+}

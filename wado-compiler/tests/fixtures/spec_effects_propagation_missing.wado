@@ -1,0 +1,14 @@
+// A function that calls an effectful function without declaring its effects
+// is a compile error.
+use { println, Stdout } from "core:cli";
+
+fn helper() {
+    println("x");      // ERROR: missing effect 'Stdout' required by 'println'
+}
+
+test {
+    helper();
+}
+
+__DATA__
+{"compile_error":"missing effect 'Stdout' required by 'println'"}

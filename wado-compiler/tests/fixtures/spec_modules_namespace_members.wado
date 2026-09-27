@@ -1,0 +1,30 @@
+// A namespace reaches the module's pub items through the `ns::` prefix.
+
+use geo from "./sub/spec_modules_geo.wado";
+
+trait Show {
+    fn show(&self) -> String;
+}
+
+struct Local {}
+
+test {
+    let [p1, p2] = [geo::Point { x: 0.0, y: 0.0 }, geo::Point { x: 3.0, y: 4.0 }];
+
+    // Functions
+    assert geo::distance(p1, p2) == 5.0;
+
+    // Types (structs, enums, variants)
+    let p: geo::Point = geo::Point::origin();
+    let c = geo::Color::Red;
+    let s = geo::Shape::Circle(3.14);
+    assert p.x == 0.0 && c == geo::Color::Red && s matches { Circle(_) };
+}
+
+// Traits and types in an `impl` header, on either side
+impl geo::Show for Local { fn show(&self) -> String { return "local"; } }
+impl Show for geo::Tag { fn show(&self) -> String { return self.name; } }
+
+test {
+    assert Local {}.show() == "local" && geo::Tag { name: "tag" }.show() == "tag";
+}

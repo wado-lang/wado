@@ -96,15 +96,13 @@ global global:multi_value_return_nested_return.wado::$const_obj_1: ref null Arra
 
 fn "multi_value_return_nested_return.wado/run"() with Stdout {
     let $iter_0: ref "core:prelude/range.wado//RangeExclusive<i32>";
-    let a: i32;
-    let b: i32;
+    let fb_2: ref "tuple//[i32, i32]";
     let c: i32;
     let d: i32;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
-    let $local_10: ref "tuple//[i32, i32]";
     let $local_11: ref "tuple//[i32, i32]";
-    let fb_15: ref "tuple//[i32, i32]";
+    let v_14: ref "tuple//[i32, i32]";
     let handle: i32;
     let new_used_40: i32;
     let start_41: i32;
@@ -116,7 +114,8 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
     let rx_85: i32;
     let tx_86: i32;
     let $sroa_v_end_92: i32;
-    let $sroa_fb_0_95: i32;
+    let $sroa_$pattern_temp_0_0_93: i32;
+    let $sroa_$pattern_temp_0_1_94: i32;
     $sroa_v_end_92 = black_box(2);
     $iter_0 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: $sroa_v_end_92 };
     b0: block {
@@ -125,22 +124,21 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
             let $mv$$match_9$1: i32;
             multivalue_bind [$mv$$match_9$0, $mv$$match_9$1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next"($iter_0);
             if $mv$$match_9$0 == 0 {
-                $sroa_fb_0_95 = black_box(7);
-                $local_10 = $inline_pair_3: block -> ref "tuple//[i32, i32]" {
-                    fb_15 = struct.new "tuple//[i32, i32]" { 0: $sroa_fb_0_95, 1: 8 };
-                    break $inline_pair_3: struct.new "tuple//[i32, i32]" { 0: (if $mv$$match_9$1 > 0 -> i32 {
+                fb_2 = struct.new "tuple//[i32, i32]" { 0: black_box(7), 1: 8 };
+                v_14 = $inline_pair_4: block -> ref "tuple//[i32, i32]" {
+                    break $inline_pair_4: struct.new "tuple//[i32, i32]" { 0: (if $mv$$match_9$1 > 0 -> i32 {
                         $mv$$match_9$1;
                     } else {
-                        break $inline_pair_3: fb_15;
+                        break $inline_pair_4: fb_2;
                     }), 1: 1 };
                 };
-                a = $local_10.0;
-                b = $local_10.1;
+                $sroa_$pattern_temp_0_0_93 = v_14.0;
+                $sroa_$pattern_temp_0_1_94 = v_14.1;
                 $local_11 = $inline_pick_5: block -> ref "tuple//[i32, i32]" {
                     if $mv$$match_9$1 == 0 -> ref "tuple//[i32, i32]" {
                         struct.new "tuple//[i32, i32]" { 0: 10, 1: 0 };
                     } else {
-                        break $inline_pick_5: struct.new "tuple//[i32, i32]" { 0: $sroa_fb_0_95, 1: 8 };
+                        break $inline_pick_5: fb_2;
                     }
                     break $inline_pick_5;
                 };
@@ -148,7 +146,7 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
                 d = $local_11.1;
                 $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(67), used: 0 };
                 $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
-                "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(a, $local_8.buf);
+                "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_$pattern_temp_0_0_93, $local_8.buf);
                 new_used_40 = $local_7.used + 1;
                 if @unlikely(new_used_40 > builtin::array_len($local_7.repr)) {
                     cold_path;
@@ -158,7 +156,7 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
                 $local_7.used = new_used_40;
                 builtin::array_copy<u8>($local_7.repr, start_41, global:multi_value_return_nested_return.wado::$const_obj_1, 0, 1);
                 $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
-                "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(b, $local_8.buf);
+                "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_$pattern_temp_0_1_94, $local_8.buf);
                 new_used_58 = $local_7.used + 1;
                 if @unlikely(new_used_58 > builtin::array_len($local_7.repr)) {
                     cold_path;

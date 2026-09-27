@@ -1,0 +1,9 @@
+// A float literal that rounds past its type's largest finite value.
+
+test {
+    let x: f16 = 65520.0;             // compile error: literal out of range for `f16`: 65520.0
+    let y: f32 = 1e39;                // compile error: literal out of range for `f32`: 1e39
+}
+
+__DATA__
+{"compile_error":"literal out of range for `f16`: 65520.0","compile_errors_contains":["literal out of range for `f32`: 1e39"]}

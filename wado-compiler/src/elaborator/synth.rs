@@ -14,6 +14,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable, range_item};
 
 use super::Elaborator;
 use super::callee::CalleeRef;
+use super::coercion::is_primitive_literal_target;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
@@ -295,9 +296,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     || tt.fq_base_type_name(tt.representation_head(param)) == *head
             }
             ArgClass::IntLit => {
-                tt.is_numeric(param) || tt.wide_int_item(tt.representation_head(param)).is_some()
+                is_primitive_literal_target(&tt, param)
+                    || tt.wide_int_item(tt.representation_head(param)).is_some()
             }
-            ArgClass::FloatLit => tt.is_float(param),
+            ArgClass::FloatLit => tt.is_float(param) || tt.is_half(param),
             ArgClass::StrLit => tt.is_string(tt.representation_head(param)),
             ArgClass::BytesLit => {
                 tt.is_byte_list_representation(param) || tt.is_list_of_open_element(param)

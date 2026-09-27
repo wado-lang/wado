@@ -1,0 +1,12 @@
+// Integer literals out of their target range, in any base.
+
+test {
+    let b: i8 = 128;                  // compile error: literal out of range for `i8`: 128
+    let d: u32 = -1;                  // compile error: literal out of range for `u32`: -1
+    let e: i8 = 0xFF;                 // compile error: literal out of range for `i8`: 0xFF
+    let g: i32 = 0xFFFF_FFFF;         // compile error: literal out of range for `i32`: 0xFFFF_FFFF
+    let i: u32 = 0x1_0000_0000;       // compile error: literal out of range for `u32`: 0x1_0000_0000
+}
+
+__DATA__
+{"compile_error":"literal out of range for `i8`: 128","compile_errors_contains":["literal out of range for `u32`: -1","literal out of range for `i8`: 0xFF","literal out of range for `i32`: 0xFFFF_FFFF","literal out of range for `u32`: 0x1_0000_0000"]}

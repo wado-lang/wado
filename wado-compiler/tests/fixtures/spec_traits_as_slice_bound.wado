@@ -1,0 +1,10 @@
+// A function generic over `AsSlice` reads any of the three sequence types.
+
+fn total<S: AsSlice<Elem = i32>>(xs: S) -> i32 {
+    return xs.iter_value().fold(0, |acc, x| acc + x);
+}
+
+test {
+    let list: List<i32> = [1, 2, 3];
+    assert total(list) == 6 && total(list.to_array()) == 6 && total(list.as_slice()) == 6;
+}

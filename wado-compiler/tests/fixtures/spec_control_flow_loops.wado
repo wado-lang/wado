@@ -1,0 +1,155 @@
+// Quoted by docs/spec-control-flow.md § While Loop, § For Loop, § For-Of Loop,
+// § Infinite Loop and § Break and Continue.
+
+test "while" {
+    let mut i = 0;
+    let mut sum = 0;
+    while i < 10 {
+        sum += i;
+        i = i + 1;
+    }
+    assert sum == 45;
+}
+
+test "while let" {
+    let items: List<i32> = [1, 2, 3];
+    let mut iter = items.into_iter();
+
+    let mut seen: List<i32> = [];
+    while let Some(x) = iter.next() {
+        seen.push(x);
+    }
+    assert seen == [1, 2, 3];
+}
+
+test "C-style for" {
+    let mut sum = 0;
+    for let mut i = 0; i < 10; i = i + 1 {
+        sum += i;
+    }
+    assert sum == 45;
+
+    // With parentheses (also valid)
+    for (let mut i = 0; i < 10; i = i + 1) {
+        sum += i;
+    }
+    assert sum == 90;
+
+    // All parts are optional
+    let mut n = 0;
+    for ;; {
+        n += 1;
+        if n == 3 { break; }
+    }
+    assert n == 3;
+}
+
+test "each iteration has its own bindings" {
+    let mut fs: List<fn() -> i32> = [];
+    for let mut i = 0; i < 3; i += 1 {
+        fs.push(|| i);
+    }
+    assert fs[0]() == 0 && fs[1]() == 1 && fs[2]() == 2;   // not 3, 3 and 3
+}
+
+test "for with a pattern condition" {
+    let items: List<i32> = [10, 20, 30];
+    let mut iter = items.into_iter();
+
+    let mut sum = 0;
+    for ; let Some(x) = iter.next(); {
+        sum += x;
+    }
+    assert sum == 60;
+
+    // With update expression
+    let mut again = items.into_iter();
+    let mut count = 0;
+    for ; let Some(x) = again.next(); count += 1 {
+        assert x == items[count];
+    }
+    assert count == 3;
+}
+
+struct Countdown {
+    n: i32,
+}
+
+impl Iterator for Countdown {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        if self.n == 0 {
+            return null;
+        }
+        self.n -= 1;
+        return Option::Some(self.n + 1);
+    }
+}
+
+test "for-of" {
+    let numbers: List<i32> = [1, 2, 3, 4, 5];
+    let mut sum = 0;
+    for let n of numbers {
+        sum += n;
+    }
+    assert sum == 15;
+
+    // With mutable binding
+    for let mut item of numbers {
+        item = item * 2;  // Can modify the local binding
+        sum += item;
+    }
+    assert sum == 45 && numbers[0] == 1;
+
+    // Custom types that implement IntoIterator also work
+    let my_collection = Countdown { n: 3 };
+    let mut order: List<i32> = [];
+    for let x of my_collection {
+        order.push(x);
+    }
+    assert order == [3, 2, 1];
+}
+
+test "tuple for-of" {
+    let t = [42, "hello", true];
+    let mut out = "";
+    for let v of t {
+        out.push_str(`${v} `);  // expanded to three blocks, each with the correct type
+    }
+    assert out == "42 hello true ";
+}
+
+test "loop" {
+    let mut n = 0;
+    loop {
+        // runs forever until break
+        n += 1;
+        if n == 5 {
+            break;
+        }
+    }
+    assert n == 5;
+}
+
+test "break and continue" {
+    // break example
+    let mut i = 0;
+    while i < 100 {
+        if i == 10 {
+            break;  // exit the loop
+        }
+        i = i + 1;
+    }
+    assert i == 10;
+
+    // continue example
+    let mut kept: List<i32> = [];
+    for let mut j = 0; j < 10; j = j + 1 {
+        if j == 5 {
+            continue;  // skip 5
+        }
+        kept.push(j);
+    }
+    assert kept.len() == 9 && kept[5] == 6;
+}

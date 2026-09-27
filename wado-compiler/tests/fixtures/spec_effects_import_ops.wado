@@ -1,0 +1,28 @@
+// An imported effect operation is called without the `Effect::` prefix.
+
+// Import effect operations
+use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
+use {Environment, Environment::{get_environment, get_arguments}} from "wasi:cli";
+
+pub fn println(message: String) with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    let done = write_via_stream(rx);  // No need for Stdout:: prefix
+    tx.write_all(`${message}\n`.bytes().collect());
+    tx.drop();
+    done.drop();
+}
+
+pub fn env(name: String) -> Option<String> with Environment {
+    let vars = get_environment();  // No need for Environment:: prefix
+    for let [key, value] of vars {
+        if key == name {
+            return Some(value);
+        }
+    }
+    return None;
+}
+
+test {
+    println(`${get_arguments().len()} arguments`);
+    assert env("SPEC_EFFECTS_UNSET_VARIABLE") == null;
+}

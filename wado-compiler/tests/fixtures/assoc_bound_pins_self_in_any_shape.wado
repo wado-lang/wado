@@ -1,0 +1,106 @@
+// An associated type's bound pins the bounded type wherever `Self` appears on
+// its right: bare, inside a generic, or through one of its own associated
+// types. Each builder is a type of its own, so a `Self` read as the builder
+// would not type.
+
+trait Builder with () {
+    type Item;
+    type Output;
+
+    fn add(&mut self, e: Self::Item);
+    fn build(&self) -> Self::Output;
+}
+
+struct Bag {
+    items: List<i32>,
+}
+
+struct BagBuilder {
+    items: List<i32>,
+}
+
+struct MaybeBagBuilder {
+    items: List<i32>,
+}
+
+struct ItemsBuilder {
+    items: List<i32>,
+}
+
+impl Builder for BagBuilder {
+    type Item = i32;
+    type Output = Bag;
+
+    fn add(&mut self, e: i32) { self.items.push(e); }
+    fn build(&self) -> Bag { return Bag { items: self.items }; }
+}
+
+impl Builder for MaybeBagBuilder {
+    type Item = i32;
+    type Output = Option<Bag>;
+
+    fn add(&mut self, e: i32) { self.items.push(e); }
+    fn build(&self) -> Option<Bag> { return Some(Bag { items: self.items }); }
+}
+
+impl Builder for ItemsBuilder {
+    type Item = i32;
+    type Output = List<i32>;
+
+    fn add(&mut self, e: i32) { self.items.push(e); }
+    fn build(&self) -> List<i32> { return self.items; }
+}
+
+trait Plain {
+    type Item;
+    type Maker: Builder<Item = Self::Item, Output = Self>;
+}
+
+trait Wrapped {
+    type Item;
+    type Maker: Builder<Item = Self::Item, Output = Option<Self>>;
+}
+
+trait Listed {
+    type Item;
+    type Maker: Builder<Item = Self::Item, Output = List<Self::Item>>;
+}
+
+impl Plain for Bag {
+    type Item = i32;
+    type Maker = BagBuilder;
+}
+
+impl Wrapped for Bag {
+    type Item = i32;
+    type Maker = MaybeBagBuilder;
+}
+
+impl Listed for Bag {
+    type Item = i32;
+    type Maker = ItemsBuilder;
+}
+
+fn plain<C: Plain>(b: C::Maker, e: C::Item) -> C {
+    let mut b = b;
+    b.add(e);
+    return b.build();
+}
+
+fn wrapped<C: Wrapped>(b: C::Maker, e: C::Item) -> Option<C> {
+    let mut b = b;
+    b.add(e);
+    return b.build();
+}
+
+fn listed<C: Listed>(b: C::Maker, e: C::Item) -> List<C::Item> {
+    let mut b = b;
+    b.add(e);
+    return b.build();
+}
+
+test {
+    assert plain::<Bag>(BagBuilder { items: [] }, 7).items == [7];
+    assert wrapped::<Bag>(MaybeBagBuilder { items: [] }, 8) matches { Some(bag) && bag.items == [8] };
+    assert listed::<Bag>(ItemsBuilder { items: [] }, 9) == [9];
+}

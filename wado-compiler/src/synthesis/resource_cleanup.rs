@@ -981,21 +981,13 @@ fn elab_stmt(
             Flow::Normal
         }
 
-        TirStmtKind::LetDestructure {
-            pattern,
-            is_mut,
-            value,
-        } => {
+        TirStmtKind::LetDestructure { pattern, value } => {
             let value = elab_value_expr(value, owned, cx);
             for live in pattern_resources(&pattern, cx) {
                 owned.push(Some(live));
             }
             out.push(TirStmt {
-                kind: TirStmtKind::LetDestructure {
-                    pattern,
-                    is_mut,
-                    value,
-                },
+                kind: TirStmtKind::LetDestructure { pattern, value },
                 span,
             });
             Flow::Normal

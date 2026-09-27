@@ -1,0 +1,16 @@
+// A world imports whole interfaces and exports interfaces or functions.
+use { Stdout, Environment, Run } from "wasi:cli";
+
+#[cm("example:app/plugin@0.1.0")]
+pub world Plugin {
+    import Stdout;
+    import Environment;
+
+    export Run;                                              // an interface
+    export fn transform(input: String) -> String;            // a function
+    export async fn fetch(url: String) -> Result<String, String>;
+}
+
+test {
+    assert true;   // a world is a declaration: accepting it is the check
+}

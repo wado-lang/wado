@@ -1,0 +1,9 @@
+// A literal nothing coerces is range-checked as `i32`.
+
+test {
+    let k = 4294967296;               // compile error: literal out of range for `i32`: 4294967296
+    let m = -2147483649;              // compile error: literal out of range for `i32`: -2147483649
+}
+
+__DATA__
+{"compile_error":"literal out of range for `i32`: 4294967296","compile_errors_contains":["literal out of range for `i32`: -2147483649"]}

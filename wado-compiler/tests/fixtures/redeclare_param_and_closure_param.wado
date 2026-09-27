@@ -1,0 +1,19 @@
+// A function's body shares its parameters' scope, so a `let` there redeclares
+// a parameter. A closure parameter named like the outer binding is its own
+// name, not a read of the one the `let` hides.
+
+fn f(p: i32) -> i32 {
+    let p = 2;
+    return p;
+}
+
+test {
+    let x = 1;
+    let x = |x: i32| x + 1;
+}
+
+__DATA__
+{
+    "compile_error": "cannot redeclare 'p' in the same scope",
+    "compile_errors_contains": ["cannot redeclare 'x' in the same scope"]
+}

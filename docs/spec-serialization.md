@@ -3,13 +3,20 @@
 `core:serde` is a format-agnostic serialization framework. One pair of traits
 serves every format:
 
+<!-- {"fixture":"spec_serialization_traits.wado"} -->
+
 ```wado
-pub trait Serialize {
+pub trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
-pub trait Deserialize {
+pub trait Deserialize with () {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
+}
+
+test {
+    assert json::to_string(&Reading { c: Celsius { deg: 21 } }).unwrap() == "21";
+    assert json::from_string::<Reading>("21").unwrap().c.deg == 21;
 }
 ```
 
@@ -114,11 +121,19 @@ though the value may be null. `Option<T> = null` is the optional one. For a
 zero-value fallback, write the zero literal (`= 0`, `= ""`, `= false`, `= []`,
 `= null`).
 
+<!-- {"fixture":"spec_serialization_optional_fields.wado"} -->
+
 ```wado
 struct Config {
     host: String,            // required: MissingField if absent
     port: i32 = 8080,        // optional: 8080 if absent
     tags: List<String> = [], // optional: [] if absent
+}
+
+test {
+    let c = from_string::<Config>(`{"host":"h"}`).unwrap();
+    assert c.port == 8080 && c.tags == [];
+    assert from_string::<Config>(`{"port":1}`).unwrap_err().kind matches { MissingField };
 }
 ```
 
@@ -138,12 +153,19 @@ holds.
 no marker to be serializable. An anonymous struct, which no marker can name, is
 serializable the same way:
 
+<!-- {"fixture":"spec_serialization_bound_driven.wado"} -->
+
 ```wado
 use { to_string } from "core:json";
 
 struct Point { x: i32, y: i32 }              // no impl marker needed
-let json = to_string(&Point { x: 1, y: 2 }); // Ok("{\"x\":1,\"y\":2}")
-let anon = to_string(&{ x: 1, y: 2 });       // the same JSON, from an anonymous struct
+
+test {
+    let json = to_string(&Point { x: 1, y: 2 });
+    assert json.unwrap() == `{"x":1,"y":2}`;
+    let anon = to_string(&{ x: 1, y: 2 });       // the same JSON, from an anonymous struct
+    assert anon.unwrap() == json.unwrap();
+}
 ```
 
 The marker `impl Serialize for T;`
@@ -157,14 +179,24 @@ control where that matters.
 
 ## JSON Module (`core:json`)
 
+<!-- {"fixture":"spec_serialization_json.wado"} -->
+
 ```wado
 use { to_string, from_string } from "core:json";
 
-// Serialize to JSON string
-let json = to_string::<User>(&user);   // Result<String, SerializeError>
+struct User { name: String, age: i32 }
 
-// Deserialize from JSON string
-let user = from_string::<User>(json);  // Result<User, DeserializeError>
+test {
+    let user = User { name: "Alice", age: 30 };
+
+    // Serialize to JSON string
+    let json = to_string::<User>(&user).unwrap();
+    assert json == `{"name":"Alice","age":30}`;
+
+    // Deserialize from JSON string
+    let back = from_string::<User>(json).unwrap();
+    assert back.name == "Alice" && back.age == 30;
+}
 ```
 
 Serializing a `NaN` or an infinite float is an `Err`. Deserializing malformed
@@ -182,14 +214,24 @@ array of its fields in declaration order, with no field names. It writes a unit
 variant case as its discriminant integer, and a payload case as
 `[discriminant, payload]`.
 
+<!-- {"fixture":"spec_serialization_json_nsd.wado"} -->
+
 ```wado
 use { to_string, from_string } from "core:json_nsd";
 
-// Struct as positional array
-let json = to_string::<User>(&user);   // Result: Ok("[\"Alice\",30]")
+struct User { name: String, age: i32 }
 
-// Deserialize from positional array
-let user = from_string::<User>(`["Alice",30]`);  // Result<User, DeserializeError>
+test {
+    let user = User { name: "Alice", age: 30 };
+
+    // Struct as positional array
+    let json = to_string::<User>(&user);
+    assert json.unwrap() == `["Alice",30]`;
+
+    // Deserialize from positional array
+    let back = from_string::<User>(`["Alice",30]`).unwrap();
+    assert back.name == "Alice" && back.age == 30;
+}
 ```
 
 ## Command-Line Arguments (`core:args`)
@@ -197,6 +239,8 @@ let user = from_string::<User>(`["Alice",30]`);  // Result<User, DeserializeErro
 `core:args` is a non-self-describing, parse-only `Deserializer` over `argv`. An
 argument type is an ordinary struct. Each field is a `--long` option, unless
 `#[wire(positional)]` marks it as a positional.
+
+<!-- {"fixture":"spec_serialization_args.wado"} -->
 
 ```wado
 use { parse } from "core:args";
@@ -207,7 +251,10 @@ struct Cli {
     verbose: bool = false,
 }
 
-let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
+test {
+    let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]).unwrap();
+    assert cli.input == "in.txt" && cli.jobs == 4 && cli.verbose;
+}
 ```
 
 `parse::<T>(argv)` takes the arguments as a `List<String>` and performs no
@@ -258,6 +305,8 @@ parses the tokens after it. A tag naming no case is `UnknownSubcommand`.
 `#[wire(name_policy = "kebab-case")]` on the variant makes `AddRemote` the tag
 `add-remote`; no case folding happens beyond the wire name.
 
+<!-- {"fixture":"spec_serialization_subcommands.wado"} -->
+
 ```wado
 struct AddArgs { #[wire(positional)] path: String, all: bool = false }
 
@@ -273,6 +322,12 @@ variant RemoteCmd { List }
 struct Cli {
     verbose: bool = false,
     #[wire(positional)] command: Command,
+}
+
+test {
+    let cli = parse::<Cli>(["--verbose", "add", "--all", "x"]).unwrap();
+    assert cli.verbose && cli.command matches { Add(a) && a.all && a.path == "x" };
+    assert parse::<Cli>(["remote", "list"]).unwrap().command matches { Remote(List) };
 }
 ```
 

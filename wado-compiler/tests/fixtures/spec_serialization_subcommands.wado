@@ -1,0 +1,25 @@
+// A variant-typed positional is a subcommand set.
+
+use { parse } from "core:args";
+
+struct AddArgs { #[wire(positional)] path: String, all: bool = false }
+
+#[wire(name_policy = "kebab-case")]
+variant Command {
+    Add(AddArgs),          // tag `add`
+    Remote(RemoteCmd),     // nested: the payload holds another variant
+}
+
+#[wire(name_policy = "kebab-case")]
+variant RemoteCmd { List }
+
+struct Cli {
+    verbose: bool = false,
+    #[wire(positional)] command: Command,
+}
+
+test {
+    let cli = parse::<Cli>(["--verbose", "add", "--all", "x"]).unwrap();
+    assert cli.verbose && cli.command matches { Add(a) && a.all && a.path == "x" };
+    assert parse::<Cli>(["remote", "list"]).unwrap().command matches { Remote(List) };
+}

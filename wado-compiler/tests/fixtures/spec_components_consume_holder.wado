@@ -1,0 +1,15 @@
+// A consuming method may move the resource out of what holds it.
+use { Fields } from "wasi:http";
+
+struct Holder { f: Fields }
+
+impl Holder {
+    fn into_fields(self) -> Fields {
+        return self.f;       // OK: the holder is consumed
+    }
+}
+
+test {
+    let holder = Holder { f: Fields::new() };
+    assert holder.into_fields().copy_all().is_empty();
+}

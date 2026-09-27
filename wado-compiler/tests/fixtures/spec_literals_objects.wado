@@ -1,0 +1,36 @@
+// Object literals: `TreeMap` construction, spread and access.
+
+use { TreeMap } from "core:collections";
+
+test {
+    let mut map = TreeMap::<String, i32>::new();
+    map["x"] = 10;                   // insert or overwrite
+    map["y"] = 20;
+
+    let v = map["x"];                // panics if key not found
+    let opt = map.get("x");          // returns Option<V>
+    assert !map.try_insert("x", 99); // inserts only if absent; reports whether it did
+    assert v == 10 && opt == Option::Some(10) && map["x"] == 10;
+
+    // Keys preserve insertion order
+    let mut keys = map.keys();  // an iterator over the keys, in insertion order
+    assert *keys.next().unwrap() == "x" && *keys.next().unwrap() == "y";
+
+    // Functional-update spread: seed from a base map, then override/add keys
+    let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
+    assert m2["x"] == 99 && m2["y"] == 20 && m2["w"] == 40;
+}
+
+struct User { name: String }
+
+test "access" {
+    let user = User { name: "Alice" };
+    let map: TreeMap<String, i32> = { key: 1 };
+
+    // Struct: dot notation
+    assert user.name == "Alice";
+
+    // TreeMap: bracket notation or methods
+    assert map["key"] == 1;                    // panics if key not found
+    assert map.get("key") == Option::Some(1);  // returns Option<V>
+}

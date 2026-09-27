@@ -1,0 +1,28 @@
+// Iterating a list: for-of, an explicit iterator, collect, and terminals.
+
+use { println } from "core:cli";
+
+test {
+    let arr: List<i32> = [1, 2, 3, 4, 5];
+
+    // for-of uses IntoIterator automatically
+    for let x of arr {
+        println(`${x}`);
+    }
+
+    // Explicit iterator
+    let mut iter = arr.iter_value();
+    while let Some(x) = iter.next() {
+        println(`${x}`);
+    }
+
+    // Collect remaining elements
+    let mut rest_iter = arr.iter_value();
+    rest_iter.next();  // skip first
+    let rest = rest_iter.collect();
+    assert rest == [2, 3, 4, 5];
+
+    // Terminals compose with the adapters
+    let total = arr.iter_value().filter(|x| x % 2 == 1).sum();
+    assert total == Option::Some(9);
+}

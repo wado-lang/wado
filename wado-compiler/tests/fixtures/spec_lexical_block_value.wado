@@ -1,0 +1,11 @@
+// A block's value is its last expression, with or without a trailing `;`.
+
+fn g() {}
+
+test {
+    let c = builtin::black_box(true);
+    let a = if c { 1 } else { 2 };
+    let b = if c { 1; } else { 2; };       // a trailing `;` keeps the value
+    let u = if c { g(); () } else { () };  // write `()` to mean `()`
+    assert a == 1 && b == 1 && u == ();
+}

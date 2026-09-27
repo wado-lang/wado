@@ -16,11 +16,12 @@ use lexopt::Arg::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use wado_compiler::hashmap::IndexMap;
 use wasmtime::component::{Component, Linker};
-use wasmtime::{Engine, GuestProfiler, UpdateDeadline};
+use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
 use crate::discover;
+use crate::eval_host::{EvalHost, EvalSession};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
@@ -35,6 +36,15 @@ const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Coarse epoch interval to keep thread wake-ups down. Cost: up to 1s
 // overshoot, which is fine because timeouts only fire on runaway tests.
 const EPOCH_INTERVAL_MS: u64 = 1000;
+
+/// The epoch ticks `span` takes, rounded up and never zero.
+fn epoch_ticks(span: Duration) -> u64 {
+    let ticks = span
+        .as_millis()
+        .div_ceil(u128::from(EPOCH_INTERVAL_MS))
+        .max(1);
+    u64::try_from(ticks).expect("a timeout fits in u64 ticks")
+}
 
 pub struct TestOptions {
     /// First entry is the root package (label `"."` outside a `wado.toml`
@@ -495,7 +505,8 @@ pub(crate) struct LoadFailure {
 ///
 /// `cpu` caps total CPU-bound tasks across all three stages — every worker
 /// acquires one permit. This makes `--parallel N` a truthful global cap
-/// that per-stage buffer sizes can't multiply.
+/// that per-stage buffer sizes can't multiply. It is the whole run's
+/// budget, shared with `core:eval`, whose compiles can outlive a package.
 ///
 /// `modules` caps live wasmtime `Component`s independently of channel
 /// buffering, bounding peak memory. The permit is held via
@@ -506,11 +517,11 @@ struct PipelineBudget {
 }
 
 impl PipelineBudget {
-    fn new(parallel_cap: usize, compile_jobs: usize, execute_jobs: usize) -> Self {
+    fn new(cpu: Arc<Semaphore>, compile_jobs: usize, execute_jobs: usize) -> Self {
         // A zero-permit semaphore is a stage that never runs.
-        assert!(parallel_cap > 0 && compile_jobs > 0 && execute_jobs > 0);
+        assert!(compile_jobs > 0 && execute_jobs > 0);
         Self {
-            cpu: Arc::new(Semaphore::new(parallel_cap)),
+            cpu,
             modules: Arc::new(Semaphore::new(compile_jobs + execute_jobs)),
         }
     }
@@ -569,6 +580,7 @@ fn format_panic_payload(payload: &Box<dyn Any + Send>) -> String {
 
 struct TestJob {
     module: Arc<LoadedModule>,
+    eval_host: Arc<EvalHost>,
     test_name: String,
     display_name: String,
     expect_trap: bool,
@@ -594,11 +606,25 @@ pub(crate) struct TestResult {
     pub(crate) outcome: TestOutcome,
     pub(crate) error: Option<String>,
     pub(crate) duration: Duration,
+    /// Fuel the test's store spent, instantiation included, under
+    /// `--report-fuel`.
+    pub(crate) fuel: Option<u64>,
     /// Captured guest stdout/stderr (see `runtime::create_test_store`).
     /// Empty when nothing was printed, or when the test never got as far
     /// as calling its test function (`fail_result`'s setup-time failures).
     pub(crate) stdout: String,
     pub(crate) stderr: String,
+}
+
+impl TestResult {
+    /// What the test cost: its duration, and its fuel where it was metered.
+    pub(crate) fn cost(&self) -> String {
+        let duration = format_duration(self.duration);
+        match self.fuel {
+            Some(fuel) => format!("{duration}, fuel {fuel}"),
+            None => duration,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -837,7 +863,7 @@ fn load_module(
             runtime_knobs,
         )?);
         let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
-        let linker = Arc::new(runtime::create_linker(&component)?);
+        let linker = Arc::new(runtime::create_test_linker(&component)?);
         let profiler = match (profile, profiler_slot) {
             (ProfileMode::Guest { interval_ms, .. }, Some(slot)) => {
                 let interval = Duration::from_millis(*interval_ms);
@@ -1221,6 +1247,7 @@ async fn run_execute_stage(
     parallelism: usize,
     cpu_budget: Arc<Semaphore>,
     preopened_dirs: Arc<Vec<(String, String)>>,
+    eval_host: Arc<EvalHost>,
     observer: Arc<StageObserver>,
     result_tx: mpsc::Sender<TestResult>,
     reporter: Arc<dyn TestReporter>,
@@ -1235,6 +1262,7 @@ async fn run_execute_stage(
             .iter()
             .map(|t| TestJob {
                 module: module.clone(),
+                eval_host: Arc::clone(&eval_host),
                 test_name: t.export_name.clone(),
                 display_name: t.display_name(),
                 expect_trap: t.parsed.kind == TestKind::ExpectTrap,
@@ -1270,12 +1298,14 @@ async fn run_execute_stage(
                 // few I/O-dominated tests pay a small fairness cost
                 // but the vast majority of fixtures are CPU-bound
                 // and would otherwise trip the 5 s default timeout
-                // under contention on 2 vCPU CI runners.
-                let _cpu_permit = cpu_budget
+                // under contention on 2 vCPU CI runners. The test's
+                // `EvalSession` holds it, since the test gives it back
+                // while it waits inside `eval`.
+                let cpu_permit = cpu_budget
                     .acquire_owned()
                     .await
                     .expect("cpu semaphore closed");
-                run_single_test_safe(job, &preopened_dirs).await
+                run_single_test_safe(job, cpu_permit, &preopened_dirs).await
             })
         })
         .buffer_unordered(parallelism.max(1));
@@ -1418,11 +1448,12 @@ impl Drop for EpochTicker {
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
-    parallel_cap: usize,
+    cpu: Arc<Semaphore>,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
+    eval_host: Arc<EvalHost>,
     no_run: bool,
     profile: ProfileMode,
     runtime_knobs: RuntimeKnobs,
@@ -1431,11 +1462,7 @@ async fn run_pipeline(
     run_cache: Arc<RunCache>,
 ) -> PipelineOutcome {
     let opt_level = flags.knobs.opt_level.to_wasmtime();
-    let budget = Arc::new(PipelineBudget::new(
-        parallel_cap,
-        compile_jobs,
-        execute_jobs,
-    ));
+    let budget = Arc::new(PipelineBudget::new(cpu, compile_jobs, execute_jobs));
 
     // Inter-stage channel capacities: small. The `modules` semaphore
     // and per-stage `buffer_unordered` caps are what actually limit
@@ -1516,6 +1543,7 @@ async fn run_pipeline(
             execute_jobs,
             budget.cpu.clone(),
             preopened_dirs,
+            eval_host,
             execute_observer.clone(),
             result_tx,
             reporter.clone(),
@@ -1578,7 +1606,7 @@ async fn collect_into_vec<T>(mut rx: mpsc::Receiver<T>) -> Vec<T> {
 }
 
 /// Build a `TestResult` for a setup-time failure (store/linker/instance/etc.).
-fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
+fn fail_result(job: &TestJob, error: String, start: Instant, fuel: Option<u64>) -> TestResult {
     TestResult {
         file_path: job.module.path.clone(),
         test_name: job.test_name.clone(),
@@ -1586,6 +1614,7 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
         outcome: TestOutcome::Fail,
         error: Some(error),
         duration: start.elapsed(),
+        fuel,
         stdout: String::new(),
         stderr: String::new(),
     }
@@ -1594,27 +1623,39 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
 /// `run_single_test` wrapped in `catch_unwind` so a panic anywhere
 /// inside (host-side bug, wasmtime debug assertion, allocator OOM)
 /// becomes a per-test `Fail` rather than aborting the whole pipeline.
-async fn run_single_test_safe(job: TestJob, preopened_dirs: &[(String, String)]) -> TestResult {
+async fn run_single_test_safe(
+    job: TestJob,
+    cpu_permit: OwnedSemaphorePermit,
+    preopened_dirs: &[(String, String)],
+) -> TestResult {
     let start = Instant::now();
-    let panic_or_result = AssertUnwindSafe(run_single_test(&job, preopened_dirs))
+    let panic_or_result = AssertUnwindSafe(run_single_test(&job, cpu_permit, preopened_dirs))
         .catch_unwind()
         .await;
     panic_or_result.unwrap_or_else(|payload| {
         let cause = format_panic_payload(&payload);
-        fail_result(&job, format!("test worker panicked: {cause}"), start)
+        fail_result(&job, format!("test worker panicked: {cause}"), start, None)
     })
 }
 
 /// Run a single test in its own Store
-async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> TestResult {
+async fn run_single_test(
+    job: &TestJob,
+    cpu_permit: OwnedSemaphorePermit,
+    preopened_dirs: &[(String, String)],
+) -> TestResult {
     let start = Instant::now();
     let module = job.module.as_ref();
 
-    let (mut store, stdout_pipe, stderr_pipe) =
-        match runtime::create_test_store(&module.engine, preopened_dirs, &module.path) {
-            Ok(v) => v,
-            Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
-        };
+    let (mut store, stdout_pipe, stderr_pipe) = match runtime::create_test_store(
+        &module.engine,
+        preopened_dirs,
+        &module.path,
+        EvalSession::new(Arc::clone(&job.eval_host), &module.path, cpu_permit),
+    ) {
+        Ok(v) => v,
+        Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),
+    };
 
     // Profiling samples on every epoch tick, so it takes the deadline the
     // timeout was counted in; `parse_args` says so on the flag.
@@ -1627,8 +1668,21 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         });
         store.set_epoch_deadline(1);
     } else {
-        let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
-        store.set_epoch_deadline(deadline_ticks);
+        // Time inside `eval` does not count, so reaching the deadline grants
+        // what is left of the test's own time. It counts from the current
+        // epoch, which an `eval` may have carried far past the deadline.
+        let timeout = Duration::from_millis(job.timeout_ms);
+        store.epoch_deadline_callback(move |mut store_ctx| {
+            let own = start
+                .elapsed()
+                .saturating_sub(store_ctx.data_mut().eval_session().paused());
+            let left = timeout.saturating_sub(own);
+            if left.is_zero() {
+                return Err(Trap::Interrupt.into());
+            }
+            Ok(UpdateDeadline::Continue(epoch_ticks(left)))
+        });
+        store.set_epoch_deadline(epoch_ticks(timeout));
     }
 
     let instance = match module
@@ -1637,7 +1691,10 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         .await
     {
         Ok(inst) => inst,
-        Err(e) => return fail_result(job, format!("failed to instantiate: {e:#}"), start),
+        Err(e) => {
+            let fuel = runtime::fuel_spent(&store);
+            return fail_result(job, format!("failed to instantiate: {e:#}"), start, fuel);
+        }
     };
 
     let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &job.test_name);
@@ -1694,6 +1751,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         outcome,
         error,
         duration: start.elapsed(),
+        fuel: runtime::fuel_spent(&store),
         stdout: String::from_utf8_lossy(&stdout_pipe.contents()).into_owned(),
         stderr: String::from_utf8_lossy(&stderr_pipe.contents()).into_owned(),
     }
@@ -1908,15 +1966,15 @@ pub(crate) fn display_test_results(
         let mut sorted_results: Vec<_> = file_results.clone();
         sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
         for result in sorted_results {
-            let dur = format_duration(result.duration);
+            let cost = result.cost();
             match result.outcome {
                 TestOutcome::Pass => {
-                    println!("  ok   {} ({dur})", result.display_name);
+                    println!("  ok   {} ({cost})", result.display_name);
                     print_captured_output(&result.stdout, &result.stderr, "    ");
                     report.test_passed += 1;
                 }
                 TestOutcome::Fail => {
-                    println!("  \x1b[31mFAILED\x1b[0m {} ({dur})", result.display_name);
+                    println!("  \x1b[31mFAILED\x1b[0m {} ({cost})", result.display_name);
                     report.fail_entries.push(FailEntry {
                         file_path: result.file_path.clone(),
                         display_name: result.display_name.clone(),
@@ -1928,7 +1986,7 @@ pub(crate) fn display_test_results(
                 }
                 TestOutcome::TodoPending => {
                     println!(
-                        "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({dur})",
+                        "  \x1b[33m·\x1b[0m {} \x1b[33m# TODO\x1b[0m ({cost})",
                         result.display_name
                     );
                     print_captured_output(&result.stdout, &result.stderr, "    ");
@@ -1941,7 +1999,7 @@ pub(crate) fn display_test_results(
                 }
                 TestOutcome::TodoResolved => {
                     println!(
-                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({dur})",
+                        "  \x1b[36m✓\x1b[0m {} \x1b[36m# TODO resolved\x1b[0m ({cost})",
                         result.display_name
                     );
                     if let Some(ref error) = result.error {
@@ -2063,11 +2121,12 @@ fn tally_test_results(results: &[TestResult]) -> (u32, u32, u32, u32) {
 async fn run_one_package(
     pkg_run: &PackageRun,
     flags: Arc<CompileFlags>,
-    parallel_cap: usize,
+    cpu: Arc<Semaphore>,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
+    eval_host: Arc<EvalHost>,
     show_banner: bool,
     no_run: bool,
     profile: ProfileMode,
@@ -2081,11 +2140,12 @@ async fn run_one_package(
     let outcome = run_pipeline(
         &pkg_run.paths,
         flags,
-        parallel_cap,
+        cpu,
         compile_jobs,
         load_jobs,
         execute_jobs,
         preopened_dirs,
+        eval_host,
         no_run,
         profile,
         runtime_knobs,
@@ -2259,10 +2319,10 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
     // `jobs` (= `--parallel N`, default `cpus`) is the **true** cap
-    // on peak in-flight CPU work, enforced by the pipeline's shared
-    // `cpu` semaphore (`PipelineBudget::cpu`): every per-fixture
-    // worker — compile, load, execute — acquires one CPU permit
-    // before doing its work. Per-stage `*_jobs` caps below only
+    // on peak in-flight CPU work, enforced by the run's shared `cpu`
+    // semaphore: every per-fixture worker — compile, load, execute —
+    // and every `eval` compile acquires one CPU permit before doing
+    // its work. Per-stage `*_jobs` caps below only
     // shape queueing depth and how upstream backpressure is
     // distributed; they cannot exceed `jobs` in actual concurrency.
     //
@@ -2271,6 +2331,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // load workers on top of internal Cranelift threading thrashes
     // more than it helps. The shared cpu semaphore enforces the
     // cross-stage total either way.
+    let cpu = Arc::new(Semaphore::new(jobs));
     let compile_jobs = jobs;
     let load_jobs = (jobs / 2).max(1);
     let execute_jobs = jobs;
@@ -2287,6 +2348,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
+    let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&cpu), jobs));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
@@ -2296,11 +2358,12 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
         let totals = run_one_package(
             pkg_run,
             Arc::clone(&flags),
-            jobs,
+            Arc::clone(&cpu),
             compile_jobs,
             load_jobs,
             execute_jobs,
             preopened_dirs.clone(),
+            Arc::clone(&eval_host),
             multi_pkg,
             no_run,
             profile.clone(),

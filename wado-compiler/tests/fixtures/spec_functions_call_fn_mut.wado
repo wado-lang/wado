@@ -1,0 +1,11 @@
+// Calling a `fn mut` requires a mutable root binding.
+
+fn run(mut f: fn mut(i32)) { f(1); f(2); }   // `mut f` is required
+
+test {
+    let mut count = 0;
+    let mut c = || count += 1;                   // `mut c` is required
+    c();
+    run(|x| count += x);
+    assert count == 4;
+}

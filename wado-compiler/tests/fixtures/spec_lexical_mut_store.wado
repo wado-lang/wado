@@ -1,0 +1,9 @@
+// A store to an element needs a `mut` binding.
+
+test {
+    let xs: List<i32> = [1, 2, 3];
+    xs[0] = 9;       // Error: the store roots at an immutable binding
+}
+
+__DATA__
+{"compile_error": "cannot assign into immutable 'xs'"}
