@@ -2915,13 +2915,13 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             if opt_scan_pos >= 0 {
                 p.site = 8;
                 p.atn_ret_pending = 47;
-                _parse_expr(p, 0);
+                _parse_expr(p);
                 if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
                     p.take();
                     p.site = 9;
                     p.atn_ret_pending = 56;
-                    _parse_expr(p, 0);
+                    _parse_expr(p);
                     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
                 }
             }

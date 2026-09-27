@@ -924,6 +924,7 @@ the compiled fast path:**
    competes with the loop for a shared delimiter (`'between' expr 'and' expr`
    against `expr 'and' expr`; fixture `lr_between.g4`), or when one LR
    alternative's suffix is a proper prefix of another's (`expr 'x' expr`
+<<<<<<< HEAD
    against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). A rule is
    also routed here when an LR alternative's suffix can start with a `.` or a
    `~X`. That start may be the suffix's first element, sit behind a rule or a
@@ -933,6 +934,22 @@ the compiled fast path:**
    `lr_wildcard_postfix.g4` and `lr_open_ended_rule_suffix.g4`. Its mid
    operand is ANTLR4's `expr[0]`. The loop takes a token an enter edge admits,
    and the full simulator decides instead in two cases. One is a caller that
+||||||| 9b52d7a43
+   against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). Its mid
+   operand is ANTLR4's `expr[0]`. The loop takes a token an enter edge admits,
+   and the full simulator decides instead in two cases. One is a caller that
+=======
+   against `expr 'x' expr 'y' expr`; fixture `lr_shared_lead.g4`). A third
+   reason is a self-reference nested in a subrule of an LR alternative that a
+   loop operator can follow inside that alternative (`expr (',' expr)* '>>'
+   expr`; fixture `lr_nested_self_ref.g4`). ANTLR4 calls a nested reference as
+   a plain `expr[0]`, so it climbs a `'>>'` exactly when another is left over
+   for the enclosing alternative. No precedence floor says that. A nested
+   reference no loop operator can follow inside its alternative stays static,
+   as a plain call. A routed rule's mid operand is ANTLR4's `expr[0]`. The loop
+   takes a token an enter edge admits, and the full simulator decides instead
+   in two cases. One is a caller that
+>>>>>>> worktree-agent-a80b3309ceab67b82
    must take the token. The other is a caller's loop that can take it through
    an alternative this operand's precedence excludes (`lr_atn_trailing.g4`).
    The same shape inside an LR alternative (SQLite's
