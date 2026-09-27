@@ -1308,10 +1308,11 @@ fn binary_body(op: &String, lhs: &String, rhs: &String) -> String {
 }
 
 /// One element `v` of primitive `from` as `to`, as ONNX's `Cast` converts it:
-/// a bool is 1 or 0, and anything nonzero is true.
+/// a bool is 1 or 0, and anything nonzero is true. The binding the map lands in
+/// states no type, so a literal the body returns states its own.
 fn cast_body(from: &String, to: &String) -> String {
     if *from == "bool" {
-        return if *to == "i64" { "if v { 1 } else { 0 }" } else { "if v { 1.0 } else { 0.0 }" };
+        return `if v { 1 as ${to} } else { 0 as ${to} }`;
     }
     if *to == "bool" {
         return if *from == "i64" { "v != 0" } else { "v != 0.0" };

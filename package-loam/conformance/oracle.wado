@@ -35,12 +35,13 @@ fn known_of(bytes: ByteList) -> Known {
 pub global TOLERANCE: f32 = 1e-6;
 
 /// `Sqrt` of a negative element is NaN, and the two implementations agreeing
-/// means agreeing on where those sit, which `==` never reports.
+/// means agreeing on where those sit, which `==` never reports. An infinity is
+/// equal or not close at all, since the difference of two is NaN.
 pub fn assert_close(got: &List<f32>, want: &List<f32>) {
     assert got.len() == want.len();
     for let mut i = 0; i < want.len(); i += 1 {
         assert got[i].is_nan() == want[i].is_nan();
-        if !want[i].is_nan() {
+        if !want[i].is_nan() && got[i] != want[i] {
             assert f32::abs(got[i] - want[i]) < TOLERANCE * f32::max(1.0, f32::abs(want[i]));
         }
     }

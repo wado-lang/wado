@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
-import { FLOAT, INT32, INT64, message, tensorProto, text } from '../tests/onnx_proto.mjs';
+import { FLOAT, INT32, INT64, modelProto, nodeProto, tensorProto, text, valueInfo } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
 
@@ -38,7 +38,7 @@ const scalars = {
 };
 
 // Every case reads `S = Shape(X)`, and the nodes it lists after that.
-const node = (op, inputs, output, attrs = []) => ({ op, inputs, output, attrs });
+const node = (op, inputs, output, attrs = {}) => ({ op, inputs, outputs: [output], attrs });
 // `N` as a scalar: a scalar index gathers one element out of `S`, dropping the axis.
 const length = node('Gather', ['S', 'ScalarZero'], 'N');
 const cases = [
@@ -65,47 +65,27 @@ const cases = [
   ['RangeBackFromLength', [length, node('Range', ['N', 'ScalarZero', 'ScalarMinusOne'], 'RangeBackFromLength')]],
   ['RangeBackByTwo', [length, node('Range', ['N', 'ScalarZero', 'ScalarMinusTwo'], 'RangeBackByTwo')]],
   ['CastWraps', [
-    node('Cast', ['Big'], 'BigInt32', [['to', INT32]]),
-    node('Cast', ['BigInt32'], 'CastWraps', [['to', INT64]]),
+    node('Cast', ['Big'], 'BigInt32', { to: INT32 }),
+    node('Cast', ['BigInt32'], 'CastWraps', { to: INT64 }),
   ]],
   ['CastWrapsLength', [
     node('Mul', ['S', 'Big'], 'SBig'),
-    node('Cast', ['SBig'], 'SBigInt32', [['to', INT32]]),
-    node('Cast', ['SBigInt32'], 'CastWrapsLength', [['to', INT64]]),
+    node('Cast', ['SBig'], 'SBigInt32', { to: INT32 }),
+    node('Cast', ['SBigInt32'], 'CastWrapsLength', { to: INT64 }),
   ]],
   ['ReshapeKeepSplit', [
-    node('Concat', ['Zero', 'Two', 'MinusOne'], 'KeepSplitShape', [['axis', 0]]),
+    node('Concat', ['Zero', 'Two', 'MinusOne'], 'KeepSplitShape', { axis: 0 }),
     node('Reshape', ['P', 'KeepSplitShape'], 'ReshapeKeepSplit'),
   ]],
   ['ReshapeFlat', [node('Reshape', ['P', 'MinusOne'], 'ReshapeFlat')]],
   ['ReshapeRestFirst', [
-    node('Concat', ['MinusOne', 'Two'], 'RestFirstShape', [['axis', 0]]),
+    node('Concat', ['MinusOne', 'Two'], 'RestFirstShape', { axis: 0 }),
     node('Reshape', ['P', 'RestFirstShape'], 'ReshapeRestFirst'),
   ]],
 ];
 
-// ValueInfoProto: name = 1, type = 2; TypeProto.tensor_type = 1;
-// Tensor: elem_type = 1, shape = 2; TensorShapeProto.dim = 1;
-// Dimension: dim_value = 1, dim_param = 2.
-function valueInfo(name, elemType, dims) {
-  const dim = (d) => [1, typeof d === 'string' ? [[2, text(d)]] : [[1, d]]];
-  const shape = dims === null ? [] : [[2, dims.map(dim)]];
-  return [[1, text(name)], [2, [[1, [[1, elemType], ...shape]]]]];
-}
-
 function int64Initializer(name, value, dims) {
   return tensorProto(name, INT64, dims, new Uint8Array(new BigInt64Array([value]).buffer));
-}
-
-// NodeProto: input = 1, output = 2, op_type = 4, attribute = 5;
-// AttributeProto: name = 1, i = 3, type = 20 (INT = 2).
-function nodeProto({ op, inputs, output, attrs }) {
-  return [
-    ...inputs.map((i) => [1, text(i)]),
-    [2, text(output)],
-    [4, text(op)],
-    ...attrs.map(([name, i]) => [5, [[1, text(name)], [3, i], [20, 2]]]),
-  ];
 }
 
 const inputs = {
@@ -116,7 +96,6 @@ const inputs = {
 const iota = (count) => Float32Array.from({ length: count }, (_, i) => i);
 
 // GraphProto: node = 1, name = 2, initializer = 5, input = 11, output = 12.
-// ModelProto: ir_version = 1, graph = 7, opset_import = 8 (version = 2).
 function model(name, nodes) {
   const read = new Set(nodes.flatMap((n) => n.inputs));
   const all = read.has('S') ? [node('Shape', ['X'], 'S'), ...nodes] : nodes;
@@ -129,7 +108,7 @@ function model(name, nodes) {
     ...Object.entries(inputs).filter(([i]) => all.some((n) => n.inputs.includes(i))).map(([i, { dims }]) => [11, valueInfo(i, FLOAT, dims)]),
     [12, valueInfo(name, elemType, null)],
   ];
-  return message([[1, 8], [7, graph], [8, [[2, 13]]]]);
+  return modelProto(graph, 13);
 }
 
 mkdirSync(join(here, 'semantics'), { recursive: true });
