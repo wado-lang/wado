@@ -649,17 +649,16 @@ g (float[2, 4, 8] X) => (float[1, 4, 1] Y)
     assert out.contains("let Y = reduce(X, [0, 2], 0.0, |x, y| x + y);");
 }
 
-test "a reduction that drops its axes names itself" {
+test "a reduction that drops its axes reshapes the kept ones away" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4] Y)
 {
     Y = ReduceMean <axes = [-1], keepdims = 0> (X)
 }
 `;
-    let e = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap_err();
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert `${e}` == "Y = ReduceMean: no kernel drops a reduced axis";
-    assert e matches { Refused(Refusal { op: "ReduceMean", .. }) };
+    assert out.contains("let Y = reshape::<f32, [Batch, Seq, Embed], [Batch, Seq]>(&reduce_mean(X, [2]), [2, 4]);");
 }
 
 fn is_error<E: Error>() {
@@ -1003,7 +1002,7 @@ test "an embedding lookup is a row gather, and a folded index tensor is a litera
     assert out.contains("let F = gather_rows(&weights.P, &Q);");
 }
 
-test "Gather along any axis but the first stops the build" {
+test "Gather along any axis but the first lowers to gather, the axes spelled" {
     let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {
         Y = Gather<axis = 1>(W, I)
     }`;
@@ -1011,9 +1010,8 @@ test "Gather along any axis but the first stops the build" {
         rule("I", ["Pick"]),
         rule("W", ["Vocab", "Hidden"]),
     ];
-    let e = generate(source, layout).unwrap_err();
-    assert `${e}` == "Y = Gather: no kernel gathers along axis 1";
-    assert e matches { Refused(Refusal { node: "Y", .. }) };
+    let out = generate(source, layout).unwrap();
+    assert out.contains("let Y = gather::<f32, [Vocab], Hidden, [], [Pick]>(&weights.W, I, 1);");
 }
 
 test "a Cast to the element a tensor already has computes nothing" {

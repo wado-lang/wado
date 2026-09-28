@@ -192,20 +192,42 @@ pub fn gather_rows<E, Row, ..Rest, ..Ix>(
     data: &Tensor<E, [Row, ..Rest]>,
     indices: &Tensor<i64, [..Ix]>,
 ) -> Tensor<E, [..Ix, ..Rest]> {
-    let rows = data.extents[0] as i64;
-    let mut extents = indices.extents;
-    let mut width = 1;
-    for let i of 1..<data.extents.len() {
-        extents.push(data.extents[i]);
-        width *= data.extents[i];
-    }
+    return gathered(&data.data, &data.extents, indices, 0);
+}
+
+/// `Gather` along `axis`: the index axes take its place, and each index names
+/// one of its positions. The caller spells the axes, since the index axes land
+/// between two packs.
+pub fn gather<E, ..Pre, Along, ..Post, ..Ix>(
+    data: &Tensor<E, [..Pre, Along, ..Post]>,
+    indices: &Tensor<i64, [..Ix]>,
+    axis: i32,
+) -> Tensor<E, [..Pre, ..Ix, ..Post]> {
+    return gathered(&data.data, &data.extents, indices, axis);
+}
+
+/// A negative index counts from the end.
+fn gathered<E, Ix, Out>(
+    data: &List<E>,
+    data_extents: &List<i32>,
+    indices: &Tensor<i64, Ix>,
+    axis: i32,
+) -> Tensor<E, Out> {
+    let along = data_extents[axis];
+    let outer = element_count(&data_extents[0..<axis].to_list());
+    let inner = element_count(&data_extents[axis + 1..<data_extents.len()].to_list());
+    let mut extents = data_extents[0..<axis].to_list();
+    extents.extend(&indices.extents);
+    extents.extend(&data_extents[axis + 1..<data_extents.len()].to_list());
     let mut out = List::<E>::with_capacity(element_count(&extents));
-    for let index of indices.data {
-        let row = if index < 0 { index + rows } else { index };
-        assert 0 <= row < rows;
-        let base = row as i32 * width;
-        for let k of 0..<width {
-            out.push(data.data[base + k]);
+    for let o of 0..<outer {
+        for let index of indices.data {
+            let at = if index < 0 { index + along as i64 } else { index };
+            assert 0 <= at < along as i64;
+            let base = (o * along + at as i32) * inner;
+            for let k of 0..<inner {
+                out.push(data[base + k]);
+            }
         }
     }
     return Tensor { data: out, extents };

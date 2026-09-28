@@ -6,7 +6,16 @@ use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_res
 use { Extent } from "./extent.wado";
 use { Condition, Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
-use { Elements, Graph, Node, data_type, element_of, is_binary_elementwise, trailing_axes } from "./graph.wado";
+use {
+    Elements,
+    Graph,
+    KERNEL_ELEMENT,
+    Node,
+    data_type,
+    element_of,
+    is_binary_elementwise,
+    trailing_axes,
+} from "./graph.wado";
 use { fill_of } from "./fold.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { expected } from "./safetensors.wado";
@@ -908,15 +917,8 @@ fn node_call(
     let shapes = &checked.shapes;
     let op = node.op;
     if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
-        let from = shapes.get(node.inputs[0]).unwrap();
-        let to = shapes.get(node.outputs[0]).unwrap();
-        let operand = exprs.reference(&node.inputs[0]);
         let element = checked.primitives.get(node.inputs[0]).unwrap();
-        return Result::Ok(
-            `reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${symbols.spell_all(
-                &extents_of(&to),
-            )?})`,
-        );
+        return reshaped(node, checked, &element, &exprs.reference(&node.inputs[0]), symbols);
     }
     if op == "Slice" {
         return slice_call(node, checked, exprs, symbols);
@@ -944,11 +946,23 @@ fn node_call(
         return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${cast_body(&from, &to)})`);
     }
     if op == "Gather" {
-        let axis = settled(gather_axis(node, shapes.get(node.inputs[0]).unwrap().rank()));
-        if axis != 0 {
-            return Result::Err(EmitError::Refused(Refusal::of(node, `no kernel gathers along axis ${axis}`)));
+        let data = shapes.get(node.inputs[0]).unwrap();
+        let axis = settled(gather_axis(node, data.rank()));
+        let [operand, indices] = [
+            exprs.reference(&node.inputs[0]),
+            exprs.reference(&node.inputs[1]),
+        ];
+        if axis == 0 {
+            return Result::Ok(`gather_rows(${operand}, ${indices})`);
         }
-        return Result::Ok(`gather_rows(${exprs.reference(&node.inputs[0])}, ${exprs.reference(&node.inputs[1])})`);
+        let element = checked.primitives.get(node.inputs[0]).unwrap();
+        let [pre, post] = [
+            axis_run(&data, 0, axis),
+            axis_run(&data, axis + 1, data.rank()),
+        ];
+        let index_axes = axis_list(&shapes.get(node.inputs[1]).unwrap());
+        let turbofish = `::<${element}, [${pre}], ${data.axes[axis].name}, [${post}], [${index_axes}]>`;
+        return Result::Ok(`gather${turbofish}(${operand}, ${indices}, ${axis})`);
     }
     if op == "MaxPool" || op == "Conv" {
         return window_call(node, shapes, exprs, symbols);
@@ -986,7 +1000,7 @@ fn node_call(
         return Result::Ok(`${kernel}(${exprs.reference(&node.inputs[0])}, ${lane.axis})`);
     }
     if is_reduction(&op) {
-        return reduction_call(node, checked, exprs);
+        return reduction_call(node, checked, exprs, symbols);
     }
     if op == "Transpose" {
         let shape = shapes.get(node.inputs[0]).unwrap();
@@ -1084,19 +1098,35 @@ fn lifted(node: &Node, tensor: &String, out: &Shape, checked: &Checked, exprs: &
     );
 }
 
-/// A `ReduceMean` or `ReduceSum`, whose kernels keep each reduced axis at
-/// extent 1, so one that drops them has no call to write.
-fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
+/// `operand`, whose axes are `node`'s first input's, laid out as `node`'s output.
+fn reshaped(
+    node: &Node,
+    checked: &Checked,
+    element: &String,
+    operand: &String,
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
+    let from = checked.shapes.get(node.inputs[0]).unwrap();
+    let to = checked.shapes.get(node.outputs[0]).unwrap();
+    let extents = symbols.spell_all(&extents_of(&to))?;
+    return Result::Ok(`reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${extents})`);
+}
+
+/// A `ReduceMean` or `ReduceSum`. The kernels keep each reduced axis at
+/// extent 1, and a reshape drops them where the node does.
+fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
     let x = checked.shapes.get(node.inputs[0]).unwrap();
-    if checked.shapes.get(node.outputs[0]).unwrap().rank() != x.rank() {
-        return Result::Err(EmitError::Refused(Refusal::of(node, "no kernel drops a reduced axis")));
-    }
     let axes = settled(reduced_axes(node, &checked.known, x.rank()));
     let a = exprs.reference(&node.inputs[0]);
-    if node.op == "ReduceMean" {
-        return Result::Ok(`reduce_mean(${a}, ${axes})`);
+    let kept = if node.op == "ReduceMean" {
+        `reduce_mean(${a}, ${axes})`;
+    } else {
+        `reduce(${a}, ${axes}, 0.0, |x, y| x + y)`;
+    };
+    if checked.shapes.get(node.outputs[0]).unwrap().rank() == x.rank() {
+        return Result::Ok(kept);
     }
-    return Result::Ok(`reduce(${a}, ${axes}, 0.0, |x, y| x + y)`);
+    return reshaped(node, checked, &KERNEL_ELEMENT, &`&${kept}`, symbols);
 }
 
 /// The literal operand `index` folds into a closure as: a `Gemm` bias, or an
