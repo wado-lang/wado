@@ -7,7 +7,7 @@ use std::cell::{Cell, RefCell};
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{node_mentions_local, rebound_locals, strip_one_value_copy};
+use super::arena_query::{rebound_locals, strip_one_value_copy};
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1036,12 +1036,13 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
         return;
     }
 
-    // Whole write: candidate = literal -> one scalar write per field. A literal
-    // reading the candidate evaluates every field before writing any, as the
-    // aggregate write did.
+    // Whole write: candidate = literal -> one scalar write per field. The
+    // aggregate write happened once every field was evaluated, so a field that
+    // reads the candidate, or leaves the statement (`continue`, `break L`),
+    // still sees none of it written: each field but a constant is evaluated
+    // into a temp, and the writes come last.
     if let Some((local, literal)) = whole_literal_assign(engine.body, id, ctx.decomposed) {
         let span = engine.body.exprs[id].span;
-        let reads_self = node_mentions_local(engine.body, NodeRef::Expr(literal), local);
         let pairs = literal_fields(engine.body, literal);
         engine.body.take_expr(literal);
         let mut stmts = Vec::with_capacity(2 * pairs.len());
@@ -1051,7 +1052,10 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
                 rewrite_expr(engine, e, ctx);
             }
             let slot = &ctx.field_map[&(local, field_index)];
-            if reads_self {
+            let constant = value
+                .as_value()
+                .is_some_and(|v| engine.body.values.kind(v).is_constant());
+            if !constant {
                 let temp =
                     engine.alloc_minted_local(&minted_what(SROA, "next"), slot.type_id, false);
                 let name = engine.local_name(temp);

@@ -444,8 +444,7 @@ pub(super) fn operand_read_locals(body: &Body, op: Operand) -> IndexSet<u32> {
     out
 }
 
-/// Whether `idx` appears anywhere under `node`, skeleton or promoted.
-pub(super) fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
+fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     mentions_local_except(body, node, None, idx)
 }
 

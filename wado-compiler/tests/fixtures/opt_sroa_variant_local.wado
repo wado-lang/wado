@@ -67,7 +67,23 @@ fn guard_resets(n: i64, reset: bool) -> i64 {
     };
 }
 
+// A write whose payload leaves the block writes nothing: split, the tag must
+// not land before the payload is evaluated.
+#[inline("never")]
+fn payload_breaks(c: bool) -> i32 {
+    let mut s: Option<i32> = null;
+    done: {
+        s = Option::Some(if c { break done; } else { 1 });
+    }
+    return match s {
+        Some(v) => v,
+        None => -1,
+    };
+}
+
 export fn run() {
+    assert payload_breaks(builtin::black_box(true)) == -1;
+    assert payload_breaks(builtin::black_box(false)) == 1;
     assert guard_resets(builtin::black_box(5), builtin::black_box(true)) == 6;
     assert guard_resets(builtin::black_box(5), builtin::black_box(false)) == 6;
     assert nested(builtin::black_box(5)) == 5;

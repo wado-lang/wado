@@ -49,6 +49,19 @@ fn whole_write_reads_self(n: i32) -> i32 {
     return p.x;
 }
 
+// Pattern 2c: Whole write whose later field leaves the statement. No field is
+// written, the earlier one included.
+
+
+#[inline("never")]
+fn whole_write_continues(n: i32) -> i32 {
+    let mut p = Point { x: 0, y: 0 };
+    for let i of 0..<n {
+        p = Point { x: i + 10, y: if i == n - 1 { continue; } else { i } };
+    }
+    return p.x * 100 + p.y;
+}
+
 // Pattern 3: Struct where only some fields escape (currently all-or-nothing)
 // Ideally, field y should still be SROA'd even though x is used in a call
 
@@ -111,6 +124,7 @@ export fn run() {
     assert basic_sroa() == 30;
     assert mutable_field_write(builtin::black_box(7)) == 147;
     assert whole_write_reads_self(builtin::black_box(3)) == 5;
+    assert whole_write_continues(builtin::black_box(3)) == 1101;
     assert partial_escape(50) == 150;
     assert nested_struct() == 33;
     assert multiple_structs() == 10;
