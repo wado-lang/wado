@@ -11,8 +11,11 @@
 const ITEM_BYTES = { F32: 4 };
 const LM_HEAD = "onnx::MatMul_3718";
 
+// The same two checks as `header_end` in src/runtime/checkpoint.wado.
 function readHeader(bytes) {
+  if (bytes.length < 8) throw new Error(`the header is 8 bytes, past the ${bytes.length} given`);
   const n = Number(new DataView(bytes.buffer, bytes.byteOffset, 8).getBigUint64(0, true));
+  if (n > bytes.length - 8) throw new Error(`the header is ${n} bytes, past the ${bytes.length - 8} given`);
   return { n, json: JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + n))) };
 }
 
