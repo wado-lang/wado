@@ -71,7 +71,13 @@ fn parent_dir(dir: &Path) -> Option<PathBuf> {
         Some(Component::RootDir | Component::Prefix(_)) => None,
         None | Some(Component::CurDir | Component::ParentDir) => {
             let above_root = fs::canonicalize(openable_dir(dir)).ok()?.parent().is_none();
-            (!above_root).then(|| normalize_path(&dir.join("..")))
+            // A `..` after a named component leaves wherever that component
+            // resolves to, a symlink's target included, so only dots fold.
+            let only_dots = dir
+                .components()
+                .all(|c| matches!(c, Component::CurDir | Component::ParentDir));
+            let above = dir.join("..");
+            (!above_root).then(|| if only_dots { normalize_path(&above) } else { above })
         }
     }
 }
@@ -430,6 +436,17 @@ mod tests {
     use super::*;
     use std::assert_matches;
     use std::fs;
+
+    #[cfg(unix)]
+    #[test]
+    fn parent_dir_leaves_a_symlink_where_the_filesystem_does() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        fs::create_dir_all(root.join("a/b/c")).unwrap();
+        std::os::unix::fs::symlink(root.join("a/b/c"), root.join("link")).unwrap();
+        let above = parent_dir(&root.join("link/..")).unwrap();
+        assert_eq!(fs::canonicalize(above).unwrap(), root.join("a"));
+    }
 
     #[test]
     fn parent_dir_walks_a_relative_path_past_the_working_directory() {

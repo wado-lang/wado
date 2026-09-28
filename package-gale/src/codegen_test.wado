@@ -2280,6 +2280,22 @@ DOT : '.' ;
     assert got == "0.25rem => D:0.25rem\n12px => D:12px\n.5rem => D:.5rem\n3. => N:3 DOT:.\n1.5 => N:1.5\nx1.5 => E:x1.5\nx3. => E:x3 DOT:.\n", got;
 }
 
+test "a called lexer rule keeps its own case folding" {
+    let got = lexes("lexer grammar L;
+A : B 'z' ;
+B options { caseInsensitive = true; } : 'a' | 'ab' ;
+", ["Az", "A"]);
+    assert got == "Az => A:Az\nA => B:A\n", got;
+}
+
+test "a called lexer rule runs its actions only for a token of its own" {
+    let got = lexes("lexer grammar L;
+A : B 'z' ;
+B : 'a' { System.out.println(\"x\"); } | 'ab' ;
+", ["az", "abz", "a"]);
+    assert got == "az => A:az\nabz => A:abz\na => B:a [x\n]\n", got;
+}
+
 test "an unmodelled ANTLR lexer field is a loud diagnostic, not broken code" {
     // `_hitEOF` is a recognizer field Gale does not model.
     let src = "lexer grammar L;
