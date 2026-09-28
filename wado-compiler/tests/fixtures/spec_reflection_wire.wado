@@ -1,0 +1,34 @@
+// Reflection reports the authored `#[wire(...)]` facts as they are written.
+// Resolving a wire name from them is `core:serde`'s job.
+
+use { wire_name } from "core:serde";
+
+#[wire(name_policy = "camelCase")]
+struct Account {
+    user_id: i32,
+    #[wire(name = "mail")]
+    email_address: String,
+}
+
+struct Plain {
+    user_id: i32,
+}
+
+test "the policy is reported, not applied" {
+    assert Reflect::<Account>::wire_name_policy() == CaseStyle::Camel;
+    assert Reflect::<Plain>::wire_name_policy() == CaseStyle::Identity;
+    let fs = ReflectStruct::<Account>::members();
+    assert fs.0.name() == "user_id";
+    assert fs.0.wire_name_override() matches { None };
+    assert fs.1.wire_name_override() matches { Some(n) && n == "mail" };
+}
+
+test "core:serde resolves the wire name from both facts" {
+    let fs = ReflectStruct::<Account>::members();
+    let policy = Reflect::<Account>::wire_name_policy();
+    assert wire_name(&fs.0, policy) == "userId";
+    assert wire_name(&fs.1, policy) == "mail";
+}
+
+__DATA__
+{"test": {}}

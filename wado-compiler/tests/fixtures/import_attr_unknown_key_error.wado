@@ -1,0 +1,10 @@
+// A `with` key nothing reads is an error on the key, and so is a value of the
+// wrong kind: either would otherwise be dropped without a word.
+use { println, Stdout } from "core:cli" with { tpye: "wasm", provider: 1 };
+
+export fn run() with Stdout {
+    println("unreachable");
+}
+
+__DATA__
+{"compile_errors_contains": ["unknown import attribute `tpye`; `with` takes `type`, `provider`, `git`, `ref`, `directory`, `registry`, `package`, `version`, or `generator`", "import attribute `provider` must be a string, got integer"], "compile_error": ":3:48: ", "compile_error_codes": ["IMPORT_ATTR_INVALID"]}

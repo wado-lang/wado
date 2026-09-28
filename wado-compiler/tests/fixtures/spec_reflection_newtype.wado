@@ -1,0 +1,40 @@
+// A newtype is its own kind with no members: `ReflectNewtype` names its base.
+// It names itself through the root and inherits its base's structure.
+
+trait Doubled with () {
+    fn doubled(&self) -> Self;
+}
+
+impl<N: ReflectNewtype<Base = B>, B: Add<Output = B>> Doubled for N {
+    fn doubled(&self) -> N {
+        let base = *self as B;
+        return (base + base) as N;
+    }
+}
+
+type Meters = f64;
+type Name = String;
+
+test "a derivation reads the base and casts across it" {
+    assert (2.5 as Meters).doubled() == 5.0 as Meters;
+    assert ("ab" as Name).doubled() == "abab" as Name;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+type Spot = Point;
+
+test "a newtype names itself and walks its base's members" {
+    assert Reflect::<Spot>::type_name() == "Spot";
+    let mut names = "";
+    for let f of ReflectStruct::<Spot>::members() {
+        names.push_str(f.name());
+    }
+    assert names == "xy";
+}
+
+__DATA__
+{"test": {}}

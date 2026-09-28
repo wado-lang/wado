@@ -1242,16 +1242,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let return_type = ctx.return_type;
         // Use expected type for coercion (numeric literals, tuple to array,
         // etc.) and check the value type against the function return type.
-        if let Some(expr) = ret_stmt.value.as_ref() {
-            let mut value_type = self.resolve_expr(expr, ctx, Some(return_type));
-            // Pin a deferred hole that rode a prior binding into the returned
-            // value (`let v = gen()?; return Ok(v)`) against the return type.
-            if self.type_has_infer_hole(value_type) {
-                self.solve_infer_holes_against(value_type, return_type);
-                value_type = self.apply_infer_holes(value_type);
+        let Some(expr) = ret_stmt.value.as_ref() else {
+            if !ctx.is_async {
+                self.typecheck(TypeTable::UNIT, return_type, ret_stmt.span);
             }
-            self.typecheck_return(value_type, return_type, ret_stmt.span);
+            return;
+        };
+        let mut value_type = self.resolve_expr(expr, ctx, Some(return_type));
+        // Pin a deferred hole that rode a prior binding into the returned
+        // value (`let v = gen()?; return Ok(v)`) against the return type.
+        if self.type_has_infer_hole(value_type) {
+            self.solve_infer_holes_against(value_type, return_type);
+            value_type = self.apply_infer_holes(value_type);
         }
+        self.typecheck(value_type, return_type, ret_stmt.span);
     }
 
     pub(super) fn resolve_task_return(
@@ -1273,7 +1277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.solve_infer_holes_against(value_type, expected);
             value_type = self.apply_infer_holes(value_type);
         }
-        self.typecheck_return(value_type, expected, tr_stmt.span);
+        self.typecheck(value_type, expected, tr_stmt.span);
     }
 
     /// Reify rebuilds the `If` / if-let-chain TIR from the AST + the

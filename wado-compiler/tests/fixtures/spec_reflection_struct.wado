@@ -1,0 +1,71 @@
+// `ReflectStruct` exposes a struct's fields: a handle per field, the build
+// direction from field values, and the field slots.
+
+struct Config {
+    host: String,
+    port: i32 = 8080,
+    #[wire(name = "v")]
+    verbose: bool,
+}
+
+test "members() walks the fields in declaration order" {
+    let c = Config { host: "example.org", port: 80, verbose: true };
+    let mut out = "";
+    for let f of ReflectStruct::<Config>::members() {
+        out.push_str(`${f.index()}:${f.name()}=${f.get(&c):?} `);
+    }
+    assert out == "0:host=\"example.org\" 1:port=80 2:verbose=true ";
+}
+
+test "a handle reports what the field declares" {
+    let fs = ReflectStruct::<Config>::members();
+    assert !fs.0.has_default() && fs.1.has_default();
+    assert fs.2.wire_name_override() matches { Some(n) && n == "v" };
+}
+
+test "from_fields builds the struct from its field values" {
+    let c = ReflectStruct::<Config>::from_fields(["localhost", 3000, false]);
+    assert c.host == "localhost" && c.port == 3000 && !c.verbose;
+}
+
+test "the slots start empty and default_slot fills one default" {
+    let empty = ReflectStruct::<Config>::empty_slots();
+    assert empty.0 matches { None } && empty.1 matches { None };
+    let slots = ReflectStruct::<Config>::default_slot(1);
+    assert slots.1 matches { Some(8080) };
+    assert slots.0 matches { None } && slots.2 matches { None };
+}
+
+fn boom() -> i32 {
+    panic("evaluated");
+}
+
+struct Lazy {
+    first: i32 = boom(),
+    second: i32 = 7,
+}
+
+test "default_slot evaluates only the default it fills" {
+    assert ReflectStruct::<Lazy>::default_slot(1).1 matches { Some(7) };
+}
+
+struct Pair<T> {
+    left: T,
+    right: i32,
+}
+
+fn values<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(v: &T) -> String {
+    let mut out = "";
+    for let f of ReflectStruct::<T>::members() {
+        out.push_str(`${f.get(v):?};`);
+    }
+    return out;
+}
+
+test "a generic struct substitutes its arguments into FieldTypes" {
+    assert values(&Pair { left: "ada", right: 7 }) == "\"ada\";7;";
+    assert values(&Pair { left: 2.5, right: 7 }) == "2.5;7;";
+}
+
+__DATA__
+{"test": {}}

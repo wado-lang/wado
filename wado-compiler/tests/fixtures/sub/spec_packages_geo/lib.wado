@@ -1,0 +1,16 @@
+// geo/src/lib.wado - the file `[package].lib` names
+pub use { Square } from "./shapes.wado";
+
+pub fn area(s: Square) -> i32 { return s.side * s.side; }
+
+pub fn map_sides<T>(squares: List<Square>, f: fn(i32) -> T) -> List<T> {
+    return squares.into_iter().map(|s| f(s.side)).collect();
+}
+
+export fn unit_side() -> i32 { return 1; }
+
+internal fn scale() -> i32 { return 2; }
+
+fn margin() -> i32 { return 0; }
+
+pub fn grown(s: Square) -> Square { return Square { side: s.side * scale() + margin() }; }

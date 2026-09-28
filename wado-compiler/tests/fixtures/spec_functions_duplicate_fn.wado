@@ -1,0 +1,12 @@
+// A module declares a function name once: a second `fn` of that name is not
+// an overload, even with other parameter types.
+
+fn scale(x: i32) -> i32 { return x * 2; }
+fn scale(x: f64) -> f64 { return x * 2.0; }
+
+test {
+    assert scale(1) == 2;
+}
+
+__DATA__
+{"compile_error": ":5:1: error: duplicate definition 'scale' (first defined at 4:1)"}

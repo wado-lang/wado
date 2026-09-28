@@ -1,0 +1,13 @@
+// A comparison on a type parameter needs the bound that supplies it, as `+`
+// needs `Add`: `T` carries no `Ord`, so `a < b` is rejected in the body.
+
+fn less<T>(a: T, b: T) -> bool {
+    return a < b;
+}
+
+test {
+    assert less(1, 2);
+}
+
+__DATA__
+{"compile_error_codes":["TRAIT_BOUND_NOT_SATISFIED"]}

@@ -214,6 +214,17 @@ export(Command::run, HttpServer::run) pub fn run() {
 - **More keywords**: Introduces `contract` and extends `export` syntax
 - **Three concepts**: Developers must understand `pub`, `export`, and `contract`
 
+## Known gaps
+
+- `contract` does not parse. No declaration names the world a module conforms
+  to, so the world comes from the command line or the manifest alone.
+- `export(World::name)` mapping and type export do not parse.
+- An effect the selected world does not import is not rejected. The compiler
+  adds the interface to the component's imports instead: a `wasi:cli/command`
+  program performing `wasi:http/types` operations compiles to a component
+  importing `wasi:http/types`, which the host then refuses to instantiate or
+  provides by accident.
+
 ## References
 
 - [WIT Reference - Component Model](https://component-model.bytecodealliance.org/design/wit.html)

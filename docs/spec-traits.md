@@ -305,8 +305,9 @@ A rigid type parameter satisfies a bound from the bounds in force on it and from
 nothing else. So `[..T]: Ord` does not hold of `[A, B]` under
 `A: Inspect, B: Inspect`, and the body that wants it writes `A: Ord, B: Ord`.
 
-A `Reflect*` bound holds only where every member of the receiver is visible at
-the use site.
+A bound on a kind trait of the `Reflect` family (`ReflectStruct` and its
+siblings) holds only where every member of the receiver is visible at the use
+site. The root `Reflect` names the type and no member, so it holds anywhere.
 
 A blanket's receiver parameter is matched by position, not by spelling: a method
 parameter named `T` inside the method is the method's own `T`.

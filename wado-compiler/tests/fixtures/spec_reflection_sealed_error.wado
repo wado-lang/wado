@@ -1,0 +1,10 @@
+// Only the compiler implements a `Reflect*` trait.
+
+type Meters = f64;
+
+impl ReflectNewtype for Meters {  // ERROR: cannot implement `ReflectNewtype`
+    type Base = f64;
+}
+
+__DATA__
+{"compile_error": "cannot implement `ReflectNewtype`: it is a sealed, compiler-synthesized trait provided automatically for every eligible type"}

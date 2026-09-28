@@ -1,0 +1,12 @@
+use { margin } from "lib:geo";   // error: private to geo's entry module
+
+test {
+    assert margin() == 0;
+}
+
+__DATA__
+{
+  "test": {},
+  "dependencies": { "lib:geo": "sub/spec_packages_geo/lib.wado" },
+  "compile_error": "symbol 'margin' is private to 'dep:sub/spec_packages_geo/lib.wado' and cannot be imported"
+}

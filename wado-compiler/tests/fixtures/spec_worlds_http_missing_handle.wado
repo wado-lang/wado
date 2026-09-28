@@ -1,0 +1,13 @@
+// A `wasi:http/service` program must define `handle`. A `run` does not stand in
+// for it.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println("not a service");
+}
+
+__DATA__
+{
+    "wasi:http/service": {},
+    "compile_error": "function `handle` is required as a world entry point but is not defined"
+}

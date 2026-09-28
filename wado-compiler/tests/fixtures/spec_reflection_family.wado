@@ -1,0 +1,33 @@
+// A kind bound carries the `Reflect` root, and every reflection call is
+// trait-qualified, so a type's own namespace stays its author's.
+
+struct Point {
+    x: i32,
+}
+
+// `T: ReflectStruct` alone reaches `Reflect`'s methods
+fn struct_name<T: ReflectStruct>() -> String {
+    return Reflect::<T>::type_name();
+}
+
+test "a kind bound reaches the root" {
+    assert struct_name::<Point>() == "Point";
+}
+
+struct Tagged {
+    tag: i32,
+}
+
+impl Tagged {
+    fn type_name() -> String {    // the type's own function, not reflection's
+        return "tagged";
+    }
+}
+
+test "reflection leaves the type's namespace alone" {
+    assert Tagged::type_name() == "tagged";
+    assert Reflect::<Tagged>::type_name() == "Tagged";
+}
+
+__DATA__
+{"test": {}}

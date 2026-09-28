@@ -598,6 +598,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::BOOL;
                     }
                 }
+                let item = if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
+                    CompilerItem::Eq
+                } else {
+                    CompilerItem::Ord
+                };
+                let trait_name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_trait_name(item)
+                    .to_string();
+                self.report_operator_bound_missing(&operand.spelled, &trait_name, span);
+                return TypeTable::ERROR;
             }
         }
 

@@ -1,0 +1,22 @@
+// A type's inherent impls share one set of method names: a second `impl`
+// block may not declare a method the first already has.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn sum(&self) -> i32 { return self.x + self.y; }
+}
+
+impl Point {
+    fn sum(&self) -> i32 { return self.x; }
+}
+
+test {
+    assert Point { x: 1, y: 2 }.sum() == 3;
+}
+
+__DATA__
+{"compile_error": ":14:5: error: duplicate definition of `sum` for `Point`: another inherent impl already defines it"}

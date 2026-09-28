@@ -1,0 +1,14 @@
+// An unbounded comparison is rejected in the body, before any instantiation:
+// a `fn` type has no comparison, and lowering one used to crash the compiler.
+
+fn less<T>(a: T, b: T) -> bool {
+    return a < b;
+}
+
+test {
+    let f: fn() -> i32 = || 1;
+    assert !less(f, f);
+}
+
+__DATA__
+{"compile_error": ":5:12: error: type 'T' does not implement trait 'Ord' required by bound on 'T'"}

@@ -1,5 +1,624 @@
 # Functions
 
+## Function Declarations
+
+A function declaration is `fn`, a name, a parameter list in parentheses, an
+optional return type after `->`, and a block body. Each parameter is written
+`name: Type`.
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test "a declaration and a call" {
+    assert add(2, 3) == 5;
+}
+```
+
+Every parameter declares its type. Nothing infers it from the calls:
+
+<!-- {"fixture":"spec_functions_param_type_required.wado"} -->
+
+```wado
+fn double(n) -> i32 {
+    return n * 2;
+}
+```
+
+Two parameters of one function may not share a name:
+
+<!-- {"fixture":"spec_functions_duplicate_param.wado"} -->
+
+```wado
+fn area(side: i32, side: i32) -> i32 {
+    return side * side;
+}
+```
+
+A parameter is a local binding of the body. It holds the callee's own copy of
+the argument ([Value Semantics](./spec-memory.md#value-semantics)). It is
+immutable unless declared `mut` ([`mut` Parameters](./spec-memory.md#mut-parameters)).
+
+### Return Values
+
+A function returns a value only through `return`
+([Statements](./spec-expressions.md#statements)). Every path through a
+value-returning body must end in a `return`, or in a call that never returns,
+such as `panic`:
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+fn sign(n: i32) -> i32 {
+    if n < 0 {
+        return -1;
+    } else if n > 0 {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+fn check_positive(n: i32) -> i32 {
+    if n > 0 {
+        return n;
+    }
+    panic("not positive");
+}
+
+test "every path returns" {
+    assert sign(-5) == -1 && sign(0) == 0 && sign(9) == 1;
+    assert check_positive(3) == 3;
+}
+```
+
+A path that reaches the end of the body without a `return` is an error. The
+error points at the function:
+
+<!-- {"fixture":"spec_functions_missing_return.wado"} -->
+
+```wado
+fn sign(n: i32) -> i32 {
+    if n < 0 {
+        return -1;
+    }
+}
+```
+
+A function without `-> T` returns `()`, and `-> ()` says the same. Such a
+function may leave early with `return;`:
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+fn record(log: &mut List<String>, line: String) {
+    if line.is_empty() {
+        return;              // an early exit from a unit function
+    }
+    log.push(line);
+}
+
+fn clear(log: &mut List<String>) -> () {
+    log.truncate(0);
+}
+
+test "a unit function" {
+    let mut log: List<String> = [];
+    record(&mut log, "");
+    record(&mut log, "a");
+    assert log == ["a"];
+    assert record(&mut log, "b") == ();
+    clear(&mut log);
+    assert log.is_empty();
+}
+```
+
+A bare `return;` returns `()`. Every `return` is checked against the declared
+return type, so `return;` is an error in a function that returns a value:
+
+<!-- {"fixture":"error_return_missing_value.wado"} -->
+
+```wado
+fn f() -> i32 {
+    return;
+}
+```
+
+A value is an error in a function that returns `()`:
+
+<!-- {"fixture":"error_return_value_from_unit_fn.wado"} -->
+
+```wado
+fn f() {
+    return 1;
+}
+```
+
+A function that never returns declares `-> !`
+([The Never Type](./spec-types.md#the-never-type-)).
+
+### Calls
+
+A call `f(args)` passes one argument per parameter, in order. A trailing
+parameter with a default may be left out ([Default Arguments](#default-arguments)).
+Any other count is an error:
+
+<!-- {"fixture":"spec_functions_arg_count.wado"} -->
+
+```wado
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test {
+    assert add(1, 2, 3) == 6;
+}
+```
+
+The arguments are evaluated left to right, and then the body runs:
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+fn next(log: &mut List<i32>, v: i32) -> i32 {
+    log.push(v);
+    return v;
+}
+
+fn digits(a: i32, b: i32, c: i32) -> i32 {
+    return a * 100 + b * 10 + c;
+}
+
+test "arguments are evaluated left to right" {
+    let mut order: List<i32> = [];
+    let n = digits(next(&mut order, 1), next(&mut order, 2), next(&mut order, 3));
+    assert n == 123 && order == [1, 2, 3];
+}
+```
+
+A module-level function is in scope in the whole module, before its declaration
+as well as after it. Functions may call each other recursively:
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+test "a function declared later" {
+    assert is_even(10) && !is_even(7);
+}
+
+fn is_even(n: i32) -> bool {
+    if n == 0 { return true; }
+    return is_odd(n - 1);
+}
+
+fn is_odd(n: i32) -> bool {
+    if n == 0 { return false; }
+    return is_even(n - 1);
+}
+```
+
+A module declares each function name once. A second `fn` of the same name is an
+error, not an overload:
+
+<!-- {"fixture":"spec_functions_duplicate_fn.wado"} -->
+
+```wado
+fn scale(x: i32) -> i32 { return x * 2; }
+fn scale(x: f64) -> f64 { return x * 2.0; }
+```
+
+### Visibility and Effects
+
+A function without a modifier is private to its file. `internal`, `pub` and
+`export` widen its reach, as [Visibility](./spec-modules.md#visibility)
+specifies.
+
+A `with` clause after the return type lists the effects the function performs,
+as [Effect Declaration in Functions](./spec-effects.md#effect-declaration-in-functions)
+specifies.
+
+## Methods
+
+An `impl Type { … }` block declares methods of `Type`.
+[Inherent Impls](./spec-traits.md#inherent-impls) says where such a block may be
+written, and
+[Impl Type Parameters Are Declared](./spec-traits.md#impl-type-parameters-are-declared)
+covers `impl<T>`.
+
+A method whose first parameter is `&self` or `&mut self` is an instance method.
+A method without that receiver is a static method.
+[Method Receiver: `self` by Value](./spec-memory.md#method-receiver-self-by-value)
+says when the receiver may be a bare `self`.
+
+An instance method is called on a value with `.`. A static method is called on
+the type with `::`:
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn new(x: i32, y: i32) -> Point {
+        return Point { x, y };
+    }
+
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+
+    fn scale(&mut self, k: i32) {
+        self.x *= k;
+        self.y *= k;
+    }
+}
+
+test "instance and static methods" {
+    let mut p = Point::new(1, 2);
+    assert p.sum() == 3;
+    p.scale(10);
+    assert p.x == 10 && p.y == 20;
+}
+```
+
+A static method has no receiver, so calling one on a value is an error:
+
+<!-- {"fixture":"spec_functions_static_with_dot.wado"} -->
+
+```wado
+let p = Point { x: 1, y: 2 };
+assert p.origin().x == 0;
+```
+
+A method written with `.` may also be called as `Type::method(recv, args…)`
+([Qualified Calls](./spec-traits.md#qualified-calls)).
+
+### The Receiver
+
+Inside a method, `self` is the receiver. Its fields and the type's other methods
+are reached through it. A bare field name is not in scope:
+
+<!-- {"fixture":"spec_functions_method_bare_field.wado"} -->
+
+```wado
+impl Point {
+    fn sum(&self) -> i32 {
+        return x + y;
+    }
+}
+```
+
+A `&self` or `&mut self` method takes a reference to its receiver. So the
+receiver may be a value, a `&T` or a `&mut T`:
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+test "a call through a reference" {
+    let mut p = Point::new(1, 2);
+    let r = &p;
+    assert r.sum() == 3;           // `&self` through `&Point`
+    let m = &mut p;
+    m.scale(2);                    // `&mut self` through `&mut Point`
+    assert p.sum() == 6;
+}
+```
+
+A `&mut self` method writes to its receiver, so the receiver must be mutable. An
+immutable binding is an error:
+
+<!-- {"fixture":"spec_functions_method_mut_immutable.wado"} -->
+
+```wado
+let c = Counter { n: 0 };
+c.bump();
+assert c.n == 1;
+```
+
+A `&T` does not reach a `&mut self` method either, even when the binding behind
+it is mutable:
+
+<!-- {"fixture":"spec_functions_method_mut_through_ref.wado"} -->
+
+```wado
+let mut c = Counter { n: 0 };
+let r = &c;
+r.bump();
+assert c.n == 1;
+```
+
+### `Self`
+
+Inside an `impl`, `Self` names the impl's type. It stands for that type in a
+signature or a body, and it prefixes the type's static methods. A call may
+follow another on the value the first one returns:
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+impl Point {
+    fn origin() -> Self {
+        return Self::new(0, 0);
+    }
+
+    fn moved(&self, dx: i32, dy: i32) -> Self {
+        return Self::new(self.x + dx, self.y + dy);
+    }
+
+    fn doubled_sum(&self) -> i32 {
+        return self.sum() * 2;     // another method, through `self`
+    }
+}
+
+test "Self and chained calls" {
+    assert Point::origin().sum() == 0;
+    assert Point::origin().moved(1, 2).moved(3, 4).doubled_sum() == 20;
+}
+```
+
+On a variant, `Self` also prefixes a case:
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+variant Shape {
+    Circle(i32),
+    Square(i32),
+}
+
+impl Shape {
+    fn unit_circle() -> Self {
+        return Self::Circle(1);
+    }
+
+    fn same_kind(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Circle(_), Circle(_)] => true,
+            [Square(_), Square(_)] => true,
+            _ => false,
+        };
+    }
+}
+
+test "Self names the impl's type" {
+    let c = Shape::unit_circle();
+    assert c.same_kind(&Shape::Circle(5)) && !c.same_kind(&Shape::Square(1));
+}
+```
+
+### Several Impl Blocks
+
+A type may have several inherent `impl` blocks, as `Point` above does. Their
+methods form one set, so a name is declared once across all of them:
+
+<!-- {"fixture":"spec_functions_method_duplicate.wado"} -->
+
+```wado
+impl Point {
+    fn sum(&self) -> i32 { return self.x + self.y; }
+}
+
+impl Point {
+    fn sum(&self) -> i32 { return self.x; }
+}
+```
+
+Fields and methods are looked up apart. A field and a method may share a name:
+`c.count` reads the field, and `c.count()` calls the method.
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+struct Counter {
+    count: i32,
+}
+
+impl Counter {
+    fn count(&self) -> i32 {
+        return self.count * 10;
+    }
+}
+
+test "a field and a method may share a name" {
+    let c = Counter { count: 4 };
+    assert c.count == 4 && c.count() == 40;
+}
+```
+
+When a trait declares a method of the same name,
+[Method Resolution](./spec-traits.md#method-resolution) says which one a call
+reaches.
+
+## Generic Functions
+
+A function declares type parameters in `<…>` after its name. The parameter
+types, the return type and the body may all name them:
+
+<!-- {"fixture":"spec_functions_generics.wado"} -->
+
+```wado
+fn first<T>(items: List<T>) -> Option<T> {
+    if items.is_empty() {
+        return null;
+    }
+    return Some(items[0]);
+}
+
+fn pair<A, B>(a: A, b: B) -> [A, B] {
+    return [a, b];
+}
+
+test "type parameters" {
+    assert first([7, 8]) == Some(7);
+    assert first(["x"]) == Some("x");
+    let p = pair(1, "one");
+    assert p.0 == 1 && p.1 == "one";
+}
+```
+
+A type parameter may declare a default
+([Type Parameter Defaults](#type-parameter-defaults)). A function may also take
+a pack of them ([Variadic Type Packs](#variadic-type-packs)).
+
+### Type Arguments
+
+A call settles each type parameter from its arguments and from the type expected
+of the call. [Generic Type Inference](./spec-types.md#generic-type-inference)
+gives the rules. A turbofish, `f::<T>(…)`, writes the type arguments at the
+call instead:
+
+<!-- {"fixture":"spec_functions_generics.wado"} -->
+
+```wado
+fn zero<T: Default>() -> T {
+    return T::default();
+}
+
+test "a turbofish" {
+    assert zero::<i32>() == 0;
+    let s: String = zero();          // or the expected type settles `T`
+    assert s == "";
+    let n = first::<i64>([5]);       // the literal becomes an `i64`
+    let wide: i64 = n.unwrap();
+    assert wide == 5;
+}
+```
+
+A type parameter that nothing settles is an error:
+
+<!-- {"fixture":"spec_functions_generic_uninferable.wado"} -->
+
+```wado
+fn zero<T: Default>() -> T {
+    return T::default();
+}
+
+test {
+    zero();
+}
+```
+
+A turbofish may not name more type arguments than the function declares:
+
+<!-- {"fixture":"spec_functions_turbofish_count.wado"} -->
+
+```wado
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+test {
+    assert identity::<i32, i32>(1) == 1;
+}
+```
+
+### Bounds
+
+A type parameter may carry bounds, such as `T: Ord` or `T: Ord + Display`.
+[Trait Bounds](./spec-traits.md#trait-bounds) specifies them. A bound lets the
+body use what its traits provide: `>` from `Ord`, `${a}` from `Display`, and
+`T::default()` from `Default`:
+
+<!-- {"fixture":"spec_functions_generics.wado"} -->
+
+```wado
+fn largest<T: Ord>(items: List<T>) -> T {
+    let mut best = items[0];
+    for let x of items {
+        if x > best {
+            best = x;
+        }
+    }
+    return best;
+}
+
+fn describe<T: Ord + Display>(a: T, b: T) -> String {
+    return if a < b { `${a} < ${b}` } else { `${a} >= ${b}` };
+}
+
+test "bounds" {
+    assert largest([3, 9, 2]) == 9;
+    assert largest(["b", "c", "a"]) == "c";
+    assert describe(1, 2) == "1 < 2";
+}
+```
+
+The body may use nothing else. A method that no bound declares is an error,
+whatever type a call would pass:
+
+<!-- {"fixture":"spec_functions_generic_no_bound_method.wado"} -->
+
+```wado
+fn size<T>(x: T) -> i32 {
+    return x.len();
+}
+```
+
+An operator follows the same rule. A comparison needs `T: Ord`, and `==` needs
+`T: Eq`:
+
+<!-- {"fixture":"error_generic_compare_unbounded.wado"} -->
+
+```wado
+fn less<T>(a: T, b: T) -> bool {
+    return a < b;
+}
+```
+
+A call checks its type arguments against the bounds:
+
+<!-- {"fixture":"spec_functions_generic_bound_unmet.wado"} -->
+
+```wado
+trait Named {
+    fn name(&self) -> String;
+}
+
+fn greet<T: Named>(x: &T) -> String {
+    return `Hello, ${x.name()}`;
+}
+
+test {
+    assert greet(&1) == "Hello, 1";
+}
+```
+
+### Generic Methods
+
+A method may declare type parameters of its own, after its name. They sit beside
+the ones its `impl` declares. A turbofish on a method call follows the method
+name:
+
+<!-- {"fixture":"spec_functions_generics.wado"} -->
+
+```wado
+struct Stack<T> {
+    items: List<T>,
+}
+
+impl<T> Stack<T> {
+    fn map<U>(&self, f: fn(T) -> U) -> Stack<U> {
+        let mut out: List<U> = [];
+        for let x of self.items {
+            out.push(f(x));
+        }
+        return Stack { items: out };
+    }
+}
+
+test "a generic method" {
+    let s = Stack { items: [1, 2] };
+    assert s.map(|x| `${x}`).items == ["1", "2"];
+    assert s.map::<i64>(|x| x as i64 * 10).items == [10, 20];
+}
+```
+
 ## Closures
 
 Closures are anonymous function expressions with `|params| body` syntax.

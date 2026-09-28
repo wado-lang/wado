@@ -1,0 +1,22 @@
+// A `&mut self` method cannot be reached through a `&T`, even when the
+// binding behind it is mutable.
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) {
+        self.n += 1;
+    }
+}
+
+test {
+    let mut c = Counter { n: 0 };
+    let r = &c;
+    r.bump();
+    assert c.n == 1;
+}
+
+__DATA__
+{"compile_error": ":17:5: error: cannot call `&mut self` method `bump` through immutable reference"}

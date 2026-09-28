@@ -1,0 +1,40 @@
+// A service reads the request's method, path, headers and body, and answers
+// from them.
+use { Request, Response, ErrorCode, Headers, Trailers, FieldName } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let is_post = request.get_method() matches { Post };
+    let path = request.get_path_with_query().unwrap_or("/");
+    let headers = request.get_headers();
+    let greetings = headers.get("x-greeting" as FieldName);
+    assert is_post && path == "/greet" && greetings.len() == 1;
+
+    let [done, _done_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [request_body, _request_trailers] = Request::consume_body(request, done);
+    let name = String::from_utf8_lossy(request_body.read_to_end());
+    request_body.drop();
+
+    let [body, body_tx] = Stream::<u8>::new();
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), Some(body), trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    let greeting = String::from_utf8_lossy(greetings[0]);
+    body_tx.write_all(`${greeting}, ${name}`.bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "request": {
+            "method": "POST",
+            "path": "/greet",
+            "headers": [["x-greeting", "hello"]],
+            "body": "Ann"
+        },
+        "status": 200,
+        "body": "hello, Ann"
+    }
+}

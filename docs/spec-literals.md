@@ -889,8 +889,9 @@ through the bound; a diagnostic and `Reflect::type_name()` show it as its text
 with each hole spelled by its type and specifier, `` `id = ${i32:04}` ``, cut
 at 50 characters with `...`.
 
-`ReflectTemplate` is sealed: only the compiler implements it, and an `impl` of
-it is a compile error. Its associated type `Holes` is the tuple of hole types,
+`ReflectTemplate` is
+[sealed](./spec-reflection.md#sealed-traits), as the whole family is. Its
+associated type `Holes` is the tuple of hole types,
 and `Members` the tuple of hole handles `members()` returns. The tag walks the
 holes with tuple `for-of`:
 

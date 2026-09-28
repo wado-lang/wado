@@ -1,0 +1,15 @@
+// A value-returning function whose end is reachable without a `return` is
+// rejected: here the path where `n >= 0` falls off the end.
+
+fn sign(n: i32) -> i32 {
+    if n < 0 {
+        return -1;
+    }
+}
+
+test {
+    assert sign(-1) == -1;
+}
+
+__DATA__
+{"compile_error": ":4:1: error: function with return type 'i32' must use explicit `return`"}

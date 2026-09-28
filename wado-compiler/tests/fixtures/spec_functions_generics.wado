@@ -1,0 +1,73 @@
+// Generic functions and methods: type parameters, bounds, turbofish, and a
+// static call through a bound.
+
+fn first<T>(items: List<T>) -> Option<T> {
+    if items.is_empty() {
+        return null;
+    }
+    return Some(items[0]);
+}
+
+fn pair<A, B>(a: A, b: B) -> [A, B] {
+    return [a, b];
+}
+
+test "type parameters" {
+    assert first([7, 8]) == Some(7);
+    assert first(["x"]) == Some("x");
+    let p = pair(1, "one");
+    assert p.0 == 1 && p.1 == "one";
+}
+
+fn largest<T: Ord>(items: List<T>) -> T {
+    let mut best = items[0];
+    for let x of items {
+        if x > best {
+            best = x;
+        }
+    }
+    return best;
+}
+
+fn describe<T: Ord + Display>(a: T, b: T) -> String {
+    return if a < b { `${a} < ${b}` } else { `${a} >= ${b}` };
+}
+
+test "bounds" {
+    assert largest([3, 9, 2]) == 9;
+    assert largest(["b", "c", "a"]) == "c";
+    assert describe(1, 2) == "1 < 2";
+}
+
+fn zero<T: Default>() -> T {
+    return T::default();
+}
+
+test "a turbofish" {
+    assert zero::<i32>() == 0;
+    let s: String = zero();          // or the expected type settles `T`
+    assert s == "";
+    let n = first::<i64>([5]);       // the literal becomes an `i64`
+    let wide: i64 = n.unwrap();
+    assert wide == 5;
+}
+
+struct Stack<T> {
+    items: List<T>,
+}
+
+impl<T> Stack<T> {
+    fn map<U>(&self, f: fn(T) -> U) -> Stack<U> {
+        let mut out: List<U> = [];
+        for let x of self.items {
+            out.push(f(x));
+        }
+        return Stack { items: out };
+    }
+}
+
+test "a generic method" {
+    let s = Stack { items: [1, 2] };
+    assert s.map(|x| `${x}`).items == ["1", "2"];
+    assert s.map::<i64>(|x| x as i64 * 10).items == [10, 20];
+}

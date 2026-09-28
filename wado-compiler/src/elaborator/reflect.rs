@@ -608,25 +608,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A newtype answers for what it wraps: structure is inherited
     /// (WEP 2026-01-29), and peeling here is what lets every consumer — the
     /// pack projection included — read one answer.
+    ///
+    /// Fields are read through the struct's head, so an anonymous shape, which
+    /// has no declaration to reach them through, answers like a declared struct.
     fn reflect_struct_subject(&self, self_ty: TypeId) -> Option<ReflectSubject> {
         let self_ty = self
             .tysys
             .type_table
             .borrow()
             .reflect_structure_head(self_ty);
-        let (base_name, module_source, type_args) = {
+        let (base_name, module_source, type_args, resolved) = {
             let tt = self.tysys.type_table.borrow();
             let (name, module_source) = tt.nominal_head(self_ty)?;
             (
                 name,
                 module_source,
                 tt.nominal_type_args(self_ty).unwrap_or_default(),
+                tt.get(self_ty).clone(),
             )
         };
-        let info = self
-            .tysys
-            .type_def(self_ty)
-            .and_then(|def| self.type_lookup().struct_fields_of(def))?;
+        let lookup = self.type_lookup();
+        let info = match resolved {
+            ResolvedType::Struct { def, .. } => lookup.struct_fields_of_head(def),
+            ResolvedType::GenericInstance { def, .. } => lookup.struct_fields_of(def),
+            _ => None,
+        }?;
         let declared: Vec<TypeId> = info.fields.iter().map(|(_, ty, _)| *ty).collect();
         let param_ids = info.type_param_type_ids.clone();
         Some(ReflectSubject {

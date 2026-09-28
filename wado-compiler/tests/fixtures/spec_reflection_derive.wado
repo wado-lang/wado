@@ -1,0 +1,158 @@
+// A library derives a trait for every type of a kind with one blanket impl
+// bound by that kind's `Reflect*` trait.
+
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl Show for i32 {
+    fn show(&self) -> String { return `${*self}`; }
+}
+
+impl Show for String {
+    fn show(&self) -> String { return *self; }
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Show> Show for T {
+    fn show(&self) -> String {
+        let mut out = `${Reflect::<T>::type_name()}(`;
+        for let f of ReflectStruct::<T>::members() {
+            out.push_str(`${f.name()}=${f.get(self).show()};`);
+        }
+        return `${out})`;
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Label {
+    text: String,
+    at: Point,
+}
+
+test "a field that is a struct takes the same blanket" {
+    let l = Label { text: "origin", at: Point { x: 0, y: 0 } };
+    assert l.show() == "Label(text=origin;at=Point(x=0;y=0;);)";
+}
+
+trait CaseName with () {
+    fn case_name(&self) -> String;
+}
+
+impl<T: ReflectEnum<Members = [..M]>, ..M> CaseName for T {
+    fn case_name(&self) -> String {
+        for let c of ReflectEnum::<T>::members() {
+            if c.holds(self) {
+                return c.name();
+            }
+        }
+        return "";
+    }
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+test "an enum derivation binds its members" {
+    assert Color::Green.case_name() == "Green";
+}
+
+trait Tag with () {
+    fn tag() -> String;
+}
+
+impl Tag for i32 {
+    fn tag() -> String { return "int"; }
+}
+
+impl Tag for bool {
+    fn tag() -> String { return "bool"; }
+}
+
+trait Schema with () {
+    fn schema() -> String;
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Tag> Schema for T {
+    fn schema() -> String {
+        let mut out = "";
+        for let t of [..F::tag()] {
+            out.push_str(`${t} `);
+        }
+        return out;
+    }
+}
+
+struct Row {
+    id: i32,
+    live: bool,
+}
+
+test "a static derivation maps over the field types without a value" {
+    assert Row::schema() == "int bool ";
+}
+
+fn set_members<L: ReflectFlags<Members = [..M]>, ..M>(v: &L) -> String {
+    let mut out = "";
+    for let b of ReflectFlags::<L>::members() {
+        if b.is_set(v) {
+            out.push_str(b.name());
+        }
+    }
+    return out;
+}
+
+flags Perm {
+    Read,
+    Write,
+}
+
+test "a free function takes the bound and its caller names neither parameter" {
+    assert set_members(&(Perm::Read | Perm::Write)) == "ReadWrite";
+}
+
+trait Zero with () {
+    fn zero() -> Self;
+}
+
+impl Zero for i32 {
+    fn zero() -> i32 { return 0; }
+}
+
+impl Zero for () {
+    fn zero() -> () { return (); }
+}
+
+trait Parse with () {
+    fn parse(case_name: String) -> Option<Self>;
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Zero> Parse for V {
+    fn parse(case_name: String) -> Option<V> {
+        for let c of ReflectVariant::<V>::members() {
+            if c.name() == case_name {
+                return Option::Some(c.construct(P::zero()));
+            }
+        }
+        return Option::None;
+    }
+}
+
+variant Shape {
+    Circle(i32),
+    Empty,
+}
+
+test "a static method that is not a case name reaches the blanket" {
+    assert Shape::parse("Circle") == Option::Some(Shape::Circle(0));
+    assert Shape::parse("Empty") == Option::Some(Shape::Empty);
+    assert Shape::parse("Square") matches { None };
+}
+
+__DATA__
+{"test": {}}

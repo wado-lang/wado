@@ -1,0 +1,13 @@
+// An `export async fn` delivers its result with `task return`. A plain
+// `return` is rejected.
+use { Request, Response, ErrorCode } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    return Result::<Response, ErrorCode>::Err(ErrorCode::InternalError(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {},
+    "compile_error": "cannot use `return expr` in `export async fn`; use `task return expr` instead"
+}

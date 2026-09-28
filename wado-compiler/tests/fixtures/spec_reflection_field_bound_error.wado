@@ -1,0 +1,30 @@
+// A bound on the field-type pack holds only if every field's type meets it,
+// and it is checked where the subject is known.
+
+trait Weight with () {
+    fn weight(&self) -> i32;
+}
+
+impl Weight for i32 {
+    fn weight(&self) -> i32 { return *self; }
+}
+
+fn total<T: ReflectStruct<FieldTypes = [..F]>, ..F: Weight>(v: &T) -> i32 {
+    let mut n = 0;
+    for let f of ReflectStruct::<T>::members() {
+        n += f.get(v).weight();
+    }
+    return n;
+}
+
+struct Item {
+    count: i32,
+    name: String,
+}
+
+test {
+    let n = total(&Item { count: 2, name: "pen" });  // ERROR: `String` is not `Weight`
+}
+
+__DATA__
+{"compile_error": "type 'String' does not implement trait 'Weight' required by bound on 'F'"}

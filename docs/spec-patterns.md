@@ -413,4 +413,4 @@ A type match over resources always needs a final `_` arm, because the host may h
 
 A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
 
-A type pattern narrows a value at runtime, unlike `match type`, which narrows a type parameter at compile time, is exhaustive, and takes no `_`.
+A type pattern narrows a value at runtime.

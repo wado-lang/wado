@@ -169,8 +169,8 @@ Rationale: [WEP: Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-
 | ------------- | ----------------------------- | ------------------------------------ |
 | WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
 | Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
-| CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
-| Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
+| [CM coordinate](./spec-packages.md#package-specifiers) | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
+| [Library alias](./spec-packages.md#package-specifiers) | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
 | Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
 A specifier names a package or a local file. It never carries an interface segment: interfaces and their members
@@ -186,9 +186,9 @@ A module path resolves by its form:
 
 1. Bundled namespaces `core:` / `wasi:`: resolved from the embedded stdlib.
 
-2. Open coordinates `<ns>:<pkg>` (any other namespace): resolved from a `[dependencies]` entry in `wado.toml` or an inline `with` source. An undeclared coordinate is an error.
+2. Open coordinates `<ns>:<pkg>` (any other namespace): resolved as a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
 
-3. Library aliases `lib:<nick>`: resolved via `wado.toml` or an inline `with`. An alias renames a dependency, shortens its name, tells two major versions apart, or names a dependency with no public coordinate.
+3. Library aliases `lib:<nick>`: resolved as a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
 
 4. Local modules (`./` or `../`): Resolved relative to importing module.
 
@@ -198,12 +198,8 @@ A module path resolves by its form:
 The reserved namespaces are `core`, `wasi`, and `lib`. `core` and `wasi` are
 bundled; `lib` is not. Every other namespace is open.
 
-`lib` is the one place an alias lives: a `[dependencies]` key under any other namespace is the
-dependency's own coordinate, and a `lib:` key names the real coordinate it
-stands for with its `package` field. A `[dependencies]` key is byte-identical to
-the specifier that uses it.
-
-Bare names (`"router"`) are rejected. The one exception is a bare key in `[dependencies]`, which is deprecated and draws a warning.
+Bare names (`"router"`) are rejected, except a deprecated bare `[dependencies]`
+key ([Package Specifiers](./spec-packages.md#package-specifiers)).
 
 Rationale: [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 
@@ -321,16 +317,7 @@ test {
 
 ## Import Attributes (`with`)
 
-Use `with { ... }` to specify import metadata. An inline dependency source lets
-a single-file script name a dependency with no `wado.toml`:
-
-<!-- {"source": "wado-cli/tests/fixtures/inline_dependencies.wado"} -->
-
-```wado
-use { Regexp } from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
-use { Router } from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
-use { Parse } from "lib:rx" with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };
-```
+Use `with { ... }` to specify import metadata:
 
 <!-- {"fixture":"spec_modules_type_attribute.wado"} -->
 
@@ -343,13 +330,10 @@ test {
 }
 ```
 
-An inline source takes the same keys as a `[dependencies]` value: `git`, `ref`,
-`directory`, `registry`, `package`, `path`, and an exact `version`. An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive.
-
-Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them. The specifier's `@ver` and an inline `with` take an exact version, and a range there is an error.
-
-Two other keys have sections of their own: `generator` makes the import a
-[generated import](./spec-kiln.md), and `provider` satisfies a
+The other keys have sections of their own. The dependency source keys give a
+dependency its source with no `wado.toml`
+([Inline Sources](./spec-packages.md#inline-sources)). `generator` makes the
+import a [generated import](./spec-kiln.md), and `provider` satisfies a
 component's guest effect ([Wasm Module and Component Imports](#wasm-module-and-component-imports)).
 
 ### Type Attribute Requirement

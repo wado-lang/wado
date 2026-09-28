@@ -1,0 +1,12 @@
+// A `Reflect*` trait takes exactly one type argument: the subject.
+
+struct Point {
+    x: i32,
+}
+
+test {
+    let n = Reflect::<Point, i32>::type_name();  // ERROR: one subject, found 2
+}
+
+__DATA__
+{"compile_error": "one subject type argument, found 2"}

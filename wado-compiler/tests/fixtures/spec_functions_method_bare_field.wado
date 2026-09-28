@@ -1,0 +1,20 @@
+// A method reaches its receiver's fields through `self`; a bare field name is
+// not in scope.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn sum(&self) -> i32 {
+        return x + y;
+    }
+}
+
+test {
+    assert Point { x: 1, y: 2 }.sum() == 3;
+}
+
+__DATA__
+{"compile_error": ":11:16: error: unknown identifier 'x'"}

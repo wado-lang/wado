@@ -1,5 +1,5 @@
-// Error case: using an unknown module namespace
-// Should produce an error like "unknown module namespace 'unknown'; expected 'core' or 'wasi'"
+// Error case: an open namespace no dependency declares. Every namespace but
+// `core` and `wasi` is one, so the error names the dependency, not the namespace.
 
 use {foo} from "unknown:module";
 
@@ -8,4 +8,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "unknown module namespace"}
+{"compile_error": "dependency 'unknown:module' is not declared"}
