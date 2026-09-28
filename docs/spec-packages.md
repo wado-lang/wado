@@ -287,11 +287,10 @@ specifier, or from an inline source on the `use`. An undeclared coordinate or
 alias is an error.
 
 A key under an open namespace is the dependency's own coordinate. `lib` is the
-one place an alias lives. A `lib:` key names the coordinate it stands for with
-its `package` field ([Registry Sources](#registry-sources)), or reaches a
-package with no public coordinate through a path or git source. An alias
-renames a dependency, shortens its name, tells two major versions apart, or
-names a dependency with no public coordinate.
+one place an alias lives. An alias renames a dependency, shortens its name,
+tells two major versions apart, or names a dependency with no public
+coordinate. A `lib:` key names the coordinate it stands for with its `package`
+field ([Registry Sources](#registry-sources)).
 
 ```toml
 [dependencies]
