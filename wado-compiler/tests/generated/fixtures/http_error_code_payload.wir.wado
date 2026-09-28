@@ -181,30 +181,15 @@ struct core:prelude/types.wado//Option<u32>::Some {  // TypeId(28)
     payload_0: u32,
 }
 
-variant core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode> {  // TypeId(29)
-    Ok(i32),
-    Err(ref "wasi:http/types.wado//ErrorCode"),
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(29)
 
-struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok {  // TypeId(30)
-    discriminant: i32,
-    payload_0: i32,
-}
+type "functype//http_error_code_payload.wado/$cm_export__handle" = fn(i32);  // TypeId(30)
 
-struct core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err {  // TypeId(31)
-    discriminant: i32,
-    payload_0: ref "wasi:http/types.wado//ErrorCode",
-}
+type "functype//http_error_code_payload.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(31)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(32)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(32)
 
-type "functype//http_error_code_payload.wado/$cm_export__handle" = fn(i32);  // TypeId(33)
-
-type "functype//http_error_code_payload.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(34)
-
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(35)
-
-type "functype//wasi/resource-drop:wasi/http/types.wado#request" = fn(i32);  // TypeId(36)
+type "functype//wasi/resource-drop:wasi/http/types.wado#request" = fn(i32);  // TypeId(33)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
@@ -217,7 +202,6 @@ fn "http_error_code_payload.wado/$cm_export__handle"(request) {
 
 fn "http_error_code_payload.wado/$cm_task_entry__handle"(request) {
     let $load_0: i32;
-    let $task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $tv_1: i32;
     let $tv_2: i32;
     let $tv_3: i64;
@@ -383,7 +367,8 @@ fn "http_error_code_payload.wado/$cm_task_entry__handle"(request) {
     let ptr_277: i32;
     let self_278: i32;
     let i_284: i32;
-    $task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("custom error"), used: 12 } } };
+    let $sroa_$task_ret_2_289: ref null "wasi:http/types.wado//ErrorCode";
+    $sroa_$task_ret_2_289 = struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("custom error"), used: 12 } };
     $tv_1 = 0;
     $tv_2 = 0;
     $tv_3 = 0_i64;
@@ -391,7 +376,7 @@ fn "http_error_code_payload.wado/$cm_task_entry__handle"(request) {
     $tv_5 = 0;
     $tv_6 = 0;
     $tv_7 = 0;
-    $err_val_12 = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err"($task_ret).payload_0;
+    $err_val_12 = ref.as_non_null($sroa_$task_ret_2_289);
     $tv_1 = local.tee $load_0($err_val_12.discriminant);
     if $load_0 == 0 {
     } else if ref.test "wasi:http/types.wado//ErrorCode::DnsError"($err_val_12) {

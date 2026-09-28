@@ -75,13 +75,14 @@ fn "cm_list_param_resource_return.wado/$cm_binding__Api_make_layout"(entries) wi
     let $entries_elem: u32;
     let $licm_repr_18: ref Array<u32>;
     $entries_len = entries.used;
-    $entries_base = "mem/realloc"(0, 0, 4, if @unlikely(($entries_len < 0) | ($entries_len > 536870911)) {
+    if @unlikely(($entries_len < 0) | ($entries_len > 536870911)) {
         cold_path;
         let $mv_field_1: ref Array<u8>;
         $mv_field_1 = array.new_data<u8>("a buffer's length is negative or past what linear memory can address");
         "core:rt/panic"($mv_field_1, 68);
         unreachable;
-    }; $entries_len * 4);
+    }
+    $entries_base = "mem/realloc"(0, 0, 4, $entries_len * 4);
     $entries_i = 0;
     $licm_repr_18 = entries.repr;
     b1: block {
