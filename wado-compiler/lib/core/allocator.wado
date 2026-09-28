@@ -15,7 +15,9 @@
 /// The compiler selects one based on `--allocator` flag or target world,
 /// and DCE removes the unused implementations.
 
-/// Bump allocator heap pointer. Starts at 8 to avoid returning address 0 (null sentinel).
+/// Bump allocator heap pointer. Starts at 8 to avoid returning address 0 (null
+/// sentinel). The embedded wasm modules share this memory from address 0, so
+/// the compiler adds the size of the memory they reserve to this initial value.
 global mut heap_offset: i32 = 8;
 
 /// The Wasm linear memory page size, the unit `memory.size` and `memory.grow` count in.
@@ -114,9 +116,10 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
 /// `realloc` is ever called with: Component Model alignments are all
 /// <= 8, and the widest Wasm alignment, `v128`, is 16.
 ///
-/// The 33 bin heads live in memory at `[8, 8 + 4*33)`; the first block
-/// starts at byte 152 (the lowest address past the bin-head table that
-/// is congruent to 8 mod 16). Wasm memory is zero-initialised, so every
+/// The 33 bin heads live in the first `4*33` bytes of the heap, reserved on
+/// first use. The heap starts at an address congruent to 8 (mod 16), so the
+/// first block starts `FL_TABLE_SPAN` bytes past it: the lowest address past
+/// the table with that congruence. Wasm memory is zero-initialised, so every
 /// bin head starts empty.
 ///
 /// Selected by `--allocator freelist` (default for HTTP service world).
@@ -141,15 +144,21 @@ fn fl_bin(size: i32) -> i32 {
     return if k < 32 { k } else { 32 };
 }
 
-/// Head of size-class bin `k` (0 when empty). The bin-head table is the
-/// reserved memory region starting at byte 8.
+/// Where the bin-head table starts, or 0 before the first call reserves it.
+global mut fl_table: i32 = 0;
+
+/// The bytes the bin-head table takes from the heap, padded so the first block
+/// keeps the heap start's congruence to 8 (mod 16).
+global FL_TABLE_SPAN: i32 = 144;
+
+/// Head of size-class bin `k` (0 when empty).
 fn fl_bin_head(k: i32) -> i32 {
-    return builtin::i32_load(8 + k * 4);
+    return builtin::i32_load(fl_table + k * 4);
 }
 
 /// Set the head of size-class bin `k`.
 fn fl_set_bin_head(k: i32, head: i32) {
-    builtin::i32_store(8 + k * 4, head);
+    builtin::i32_store(fl_table + k * 4, head);
 }
 
 /// Write the header and footer boundary tags of the block at `block`.
@@ -216,13 +225,13 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
 // Model alignments are all <= 8; the widest Wasm alignment, `v128`, is 16).
 #[allocator("freelist")]
 export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
-    // The shared `heap_offset` global starts at 8; on first use, reserve
-    // [8, 8 + 4*33) for the bin-head table and move the heap frontier to
-    // 152 — past the table and congruent to 8 mod 16, so payloads land
-    // 16-byte aligned. Wasm memory is zero-initialised, so the bins start
-    // empty.
-    if heap_offset < 152 {
-        heap_offset = 152;
+    if fl_table == 0 {
+        builtin::cold_path();
+        fl_table = heap_offset;
+        heap_offset += FL_TABLE_SPAN;
+        if heap_offset > builtin::memory_size() * PAGE_SIZE {
+            grow_memory(heap_offset);
+        }
     }
 
     if newsize == 0 {
@@ -248,9 +257,9 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
             }
         }
         // Coalesce with the physically-preceding block when it is free.
-        // The first block sits at byte 152, so `block > 152` means a
-        // predecessor exists and `block - 8` holds its footer.
-        if block > 152 {
+        // A block past the first has a predecessor, whose footer is at
+        // `block - 8`.
+        if block > fl_table + FL_TABLE_SPAN {
             let prev_footer = builtin::i32_load(block - 8);
             if fl_used(prev_footer) == 0 {
                 let prev_size = fl_size(prev_footer);

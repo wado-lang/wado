@@ -8,8 +8,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::MangledName;
 
 use crate::canonical::CanonicalIntrinsic;
+use crate::loader::DEFAULT_PAGE_SIZE_LOG2;
 use crate::module_source::ModuleSource;
-use crate::name::{StructName, wir_enum_type_key, wir_type_key};
+use crate::name::{StructName, global_name, wir_enum_type_key, wir_type_key};
 use crate::nir::{FuncId, NirFunction};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
@@ -1010,14 +1011,15 @@ impl<'a> WirContext<'a> {
         Some(type_id)
     }
 
-    /// Minimum size, in pages, of the linear memory a `#![wasm_module]` module
-    /// defines.
+    /// The pages, from address 0, of the linear memory the embedded wasm assets
+    /// reserve. 0 when no asset is referenced.
     ///
     /// The component has one linear memory, and codegen rewrites each embedded
-    /// wasm asset to import it rather than define its own — so it must be at
-    /// least as large as the largest asset's own minimum, or that asset's data
-    /// segments land past the end of memory. libm wants 17 pages.
-    fn wasm_module_min_memory_pages(&self) -> u32 {
+    /// wasm asset to import it rather than define its own. An asset's own
+    /// minimum covers its data segments and, for one built by a toolchain like
+    /// Rust's, the stack below them: libm wants 17 pages. The memory must be at
+    /// least that large, and the allocator must hand out nothing inside it.
+    fn wasm_asset_reserved_pages(&self) -> u32 {
         let assets = &self.package.wasm_assets;
         let referenced: IndexSet<&str> = self
             .package
@@ -1031,20 +1033,22 @@ impl<'a> WirContext<'a> {
             .map(|namespace| {
                 u32::try_from(assets[*namespace].min_memory_pages()).unwrap_or(u32::MAX)
             })
-            .fold(1, u32::max)
+            .fold(0, u32::max)
     }
 
     /// Consume this context and produce the final `WirPackage`.
     pub fn into_wir_package(self) -> WirPackage {
+        let reserved_pages = self.wasm_asset_reserved_pages();
         let memory = WirMemory {
-            min: self.wasm_module_min_memory_pages(),
+            min: reserved_pages.max(1),
             max: None,
         };
         let trait_bound_violations = self.trait_bound_violations;
         let cm_import_violations = self.cm_import_violations;
         let functions = self.functions;
-        let globals = self.globals;
+        let mut globals = self.globals;
         let global_map = &self.global_map;
+        start_heap_past(&mut globals, global_map, reserved_pages);
 
         // Extract functions and globals from #![wasm_module("...")] sources
         // into separate standalone packages.
@@ -1154,6 +1158,29 @@ impl<'a> WirContext<'a> {
             cm_import_violations,
         }
     }
+}
+
+/// Move the allocator's heap past the `reserved_pages` the embedded wasm assets
+/// own, by adding their size to `heap_offset`'s initial value.
+fn start_heap_past(
+    globals: &mut [WirGlobal],
+    global_map: &IndexMap<String, u32>,
+    reserved_pages: u32,
+) {
+    let name = global_name(&ModuleSource::allocator(), "heap_offset");
+    let &index = global_map
+        .get(&name)
+        .unwrap_or_else(|| panic!("[WIR] `core:allocator` defines no `{name}`"));
+    let heap_offset = &mut globals[index as usize];
+    let WirInstr::I32Const(start) = heap_offset.init else {
+        panic!(
+            "[WIR] `{name}` starts at {:?}, not an `i32` constant",
+            heap_offset.init
+        );
+    };
+    let reserved = i32::try_from(u64::from(reserved_pages) << DEFAULT_PAGE_SIZE_LOG2)
+        .expect("the wasm assets reserve less than 2 GiB");
+    heap_offset.init = WirInstr::I32Const(reserved + start);
 }
 
 /// Collect fully-qualified global names referenced by WIR instructions.

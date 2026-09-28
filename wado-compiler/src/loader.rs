@@ -639,7 +639,7 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
 }
 
 /// Log2 of the default wasm page size, 64 KiB.
-const DEFAULT_PAGE_SIZE_LOG2: u32 = 16;
+pub(crate) const DEFAULT_PAGE_SIZE_LOG2: u32 = 16;
 
 /// An embedded asset is wired to the component's memory, so its own memory
 /// must have that memory's shape: 32-bit, unshared, default page size. Its

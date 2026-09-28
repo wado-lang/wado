@@ -1,0 +1,24 @@
+/// Test that the allocator hands out none of the memory an embedded wasm asset
+/// reserves: libm keeps its tables in the component's one memory, so filling
+/// every allocated byte must leave `f32::exp` as it was.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let size = 4 * 1024 * 1024;
+    let ptr = builtin::realloc(0, 0, 1, size);
+    // Derived from the pointer, so no `exp` below folds at compile time.
+    let base = -((ptr % 7) as f32) - 1.0;
+    let mut before: List<f32> = [];
+    for let k of 0..<64 {
+        before.push(f32::exp(base - k as f32 * 0.25));
+    }
+    builtin::memory_fill(ptr, 0xFF, size);
+    for let k of 0..<64 {
+        let x = base - k as f32 * 0.25;
+        assert f32::exp(x) == before[k], `exp(${x}) was ${before[k]}, now ${f32::exp(x)}`;
+    }
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
