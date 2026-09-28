@@ -1,6 +1,6 @@
 ---
 name: profiling-wado-compiler
-description: Profile the native Rust `wado` binary (compile/serve/run) with a sampling profiler to find host-side bottlenecks. Use for native CPU profiling, not guest wasm (see wado-performance for that).
+description: Profile the native Rust `wado` binary (compile/serve/run) for host-side bottlenecks — CPU with a sampling profiler, memory with the span trace's RSS and valgrind DHAT. Use for native CPU or memory profiling, not guest wasm (see wado-performance for that).
 ---
 
 # Profiling the native `wado` binary
@@ -126,6 +126,49 @@ node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
   /tmp/prof.json --binary wado-lsp
 ```
+
+## Memory
+
+Measure peak RSS first, per phase second, per allocation site last.
+
+### Per phase: the span trace
+
+`--log-level debug` prints every compiler span with the process's resident set
+(Linux only). An end line adds the net change in current RSS since the span
+began:
+
+```sh
+wado compile --log-level debug hello.wado 2>&1 | grep '<< '
+# [00:00:02.1547] << stdlib_snapshot · rss 343/343 MiB (+225)
+```
+
+The pair is current/peak MiB. A span that allocates and frees again nets out
+near `+0`, so read a jump in the peak as well as the change. RSS is
+process-wide, so under `wado test` with more than one worker the changes mix
+every worker's compile. Use `-p 1` there.
+
+### Per allocation site: DHAT
+
+A heap profiler sees only the system allocator. `wado-cli`'s default
+`mimalloc` feature replaces it, so build without it, and copy the binary aside
+so the next build does not replace it:
+
+```sh
+cargo build -p wado-cli --bin wado --no-default-features
+cp target/debug/wado /tmp/wado-sysalloc
+valgrind --tool=dhat --num-callers=40 --dhat-out-file=/tmp/dhat.json \
+  /tmp/wado-sysalloc compile -O2 hello.wado -o /tmp/out.wasm
+node .claude/skills/profiling-wado-compiler/scripts/analyze_dhat.ts /tmp/dhat.json
+```
+
+DHAT runs about 10× slower than native. Its default of 12 frames cuts off the
+recursive phases, which is why `--num-callers=40` is there.
+
+The analyzer reports what was live at the heap's peak (t-gmax), since that
+sets peak memory, by allocation site and by `wado` function inclusive.
+`--where RE` and `--not RE` keep or drop stacks, so
+`--where get_or_init_snapshot` splits the per-thread stdlib snapshot from the
+compile itself. `--stacks N` prints the largest stacks whole.
 
 ## Non-obvious points
 

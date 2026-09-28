@@ -13,8 +13,14 @@ use crate::unparse::binary_op_str;
 
 use super::Elaborator;
 use super::coercion::{
+<<<<<<< HEAD
     is_numeric_literal_expr, is_primitive_literal_target, numeric_literal_pair_order,
     unary_passes_expected_type,
+||||||| c013e91ab
+    is_numeric_literal_expr, is_primitive_literal_target, numeric_literal_pair_order,
+=======
+    is_literal_arithmetic, is_primitive_literal_target, numeric_literal_pair_order,
+>>>>>>> origin/main
 };
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
@@ -110,6 +116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, TypeId) {
+<<<<<<< HEAD
         // A comparison is `bool` whatever its operands are, so the type expected
         // of it says nothing about them.
         let expected_type = if op.is_comparison() {
@@ -119,8 +126,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let left_is_numeric_literal = is_numeric_literal_expr(left_ast);
         let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
+||||||| c013e91ab
+        let left_is_numeric_literal = is_numeric_literal_expr(left_ast);
+        let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
+=======
+        let left_is_literal = is_literal_arithmetic(left_ast);
+        let right_is_literal = is_literal_arithmetic(right_ast);
+>>>>>>> origin/main
 
-        if left_is_numeric_literal && !right_is_numeric_literal {
+        if left_is_literal && !right_is_literal {
             let right = self.resolve_expr(right_ast, ctx, expected_type);
             let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), right)
             {
@@ -130,7 +144,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             let left = self.resolve_expr(left_ast, ctx, coerce_type);
             (left, right)
-        } else if right_is_numeric_literal && !left_is_numeric_literal {
+        } else if right_is_literal && !left_is_literal {
             let left = self.resolve_expr(left_ast, ctx, expected_type);
             let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), left)
             {
@@ -143,7 +157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             let right = self.resolve_expr(right_ast, ctx, coerce_type);
             (left, right)
-        } else if left_is_numeric_literal && right_is_numeric_literal {
+        } else if left_is_literal && right_is_literal {
             let order = numeric_literal_pair_order(
                 &self.tysys.type_table.borrow(),
                 left_ast,
@@ -928,9 +942,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             UnaryOp::Ref | UnaryOp::MutRef => {
                 expected_type.and_then(|expected| self.tysys.pointee_of(expected))
             }
+<<<<<<< HEAD
             _ => expected_type.filter(|&expected| {
                 unary_passes_expected_type(&self.tysys.type_table.borrow(), unary.op, expected)
             }),
+||||||| c013e91ab
+        let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
+            expected_type.and_then(|expected| self.tysys.pointee_of(expected))
+        } else {
+            None
+=======
+            UnaryOp::Neg | UnaryOp::BitNot if is_literal_arithmetic(&unary.expr) => expected_type,
+            UnaryOp::Neg | UnaryOp::BitNot | UnaryOp::Not | UnaryOp::Deref => None,
+>>>>>>> origin/main
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the
         // subscript resolves through `IndexRefMut` and carries the mutability in

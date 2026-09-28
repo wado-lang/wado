@@ -5,6 +5,7 @@
 //! - TIR expression and statement builders
 //! - Synthetic function creation
 
+use crate::call_args::CallArgs;
 use crate::canonical::{CanonicalIntrinsic, CmCallTarget};
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
@@ -41,8 +42,7 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
                 method_info: None,
             }),
             type_args: vec![],
-            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
-            has_receiver: false,
+            args: CallArgs::free(args.into_iter().map(|e| CallArg::new(e, false)).collect()),
         },
         return_type,
         synth_span(),
@@ -61,8 +61,7 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
                 method_info: None,
             }),
             type_args: vec![],
-            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
-            has_receiver: false,
+            args: CallArgs::free(args.into_iter().map(|e| CallArg::new(e, false)).collect()),
         },
         return_type,
         synth_span(),
@@ -86,8 +85,7 @@ pub fn entry_call(
                 method_info: None,
             }),
             type_args: vec![],
-            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
-            has_receiver: false,
+            args: CallArgs::free(args.into_iter().map(|e| CallArg::new(e, false)).collect()),
         },
         return_type,
         synth_span(),
@@ -460,8 +458,7 @@ pub fn generic_static_call(
                 method_info: Some(info),
             }),
             type_args: vec![],
-            args: args.into_iter().map(|e| CallArg::new(e, false)).collect(),
-            has_receiver: false,
+            args: CallArgs::free(args.into_iter().map(|e| CallArg::new(e, false)).collect()),
         },
         return_type,
         synth_span(),

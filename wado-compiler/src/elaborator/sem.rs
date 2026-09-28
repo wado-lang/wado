@@ -1,7 +1,8 @@
 //! [`ModuleSemantics`] — per-module semantic facts (WEP 2026-05-26), one
-//! instance per loaded module that the per-module [`super::Elaborator`] takes
-//! for the length of one pass over that module and every other phase borrows.
-//! Membership
+//! instance per loaded module. A module a compile walks owns its instance, which
+//! the per-module [`super::Elaborator`] takes for the length of one pass; a
+//! stdlib module served from the snapshot shares the snapshot's, which no pass
+//! takes. Every other phase borrows. Membership
 //! splits across four sub-structs, each in its own file so the "does this fit?"
 //! question that gates a new field stays reviewable.
 
@@ -28,12 +29,19 @@ pub(crate) struct ModuleSemantics {
     pub(crate) imports: ModuleImports,
     pub(crate) types: TypeAnnotations,
     pub(crate) decls: ModuleDecls,
-    /// Per-impl trait default-method `ModuleSemantics` snapshots, keyed by
+    /// Per-impl trait default-method facts, keyed by
     /// `(impl_block.id, trait_default_method.ast_id)`. The same trait body is
     /// synthesised once per impl, so one trait node legitimately carries a fact
-    /// set per impl, which snapshot isolation gives and a flat map could not.
-    /// Each value's `decls` / `imports` are cloned from the impl module.
-    pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
+    /// set per impl, which a flat map could not hold.
+    pub(crate) default_method_facts: IndexMap<(AstId, AstId), DefaultMethodFacts>,
+}
+
+/// What one walk of a trait default body records for one impl. Its
+/// declarations and imports are the impl module's, so it holds none.
+#[derive(Clone)]
+pub(crate) struct DefaultMethodFacts {
+    pub(crate) bindings: ModuleBindings,
+    pub(crate) types: TypeAnnotations,
 }
 
 /// The fact kinds [`crate::semantics::Semantics`] answers by `AstId`, and so

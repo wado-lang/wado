@@ -1319,7 +1319,7 @@ mod tests {
         let sym_id = *module_sem.bindings.local_symbols.keys().next().unwrap();
         assert!(sem.symbol_at(sym_id).is_some());
 
-        // The same holds for a module seeded from the stdlib snapshot, which
+        // The same holds for a module served from the stdlib snapshot, which
         // carries its facts per module rather than re-splitting flat ones.
         let stdlib_facts = sem
             .state
@@ -1332,6 +1332,30 @@ mod tests {
                 !sem.types.expression_types.is_empty() && !sem.bindings.references.is_empty()
             });
         assert!(stdlib_facts);
+    }
+
+    /// A stdlib module served from the snapshot reads the snapshot's facts in
+    /// place rather than a copy made per compile.
+    #[test]
+    fn a_compile_shares_the_snapshot_facts() {
+        let snap = get_or_init_snapshot().expect("not re-entering the builder");
+        let snap_state = snap
+            .state
+            .as_ref()
+            .expect("the stdlib snapshot is complete");
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics("fn main() {}", &host, Some("entry.wado")));
+        let state = sem.state.as_ref().expect("annotate state");
+
+        let prelude = state
+            .module_semantics
+            .keys()
+            .find(|source| source.to_string() == "core:prelude")
+            .expect("every compile loads the prelude");
+        assert!(std::rc::Rc::ptr_eq(
+            &state.module_semantics[prelude],
+            &snap_state.module_semantics[prelude],
+        ));
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

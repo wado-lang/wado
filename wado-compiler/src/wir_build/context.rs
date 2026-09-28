@@ -1010,34 +1010,12 @@ impl<'a> WirContext<'a> {
         Some(type_id)
     }
 
-    /// Minimum size, in pages, of the linear memory a `#![wasm_module]` module
-    /// defines.
-    ///
-    /// The component has one linear memory, and codegen rewrites each embedded
-    /// wasm asset to import it rather than define its own — so it must be at
-    /// least as large as the largest asset's own minimum, or that asset's data
-    /// segments land past the end of memory. libm wants 17 pages.
-    fn wasm_module_min_memory_pages(&self) -> u32 {
-        let assets = &self.package.wasm_assets;
-        let referenced: IndexSet<&str> = self
-            .package
-            .imports
-            .iter()
-            .map(|import| import.namespace.as_str())
-            .filter(|namespace| assets.contains_key(*namespace))
-            .collect();
-        referenced
-            .iter()
-            .map(|namespace| {
-                u32::try_from(assets[*namespace].min_memory_pages()).unwrap_or(u32::MAX)
-            })
-            .fold(1, u32::max)
-    }
-
     /// Consume this context and produce the final `WirPackage`.
     pub fn into_wir_package(self) -> WirPackage {
+        // One page past the reserved ones holds the start of the heap, where the
+        // freelist allocator keeps its bin heads.
         let memory = WirMemory {
-            min: self.wasm_module_min_memory_pages(),
+            min: self.package.wasm_asset_reserved_pages() + 1,
             max: None,
         };
         let trait_bound_violations = self.trait_bound_violations;
@@ -1099,19 +1077,17 @@ impl<'a> WirContext<'a> {
                     }
                 }
 
-                // Get result types from the function's type definition
-                let results = if let Some(WirTypeDef::Func(ft)) =
+                let Some(WirTypeDef::Func(signature)) =
                     self.types.get(func.type_id.index() as usize)
-                {
-                    ft.results.clone()
-                } else {
-                    vec![WirType::I32]
+                else {
+                    unreachable!("a function's type is a func type");
                 };
 
                 mod_functions.push(WasmModuleFunc {
                     export_name,
                     param_names: func.param_names.clone(),
-                    results,
+                    params: signature.params.clone(),
+                    results: signature.results.clone(),
                     body,
                     original_func_index: DEFINED_FUNC_BASE + func_idx,
                     is_exported: func.export_name.is_some(),

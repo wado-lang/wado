@@ -11,6 +11,7 @@ pub mod ast_index;
 pub mod attribute;
 pub mod bind;
 pub mod builtin_registry;
+pub mod call_args;
 pub mod canonical;
 pub mod cm_abi;
 pub mod codegen;
@@ -597,10 +598,28 @@ const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 /// The FQ prefix of every `core:eval` interface.
 const EVAL_PACKAGE_PREFIX: &str = "core:eval/";
 
+#[derive(Default)]
 struct LibSurface {
     submodule_exports: Vec<world_registry::WorldExportInfo>,
     submodule_type_decls: Vec<(ModuleSource, ast::Item)>,
     submodule_interfaces: Vec<ast::InterfaceDecl>,
+    /// Published beside the package's types, but no API the package declares.
+    stdlib_newtypes: Vec<(ModuleSource, ast::Item)>,
+}
+
+impl LibSurface {
+    /// Every type the component publishes beyond the entry module's own.
+    fn published_type_decls(&self) -> impl Iterator<Item = &(ModuleSource, ast::Item)> {
+        self.submodule_type_decls
+            .iter()
+            .chain(&self.stdlib_newtypes)
+    }
+
+    fn published_type_decls_mut(&mut self) -> impl Iterator<Item = &mut (ModuleSource, ast::Item)> {
+        self.submodule_type_decls
+            .iter_mut()
+            .chain(&mut self.stdlib_newtypes)
+    }
 }
 
 fn collect_lib_surface(
@@ -657,7 +676,72 @@ fn collect_lib_surface(
         submodule_exports,
         submodule_type_decls,
         submodule_interfaces,
+        stdlib_newtypes: Vec::new(),
     }
+}
+
+/// The stdlib newtypes a library's surface names, at any depth. The library
+/// publishes each as its own alias, as `wado wit` renders it: `ByteList`
+/// crosses as `type byte-list = list<u8>`.
+fn stdlib_newtypes_in_lib_surface(
+    resolutions: &resolve::Resolutions,
+    modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
+    entry: Option<&ast::Module>,
+    surface: &LibSurface,
+) -> Vec<(ModuleSource, ast::Item)> {
+    use crate::ast::Item;
+    let defs = resolutions.defs();
+    let stdlib_newtypes: hashmap::IndexMap<DefId, (&ModuleSource, &Item)> = modules
+        .iter()
+        .filter(|(source, _)| source.is_core())
+        .flat_map(|(source, module)| module.items.iter().map(move |item| (source, item)))
+        .filter(|(_, item)| matches!(item, Item::Newtype(_)))
+        .map(|(source, item)| (defs.def_at(item.id()), (source, item)))
+        .collect();
+
+    fn signature(f: &ast::Function) -> Vec<&ast::Type> {
+        f.params
+            .iter()
+            .map(|p| &p.ty)
+            .chain(f.return_type.as_ref())
+            .collect()
+    }
+    let entry_items = entry.into_iter().flat_map(|module| &module.items);
+    let mut pending: Vec<&ast::Type> = entry_items
+        .chain(surface.submodule_type_decls.iter().map(|(_, item)| item))
+        .flat_map(|item| match item {
+            Item::Function(f) if f.is_export => signature(f),
+            Item::Interface(decl) => decl.methods.iter().flat_map(signature).collect(),
+            _ => declared_member_types(item),
+        })
+        .chain(
+            surface
+                .submodule_exports
+                .iter()
+                .flat_map(|e| e.params.iter().map(|(_, ty)| ty).chain(&e.return_type)),
+        )
+        .chain(
+            surface
+                .submodule_interfaces
+                .iter()
+                .flat_map(|decl| decl.methods.iter().flat_map(signature)),
+        )
+        .collect();
+
+    let mut reached: hashmap::IndexMap<DefId, (ModuleSource, Item)> = hashmap::IndexMap::default();
+    while let Some(ty) = pending.pop() {
+        ty.for_each(&mut |ty| {
+            if let ast::Type::Named(named) = ty
+                && let Some(def) = resolutions.declared_if_walked(named.id)
+                && let Some(&(source, item)) = stdlib_newtypes.get(&def)
+                && !reached.contains_key(&def)
+            {
+                reached.insert(def, (source.clone(), item.clone()));
+                pending.extend(declared_member_types(item));
+            }
+        });
+    }
+    reached.into_values().collect()
 }
 
 fn first_duplicate<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<String> {
@@ -1251,15 +1335,21 @@ fn compile_after_load<H: CompilerHost>(
         (false, true) => LibSurface {
             submodule_type_decls: collect_lib_surface(&sem.entry_module_source, &sem.modules)
                 .submodule_type_decls,
-            submodule_exports: Vec::new(),
-            submodule_interfaces: Vec::new(),
+            ..LibSurface::default()
         },
-        (false, false) => LibSurface {
-            submodule_exports: Vec::new(),
-            submodule_type_decls: Vec::new(),
-            submodule_interfaces: Vec::new(),
-        },
+        (false, false) => LibSurface::default(),
     };
+    if synth_world_fq.is_some() {
+        let resolutions = sem
+            .resolutions()
+            .expect("a complete analysis has resolutions");
+        lib_surface.stdlib_newtypes = stdlib_newtypes_in_lib_surface(
+            resolutions,
+            &sem.modules,
+            sem.modules.get(&sem.entry_module_source),
+            &lib_surface,
+        );
+    }
 
     let entry_type_names: Vec<String> = sem
         .modules
@@ -1294,8 +1384,7 @@ fn compile_after_load<H: CompilerHost>(
         let all_named: Vec<(String, String)> = entry_named
             .chain(
                 lib_surface
-                    .submodule_type_decls
-                    .iter()
+                    .published_type_decls()
                     .filter_map(|(source, item)| {
                         Some((lib_type_decl_name(item)?, source.to_string()))
                     }),
@@ -1338,18 +1427,13 @@ fn compile_after_load<H: CompilerHost>(
             .into_iter()
             .flat_map(|module| &module.items)
             .filter(|item| lib_type_decl_name(item).is_some())
-            .chain(
-                lib_surface
-                    .submodule_type_decls
-                    .iter()
-                    .map(|(_, item)| item),
-            );
+            .chain(lib_surface.published_type_decls().map(|(_, item)| item));
         let binder = LibTypeBinder::new(resolutions, registry, fq, &sem.modules, published);
         let mut entry = entry.cloned();
         for item in entry.iter_mut().flat_map(|module| &mut module.items) {
             binder.bind_item(item);
         }
-        for (_, item) in &mut lib_surface.submodule_type_decls {
+        for (_, item) in lib_surface.published_type_decls_mut() {
             binder.bind_item(item);
         }
         for export in &mut lib_surface.submodule_exports {
@@ -1502,7 +1586,7 @@ fn compile_after_load<H: CompilerHost>(
         let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
-        registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
+        registry.register_lib_local_items(lib_surface.published_type_decls(), fq);
         // Guest effect interfaces left unhandled at the boundary become CM
         // imports the consumer satisfies — from the entry module and every
         // submodule, since a library spreads its effects (like its types).

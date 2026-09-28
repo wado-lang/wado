@@ -2647,20 +2647,9 @@ fn try_inline_call_expr(
     reval: &mut Vec<InlineRevalInfo>,
     site: Site,
 ) -> Option<(ExprId, FuncId)> {
-    let (func_id, arg_ops, has_receiver): (FuncId, Vec<Operand>, bool) =
-        match &caller.exprs[call_id].kind {
-            ExprKind::Call {
-                func_id,
-                args,
-                has_receiver,
-                ..
-            } => (
-                *func_id,
-                args.iter().map(|a| a.expr).collect(),
-                *has_receiver,
-            ),
-            _ => return None,
-        };
+    let ExprKind::Call { func_id, .. } = caller.exprs[call_id].kind else {
+        return None;
+    };
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
@@ -2682,6 +2671,10 @@ fn try_inline_call_expr(
     }
     let callee = candidate.body.as_ref()?;
     let call_span = caller.exprs[call_id].span;
+    let ExprKind::Call { args, .. } = &caller.exprs[call_id].kind else {
+        unreachable!("matched a Call above")
+    };
+    let args = args.clone();
 
     // Args are already in the caller arena (operands of the discarded call); bind
     // each to its param `Let` directly.
@@ -2691,11 +2684,11 @@ fn try_inline_call_expr(
     // would propagate whatever the caller recorded, including the unresolved
     // type of a synthesized default.
     let mut params = candidate.params.iter();
-    let mut args = arg_ops.iter();
+    let (receiver, rest) = args.split();
     let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
-    if has_receiver {
+    if let Some(receiver) = receiver {
         let self_param = params.next()?;
-        let receiver_op = *args.next()?;
+        let receiver_op = receiver.expr;
         // Bind the receiver to `self`. For `&mut self`, wrap it in a `MutRef` so
         // field mutations write back to the original (the receiver is then an
         // lvalue `Expr`, never a promoted constant); for `&self` / by-value pass
@@ -2726,12 +2719,12 @@ fn try_inline_call_expr(
             value: self_value,
         });
     }
-    bindings.extend(params.zip(args).map(|(param, &arg)| InlineBinding {
+    bindings.extend(params.zip(rest).map(|(param, arg)| InlineBinding {
         callee_local_index: param.local_index,
         name: param.name.clone(),
         is_mut: param.is_mut,
         local_type: param.type_id,
-        value: arg,
+        value: arg.expr,
     }));
 
     let inlined = build_inlined_labeled_block(
@@ -3160,23 +3153,18 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             func_id,
             type_args,
             args,
-            has_receiver,
-        } => {
-            let (func_id, type_args, has_receiver) = (*func_id, type_args.clone(), *has_receiver);
-            let arg_data: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
-            ExprKind::Call {
-                func_id,
-                type_args,
-                args: arg_data
-                    .into_iter()
-                    .map(|(e, m)| ArenaCallArg {
-                        expr: splice_operand(caller, callee, e, ctx),
-                        is_mut: m,
+        } => ExprKind::Call {
+            func_id: *func_id,
+            type_args: type_args.clone(),
+            args: args.rebuild(
+                args.iter()
+                    .map(|a| ArenaCallArg {
+                        expr: splice_operand(caller, callee, a.expr, ctx),
+                        is_mut: a.is_mut,
                     })
                     .collect(),
-                has_receiver,
-            }
-        }
+            ),
+        },
         ExprKind::CmRawCall { target, args } => {
             let (target, args) = (target.clone(), args.clone());
             ExprKind::CmRawCall {

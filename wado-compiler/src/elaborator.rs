@@ -60,7 +60,9 @@ use crate::elaborator::item::OperationOwner;
 use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
-use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
+use crate::elaborator::sem::{
+    DefaultMethodFacts, ModuleBindings, ModuleSemantics, TypeAnnotations,
+};
 use crate::elaborator::trait_query::{OnBoundTrait, SelfBinding};
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
@@ -162,7 +164,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`).
     /// Identifies the active `ModuleSemantics`, which the driver swaps by
-    /// `IndexMap<ModuleSource, ModuleSemantics>` key.
+    /// this key.
     current_module_source: ModuleSource,
     /// Entry module source (for cross-module import dedup)
     entry_module_source: ModuleSource,
@@ -1738,7 +1740,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.record_impl_decls(impl_block);
             }
         }
-        self.sem.decls.function_sigs = Rc::new(function_sigs);
+        self.sem.decls.function_sigs = function_sigs;
         for item in &module.items {
             if let Item::Function(func) = item {
                 self.precompute_generic_function_cache(func);
@@ -2079,14 +2081,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or_default();
 
             // One default body serves every impl taking it, so each impl records its
-            // per-node facts apart; declarations stay the impl module's own.
+            // per-node facts apart; declarations and imports stay the impl module's
+            // own, lent to the walk and taken back.
             for default_method in &default_methods {
                 let synthetic = ModuleSemantics {
                     bindings: ModuleBindings::default(),
-                    imports: scope.sem.imports.clone(),
+                    imports: std::mem::take(&mut scope.sem.imports),
                     types: TypeAnnotations::default(),
                     decls: std::mem::take(&mut scope.sem.decls),
-                    default_method_semantics: hashmap::IndexMap::default(),
+                    default_method_facts: hashmap::IndexMap::default(),
                 };
                 let ((), populated) = util::replaced(
                     &mut *scope,
@@ -2107,11 +2110,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     },
                 );
 
-                scope.sem.decls = populated.decls.clone();
-                scope
-                    .sem
-                    .default_method_semantics
-                    .insert((impl_block.id, default_method.id), populated);
+                let ModuleSemantics {
+                    bindings,
+                    imports,
+                    types,
+                    decls,
+                    default_method_facts,
+                } = populated;
+                assert!(
+                    default_method_facts.is_empty(),
+                    "a default method's walk synthesises no default methods of its own"
+                );
+                scope.sem.imports = imports;
+                scope.sem.decls = decls;
+                scope.sem.default_method_facts.insert(
+                    (impl_block.id, default_method.id),
+                    DefaultMethodFacts { bindings, types },
+                );
             }
         }
     }

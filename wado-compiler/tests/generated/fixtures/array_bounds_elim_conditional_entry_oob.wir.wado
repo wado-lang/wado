@@ -83,7 +83,7 @@ fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
     let flag: bool;
     let i: i32;
     let s: i32;
-    let $cse_44: bool;
+    let $cse_53: bool;
     repr = builtin::array_new<i32>(local.tee n(black_box(5)));
     builtin::array_fill<i32>(repr, 0, 3, n);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -91,9 +91,9 @@ fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
         i = 0;
     }; s = 0; b1: block {
         l2: loop {
-            $cse_44 = i < n;
-            break_if b1 $cse_44 == 0;
-            if @unlikely(select i32(0 <= i, $cse_44, 0) == 0) {
+            $cse_53 = i < n;
+            break_if b1 $cse_53 == 0;
+            if @unlikely(select i32(0 <= i, $cse_53, 0) == 0) {
                 cold_path;
                 "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of range"), used: 18 });
                 unreachable;

@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::convert::identity;
 use std::rc::Rc;
 
+use crate::call_args::CallArgs;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
@@ -2176,8 +2177,7 @@ fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
                 method_info: None,
             }),
             type_args: vec![],
-            args: vec![],
-            has_receiver: false,
+            args: CallArgs::free(vec![]),
         },
         result_type,
         span,

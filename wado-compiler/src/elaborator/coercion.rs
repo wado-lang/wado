@@ -124,6 +124,23 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     classify_numeric_literal(expr).is_some()
 }
 
+/// Whether `expr` is built from numeric literals alone, through `-`, `~` and
+/// the numeric binary operators, and so takes its type from its context as a
+/// bare literal does: `~7`, `1 << 40`.
+pub(super) fn is_literal_arithmetic(expr: &Expr) -> bool {
+    if let Expr::Unary(unary) = expr
+        && matches!(unary.op, UnaryOp::Neg | UnaryOp::BitNot)
+    {
+        return is_literal_arithmetic(&unary.expr);
+    }
+    if let Expr::Binary(binary) = expr
+        && binary.op.is_numeric()
+    {
+        return is_literal_arithmetic(&binary.left) && is_literal_arithmetic(&binary.right);
+    }
+    is_numeric_literal_expr(expr)
+}
+
 /// Whether a call argument takes its type from its context: a numeric literal or
 /// `null`. Inference defers it, so the other arguments bind the parameter first.
 pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
@@ -147,6 +164,15 @@ impl PendingLiterals {
             literals: Vec::new(),
         }
     }
+}
+
+/// A call's declared return type, in the frame its parameter types are in, and
+/// the type its context expects of the result. It answers a variable the
+/// arguments left open before the literals' default does.
+#[derive(Clone, Copy)]
+pub(super) struct ExpectedReturn {
+    pub(super) declared: TypeId,
+    pub(super) expected: TypeId,
 }
 
 /// The type `literals` take together where nothing else answers their
@@ -522,8 +548,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve each literal `pending` deferred against what its variable was
-    /// answered with, answering the variables nothing answered with their
-    /// literals' default first. Answers each literal's type by its id.
+    /// answered with. A variable nothing answered takes what `expected_return`
+    /// answers it with, else its literals' default. Answers each literal's type
+    /// by its id.
     ///
     /// A variable only literals standing as `args` met stays theirs to answer
     /// as they did before any deferral: the call's own inference weighs its
@@ -537,6 +564,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         pending: PendingLiterals,
         args: &[Expr],
+        expected_return: Option<ExpectedReturn>,
         ctx: &mut FunctionContext,
     ) -> IndexMap<AstId, TypeId> {
         let mut by_var: IndexMap<TypeId, Vec<Expr>> = IndexMap::default();
@@ -547,8 +575,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {
             let default = shared_literal_default(&literals);
+            let yields_to_return =
+                self.apply_infer_holes(var) == var && literals.iter().all(is_arg);
+            if !yields_to_return
+                && let Some(ExpectedReturn { declared, expected }) = expected_return
+            {
+                let declared = self.apply_infer_holes(declared);
+                self.solve_own_infer_holes_against(declared, expected, &[var]);
+            }
             let mut answer = self.apply_infer_holes(var);
-            let yields_to_return = answer == var && literals.iter().all(is_arg);
             if answer == var && !yields_to_return {
                 self.solve_infer_var(var, default);
                 answer = default;

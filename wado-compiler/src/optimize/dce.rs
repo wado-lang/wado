@@ -516,6 +516,7 @@ fn resolve_imports(
     project
         .imports
         .sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
+    project.reserve_asset_memory();
 
     project.used_wasi_functions = used_wasi_functions;
 }
@@ -1948,7 +1949,7 @@ fn lazy_guard_global(
     if !callee.is_builtin_named("is_uninitialized") {
         return None;
     }
-    let [arg] = args.as_slice() else {
+    let [arg] = &args[..] else {
         return None;
     };
     let read = arg.expr.as_expr()?;

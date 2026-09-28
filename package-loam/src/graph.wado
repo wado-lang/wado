@@ -58,6 +58,7 @@ pub fn static_extents(rank: &Rank) -> Option<List<i32>> {
     return Option::Some(extents);
 }
 
+/// A named tensor the graph declares: an input, an output, or an initializer.
 pub struct ValueInfo {
     pub name: String,
     pub dtype: String,
@@ -112,6 +113,14 @@ pub fn bit_pattern(tensor: &String, dtype: &String, v: i32, width: i32) -> Resul
     return Result::Ok(v as u32);
 }
 
+/// Whether `text` is a float the text form spells as a word, as ONNX's parser
+/// reads one: `nan`, `inf` or `infinity` in any case, after an optional minus.
+pub fn is_float_word(text: &String) -> bool {
+    let unsigned = if text.starts_with("-") { text.substr_bytes(1, text.len()) } else { *text };
+    let word = unsigned.to_ascii_lowercase();
+    return word == "nan" || word == "inf" || word == "infinity";
+}
+
 /// One element's low `width` bytes, little-endian, as the protobuf form lays
 /// out a payload.
 pub fn push_element(bytes: &mut ByteList, bits: u64, width: i32) {
@@ -139,9 +148,49 @@ pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) 
 pub struct Known {
     pub extents: List<i32>,
     pub elements: Elements,
-    /// Whether the integers are ONNX's int32, which wraps at 32 bits where
-    /// int64 does not, though `i64` holds both.
-    pub int32: bool = false,
+    /// The ONNX element type the elements are stored as.
+    pub stored: Stored = Stored::Computed,
+}
+
+/// The ONNX element type a known tensor is stored as, where it is narrower
+/// than the type stage 0 computes its elements in. A half is computed in f32,
+/// which holds each of its values exactly.
+pub enum Stored {
+    /// int64, float or bool, each computed as it is stored.
+    Computed,
+    /// Held in `i64`, but wrapping at 32 bits where int64 does not.
+    Int32,
+    Float16,
+    BFloat16,
+}
+
+impl Stored {
+    /// The half type `dtype` names, or `None` for any other.
+    pub fn half(dtype: &String) -> Option<Stored> {
+        return match dtype.as_str_slice() {
+            "float16" => Option::Some(Stored::Float16),
+            "bfloat16" => Option::Some(Stored::BFloat16),
+            _ => null,
+        };
+    }
+
+    /// A half's bit pattern as the f32 that holds it.
+    pub fn widened(&self, bits: u16) -> f32 {
+        return match self {
+            Float16 => f32::from(f16::from_bits(bits)),
+            BFloat16 => f32::from(bf16::from_bits(bits)),
+            _ => unreachable(),
+        };
+    }
+
+    /// The bit pattern of the half `widened` gave `v` for.
+    pub fn narrowed(&self, v: f32) -> u16 {
+        return match self {
+            Float16 => f16::from_f32(v).to_bits(),
+            BFloat16 => bf16::from_f32(v).to_bits(),
+            _ => unreachable(),
+        };
+    }
 }
 
 /// A known tensor's elements, in the type stage 0 computes them in. ONNX's
@@ -170,6 +219,7 @@ impl Elements {
 }
 
 impl Known {
+    /// How many elements the tensor holds.
     pub fn len(&self) -> i32 {
         return match &self.elements {
             Ints(v) => v.len(),
@@ -180,12 +230,15 @@ impl Known {
     }
 }
 
-/// An attribute's values as written, since ONNX types one by the operator
-/// rather than the syntax. A tensor has no text form and travels in `tensor`.
+/// An attribute's values as written, each number or string as its text. A
+/// tensor has no text form and travels in `tensor`.
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
     pub is_list: bool,
+    /// Whether the values are strings rather than numbers, which their text
+    /// alone does not tell where a string reads as `3` or `inf`.
+    pub is_string: bool = false,
     pub tensor: Option<Known> = null,
 }
 
@@ -208,7 +261,7 @@ impl Attr {
     /// Every value read as an integer.
     pub fn ints(&self) -> Result<List<i64>, AttrError> {
         let mut values: List<i64> = [];
-        for let text of self.values {
+        for let text of self.numbers()? {
             values.push(int_of(&text).map_err(|reason| self.error(reason))?);
         }
         return Result::Ok(values);
@@ -217,7 +270,7 @@ impl Attr {
     /// `ints` for a float attribute.
     pub fn floats(&self) -> Result<List<f32>, AttrError> {
         let mut values: List<f32> = [];
-        for let text of self.values {
+        for let text of self.numbers()? {
             values.push(float_of(&text).map_err(|reason| self.error(reason))?);
         }
         return Result::Ok(values);
@@ -225,19 +278,44 @@ impl Attr {
 
     /// The one value an operator reads as an integer.
     pub fn int(&self) -> Result<i64, AttrError> {
-        return int_of(&self.one_value()?).map_err(|reason| self.error(reason));
+        return int_of(&self.one_of(self.numbers()?)?).map_err(|reason| self.error(reason));
     }
 
     /// `int` for a float attribute.
     pub fn float(&self) -> Result<f32, AttrError> {
-        return float_of(&self.one_value()?).map_err(|reason| self.error(reason));
+        return float_of(&self.one_of(self.numbers()?)?).map_err(|reason| self.error(reason));
     }
 
-    fn one_value(&self) -> Result<String, AttrError> {
-        if self.values.len() != 1 {
+    /// The one value an operator reads as a string.
+    pub fn string(&self) -> Result<String, AttrError> {
+        return self.one_of(self.texts(true, "a string")?);
+    }
+
+    fn one_of(&self, values: List<String>) -> Result<String, AttrError> {
+        if values.len() != 1 {
             return Result::Err(self.error("is a list and the operator reads one value"));
         }
-        return Result::Ok(self.values[0]);
+        return Result::Ok(values[0]);
+    }
+
+    fn numbers(&self) -> Result<List<String>, AttrError> {
+        return self.texts(false, "numbers");
+    }
+
+    /// The values, which the operator `reads` as strings or as numbers. An
+    /// empty list is either.
+    fn texts(&self, strings: bool, reads: String) -> Result<List<String>, AttrError> {
+        if self.tensor matches { Some(_) } {
+            return Result::Err(self.error(`holds a tensor, and the operator reads ${reads}`));
+        }
+        if !self.is_list && self.values.is_empty() {
+            return Result::Err(self.error("holds no value the build reads"));
+        }
+        if !self.values.is_empty() && self.is_string != strings {
+            let holds = if self.is_string { "strings" } else { "numbers" };
+            return Result::Err(self.error(`holds ${holds}, and the operator reads ${reads}`));
+        }
+        return Result::Ok(self.values);
     }
 
     fn error(&self, reason: String) -> AttrError {
@@ -259,6 +337,7 @@ fn float_of(text: &String) -> Result<f32, String> {
     return Result::Ok(v);
 }
 
+/// One operator application: what it reads, what it writes, and its attributes.
 pub struct Node {
     pub op: String,
     pub outputs: List<String>,
@@ -267,6 +346,21 @@ pub struct Node {
 }
 
 impl Node {
+    /// What names the node in a message. ONNX identifies one by its first
+    /// output, and a node the file gave none falls back to its operator.
+    pub fn name(&self) -> String {
+        if self.outputs.is_empty() {
+            return self.op;
+        }
+        return self.outputs[0];
+    }
+
+    /// The node as a message places something at it: its name and operator.
+    pub fn site(&self) -> String {
+        return `${self.name()} = ${self.op}`;
+    }
+
+    /// The attribute `name`, where the node carries it.
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
             if a.name.as_str_slice() == name.as_str_slice() {
@@ -325,17 +419,19 @@ pub fn default_opset(imports: &List<[String, i64]>) -> Option<i64> {
 }
 
 /// `nodes` as the current opset defines them, read from `opset`'s definitions.
-/// A spelling whose older meaning no later opset has stops the read.
+/// A graph naming no opset is read as the current one. Arithmetic keeps its
+/// `axis` only where it aligns B at it, as before opset 7 with `broadcast`,
+/// which no later opset spells.
 pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, String> {
-    let Some(version) = opset else {
-        return Result::Ok(nodes);
-    };
+    let version = opset.unwrap_or(i64::MAX);
     let mut out: List<Node> = [];
     for let node of nodes {
-        if version < 7 && is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
-            return Result::Err(
-                `${node.outputs.join(", ")} = ${node.op}: opset ${version} aligns the operands at attribute axis, which no later opset does`,
-            );
+        if is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
+            let aligns = version < 7 && node.int_attr("broadcast", 0).map_err(|e| `${node.site()}: ${e}`)? != 0;
+            if !aligns {
+                out.push(Node { ..node, attrs: node.attrs.into_iter().filter(|a| a.name != "axis").collect() });
+                continue;
+            }
         }
         if version < 4 && node.op == "Concat" && node.attr("axis") matches { None } {
             let mut attrs = node.attrs;
@@ -355,6 +451,20 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
 /// The operators that broadcast two operands against each other.
 pub fn is_binary_elementwise(op: &String) -> bool {
     return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
+}
+
+/// How many of A's axes follow B's where arithmetic aligns B at A's `axis`, or
+/// 0 where it aligns B at A's end, as numpy does.
+pub fn trailing_axes(node: &Node, a_rank: i32, b_rank: i32) -> Result<i32, String> {
+    assert is_binary_elementwise(&node.op);
+    if node.attr("axis") matches { None } {
+        return Result::Ok(0);
+    }
+    let axis = node.int_attr("axis", 0).map_err(|e| `${e}`)?;
+    if !(0 <= axis <= (a_rank - b_rank) as i64) {
+        return Result::Err(`attribute axis is ${axis}, and B's ${b_rank} axes from there pass A's ${a_rank}`);
+    }
+    return Result::Ok(a_rank - b_rank - axis as i32);
 }
 
 /// A model neither reader can take, and why.

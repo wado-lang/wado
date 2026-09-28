@@ -582,36 +582,28 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
             scan_transfers(inner, false, consumed, cx);
         }
 
-        TirExprKind::Call {
-            func,
-            args,
-            has_receiver,
-            ..
-        } => {
-            let rest = match has_receiver.then(|| args.split_first()).flatten() {
-                Some((receiver, rest)) => {
-                    // `&self` methods auto-reference the receiver; look through
-                    // that `&` to reach the underlying value.
-                    let recv_inner = match &receiver.expr.kind {
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                            expr,
-                        } => expr.as_ref(),
-                        _ => &receiver.expr,
-                    };
-                    // The receiver is transferred exactly when the method takes
-                    // `self` by value. Extraction (`Result::unwrap`) is such a
-                    // by-value method, so it is covered here with no
-                    // aggregate-shape guessing.
-                    let receiver_consumed = func
-                        .method_info
-                        .as_ref()
-                        .is_some_and(|info| cx.owned_self.contains(&info.base_dispatch_key()));
-                    scan_transfers(recv_inner, receiver_consumed, consumed, cx);
-                    rest
-                }
-                None => args.as_slice(),
-            };
+        TirExprKind::Call { func, args, .. } => {
+            let (receiver, rest) = args.split();
+            if let Some(receiver) = receiver {
+                // `&self` methods auto-reference the receiver; look through
+                // that `&` to reach the underlying value.
+                let recv_inner = match &receiver.expr.kind {
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                        expr,
+                    } => expr.as_ref(),
+                    _ => &receiver.expr,
+                };
+                // The receiver is transferred exactly when the method takes
+                // `self` by value. Extraction (`Result::unwrap`) is such a
+                // by-value method, so it is covered here with no
+                // aggregate-shape guessing.
+                let receiver_consumed = func
+                    .method_info
+                    .as_ref()
+                    .is_some_and(|info| cx.owned_self.contains(&info.base_dispatch_key()));
+                scan_transfers(recv_inner, receiver_consumed, consumed, cx);
+            }
             for arg in rest {
                 scan_transfers(&arg.expr, true, consumed, cx);
             }

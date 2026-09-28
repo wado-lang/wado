@@ -1,6 +1,6 @@
-use { EmitError, GRAPH_BANNER, NameCollision, UnimplementedBroadcast, UnmappedDtype, emit } from "./emit.wado";
+use { EmitError, GRAPH_BANNER, NameCollision, UnmappedDtype, emit } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
-use { Refusal, infer } from "./infer.wado";
+use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 
@@ -325,7 +325,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
     assert out.contains("map(X, |v| f32::erf(v))");
 }
 
-test "a broadcast no kernel covers names both operands" {
+test "an axis of 1 named apart from the one it stretches over is read under the result's axes" {
     let source = `
 g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
 <>
@@ -338,9 +338,27 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
         rule("Z", ["Batch", "Wide"]),
         rule("Y", ["Batch", "Wide"]),
     ];
-    let e = generate(source, layout).unwrap_err();
+    let out = generate(source, layout).unwrap();
 
-    assert `${e}` == "Y = Add: no kernel broadcasts [Batch, One] against [Batch, Wide]";
+    assert out.contains("let Y = zip(&lift::<f32, [Batch, One], [Batch, Wide]>(X, 2), Z, |x, y| x + y);");
+}
+
+test "a Where operand whose axis of 1 is named apart is read under the result's axes" {
+    let source = `
+g (float[N, 1] M, float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
+{
+    C = Cast <to = 9> (M)
+    Y = Where(C, X, Z)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("M", ["Batch", "One"]),
+        rule("C", ["Batch", "One"]),
+        rule("*", ["Batch", "Wide"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("let Y = select(&lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2), X, Z);");
 }
 
 test "an extent-1 axis stretches under the name the other operand gives it" {
@@ -395,6 +413,47 @@ g (float[1, 16, 4, 4] X, float[1, 256] Z) => (float[1, 256] Y)
     ]).unwrap();
 
     assert !emitted(&out).contains("let S =");
+}
+
+test "a grouped Conv lowers to conv_grouped, naming the weight's channel axis" {
+    let source = `
+g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
+<float[2, 2, 2, 2] W>
+{
+    Y = Conv <group = 2> (X, W)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Share", "KRow", "KCol"]),
+        rule("Y", ["Batch", "Out", "ORow", "OCol"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains(
+        "let Y = conv_grouped::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, 2, &Window {",
+    );
+}
+
+test "a grouped Conv with a bias lowers to conv_grouped_bias" {
+    let source = `
+g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
+<float[2, 2, 2, 2] W, float[2] B>
+{
+    Y = Conv <group = 2> (X, W, B)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Share", "KRow", "KCol"]),
+        rule("B", ["Out"]),
+        rule("Y", ["Batch", "Out", "ORow", "OCol"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains(
+        "let Y = conv_grouped_bias::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, &weights.B, 2, &Window {",
+    );
 }
 
 test "Conv and MaxPool lower to their kernels under the window stage 0 read" {
@@ -561,9 +620,9 @@ g (float[1, 4, 24] X) => (float[1, 4, 8] K)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Q = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 0, 8);");
-    assert out.contains("let K = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 8, 8);");
-    assert out.contains("let V = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 16, 8);");
+    assert out.contains("let Q = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 0, 8, 1);");
+    assert out.contains("let K = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 8, 8, 1);");
+    assert out.contains("let V = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 16, 8, 1);");
 }
 
 test "Softmax lowers to the kernel along its axis" {
@@ -576,6 +635,51 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
     assert out.contains("let Y = softmax(X, 2);");
+}
+
+test "Softmax before opset 13 lowers to the kernel over the axes from its own on" {
+    let lowered = |attrs: String| -> String {
+        let source = `<ir_version: 7, opset_import: ["" : 11]>
+g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
+{
+    Y = Softmax ${attrs} (X)
+}
+`;
+        return generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+    };
+
+    assert lowered("").contains("let Y = softmax_flattened(X, 1);");
+    assert lowered("<axis = 2>").contains("let Y = softmax(X, 2);");
+}
+
+test "arithmetic before opset 7 aligned at an axis lowers to zip_at" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y)
+{
+    Y = Add <broadcast = 1, axis = 1> (X, B)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("B", ["Seq"]),
+    ]).unwrap();
+
+    assert out.contains("let Y = zip_at::<[Batch], [Seq], [Embed]>(X, B, 1, |x, y| x + y);");
+}
+
+test "arithmetic before opset 7 aligned at the axis numpy would take lowers as numpy's" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+g (float[2, 4, 8] X, float[8] B) => (float[2, 4, 8] Y)
+{
+    Y = Add <broadcast = 1, axis = 2> (X, B)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("B", ["Embed"]),
+    ]).unwrap();
+
+    assert out.contains("let Y = zip_suffix::<[Batch, Seq], [Embed]>(X, B, |x, y| x + y);");
 }
 
 test "a layer norm's mean stretches back over the axis it reduced" {
@@ -604,17 +708,16 @@ g (float[2, 4, 8] X) => (float[1, 4, 1] Y)
     assert out.contains("let Y = reduce(X, [0, 2], 0.0, |x, y| x + y);");
 }
 
-test "a reduction that drops its axes names itself" {
+test "a reduction that drops its axes reshapes the kept ones away" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4] Y)
 {
     Y = ReduceMean <axes = [-1], keepdims = 0> (X)
 }
 `;
-    let e = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap_err();
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert `${e}` == "Y = ReduceMean: no kernel drops a reduced axis";
-    assert e matches { Refused(Refusal { op: "ReduceMean", .. }) };
+    assert out.contains("let Y = reshape::<f32, [Batch, Seq, Embed], [Batch, Seq]>(&reduce_mean(X, [2]), [2, 4]);");
 }
 
 fn is_error<E: Error>() {
@@ -622,9 +725,7 @@ fn is_error<E: Error>() {
 
 test "every error emit reports is an Error" {
     is_error::<EmitError>();
-    is_error::<Refusal>();
     is_error::<UnmappedDtype>();
-    is_error::<UnimplementedBroadcast>();
     is_error::<NameCollision>();
 }
 
@@ -726,17 +827,35 @@ g (float[1, 4, 8] X) => (float[1, 4, 16] Y)
     assert out.contains("let Y = matmul_shared(X, &weights.W);");
 }
 
-test "a MatMul batch axis that stretches names both operands" {
+test "a MatMul batch axis that stretches lowers to matmul_broadcast, the result spelled" {
     let source = `
 g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
-<>
 {
     Y = MatMul(X, Z)
 }
 `;
-    let e = generate(source, [rule("*", ["Batch", "M", "K"])]).unwrap_err();
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Row", "K"]),
+        rule("Z", ["Batch", "K", "Col"]),
+    ];
+    let out = generate(source, layout).unwrap();
 
-    assert `${e}` == "Y = MatMul: no kernel broadcasts [Batch, M, K] against [Batch, M, K]";
+    assert out.contains("let Y = matmul_broadcast::<[Batch, Row, K], [Batch, K, Col], [Batch, Row, Col]>(X, Z);");
+}
+
+test "a rank-1 MatMul operand lowers to matmul_broadcast, which drops its axis" {
+    let source = `
+g (float[3] X, float[3, 5] Z) => (float[5] Y)
+{
+    Y = MatMul(X, Z)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["K"]),
+        rule("Z", ["K", "Col"]),
+    ]).unwrap();
+
+    assert out.contains("let Y = matmul_broadcast::<[K], [K, Col], [Col]>(X, Z);");
 }
 
 fn refused_dtype(dtype: String) -> String {
@@ -878,20 +997,49 @@ test "a Range over a symbolic length is a kernel call" {
     assert out.contains("let Y = range_i64::<Seq>(0, to_extent(dim_N), 1);");
 }
 
-test "a Slice bound the build cannot show within its axis is checked before any kernel" {
+test "a clamp the run computes, read as its operand, is checked before any kernel" {
     let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
         S = Shape(X)
-        Y = Slice(M, Z, S)
+        A = Slice(M, Z, S)
+        Y = Add(A, X)
     }`;
     let layout: List<LayoutRule> = [
         rule("X", ["Seq"]),
         rule("M", ["Pos"]),
-        rule("Y", ["Seq"]),
+        rule("A", ["Seq"]),
     ];
     let out = emitted(&generate(source, layout).unwrap());
-    let check = out.find("refuse(unmet(-dim_N + 8, \"Y = Slice: the bound N must be at most 8\"));").unwrap();
-    let slice = out.find("let Y = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(dim_N));").unwrap();
+    let check = out.find("refuse(unmet(-dim_N + 8, \"A = Slice: N must be at most 8\"));").unwrap();
+    let call = "let A = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(i64::min(dim_N, 8)), 1);";
+    let slice = out.find(call).unwrap();
     assert check < slice;
+}
+
+test "a Reshape -1 the build rounds is checked to divide before the kernel runs" {
+    let source = `g (float[N] X) => (float[?, 2] Y) <int64[2] T = {-1, 2}> {
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Pair", "Two"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    let check = out.find("refuse(unmet(-dim_N + 2 * floor_div(dim_N, 2), ").unwrap();
+    let call = "let Y = reshape::<f32, [Seq], [Pair, Two]>(X, [to_extent(floor_div(dim_N, 2)), 2]);";
+    let reshape = out.find(call).unwrap();
+    assert check < reshape;
+}
+
+test "a Slice by a negative step walks back from its start" {
+    let source = `g (float[N] X) => (float[N] Y) <int64[1] B = {-1}, int64[1] E = {-4000000000}, int64[1] Z = {0}, int64[1] Back = {-1}> {
+        Y = Slice(X, B, E, Z, Back)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Rev"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("let Y = slice_axis::<f32, [], Seq, Rev, []>(X, 0, dim_N - 1, to_extent(dim_N), -1);");
 }
 
 test "an int64 input is held as i64 through the layout kernels and Cast converts it" {
@@ -929,7 +1077,7 @@ test "an embedding lookup is a row gather, and a folded index tensor is a litera
     assert out.contains("let F = gather_rows(&weights.P, &Q);");
 }
 
-test "Gather along any axis but the first stops the build" {
+test "Gather along any axis but the first lowers to gather, the axes spelled" {
     let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {
         Y = Gather<axis = 1>(W, I)
     }`;
@@ -937,9 +1085,8 @@ test "Gather along any axis but the first stops the build" {
         rule("I", ["Pick"]),
         rule("W", ["Vocab", "Hidden"]),
     ];
-    let e = generate(source, layout).unwrap_err();
-    assert `${e}` == "Y = Gather: no kernel gathers along axis 1";
-    assert e matches { Refused(Refusal { node: "Y", .. }) };
+    let out = generate(source, layout).unwrap();
+    assert out.contains("let Y = gather::<f32, [Vocab], Hidden, [], [Pick]>(&weights.W, I, 1);");
 }
 
 test "a Cast to the element a tensor already has computes nothing" {

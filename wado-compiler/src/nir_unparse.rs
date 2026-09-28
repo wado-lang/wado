@@ -706,19 +706,19 @@ impl<'a> NirUnparser<'a> {
                 func_id,
                 type_args,
                 args,
-                has_receiver,
             } => {
                 let func_id = *func_id;
                 let type_args = type_args.clone();
-                let mut arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                if *has_receiver {
+                let (receiver, rest) = args.split();
+                let receiver = receiver.map(|a| a.expr);
+                let arg_ops: Vec<Operand> = rest.iter().map(|a| a.expr).collect();
+                if let Some(receiver) = receiver {
                     // Quote the full resolved method name (e.g. `"Type::method"`)
                     // so the output captures which impl was selected.
                     let func_name = match self.callee(func_id) {
                         Some(func) => func.name.clone(),
                         None => format!("fn#{func_id:?}"),
                     };
-                    let receiver = arg_ops.remove(0);
                     // The elaborator wraps `self` receivers in `&`/`&mut`
                     // automatically; strip that wrapper so the rendering reflects
                     // the source value.

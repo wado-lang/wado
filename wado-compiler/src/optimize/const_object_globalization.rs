@@ -8,6 +8,7 @@ use cranelift_entity::EntityRef;
 use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
+use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirGlobal, NirUnaryOp};
@@ -1176,21 +1177,12 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
                         out.insert(r);
                     }
                 }
-                ExprKind::Call {
-                    func_id,
-                    args,
-                    has_receiver,
-                    ..
-                } => {
-                    for (i, a) in args.iter().enumerate() {
-                        // A receiver is written unless the callee is known not
-                        // to mutate `self`; every other arg only by `is_mut`.
-                        let writes = if *has_receiver && i == 0 {
-                            gate.callee_mutates_self(*func_id) != Some(false)
-                        } else {
-                            a.is_mut
-                        };
-                        if writes && let Some(r) = a.expr.as_expr().and_then(root_of) {
+                ExprKind::Call { func_id, args, .. } => {
+                    // A receiver is written unless the callee is known not to
+                    // mutate `self`; every other arg only by `is_mut`.
+                    let receiver_reaches = gate.callee_mutates_self(*func_id) != Some(false);
+                    for (a, reaches_storage) in args.with_storage_reach(receiver_reaches) {
+                        if reaches_storage && let Some(r) = a.expr.as_expr().and_then(root_of) {
                             out.insert(r);
                         }
                     }
@@ -1838,12 +1830,7 @@ fn written_through(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => inner.as_expr().is_some_and(rooted),
-            ExprKind::Call {
-                func_id,
-                args,
-                has_receiver: true,
-                ..
-            } => args.first().is_some_and(|recv| {
+            ExprKind::Call { func_id, args, .. } => args.receiver().is_some_and(|recv| {
                 recv.expr
                     .as_expr()
                     .is_some_and(|r| rooted(strip_refs(body, r)))
@@ -1917,22 +1904,13 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
             match &body.exprs[e].kind {
                 // A by-value `self` receiver hands the storage to the callee,
                 // which may return or store it in turn; `&self` only reads it.
-                ExprKind::Call {
-                    func_id,
-                    args,
-                    has_receiver,
-                    ..
-                } => {
-                    let (receiver, first_rest) = match (has_receiver, args.split_first()) {
-                        (true, Some(_)) => (args.first(), 1),
-                        (true, None) => return Some(()),
-                        (false, _) => (None, 0),
-                    };
+                ExprKind::Call { func_id, args, .. } => {
+                    let (receiver, _) = args.split();
                     // Handing the storage on as a read-only borrow is not an
                     // escape when the callee keeps it one — the same question
                     // this walk answers, asked of the callee. A Wasm
                     // instruction has no way to keep it at all.
-                    for (pos, a) in args.iter().enumerate().skip(first_rest) {
+                    for (pos, a) in args.rest_positioned() {
                         if !escapes(a.expr) {
                             continue;
                         }
@@ -2238,23 +2216,15 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         // consuming use. Reject.
         ExprKind::Local { index, .. } => *index != idx,
 
-        ExprKind::Call {
-            func_id,
-            args,
-            has_receiver,
-            ..
-        } => {
+        ExprKind::Call { func_id, args, .. } => {
             let callee_id = *func_id;
-            let has_receiver = *has_receiver;
-            let receiver = has_receiver.then(|| args.first()).flatten().map(|a| a.expr);
+            let receiver = args.receiver().map(|a| a.expr);
             // Paired with its own `is_mut`, not with a position: an argument
             // promoted to `Operand::Value` carries no `ExprId`, so counting
             // surviving expressions would put every later argument against the
             // wrong parameter.
             let rest: Vec<(Operand, ArgUse)> = args
-                .iter()
-                .enumerate()
-                .skip(usize::from(has_receiver))
+                .rest_positioned()
                 .map(|(pos, a)| {
                     let arg_use = if a.is_mut {
                         ArgUse::WritesThrough
@@ -2711,11 +2681,10 @@ fn guard_set_on_uninit(
         kind: ExprKind::Call {
             func_id: is_uninitialized,
             type_args: vec![ty],
-            args: vec![ArenaCallArg {
+            args: CallArgs::free(vec![ArenaCallArg {
                 expr: global_get.into(),
                 is_mut: false,
-            }],
-            has_receiver: false,
+            }]),
         },
         type_id: TypeTable::BOOL,
         span,

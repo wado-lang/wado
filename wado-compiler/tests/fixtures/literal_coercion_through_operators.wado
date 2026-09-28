@@ -1,0 +1,27 @@
+// A numeric literal takes its type from its context through the operators
+// around it: `~` and `-` pass the type they are expected to have to their
+// operand, and an operand built from literals alone takes the other operand's
+// type, as a bare literal does.
+
+fn clear_low_bits(tag: u32) -> u32 {
+    return tag & ~7;
+}
+
+test "`~` passes the expected type to its literal operand" {
+    let all: u8 = ~0;
+    assert all == 255;
+    assert clear_low_bits(0x1F) == 0x18;
+}
+
+test "an operand built from literals takes the other operand's type" {
+    let t: u32 = builtin::black_box(0xFFFF_FFFF as u32);
+    assert t & ~7 == 0xFFFF_FFF8;
+    assert t & (1 << 31) == 0x8000_0000;
+    let wide: u64 = builtin::black_box(1 as u64);
+    assert (1 << 40) | wide == 0x100_0000_0001;
+}
+
+test "`-` passes the expected type to an operand built from literals" {
+    let n: i64 = -(1 << 40);
+    assert n == -0x100_0000_0000;
+}

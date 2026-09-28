@@ -10,6 +10,7 @@
 
 use std::cell::Cell;
 
+use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirStruct, NirUnaryOp};
@@ -512,7 +513,7 @@ fn is_storage_builtin(builtin: CtfeBuiltin) -> bool {
         | CtfeBuiltin::ArrayClonePrefix
         | CtfeBuiltin::ColdPath
         | CtfeBuiltin::Select => true,
-        CtfeBuiltin::I32AsChar => false,
+        CtfeBuiltin::I32AsChar | CtfeBuiltin::HeapBase(_) => false,
     }
 }
 
@@ -2274,11 +2275,10 @@ fn build_constructor_call(
         ExprKind::Call {
             func_id,
             type_args: Vec::new(),
-            args: vec![ArenaCallArg {
+            args: CallArgs::free(vec![ArenaCallArg {
                 expr: cap,
                 is_mut: false,
-            }],
-            has_receiver: false,
+            }]),
         },
         field.list_type,
         span,

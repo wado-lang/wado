@@ -370,7 +370,6 @@ fn reaches(links: &IndexMap<DefId, DefId>, from: DefId, target: DefId) -> bool {
 /// [`Elaborator::build_tir_from_state`]. The [`TypeSystem`] internals are
 /// reference-counted so per-module elaborators clone them cheaply, and the
 /// [`TypeTable`] stays behind `Rc<RefCell<…>>` because lowering interns into it.
-/// Each [`Self::module_semantics`] entry is owned by one place at a time.
 pub(crate) struct AnnotateState {
     /// Pipeline-wide type knowledge: the type arena, decl-interned type
     /// tables, registries, included-files map, and read-only caches
@@ -391,12 +390,12 @@ pub(crate) struct AnnotateState {
     /// so a `TirModule`'s position in the result map matches the
     /// dependency order downstream phases expect.
     pub(crate) sorted_sources: Vec<ModuleSource>,
-    /// Per-module semantic facts, one entry per loaded module: stdlib entries
-    /// seeded from the snapshot in [`Self::annotate_modules`], the rest produced
-    /// by the body walk in [`Self::build_tir_from_state`]. Each module owns its
-    /// own [`super::sem::ModuleSemantics`], so the walk's `&mut` access stays
-    /// disjoint and needs no shared-mutability plumbing.
-    pub(crate) module_semantics: IndexMap<ModuleSource, ModuleSemantics>,
+    /// Per-module semantic facts, one entry per loaded module: a stdlib module
+    /// served from the snapshot shares the snapshot's, and the rest are filled
+    /// by the passes in [`Elaborator::build_tir_from_state`]. A pass takes its
+    /// module's entry out and owns it, so its `&mut` access stays disjoint and
+    /// needs no shared-mutability plumbing.
+    pub(crate) module_semantics: IndexMap<ModuleSource, Rc<ModuleSemantics>>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
     pub(crate) invocations: Rc<InvocationIndex>,
@@ -1080,34 +1079,32 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &trait_env,
         );
 
-        // Seed per-module semantics with the snapshot's pre-resolved stdlib
-        // entries so the LSP edges remain consistent and the body walk on
-        // user modules can extend on top. The snapshot holds them per module
-        // already, so each lands in the [`super::sem::ModuleSemantics`] whose
-        // walk recorded it.
-        let mut module_semantics: IndexMap<ModuleSource, ModuleSemantics> = IndexMap::default();
-        // Ensure every loaded module has an entry; the body walk in
-        // `build_tir_from_state` requires a `ModuleSemantics` to swap in
-        // for each user module it processes.
-        for ms in modules.keys() {
-            module_semantics.entry(ms.clone()).or_default();
-        }
-        if let Some(snap_state) = snapshot_state {
-            for (ms, snap_sem) in &snap_state.module_semantics {
-                let Some(sem) = module_semantics.get_mut(ms) else {
-                    debug_assert!(
-                        snap_sem.routed_facts().next().is_none(),
-                        "a snapshot module carrying facts must be in the current compile's loaded set: {ms}"
-                    );
-                    continue;
+        // A module served from the snapshot runs no pass this compile, so it
+        // shares the snapshot's facts; every other module starts empty for the
+        // walks in `build_tir_from_state` to fill.
+        let module_semantics: IndexMap<ModuleSource, Rc<ModuleSemantics>> = modules
+            .keys()
+            .map(|ms| {
+                let sem = match snapshot_state {
+                    Some(snap_state) if is_stdlib_snapshot_hit(snapshot, ms) => {
+                        Rc::clone(&snap_state.module_semantics[ms])
+                    }
+                    _ => Rc::default(),
                 };
-                sem.types = snap_sem.types.clone();
-                sem.bindings = snap_sem.bindings.clone();
-                // A snapshot module runs no decl pass this compile;
-                // its digests must come from the snapshot.
-                sem.decls.clone_digests_from(&snap_sem.decls);
-            }
-        }
+                (ms.clone(), sem)
+            })
+            .collect();
+        debug_assert!(
+            snapshot_state.is_none_or(|snap_state| snap_state
+                .module_semantics
+                .iter()
+                .filter(
+                    |(ms, _)| !(modules.contains_key(*ms) && is_stdlib_snapshot_hit(snapshot, ms))
+                )
+                .all(|(_, sem)| sem.routed_facts().next().is_none()
+                    && sem.default_method_facts.is_empty())),
+            "a snapshot module carrying facts must be served to this compile"
+        );
 
         let tysys = TypeSystem {
             type_table,
@@ -1143,6 +1140,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (def, sig) in &sem.decls.impl_sigs {
             signatures.impl_sigs.insert(*def, sig.clone());
         }
+    }
+
+    /// Take a module's facts out of `state` for a pass to own, leaving the
+    /// module absent until the pass puts them back.
+    fn take_module_semantics(
+        state: &mut AnnotateState,
+        module_source: &ModuleSource,
+    ) -> ModuleSemantics {
+        let sem = state
+            .module_semantics
+            .swap_remove(module_source)
+            .expect("module_semantics is pre-populated by annotate_modules");
+        Rc::into_inner(sem).expect("a module this compile walks owns its facts")
     }
 
     /// Construct a per-module `Elaborator` over the shared driver state; the
@@ -1205,21 +1215,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // swap each module's `ModuleSemantics` in and out, which would
         // otherwise conflict with borrowing `state.sorted_sources`.
         let sorted_sources = state.sorted_sources.clone();
-        // A stdlib module whose pre-lowered `TirModule` is in the snapshot:
-        // its facts are already seeded into `module_semantics`, so it runs no
-        // body walk (Phase 1); the cached TIR is rehydrated in the reify pass
-        // below. Only `Core` / `Wasi` / `Wasm` variants are eligible —
-        // `ModuleSource::EntryPoint` values compare equal regardless of
-        // filename (one entry per compile), so the gate keeps the user entry
-        // from matching the snapshot's synthetic empty entry.
-        let is_stdlib_snapshot_hit = |ms: &ModuleSource| {
-            matches!(
-                ms,
-                ModuleSource::Core { .. }
-                    | ModuleSource::Binding { .. }
-                    | ModuleSource::Wasm { .. }
-            ) && snapshot.is_some_and(|s| s.tir_modules.contains_key(ms))
-        };
         // User modules whose Phase 1 body walk succeeded and whose AST is
         // well-formed — the set the reify pass emits.
         let mut reify_eligible: IndexSet<ModuleSource> = IndexSet::default();
@@ -1231,7 +1226,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // resolve before any body walk, so bodies see complete decl
         // knowledge regardless of module order.
         for module_source in &sorted_sources {
-            if is_stdlib_snapshot_hit(module_source) {
+            if is_stdlib_snapshot_hit(snapshot, module_source) {
                 Self::publish_impl_sigs(state, module_source);
                 continue;
             }
@@ -1289,15 +1284,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
 
-            // Take this module's `ModuleSemantics` out of `state` so the
-            // elaborator owns it for the decl pass, then reinstall it after
-            // `annotate_module_decls` returns. `annotate_modules` pre-populated an
-            // entry per module, so `expect` rather than `unwrap_or_default`
-            // surfaces any divergence from `sorted_sources` loudly.
-            let mut sem = state
-                .module_semantics
-                .swap_remove(module_source)
-                .expect("module_semantics is pre-populated by annotate_modules");
+            // The elaborator owns the module's facts for the decl pass, and
+            // they go back once `annotate_module_decls` returns.
+            let mut sem = Self::take_module_semantics(state, module_source);
             sem.imports.namespace_imports = namespace_imports;
             sem.decls.imported_functions = imported_functions;
 
@@ -1313,7 +1302,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             state
                 .module_semantics
-                .insert(module_source.clone(), saved_sem);
+                .insert(module_source.clone(), Rc::new(saved_sem));
             Self::publish_impl_sigs(state, module_source);
         }
 
@@ -1380,7 +1369,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // pass has run — rather than re-resolved from the declaring AST under
         // a borrowed perspective.
         for module_source in &sorted_sources {
-            if is_stdlib_snapshot_hit(module_source) {
+            if is_stdlib_snapshot_hit(snapshot, module_source) {
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");
@@ -1395,7 +1384,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .module_semantics
                 .get_mut(module_source)
                 .expect("module_semantics is pre-populated by annotate_modules");
-            sem.decls.imported_globals = imported;
+            Rc::get_mut(sem)
+                .expect("a module this compile walks owns its facts")
+                .decls
+                .imported_globals = imported;
         }
 
         // Phase 1b — `annotate_bodies`: run the body walk over every user
@@ -1403,15 +1395,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // sole TIR source. Liveness
         // runs between the two phases so reify can gate on it.
         for module_source in &sorted_sources {
-            if is_stdlib_snapshot_hit(module_source) {
+            if is_stdlib_snapshot_hit(snapshot, module_source) {
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");
 
-            let sem = state
-                .module_semantics
-                .swap_remove(module_source)
-                .expect("module_semantics is pre-populated by annotate_modules");
+            let sem = Self::take_module_semantics(state, module_source);
             let mut elaborator =
                 Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
 
@@ -1424,7 +1413,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // the elaborator did reach before bailing.
             state
                 .module_semantics
-                .insert(module_source.clone(), saved_sem);
+                .insert(module_source.clone(), Rc::new(saved_sem));
 
             // Eligible for reify (Phase 2) when THIS module's decl pass and
             // body walk logged no errors (a per-module error-count delta —
@@ -1447,8 +1436,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later; computing it here lets reify gate item emission on the live
         // set and the unused-diagnostics emitter read `dead_items`.
         {
-            let (direct, inherited) = spelled_references(state, snapshot);
-            let dispatch = dispatched_callee_edges(state, snapshot);
+            let (direct, inherited) = spelled_references(state);
+            let dispatch = dispatched_callee_edges(state);
             let references = References {
                 direct: &direct,
                 inherited: &inherited,
@@ -1486,7 +1475,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .collect();
             let snapshot_gate = gate.map(|_| &live_defs);
             for module_source in &sorted_sources {
-                if is_stdlib_snapshot_hit(module_source) {
+                if is_stdlib_snapshot_hit(snapshot, module_source) {
                     let snap_module = snapshot
                         .and_then(|s| s.tir_modules.get(module_source))
                         .expect("stdlib snapshot hit implies a cached TirModule");
@@ -2204,18 +2193,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 }
 
-/// Every `ModuleSemantics` this compile can read: the ones its own body walk
-/// built, plus the snapshot's, read in place.
-fn all_module_semantics<'a>(
-    state: &'a AnnotateState,
-    snapshot: Option<&'a Semantics>,
-) -> impl Iterator<Item = &'a ModuleSemantics> {
-    state.module_semantics.values().chain(
-        snapshot
-            .and_then(|s| s.state.as_ref())
-            .into_iter()
-            .flat_map(|s| s.module_semantics.values()),
-    )
+/// Whether `ms` is served from the snapshot: its facts and its pre-lowered
+/// `TirModule` are the snapshot's, so it runs no pass this compile. Only
+/// stdlib variants are eligible — `ModuleSource::EntryPoint` values compare
+/// equal regardless of filename, so the gate keeps the user entry from
+/// matching the snapshot's synthetic empty entry.
+fn is_stdlib_snapshot_hit(snapshot: Option<&Semantics>, ms: &ModuleSource) -> bool {
+    matches!(
+        ms,
+        ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. }
+    ) && snapshot.is_some_and(|s| s.tir_modules.contains_key(ms))
 }
 
 /// The use→def edges the source spells: `direct` from each module's own
@@ -2223,7 +2210,6 @@ fn all_module_semantics<'a>(
 /// files its edges — once per inheriting impl.
 fn spelled_references(
     state: &AnnotateState,
-    snapshot: Option<&Semantics>,
 ) -> (
     IndexMap<ast::AstId, ast::AstId>,
     IndexMap<ast::AstId, IndexSet<ast::AstId>>,
@@ -2235,8 +2221,10 @@ fn spelled_references(
         }
     }
     let mut inherited: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
-    let inherit_sems =
-        all_module_semantics(state, snapshot).flat_map(|sem| sem.default_method_semantics.values());
+    let inherit_sems = state
+        .module_semantics
+        .values()
+        .flat_map(|sem| sem.default_method_facts.values());
     for sem in inherit_sems {
         for (use_id, def_key) in &sem.bindings.references {
             inherited.entry(*use_id).or_default().insert(*def_key);
@@ -2245,24 +2233,22 @@ fn spelled_references(
     (direct, inherited)
 }
 
-/// The callees a dispatch fact names. Seeding copies a snapshot module's
-/// `types` but not the per-impl `default_method_semantics` hanging off it, so
-/// the snapshot is read alongside this compile's own state.
-fn dispatched_callee_edges(
-    state: &AnnotateState,
-    snapshot: Option<&Semantics>,
-) -> IndexMap<ast::AstId, IndexSet<ast::AstId>> {
+/// The callees a dispatch fact names, in a module's own walk or in one of its
+/// impls' inherited default methods.
+fn dispatched_callee_edges(state: &AnnotateState) -> IndexMap<ast::AstId, IndexSet<ast::AstId>> {
     let defs = state.tysys.resolutions.defs();
     let mut edges: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
-    let sems = all_module_semantics(state, snapshot)
-        .flat_map(|sem| std::iter::once(sem).chain(sem.default_method_semantics.values()));
-    for sem in sems {
-        for (use_id, def) in sem.types.dispatched_callees() {
+    let walks = state.module_semantics.values().flat_map(|sem| {
+        std::iter::once(&sem.types)
+            .chain(sem.default_method_facts.values().map(|facts| &facts.types))
+    });
+    for types in walks {
+        for (use_id, def) in types.dispatched_callees() {
             edges.entry(use_id).or_default().insert(defs.ast_id(def));
         }
         // A handler binding installs a whole block: the dispatch wrapper may
         // route any of the effect's operations to it.
-        for (use_id, impl_def) in sem.types.handler_impl_blocks() {
+        for (use_id, impl_def) in types.handler_impl_blocks() {
             edges
                 .entry(use_id)
                 .or_default()

@@ -788,8 +788,8 @@ fn run_optimization_passes(
         // post-globalization `const_fold_post_global` keep their own engine
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
         // After `const_fold`, so a caller's config struct literal already holds
-        // folded constants; inside the loop, so the next iteration prunes the
-        // clone's dead branches and reaches one call deeper. Not `gated!`: it
+        // folded constants; inside the loop, so a constant a later pass exposes
+        // is carried down its whole call chain too. Not `gated!`: it
         // owns no column, since a summary taken before a callee gained a write
         // would license an unsound substitution (see its module doc).
         record!(

@@ -1,4 +1,5 @@
 use { Extent } from "./extent.wado";
+use { Condition, Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 
 fn stat(name: String, n: i32) -> Axis {
@@ -23,7 +24,7 @@ test "matmul contracts the shared axis and keeps the outer two" {
         stat("Hidden", 4),
     ]);
 
-    let y = x.matmul(&w, "MatMul").unwrap();
+    let y = x.matmul(&w, "MatMul", &mut []).unwrap();
     assert y.rank() == 2;
     assert y.axes[0].name == "Batch";
     assert y.axes[1].name == "Hidden";
@@ -40,7 +41,7 @@ test "a contracted axis of two lengths names both" {
         stat("Hidden", 4),
     ]);
 
-    let e = x.matmul(&w, "MatMul").unwrap_err();
+    let e = x.matmul(&w, "MatMul", &mut []).unwrap_err();
     assert `${e}` == "MatMul: axis In is 3 on the left and 5 on the right";
 }
 
@@ -56,7 +57,7 @@ test "a symbolic axis contracts against the same symbol" {
         stat("Hidden", 4),
     ]);
 
-    let y = x.matmul(&w, "MatMul").unwrap();
+    let y = x.matmul(&w, "MatMul", &mut []).unwrap();
     assert y.axes[0].extent.agrees(&Extent::symbol(&"batch"));
 }
 
@@ -70,7 +71,7 @@ test "a symbol meeting a number is a failure, not a deferred check" {
         stat("Hidden", 4),
     ]);
 
-    let e = x.matmul(&w, "MatMul").unwrap_err();
+    let e = x.matmul(&w, "MatMul", &mut []).unwrap_err();
     assert `${e}` == "MatMul: axis In is in on the left and 3 on the right";
 }
 
@@ -86,7 +87,7 @@ test "matmul batches over every axis ahead of the last two" {
         stat("N", 4),
     ]);
 
-    let y = a.matmul(&b, "MatMul").unwrap();
+    let y = a.matmul(&b, "MatMul", &mut []).unwrap();
     assert y.rank() == 3;
     assert y.axes[0].extent.agrees(&Extent::symbol(&"b"));
     assert y.axes[1].name == "M";
@@ -105,7 +106,7 @@ test "a batch axis of two lengths stops the contraction" {
         stat("N", 4),
     ]);
 
-    let e = a.matmul(&b, "MatMul").unwrap_err();
+    let e = a.matmul(&b, "MatMul", &mut []).unwrap_err();
     assert `${e}` == "MatMul: axis Batch is 2 on the left and 8 on the right";
 }
 
@@ -120,7 +121,7 @@ test "a matrix broadcasts across the batch axes of the other operand" {
         stat("N", 4),
     ]);
 
-    let y = a.matmul(&b, "MatMul").unwrap();
+    let y = a.matmul(&b, "MatMul", &mut []).unwrap();
     assert y.rank() == 3;
     assert y.axes[0].name == "Batch";
     assert y.axes[1].name == "M";
@@ -139,7 +140,7 @@ test "a batch axis of extent 1 yields to the other operand's" {
         stat("N", 4),
     ]);
 
-    let y = a.matmul(&b, "MatMul").unwrap();
+    let y = a.matmul(&b, "MatMul", &mut []).unwrap();
     assert y.axes[0].name == "Batch";
     assert y.axes[0].extent.agrees(&Extent::Static(8));
 }
@@ -151,7 +152,7 @@ test "a rank-1 left operand is a row whose axis is dropped" {
         stat("N", 4),
     ]);
 
-    let y = v.matmul(&w, "MatMul").unwrap();
+    let y = v.matmul(&w, "MatMul", &mut []).unwrap();
     assert y.rank() == 1;
     assert y.axes[0].name == "N";
 }
@@ -163,7 +164,7 @@ test "a rank-1 right operand is a column whose axis is dropped" {
     ]);
     let v = shape([stat("K", 3)]);
 
-    let y = m.matmul(&v, "MatMul").unwrap();
+    let y = m.matmul(&v, "MatMul", &mut []).unwrap();
     assert y.rank() == 1;
     assert y.axes[0].name == "M";
 }
@@ -175,7 +176,7 @@ test "a rank-1 operand still contracts its one axis" {
         stat("N", 4),
     ]);
 
-    let e = v.matmul(&w, "MatMul").unwrap_err();
+    let e = v.matmul(&w, "MatMul", &mut []).unwrap_err();
     assert `${e}` == "MatMul: axis K is 5 on the left and 3 on the right";
 }
 
@@ -186,7 +187,7 @@ test "elementwise broadcasts a missing leading axis" {
     ]);
     let bias = shape([stat("Out", 4)]);
 
-    let y = a.elementwise(&bias, "add").unwrap();
+    let y = a.elementwise(&bias, "add", &mut []).unwrap();
     assert y.rank() == 2;
     assert y.axes[0].name == "Batch";
 }
@@ -201,7 +202,7 @@ test "elementwise keeps the shape when every axis agrees" {
         stat("Out", 4),
     ]);
 
-    let y = a.elementwise(&b, "add").unwrap();
+    let y = a.elementwise(&b, "add", &mut []).unwrap();
     assert y.rank() == 2;
     assert y.axes[1].name == "Out";
 }
@@ -216,6 +217,43 @@ test "elementwise names the operation that disagreed" {
         stat("Out", 7),
     ]);
 
-    let e = a.elementwise(&b, "add").unwrap_err();
+    let e = a.elementwise(&b, "add", &mut []).unwrap_err();
     assert `${e}` == "add: axis Out is 4 on the left and 7 on the right";
+}
+
+/// An axis whose extent is `N` clamped to at most `bound`, as a `Slice` to `N` leaves it.
+fn clamped(name: String, bound: i64) -> Axis {
+    let n = Poly::symbol(&"N");
+    return Axis { name, extent: Extent::of(Poly::min_of(&n, &Poly::constant(bound), &"M = Slice")).unwrap() };
+}
+
+test "a clamp meets its own operand where the inputs owe that it takes it unchanged" {
+    let mask = shape([clamped("Seq", 8)]);
+    let scores = shape([sym("Seq", "N")]);
+    let mut owed: List<Condition> = [];
+    let y = mask.elementwise(&scores, "add", &mut owed).unwrap();
+    assert y.axes[0].extent.agrees(&Extent::symbol(&"N"));
+    assert owed.len() == 1 && owed[0].reason == "M = Slice: N must be at most 8";
+}
+
+test "a count that is 1 only where the inputs owe it stretches" {
+    // What a `Slice` from -1 leaves of an axis of `N`: 1, or none where `N` is 0.
+    let n = Poly::symbol(&"N");
+    let one = Poly::constant(1);
+    let start = Poly::max_of(&n.try_sub(&one).unwrap(), &Poly::constant(0), &"L = Slice");
+    let last = shape([
+        Axis { name: "Seq", extent: Extent::of(n.try_sub(&start).unwrap()).unwrap() },
+    ]);
+    let scores = shape([sym("Seq", "M")]);
+    let mut owed: List<Condition> = [];
+    let y = last.elementwise(&scores, "add", &mut owed).unwrap();
+    assert y.axes[0].extent.agrees(&Extent::symbol(&"M"));
+    assert owed.len() == 1 && owed[0].reason == "L = Slice: N - 1 must be at least 0";
+}
+
+test "a clamp meets no length its operand is not" {
+    let mask = shape([clamped("Seq", 8)]);
+    let other = shape([sym("Seq", "M")]);
+    let e = mask.elementwise(&other, "add", &mut []).unwrap_err();
+    assert `${e}` == "add: axis Seq is min(N, 8) on the left and M on the right";
 }

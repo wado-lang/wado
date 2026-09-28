@@ -524,11 +524,12 @@ fn collect_subscripts<'e>(
             out.push(index);
         }
         TirExprKind::Call { func, args, .. } if is_index_accessor(func, items) => {
-            let Some((container, subscripts)) = args.split_first_mut() else {
-                unreachable!("an index accessor takes its container first")
-            };
+            let mut args = args.iter_mut();
+            let container = args
+                .next()
+                .expect("an index accessor takes its container first");
             collect_subscripts(&mut container.expr, items, out);
-            out.extend(subscripts.iter_mut().map(|arg| &mut arg.expr));
+            out.extend(args.map(|arg| &mut arg.expr));
         }
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }

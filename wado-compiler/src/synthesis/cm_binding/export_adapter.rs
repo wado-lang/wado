@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
+use crate::call_args::CallArgs;
 use crate::canonical::CanonicalIntrinsic;
 use crate::cm_abi;
 use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
@@ -1662,12 +1663,13 @@ fn build_call_user(
                 callee_module.clone(),
             )),
             type_args: vec![],
-            args: call_args
-                .into_iter()
-                .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
-                .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
-                .collect(),
-            has_receiver: false,
+            args: CallArgs::free(
+                call_args
+                    .into_iter()
+                    .zip(param_is_mut.into_iter().chain(std::iter::repeat(false)))
+                    .map(|(expr, is_mut)| CallArg::new(expr, is_mut))
+                    .collect(),
+            ),
         },
         return_type,
         synth_span(),

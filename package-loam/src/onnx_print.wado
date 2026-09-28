@@ -1,7 +1,7 @@
 //! A graph in the ONNX textual format, spelled so `onnx_text.wado` reads the
 //! same graph back.
 
-use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo, element_of } from "./graph.wado";
+use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo, element_of, is_float_word } from "./graph.wado";
 use { Refusal } from "./infer.wado";
 
 /// What the textual format has no spelling for.
@@ -93,11 +93,14 @@ fn initializer(vi: &ValueInfo) -> Result<String, PrintError> {
 /// A graph constant's type. A reader never writes a symbolic integer; only
 /// stage 0's folding does, and it prints nothing.
 fn known_type(known: &Known) -> String {
-    let dtype = match &known.elements {
-        Ints(_) => if known.int32 { "int32" } else { "int64" },
-        Symbolic(_) => unreachable(),
-        Floats(_) => "float",
-        Bools(_) => "bool",
+    let dtype = match [&known.elements, known.stored] {
+        [Ints(_), Int32] => "int32",
+        [Ints(_), _] => "int64",
+        [Symbolic(_), _] => unreachable(),
+        [Floats(_), Float16] => "float16",
+        [Floats(_), BFloat16] => "bfloat16",
+        [Floats(_), _] => "float",
+        [Bools(_), _] => "bool",
     };
     if known.extents.is_empty() {
         return dtype;
@@ -115,8 +118,9 @@ fn known_values(tensor: &String, known: &Known) -> Result<String, PrintError> {
         },
         Symbolic(_) => unreachable(),
         Floats(v) => {
+            let half = known.stored matches { Float16 | BFloat16 };
             for let x of *v {
-                elements.push(float_text(tensor, x)?);
+                elements.push(if half { `${known.stored.narrowed(x)}` } else { float_text(tensor, x)? });
             }
         },
         Bools(v) => {
@@ -128,12 +132,16 @@ fn known_values(tensor: &String, known: &Known) -> Result<String, PrintError> {
     return Result::Ok(`{${elements.join(", ")}}`);
 }
 
-/// The grammar has no literal for a float that is not finite.
+/// A float as the reader takes it back, bit for bit. The word `nan` reads as
+/// one NaN, so a NaN with any other sign or payload has no spelling.
 fn float_text(tensor: &String, v: f32) -> Result<String, PrintError> {
-    if !v.is_finite() {
-        return fail(`${tensor}: ${v} has no text form`);
+    if !v.is_nan() {
+        return Result::Ok(`${v}`);
     }
-    return Result::Ok(`${v}`);
+    if v.to_bits() != f32::NAN.to_bits() {
+        return fail(`${tensor}: the NaN 0x${v.to_bits():x} has no text form`);
+    }
+    return Result::Ok("nan");
 }
 
 fn node_line(node: &Node) -> Result<String, PrintError> {
@@ -160,7 +168,8 @@ fn attr_value(node: &Node, a: &Attr) -> Result<String, PrintError> {
     }
     let mut values: List<String> = [];
     for let v of a.values {
-        if is_number(&v) {
+        if !a.is_string {
+            assert is_number(&v) || is_float_word(&v);
             values.push(v);
         } else if v.contains("\"") {
             return Result::Err(refused(`attribute ${a.name} holds a quote, which the grammar cannot spell`));
