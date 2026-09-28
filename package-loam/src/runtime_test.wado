@@ -25,6 +25,7 @@ use {
     sigmoid_f32,
     slice_axis,
     softmax,
+    softmax_flattened,
     to_extent,
     transpose2,
     unmet,
@@ -378,6 +379,13 @@ test "softmax normalizes each lane along the axis" {
     // Each lane's maximum is subtracted first, so column 0 is [e^-1, 1] scaled.
     let a = f32::exp(-1.0);
     assert along_rows.data == [a / (a + 1.0), 1.0, 1.0 / (a + 1.0), 0.0] as List<f32>;
+}
+
+test "softmax_flattened normalizes every axis from its own on as one lane" {
+    let t: Tensor<f32, [Row, Col]> = tensor([2, 2], [0.0, 0.0, 0.0, 0.0]);
+
+    assert softmax_flattened(&t, 0).data == [0.25, 0.25, 0.25, 0.25] as List<f32>;
+    assert softmax_flattened(&t, 1).data == [0.5, 0.5, 0.5, 0.5] as List<f32>;
 }
 
 test "reduce folds the named axes to extent 1" {

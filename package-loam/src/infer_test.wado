@@ -562,13 +562,12 @@ test "a Softmax axis outside the operand stops the build" {
     assert y_axes(source, rows()).unwrap_err() == "Y = Softmax: attribute axis is 3, outside rank 3";
 }
 
-test "Softmax before opset 13 normalizing past one axis stops the build" {
+test "Softmax before opset 13 normalizing past one axis keeps its operand's shape" {
     let source = `<ir_version: 7, opset_import: ["" : 11]>
     g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
         Y = Softmax(X)
     }`;
-    let e = y_axes(source, rows()).unwrap_err();
-    assert e == "Y = Softmax: opset 11 normalizes axes 1 to 2 as one, and Loam normalizes along one axis";
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
 }
 
 test "Softmax before opset 13 along the last axis is the one-axis Softmax" {

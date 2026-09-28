@@ -578,6 +578,21 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     assert out.contains("let Y = softmax(X, 2);");
 }
 
+test "Softmax before opset 13 lowers to the kernel over the axes from its own on" {
+    let lowered = |attrs: String| -> String {
+        let source = `<ir_version: 7, opset_import: ["" : 11]>
+g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
+{
+    Y = Softmax ${attrs} (X)
+}
+`;
+        return generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+    };
+
+    assert lowered("").contains("let Y = softmax_flattened(X, 1);");
+    assert lowered("<axis = 2>").contains("let Y = softmax(X, 2);");
+}
+
 test "a layer norm's mean stretches back over the axis it reduced" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 8] Y)

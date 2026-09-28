@@ -604,11 +604,23 @@ pub fn permute<E, In, Out>(t: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out>
     return Tensor { data: out, extents };
 }
 
-/// ONNX's `Softmax` along `axis`: each lane's exponentials over their sum. The
-/// lane's maximum is subtracted first, so no exponential overflows.
+/// ONNX's `Softmax` along `axis`: each lane's exponentials over their sum.
 pub fn softmax<Axes>(t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {
-    let extent = t.extents[axis];
-    let inner = element_count(&t.extents[axis + 1..<t.extents.len()].to_list());
+    return softmax_lanes(t, axis, axis + 1);
+}
+
+/// ONNX's `Softmax` before opset 13, which normalized the axes from `axis` on
+/// as one lane.
+pub fn softmax_flattened<Axes>(t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {
+    return softmax_lanes(t, axis, t.extents.len());
+}
+
+/// The softmax of each lane running across axes `from..<to`, which are adjacent
+/// and so step through the data as one axis would. The lane's maximum is
+/// subtracted first, so no exponential overflows.
+fn softmax_lanes<Axes>(t: &Tensor<f32, Axes>, from: i32, to: i32) -> Tensor<f32, Axes> {
+    let extent = element_count(&t.extents[from..<to].to_list());
+    let inner = element_count(&t.extents[to..<t.extents.len()].to_list());
     let mut out = t.data;
     let lanes = if extent == 0 { 0 } else { t.data.len() / extent };
     for let lane of 0..<lanes {

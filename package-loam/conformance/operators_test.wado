@@ -381,6 +381,20 @@ test "Softmax along the first axis" {
     assert_agrees(#include_bytes("./operators/SoftmaxFirst.onnx"), #include_str("./operators/SoftmaxFirst.txt"));
 }
 
+test "Softmax before opset 13 normalizes the axes from its default on as one" {
+    assert_agrees(
+        #include_bytes("./operators/SoftmaxFlattenedDefault.onnx"),
+        #include_str("./operators/SoftmaxFlattenedDefault.txt"),
+    );
+}
+
+test "Softmax before opset 13 from the first axis normalizes the whole tensor" {
+    assert_agrees(
+        #include_bytes("./operators/SoftmaxFlattenedFirst.onnx"),
+        #include_str("./operators/SoftmaxFlattenedFirst.txt"),
+    );
+}
+
 test "Softmax along a middle axis" {
     assert_agrees(#include_bytes("./operators/SoftmaxMiddle.onnx"), #include_str("./operators/SoftmaxMiddle.txt"));
 }

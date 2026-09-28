@@ -21,7 +21,7 @@ use {
     range_bounds,
     reduced_axes,
     slice_cuts,
-    softmax_axis,
+    softmax_lane,
     split_axis,
     split_parts,
     transpose_perm,
@@ -981,8 +981,9 @@ fn node_call(
         return Result::Ok(`select(${operands.join(", ")})`);
     }
     if op == "Softmax" {
-        let axis = settled(softmax_axis(node, shapes.get(node.inputs[0]).unwrap().rank(), opset));
-        return Result::Ok(`softmax(${exprs.reference(&node.inputs[0])}, ${axis})`);
+        let lane = settled(softmax_lane(node, shapes.get(node.inputs[0]).unwrap().rank(), opset));
+        let kernel = if lane.flattened { "softmax_flattened" } else { "softmax" };
+        return Result::Ok(`${kernel}(${exprs.reference(&node.inputs[0])}, ${lane.axis})`);
     }
     if is_reduction(&op) {
         return reduction_call(node, checked, exprs);

@@ -181,7 +181,15 @@ add('ConvGrouped', {
 
 add('SoftmaxLast', { inputs: { A: float([2, 3]) }, nodes: [node('Softmax', ['A'], 'Y')], layout: { A: ['Row', 'Col'] } });
 add('SoftmaxFirst', { inputs: { A: float([2, 3]) }, nodes: [node('Softmax', ['A'], 'Y', { axis: 0 })], layout: { A: ['Row', 'Col'] } });
-add('SoftmaxMiddle', { inputs: { A: float([2, 3, 4]) }, nodes: [node('Softmax', ['A'], 'Y', { axis: 1 })], layout: cube });
+// Before opset 13, Softmax normalized every axis from `axis` on as one lane.
+add('SoftmaxFlattenedDefault', { inputs: { A: float([2, 3, 4]) }, nodes: [node('Softmax', ['A'], 'Y')], layout: cube, opset: 11 });
+add('SoftmaxFlattenedFirst', {
+  inputs: { A: float([2, 3, 4]) },
+  nodes: [node('Softmax', ['A'], 'Y', { axis: 0 })],
+  layout: cube,
+  opset: 11,
+});
+add('SoftmaxMiddle',{ inputs: { A: float([2, 3, 4]) }, nodes: [node('Softmax', ['A'], 'Y', { axis: 1 })], layout: cube });
 add('SoftmaxLarge', {
   inputs: { A: float([2, 3], [1000, 1001, 1002, -1000, 0, 1000]) },
   nodes: [node('Softmax', ['A'], 'Y')],
