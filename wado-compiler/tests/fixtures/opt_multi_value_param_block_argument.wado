@@ -1,0 +1,54 @@
+// A struct an inlined constructor builds in argument position reaches a
+// multi-value parameter as its fields, the same as a bare literal does in
+// `opt_multi_value_param.wado`. The inlined `slice` leaves `lookup({ …clamps…;
+// Slice { … } })`, and its leading statements hoist out ahead of the call. A
+// `$mv_arg_` spill is the aggregate built and read back field by field.
+//
+// The shape is `core:json`'s field-key dispatch, which allocated a `Slice` per
+// key before this.
+
+trait Schema with () {
+    fn lookup(key: ByteSlice) -> Option<i32>;
+}
+
+struct Keys {}
+
+impl Schema for Keys {
+    #[inline("never")]
+    fn lookup(key: ByteSlice) -> Option<i32> {
+        if key.len() == 2 {
+            return Option::Some(0);
+        }
+        return null;
+    }
+}
+
+struct Holder {
+    input: ByteSlice,
+}
+
+#[inline("never")]
+fn key_index<S: Schema>(h: &Holder, start: i32, end: i32) -> i32 {
+    return match S::lookup(h.input.slice(start, end)) {
+        Some(i) => i,
+        None => -1,
+    };
+}
+
+export fn run() {
+    let bytes: ByteList = builtin::black_box(b"abcdef");
+    let h = Holder { input: bytes.as_slice() as ByteSlice };
+    assert key_index::<Keys>(&h, builtin::black_box(1), 3) == 0;
+    assert key_index::<Keys>(&h, builtin::black_box(1), 5) == -1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "Schema::lookup\"($mv_field_"
+    ],
+    "wir_not_expect:O2": [
+        "Schema::lookup\"($mv_arg_"
+    ]
+}

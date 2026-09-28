@@ -8,7 +8,7 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKin
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
-use super::arena_query::strip_refs;
+use super::arena_query::{block_contains_loop, strip_refs};
 use super::gate::{FunctionGate, GatedPass};
 
 /// Flatten every block-tailed `let` binding across the package.
@@ -86,10 +86,8 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     let StmtKind::Let { value, .. } = &body.stmts[sid].kind else {
         return None;
     };
-    // A reference around the block applies to the tail's value either way, so
-    // the leading statements hoist the same. `&mut { …; Struct { … } }` is
-    // what an inlined by-reference receiver leaves.
-    let value_e = strip_refs(body, value.as_expr()?);
+    let bound = strip_refs(body, value.as_expr()?);
+    let value_e = first_evaluated(body, bound);
     // Flattening a block a `break` names would strip the target the jump needs.
     let inner = body.unbroken_block(value_e)?;
     let (&tail, leading) = body.blocks[inner].stmts.split_last()?;
@@ -99,24 +97,32 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     let StmtKind::Expr(tail_value) = body.stmts[tail].kind else {
         return None;
     };
-    let straight_line = leading.iter().all(|s| {
-        matches!(
-            body.stmts[*s].kind,
-            StmtKind::Let { .. } | StmtKind::Expr(_) | StmtKind::LetDestructure { .. }
-        )
-    });
-    // Keep control-flow regions available to CTFE unless their tail exposes a
-    // literal for SROA. Flattening a list-building loop strands its evaluation
-    // outside the value region (`ctfe_list_result`).
-    if !straight_line
-        && !tail_value.as_expr().is_some_and(|e| {
+    // Keep a loop available to CTFE: flattening a list-building loop strands
+    // its evaluation outside the value region (`ctfe_list_result`). A bound
+    // block gives that up where its tail exposes a literal for SROA. An
+    // argument never does, since it is the callee that reads the value
+    // (`ctfe_struct_result`).
+    if value_e != bound {
+        if block_contains_loop(body, inner) {
+            return None;
+        }
+    } else {
+        let straight_line = leading.iter().all(|s| {
             matches!(
-                body.exprs[e].kind,
-                ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+                body.stmts[*s].kind,
+                StmtKind::Let { .. } | StmtKind::Expr(_) | StmtKind::LetDestructure { .. }
             )
-        })
-    {
-        return None;
+        });
+        if !straight_line
+            && !tail_value.as_expr().is_some_and(|e| {
+                matches!(
+                    body.exprs[e].kind,
+                    ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+                )
+            })
+        {
+            return None;
+        }
     }
     // Defer while a leading statement is a shadow a session dissolver owns: a
     // immutable local copy (`let a = b`, the inliner's param binding, copy_prop's) or
@@ -143,6 +149,29 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
         })
     });
     no_shadow_copy.then_some((value_e, inner))
+}
+
+/// The subexpression of `e` that runs first, which is where a block's leading
+/// statements can hoist to the binding's place without reordering anything.
+///
+/// A reference around it applies to the tail's value either way:
+/// `&mut { …; Struct { … } }` is what an inlined by-reference receiver leaves.
+/// A call's argument is first when every argument ahead of it is a constant:
+/// `f({ …; Slice { … } })` is what an inlined constructor leaves in argument
+/// position, and hoisting it hands the literal to the split parameter ABI.
+fn first_evaluated(body: &Body, e: ExprId) -> ExprId {
+    let ExprKind::Call { args, .. } = &body.exprs[e].kind else {
+        return e;
+    };
+    for arg in args {
+        match arg.expr {
+            Operand::Expr(first) => return first_evaluated(body, strip_refs(body, first)),
+            Operand::Value(v) if body.values.kind(v).is_constant() => {}
+            // A promoted read of a local a leading statement may assign.
+            Operand::Value(_) => return e,
+        }
+    }
+    e
 }
 
 /// A place expression — the lvalue forms `ref_elim` dissolves a `&`/`&mut` of.

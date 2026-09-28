@@ -25,7 +25,9 @@ fn basic_sroa() -> i32 {
     return p.x + p.y;
 }
 
-// Pattern 2: Mutable struct with field write then read
+// Pattern 2: Mutable struct with field write then read. The writes forward to
+// the reads, so the result is 100 whatever `seed` is and the call folds away,
+// `black_box` or not.
 
 
 #[inline("never")]
@@ -108,7 +110,7 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": [
-        "return 100"
+    "wir_not_expect:O2": [
+        "mutable_field_write\"("
     ]
 }
