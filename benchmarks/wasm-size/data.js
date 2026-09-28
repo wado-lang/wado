@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790568535953,
+  "lastUpdate": 1790575892589,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61261,6 +61261,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0cb9810fdb4b316f3cf016a81ee8bc437f2286e7"
         },
         "date": 1790568535354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6728,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20219,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288336,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d61e6e59659a7662c54449ac152249f6b79cdbf0",
+          "message": "Merge pull request #2203 from wado-lang/loam-semantics-todos\n\nfeat(loam): every lowered operator agrees with onnxruntime, and ONNX's clamps and rounded counts become symbols",
+          "timestamp": "2026-09-28T14:44:52+09:00",
+          "tree_id": "de4ea6aba35c7e4bdfe54a0687d052d46b3e8a82",
+          "url": "https://github.com/wado-lang/wado/commit/d61e6e59659a7662c54449ac152249f6b79cdbf0"
+        },
+        "date": 1790575892198,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
