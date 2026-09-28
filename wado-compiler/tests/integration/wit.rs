@@ -166,13 +166,14 @@ fn wide_int_export_emits_its_prelude_record() {
     );
 }
 
-/// A stdlib newtype crosses as its base, so naming no type of the package's
-/// own, the export stays a direct world function.
+/// A stdlib newtype is an alias of its base, as a package's own newtype is.
 #[test]
-fn stdlib_newtype_export_emits_its_base() {
+fn stdlib_newtype_export_emits_its_alias() {
     check(
         "export fn size(b: ByteList) -> i32 { return b.len(); }",
-        "package root:component;\n\nworld command {\n  export size: func(b: list<u8>) -> s32;\n}",
+        "package root:component;\n\n\
+         interface entry {\n  type byte-list = list<u8>;\n  size: func(b: byte-list) -> s32;\n}\n\n\
+         world command {\n  export entry;\n}",
     );
 }
 

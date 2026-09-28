@@ -3,7 +3,7 @@
 //! what `wado wit` renders (issue #1456). `wit_component::decode` recovers WIT
 //! from the component's own types, so a decoded `id-newtype` that reads
 //! `func(v: f64) -> f64` (with no `meters` type) is the drift this guards. A
-//! stdlib newtype crosses as its base.
+//! stdlib newtype the signature names is carried the same way.
 
 use crate::cm_catalog::{FIXTURE, LIB_WORLD_FQ};
 use crate::common::{
@@ -196,10 +196,11 @@ test "shape compiles" {}
     );
 }
 
-/// A library signature naming a stdlib newtype crosses as its base: `ByteList`
-/// is `list<u8>` in and out, and inside an `option`.
+/// A library signature naming a stdlib newtype carries it as an alias, as it
+/// does a local one: `ByteList` is `byte-list`, in and out, and inside an
+/// `option`.
 #[test]
-fn lib_stdlib_newtype_crosses_as_its_base() {
+fn lib_stdlib_newtype_crosses_as_its_alias() {
     let source = r#"
 export fn reversed(b: ByteList) -> ByteList {
     let mut out: ByteList = [];
@@ -218,27 +219,15 @@ export fn head(b: Option<ByteList>) -> Option<u8> {
     let wasm = compile_lib_world(source, LIB_WORLD_FQ, OptLevel::O2, None);
     let decoded = wit_component::decode(&wasm).expect("decode structural type");
     let resolve = decoded.resolve();
-    // Naming no type of the package's own, the exports stay bare world functions.
     let reversed = resolve
-        .worlds
+        .interfaces
         .iter()
-        .flat_map(|(_, w)| w.exports.values())
-        .find_map(|item| match item {
-            wit_parser::WorldItem::Function(f) if f.name == "reversed" => Some(f),
-            _ => None,
-        })
-        .expect("reversed is a world export");
-    let wit_parser::Type::Id(param) = reversed.params[0].ty else {
-        panic!("reversed param is not a defined type");
-    };
-    let param = &resolve.types[param];
-    assert!(
-        param.name.is_none()
-            && matches!(
-                param.kind,
-                wit_parser::TypeDefKind::List(wit_parser::Type::U8)
-            ),
-        "reversed param is not a bare list<u8>: {param:?}"
+        .find_map(|(_, i)| i.functions.get("reversed"))
+        .expect("reversed export present");
+    assert_eq!(
+        type_name(resolve, &reversed.params[0].ty).as_deref(),
+        Some("byte-list"),
+        "reversed param erased the stdlib newtype to its base"
     );
 
     let component = Component::new(engine(), &wasm).expect("component failed to load");

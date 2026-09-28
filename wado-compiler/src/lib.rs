@@ -660,6 +660,70 @@ fn collect_lib_surface(
     }
 }
 
+/// The stdlib newtypes a library's surface names, at any depth. The library
+/// publishes each as its own alias, as `wado wit` renders it: `ByteList`
+/// crosses as `type byte-list = list<u8>`.
+fn stdlib_newtypes_in_lib_surface(
+    resolutions: &resolve::Resolutions,
+    modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
+    entry: Option<&ast::Module>,
+    surface: &LibSurface,
+) -> Vec<(ModuleSource, ast::Item)> {
+    use crate::ast::Item;
+    let defs = resolutions.defs();
+    let stdlib_newtypes: hashmap::IndexMap<DefId, (&ModuleSource, &Item)> = modules
+        .iter()
+        .filter(|(source, _)| source.is_core())
+        .flat_map(|(source, module)| module.items.iter().map(move |item| (source, item)))
+        .filter(|(_, item)| matches!(item, Item::Newtype(_)))
+        .map(|(source, item)| (defs.def_at(item.id()), (source, item)))
+        .collect();
+
+    fn signature(f: &ast::Function) -> Vec<&ast::Type> {
+        f.params
+            .iter()
+            .map(|p| &p.ty)
+            .chain(f.return_type.as_ref())
+            .collect()
+    }
+    let entry_items = entry.into_iter().flat_map(|module| &module.items);
+    let mut pending: Vec<&ast::Type> = entry_items
+        .chain(surface.submodule_type_decls.iter().map(|(_, item)| item))
+        .flat_map(|item| match item {
+            Item::Function(f) if f.is_export => signature(f),
+            Item::Interface(decl) => decl.methods.iter().flat_map(signature).collect(),
+            _ => declared_member_types(item),
+        })
+        .chain(
+            surface
+                .submodule_exports
+                .iter()
+                .flat_map(|e| e.params.iter().map(|(_, ty)| ty).chain(&e.return_type)),
+        )
+        .chain(
+            surface
+                .submodule_interfaces
+                .iter()
+                .flat_map(|decl| decl.methods.iter().flat_map(signature)),
+        )
+        .collect();
+
+    let mut reached: hashmap::IndexMap<DefId, (ModuleSource, Item)> = hashmap::IndexMap::default();
+    while let Some(ty) = pending.pop() {
+        ty.for_each(&mut |ty| {
+            if let ast::Type::Named(named) = ty
+                && let Some(def) = resolutions.declared_if_walked(named.id)
+                && let Some(&(source, item)) = stdlib_newtypes.get(&def)
+                && !reached.contains_key(&def)
+            {
+                reached.insert(def, (source.clone(), item.clone()));
+                pending.extend(declared_member_types(item));
+            }
+        });
+    }
+    reached.into_values().collect()
+}
+
 fn first_duplicate<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<String> {
     let mut seen = hashmap::IndexSet::default();
     for name in names {
@@ -741,13 +805,10 @@ fn synthesize_lib_world_info(
 
 /// Names each type a synthesized world's surface writes by its declaration, and
 /// answers the site with the world's interface or the `#[cm(…)]` one it binds.
-/// A stdlib newtype binds neither: the surface carries its base, so `ByteList`
-/// crosses as `list<u8>` rather than as an alias the package would own.
 struct LibTypeBinder<'a> {
     resolutions: &'a resolve::Resolutions,
     registry: &'a CmInterfaceRegistry,
     interfaces: hashmap::IndexMap<DefId, String>,
-    stdlib_newtype_bases: hashmap::IndexMap<DefId, ast::Type>,
 }
 
 impl<'a> LibTypeBinder<'a> {
@@ -766,52 +827,14 @@ impl<'a> LibTypeBinder<'a> {
         for (def, source) in cm_bound_defs(items, defs) {
             interfaces.entry(def).or_insert(source);
         }
-        let stdlib_newtype_bases = modules
-            .iter()
-            .filter(|(source, _)| source.is_core())
-            .flat_map(|(_, module)| &module.items)
-            .filter_map(|item| match item {
-                ast::Item::Newtype(newtype) => Some((defs.def_at(item.id()), newtype.ty.clone())),
-                _ => None,
-            })
-            .filter(|(def, _)| !interfaces.contains_key(def))
-            .collect();
         Self {
             resolutions,
             registry,
             interfaces,
-            stdlib_newtype_bases,
-        }
-    }
-
-    fn peel_stdlib_newtypes(&self, ty: &mut ast::Type) {
-        use crate::ast::Type;
-        while let Type::Named(named) = ty
-            && let Some(def) = self.resolutions.declared_if_walked(named.id)
-            && let Some(base) = self.stdlib_newtype_bases.get(&def)
-        {
-            *ty = base.clone();
-        }
-        match ty {
-            Type::Named(_) => {}
-            Type::Generic(g) => g
-                .args
-                .iter_mut()
-                .for_each(|arg| self.peel_stdlib_newtypes(arg)),
-            Type::Tuple(elems) => elems
-                .iter_mut()
-                .for_each(|elem| self.peel_stdlib_newtypes(elem)),
-            Type::Reference(inner) | Type::MutReference(inner) => self.peel_stdlib_newtypes(inner),
-            Type::NamespacedGeneric(_)
-            | Type::Function(_)
-            | Type::TypePackSpread(..)
-            | Type::Infer(_)
-            | Type::Error(_) => {}
         }
     }
 
     fn bind_type(&self, ty: &mut ast::Type) -> Result<(), Infallible> {
-        self.peel_stdlib_newtypes(ty);
         bind_type_names(ty, self.resolutions, &mut |named, def| {
             if let Some(source) = self.interfaces.get(&def) {
                 self.registry.set_source_interface(named.id, source.clone());
@@ -1301,6 +1324,18 @@ fn compile_after_load<H: CompilerHost>(
             submodule_interfaces: Vec::new(),
         },
     };
+    if synth_world_fq.is_some() {
+        let resolutions = sem
+            .resolutions()
+            .expect("a complete analysis has resolutions");
+        let stdlib_newtypes = stdlib_newtypes_in_lib_surface(
+            resolutions,
+            &sem.modules,
+            sem.modules.get(&sem.entry_module_source),
+            &lib_surface,
+        );
+        lib_surface.submodule_type_decls.extend(stdlib_newtypes);
+    }
 
     let entry_type_names: Vec<String> = sem
         .modules

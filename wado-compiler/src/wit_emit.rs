@@ -925,23 +925,9 @@ impl<'a> Emitter<'a> {
     /// referenced user types for later `TypeDef` emission. Structural shapes
     /// route through the shared [`assemble`] rule; leaves render here.
     fn map_type(&mut self, type_id: TypeId) -> Result<Type, WitEmitError> {
-        let type_id = self.stdlib_newtype_base(type_id);
         match self.classify_resolved(type_id) {
             CmShape::Leaf => self.map_resolved_leaf(type_id),
             shape => assemble(shape, |child| self.map_type(child)),
-        }
-    }
-
-    /// The base of a stdlib newtype, else `id` itself: `ByteList` crosses as
-    /// `list<u8>` rather than as an alias the package would own.
-    fn stdlib_newtype_base(&self, id: TypeId) -> TypeId {
-        match self.types.get(id) {
-            ResolvedType::Newtype { def, base_type, .. }
-                if self.types.def_module(*def).is_core() =>
-            {
-                self.stdlib_newtype_base(*base_type)
-            }
-            _ => id,
         }
     }
 
