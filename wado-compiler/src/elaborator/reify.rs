@@ -461,18 +461,12 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) pending_local_structs: IndexMap<DefId, TirStruct>,
     /// Local newtype declarations (`Stmt::Item`) — same reasoning as
     /// `pending_local_structs`.
-<<<<<<< HEAD
-    pub(crate) pending_local_newtypes: Vec<TirNewtype>,
+    pub(crate) pending_local_newtypes: IndexMap<DefId, TirNewtype>,
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
     /// The probe ids reify has put in so far.
     pub(crate) probes_emitted: IndexSet<u32>,
-||||||| 0cb9810fd
-    pub(crate) pending_local_newtypes: Vec<TirNewtype>,
-=======
-    pub(crate) pending_local_newtypes: IndexMap<DefId, TirNewtype>,
->>>>>>> origin/main
 }
 
 /// Call site captured for location literals in defaults.
@@ -529,18 +523,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             emit_live,
             compound_overrides: IndexMap::default(),
             call_site_location: None,
-<<<<<<< HEAD
-            pending_local_structs: Vec::new(),
-            pending_local_newtypes: Vec::new(),
-            coverage: None,
-            probes_emitted: IndexSet::default(),
-||||||| 0cb9810fd
-            pending_local_structs: Vec::new(),
-            pending_local_newtypes: Vec::new(),
-=======
             pending_local_structs: IndexMap::default(),
             pending_local_newtypes: IndexMap::default(),
->>>>>>> origin/main
+            coverage: None,
+            probes_emitted: IndexSet::default(),
         }
     }
 
