@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790561540179,
+  "lastUpdate": 1790568535953,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61237,6 +61237,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 290120,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0cb9810fdb4b316f3cf016a81ee8bc437f2286e7",
+          "message": "Merge pull request #2199 from wado-lang/fix-closure-literal-and-param-spec\n\nfix(compiler): closure-returned literals take the expected type, and -O2 converges on deep constant chains",
+          "timestamp": "2026-09-28T12:37:43+09:00",
+          "tree_id": "c171164cd0636f0993a01e138e27662658c40e75",
+          "url": "https://github.com/wado-lang/wado/commit/0cb9810fdb4b316f3cf016a81ee8bc437f2286e7"
+        },
+        "date": 1790568535354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6728,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20219,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288336,
             "unit": "bytes"
           }
         ]
