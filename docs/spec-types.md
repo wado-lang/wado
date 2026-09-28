@@ -933,9 +933,33 @@ answer the method, it settles the literal: with `impl Tag for Box<u64>` alone,
 for each literal makes its target the receiver, so `Pair<T, T>` answers
 `mk(1, x)` at `x`'s type and `Pair<u64, i32>` never answers `dup(1)`. Inherent
 impls are asked first, and the impls of the traits in scope only where no
-inherent impl could answer. Where several could, as `impl Tag for Box<i32>` and
-`impl Tag for Box<u64>` can, the literal takes its default first and the impl
-for that type answers. A subscript asks the impls that take its key.
+inherent impl could answer. Where several could, the literal takes its default
+first and the impl for that type answers. A subscript asks the impls that take
+its key.
+
+<!-- {"fixture":"spec_types_receiver_literal.wado"} -->
+
+```wado
+assert wrap(1).tag() == "u64";    // only `Box<u64>` could answer
+assert wrap(1).name() == "i32";   // both could: the default answers
+assert wrap(1 as u64).name() == "u64";
+```
+
+An impl is counted by its target's shape, not by whether a literal could become
+its type. This is where Wado departs from Rust. Rust's integer literal becomes
+one of a closed set of primitives, so it can rule out `Box<String>`. A Wado
+literal also becomes a numeric newtype, a wide integer or a half-precision
+float, and that set grows with the language. Counting by shape keeps method
+lookup independent of the coercion rules. So with `impl Tag for Box<String>`
+and `impl Tag for Box<u64>`, two impls could answer, the literal settles to
+`i32`, and no impl takes `Box<i32>`. Writing the type the literal means
+settles it before any impl is asked, as `wrap(1 as u64)` does above.
+
+<!-- {"fixture":"spec_types_receiver_literal_counts_shape.wado"} -->
+
+```wado
+let t = wrap(1).tag();
+```
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says

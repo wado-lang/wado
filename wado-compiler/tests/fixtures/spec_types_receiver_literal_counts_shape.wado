@@ -1,0 +1,27 @@
+// An impl is counted by its target's shape, not by whether a literal could
+// become its type, so `Box<String>` counts and the literal takes its default.
+
+struct Box<T> { value: T }
+
+fn wrap<U>(u: U) -> Box<U> {
+    return Box { value: u };
+}
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+impl Tag for Box<String> {
+    fn tag(&self) -> String { return "String"; }
+}
+
+impl Tag for Box<u64> {
+    fn tag(&self) -> String { return "u64"; }
+}
+
+test {
+    let t = wrap(1).tag();
+}
+
+__DATA__
+{"compile_error":"no method 'tag' found on type 'Box<i32>'"}
