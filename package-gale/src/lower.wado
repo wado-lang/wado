@@ -255,12 +255,11 @@ fn continuation_arg(ctx: &mut GenContext, elements: &List<Element>, from: i32) -
         }
         return FollowArg::AltMask(CallerLoop { loop_mask, exit });
     }
-    let i = from - 1;
     let mut visiting: List<String> = [];
-    let [deep, consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
+    let [deep, consumed] = ctx.deep_position_first_sets_from(elements, from, FOLLOW_MASK_MAX_K, &mut visiting);
     // A mask stopping short of the suffix proves only that the caller's
     // continuation could *start* here, not that it can complete.
-    let covers_suffix = i + 1 + consumed >= elements.len();
+    let covers_suffix = from + consumed >= elements.len();
     // Effective caller-continuation mask. Prefer the multi-depth deep
     // walk; when it halts immediately (a `Repeat` / `Group` / multi-alt
     // `RuleRef` at the suffix head, e.g. `a b?`), fall back to the
@@ -268,21 +267,21 @@ fn continuation_arg(ctx: &mut GenContext, elements: &List<Element>, from: i32) -
     // deep-nullable suffix's `first(b)` and drops a non-first-exact one
     // (soundness invariant 2) — exactly the depth-0 token the deep walk
     // misses.
-    let one_tok = ctx.compute_call_site_follow(elements, i);
+    let one_tok = ctx.compute_call_site_follow(elements, from - 1);
     let mut mask: List<List<String>> = [];
     if !deep.is_empty() {
         mask = deep;
     } else if !one_tok.is_empty() {
         mask.push(one_tok);
     }
-    if !ctx.tail_is_nullable_deep(elements, i + 1) {
+    if !ctx.tail_is_nullable_deep(elements, from) {
         // A mask that stops short of an optional head proves nothing: the token
         // it names may be the callee's own, and yielding it strands the token
         // where the caller declines the optional. Greedy is ANTLR4's answer for
         // nested subrules — the inner `if` keeps the `else` its caller could
         // also take.
         let mut head_visiting: List<String> = [];
-        if !covers_suffix && ctx.element_is_nullable_deep(&elements[i + 1], &mut head_visiting) {
+        if !covers_suffix && ctx.element_is_nullable_deep(&elements[from], &mut head_visiting) {
             return FollowArg::NoFollow;
         }
         // The local suffix is the whole continuation the callee must clear, but
@@ -300,8 +299,8 @@ fn continuation_arg(ctx: &mut GenContext, elements: &List<Element>, from: i32) -
     // current rule was called with is the answer instead — the mask would say
     // `htmlElement` is followed by `htmlChardata?` and nothing else, and `<p>`
     // would give its text to the loop that called it.
-    if i + 1 < elements.len() && !covers_suffix {
-        let suffix_first = ctx.first_of_elements_from(elements, i + 1);
+    if from < elements.len() && !covers_suffix {
+        let suffix_first = ctx.first_of_elements_from(elements, from);
         return FollowArg::ForwardOpen(ctx.intern_follow_mask(&[suffix_first]));
     }
     if let Some(id) = ctx.intern_follow_mask(&mask) {
@@ -1120,8 +1119,8 @@ fn stamp_lr_atom_mid_operands(
     for let mut a = 0; a < atom.alts.len(); a += 1 {
         let elements = &rule.alternatives[non_lr_indices[a]].elements;
         let ops_len = atom.alts[a].ops.len();
-        assert atom.scan_alts[a].elements.len() == ops_len, `LR atom walk length mismatch: parse-side ${ops_len}, scan-side ${atom.scan_alts[a].elements.len(
-        )}`;
+        let scan_len = atom.scan_alts[a].elements.len();
+        assert scan_len == ops_len, `LR atom walk length mismatch: parse-side ${ops_len}, scan-side ${scan_len}`;
         for let mut k = 0; k + 1 < ops_len; k += 1 {
             if find_self_ref_rule_call(&atom.alts[a].ops[k], &rule.name) matches { None } {
                 continue;

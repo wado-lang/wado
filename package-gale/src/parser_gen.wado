@@ -2080,26 +2080,22 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         } else {
             [] as List<String>;
         };
-        if re.gate_caller_follow && re.body matches { Token(_) | Wildcard | Excluded(_) } {
-            let enters = leaf_enters_while_viable(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
-            w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, "", ctx)} && ${enters}`);
-            gen_scan_iteration(w, re, &effective, ctx, false);
-            w.end();
-            return;
+        let leaf_enters = re.gate_caller_follow && re.body matches { Token(_) | Wildcard | Excluded(_) };
+        let call_enters = scan_enters_while_viable(re);
+        let yield_gate = if leaf_enters || call_enters { String::new() } else { caller_follow_gate };
+        let mut guard = scan_repeat_guard_excluding(&effective, &excluded, &yield_gate, ctx);
+        if leaf_enters {
+            guard = `${guard} && ${leaf_enters_while_viable(ctx, &re.caller_follow_first, "tokens", "tokens", "pos")}`;
         }
-        if !scan_enters_while_viable(re) {
-            w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
-            gen_scan_iteration(w, re, &effective, ctx, false);
-            w.end();
-            return;
-        }
-        assert !repeat_body_implied_by_guard(&re.body, &effective), "a rule-call body is scanned, which marks `sp`";
-        w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, "", ctx)}`);
+        w.begin(`if ${guard}`);
         gen_scan_iteration(w, re, &effective, ctx, false);
-        let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
-        w.begin(`if ${follow_yields_call("tokens", "sp")} && !${resumes}`);
-        gen_scan_rewind(w, ctx, "sp");
-        w.end();
+        if call_enters {
+            assert !repeat_body_implied_by_guard(&re.body, &effective), "a rule-call body is scanned, which marks `sp`";
+            let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
+            w.begin(`if ${follow_yields_call("tokens", "sp")} && !${resumes}`);
+            gen_scan_rewind(w, ctx, "sp");
+            w.end();
+        }
         w.end();
         return;
     }
@@ -6422,14 +6418,14 @@ fn continuation_resumes_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     stream: S1,
     at: S2,
 ) -> String {
-    let admits = follow_resumes_call(tokens, at);
+    let caller_resumes = follow_resumes_call(tokens, at);
     let mut kinds = *local_first;
     dedup_append_arr(&mut kinds, ctx.lr_continuation());
     if kinds.is_empty() {
-        return admits;
+        return caller_resumes;
     }
-    let kind = `(if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF })`;
-    return `(${ctx.kind_check_str(&kinds, &kind)} || ${admits})`;
+    let kind = `(${kind_at(stream, &at)})`;
+    return `(${ctx.kind_check_str(&kinds, &kind)} || ${caller_resumes})`;
 }
 
 /// Whether the probe decides this greedy `?` over a leaf body. Any leaf: a
@@ -7222,9 +7218,12 @@ fn gen_scan_gate_restore<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, sl
 /// The lookahead read every gate and probe opens with: the kind at `at`, EOF
 /// past the end. `stream` is `tokens` inside a scan and `p.kinds` outside one.
 fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, stream: S1, at: S2) {
-    w.line(
-        `let ${name} = if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF };`,
-    );
+    w.line(`let ${name} = ${kind_at(stream, at)};`);
+}
+
+/// The kind at `at` as an expression, EOF past the end.
+fn kind_at<S: AsStrSlice, S1: AsStrSlice>(stream: S, at: S1) -> String {
+    return `if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF }`;
 }
 
 /// Whether the token after an iteration lets the walk go on without declining:

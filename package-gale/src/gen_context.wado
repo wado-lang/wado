@@ -1526,8 +1526,8 @@ impl GenContext {
             if seq.len() != 2 {
                 return none;
             }
-            push_unique_name(&mut firsts, &seq[0]);
-            push_unique_name(&mut seconds, &seq[1]);
+            push_unique(&mut firsts, &seq[0]);
+            push_unique(&mut seconds, &seq[1]);
         }
         if firsts.is_empty() || heads.len() != firsts.len() * seconds.len() {
             return none;
@@ -1557,16 +1557,16 @@ impl GenContext {
             if seq.is_empty() {
                 head_nullable = true;
             } else if seq.len() == 2 {
-                push_unique_seq(&mut out, seq);
+                push_unique(&mut out, seq);
             } else {
                 if self.elements_reach_open_end(elements, start + 1) {
                     return null;
                 }
                 for let next of &self.first_of_elements_from(elements, start + 1) {
-                    push_unique_seq(&mut out, &[seq[0], *next]);
+                    push_unique(&mut out, &[seq[0], *next]);
                 }
                 if self.tail_is_nullable_deep(elements, start + 1) {
-                    push_unique_seq(&mut out, seq);
+                    push_unique(&mut out, seq);
                 }
             }
         }
@@ -1575,7 +1575,7 @@ impl GenContext {
                 return null;
             };
             for let seq of &rest {
-                push_unique_seq(&mut out, seq);
+                push_unique(&mut out, seq);
             }
         }
         return Option::Some(out);
@@ -1622,7 +1622,7 @@ impl GenContext {
                 return null;
             };
             for let seq of &seqs {
-                push_unique_seq(&mut out, seq);
+                push_unique(&mut out, seq);
             }
         }
         return Option::Some(out);
@@ -1642,10 +1642,10 @@ impl GenContext {
             return null;
         }
         for let seq of &body {
-            push_unique_seq(&mut out, seq);
+            push_unique(&mut out, seq);
             if loops && seq.len() == 1 {
                 for let next of &self.first_of_elements_from(&body_elements, 0) {
-                    push_unique_seq(&mut out, &[seq[0], *next]);
+                    push_unique(&mut out, &[seq[0], *next]);
                 }
             }
         }
@@ -3009,15 +3009,9 @@ fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
     }
 }
 
-fn push_unique_name(out: &mut List<String>, name: &String) {
-    if !out.contains(name) {
-        out.push(*name);
-    }
-}
-
-fn push_unique_seq(out: &mut List<List<String>>, seq: &List<String>) {
-    if !out.contains(seq) {
-        out.push(*seq);
+fn push_unique<T: Eq>(out: &mut List<T>, item: &T) {
+    if !out.contains(item) {
+        out.push(*item);
     }
 }
 

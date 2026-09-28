@@ -990,13 +990,17 @@ pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<
     if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
     }
+    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    return follow_open_has(cont, kind, sets, true);
+}
+
+fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {
     let open = cont & FOLLOW_OPEN_FIELD;
     if open == 0 {
         return false;
     }
     let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
-    return set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind);
+    return if set_id == 0 { unknown_has } else { kind_set_has(&sets[(set_id - 1) as i32], kind) };
 }
 
 fn follow_heads_have(
@@ -1011,12 +1015,8 @@ fn follow_heads_have(
         return unknown_has;
     }
     let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
-    let open = cont & FOLLOW_OPEN_FIELD;
-    if open != 0 {
-        let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-        if set_id == 0 && unknown_has || set_id != 0 && kind_set_has(&sets[(set_id - 1) as i32], kind) {
-            return true;
-        }
+    if follow_open_has(cont, kind, sets, unknown_has) {
+        return true;
     }
     let mut c = cont & FOLLOW_CONT_MASK;
     let mut head = true;
