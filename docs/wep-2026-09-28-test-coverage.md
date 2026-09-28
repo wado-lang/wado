@@ -323,12 +323,11 @@ host call on every run is too slow for loops.
 
 ## Known gaps
 
-- [ ] A trap in the middle of a region marks the whole region as run. Only a
-      statement that can leave its block starts a new region, and any call can
-      trap. A 100% report can therefore include a statement no test ran to its
-      end.
-- [ ] A trap before a derived region reaches its choice marks the region as not
-      run, though it ran.
+- [ ] A trap cuts a region short, and the report does not see where. A trap in
+      the middle of a region marks the whole region as run, and a trap before a
+      derived region reaches its choice marks it as not run. Wado cannot catch
+      a trap, so any other test that traps fails the run; only an
+      `#[expect_trap]` or `#[TODO]` test reports coverage past one.
 - [ ] Hit or not only, no execution counts. `FNDA` and `DA` report `1` or `0`.
 - [ ] `core:allocator` is not measured. Its tests are e2e fixtures, which
       `wado test` does not run.
