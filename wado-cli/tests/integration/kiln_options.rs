@@ -160,6 +160,27 @@ fn type_mismatch_points_at_the_field_key() {
         ));
 }
 
+/// A misspelled key stops `run` as it stops `check`: the program is never
+/// built from a generator that ran on options its use site did not write.
+#[test]
+fn unknown_option_stops_the_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_project(
+        tmp.path(),
+        VERBOSE_GENERATOR,
+        "{ verbose: false, verbsoe: false }",
+    );
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "main.wado:5:36: error: kiln: unknown options field `options.verbsoe`",
+        ))
+        .stdout("");
+}
+
 /// A `TreeMap<String, V>` option takes an object whose keys are the author's
 /// own, and the generator reads them in key order.
 #[test]

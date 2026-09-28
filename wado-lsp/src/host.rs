@@ -9,7 +9,9 @@
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, Severity, SourceError};
+use wado_compiler::{
+    CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, Severity, SourceError,
+};
 
 pub mod discovery;
 pub mod prefetch;
@@ -116,11 +118,22 @@ impl CompilerHost for FilesystemCompilerHost {
         self.collect_diagnostic(diagnostic);
     }
 
+    /// An invalid manifest yields an empty index that says why, so the editor
+    /// keeps answering and each dependency import reports the manifest.
     fn dependency_index(&self) -> DependencyIndex {
-        let Some((manifest, root)) = nearest_manifest(&self.base_path) else {
+        let Some(dir) = discovery::nearest_manifest_dir(&self.base_path) else {
             return DependencyIndex::default();
         };
-        dependency_index_from(&manifest, &root, &self.base_path)
+        match read_manifest(&dir) {
+            Ok(manifest) => dependency_index_from(&manifest, &dir, &self.base_path),
+            Err(error) => DependencyIndex {
+                manifest: Some(DependencyManifest {
+                    path: manifest_path(&dir),
+                    error: Some(error),
+                }),
+                ..DependencyIndex::default()
+            },
+        }
     }
 }
 
@@ -134,7 +147,13 @@ pub fn dependency_index_from(
     manifest_dir: &Path,
     base: &Path,
 ) -> DependencyIndex {
-    let mut index = DependencyIndex::default();
+    let mut index = DependencyIndex {
+        manifest: Some(DependencyManifest {
+            path: manifest_path(manifest_dir),
+            error: None,
+        }),
+        ..DependencyIndex::default()
+    };
     let base_abs = absolutize(base);
     for (name, entry) in discovery::resolve_all(manifest, manifest_dir) {
         match entry {
@@ -154,12 +173,19 @@ pub fn dependency_index_from(
     index
 }
 
-/// The nearest `wado.toml` at or above `start`, parsed, with its directory.
-fn nearest_manifest(start: &Path) -> Option<(wado_manifest::Manifest, PathBuf)> {
-    let dir = discovery::nearest_manifest_dir(start)?;
-    let text = std::fs::read_to_string(dir.join(wado_manifest::MANIFEST_FILENAME)).ok()?;
-    let manifest = discovery::resolve_member_manifest(&dir, &text).ok()?;
-    Some((manifest, dir))
+/// The `wado.toml` in `dir`, parsed, or why it cannot be.
+fn read_manifest(dir: &Path) -> Result<wado_manifest::Manifest, String> {
+    let text = std::fs::read_to_string(dir.join(wado_manifest::MANIFEST_FILENAME))
+        .map_err(|e| e.to_string())?;
+    discovery::resolve_member_manifest(dir, &text).map_err(|e| e.to_string())
+}
+
+/// The absolute path of the `wado.toml` in `dir`, as diagnostics name it.
+fn manifest_path(dir: &Path) -> String {
+    absolutize(dir)
+        .join(wado_manifest::MANIFEST_FILENAME)
+        .display()
+        .to_string()
 }
 
 /// Lexical relative path from directory `from_dir` to file `to_file`. Both

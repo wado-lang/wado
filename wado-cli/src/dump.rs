@@ -329,7 +329,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         .unwrap_or_default();
     let host = FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level);
 
-    let manifest_pair = load_nearest_manifest(path);
+    let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
     let host = attach_manifest_and_component_deps(
         host,
         manifest_pair.as_ref(),

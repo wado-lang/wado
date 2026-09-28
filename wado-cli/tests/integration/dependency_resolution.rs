@@ -302,6 +302,55 @@ export fn run() {
         ));
 }
 
+/// A `lib:` alias no `[dependencies]` entry declares is reported as that, naming
+/// the manifest it is missing from, rather than as an unknown namespace.
+#[test]
+fn an_undeclared_alias_names_the_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        "use { x } from \"lib:nothere\";\n\nexport fn run() {\n    x();\n}\n",
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["check", "src/main.wado"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("dependency 'lib:nothere' is not declared in [dependencies] of ")
+                .and(predicate::str::contains("app/wado.toml"))
+                .and(predicate::str::contains("unknown module namespace").not()),
+        );
+}
+
+/// With no manifest at all, the same import says there is none to declare it in.
+#[test]
+fn an_undeclared_alias_without_a_manifest_says_so() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("main.wado"),
+        "use { x } from \"lib:nothere\";\n\nexport fn run() {\n    x();\n}\n",
+    )
+    .unwrap();
+
+    wado_in(tmp.path())
+        .args(["check", "main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "dependency 'lib:nothere' is not declared: no wado.toml governs this module, \
+             and the `use` gives no inline source",
+        ));
+}
+
 /// Two separate consumer projects may use the SAME dependency alias
 /// (`greet`) for DIFFERENT packages. The dependency index is built per
 /// project (per compile, on a fresh interner), so each resolves to its own

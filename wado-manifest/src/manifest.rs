@@ -211,8 +211,9 @@ pub struct Package {
     pub name: String,
     pub version: String,
     /// Entry-point module exposed when the package is consumed as a
-    /// dependency (`use { … } from "<dep-name>"`). Only `export` items are
-    /// visible to consumers.
+    /// dependency (`use { … } from "<dep-name>"`). Its `pub` and `export`
+    /// items are visible to a consumer of the source; a consumer of the built
+    /// component sees the `export` items only.
     pub lib: Option<String>,
     /// Short, human-readable summary (→ `org.opencontainers.image.description`).
     pub description: Option<String>,

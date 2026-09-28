@@ -44,6 +44,7 @@ use crate::cache::{is_staging_file, write_atomic};
 use crate::kiln_metadata::{
     self, FileHash as MetaFileHash, METADATA_VERSION, Metadata, OutputEntry as MetaOutputEntry,
 };
+use crate::manifest::DiscoveryError;
 
 /// Outcome of plan construction.
 #[derive(Debug)]
@@ -835,6 +836,8 @@ pub enum PipelineError {
     /// per-conflict diagnostics have already been emitted through the host;
     /// this carries the count for the summary.
     RedirectConflict(usize),
+    /// A generator package's `wado.toml` cannot be read or parsed.
+    Manifest(DiscoveryError),
 }
 
 impl std::fmt::Display for PipelineError {
@@ -859,6 +862,7 @@ impl std::fmt::Display for PipelineError {
             PipelineError::RedirectConflict(n) => {
                 write!(f, "kiln: {n} conflicting generator redirect(s)")
             }
+            PipelineError::Manifest(e) => write!(f, "kiln: {e}"),
         }
     }
 }

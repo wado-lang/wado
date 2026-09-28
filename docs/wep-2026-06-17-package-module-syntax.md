@@ -146,3 +146,7 @@ Bare names (`from "router"`) are rejected everywhere.
   validation, and the import fails as a missing file.
 - An inline `with { path }` is not read, so a single-file script cannot name a
   path dependency. The import fails as an unknown namespace.
+- A `lib:` key cannot carry `package` beside a `git` source. The manifest
+  rejects the pair ("cannot have both `git` and `package` sources"), though the
+  `package` table above makes `package` optional there. A git dependency's alias
+  therefore cannot state the coordinate it stands for.

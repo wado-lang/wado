@@ -264,6 +264,44 @@ version = "0.1.0"
         ));
 }
 
+/// Every subcommand that reads the governing `wado.toml` fails on an invalid
+/// one. `wado build` always did; the ones that take a file argument dropped the
+/// parse error and compiled as if no manifest were there.
+#[test]
+fn an_invalid_manifest_fails_every_subcommand_that_reads_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let toml = r#"[package]
+name = "p"
+version = "0.1.0"
+
+[dependencies]
+"lib:x" = "1.0.0"
+"#;
+    fs::write(tmp.path().join("wado.toml"), toml).unwrap();
+    fs::write(
+        tmp.path().join("t.wado"),
+        "export fn run() {}\n\ntest { assert 1 == 1; }\n",
+    )
+    .unwrap();
+
+    for args in [
+        &["build"][..],
+        &["test", "t.wado"],
+        &["check", "t.wado"],
+        &["compile", "t.wado"],
+        &["run", "t.wado"],
+        &["dump", "t.wado"],
+        &["wit", "t.wado"],
+        &["query", "diagnostics", "t.wado"],
+    ] {
+        wado_in(tmp.path())
+            .args(args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid wado.toml"));
+    }
+}
+
 #[test]
 fn test_build_from_subdirectory() {
     let tmp = tempfile::tempdir().unwrap();

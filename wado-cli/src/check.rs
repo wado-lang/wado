@@ -150,7 +150,9 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     let world = check_world(
         opts.target_world.as_deref(),
         &path,
-        load_nearest_manifest(&path).as_ref(),
+        load_nearest_manifest(&path)
+            .map_err(CliExit::error)?
+            .as_ref(),
     );
     check_entry(&path, world, &opts).await
 }
@@ -191,7 +193,7 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
         .unwrap_or_default();
     let source = std::fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
-    let manifest_pair = load_nearest_manifest(path);
+    let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
     let (target_world, lib_world) = world.options();
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level),

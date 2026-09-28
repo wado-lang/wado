@@ -179,13 +179,13 @@ async fn world_snapshot_and_surface(
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
 
-    let manifest_pair = load_nearest_manifest(path);
+    let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
+    let interface_name = default_interface_name(&input, manifest_pair.as_ref());
     let host = analysis_host(&base_path, manifest_pair.as_ref(), &source).await?;
     let invocations = run_generators(path, &host, manifest_pair).await?;
 
     let world_fq = world.clone().unwrap_or_else(|| DEFAULT_WORLD.to_string());
-    let contract =
-        wit_emit::wit_contract(Some(&world_fq), None, Some(&default_interface_name(&input)));
+    let contract = wit_emit::wit_contract(Some(&world_fq), None, Some(&interface_name));
     let options = CompilerOptions {
         opt_level: wado_compiler::OptLevel::O2,
         target_world: world,
@@ -289,13 +289,14 @@ fn wir_surface(wir_package: Option<wado_compiler::wir::WirPackage>) -> WorldSurf
     wir_package.map(|pkg| pkg.world_surface).unwrap_or_default()
 }
 
-/// The default interface name: the manifest `[package].name` when the input
-/// resolves through a project, otherwise the entry file stem.
-pub(crate) fn default_interface_name(input: &str) -> String {
-    if let Some(project) = load_nearest_manifest(Path::new(input))
-        && let Some(package) = project.manifest.package
-    {
-        return package.name;
+/// The default interface name: `[package].name` of the `project` governing
+/// `input`, otherwise the entry file stem.
+pub(crate) fn default_interface_name(
+    input: &str,
+    project: Option<&manifest::ProjectManifest>,
+) -> String {
+    if let Some(package) = project.and_then(|p| p.manifest.package.as_ref()) {
+        return package.name.clone();
     }
     PathBuf::from(input)
         .file_stem()

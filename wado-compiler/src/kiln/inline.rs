@@ -797,6 +797,99 @@ mod tests {
         );
     }
 
+    /// An entry whose key sits at `line:column`, for a test that pins where a
+    /// diagnostic points.
+    fn entry_at(line: usize, column: usize, value: AttrValue) -> AttrEntry {
+        AttrEntry {
+            key_span: Span::new(0, 0, line, column),
+            value_span: span(),
+            value,
+        }
+    }
+
+    /// The one diagnostic of collecting `attrs` on a `use` in `src/main.wado`,
+    /// with where it points.
+    fn only_error(attrs: ImportAttributes) -> (String, usize, usize) {
+        let module = module_with_use("./value.txt", attrs);
+        let errs = expect_errors(collect_inline_invocations(
+            [("src/main.wado", &module)],
+            &IndexMap::default(),
+            "",
+        ));
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert_eq!(errs[0].code, Code::GeneratorOptionsInvalid);
+        let at = errs[0].span.as_ref().expect("a clause error carries a span");
+        (errs[0].message.clone(), at.line, at.column)
+    }
+
+    #[test]
+    fn unknown_generator_field_is_an_error_on_its_key() {
+        let mut attrs =
+            attr_with_generator(&[("module", AttrValue::String("./inner.wado".to_string()))]);
+        let generator = attrs.entries.get_mut("generator").expect("built above");
+        let AttrValue::Object(fields) = &mut generator.value else {
+            panic!("built as an object");
+        };
+        fields.insert(
+            "input".to_string(),
+            entry_at(4, 13, AttrValue::Array(Vec::new())),
+        );
+
+        assert_eq!(
+            only_error(attrs),
+            (
+                "kiln: unknown `generator` field `input`; the fields are `module`, `version`, \
+                 `registry`, `options`, `inputs`, and `output_dir`"
+                    .to_string(),
+                4,
+                13,
+            ),
+        );
+    }
+
+    #[test]
+    fn a_key_beside_generator_is_an_error_on_its_key() {
+        let mut attrs =
+            attr_with_generator(&[("module", AttrValue::String("./inner.wado".to_string()))]);
+        attrs.entries.insert(
+            "type".to_string(),
+            entry_at(3, 9, AttrValue::String("wasm".to_string())),
+        );
+
+        assert_eq!(
+            only_error(attrs),
+            (
+                "kiln: unknown key `type` beside `generator`; a generated import's `with` \
+                 holds `generator` alone"
+                    .to_string(),
+                3,
+                9,
+            ),
+        );
+    }
+
+    #[test]
+    fn a_generator_that_is_not_an_object_is_an_error() {
+        let mut entries = AttrObject::default();
+        entries.insert(
+            "generator".to_string(),
+            entry_at(2, 5, AttrValue::String("./inner.wado".to_string())),
+        );
+        let attrs = ImportAttributes {
+            entries,
+            span: span(),
+        };
+
+        assert_eq!(
+            only_error(attrs),
+            (
+                "kiln: `generator` must be an object, got string".to_string(),
+                2,
+                5
+            ),
+        );
+    }
+
     #[test]
     fn dedup_merges_identical_clauses() {
         let mk = || {

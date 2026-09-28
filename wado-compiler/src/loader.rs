@@ -11,7 +11,9 @@ use crate::hashmap::IndexMap;
 use rustc_hash::FxBuildHasher;
 
 use crate::ast::{AstIdSpace, ImportAttributes, Item, Module, UseDecl};
-use crate::compiler_host::{Code, CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
+use crate::compiler_host::{
+    Code, CompilerHost, DependencyManifest, Diagnostic, InMemoryCompilerHost, SourceError,
+};
 use crate::component_model::SourceInterfaceBatch;
 use crate::kiln::InvocationIndex;
 use crate::lexer::{LexError, lex};
@@ -58,8 +60,13 @@ pub enum LoadError {
     },
     /// I/O error reading file
     IoError { path: String, message: String },
-    /// Unknown module namespace (e.g., "unknown:foo")
-    UnknownNamespace { namespace: String },
+    /// A namespaced import (`ns:pkg`, `lib:nick`) that no dependency declares.
+    /// Every namespace but the bundled `core` and `wasi` is one a dependency
+    /// supplies. `manifest` is the `wado.toml` it would be declared in.
+    UndeclaredDependency {
+        name: String,
+        manifest: Option<String>,
+    },
     /// Invalid module path format (e.g., "foo.wado" without "./" prefix)
     InvalidModulePath { path: String },
     /// A bare name matched a declared `[dependencies]` entry, but the
@@ -139,10 +146,23 @@ impl std::fmt::Display for LoadError {
             LoadError::IoError { path, message } => {
                 write!(f, "error reading '{path}': {message}")
             }
-            LoadError::UnknownNamespace { namespace } => {
+            LoadError::UndeclaredDependency {
+                name,
+                manifest: Some(manifest),
+            } => {
                 write!(
                     f,
-                    "unknown module namespace '{namespace}'; expected 'core' or 'wasi'"
+                    "dependency '{name}' is not declared in [dependencies] of {manifest}"
+                )
+            }
+            LoadError::UndeclaredDependency {
+                name,
+                manifest: None,
+            } => {
+                write!(
+                    f,
+                    "dependency '{name}' is not declared: no wado.toml governs this module, \
+                     and the `use` gives no inline source"
                 )
             }
             LoadError::InvalidModulePath { path } => {
@@ -202,7 +222,7 @@ impl LoadError {
             LoadError::IoError { .. } => Code::FileReadError,
             LoadError::StdlibIdentity { .. } => Code::StdlibAttr,
             LoadError::ModuleNotFound { .. }
-            | LoadError::UnknownNamespace { .. }
+            | LoadError::UndeclaredDependency { .. }
             | LoadError::InvalidModulePath { .. }
             | LoadError::DependencyUnresolved { .. } => Code::ModuleNotFound,
         }
@@ -1852,8 +1872,19 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 reason: reason.to_string(),
             });
         }
+        let manifest = self.interner.dependency_manifest();
+        if let Some(DependencyManifest {
+            path,
+            error: Some(error),
+        }) = manifest
+        {
+            return Err(LoadError::DependencyUnresolved {
+                name: import_source.to_string(),
+                reason: format!("{path} is invalid: {error}"),
+            });
+        }
 
-        // Check for unknown namespace pattern (xxx:yyy)
+        // A namespaced import (xxx:yyy) names a dependency
         if let Some(colon_pos) = import_source.find(':') {
             let namespace = &import_source[..colon_pos];
             // Ensure it's a valid identifier-like namespace (not a URL scheme)
@@ -1862,8 +1893,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '_')
             {
-                return Err(LoadError::UnknownNamespace {
-                    namespace: namespace.to_string(),
+                return Err(LoadError::UndeclaredDependency {
+                    name: import_source.to_string(),
+                    manifest: manifest.map(|m| m.path.clone()),
                 });
             }
         }
