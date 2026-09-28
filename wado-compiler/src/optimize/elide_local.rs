@@ -250,6 +250,79 @@ mod tests {
         engine.run(&[&rule]);
     }
 
+    /// `let x = f();` where `f` may trap by its summary, run with `in_bounds`
+    /// either proving that call or not. Answers the root's statements.
+    fn elide_binding_of_trapping_call(proven: bool) -> Vec<StmtKind> {
+        use cranelift_entity::EntityRef;
+
+        use crate::call_args::CallArgs;
+        use crate::nir::FuncId;
+        use crate::nir_arena::ExprNode;
+
+        let mut body = Body::empty();
+        let call = body.exprs.push(ExprNode {
+            kind: ExprKind::Call {
+                func_id: FuncId::new(0),
+                type_args: vec![],
+                args: CallArgs::free(vec![]),
+            },
+            type_id: TypeTable::I32,
+            span: Span::default(),
+        });
+        let binding = body.stmts.push(StmtNode {
+            kind: StmtKind::Let {
+                name: "x".to_string(),
+                local_index: 0,
+                is_mut: false,
+                is_reactive: false,
+                type_id: TypeTable::I32,
+                value: Operand::Expr(call),
+                skip_value_copy: false,
+            },
+            span: Span::default(),
+        });
+        body.root = body.blocks.push(BlockNode {
+            stmts: vec![binding],
+            span: Span::default(),
+        });
+        let mut locals = vec![NirLocal {
+            name: "x".to_string(),
+            type_id: TypeTable::I32,
+            is_mut: false,
+        }];
+        let effects = [FnEffect {
+            may_trap: true,
+            ..FnEffect::default()
+        }];
+        let stores_aliased = IndexSet::default();
+        let in_bounds: IndexSet<ExprId> = proven.then_some(call).into_iter().collect();
+        let types = TypeTable::new();
+        let rule = ElideRule::new(&stores_aliased, &effects, &in_bounds);
+        let mut buffers = EngineBuffers::default();
+        let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
+        engine.set_value_graph_type_table(&types);
+        engine.run(&[&rule]);
+        body.blocks[body.root]
+            .stmts
+            .iter()
+            .map(|s| body.stmts[*s].kind.clone())
+            .collect()
+    }
+
+    #[test]
+    fn drops_a_dead_call_whose_trap_checks_are_proven() {
+        assert!(elide_binding_of_trapping_call(true).is_empty());
+    }
+
+    #[test]
+    fn demotes_a_dead_call_that_may_trap() {
+        let stmts = elide_binding_of_trapping_call(false);
+        assert!(
+            matches!(stmts.as_slice(), [StmtKind::Expr(Operand::Expr(_))]),
+            "the call still runs, for its trap: {stmts:?}"
+        );
+    }
+
     #[test]
     fn elides_a_binding_whose_promoted_read_no_operand_carries() {
         let (mut body, mut locals) = body_with_promoted_read(false);

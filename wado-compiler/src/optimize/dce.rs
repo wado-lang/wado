@@ -26,9 +26,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
-use crate::optimize::arena_query::{
-    expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
-};
+use crate::optimize::arena_query::{expr_node_may_trap, promoted_local_reads};
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
 use crate::{hashmap, nir, tir};
 
@@ -2017,7 +2015,31 @@ impl GlobalGuards<'_> {
             || callee_descriptor(self.descriptors, *func_id).is_builtin_named("cold_path"))
             && args
                 .iter()
-                .all(|arg| is_pure_nontrapping_operand_typed(body, arg.expr, Some(self.types)))
+                .all(|arg| deletable_value(body, arg.expr, self.types, self.effects, in_bounds))
+    }
+
+    /// Whether `stmt` binds a local nothing mentions to a value the pass may
+    /// delete — a binding that computes something and drops it. A trap is an
+    /// observable effect, so a trapping value keeps the binding alive even
+    /// though nobody reads it.
+    fn dead_binding(
+        &self,
+        body: &Body,
+        stmt: StmtId,
+        mentioned: &IndexSet<u32>,
+        in_bounds: &IndexSet<ExprId>,
+    ) -> Option<ExprId> {
+        let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[stmt].kind
+        else {
+            return None;
+        };
+        if mentioned.contains(local_index) {
+            return None;
+        }
+        let expr = value.as_expr()?;
+        deletable_value(body, *value, self.types, self.effects, in_bounds).then_some(expr)
     }
 
     fn inert_body(&self, body: &Body, in_bounds: &IndexSet<ExprId>) -> bool {
@@ -2128,29 +2150,6 @@ impl GlobalGuards<'_> {
     }
 }
 
-/// Whether `stmt` binds a local nothing mentions to a value the pass may
-/// delete — a binding that computes something and drops it. A trap is an
-/// observable effect, so a trapping value keeps the binding alive even though
-/// nobody reads it.
-fn dead_pure_binding(
-    body: &Body,
-    stmt: StmtId,
-    mentioned: &IndexSet<u32>,
-    types: &TypeTable,
-) -> Option<ExprId> {
-    let StmtKind::Let {
-        local_index, value, ..
-    } = &body.stmts[stmt].kind
-    else {
-        return None;
-    };
-    if mentioned.contains(local_index) {
-        return None;
-    }
-    let value = value.as_expr()?;
-    is_pure_nontrapping_expr_typed(body, value, Some(types)).then_some(value)
-}
-
 /// Un-hoist a constant globalization hoisted for nobody: the folds that run
 /// after globalization can take every reader with them, leaving a global that
 /// holds its whole initializer in the binary for no observer. The
@@ -2203,7 +2202,7 @@ pub(super) fn unhoist_unobserved_globals(
                 guarded.insert(key);
                 unobserving.insert(read);
             }
-            if let Some(value) = dead_pure_binding(body, stmt, &mentioned, &types) {
+            if let Some(value) = guards.dead_binding(body, stmt, &mentioned, in_bounds) {
                 unobserving.extend(global_reads_in(body, value).into_iter().map(|(e, _)| e));
             }
         }
@@ -2290,8 +2289,9 @@ fn drop_unobserved_stmts(
         let is_guard = guards
             .find(body, s, in_bounds)
             .is_some_and(|(_, key, _)| unobserved.contains(&key));
-        let is_dead_read =
-            dead_pure_binding(body, s, mentioned, guards.types).is_some_and(|value| {
+        let is_dead_read = guards
+            .dead_binding(body, s, mentioned, in_bounds)
+            .is_some_and(|value| {
                 global_reads_in(body, value)
                     .iter()
                     .any(|(_, key)| unobserved.contains(key))
