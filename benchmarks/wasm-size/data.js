@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790552282489,
+  "lastUpdate": 1790558661333,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61129,6 +61129,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0e84b9ee89e139c81f7c6c923b59383f67603c1b"
         },
         "date": 1790552281685,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6728,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20219,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290120,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c013e91abe6b03ea2a7026a23cf1a2f718cc2680",
+          "message": "Merge pull request #2200 from wado-lang/claude/antlr4-issues-triage-e71o0m\n\ntest(gale): pin four antlr/antlr4 parse-bug reports; ANTLR4's own bugs are not reproduced",
+          "timestamp": "2026-09-28T10:01:17+09:00",
+          "tree_id": "7af853276e904c608cf9fce812b5ac61ad50e70d",
+          "url": "https://github.com/wado-lang/wado/commit/c013e91abe6b03ea2a7026a23cf1a2f718cc2680"
+        },
+        "date": 1790558661134,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
