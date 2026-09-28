@@ -85,6 +85,13 @@ pub(crate) fn openable_dir(dir: &Path) -> &Path {
     dir
 }
 
+/// `path` as an absolute, lexically normalized path, so two paths spelled
+/// independently can be expressed against each other.
+pub(crate) fn absolute(path: &Path) -> PathBuf {
+    let path = openable_dir(path);
+    std::path::absolute(path).map_or_else(|_| path.to_path_buf(), |p| normalize_path(&p))
+}
+
 /// Parse a member's `wado.toml`, applying `[workspace.package]` inheritance when
 /// the directory belongs to a workspace; otherwise parse it standalone.
 pub(crate) fn resolve_manifest(

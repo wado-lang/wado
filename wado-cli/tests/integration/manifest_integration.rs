@@ -312,15 +312,15 @@ fn a_directory_below_the_package_is_walked_from_below_it() {
         "[package]\nname = \"p\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    fs::write(src_dir.join("sub/a.wado"), "test { assert 1 == 1; }\n").unwrap();
+    fs::write(src_dir.join("sub/a.wado"), "test {\n    assert 1 == 1;\n}\n").unwrap();
 
     for dir in ["sub", "."] {
         wado_in(&src_dir)
-            .args(["test", dir])
+            .args(["test", "--format", "verbose", dir])
             .assert()
             .success()
             .stdout(predicate::str::contains("sub/a.wado"))
-            .stdout(predicate::str::contains("..").not());
+            .stdout(predicate::str::contains("../").not());
     }
     wado_in(&src_dir)
         .args(["format", "--check", "sub"])
