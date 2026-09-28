@@ -122,7 +122,8 @@ struct Candidate {
 }
 
 pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let candidates = collect_and_validate(project, gate);
+    let dirty = gate.dirty_funcs(GatedPass::SroaVariantReturn, project.functions.len());
+    let candidates = collect_and_validate(project, &dirty);
     let mut changed = !candidates.is_empty();
     for &key in candidates.keys() {
         compiler_trace!(
@@ -148,7 +149,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
         });
     }
     rewrite_call_sites(project, &all, &mut touched);
-    scalarize_variant_locals(project, &mut touched);
+    scalarize_variant_locals(project, &dirty, &mut touched);
     // A round with no new candidates still does work: `nir/inline` plants call
     // sites on callees scalarized earlier, and rewriting one is a change the
     // fixed-point loop has to see. Reporting only the candidate set let the
@@ -195,7 +196,7 @@ fn rebox_stragglers(
             continue;
         }
         let span = func.span;
-        let bound = handled_call_sites(&body, scalarized, own_return);
+        let bound = handled_call_sites(&body, scalarized, own_return, &project.type_table.borrow());
         let targets = straggler_calls(&body, scalarized, &bound);
         let reboxed = !targets.is_empty();
         for call in targets {
@@ -230,6 +231,7 @@ fn rebox_stragglers_in_globals(
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
 ) -> bool {
     let mut changed = false;
+    let type_table = project.type_table.borrow();
     for global in &mut project.globals {
         let (span, name) = (global.span, global.name.clone());
         // An initializer has no `return`, so no call in it is a pass-through
@@ -237,7 +239,7 @@ fn rebox_stragglers_in_globals(
         let own_return = global.ty;
         let locals = &mut global.locals;
         let body = global.init.slot_expr_mut().body_mut();
-        let bound = handled_call_sites(body, scalarized, own_return);
+        let bound = handled_call_sites(body, scalarized, own_return, &type_table);
         let targets = straggler_calls(body, scalarized, &bound);
         if targets.is_empty() {
             continue;
@@ -269,11 +271,21 @@ fn scalarized_returns(project: &NirPackage) -> IndexMap<FuncId, (TypeId, Layout)
         let Some(layout) = compute_layout(project, variant) else {
             continue;
         };
-        if layout.tuple_type == func.return_type {
+        if same_type(
+            &project.type_table.borrow(),
+            layout.tuple_type,
+            func.return_type,
+        ) {
             out.insert(key, (variant, layout));
         }
     }
     out
+}
+
+/// Whether two ids name one type. A `TypeId` is a slot: newtype erasure and the
+/// boxing rewrite leave several resolving to the same type.
+fn same_type(type_table: &TypeTable, a: TypeId, b: TypeId) -> bool {
+    type_table.type_key(a) == type_table.type_key(b)
 }
 
 /// Call nodes whose consumer already reads a tuple: a `let` whose declared type
@@ -473,13 +485,14 @@ fn handled_call_sites(
     body: &Body,
     scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
     own_return: TypeId,
+    type_table: &TypeTable,
 ) -> IndexSet<ExprId> {
     call_sites(body, own_return)
         .into_iter()
         .filter(|s| {
             scalarized
                 .get(&s.callee)
-                .is_some_and(|(_, l)| l.tuple_type == s.expected)
+                .is_some_and(|(_, l)| same_type(type_table, l.tuple_type, s.expected))
         })
         .map(|s| s.call)
         .collect()
@@ -703,7 +716,12 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
         // hole it guards opens when `nir/inline` plants a call site after
         // validation, which no hand-written source can force, and this runs
         // over every fixture in the suite.
-        let handled = handled_call_sites(body, &scalarized, func.return_type);
+        let handled = handled_call_sites(
+            body,
+            &scalarized,
+            func.return_type,
+            &project.type_table.borrow(),
+        );
         let stragglers = straggler_calls(body, &scalarized, &handled);
         // `straggler_calls` descends from the root, so it never sees the nodes a
         // rewrite orphaned — the arena is not compacted, and reporting those
@@ -738,7 +756,8 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     // repair is not trusted on faith.
     for global in &project.globals {
         let body = global.init.slot_expr().body();
-        let handled = handled_call_sites(body, &scalarized, global.ty);
+        let handled =
+            handled_call_sites(body, &scalarized, global.ty, &project.type_table.borrow());
         let stragglers = straggler_calls(body, &scalarized, &handled);
         assert!(
             stragglers.is_empty(),
@@ -1040,22 +1059,20 @@ fn is_eligible(func: &NirFunction) -> bool {
     !func.is_dead && func.body.is_some() && func.only_reached_by_direct_call()
 }
 
-fn collect_and_validate(
-    project: &NirPackage,
-    gate: &mut FunctionGate,
-) -> IndexMap<FuncId, Candidate> {
+fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<FuncId, Candidate> {
     let mut candidates: IndexMap<FuncId, Candidate> = IndexMap::default();
-    let mut layout_cache: IndexMap<TypeId, Option<Layout>> = IndexMap::default();
+    let mut layout_cache: IndexMap<TypeKey, Option<Layout>> = IndexMap::default();
 
-    for fid in gate.dirty_funcs(GatedPass::SroaVariantReturn, project.functions.len()) {
+    for &fid in dirty {
         let func = project.functions[fid.index()].borrow();
         if !is_eligible(&func) {
             continue;
         }
         let Some(key) = func.id else { continue };
         let variant_type = func.return_type;
+        let type_key = project.type_table.borrow().type_key(variant_type);
         let layout = layout_cache
-            .entry(variant_type)
+            .entry(type_key)
             .or_insert_with(|| compute_layout(project, variant_type))
             .clone();
         let Some(layout) = layout else { continue };
@@ -1103,11 +1120,14 @@ fn collect_and_validate(
                 continue;
             }
             let func = project.functions[callee.index()].borrow();
-            if !is_eligible(&func) || func.return_type != variant_type {
+            if !is_eligible(&func)
+                || !same_type(&project.type_table.borrow(), func.return_type, variant_type)
+            {
                 continue;
             }
+            let type_key = project.type_table.borrow().type_key(variant_type);
             let layout = layout_cache
-                .entry(variant_type)
+                .entry(type_key)
                 .or_insert_with(|| compute_layout(project, variant_type))
                 .clone();
             let Some(layout) = layout else { continue };
@@ -1150,9 +1170,15 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
+            let returns = Returns {
+                body,
+                cand,
+                tail_ok: &tail_ok,
+                type_table: &project.type_table.borrow(),
+            };
             // Every `Return` `rewrite_returns` reaches must turn into the result tuple.
             if !arena_query::every_return(body, NodeRef::Block(body.root), |value| {
-                value.is_some_and(|v| return_value_scalarizable(body, v, cand, &tail_ok))
+                value.is_some_and(|v| returns.value_scalarizable(v))
             }) {
                 invalid.insert(key);
             }
@@ -1195,45 +1221,68 @@ fn collect_called(body: &Body, node: NodeRef, out: &mut IndexSet<FuncId>) {
     body.for_each_child(node, |c| collect_called(body, c, out));
 }
 
-/// The value of a `return`, in tail position. A `return` nested inside it is
-/// checked on its own by [`arena_query::every_return`].
-fn return_value_scalarizable(
-    body: &Body,
-    op: Operand,
-    cand: &Candidate,
-    tail_ok: &IndexMap<FuncId, TypeId>,
-) -> bool {
-    let Some(expr) = op.as_expr() else {
-        return null_return_case(body, op, cand).is_some();
-    };
-    if body.exprs[expr].type_id == TypeTable::NEVER {
-        return true;
-    }
-    if let Some(b) = body.unbroken_block(expr) {
-        return block_tail_scalarizable(body, b, cand, tail_ok);
-    }
-    match &body.exprs[expr].kind {
-        ExprKind::VariantConstruct { variant_type, .. } => *variant_type == cand.variant_type,
-        // `return g(x)` where `g` shares the variant, hence the layout: `g`
-        // already returns this function's tuple, whichever round rewrote it.
-        ExprKind::Call { func_id, .. } => tail_ok.get(func_id) == Some(&cand.variant_type),
-        ExprKind::Local { index, .. } => single_def_variant_construct(body, *index, cand).is_some(),
-        ExprKind::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            block_tail_scalarizable(body, *then_branch, cand, tail_ok)
-                && else_branch.is_some_and(|b| block_tail_scalarizable(body, b, cand, tail_ok))
+/// What deciding whether a candidate's returns scalarize reads.
+struct Returns<'a> {
+    body: &'a Body,
+    cand: &'a Candidate,
+    /// The callees a tail call may reach, each with the variant it returns.
+    tail_ok: &'a IndexMap<FuncId, TypeId>,
+    type_table: &'a TypeTable,
+}
+
+impl Returns<'_> {
+    /// The value of a `return`, in tail position. A `return` nested inside it
+    /// is checked on its own by [`arena_query::every_return`].
+    fn value_scalarizable(&self, op: Operand) -> bool {
+        let (body, cand) = (self.body, self.cand);
+        let Some(expr) = op.as_expr() else {
+            return null_return_case(body, op, cand).is_some();
+        };
+        if body.exprs[expr].type_id == TypeTable::NEVER {
+            return true;
         }
-        ExprKind::Match { arms, .. } => arms
-            .iter()
-            .all(|a| return_value_scalarizable(body, a.body, cand, tail_ok)),
-        ExprKind::Switch { arms, default, .. } => arms
-            .iter()
-            .chain(std::iter::once(default))
-            .all(|&b| block_tail_scalarizable(body, b, cand, tail_ok)),
-        _ => false,
+        if let Some(b) = body.unbroken_block(expr) {
+            return self.block_tail_scalarizable(b);
+        }
+        match &body.exprs[expr].kind {
+            ExprKind::VariantConstruct { variant_type, .. } => {
+                same_type(self.type_table, *variant_type, cand.variant_type)
+            }
+            // `return g(x)` where `g` shares the variant, hence the layout: `g`
+            // already returns this function's tuple, whichever round rewrote it.
+            ExprKind::Call { func_id, .. } => self
+                .tail_ok
+                .get(func_id)
+                .is_some_and(|&t| same_type(self.type_table, t, cand.variant_type)),
+            ExprKind::Local { index, .. } => {
+                single_def_variant_construct(body, *index, cand, self.type_table).is_some()
+            }
+            ExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                self.block_tail_scalarizable(*then_branch)
+                    && else_branch.is_some_and(|b| self.block_tail_scalarizable(b))
+            }
+            ExprKind::Match { arms, .. } => arms.iter().all(|a| self.value_scalarizable(a.body)),
+            ExprKind::Switch { arms, default, .. } => arms
+                .iter()
+                .chain(std::iter::once(default))
+                .all(|&b| self.block_tail_scalarizable(b)),
+            _ => false,
+        }
+    }
+
+    fn block_tail_scalarizable(&self, block: BlockId) -> bool {
+        let Some(&last) = self.body.blocks[block].stmts.last() else {
+            return false;
+        };
+        match &self.body.stmts[last].kind {
+            StmtKind::Expr(e) => self.value_scalarizable(*e),
+            StmtKind::Return { .. } => true,
+            _ => false,
+        }
     }
 }
 
@@ -1248,28 +1297,17 @@ fn null_return_case(body: &Body, op: Operand, cand: &Candidate) -> Option<u32> {
     cand.layout.null_case
 }
 
-fn block_tail_scalarizable(
-    body: &Body,
-    block: BlockId,
-    cand: &Candidate,
-    tail_ok: &IndexMap<FuncId, TypeId>,
-) -> bool {
-    let Some(&last) = body.blocks[block].stmts.last() else {
-        return false;
-    };
-    match &body.stmts[last].kind {
-        StmtKind::Expr(e) => return_value_scalarizable(body, *e, cand, tail_ok),
-        StmtKind::Return { .. } => true,
-        _ => false,
-    }
-}
-
 /// A `let t = VariantConstruct(…)` whose only mention is the `return t` asking
 /// about it — the shape `field_scalarize` leaves when a construction has to
 /// happen before a later side effect. The rewrite retypes the binding in place,
 /// so nothing moves and no trap or ordering analysis is needed. Returns the
 /// construction.
-fn single_def_variant_construct(body: &Body, local: u32, cand: &Candidate) -> Option<ExprId> {
+fn single_def_variant_construct(
+    body: &Body,
+    local: u32,
+    cand: &Candidate,
+    type_table: &TypeTable,
+) -> Option<ExprId> {
     let mut defs: Vec<StmtId> = Vec::new();
     let mut reads = 0usize;
     count_local_def_use(
@@ -1291,7 +1329,9 @@ fn single_def_variant_construct(body: &Body, local: u32, cand: &Candidate) -> Op
     }
     let init = value.as_expr()?;
     match &body.exprs[init].kind {
-        ExprKind::VariantConstruct { variant_type, .. } if *variant_type == cand.variant_type => {
+        ExprKind::VariantConstruct { variant_type, .. }
+            if same_type(type_table, *variant_type, cand.variant_type) =>
+        {
             Some(init)
         }
         _ => None,
@@ -1716,7 +1756,13 @@ fn rewrite_callees(
         };
         let root = body.root;
         let mut retyped: Vec<u32> = Vec::new();
-        rewrite_returns(&mut body, NodeRef::Block(root), cand, span, &mut retyped);
+        let mut rw = ReturnRewrite {
+            cand,
+            span,
+            type_table: &project.type_table.borrow(),
+            retyped: &mut retyped,
+        };
+        rw.returns(&mut body, NodeRef::Block(root));
         // A `let t = Ok(v); … return t` had its initializer rewritten in place,
         // so the binding now holds the tuple: its declared type has to follow,
         // or WIR declares the local by the variant it no longer carries.
@@ -1729,114 +1775,107 @@ fn rewrite_callees(
     }
 }
 
-/// Rewrite every `Return` value leaf into the result tuple, retyping the merge
-/// points it passes through on the way.
-fn rewrite_returns(
-    body: &mut Body,
-    node: NodeRef,
-    cand: &Candidate,
+/// The callee rewrite of one candidate's returns.
+struct ReturnRewrite<'a> {
+    cand: &'a Candidate,
     span: Span,
-    retyped: &mut Vec<u32>,
-) {
-    if let NodeRef::Stmt(s) = node
-        && let StmtKind::Return { value: Some(v) } = body.stmts[s].kind
-        && let Some(new) = rewrite_return_value(body, v, cand, span, retyped)
-    {
-        body.stmts[s].kind = StmtKind::Return { value: Some(new) };
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        rewrite_returns(body, c, cand, span, retyped);
-    }
+    type_table: &'a TypeTable,
+    /// The `let`-bound temps a `return t` rewrote the initializer of.
+    retyped: &'a mut Vec<u32>,
 }
 
-/// Rewrites in place where the value is a skeleton node, and returns a
-/// replacement operand where it is not — a promoted `null`, which has no
-/// `ExprId` to overwrite.
-#[must_use]
-fn rewrite_return_value(
-    body: &mut Body,
-    op: Operand,
-    cand: &Candidate,
-    span: Span,
-    retyped: &mut Vec<u32>,
-) -> Option<Operand> {
-    let Some(expr) = op.as_expr() else {
-        return null_tuple(body, op, cand, span);
-    };
-    if body.exprs[expr].type_id == TypeTable::NEVER {
-        return None;
-    }
-    if let Some(b) = body.unbroken_block(expr) {
-        retype_block(body, expr, cand.layout.tuple_type);
-        rewrite_block_tail(body, b, cand, span, retyped);
-        return None;
-    }
-    match body.exprs[expr].kind.clone() {
-        ExprKind::VariantConstruct { .. } => rewrite_construct(body, expr, cand, span),
-        // A tail call to a co-candidate already returns this tuple.
-        ExprKind::Call { .. } => {
-            body.exprs[expr].type_id = cand.layout.tuple_type;
+impl ReturnRewrite<'_> {
+    /// Rewrite every `Return` value leaf into the result tuple, retyping the
+    /// merge points it passes through on the way.
+    fn returns(&mut self, body: &mut Body, node: NodeRef) {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Return { value: Some(v) } = body.stmts[s].kind
+            && let Some(new) = self.value(body, v)
+        {
+            body.stmts[s].kind = StmtKind::Return { value: Some(new) };
         }
-        ExprKind::Local { index, .. } => {
-            if let Some(init) = single_def_variant_construct(body, index, cand) {
-                rewrite_construct(body, init, cand, span);
+        let mut kids = Vec::new();
+        body.for_each_child(node, |c| kids.push(c));
+        for c in kids {
+            self.returns(body, c);
+        }
+    }
+
+    /// Rewrites in place where the value is a skeleton node, and returns a
+    /// replacement operand where it is not — a promoted `null`, which has no
+    /// `ExprId` to overwrite.
+    #[must_use]
+    fn value(&mut self, body: &mut Body, op: Operand) -> Option<Operand> {
+        let (cand, span) = (self.cand, self.span);
+        let Some(expr) = op.as_expr() else {
+            return null_tuple(body, op, cand, span);
+        };
+        if body.exprs[expr].type_id == TypeTable::NEVER {
+            return None;
+        }
+        if let Some(b) = body.unbroken_block(expr) {
+            retype_block(body, expr, cand.layout.tuple_type);
+            self.block_tail(body, b);
+            return None;
+        }
+        match body.exprs[expr].kind.clone() {
+            ExprKind::VariantConstruct { .. } => rewrite_construct(body, expr, cand, span),
+            // A tail call to a co-candidate already returns this tuple.
+            ExprKind::Call { .. } => {
                 body.exprs[expr].type_id = cand.layout.tuple_type;
-                retyped.push(index);
             }
-        }
-        ExprKind::If {
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            body.exprs[expr].type_id = cand.layout.tuple_type;
-            rewrite_block_tail(body, then_branch, cand, span, retyped);
-            if let Some(eb) = else_branch {
-                rewrite_block_tail(body, eb, cand, span, retyped);
-            }
-        }
-        ExprKind::Match { arms, .. } => {
-            body.exprs[expr].type_id = cand.layout.tuple_type;
-            let replacements: Vec<(usize, Operand)> = arms
-                .iter()
-                .enumerate()
-                .filter_map(|(i, a)| {
-                    rewrite_return_value(body, a.body, cand, span, retyped).map(|new| (i, new))
-                })
-                .collect();
-            if let ExprKind::Match { arms, .. } = &mut body.exprs[expr].kind {
-                for (i, new) in replacements {
-                    arms[i].body = new;
+            ExprKind::Local { index, .. } => {
+                if let Some(init) = single_def_variant_construct(body, index, cand, self.type_table)
+                {
+                    rewrite_construct(body, init, cand, span);
+                    body.exprs[expr].type_id = cand.layout.tuple_type;
+                    self.retyped.push(index);
                 }
             }
-        }
-        ExprKind::Switch { arms, default, .. } => {
-            body.exprs[expr].type_id = cand.layout.tuple_type;
-            for b in arms.into_iter().chain(std::iter::once(default)) {
-                rewrite_block_tail(body, b, cand, span, retyped);
+            ExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                body.exprs[expr].type_id = cand.layout.tuple_type;
+                self.block_tail(body, then_branch);
+                if let Some(eb) = else_branch {
+                    self.block_tail(body, eb);
+                }
             }
+            ExprKind::Match { arms, .. } => {
+                body.exprs[expr].type_id = cand.layout.tuple_type;
+                let replacements: Vec<(usize, Operand)> = arms
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, a)| self.value(body, a.body).map(|new| (i, new)))
+                    .collect();
+                if let ExprKind::Match { arms, .. } = &mut body.exprs[expr].kind {
+                    for (i, new) in replacements {
+                        arms[i].body = new;
+                    }
+                }
+            }
+            ExprKind::Switch { arms, default, .. } => {
+                body.exprs[expr].type_id = cand.layout.tuple_type;
+                for b in arms.into_iter().chain(std::iter::once(default)) {
+                    self.block_tail(body, b);
+                }
+            }
+            _ => {}
         }
-        _ => {}
+        None
     }
-    None
-}
 
-fn rewrite_block_tail(
-    body: &mut Body,
-    block: BlockId,
-    cand: &Candidate,
-    span: Span,
-    retyped: &mut Vec<u32>,
-) {
-    let Some(&last) = body.blocks[block].stmts.last() else {
-        return;
-    };
-    if let StmtKind::Expr(e) = body.stmts[last].kind
-        && let Some(new) = rewrite_return_value(body, e, cand, span, retyped)
-    {
-        body.stmts[last].kind = StmtKind::Expr(new);
+    fn block_tail(&mut self, body: &mut Body, block: BlockId) {
+        let Some(&last) = body.blocks[block].stmts.last() else {
+            return;
+        };
+        if let StmtKind::Expr(e) = body.stmts[last].kind
+            && let Some(new) = self.value(body, e)
+        {
+            body.stmts[last].kind = StmtKind::Expr(new);
+        }
     }
 }
 
@@ -2032,39 +2071,30 @@ fn rewrite_call_sites(
 /// … s = Some(v); … match s { … }` holds `[tag, v]`, which `sroa` then splits
 /// into scalars, so no write allocates. It qualifies when every write builds a
 /// case and every read destructures, so nothing ever needs the variant whole.
-fn scalarize_variant_locals(project: &NirPackage, touched: &mut IndexSet<usize>) {
-    let mut layouts: IndexMap<TypeId, Option<Candidate>> = IndexMap::default();
-    for i in 0..project.functions.len() {
-        let mut func = project.functions[i].borrow_mut();
+fn scalarize_variant_locals(project: &NirPackage, dirty: &[FuncId], touched: &mut IndexSet<usize>) {
+    let mut layouts: IndexMap<TypeKey, Option<Candidate>> = IndexMap::default();
+    for &fid in dirty {
+        let mut func = project.functions[fid.index()].borrow_mut();
         let Some(mut body) = func.body.take() else {
             continue;
         };
+        // `sroa` splits only a local one `Let` binds; a tuple it leaves whole
+        // allocates at every write, `null` included.
+        let rebound = arena_query::rebound_locals(&body);
         let mut candidates: IndexMap<u32, Candidate> = IndexMap::default();
         for (local, l) in func.locals.iter().enumerate() {
             let local = u32::try_from(local).expect("too many locals");
             if func.address_taken_locals.contains(&local)
                 || func.stores_aliased_locals.contains(&local)
+                || rebound.contains(&local)
                 || func.params.iter().any(|p| p.local_index == local)
             {
                 continue;
             }
-            let cand = layouts.entry(l.type_id).or_insert_with(|| {
-                let layout = compute_layout(project, l.type_id)?;
-                // A slot that would qualify in turn is a variant local again
-                // once `sroa` splits the tuple, often of this very type
-                // (`Option<Option<i32>>`), so taking it never terminates.
-                if layout
-                    .slot_types
-                    .iter()
-                    .any(|&slot| compute_layout(project, slot).is_some())
-                {
-                    return None;
-                }
-                Some(Candidate {
-                    layout,
-                    variant_type: l.type_id,
-                })
-            });
+            let key = project.type_table.borrow().type_key(l.type_id);
+            let cand = layouts
+                .entry(key)
+                .or_insert_with(|| local_candidate(project, l.type_id));
             if let Some(cand) = cand {
                 candidates.insert(local, cand.clone());
             }
@@ -2072,20 +2102,26 @@ fn scalarize_variant_locals(project: &NirPackage, touched: &mut IndexSet<usize>)
         if !candidates.is_empty() {
             let type_table = project.type_table.borrow();
             let rebind = Rebind::new(&func, &type_table);
-            candidates.retain(|&local, cand| variant_local_rewritable(&body, local, cand, &rebind));
+            retain_rewritable_locals(&body, &mut candidates, &rebind);
             if !candidates.is_empty() {
                 let span = func.span;
-                for (&local, cand) in &candidates {
+                for &local in candidates.keys() {
                     compiler_trace!(
                         "sroa_variant_return",
                         "scalarizing local {} in {}",
                         func.locals[local as usize].name,
                         func.name
                     );
-                    rewrite_variant_local_defs(&mut body, local, cand, span);
-                    func.locals[local as usize].type_id = cand.layout.tuple_type;
-                    retype_let(&mut body, local, cand.layout.tuple_type);
                 }
+                rewrite_variant_local_defs(&mut body, &candidates, span);
+                let tuple_types: IndexMap<u32, TypeId> = candidates
+                    .iter()
+                    .map(|(&l, c)| (l, c.layout.tuple_type))
+                    .collect();
+                for (&local, &tuple_type) in &tuple_types {
+                    func.locals[local as usize].type_id = tuple_type;
+                }
+                retype_lets(&mut body, &tuple_types);
                 let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
                 let bound: IndexMap<u32, &Candidate> =
                     candidates.iter().map(|(&l, c)| (l, c)).collect();
@@ -2097,67 +2133,127 @@ fn scalarize_variant_locals(project: &NirPackage, touched: &mut IndexSet<usize>)
                 };
                 let root = body.root;
                 rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
-                touched.insert(i);
+                touched.insert(fid.index());
             }
         }
         func.body = Some(body);
     }
 }
 
-/// Whether every write to `local` builds a case of its variant and every read
-/// destructures it one level deep.
-fn variant_local_rewritable(body: &Body, local: u32, cand: &Candidate, rebind: &Rebind) -> bool {
-    let mut ok = true;
-    let mut defs = 0;
+/// The candidate a local of `variant_type` would be.
+fn local_candidate(project: &NirPackage, variant_type: TypeId) -> Option<Candidate> {
+    let layout = compute_layout(project, variant_type)?;
+    // A slot that would qualify in turn is a variant local again once `sroa`
+    // splits the tuple, often of this very type (`Option<Option<i32>>`), so
+    // taking it never terminates.
+    if layout
+        .slot_types
+        .iter()
+        .any(|&slot| compute_layout(project, slot).is_some())
+    {
+        return None;
+    }
+    Some(Candidate {
+        layout,
+        variant_type,
+    })
+}
+
+/// Keep the candidates every write of which builds a case and every read of
+/// which destructures one level deep, so nothing needs the variant whole.
+fn retain_rewritable_locals(
+    body: &Body,
+    candidates: &mut IndexMap<u32, Candidate>,
+    rebind: &Rebind,
+) {
+    let mut refused: IndexSet<u32> = IndexSet::default();
+    let mut defined: IndexSet<u32> = IndexSet::default();
     let mut sanctioned: IndexSet<ExprId> = IndexSet::default();
+    let mut reads: Vec<(u32, ExprId)> = Vec::new();
+    let of = |op: Operand| temp_local(body, op, candidates);
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(s) => {
             if let StmtKind::Let {
                 local_index, value, ..
             } = &body.stmts[s].kind
-                && *local_index == local
+                && let Some(cand) = candidates.get(local_index)
             {
-                defs += 1;
-                ok &= builds_case(body, *value, cand);
+                defined.insert(*local_index);
+                if !builds_case(body, *value, cand) {
+                    refused.insert(*local_index);
+                }
             }
         }
         NodeRef::Pat(p) => {
-            if matches!(body.pats[p].kind, PatKind::Binding { local_index, .. } if local_index == local)
+            if let PatKind::Binding { local_index, .. } = body.pats[p].kind
+                && candidates.contains_key(&local_index)
             {
-                ok = false;
+                refused.insert(local_index);
             }
         }
         NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Assign { target, value } if is_local(body, Operand::Expr(*target), local) => {
-                sanctioned.insert(*target);
-                ok &= builds_case(body, *value, cand);
+            ExprKind::Local { index, .. } if candidates.contains_key(index) => {
+                reads.push((*index, e));
             }
-            ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. }
-                if is_local(body, *expr, local) =>
-            {
-                sanctioned.extend(expr.as_expr());
+            ExprKind::Assign { target, value } => {
+                if let Some(local) = of(Operand::Expr(*target)) {
+                    sanctioned.insert(*target);
+                    if !builds_case(body, *value, &candidates[&local]) {
+                        refused.insert(local);
+                    }
+                }
+            }
+            ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
+                if of(*expr).is_some() {
+                    sanctioned.extend(expr.as_expr());
+                }
             }
             // A payload read of a unit case has no slot to read. It only
             // survives where nothing reaches it, but it still has to lower.
             ExprKind::VariantPayload {
                 expr, case_index, ..
-            } if is_local(body, *expr, local) => {
-                sanctioned.extend(expr.as_expr());
-                ok &= cand.layout.payload_read_type(*case_index).is_some();
+            } => {
+                if let Some(local) = of(*expr) {
+                    sanctioned.extend(expr.as_expr());
+                    if candidates[&local]
+                        .layout
+                        .payload_read_type(*case_index)
+                        .is_none()
+                    {
+                        refused.insert(local);
+                    }
+                }
             }
-            ExprKind::Match { expr, arms } if is_local(body, *expr, local) => {
-                sanctioned.extend(expr.as_expr());
-                ok &= arms_are_one_level(body, arms, rebind, &cand.layout);
+            // The rewritten match reads the payload slot again at each guard
+            // and arm body, which only a guard writing the local tells apart
+            // from the one read the scrutinee was.
+            ExprKind::Match { expr, arms } => {
+                if let Some(local) = of(*expr) {
+                    sanctioned.extend(expr.as_expr());
+                    let guard_writes = arms.iter().filter_map(|a| a.guard?.as_expr()).any(|g| {
+                        body.find_in_live_node_under(NodeRef::Expr(g), |n| {
+                            (arena_query::local_written_by(body, n) == Some(local)).then_some(())
+                        })
+                        .is_some()
+                    });
+                    if guard_writes
+                        || !arms_are_one_level(body, arms, rebind, &candidates[&local].layout)
+                    {
+                        refused.insert(local);
+                    }
+                }
             }
             _ => {}
         },
         NodeRef::Block(_) => {}
     });
-    ok && defs > 0
-        && reachable_exprs(body).into_iter().all(|e| {
-            sanctioned.contains(&e)
-                || !matches!(body.exprs[e].kind, ExprKind::Local { index, .. } if index == local)
-        })
+    refused.extend(
+        reads
+            .into_iter()
+            .filter(|(_, e)| !sanctioned.contains(e))
+            .map(|(local, _)| local),
+    );
+    candidates.retain(|local, _| defined.contains(local) && !refused.contains(local));
 }
 
 /// A case construction of the candidate's variant, or the `null` that spells
@@ -2169,33 +2265,41 @@ fn builds_case(body: &Body, value: Operand, cand: &Candidate) -> bool {
     }
 }
 
-/// Turn every write to `local` into the case's tuple.
-fn rewrite_variant_local_defs(body: &mut Body, local: u32, cand: &Candidate, span: Span) {
-    let mut lets: Vec<StmtId> = Vec::new();
-    let mut assigns: Vec<ExprId> = Vec::new();
+/// Turn every write to a candidate into the case's tuple.
+fn rewrite_variant_local_defs(body: &mut Body, candidates: &IndexMap<u32, Candidate>, span: Span) {
+    let mut lets: Vec<(StmtId, u32)> = Vec::new();
+    let mut assigns: Vec<(ExprId, u32)> = Vec::new();
     body.for_each_reachable_node(|node| match node {
-        NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Let { local_index, .. } if local_index == local) => {
-            lets.push(s);
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let { local_index, .. } = body.stmts[s].kind
+                && candidates.contains_key(&local_index)
+            {
+                lets.push((s, local_index));
+            }
         }
-        NodeRef::Expr(e) if matches!(&body.exprs[e].kind, ExprKind::Assign { target, .. } if is_local(body, Operand::Expr(*target), local)) => {
-            assigns.push(e);
+        NodeRef::Expr(e) => {
+            if let ExprKind::Assign { target, .. } = body.exprs[e].kind
+                && let Some(local) = temp_local(body, Operand::Expr(target), candidates)
+            {
+                assigns.push((e, local));
+            }
         }
         _ => {}
     });
-    for s in lets {
+    for (s, local) in lets {
         let StmtKind::Let { value, .. } = body.stmts[s].kind else {
             unreachable!()
         };
-        let tuple = case_tuple(body, value, cand, span);
+        let tuple = case_tuple(body, value, &candidates[&local], span);
         if let StmtKind::Let { value, .. } = &mut body.stmts[s].kind {
             *value = tuple;
         }
     }
-    for e in assigns {
+    for (e, local) in assigns {
         let ExprKind::Assign { value, .. } = body.exprs[e].kind else {
             unreachable!()
         };
-        let tuple = case_tuple(body, value, cand, span);
+        let tuple = case_tuple(body, value, &candidates[&local], span);
         if let ExprKind::Assign { value, .. } = &mut body.exprs[e].kind {
             *value = tuple;
         }
@@ -2236,6 +2340,11 @@ fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candida
 /// own entry is retyped by the caller; a `Let` and each `Local` node carry
 /// their own copy.
 fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) -> bool {
+    retype_lets(body, &IndexMap::from_iter([(local, tuple_type)]))
+}
+
+/// [`retype_let`] for several locals in one sweep.
+fn retype_lets(body: &mut Body, tuple_types: &IndexMap<u32, TypeId>) -> bool {
     let mut changed = false;
     for stmt in body.stmts.values_mut() {
         if let StmtKind::Let {
@@ -2243,7 +2352,7 @@ fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) -> bool {
             type_id,
             ..
         } = &mut stmt.kind
-            && *local_index == local
+            && let Some(&tuple_type) = tuple_types.get(local_index)
             && *type_id != tuple_type
         {
             *type_id = tuple_type;
@@ -2252,7 +2361,7 @@ fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) -> bool {
     }
     for node in body.exprs.values_mut() {
         if let ExprKind::Local { index, .. } = &node.kind
-            && *index == local
+            && let Some(&tuple_type) = tuple_types.get(index)
             && node.type_id != tuple_type
         {
             node.type_id = tuple_type;

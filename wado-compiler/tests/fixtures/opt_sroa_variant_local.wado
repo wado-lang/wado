@@ -52,7 +52,24 @@ fn nested(n: i32) -> i32 {
     };
 }
 
+// The scrutinee is read once, before any guard runs. Split, the payload is a
+// slot each arm reads again, so a guard that writes the local keeps it whole.
+#[inline("never")]
+fn guard_resets(n: i64, reset: bool) -> i64 {
+    let mut s: Option<i64> = null;
+    if n > 0 {
+        s = Option::Some(n);
+    }
+    return match s {
+        Some(v) && if reset { s = null; false } else { false } => v,
+        Some(v) => v + 1,
+        None => 0,
+    };
+}
+
 export fn run() {
+    assert guard_resets(builtin::black_box(5), builtin::black_box(true)) == 6;
+    assert guard_resets(builtin::black_box(5), builtin::black_box(false)) == 6;
     assert nested(builtin::black_box(5)) == 5;
     assert nested(builtin::black_box(-5)) == 0;
     let xs: List<i64> = [3, 8, 5, 6, 7];
