@@ -298,6 +298,8 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
 // Step 3b: mark &local field values as stores-aliased
 // -----------------------------------------------------------------------
 
+/// Every literal a decomposed candidate takes: the one its `Let` binds and each
+/// a whole-literal assign writes.
 fn mark_ref_field_locals_as_aliased(
     body: &Body,
     candidates: &[SroaCandidate],
@@ -309,6 +311,13 @@ fn mark_ref_field_locals_as_aliased(
             collect_ref_locals_in_fields(body, c.literal, stores_aliased);
         }
     }
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Expr(e) = node
+            && let Some((_, literal)) = whole_literal_assign(body, e, decomposed)
+        {
+            collect_ref_locals_in_fields(body, literal, stores_aliased);
+        }
+    });
 }
 
 fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u32>) {
@@ -494,9 +503,7 @@ fn field_access_of_candidate(
 }
 
 /// If `expr` is `candidate = <literal>`, return the candidate and the literal:
-/// a write of the whole aggregate, which is one write per field. An element
-/// reading the candidate refuses, since the field writes before it would change
-/// what it reads.
+/// a write of the whole aggregate, which is one write per field.
 fn whole_literal_assign(
     body: &Body,
     expr: ExprId,
@@ -507,18 +514,19 @@ fn whole_literal_assign(
     };
     let local = is_candidate_local(body, *target, candidates)?;
     let literal = value.as_expr()?;
-    if !matches!(
+    matches!(
         body.exprs[literal].kind,
         ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
-    ) {
-        return None;
-    }
-    let reads_candidate = body
-        .find_in_live_node_under(NodeRef::Expr(literal), |n| {
-            matches!(n, NodeRef::Expr(e) if bare_local(body, e) == Some(local)).then_some(())
-        })
-        .is_some();
-    (!reads_candidate).then_some((local, literal))
+    )
+    .then_some((local, literal))
+}
+
+/// Whether anything under `node` reads `local`.
+fn reads_local(body: &Body, node: NodeRef, local: u32) -> bool {
+    body.find_in_live_node_under(node, |n| {
+        matches!(n, NodeRef::Expr(e) if bare_local(body, e) == Some(local)).then_some(())
+    })
+    .is_some()
 }
 
 /// A literal's `(field_index, value)` pairs, in field order.
@@ -1036,23 +1044,51 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
         return;
     }
 
-    // Whole write: candidate = literal -> one scalar write per field.
+    // Whole write: candidate = literal -> one scalar write per field. A literal
+    // reading the candidate evaluates every field before writing any, as the
+    // aggregate write did.
     if let Some((local, literal)) = whole_literal_assign(engine.body, id, ctx.decomposed) {
         let span = engine.body.exprs[id].span;
+        let reads_self = reads_local(engine.body, NodeRef::Expr(literal), local);
         let pairs = literal_fields(engine.body, literal);
         engine.body.take_expr(literal);
+        let mut stmts = Vec::with_capacity(2 * pairs.len());
         let mut writes = Vec::with_capacity(pairs.len());
-        for (field_index, value) in pairs {
+        for (field_index, mut value) in pairs {
             if let Some(e) = value.as_expr() {
                 rewrite_expr(engine, e, ctx);
             }
-            let key = (local, field_index);
-            let target = engine.alloc_expr(ctx.field_local(key), ctx.field_map[&key].type_id, span);
+            let slot = &ctx.field_map[&(local, field_index)];
+            if reads_self {
+                let temp =
+                    engine.alloc_minted_local(&minted_what(SROA, "next"), slot.type_id, false);
+                let name = engine.local_name(temp);
+                stmts.push(engine.alloc_stmt(
+                    StmtKind::Let {
+                        name: name.clone(),
+                        local_index: temp,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: slot.type_id,
+                        value,
+                        skip_value_copy: true,
+                    },
+                    span,
+                ));
+                value = Operand::Expr(engine.alloc_expr(
+                    ExprKind::Local { index: temp, name },
+                    slot.type_id,
+                    span,
+                ));
+            }
+            let target =
+                engine.alloc_expr(ctx.field_local((local, field_index)), slot.type_id, span);
             let write =
                 engine.alloc_expr(ExprKind::Assign { target, value }, TypeTable::UNIT, span);
             writes.push(engine.alloc_stmt(StmtKind::Expr(Operand::Expr(write)), span));
         }
-        let block = engine.alloc_block(writes, span);
+        stmts.extend(writes);
+        let block = engine.alloc_block(stmts, span);
         engine.replace_expr_kind(id, ExprKind::plain_block(block, TypeTable::UNIT, SROA));
         return;
     }

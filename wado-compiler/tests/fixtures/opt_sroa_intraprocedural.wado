@@ -25,17 +25,28 @@ fn basic_sroa() -> i32 {
     return p.x + p.y;
 }
 
-// Pattern 2: Mutable struct with field write then read. The writes forward to
-// the reads, so the result is 100 whatever `seed` is and the call folds away,
-// `black_box` or not.
+// Pattern 2: Mutable struct with field write then read
 
 
 #[inline("never")]
 fn mutable_field_write(seed: i32) -> i32 {
     let mut p = Point { x: seed, y: 0 };
-    p.x = 42;
-    p.y = 58;
+    p.x = p.x + 42;
+    p.y = p.x * 2;
     return p.x + p.y;
+}
+
+// Pattern 2b: Whole write of a literal reading the struct itself. Every field
+// is read before any is written, so the swap sees the old values.
+
+
+#[inline("never")]
+fn whole_write_reads_self(n: i32) -> i32 {
+    let mut p = Point { x: n, y: 1 };
+    for let _ of 0..<n {
+        p = Point { x: p.y, y: p.x + p.y };
+    }
+    return p.x;
 }
 
 // Pattern 3: Struct where only some fields escape (currently all-or-nothing)
@@ -98,7 +109,8 @@ fn build_and_return(x: i32, y: i32) -> Point {
 
 export fn run() {
     assert basic_sroa() == 30;
-    assert mutable_field_write(builtin::black_box(7)) == 100;
+    assert mutable_field_write(builtin::black_box(7)) == 147;
+    assert whole_write_reads_self(builtin::black_box(3)) == 5;
     assert partial_escape(50) == 150;
     assert nested_struct() == 33;
     assert multiple_structs() == 10;
@@ -110,7 +122,8 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_not_expect:O2": [
-        "mutable_field_write\"("
+    "wir_expect:O2": [
+        "fn \"opt_sroa_intraprocedural.wado/mutable_field_write\"(seed) {\n    let $sroa_p_x_",
+        "fn \"opt_sroa_intraprocedural.wado/whole_write_reads_self\"(n) {\n    let $sroa_p_x_"
     ]
 }
