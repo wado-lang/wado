@@ -5964,9 +5964,10 @@ pub enum TirStmtKind {
         is_reactive: bool,
         type_id: TypeId,
         value: TirExpr,
-        /// When true, the WIR builder skips deep value-copy for this binding.
-        /// Set by LICM for hoisted variables whose source field is verified
-        /// non-mutated in the loop, making aliasing safe.
+        /// When true, the binding takes `value`'s storage without a copy, and
+        /// the value-copy analysis counts it as the binding's own. The
+        /// producer vouches that nothing still reads that storage as another
+        /// value.
         skip_value_copy: bool,
     },
     Expr(TirExpr),

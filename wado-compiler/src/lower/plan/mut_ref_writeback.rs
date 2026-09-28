@@ -140,8 +140,10 @@ impl Temp {
 impl WriteBack<'_> {
     /// Bind `value` to a fresh local. `skip_copy` holds for a temp standing in
     /// for storage the caller still owns — a place, or a borrow of one — and
-    /// for a fresh result. A by-value argument is neither, and value semantics
-    /// still owe it its copy.
+    /// for the temp's own storage at its last read, which the place takes
+    /// over. A by-value argument and a call's result are neither: value
+    /// semantics still owe the one its copy, and the other may be a projection
+    /// of the temp.
     fn bind(
         &mut self,
         prefix: &mut Vec<TirStmt>,
@@ -637,7 +639,10 @@ impl WriteBack<'_> {
         let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
         let original = std::mem::replace(call, placeholder);
         let mut stmts = prefix;
-        let result = self.bind(&mut stmts, "result_", original, false, true);
+        // The result may be a projection of the temp, which the place is about
+        // to take over, so whether it needs a copy is the value-copy analysis'
+        // call, as it would be at the call's own use site.
+        let result = self.bind(&mut stmts, "result_", original, false, false);
         stmts.append(&mut write_backs);
         stmts.push(TirStmt::new(TirStmtKind::Expr(result.read()), span));
         *call = TirExpr::new(
