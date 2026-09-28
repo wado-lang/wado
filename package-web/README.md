@@ -62,4 +62,5 @@ follow the HTML standard's serialization. `example/web-ssr` prints a page with
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
   generates must be added here; a test fails until it is.
 
-See [WEP: The Web Interface for Wado](../docs/wep-2026-04-01-web.md).
+See [WEP: The Web Interface for Wado](../docs/wep-2026-04-01-web.md) for the
+design, and [TODO.md](./TODO.md) for the work ahead.
