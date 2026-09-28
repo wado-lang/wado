@@ -527,176 +527,6 @@ th[align="right"] {
 .badge-beta { color: var(--color-warning); border-color: var(--color-warning); }
 .badge-deprecated { color: var(--color-danger); border-color: var(--color-danger); text-decoration: line-through; }
 
-.tabs {
-  display: flex;
-  gap: 0.25rem;
-  margin: 0;
-  padding: 0;
-  border-bottom: 1px solid var(--color-border);
-  list-style: none;
-}
-
-.tabs [role="tab"] {
-  padding: 0.5rem 1rem;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--color-muted);
-  cursor: pointer;
-}
-
-.tabs [role="tab"][aria-selected="true"] {
-  color: var(--color-fg);
-  font-weight: 600;
-  border-bottom-color: #fd8c73;
-}
-
-.tab-panel[hidden] {
-  display: none;
-}
-
-.code-block {
-  position: relative;
-}
-
-.code-block .copy {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  opacity: 0;
-  transition: opacity 120ms linear;
-}
-
-.code-block:hover .copy,
-.code-block .copy:focus {
-  opacity: 1;
-}
-
-.code-block .line-numbers span::before {
-  display: inline-block;
-  width: 2.5em;
-  padding-right: 1em;
-  color: #8c959f;
-  text-align: right;
-  content: counter(line);
-  counter-increment: line;
-}
-
-.hl-keyword { color: #cf222e; }
-.hl-string { color: #0a3069; }
-.hl-number { color: #0550ae; }
-.hl-comment { color: #6e7781; font-style: italic; }
-.hl-function { color: #8250df; }
-.hl-type { color: #953800; }
-.hl-operator,
-.hl-punctuation { color: #24292f; }
-
-.search {
-  position: relative;
-  width: 100%;
-  max-width: 360px;
-}
-
-.search input[type="search"] {
-  width: 100%;
-  height: 32px;
-  padding: 0 12px 0 32px;
-  font: inherit;
-  font-size: 0.875rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: #f6f8fa url("/icons/search.svg") no-repeat 10px center;
-  outline: none;
-}
-
-.search input[type="search"]:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
-  background-color: #ffffff;
-}
-
-.search input::placeholder {
-  color: #8c959f;
-}
-
-.search-results {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 200;
-  max-height: 420px;
-  overflow-y: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background-color: #ffffff;
-  box-shadow: var(--shadow-lg);
-}
-
-.search-results li[aria-selected="true"] {
-  background-color: #ddf4ff;
-}
-
-.search-results mark {
-  padding: 0;
-  color: inherit;
-  background-color: #fff8c5;
-}
-
-.pagination {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 3rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.pagination a {
-  display: flex;
-  flex: 1 1 0%;
-  flex-direction: column;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.pagination a + a {
-  align-items: flex-end;
-  text-align: right;
-}
-
-.pagination .label {
-  font-size: 0.75rem;
-  color: var(--color-muted);
-}
-
-.skip-link {
-  position: absolute;
-  top: -40px;
-  left: 0;
-  padding: 8px 16px;
-  color: #ffffff;
-  background-color: var(--color-accent);
-  transition: top 150ms ease-out;
-}
-
-.skip-link:focus {
-  top: 0;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* Utilities --------------------------------------------------------------- */
 
 .mt-0 { margin-top: 0 !important; }
@@ -740,7 +570,6 @@ th[align="right"] {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.search-results,
 .dropdown-menu {
   animation: fade-in 120ms ease-out;
 }
@@ -826,10 +655,6 @@ th[align="right"] {
   .callout {
     background-color: rgba(56, 139, 253, 0.1);
   }
-
-  .hl-keyword { color: #ff7b72; }
-  .hl-string { color: #a5d6ff; }
-  .hl-function { color: #d2a8ff; }
 }
 
 @supports (display: grid) and (gap: 1rem) {
@@ -844,16 +669,10 @@ th[align="right"] {
   }
 }
 
-@page {
-  margin: 2cm;
-}
-
 @media print {
   .site-header,
   .sidebar,
-  .toc,
-  .pagination,
-  .code-block .copy {
+  .toc {
     display: none !important;
   }
 

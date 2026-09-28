@@ -1,11 +1,9 @@
 //! A small inventory service: a tokenizer and evaluator for a pricing-rule
 //! language, an order book, and a report printer.
 
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::error::Error;
 use std::fmt::{self, Display};
-use std::rc::Rc;
 use std::str::FromStr;
 
 const MAX_DEPTH: usize = 64;
@@ -354,42 +352,6 @@ impl OrderBook {
     }
 }
 
-pub struct Warehouse<T> {
-    bins: Vec<Rc<RefCell<Bin<T>>>>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct Bin<T> {
-    label: String,
-    items: Vec<T>,
-}
-
-impl<T: Clone + fmt::Debug> Warehouse<T> {
-    pub fn with_bins(count: usize) -> Self {
-        let bins = (0..count)
-            .map(|i| Rc::new(RefCell::new(Bin { label: format!("B{i:02}"), items: Vec::new() })))
-            .collect();
-        Warehouse { bins }
-    }
-
-    pub fn store(&self, index: usize, item: T) -> Option<usize> {
-        let bin = self.bins.get(index)?;
-        let mut bin = bin.borrow_mut();
-        bin.items.push(item);
-        Some(bin.items.len())
-    }
-
-    pub fn fullest(&self) -> Option<(String, usize)> {
-        self.bins
-            .iter()
-            .map(|b| {
-                let b = b.borrow();
-                (b.label.clone(), b.items.len())
-            })
-            .max_by_key(|(_, n)| *n)
-    }
-}
-
 fn report<W: fmt::Write>(out: &mut W, book: &OrderBook, skus: &[Sku]) -> fmt::Result {
     writeln!(out, "{:<12} {:>8} {:>12}", "sku", "net", CURRENCY)?;
     let totals = book.totals();
@@ -445,13 +407,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("prefixes: {:?}", distinct_prefixes(&skus));
     println!("sells: {}", book.iter_side(Side::Sell).count());
 
-    let warehouse: Warehouse<Sku> = Warehouse::with_bins(3);
-    for (i, sku) in skus.iter().enumerate() {
-        warehouse.store(i % 2, *sku).ok_or("bin out of range")?;
-    }
-    if let Some((label, n)) = warehouse.fullest() {
-        println!("fullest bin {label} holds {n}");
-    }
     Ok(())
 }
 
