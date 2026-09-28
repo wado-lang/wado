@@ -177,6 +177,44 @@ test "a bound past any i64 on one side is not cancelled by another term's" {
     assert !minus(square, times(times(a, b), times(c3, d))).is_nonnegative();
 }
 
+test "a quotient of a bound past any i64 is past it too" {
+    let [a, b, c3, d] = [
+        s("a"),
+        s("b"),
+        s("c"),
+        s("d"),
+    ];
+    let q = Poly::floor_div(&times(times(a, b), times(c3, d)), &c(1 << 40), &ORIGIN);
+    assert !minus(c(1 << 30), q).is_nonnegative();
+}
+
+test "derived symbols over names that read alike are two symbols" {
+    let first = Poly::min_of(&s("A, B"), &s("C"), &ORIGIN);
+    let second = Poly::min_of(&s("A"), &s("B, C"), &ORIGIN);
+    assert `${first}` == "min(\"A, B\", C)";
+    assert first != second;
+    assert minus(first, second) != c(0);
+}
+
+/// `x0 - max(x0 - 1, 0) + x1 - ...` over `count` symbols, never negative, and
+/// that sum less `offset`.
+fn clamped_sum(count: i32, offset: i64) -> Poly {
+    let mut p = c(-offset);
+    for let i of 0..<count {
+        let x = s(`x${i}`);
+        p = plus(p, minus(x, Poly::max_of(&minus(x, c(1)), &c(0), &ORIGIN)));
+    }
+    return p;
+}
+
+test "a sum of many derived terms is proven in time" {
+    assert clamped_sum(12, 0).is_nonnegative();
+}
+
+test "a sum of many derived terms is refused in time" {
+    assert !clamped_sum(12, 1).is_nonnegative();
+}
+
 test "a rounded quotient is exact where the build can show it" {
     let n = s("N");
     assert Poly::ceil_div(&times(n, c(2)), &c(2), &ORIGIN) == n;

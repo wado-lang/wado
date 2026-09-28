@@ -959,8 +959,9 @@ fn filled(
     schema: &Schema,
     owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
-    // `fold` read the shape, and left it to the run for holding a symbol.
-    let written = polys_at(node, known, 0, "shape").unwrap().unwrap();
+    let Some(written) = polys_at(node, known, 0, "shape").map_err(|reason| refusal(node, reason))? else {
+        return Result::Err(refusal(node, "the shape is absent"));
+    };
     let mut extents: List<Extent> = [];
     for let e of written {
         owe(node, owed, e, `the shape's ${e} must not be negative`)?;

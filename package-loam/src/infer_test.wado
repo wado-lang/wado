@@ -1057,6 +1057,19 @@ test "a symbolic integer cast to int32 wraps as the run does, where an extent ca
     assert checked.known["W"].elements == Elements::integers([Poly::symbol(&"N")]);
 }
 
+test "a ConstantOfShape whose shape a kernel computes stops the build" {
+    let source = `g (float[1] X) => (float[?] Y) {
+        S = Cast <to = 7> (X)
+        Y = ConstantOfShape(S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Len"]),
+        rule("Y", ["Pos"]),
+    ];
+    assert y_axes(source, layout).unwrap_err()
+        == "Y = ConstantOfShape: operand S is computed at run time, and the build reads it";
+}
+
 test "a Range the run computes, longer than any list, stops the build" {
     let source = `g (float[N] X) => (int64[?] Y) <int64[1] Far = {3000000000}, int64[1] One = {1}> {
         S = Shape(X)

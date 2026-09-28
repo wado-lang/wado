@@ -195,14 +195,19 @@ impl Derivation {
                         corners.push(rounded(self.op, a, d));
                     }
                 }
-                span(corners);
+                // A dividend without a bound on one side leaves the quotient none.
+                let [q_low, q_high] = span(corners);
+                [
+                    if low == -REACH_LIMIT { low } else { q_low },
+                    if high == REACH_LIMIT { high } else { q_high },
+                ];
             },
             // The index where it is not negative, and past it the extent's reach.
             FromEnd => {
                 let [l, h] = self.operands[1].bounds();
                 [
-                    i128::min(0, low + l),
-                    i128::max(high, h - 1),
+                    i128::min(0, lower_sum(low, l)),
+                    i128::max(high, upper_sum(h, -1)),
                 ];
             },
             Wrap32 => [i32::MIN as i128, i32::MAX as i128],
@@ -212,35 +217,43 @@ impl Derivation {
     /// Whether every input makes the derived value at least `x`: for one of two
     /// operands, the one it takes is. `FromEnd` takes either of its index and
     /// the index past the extent, so both must be.
-    fn at_least(&self, x: &Poly) -> bool {
+    fn at_least(&self, x: &Poly, budget: &mut i32) -> bool {
         let a = &self.operands[0];
         return match self.op {
-            Min => x.at_most(a) && x.at_most(&self.operands[1]),
-            Max => x.at_most(a) || x.at_most(&self.operands[1]),
+            Min => x.at_most_within(a, budget) && x.at_most_within(&self.operands[1], budget),
+            Max => x.at_most_within(a, budget) || x.at_most_within(&self.operands[1], budget),
             // `floor(a / d) >= x` exactly where `a >= d * x`, and the ceiling is
             // never below the floor.
             CeilDiv | FloorDiv => match x.try_mul(&self.operands[1]) {
-                Some(dx) => dx.at_most(a),
+                Some(dx) => dx.at_most_within(a, budget),
                 None => false,
             },
-            FromEnd => x.at_most(a) && a.try_add(&self.operands[1]).map(|past| x.at_most(&past)).unwrap_or(false),
+            FromEnd => x.at_most_within(a, budget)
+                && match a.try_add(&self.operands[1]) {
+                    Some(past) => x.at_most_within(&past, budget),
+                    None => false,
+                },
             Wrap32 => false,
         };
     }
 
     /// `at_least`'s counterpart: every input makes the value at most `x`.
-    fn at_most(&self, x: &Poly) -> bool {
+    fn at_most(&self, x: &Poly, budget: &mut i32) -> bool {
         let a = &self.operands[0];
         return match self.op {
-            Min => a.at_most(x) || self.operands[1].at_most(x),
-            Max => a.at_most(x) && self.operands[1].at_most(x),
+            Min => a.at_most_within(x, budget) || self.operands[1].at_most_within(x, budget),
+            Max => a.at_most_within(x, budget) && self.operands[1].at_most_within(x, budget),
             // `ceil(a / d) <= x` exactly where `a <= d * x`, for an integer `x`.
             CeilDiv => match x.try_mul(&self.operands[1]) {
-                Some(dx) => a.at_most(&dx),
+                Some(dx) => a.at_most_within(&dx, budget),
                 None => false,
             },
-            FloorDiv => floor_at_most(a, &self.operands[1], x).unwrap_or(false),
-            FromEnd => a.at_most(x) && a.try_add(&self.operands[1]).map(|past| past.at_most(x)).unwrap_or(false),
+            FloorDiv => floor_at_most(a, &self.operands[1], x, budget).unwrap_or(false),
+            FromEnd => a.at_most_within(x, budget)
+                && match a.try_add(&self.operands[1]) {
+                    Some(past) => past.at_most_within(x, budget),
+                    None => false,
+                },
             Wrap32 => false,
         };
     }
@@ -248,9 +261,21 @@ impl Derivation {
 
 /// Whether every input makes `floor(a / d) <= x`, which holds exactly where
 /// `a + 1 <= d * (x + 1)`; `None` where no polynomial holds a side.
-fn floor_at_most(a: &Poly, d: &Poly, x: &Poly) -> Option<bool> {
+fn floor_at_most(a: &Poly, d: &Poly, x: &Poly, budget: &mut i32) -> Option<bool> {
     let one = Poly::constant(1);
-    return Option::Some(a.try_add(&one)?.at_most(&x.try_add(&one)?.try_mul(d)?));
+    return Option::Some(a.try_add(&one)?.at_most_within(&x.try_add(&one)?.try_mul(d)?, budget));
+}
+
+/// An input symbol's name as a message writes it: quoted unless it is an
+/// identifier, since a `dim_param` is any text. A derived symbol's name is its
+/// identity, which needs the one text each name writes to be its own.
+fn quoted(name: &String) -> String {
+    let mut chars = name.chars();
+    let identifier = match chars.next() {
+        Some(first) => (first.is_ascii_alphabetic() || first == '_') && chars.all(|c| c.is_ascii_alphanumeric() || c == '_'),
+        None => false,
+    };
+    return if identifier { *name } else { `${*name:?}` };
 }
 
 /// `text`, spelling `p`, as a factor: in parentheses where it has more than one term.
@@ -500,8 +525,14 @@ impl Poly {
 
     /// Whether every input makes this at most `other`.
     fn at_most(&self, other: &Poly) -> bool {
+        let mut budget = PROOF_BUDGET;
+        return self.at_most_within(other, &mut budget);
+    }
+
+    /// `at_most`, spending `budget` as `nonnegative_within` does.
+    fn at_most_within(&self, other: &Poly, budget: &mut i32) -> bool {
         return match other.try_sub(self) {
-            Some(d) => d.is_nonnegative(),
+            Some(d) => d.nonnegative_within(budget),
             None => false,
         };
     }
@@ -511,11 +542,22 @@ impl Poly {
     /// through the operation that derives it, as `N - max(N - 1, 0)` is
     /// compared by `N - 1` and by `0`.
     pub fn is_nonnegative(&self) -> bool {
+        let mut budget = PROOF_BUDGET;
+        return self.nonnegative_within(&mut budget);
+    }
+
+    /// `is_nonnegative`, answering false once `budget` comparisons through a
+    /// derived term have failed. Each derived term may be compared first, so
+    /// a sum of them no input keeps nonnegative is otherwise tried in every order.
+    fn nonnegative_within(&self, budget: &mut i32) -> bool {
         let [low, _] = self.bounds();
         if low >= 0 {
             return true;
         }
         for let [i, t] of self.terms.into_iter().enumerate() {
+            if *budget <= 0 {
+                return false;
+            }
             if t.symbols.len() != 1 || !(t.coefficient == 1 || t.coefficient == -1) {
                 continue;
             }
@@ -526,13 +568,17 @@ impl Poly {
             rest.terms.remove(i);
             // `rest + v >= 0` is `v >= -rest`, and `rest - v >= 0` is `v <= rest`.
             let holds = if t.coefficient == 1 {
-                Poly::constant(0).try_sub(&rest).map(|floor| d.at_least(&floor)).unwrap_or(false);
+                match Poly::constant(0).try_sub(&rest) {
+                    Some(floor) => d.at_least(&floor, budget),
+                    None => false,
+                };
             } else {
-                d.at_most(&rest);
+                d.at_most(&rest, budget);
             };
             if holds {
                 return true;
             }
+            *budget -= 1;
         }
         return false;
     }
@@ -552,23 +598,12 @@ impl Poly {
     /// A lower and an upper bound on the value, over every value of the
     /// symbols, each term bounded apart. An input symbol is an extent, within
     /// `[0, i32::MAX]`, and a derived one lies within what its operation leaves.
-    /// A term held at `REACH_LIMIT` reaches past it by an unknown amount, which
-    /// no other term's bound may cancel.
     fn bounds(&self) -> [i128, i128] {
         let [mut low, mut high] = [0 as i128, 0 as i128];
-        let [mut held_below, mut held_above] = [false, false];
         for let t of &self.terms {
             let [l, h] = t.range();
-            low += l;
-            high += h;
-            held_below = held_below || l == -REACH_LIMIT;
-            held_above = held_above || h == REACH_LIMIT;
-        }
-        if held_below {
-            low = i128::min(low, -REACH_LIMIT);
-        }
-        if held_above {
-            high = i128::max(high, REACH_LIMIT);
+            low = lower_sum(low, l);
+            high = upper_sum(high, h);
         }
         return [low, high];
     }
@@ -655,10 +690,31 @@ fn narrowed(value: i128) -> Option<i64> {
     };
 }
 
-/// How far a term's bound reaches before it is held: 2^64, past any `i64`
-/// constant a sum adds it to, so the sum keeps the sign and the side of `i32`
-/// it would have.
+/// How far a bound reaches before it is held: 2^64, past any `i64` constant a
+/// sum adds it to. A bound held there on its own side, a lower one at
+/// `-REACH_LIMIT` or an upper one at `REACH_LIMIT`, is no bound at all, and
+/// every sum and quotient over it stays none.
 global REACH_LIMIT: i128 = (i64::MAX as i128 + 1) * 2;
+
+/// How many comparisons through a derived term may fail before a proof gives
+/// up, which then owes what it could not show rather than stalling the build.
+global PROOF_BUDGET: i32 = 256;
+
+/// The sum of two lower bounds, held within `REACH_LIMIT`.
+fn lower_sum(a: i128, b: i128) -> i128 {
+    if a == -REACH_LIMIT || b == -REACH_LIMIT {
+        return -REACH_LIMIT;
+    }
+    return i128::clamp(a + b, -REACH_LIMIT, REACH_LIMIT);
+}
+
+/// The sum of two upper bounds, held within `REACH_LIMIT`.
+fn upper_sum(a: i128, b: i128) -> i128 {
+    if a == REACH_LIMIT || b == REACH_LIMIT {
+        return REACH_LIMIT;
+    }
+    return i128::clamp(a + b, -REACH_LIMIT, REACH_LIMIT);
+}
 
 /// `a * b`, held within `REACH_LIMIT` either way.
 fn product(a: i128, b: i128) -> i128 {
@@ -735,7 +791,7 @@ impl Poly {
             for let s of t.symbols {
                 factors.push(match s.derivation {
                     Some(d) => d.written(names, code),
-                    None => names.get(s.name).unwrap_or(s.name),
+                    None => names.get(s.name).unwrap_or(quoted(&s.name)),
                 });
             }
             out.push_str(&factors.join(" * "));

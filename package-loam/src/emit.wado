@@ -935,15 +935,7 @@ fn node_call(
     }
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
-        if left.rank() > 2 && right.rank() == 2 {
-            return Result::Ok(`matmul_shared(${a}, ${b})`);
-        }
-        if left.rank() >= 2 && left.rank() == right.rank() && batch_axes_agree(&left, &right) {
-            return Result::Ok(`matmul(${a}, ${b})`);
-        }
-        let out = shapes.get(node.outputs[0]).unwrap();
-        let turbofish = `::<[${axis_list(&left)}], [${axis_list(&right)}], [${axis_list(&out)}]>`;
-        return Result::Ok(`matmul_broadcast${turbofish}(${a}, ${b})`);
+        return Result::Ok(product_call(&a, &b, &left, &right, &shapes.get(node.outputs[0]).unwrap()));
     }
     if is_binary_elementwise(&op) {
         return binary_node_call(node, shapes, exprs);
@@ -1166,8 +1158,9 @@ fn window_call(
     }
     let w = shapes.get(node.inputs[1]).unwrap();
     let group = settled(conv_group(node, &w));
-    // A grouped weight's channel axis is its own, a group's share of the input's.
-    let [kernel, biased, channels, grouping] = if group == 1 {
+    // `conv` takes one type for the input's channels and the weight's; the
+    // grouped kernel types each apart, a group's share of the input's.
+    let [kernel, biased, channels, grouping] = if group == 1 && same_axis(&x.axes[1], &w.axes[1]) {
         ["conv", "conv_bias", x.axes[1].name, ""];
     } else {
         ["conv_grouped", "conv_grouped_bias", `${x.axes[1].name}, ${w.axes[1].name}`, `${group}, `];
@@ -1176,7 +1169,13 @@ fn window_call(
     let turbofish = `::<${x.axes[0].name}, ${channels}, ${w.axes[0].name}, ${spatial}>`;
     let weight = exprs.reference(&node.inputs[1]);
     if has_bias(node) {
-        let bias = exprs.reference(&node.inputs[2]);
+        let outputs = Shape { axes: [w.axes[0]] };
+        let bias = under_axes_of(
+            &exprs.reference(&node.inputs[2]),
+            &shapes.get(node.inputs[2]).unwrap(),
+            &outputs,
+            &KERNEL_ELEMENT,
+        );
         return Result::Ok(`${biased}${turbofish}(${input}, ${weight}, ${bias}, ${grouping}${geometry})`);
     }
     return Result::Ok(`${kernel}${turbofish}(${input}, ${weight}, ${grouping}${geometry})`);
@@ -1258,13 +1257,14 @@ fn under_axes_of(operand: &String, shape: &Shape, out: &Shape, element: &String)
     return `&lift::<${element}, [${own}], [${theirs}]>(${operand}, ${out.rank()})`;
 }
 
-/// `Gemm`'s `alpha * A' * B' + beta * C`, as a `matmul` under optional
+/// `Gemm`'s `alpha * A' * B' + beta * C`, as a matrix product under optional
 /// `transpose2`s, a `map` per scalar that is not one, and a bias add.
 fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
-    let a = transposed(&exprs.reference(&node.inputs[0]), trans_a);
-    let b = transposed(&exprs.reference(&node.inputs[1]), trans_b);
-    let mut product = `matmul(${a}, ${b})`;
+    let [a, left] = transposed(&exprs.reference(&node.inputs[0]), &shapes.get(node.inputs[0]).unwrap(), trans_a);
+    let [b, right] = transposed(&exprs.reference(&node.inputs[1]), &shapes.get(node.inputs[1]).unwrap(), trans_b);
+    let produced = shapes.get(node.outputs[0]).unwrap();
+    let mut product = product_call(&a, &b, &left, &right, &produced);
     if alpha != 1.0 {
         product = `map(&${product}, |v| v * ${float_literal(alpha)})`;
     }
@@ -1279,16 +1279,32 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     if beta != 1.0 {
         bias = `&map(${bias}, |v| v * ${float_literal(beta)})`;
     }
-    let produced = shapes.get(node.outputs[0]).unwrap();
     let c = shapes.get(node.inputs[2]).unwrap();
     return Result::Ok(elementwise_call(&`&${product}`, &bias, &produced, &c, &produced, &"x + y"));
 }
 
-fn transposed(operand: &String, flag: bool) -> String {
+/// A `Gemm` operand of axes `shape`, and those axes, transposed where `flag` says.
+fn transposed(operand: &String, shape: &Shape, flag: bool) -> [String, Shape] {
     if flag {
-        return `&transpose2(${operand})`;
+        return [`&transpose2(${operand})`, Shape { axes: [shape.axes[1], shape.axes[0]] }];
     }
-    return *operand;
+    return [*operand, *shape];
+}
+
+/// A matrix product of `a`, of axes `left`, by `b`, of axes `right`, into
+/// `out`. `matmul` and `matmul_shared` take one type per axis the operands
+/// share, so they serve only operands that name each shared axis alike;
+/// `matmul_broadcast` spells each operand's axes and serves the rest.
+fn product_call(a: &String, b: &String, left: &Shape, right: &Shape, out: &Shape) -> String {
+    let summed = left.rank() >= 2 && right.rank() >= 2 && same_axis(left.from_end(0), right.from_end(1));
+    if summed && left.rank() > 2 && right.rank() == 2 {
+        return `matmul_shared(${a}, ${b})`;
+    }
+    if summed && left.rank() == right.rank() && batch_axes_agree(left, right) {
+        return `matmul(${a}, ${b})`;
+    }
+    let turbofish = `::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>`;
+    return `matmul_broadcast${turbofish}(${a}, ${b})`;
 }
 
 fn is_identity(perm: &List<i32>) -> bool {
