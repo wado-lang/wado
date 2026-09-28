@@ -824,7 +824,8 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
     gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name, mid_operand_gated);
 
-    // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
+    // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop,
+    // named scan_X__walk where the memo stands in front of it.
     let walk_name = if ctx.scan_memo() { `${fn_name}__walk` } else { fn_name.to_string() };
     let mut f2 = FnSpec::new(&walk_name);
     add_scan_params(&mut f2, ctx);

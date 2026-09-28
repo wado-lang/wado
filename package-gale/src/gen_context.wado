@@ -525,25 +525,12 @@ impl GenContext {
     }
 
     fn scan_gate_path(&self) -> String {
-        if self.in_scan_fn {
-            return SCAN_GATE_HANDLE;
-        }
-        return `${PARSER_HANDLE}.${SCAN_GATE_FIELD}`;
+        return self.state_path(SCAN_GATE_HANDLE, SCAN_GATE_FIELD);
     }
 
     /// `place.field` of the scan gate.
     pub fn scan_gate_member<S: AsStrSlice>(&self, field: S) -> String {
         return `${self.scan_gate_path()}.${field}`;
-    }
-
-    fn scan_gate_arg(&self) -> String {
-        if !self.emit_scan_gate() {
-            return String::new();
-        }
-        if self.in_scan_fn {
-            return `, ${SCAN_GATE_HANDLE}`;
-        }
-        return `, &mut ${self.scan_gate_path()}`;
     }
 
     /// A condition rendered against the parameter (`scan_gate_condition`),
@@ -641,32 +628,43 @@ impl GenContext {
     }
 
     fn atn_state_path(&self) -> String {
-        if self.in_scan_fn {
-            return ATN_STATE_HANDLE;
-        }
-        return `${PARSER_HANDLE}.${ATN_STATE_HANDLE}`;
+        return self.state_path(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
     }
 
-    /// The ATN state as an argument: the scan's borrow passed on, or a fresh
-    /// borrow of the parser's field.
+    /// The ATN state as an argument.
     pub fn atn_state_arg(&self) -> String {
-        return if self.in_scan_fn { ATN_STATE_HANDLE } else { `&mut ${self.atn_state_path()}` };
+        return self.state_arg(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
+    }
+
+    /// Parser state a scan borrows, as a place: the scan's parameter `handle`,
+    /// or the parser's `field` anywhere else.
+    fn state_path<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
+        if self.in_scan_fn {
+            return handle.to_string();
+        }
+        return `${PARSER_HANDLE}.${field}`;
+    }
+
+    /// Parser state a scan borrows, as an argument: the scan's borrow passed
+    /// on, or a fresh borrow of the parser's field.
+    fn state_arg<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
+        let path = self.state_path(handle, field);
+        return if self.in_scan_fn { path } else { `&mut ${path}` };
     }
 
     /// The trailing arguments of a scan call for the parser state it borrows:
     /// the gate, the ATN state, then the memo. Empty where the scan borrows
     /// none of them.
     pub fn scan_state_args(&self) -> String {
-        let mut args = self.scan_gate_arg();
+        let mut args = String::new();
+        if self.emit_scan_gate() {
+            args.push_str(`, ${self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD)}`);
+        }
         if self.needs_scan_atn() {
             args.push_str(`, ${self.atn_state_arg()}`);
         }
         if self.scan_memo {
-            args.push_str(if self.in_scan_fn {
-                `, ${SCAN_MEMO_HANDLE}`;
-            } else {
-                `, &mut ${PARSER_HANDLE}.${SCAN_MEMO_HANDLE}`;
-            });
+            args.push_str(`, ${self.state_arg(SCAN_MEMO_HANDLE, SCAN_MEMO_HANDLE)}`);
         }
         return args;
     }
