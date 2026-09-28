@@ -671,7 +671,6 @@ fn inflate_table(
 
 
 enum InflateMode {
-    Head,
     TypeDo,
     Stored,
     Copy,
@@ -683,7 +682,6 @@ enum InflateMode {
     Dist,
     DistExt,
     Match,
-    Check,
     Done,
     Bad,
 }
@@ -696,7 +694,6 @@ global INFLATE_ORDER: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 
 struct InflateState {
     mode: InflateMode,
     last_block: bool,
-    wrap: i32,  // 0=raw, 1=zlib
 
     // bit buffer
     hold: u32,
@@ -721,23 +718,13 @@ struct InflateState {
     have_count: i32,
     lens: List<u16>,
     work: List<u16>,
-
-    // checksum
-    check: u32,
-    total: u32,
-
-    // status
-    sane: bool,
-    back: i32,
-    was: i32,
 }
 
 impl InflateState {
-    fn new(raw: bool) -> InflateState {
+    fn new() -> InflateState {
         return InflateState {
-            mode: if raw { InflateMode::TypeDo } else { InflateMode::Head },
+            mode: InflateMode::TypeDo,
             last_block: false,
-            wrap: if raw { 0 } else { 1 },
             hold: 0,
             bits: 0,
             length: 0,
@@ -754,11 +741,6 @@ impl InflateState {
             have_count: 0,
             lens: List::filled(320, 0),
             work: List::filled(288, 0),
-            check: 0,
-            total: 0,
-            sane: true,
-            back: -1,
-            was: 0,
         };
     }
 
@@ -801,6 +783,128 @@ impl InflateState {
     }
 }
 
+// The input bytes one fast-loop iteration may read: two 4-byte refills.
+global FAST_INPUT_MIN: i32 = 8;
+
+fn read_u32_le(input: &ByteList, pos: i32) -> u64 {
+    let b0 = input.get_byte_unchecked(pos) as u64;
+    let b1 = input.get_byte_unchecked(pos + 1) as u64;
+    let b2 = input.get_byte_unchecked(pos + 2) as u64;
+    let b3 = input.get_byte_unchecked(pos + 3) as u64;
+    return b0 | b1 << 8 | b2 << 16 | b3 << 24;
+}
+
+fn low_bits(hold: u64, n: i32) -> i32 {
+    return (hold & (1 as u64 << n as u64) - 1) as i32;
+}
+
+// zlib's inflate_fast: decodes whole length/distance pairs and literals in one
+// iteration, with no mode dispatch and no per-byte refill, while at least
+// FAST_INPUT_MIN input bytes remain. A 4-byte refill whenever fewer than 32 bits
+// are held covers a literal/length code with its extra bits (15 + 5), and a
+// second covers a distance code with its extra bits (15 + 13). Returns the new
+// input position, leaving `state.mode` at Len to have the caller finish the
+// block, or at TypeDo or Bad where the block ended.
+fn inflate_fast(
+    state: &mut InflateState,
+    input: &ByteList,
+    start: i32,
+    end: i32,
+    output: &mut ByteList,
+    max_output: i32,
+) -> Result<i32, ZlibError> {
+    let codes = &state.codes;
+    let lencode_off = state.lencode_off;
+    let distcode_off = state.distcode_off;
+    let lenbits = state.lenbits;
+    let distbits = state.distbits;
+    let mut hold = state.hold as u64;
+    let mut bits = state.bits;
+    let mut inp = start;
+
+    while end - inp >= FAST_INPUT_MIN {
+        if bits < 32 {
+            hold = hold | read_u32_le(input, inp) << bits as u64;
+            inp += 4;
+            bits += 32;
+        }
+        let mut here = codes[lencode_off + low_bits(hold, lenbits)];
+        let root_op = code_op(here);
+        if root_op != 0 && root_op & 0xF0 == 0 {
+            let root = code_bits(here);
+            hold = hold >> root as u64;
+            bits -= root;
+            here = codes[lencode_off + code_val(here) + low_bits(hold, root_op)];
+        }
+        let here_bits = code_bits(here);
+        hold = hold >> here_bits as u64;
+        bits -= here_bits;
+        let op = code_op(here);
+
+        if op == 0 {
+            if output.len() == max_output {
+                builtin::cold_path();
+                return Result::Err(ZlibError::OutputExceedsMax);
+            }
+            output.push(code_val(here) as u8);
+            continue;
+        }
+        if op & 16 == 0 {
+            state.mode = if op & 32 != 0 { InflateMode::TypeDo } else { InflateMode::Bad };
+            break;
+        }
+        let length_extra = op & 15;
+        let length = code_val(here) + low_bits(hold, length_extra);
+        hold = hold >> length_extra as u64;
+        bits -= length_extra;
+
+        if bits < 32 {
+            hold = hold | read_u32_le(input, inp) << bits as u64;
+            inp += 4;
+            bits += 32;
+        }
+        let mut dist_here = codes[distcode_off + low_bits(hold, distbits)];
+        let dist_root_op = code_op(dist_here);
+        if dist_root_op & 0xF0 == 0 {
+            let root = code_bits(dist_here);
+            hold = hold >> root as u64;
+            bits -= root;
+            dist_here = codes[distcode_off + code_val(dist_here) + low_bits(hold, dist_root_op)];
+        }
+        let dist_bits = code_bits(dist_here);
+        hold = hold >> dist_bits as u64;
+        bits -= dist_bits;
+        let dist_op = code_op(dist_here);
+        if dist_op & 64 != 0 {
+            state.mode = InflateMode::Bad;
+            break;
+        }
+        let dist_extra = dist_op & 15;
+        let dist = code_val(dist_here) + low_bits(hold, dist_extra);
+        hold = hold >> dist_extra as u64;
+        bits -= dist_extra;
+
+        let out_pos = output.len();
+        if dist > out_pos {
+            state.mode = InflateMode::Bad;
+            break;
+        }
+        if length > max_output - out_pos {
+            builtin::cold_path();
+            return Result::Err(ZlibError::OutputExceedsMax);
+        }
+        output.copy_within_append(out_pos - dist, length);
+    }
+
+    // Hand back the whole bytes read ahead, so the bit buffer fits a u32 again.
+    let unread = bits >> 3;
+    inp -= unread;
+    bits -= unread << 3;
+    state.hold = hold as u32 & (1 as u32 << bits as u32) - 1;
+    state.bits = bits;
+    return Result::Ok(inp);
+}
+
 /// Raw DEFLATE (RFC 1951 3.2.3) decoded from a slice of `input`, and the input bytes
 /// it consumed. The limit is checked before each write, so a bomb never materializes.
 fn inflate_raw_ex(
@@ -810,14 +914,11 @@ fn inflate_raw_ex(
     max_output: i32,
 ) -> Result<[ByteList, i32], ZlibError> {
     assert max_output >= 0, "max_output must not be negative";
-    let mut state = InflateState::new(true);
+    let mut state = InflateState::new();
     let mut output: ByteList = [];
 
     let mut inp = input_offset;
     let mut have = input_length;
-    let mut left = 0;  // available output (we grow dynamically)
-
-    let mut ret = 0;  // Z_OK
     let mut leave = false;
 
     while !leave {
@@ -827,7 +928,7 @@ fn inflate_raw_ex(
                     // discard remaining bits to byte boundary
                     state.hold = state.hold >> (state.bits & 7) as u32;
                     state.bits -= state.bits & 7;
-                    state.mode = InflateMode::Check;
+                    state.mode = InflateMode::Done;
                 } else {
                     // need 3 bits
                     while state.bits < 3 {
@@ -1158,6 +1259,14 @@ fn inflate_raw_ex(
                 }
             },
             Len => {
+                if have >= FAST_INPUT_MIN {
+                    let next = inflate_fast(&mut state, input, inp, inp + have, &mut output, max_output)?;
+                    have -= next - inp;
+                    inp = next;
+                    if !state.mode matches { Len } {
+                        continue;
+                    }
+                }
                 // decode literal/length code
                 loop {
                     let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
@@ -1227,7 +1336,6 @@ fn inflate_raw_ex(
                     output.push(state.length as u8);
                 } else if here_op & 32 != 0 {
                     // end of block
-                    state.back = -1;
                     state.mode = InflateMode::TypeDo;
                 } else if here_op & 64 != 0 {
                     state.mode = InflateMode::Bad;
@@ -1255,7 +1363,6 @@ fn inflate_raw_ex(
                     state.hold = state.hold >> state.extra as u32;
                     state.bits -= state.extra;
                 }
-                state.was = state.length;
                 state.mode = InflateMode::Dist;
             },
             Dist => {
@@ -1367,36 +1474,7 @@ fn inflate_raw_ex(
                     state.mode = InflateMode::Len;
                 }
             },
-            Check => {
-                if state.wrap == 1 {
-                    // verify adler32 for zlib streams
-                    while state.bits < 32 {
-                        if have == 0 {
-                            leave = true;
-                            break;
-                        }
-                        state.hold = state.hold | input[inp] as u32 << state.bits as u32;
-                        state.bits += 8;
-                        inp += 1;
-                        have -= 1;
-                    }
-                    if leave {
-                        break;
-                    }
-                    // swap bytes for adler32 comparison
-                    let check_val = state.hold >> 24 & 0xFF | state.hold >> 8 & 0xFF00 | (state.hold & 0xFF00) << 8 | (state.hold & 0xFF) << 24;
-                    state.hold = 0;
-                    state.bits = 0;
-                }
-                state.mode = InflateMode::Done;
-            },
-            Done => {
-                leave = true;
-            },
-            Bad => {
-                leave = true;
-            },
-            _ => {
+            Done | Bad => {
                 leave = true;
             },
         }

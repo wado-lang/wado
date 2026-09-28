@@ -851,6 +851,52 @@ test "inflate raw dynamic Huffman block (RFC 1951 3.2.7)" {
     assert bytes_equal(&out, &string_to_bytes(text));
 }
 
+// RFC 1951 section 3.2.3: a distance cannot refer past the beginning of the
+// output. A fixed block (0x03) opening with <length=3, distance=1> (0x02) at
+// output position 0. Padded, the stream is long enough for the decoder's fast
+// loop; unpadded, the byte-at-a-time path sees it.
+test "a distance before the start of the output is rejected" {
+    let unpadded: ByteList = [0x03, 0x02];
+    let padded: ByteList = [0x03, 0x02, 0, 0, 0, 0, 0, 0, 0, 0];
+    assert inflate_raw(&unpadded) matches { Err(ZlibError::InvalidDeflateData) };
+    assert inflate_raw(&padded) matches { Err(ZlibError::InvalidDeflateData) };
+}
+
+// The decoder switches from its fast loop to the byte-at-a-time path near the
+// end of the input, so a cut at every length crosses that handoff.
+test "a stream cut at any length is rejected" {
+    let raw = deflate_raw(&make_wordy(2000));
+    for let mut n = 0; n < raw.len(); n += 1 {
+        let cut = raw[0..<n].to_list() as ByteList;
+        assert inflate_raw(&cut) matches { Err(ZlibError::InvalidDeflateData) }, `cut at ${n}`;
+    }
+}
+
+test "max_output holds at every limit" {
+    let data = make_wordy(600);
+    let raw = deflate_raw(&data);
+    for let mut limit = 0; limit < data.len(); limit += 1 {
+        assert inflate_raw(&raw, limit) matches { Err(ZlibError::OutputExceedsMax) }, `limit ${limit}`;
+    }
+    assert inflate_raw(&raw, data.len()) matches { Ok(out) && bytes_equal(&out, &data) };
+}
+
+// The fast loop reads input ahead of the bits it decodes; the next member's
+// header starts where the first member's trailer ends, so it must hand back
+// every byte it did not decode.
+test "gzip members after a long member decode in place" {
+    let first = make_wordy(5000);
+    let second = make_wordy(3000);
+    let mut members = gzip_compress(&first);
+    for let b of gzip_compress(&second) {
+        members.push(b);
+    }
+    let out = inflate_gzip(&members).unwrap();
+    assert out.len() == first.len() + second.len();
+    assert bytes_equal(&(out[0..<first.len()].to_list() as ByteList), &first);
+    assert bytes_equal(&(out[first.len()..<out.len()].to_list() as ByteList), &second);
+}
+
 // RFC 1950 section 2.2: FCHECK requires CMF*256+FLG to be a multiple of 31.
 test "inflate zlib rejects bad FCHECK (RFC 1950 2.2)" {
     let bad: ByteList = [0x78, 0x00, 0, 0, 0, 0];
