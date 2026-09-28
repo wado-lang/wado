@@ -19,7 +19,16 @@ use {
 use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything } from "./gir.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
-use { TokenKinds, append_ids } from "./token_kinds.wado";
+use {
+    TokenKinds,
+    append_ids,
+    bits_of,
+    bits_is_empty,
+    bits_equal,
+    bits_ids,
+    bits_test,
+    bits_union_into,
+} from "./token_kinds.wado";
 use { RecoverySets, empty_recovery_sets } from "./recovery_sets.wado";
 use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
@@ -307,6 +316,9 @@ pub struct GenContext {
     /// By helper name, the one call a helper that only forwards would make,
     /// which its callers make instead.
     forwarded_calls: TreeMap<String, Forwarded>,
+    /// By rule name, the ways a rule begins that `first2_of_element` found
+    /// without meeting a cycle.
+    first2_cache: TreeMap<String, Heads>,
 }
 
 /// A forwarding helper's one call, and the call-site stamps it sets first.
@@ -412,6 +424,7 @@ impl GenContext {
             snake_index,
             alt_exit_label: null,
             forwarded_calls: TreeMap::new(),
+            first2_cache: TreeMap::new(),
         };
     }
 
@@ -1574,134 +1587,134 @@ impl GenContext {
         let Some(heads) = self.first2_of_elements(elements, 0, &mut visiting) else {
             return none;
         };
-        let mut firsts: List<String> = [];
-        let mut seconds: List<String> = [];
-        for let seq of &heads {
-            if seq.len() != 2 {
-                return none;
-            }
-            push_unique(&mut firsts, &seq[0]);
-            push_unique(&mut seconds, &seq[1]);
-        }
-        if firsts.is_empty() || heads.len() != firsts.len() * seconds.len() {
+        if heads.empty || !bits_is_empty(&heads.singles) || heads.pairs.is_empty() {
             return none;
         }
-        return [firsts, seconds];
+        let mut firsts: List<u64> = [];
+        let mut seconds: List<u64> = [];
+        for let pair of &heads.pairs {
+            bits_union_into(&mut firsts, &pair.firsts);
+            bits_union_into(&mut seconds, &pair.seconds);
+        }
+        for let first of &bits_ids(&firsts) {
+            let mut followers: List<u64> = [];
+            for let pair of &heads.pairs {
+                if bits_test(&pair.firsts, *first) {
+                    bits_union_into(&mut followers, &pair.seconds);
+                }
+            }
+            if !bits_equal(&followers, &seconds) {
+                return none;
+            }
+        }
+        return [
+            self.token_kinds.names_of(&bits_ids(&firsts)),
+            self.token_kinds.names_of(&bits_ids(&seconds)),
+        ];
     }
 
-    /// Every way `elements[start..]` begins, as token names at most two long;
-    /// a shorter one ends the sequence there. `null` where a head is a `.`, a
-    /// `~X` or a left-recursive rule, which no list of names spells.
-    fn first2_of_elements(
-        &mut self,
-        elements: &List<Element>,
-        start: i32,
-        visiting: &mut List<String>,
-    ) -> Option<List<List<String>>> {
-        let mut out: List<List<String>> = [];
+    /// Every way `elements[start..]` begins, at most two tokens deep. `null`
+    /// where a head is a `.`, a `~X` or a left-recursive rule, which no list of
+    /// names spells.
+    fn first2_of_elements(&mut self, elements: &List<Element>, start: i32, visiting: &mut List<String>) -> Option<Heads> {
+        let mut out = Heads::new();
         if start >= elements.len() {
-            out.push([]);
+            out.empty = true;
             return Option::Some(out);
         }
         let Some(head) = self.first2_of_element(&elements[start], visiting) else {
             return null;
         };
-        let mut head_nullable = false;
-        for let seq of &head {
-            if seq.is_empty() {
-                head_nullable = true;
-            } else if seq.len() == 2 {
-                push_unique(&mut out, seq);
-            } else {
-                if self.elements_reach_open_end(elements, start + 1) {
-                    return null;
-                }
-                for let next of &self.first_of_elements_from(elements, start + 1) {
-                    push_unique(&mut out, &[seq[0], *next]);
-                }
-                if self.tail_is_nullable_deep(elements, start + 1) {
-                    push_unique(&mut out, seq);
-                }
+        for let pair of &head.pairs {
+            out.add_pairs(pair);
+        }
+        if !bits_is_empty(&head.singles) {
+            if self.elements_reach_open_end(elements, start + 1) {
+                return null;
+            }
+            out.add_pairs(&Pairs { firsts: head.singles, seconds: bits_of(&self.first_ids_of_elements_from(
+                elements,
+                start + 1,
+            )) });
+            if self.tail_is_nullable_deep(elements, start + 1) {
+                bits_union_into(&mut out.singles, &head.singles);
             }
         }
-        if head_nullable {
+        if head.empty {
             let Some(rest) = self.first2_of_elements(elements, start + 1, visiting) else {
                 return null;
             };
-            for let seq of &rest {
-                push_unique(&mut out, seq);
-            }
+            out.add(&rest);
         }
         return Option::Some(out);
     }
 
-    fn first2_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> Option<List<List<String>>> {
+    fn first2_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> Option<Heads> {
         return match elem {
             TokenRef(_) | Literal(_) => {
                 let mut fv: List<String> = [];
-                let mut out: List<List<String>> = [];
-                for let name of &self.first_of_element(elem, &mut fv) {
-                    out.push([*name]);
-                }
+                let mut out = Heads::new();
+                out.singles = bits_of(&self.first_ids_of_element(elem, &mut fv));
                 Option::Some(out);
             },
             Label(lab) => self.first2_of_element(&lab.element, visiting),
-            RuleRef(r) => {
-                if visiting.contains(&r.name) {
-                    null;
-                } else if let Some(rule) = self.find_rule(&r.name) {
-                    let alts = rule.alternatives;
-                    visiting.push(r.name);
-                    let found = self.first2_of_alternatives(&alts, visiting);
-                    remove_from_visiting(visiting, &r.name);
-                    found;
-                } else {
-                    null;
-                }
-            },
+            RuleRef(r) => self.first2_of_rule(&r.name, visiting),
             Group(g) => self.first2_of_alternatives(&g.alternatives, visiting),
             Repeat(rep) => self.first2_of_repeat(rep, visiting),
             Wildcard(_) | Not(_) => null,
         };
     }
 
-    fn first2_of_alternatives(
-        &mut self,
-        alts: &List<Alternative>,
-        visiting: &mut List<String>,
-    ) -> Option<List<List<String>>> {
-        let mut out: List<List<String>> = [];
+    /// A rule's answer is cached only where it met no cycle: then no rule on
+    /// `visiting` was reached, so any other `visiting` gives the same answer.
+    fn first2_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> Option<Heads> {
+        if let Some(cached) = self.first2_cache.get(*name) {
+            return Option::Some(cached);
+        }
+        if visiting.contains(name) {
+            return null;
+        }
+        let Some(rule) = self.find_rule(name) else {
+            return null;
+        };
+        let alts = rule.alternatives;
+        visiting.push(*name);
+        let found = self.first2_of_alternatives(&alts, visiting);
+        remove_from_visiting(visiting, name);
+        if let Some(heads) = found {
+            self.first2_cache[*name] = heads;
+        }
+        return found;
+    }
+
+    fn first2_of_alternatives(&mut self, alts: &List<Alternative>, visiting: &mut List<String>) -> Option<Heads> {
+        let mut out = Heads::new();
         for let alt of alts {
-            let Some(seqs) = self.first2_of_elements(&alt.elements, 0, visiting) else {
+            let Some(heads) = self.first2_of_elements(&alt.elements, 0, visiting) else {
                 return null;
             };
-            for let seq of &seqs {
-                push_unique(&mut out, seq);
-            }
+            out.add(&heads);
         }
         return Option::Some(out);
     }
 
-    fn first2_of_repeat(&mut self, rep: &RepeatElement, visiting: &mut List<String>) -> Option<List<List<String>>> {
+    fn first2_of_repeat(&mut self, rep: &RepeatElement, visiting: &mut List<String>) -> Option<Heads> {
         let Some(body) = self.first2_of_element(&rep.element, visiting) else {
             return null;
         };
-        let mut out: List<List<String>> = [];
-        if !rep.kind matches { Plus } {
-            out.push([]);
-        }
+        let mut out = Heads::new();
+        out.empty = !rep.kind matches { Plus };
         let loops = !rep.kind matches { Optional };
         let body_elements: List<Element> = [rep.element];
         if loops && self.elements_reach_open_end(&body_elements, 0) {
             return null;
         }
-        for let seq of &body {
-            push_unique(&mut out, seq);
-            if loops && seq.len() == 1 {
-                for let next of &self.first_of_elements_from(&body_elements, 0) {
-                    push_unique(&mut out, &[seq[0], *next]);
-                }
-            }
+        out.add(&body);
+        if loops && !bits_is_empty(&body.singles) {
+            out.add_pairs(&Pairs { firsts: body.singles, seconds: bits_of(&self.first_ids_of_elements_from(
+                &body_elements,
+                0,
+            )) });
         }
         return Option::Some(out);
     }
@@ -3063,9 +3076,49 @@ fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
     }
 }
 
-fn push_unique<T: Eq>(out: &mut List<T>, item: &T) {
-    if !out.contains(item) {
-        out.push(*item);
+/// Every way a stretch of the grammar begins, at most two tokens deep: with
+/// nothing, with one token and then nothing, or with a pair. Tokens are kind-id
+/// sets.
+struct Heads {
+    empty: bool,
+    singles: List<u64>,
+    /// Pairs held as products, so a rule whose heads pair every first token
+    /// with every second one costs two sets rather than their product.
+    pairs: List<Pairs>,
+}
+
+/// Every pairing of a token in `firsts` with a token in `seconds`.
+struct Pairs {
+    firsts: List<u64>,
+    seconds: List<u64>,
+}
+
+impl Heads {
+    fn new() -> Heads {
+        return Heads { empty: false, singles: [], pairs: [] };
+    }
+
+    fn add(&mut self, other: &Heads) {
+        self.empty = self.empty || other.empty;
+        bits_union_into(&mut self.singles, &other.singles);
+        for let pair of &other.pairs {
+            self.add_pairs(pair);
+        }
+    }
+
+    /// Products sharing their second set merge, which bounds `pairs` by the
+    /// distinct second sets rather than by the paths reaching them.
+    fn add_pairs(&mut self, pairs: &Pairs) {
+        if bits_is_empty(&pairs.firsts) || bits_is_empty(&pairs.seconds) {
+            return;
+        }
+        for let held of &mut self.pairs {
+            if bits_equal(&held.seconds, &pairs.seconds) {
+                bits_union_into(&mut held.firsts, &pairs.firsts);
+                return;
+            }
+        }
+        self.pairs.push(*pairs);
     }
 }
 

@@ -145,6 +145,46 @@ pub fn bits_union_into(dst: &mut List<u64>, src: &List<u64>) -> bool {
     return changed;
 }
 
+/// The set holding exactly `ids`.
+pub fn bits_of(ids: &List<i32>) -> List<u64> {
+    let mut bits: List<u64> = [];
+    for let id of ids {
+        bits_set(&mut bits, *id);
+    }
+    return bits;
+}
+
+/// Whether no bit is set.
+pub fn bits_is_empty(bits: &List<u64>) -> bool {
+    return bits.iter_ref().all(|w| *w == 0 as u64);
+}
+
+/// Whether both hold the same ids, whatever their trailing zero words.
+pub fn bits_equal(a: &List<u64>, b: &List<u64>) -> bool {
+    let n = i32::max(a.len(), b.len());
+    for let mut i = 0; i < n; i += 1 {
+        let x = if i < a.len() { a[i] } else { 0 as u64 };
+        let y = if i < b.len() { b[i] } else { 0 as u64 };
+        if x != y {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The ids set, ascending.
+pub fn bits_ids(bits: &List<u64>) -> List<i32> {
+    let mut ids: List<i32> = [];
+    for let mut w = 0; w < bits.len(); w += 1 {
+        for let mut b = 0; b < 64; b += 1 {
+            if bits[w] & 1 as u64 << b as u64 != 0 as u64 {
+                ids.push(w * 64 + b);
+            }
+        }
+    }
+    return ids;
+}
+
 /// Append every id in `src` to `result`, skipping any already present (O(1)
 /// bitset probe on `seen`); insertion order is preserved.
 pub fn append_ids(result: &mut List<i32>, seen: &mut List<u64>, src: &List<i32>) {
