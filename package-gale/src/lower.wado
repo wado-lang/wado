@@ -136,6 +136,7 @@ use {
     FieldKind,
     KindSet,
     FollowArg,
+    CallerLoop,
     DiagnosticKind,
     DiagnosticOwner,
     DiagnosticSite,
@@ -210,8 +211,8 @@ fn elements_from(elements: &List<Element>, start: i32) -> List<Element> {
 ///     already spans it: the depth past the suffix is what separates a callee's
 ///     own reading of a token from the caller's;
 ///   - empty local prefix, callee strictly at this rule's tail → `Forward`;
-///   - empty local prefix with a caller loop past it → `AltMask(id)`: another
-///     iteration or what follows the loop, whichever the input matches.
+///   - a caller loop heading the suffix → `AltMask`: another iteration or what
+///     follows the loop, whichever the input matches.
 fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
     let arg = follow_arg_for(ctx, elements, i);
     // `Forward`, `Combined` and `AltMask` all spell the caller's own slots into
@@ -240,6 +241,22 @@ fn follow_arg_for(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> Fol
     if !element_consumes_follow_arg(&elements[i]) {
         return FollowArg::NoFollow;
     }
+    return continuation_arg(ctx, elements, i + 1);
+}
+
+/// The FOLLOW argument for what continues from `elements[from]` on.
+fn continuation_arg(ctx: &mut GenContext, elements: &List<Element>, from: i32) -> FollowArg {
+    // A caller loop is an alternative to what follows it, not a prefix of it:
+    // prepending asserts the loop's first token at a depth the other reading
+    // does not have it, and dropping it gives the loop's token to the callee.
+    if let Some(loop_mask) = caller_loop_mask(ctx, elements, from) {
+        let exit = continuation_arg(ctx, elements, from + 1);
+        if exit matches { NoFollow } {
+            return exit;
+        }
+        return FollowArg::AltMask(CallerLoop { loop_mask, exit });
+    }
+    let i = from - 1;
     let mut visiting: List<String> = [];
     let [deep, consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
     // A mask stopping short of the suffix proves only that the caller's
@@ -278,17 +295,6 @@ fn follow_arg_for(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> Fol
             return sequenced_follow_arg(ctx, id, covers_suffix);
         }
         return FollowArg::NoFollow;
-    }
-    // A caller loop past the callee is an alternative to what the current rule
-    // was called with, not a prefix of it: prepending asserts the loop's first
-    // token at a depth the other reading does not have it, and replacing loses
-    // that reading.
-    if mask.is_empty() && i + 1 < elements.len() {
-        if let Repeat(rep) = &elements[i + 1] {
-            if let Some(id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
-                return FollowArg::AltMask(id);
-            }
-        }
     }
     // A suffix that can vanish entirely is no continuation to gate on: yielding
     // on its first token hands back one the caller may take none of. What the
@@ -346,7 +352,7 @@ fn retarget_loop_tail_follow(op: Op, mask_id: i32) -> Op {
         RuleCall(rc) => {
             if rc.follow_arg matches { Forward } {
                 let mut call = rc;
-                call.follow_arg = FollowArg::AltMask(mask_id);
+                call.follow_arg = FollowArg::AltMask(CallerLoop { loop_mask: mask_id, exit: FollowArg::Forward });
                 Op::RuleCall(call);
             } else {
                 Op::RuleCall(rc);
@@ -381,7 +387,7 @@ fn retarget_scan_loop_tail_follow(element: ScanElement, mask_id: i32) -> ScanEle
         RuleCall(rc) => {
             if rc.follow_arg matches { Forward } {
                 let mut call = rc;
-                call.follow_arg = FollowArg::AltMask(mask_id);
+                call.follow_arg = FollowArg::AltMask(CallerLoop { loop_mask: mask_id, exit: FollowArg::Forward });
                 ScanElement::RuleCall(call);
             } else {
                 ScanElement::RuleCall(rc);
@@ -407,6 +413,18 @@ fn retarget_scan_loop_tail_follow(element: ScanElement, mask_id: i32) -> ScanEle
 /// one this evidence covers: a non-greedy or `?` repeat decides elsewhere, a
 /// multi-alt body has no single prefix, and a one-position prefix is the
 /// over-approximation soundness invariant 1 rejects.
+/// The interned iteration prefix of the greedy loop at `elements[from]`, if one
+/// stands there and its prefix is deep enough to gate on.
+fn caller_loop_mask(ctx: &mut GenContext, elements: &List<Element>, from: i32) -> Option<i32> {
+    if from >= elements.len() {
+        return null;
+    }
+    let Repeat(rep) = &elements[from] else {
+        return null;
+    };
+    return ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep));
+}
+
 fn greedy_loop_prefix(ctx: &mut GenContext, rep: &RepeatElement) -> List<List<String>> {
     let empty: List<List<String>> = [];
     if rep.non_greedy || rep.kind matches { Optional } {
@@ -431,7 +449,7 @@ fn greedy_loop_prefix(ctx: &mut GenContext, rep: &RepeatElement) -> List<List<St
     // the rule the loop exists to re-enter, and takes the repair with it —
     // `driver_cst_ll_opt_tail_caller_loop_test` is the case.
     if prefix.len() < 2 {
-        return empty;
+        return ctx.exact_two_position_first_sets(&body_elements);
     }
     return prefix;
 }

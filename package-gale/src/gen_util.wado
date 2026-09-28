@@ -666,6 +666,13 @@ pub fn follow_composed<S: AsStrSlice>(prefix: S, positions: i32, opens: bool) ->
     return `(${prefix} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
 }
 
+/// `prefix` or `alternative`, each read from the gate's position. Unlike the
+/// forwarded half in `follow_composed`, `alternative` is spelled here, so every
+/// reading it opens already begins at the gate and keeps its mark.
+pub fn follow_alternative<S: AsStrSlice, S1: AsStrSlice>(prefix: S, positions: i32, alternative: S1) -> String {
+    return `(${prefix} | (${alternative} | FOLLOW_OPENS_BIT) << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+}
+
 /// A `follow_yields` call on the forwarded continuation.
 pub fn follow_yields_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
     return follow_yields_call_of(tokens, pos, &FOLLOW_PARAM);

@@ -732,7 +732,7 @@ pub struct LiteralOp {
 /// - `Combined(id)` — a shorter local suffix precedes what the current rule
 ///   was called with; emit prepends `FOLLOW_MASK_<id>` to the forwarded
 ///   `follow` (see the variant doc below).
-/// - `AltMask(id)` — the two are alternatives rather than a sequence.
+/// - `AltMask(exit)` — a caller loop's next iteration, or what follows the loop.
 pub variant FollowArg {
     NoFollow,
     Forward,
@@ -748,14 +748,21 @@ pub variant FollowArg {
     /// reading of a token from the caller's is the depth past the suffix.
     /// Emit passes `&follow_prepend(&FOLLOW_MASK_<id>, follow)`.
     Combined(i32),
-    /// The callee's continuation is either `FOLLOW_MASK_<id>` or whatever the
-    /// current rule was called with — alternatives, not a sequence. A caller
-    /// loop is the case: `path : seg (SEP seg)*` continues into another
-    /// iteration or, when the loop ends, into what follows `path`. Neither
-    /// alone decides, and a mask holding both in sequence asserts the loop's
-    /// first token at a depth the other reading does not have it.
-    /// Emit passes `&follow_alt(&FOLLOW_MASK_<id>, follow)`.
-    AltMask(i32),
+    /// The callee's continuation is either another iteration of a caller loop
+    /// or what follows the loop — alternatives, not a sequence.
+    /// `path : seg (SEP seg)*` continues into another iteration or, when the
+    /// loop ends, into what follows `path`. Neither alone decides, and a mask
+    /// holding both in sequence asserts the loop's first token at a depth the
+    /// other reading does not have it.
+    AltMask(CallerLoop),
+}
+
+/// The two readings of a caller loop's continuation.
+pub struct CallerLoop {
+    /// `FOLLOW_MASK_<id>`, the loop's iteration prefix.
+    pub loop_mask: i32,
+    /// What follows the loop, never `NoFollow`.
+    pub exit: FollowArg,
 }
 
 pub struct RuleCallOp {

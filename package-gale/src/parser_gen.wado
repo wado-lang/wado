@@ -41,6 +41,7 @@ use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from ".
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use {
     follow_composed,
+    follow_alternative,
     follow_forward_args,
     follow_yields_call,
     follow_yields_call_if,
@@ -6461,9 +6462,17 @@ fn follow_arg_expr(ctx: &mut GenContext, arg: &FollowArg) -> String {
         // where the head stops constraining. What that pushes past the last
         // slot begins at a depth the gate does not read.
         Combined(id) => follow_composed(ctx.follow_mask_ref(*id), ctx.follow_mask_positions(*id), false),
-        // Same, and what the caller wants opens a fresh reading: the loop
+        // Same, and what follows the loop opens a fresh reading: the loop
         // iteration and it are alternatives, not a sequence.
-        AltMask(id) => follow_composed(ctx.follow_mask_ref(*id), ctx.follow_mask_positions(*id), true),
+        AltMask(le) => {
+            let loop_ref = ctx.follow_mask_ref(le.loop_mask);
+            let positions = ctx.follow_mask_positions(le.loop_mask);
+            if le.exit matches { Forward } {
+                follow_composed(loop_ref, positions, true);
+            } else {
+                follow_alternative(loop_ref, positions, follow_arg_expr(ctx, &le.exit));
+            }
+        },
     };
 }
 

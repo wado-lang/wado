@@ -1495,6 +1495,149 @@ impl GenContext {
         return [result, final_cursor - start];
     }
 
+    /// The two positions every way `elements` begins, where they are exact: each
+    /// sequence is two tokens long and every pairing of a first token with a
+    /// second one begins some sequence. Unlike `deep_position_first_sets_from`,
+    /// this sees through alternatives and nullable tails, since exactness is
+    /// checked on the pairs rather than assumed of the walk. Empty otherwise.
+    pub fn exact_two_position_first_sets(&mut self, elements: &List<Element>) -> List<List<String>> {
+        let none: List<List<String>> = [];
+        let mut visiting: List<String> = [];
+        let Some(heads) = self.first2_of_elements(elements, 0, &mut visiting) else {
+            return none;
+        };
+        let mut firsts: List<String> = [];
+        let mut seconds: List<String> = [];
+        for let seq of &heads {
+            if seq.len() != 2 {
+                return none;
+            }
+            push_unique_name(&mut firsts, &seq[0]);
+            push_unique_name(&mut seconds, &seq[1]);
+        }
+        if firsts.is_empty() || heads.len() != firsts.len() * seconds.len() {
+            return none;
+        }
+        return [firsts, seconds];
+    }
+
+    /// Every way `elements[start..]` begins, as token names at most two long;
+    /// a shorter one ends the sequence there. `null` where a head is a `.`, a
+    /// `~X` or a left-recursive rule, which no list of names spells.
+    fn first2_of_elements(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        visiting: &mut List<String>,
+    ) -> Option<List<List<String>>> {
+        let mut out: List<List<String>> = [];
+        if start >= elements.len() {
+            out.push([]);
+            return Option::Some(out);
+        }
+        let Some(head) = self.first2_of_element(&elements[start], visiting) else {
+            return null;
+        };
+        let mut head_nullable = false;
+        for let seq of &head {
+            if seq.is_empty() {
+                head_nullable = true;
+            } else if seq.len() == 2 {
+                push_unique_seq(&mut out, seq);
+            } else {
+                if self.elements_reach_open_end(elements, start + 1) {
+                    return null;
+                }
+                for let next of &self.first_of_elements_from(elements, start + 1) {
+                    push_unique_seq(&mut out, &[seq[0], *next]);
+                }
+                if self.tail_is_nullable_deep(elements, start + 1) {
+                    push_unique_seq(&mut out, seq);
+                }
+            }
+        }
+        if head_nullable {
+            let Some(rest) = self.first2_of_elements(elements, start + 1, visiting) else {
+                return null;
+            };
+            for let seq of &rest {
+                push_unique_seq(&mut out, seq);
+            }
+        }
+        return Option::Some(out);
+    }
+
+    fn first2_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> Option<List<List<String>>> {
+        return match elem {
+            TokenRef(_) | Literal(_) => {
+                let mut fv: List<String> = [];
+                let mut out: List<List<String>> = [];
+                for let name of &self.first_of_element(elem, &mut fv) {
+                    out.push([*name]);
+                }
+                Option::Some(out);
+            },
+            Label(lab) => self.first2_of_element(&lab.element, visiting),
+            RuleRef(r) => {
+                if visiting.contains(&r.name) {
+                    null;
+                } else if let Some(rule) = self.find_rule(&r.name) {
+                    let alts = rule.alternatives;
+                    visiting.push(r.name);
+                    let found = self.first2_of_alternatives(&alts, visiting);
+                    remove_from_visiting(visiting, &r.name);
+                    found;
+                } else {
+                    null;
+                }
+            },
+            Group(g) => self.first2_of_alternatives(&g.alternatives, visiting),
+            Repeat(rep) => self.first2_of_repeat(rep, visiting),
+            Wildcard(_) | Not(_) => null,
+        };
+    }
+
+    fn first2_of_alternatives(
+        &mut self,
+        alts: &List<Alternative>,
+        visiting: &mut List<String>,
+    ) -> Option<List<List<String>>> {
+        let mut out: List<List<String>> = [];
+        for let alt of alts {
+            let Some(seqs) = self.first2_of_elements(&alt.elements, 0, visiting) else {
+                return null;
+            };
+            for let seq of &seqs {
+                push_unique_seq(&mut out, seq);
+            }
+        }
+        return Option::Some(out);
+    }
+
+    fn first2_of_repeat(&mut self, rep: &RepeatElement, visiting: &mut List<String>) -> Option<List<List<String>>> {
+        let Some(body) = self.first2_of_element(&rep.element, visiting) else {
+            return null;
+        };
+        let mut out: List<List<String>> = [];
+        if !rep.kind matches { Plus } {
+            out.push([]);
+        }
+        let loops = !rep.kind matches { Optional };
+        let body_elements: List<Element> = [rep.element];
+        if loops && self.elements_reach_open_end(&body_elements, 0) {
+            return null;
+        }
+        for let seq of &body {
+            push_unique_seq(&mut out, seq);
+            if loops && seq.len() == 1 {
+                for let next of &self.first_of_elements_from(&body_elements, 0) {
+                    push_unique_seq(&mut out, &[seq[0], *next]);
+                }
+            }
+        }
+        return Option::Some(out);
+    }
+
     /// Internal walker. Returns the cursor index reached when the walk
     /// finished — equal to `elements.len()` when fully consumed, less
     /// when the walk halted (early return after a multi-alt RuleRef,
@@ -2849,6 +2992,18 @@ fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
         },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
+    }
+}
+
+fn push_unique_name(out: &mut List<String>, name: &String) {
+    if !out.contains(name) {
+        out.push(*name);
+    }
+}
+
+fn push_unique_seq(out: &mut List<List<String>>, seq: &List<String>) {
+    if !out.contains(seq) {
+        out.push(*seq);
     }
 }
 

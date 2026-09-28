@@ -1113,6 +1113,23 @@ test "a wildcard after the call leaves an at-end conflict to the token after it"
     assert got == "a b c => (s (x a b) c)\na b c a => (s (x a b c) a)\na b a => (s (x a b) a)\n", got;
 }
 
+global LOOP_AFTER_NULLABLE_CALL_G4: String = "
+grammar T;
+s : a ws (c a ws)* '{' ;
+c : '>' ws | SP ws ;
+a : ID | '.' ID ;
+ws : SP* ;
+SP : ' ' ;
+ID : [a-z]+ ;
+";
+
+test "a nullable callee yields a token to the caller loop that follows it" {
+    // css3's `selector`: the `SP` after `x` is the descendant combinator, which
+    // only another iteration of the caller's loop takes.
+    let got = parses(LOOP_AFTER_NULLABLE_CALL_G4, "s", ["x y{", "x .y {", "x > y {", "x {"]);
+    assert got == "x y{ => (s (a x) ws (c   ws) (a y) ws {)\nx .y { => (s (a x) ws (c   ws) (a . y) (ws  ) {)\nx > y { => (s (a x) (ws  ) (c > (ws  )) (a y) (ws  ) {)\nx { => (s (a x) (ws  ) {)\n", got;
+}
+
 test "a rule entry claims its call site's return state before returning early" {
     // Claimed after, a recovering entry would leave the stamp to the next
     // call from a site that stamps none.
@@ -1999,6 +2016,19 @@ A : 'a'+ { int n = 1; System.out.println(\"n=\" + n); } ;
 WS : ' ' -> skip ;
 ", ["aa"]);
     assert got == "aa => A:aa [n=1\n]\n", got;
+}
+
+test "a lexer rule called from another matches through its later alternatives" {
+    // css3's `Dimension : Number R E M`: `0.25` is `Number`'s second
+    // alternative, and its first stops at `0`. `N` is called, and still takes
+    // its longest arm as a token of its own.
+    let got = lexes("lexer grammar L;
+D : N 'rem' | N 'px' ;
+E : 'x' N ;
+N : [0-9]+ | [0-9]* '.' [0-9]+ ;
+DOT : '.' ;
+", ["0.25rem", "12px", ".5rem", "3.", "1.5", "x1.5", "x3."]);
+    assert got == "0.25rem => D:0.25rem\n12px => D:12px\n.5rem => D:.5rem\n3. => N:3 DOT:.\n1.5 => N:1.5\nx1.5 => E:x1.5\nx3. => E:x3 DOT:.\n", got;
 }
 
 test "an unmodelled ANTLR lexer field is a loud diagnostic, not broken code" {
