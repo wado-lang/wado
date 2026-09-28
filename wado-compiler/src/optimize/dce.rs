@@ -3,7 +3,8 @@
 use std::ops::ControlFlow;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
-use super::mod_ref::FnEffect;
+use super::bounds;
+use super::mod_ref::{FnEffect, builtins};
 
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
@@ -1887,11 +1888,14 @@ fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))>
 /// literal aggregate. Failing that the tree is walked: it refuses every call on
 /// sight, while the initializer globalization hoists for a reflect member walk
 /// *is* a call, so each one is answered by its whole-function summary instead.
+/// A builtin call in `in_bounds`, whose `#[trap(...)]` checks [`bounds::analyze`]
+/// proved to hold there, does not trap whatever its summary says.
 pub(super) fn deletable_value(
     body: &Body,
     value: Operand,
     types: &TypeTable,
     effects: &[FnEffect],
+    in_bounds: &IndexSet<ExprId>,
 ) -> bool {
     use cranelift_entity::EntityRef;
 
@@ -1904,10 +1908,11 @@ pub(super) fn deletable_value(
     body.find_in_live_node_under(NodeRef::Expr(root), |node| match node {
         NodeRef::Expr(id) => match &body.exprs[id].kind {
             ExprKind::Call { func_id, .. } => {
-                let effect = effects
+                let mut effect = effects
                     .get(func_id.index())
                     .copied()
                     .unwrap_or_else(FnEffect::opaque);
+                effect.may_trap &= !in_bounds.contains(&id);
                 (!effect.is_deletable()).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
@@ -1978,7 +1983,7 @@ fn lazy_guard_global(
     }
     // Dropping the guard drops the value it stores, so a value whose trap the
     // program is entitled to is not a guard this pass may take.
-    if !deletable_value(body, *value, types, effects) {
+    if !deletable_value(body, *value, types, effects, &IndexSet::default()) {
         return None;
     }
     Some((
@@ -2307,10 +2312,16 @@ pub(super) fn remove_unreachable_globals(
         used_globals.contains(&(global_module_key, global.name.clone()))
     });
 
+    use cranelift_entity::EntityRef;
+
+    let project = &*project;
     let type_table = project.type_table.borrow();
+    let builtins = builtins(project);
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
+            let in_bounds =
+                bounds::analyze(body, &type_table, |fid| builtins[fid.index()]).in_bounds;
             let root = body.root;
             remove_dead_global_sets(
                 body,
@@ -2318,6 +2329,7 @@ pub(super) fn remove_unreachable_globals(
                 used_globals,
                 &type_table,
                 effects,
+                &in_bounds,
             );
         }
     }
@@ -2331,6 +2343,7 @@ fn remove_dead_global_sets(
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
     effects: &[FnEffect],
+    in_bounds: &IndexSet<ExprId>,
 ) {
     if let NodeRef::Block(block) = node {
         let old = std::mem::take(&mut body.blocks[block].stmts);
@@ -2344,7 +2357,7 @@ fn remove_dead_global_sets(
                 kept.push(s);
                 continue;
             };
-            if let Some(effect) = kept_effect(body, value, type_table, effects) {
+            if let Some(effect) = kept_effect(body, value, type_table, effects, in_bounds) {
                 body.stmts[s].kind = StmtKind::Expr(effect.into());
                 kept.push(s);
             }
@@ -2363,7 +2376,7 @@ fn remove_dead_global_sets(
     for store in stores {
         let value = dead_store_value(body, store, used).expect("collected as a dead store");
         let unit = body.exprs[store].type_id;
-        if let Some(effect) = kept_effect(body, value, type_table, effects) {
+        if let Some(effect) = kept_effect(body, value, type_table, effects, in_bounds) {
             let span = body.exprs[store].span;
             let stmt = body.stmts.push(StmtNode {
                 kind: StmtKind::Expr(effect.into()),
@@ -2383,7 +2396,7 @@ fn remove_dead_global_sets(
     let mut children: Vec<NodeRef> = Vec::new();
     body.for_each_child(node, |c| children.push(c));
     for child in children {
-        remove_dead_global_sets(body, child, used, type_table, effects);
+        remove_dead_global_sets(body, child, used, type_table, effects, in_bounds);
     }
 }
 
@@ -2408,10 +2421,11 @@ fn kept_effect(
     value: Operand,
     type_table: &TypeTable,
     effects: &[FnEffect],
+    in_bounds: &IndexSet<ExprId>,
 ) -> Option<ExprId> {
     value
         .as_expr()
-        .filter(|_| !deletable_value(body, value, type_table, effects))
+        .filter(|_| !deletable_value(body, value, type_table, effects, in_bounds))
 }
 
 #[cfg(test)]

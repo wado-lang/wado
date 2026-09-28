@@ -759,6 +759,28 @@ fn leaf_effect<'a>(
     (effect, Some(builtin))
 }
 
+/// Each bodyless function's summary and, for a builtin, what it declared,
+/// indexed by `func_id.index()`. A function with a body is left pure here.
+fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<Builtin<'_>>>) {
+    let funcs = &project.functions;
+    let mut effects = vec![FnEffect::default(); funcs.len()];
+    let mut builtins = vec![None; funcs.len()];
+    for (i, f) in funcs.iter().enumerate() {
+        let f = f.borrow();
+        if f.body.is_none() {
+            (effects[i], builtins[i]) =
+                leaf_effect(&f, &project.builtin_registry, &project.builtin_declarations);
+        }
+    }
+    (effects, builtins)
+}
+
+/// What each builtin declared, indexed by `func_id.index()`, for
+/// [`bounds::analyze`] to prove its calls against.
+pub(super) fn builtins(project: &NirPackage) -> Vec<Option<Builtin<'_>>> {
+    leaf_effects(project).1
+}
+
 /// Resolve [`FnEffect`] for every function, indexed by `func_id.index()`.
 ///
 /// Least fixpoint from "pure until a reason appears": a function starts at its
@@ -771,15 +793,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
 
     let funcs = &project.functions;
     let types = project.type_table.borrow();
-    let mut effects = vec![FnEffect::default(); funcs.len()];
-    let mut builtins: Vec<Option<Builtin<'_>>> = vec![None; funcs.len()];
-    for (i, f) in funcs.iter().enumerate() {
-        let f = f.borrow();
-        if f.body.is_none() {
-            (effects[i], builtins[i]) =
-                leaf_effect(&f, &project.builtin_registry, &project.builtin_declarations);
-        }
-    }
+    let (mut effects, builtins) = leaf_effects(project);
     // Callee edges as one flat run per function rather than an `IndexSet` each:
     // this walks every function in the package three times per fixed-point round.
     let mut callee_edges: Vec<usize> = Vec::new();

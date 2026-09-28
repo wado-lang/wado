@@ -176,9 +176,9 @@ fn deletable(engine: &Engine, value: Operand, effects: &[FnEffect]) -> bool {
     ) {
         return true;
     }
-    engine
-        .value_graph_type_table()
-        .is_some_and(|types| deletable_value(engine.body, value, types, effects))
+    engine.value_graph_type_table().is_some_and(|types| {
+        deletable_value(engine.body, value, types, effects, &IndexSet::default())
+    })
 }
 
 /// A local is kept (not elidable) when a retaining callee aliased its
