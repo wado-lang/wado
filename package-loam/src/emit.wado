@@ -6,7 +6,8 @@ use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_res
 use { Extent } from "./extent.wado";
 use { Condition, Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, Node, data_type, element_of, is_binary_elementwise } from "./graph.wado";
+use { Elements, Graph, Node, data_type, element_of, is_binary_elementwise } from "./graph.wado";
+use { fill_of } from "./fold.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { expected } from "./safetensors.wado";
 use {
@@ -920,6 +921,14 @@ fn node_call(
     if op == "Slice" {
         return slice_call(node, checked, exprs, symbols);
     }
+    if op == "ConstantOfShape" {
+        let out = shapes.get(node.outputs[0]).unwrap();
+        let element = checked.primitives.get(node.outputs[0]).unwrap();
+        let value = element_literal(&fill_of(node).elements);
+        return Result::Ok(
+            `filled::<${element}, [${axis_list(&out)}]>(${symbols.spell_all(&extents_of(&out))?}, ${value})`,
+        );
+    }
     if op == "Range" {
         let [start, _, delta] = settled(range_bounds(node, &checked.known));
         let axis = shapes.get(node.outputs[0]).unwrap().axes[0];
@@ -1182,6 +1191,17 @@ fn window_call(
 /// The axes past a shape's first two, which a window slides over.
 fn spatial_axes(shape: &Shape) -> String {
     return axis_run(shape, 2, shape.rank());
+}
+
+/// The first of `elements` as an expression the generated source spells.
+fn element_literal(elements: &Elements) -> String {
+    return match elements {
+        Ints(v) => `${v[0]}`,
+        Floats(v) => float_literal(v[0]),
+        Bools(v) => `${v[0]}`,
+        // A tensor attribute holds numbers.
+        Symbolic(_) => unreachable(),
+    };
 }
 
 /// A constant as an expression the generated source spells. Wado has no

@@ -71,7 +71,9 @@ fn evaluated(
         "Gather" => gather(x, &operands[1], int_attr(node, "axis", 0)?)?,
         "Reshape" | "Unsqueeze" | "Squeeze" => regrouped(node, known, x)?,
         "Concat" => concat(&operands, int_attr(node, "axis", 0)?)?,
-        "ConstantOfShape" => constant_of_shape(node, x)?,
+        "ConstantOfShape" => {
+            return constant_of_shape(node, x);
+        },
         "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(node, x, &operands[1])?,
         "Slice" => {
             return slice(x, node, known);
@@ -626,23 +628,36 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
     };
 }
 
-fn constant_of_shape(node: &Node, shape: &Known) -> Result<Known, String> {
+/// `ConstantOfShape` of a shape the build knows every number of, or `None`
+/// where a symbol stands for one and the run fills it.
+fn constant_of_shape(node: &Node, shape: &Known) -> Result<Option<Known>, String> {
+    let Some(values) = numbers(&polys_of(shape)?) else {
+        return Result::Ok(null);
+    };
     let mut extents: List<i32> = [];
-    for let e of ints_of(shape)? {
+    for let e of values {
         if !(0 <= e <= i32::MAX as i64) {
             return Result::Err(`the shape holds ${e}`);
         }
         extents.push(e as i32);
     }
-    let mut fill = Known {
+    let fill = fill_of(node);
+    let count = element_count(&extents);
+    return Result::Ok(Option::Some(Known { ..fill, extents, elements: picked(&fill.elements, &List::<i32>::filled(
+        count,
+        0,
+    )) }));
+}
+
+/// The one element a `ConstantOfShape` fills with: its `value`, or a float 0.
+pub fn fill_of(node: &Node) -> Known {
+    if let Some(a) = node.attr("value") && let Some(t) = a.tensor {
+        return t;
+    }
+    return Known {
         extents: [1],
         elements: Elements::Floats([0.0]),
     };
-    if let Some(a) = node.attr("value") && let Some(t) = a.tensor {
-        fill = t;
-    }
-    let count = element_count(&extents);
-    return Result::Ok(Known { ..fill, extents, elements: picked(&fill.elements, &List::<i32>::filled(count, 0)) });
 }
 
 fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {

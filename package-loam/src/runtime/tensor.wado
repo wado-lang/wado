@@ -104,6 +104,12 @@ pub fn from_end(i: i64, extent: i64) -> i64 {
     return if i < 0 { i + extent } else { i };
 }
 
+/// A tensor of `extents` holding `value` at every position, as a
+/// `ConstantOfShape` whose shape only the run knows fills it.
+pub fn filled<E, Axes>(extents: List<i32>, value: E) -> Tensor<E, Axes> {
+    return Tensor { data: List::<E>::filled(element_count(&extents), value), extents };
+}
+
 /// A length `forward` computed from the inputs', as the kernels take one. It
 /// is computed in `i64` so that no product of lengths wraps on the way.
 pub fn to_extent(value: i64) -> i32 {

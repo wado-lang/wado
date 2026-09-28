@@ -243,6 +243,14 @@ test "Split of N by sizes the graph computes from N" {
     );
 }
 
+test "ConstantOfShape of a shape holding N fills N rows" {
+    assert_agrees(
+        #include_bytes("./semantics/ConstantOfShapeOfLength.onnx"),
+        #include_str("./semantics/ConstantOfShapeOfLength.txt"),
+        ["Part", "Pair"],
+    );
+}
+
 test "Div of N by 2 rounds down" {
     assert_agrees(
         #include_bytes("./semantics/RangeToHalfLength.onnx"),

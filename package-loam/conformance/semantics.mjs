@@ -103,6 +103,12 @@ const cases = [
     node('Concat', ['One', 'SMinusOne'], 'Sizes', { axis: 0 }),
     node('Split', ['X', 'Sizes'], ['Head', 'SplitTailOfLength']),
   ]],
+  ['ConstantOfShapeOfLength', [
+    node('Concat', ['S', 'Two'], 'FilledShape', { axis: 0 }),
+    node('ConstantOfShape', ['FilledShape'], 'ConstantOfShapeOfLength', {
+      value: { tensor: tensorProto('v', FLOAT, [1], new Float32Array([2.5]).buffer) },
+    }),
+  ]],
   ['ReshapeRestFirst', [
     node('Concat', ['MinusOne', 'Two'], 'RestFirstShape', { axis: 0 }),
     node('Reshape', ['P', 'RestFirstShape'], 'ReshapeRestFirst'),

@@ -9,6 +9,7 @@ use {
     axes_of,
     axis_indices,
     count_of,
+    fill_of,
     fits,
     fold,
     polys_at,
@@ -391,7 +392,7 @@ fn distinct(owed: List<Condition>) -> List<Condition> {
 /// Whether operand `index` is one the operator reads when the build runs, as
 /// `Reshape` reads its target, rather than a tensor its kernel computes on.
 fn read_at_build_time(node: &Node, index: i32) -> bool {
-    if node.op == "Range" {
+    if node.op == "Range" || node.op == "ConstantOfShape" {
         return true;
     }
     if node.op == "Slice" {
@@ -434,6 +435,9 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
     if op == "Range" {
         // A float range folds, so only an integer one reaches the run.
         return Result::Ok(Option::Some("i64"));
+    }
+    if op == "ConstantOfShape" {
+        return Result::Ok(Option::Some(known_primitive(&fill_of(node))));
     }
     if op == "Gather" {
         let indices = node.inputs[1];
@@ -627,6 +631,9 @@ fn infer_node(
     }
     if op == "Slice" {
         return sliced(node, &operand_at(node, shapes, 0), known, schema);
+    }
+    if op == "ConstantOfShape" {
+        return filled(node, known, schema, owed);
     }
     if op == "Range" {
         let count = range_count(node, known, owed)?;
@@ -940,6 +947,29 @@ fn difference(node: &Node, a: &Poly, b: &Poly) -> Result<Poly, InferError> {
 /// list holds that many.
 fn counted(node: &Node, count: Poly) -> Result<Extent, InferError> {
     return Extent::of(count).ok_or(refusal(node, `${count} elements are more than a list holds`));
+}
+
+/// A `ConstantOfShape` the run fills, since a symbol stands for an extent of
+/// its shape. Each extent owes that it is not negative, and every axis is new,
+/// for the output layout to name.
+fn filled(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    schema: &Schema,
+    owed: &mut List<Condition>,
+) -> Result<Shape, InferError> {
+    // `fold` read the shape, and left it to the run for holding a symbol.
+    let written = polys_at(node, known, 0, "shape").unwrap().unwrap();
+    let mut extents: List<Extent> = [];
+    for let e of written {
+        owe(node, owed, e, `the shape's ${e} must not be negative`)?;
+        extents.push(counted(node, e)?);
+    }
+    let mut axes: List<Axis> = [];
+    for let i of 0..<extents.len() {
+        axes.push(layout_axis(node, schema, i, &extents, "is filled")?);
+    }
+    return Result::Ok(Shape { axes });
 }
 
 /// How many elements a `Range` the run computes yields. Its operands are one
