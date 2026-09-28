@@ -986,7 +986,7 @@ pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<
     if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
     }
-    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    let kind = follow_kind_at(tokens, pos, eof_kind);
     return follow_open_has(cont, kind, sets, true);
 }
 
@@ -996,7 +996,16 @@ fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bo
         return false;
     }
     let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-    return if set_id == 0 { unknown_has } else { kind_set_has(&sets[(set_id - 1) as i32], kind) };
+    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
+}
+
+fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
+    return if pos < tokens.len() { tokens[pos] } else { eof_kind };
+}
+
+fn follow_set_has(sets: &List<List<i32>>, id: i64, kind: i32) -> bool {
+    let set = &sets[(id - 1) as i32];
+    return set.is_empty() || kind_set_has(set, kind);
 }
 
 fn follow_heads_have(
@@ -1010,7 +1019,7 @@ fn follow_heads_have(
     if cont == 0 {
         return unknown_has;
     }
-    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    let kind = follow_kind_at(tokens, pos, eof_kind);
     if follow_open_has(cont, kind, sets, unknown_has) {
         return true;
     }
@@ -1021,8 +1030,7 @@ fn follow_heads_have(
             head = true;
         }
         if head {
-            let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
-            if set.is_empty() || kind_set_has(set, kind) {
+            if follow_set_has(sets, c & FOLLOW_ID_MASK, kind) {
                 return true;
             }
             head = false;
@@ -1049,14 +1057,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
         if depth < FOLLOW_MAX_DEPTH {
             constrained = true;
             if alive {
-                let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
-                if !set.is_empty() {
-                    let idx = pos + depth;
-                    let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                    if !kind_set_has(set, kind) {
-                        alive = false;
-                    }
-                }
+                alive = follow_set_has(sets, c & FOLLOW_ID_MASK, follow_kind_at(tokens, pos + depth, eof_kind));
             }
             depth += 1;
         }
@@ -1666,7 +1667,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow
         try_1: {
             pos = scan_expr(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_1)), 0);
             if pos < 0 { break try_1; }
-            if pos < tokens.len() && tokens[pos] == TK_LIT_RPAREN && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
+            if pos < tokens.len() && tokens[pos] == TK_LIT_RPAREN && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_1((if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF })) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
                 pos += 1;
             }
             return pos;

@@ -986,7 +986,7 @@ pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<
     if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
     }
-    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    let kind = follow_kind_at(tokens, pos, eof_kind);
     return follow_open_has(cont, kind, sets, true);
 }
 
@@ -996,7 +996,16 @@ fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bo
         return false;
     }
     let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-    return if set_id == 0 { unknown_has } else { kind_set_has(&sets[(set_id - 1) as i32], kind) };
+    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
+}
+
+fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
+    return if pos < tokens.len() { tokens[pos] } else { eof_kind };
+}
+
+fn follow_set_has(sets: &List<List<i32>>, id: i64, kind: i32) -> bool {
+    let set = &sets[(id - 1) as i32];
+    return set.is_empty() || kind_set_has(set, kind);
 }
 
 fn follow_heads_have(
@@ -1010,7 +1019,7 @@ fn follow_heads_have(
     if cont == 0 {
         return unknown_has;
     }
-    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    let kind = follow_kind_at(tokens, pos, eof_kind);
     if follow_open_has(cont, kind, sets, unknown_has) {
         return true;
     }
@@ -1021,8 +1030,7 @@ fn follow_heads_have(
             head = true;
         }
         if head {
-            let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
-            if set.is_empty() || kind_set_has(set, kind) {
+            if follow_set_has(sets, c & FOLLOW_ID_MASK, kind) {
                 return true;
             }
             head = false;
@@ -1049,14 +1057,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
         if depth < FOLLOW_MAX_DEPTH {
             constrained = true;
             if alive {
-                let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
-                if !set.is_empty() {
-                    let idx = pos + depth;
-                    let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                    if !kind_set_has(set, kind) {
-                        alive = false;
-                    }
-                }
+                alive = follow_set_has(sets, c & FOLLOW_ID_MASK, follow_kind_at(tokens, pos + depth, eof_kind));
             }
             depth += 1;
         }
@@ -5946,14 +5947,14 @@ fn scan_conflict_clause(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, 
     return pos;
 }
 
-fn scan_expr_atom_alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_50(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     osl_131_done: {
         if pos < tokens.len() && _kind_set_5(tokens[pos]) {
@@ -5988,16 +5989,16 @@ fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, 
     return pos;
 }
 
-fn scan_expr_atom_alt_3(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_3(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_51(tokens[pos]) { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos, memo, follow, 15);
+    pos = scan_expr(tokens, pos, memo, follow, 15, lr_cont);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr_atom_alt_13(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_13(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_any_name(tokens, pos, memo);
     if pos < 0 { return -1; }
@@ -6070,7 +6071,7 @@ fn scan_expr_atom_alt_13(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>,
     return pos;
 }
 
-fn scan_expr_atom_alt_14(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_14(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -6081,7 +6082,7 @@ fn scan_expr_atom_alt_14(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>,
     return pos;
 }
 
-fn scan_expr_atom_alt_15(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_15(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_CAST { return -1; }
     pos += 1;
@@ -6098,7 +6099,7 @@ fn scan_expr_atom_alt_15(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>,
     return pos;
 }
 
-fn scan_expr_atom_alt_21(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_21(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     osl_137_done: {
         if pos < tokens.len() && tokens[pos] == TK_K_NOT && pos + 1 < tokens.len() && tokens[pos + 1] == TK_K_EXISTS {
@@ -6119,7 +6120,7 @@ fn scan_expr_atom_alt_21(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>,
     return pos;
 }
 
-fn scan_expr_atom_alt_22(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_22(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_CASE { return -1; }
     pos += 1;
@@ -6240,101 +6241,101 @@ fn scan_expr_atom_alt_22(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>,
     return pos;
 }
 
-fn scan_expr_atom_alt_23(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom_alt_23(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_raise_function(tokens, pos, memo);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_52(kind) {
         if kind == TK_OPEN_PAR {
             let mut best: i32 = -1;
-            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow);
+            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow, lr_cont);
             if try_2_end > best { best = try_2_end; }
-            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
-            let try_14_end = scan_expr_atom_alt_14(tokens, start, memo, follow);
+            let try_14_end = scan_expr_atom_alt_14(tokens, start, memo, follow, lr_cont);
             if try_14_end > best { best = try_14_end; }
-            let try_21_end = scan_expr_atom_alt_21(tokens, start, memo, follow);
+            let try_21_end = scan_expr_atom_alt_21(tokens, start, memo, follow, lr_cont);
             if try_21_end > best { best = try_21_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_K_CAST {
             let mut best: i32 = -1;
-            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow);
+            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow, lr_cont);
             if try_2_end > best { best = try_2_end; }
-            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
-            let try_15_end = scan_expr_atom_alt_15(tokens, start, memo, follow);
+            let try_15_end = scan_expr_atom_alt_15(tokens, start, memo, follow, lr_cont);
             if try_15_end > best { best = try_15_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_K_CASE {
             let mut best: i32 = -1;
-            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow);
+            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow, lr_cont);
             if try_2_end > best { best = try_2_end; }
-            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
-            let try_22_end = scan_expr_atom_alt_22(tokens, start, memo, follow);
+            let try_22_end = scan_expr_atom_alt_22(tokens, start, memo, follow, lr_cont);
             if try_22_end > best { best = try_22_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_K_RAISE {
             let mut best: i32 = -1;
-            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow);
+            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow, lr_cont);
             if try_2_end > best { best = try_2_end; }
-            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
-            let try_23_end = scan_expr_atom_alt_23(tokens, start, memo, follow);
+            let try_23_end = scan_expr_atom_alt_23(tokens, start, memo, follow, lr_cont);
             if try_23_end > best { best = try_23_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_K_NOT {
             let mut best: i32 = -1;
-            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow);
+            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow, lr_cont);
             if try_2_end > best { best = try_2_end; }
-            let try_3_end = scan_expr_atom_alt_3(tokens, start, memo, follow);
+            let try_3_end = scan_expr_atom_alt_3(tokens, start, memo, follow, lr_cont);
             if try_3_end > best { best = try_3_end; }
-            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
-            let try_21_end = scan_expr_atom_alt_21(tokens, start, memo, follow);
+            let try_21_end = scan_expr_atom_alt_21(tokens, start, memo, follow, lr_cont);
             if try_21_end > best { best = try_21_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_K_EXISTS {
             let mut best: i32 = -1;
-            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow);
+            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow, lr_cont);
             if try_2_end > best { best = try_2_end; }
-            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
-            let try_21_end = scan_expr_atom_alt_21(tokens, start, memo, follow);
+            let try_21_end = scan_expr_atom_alt_21(tokens, start, memo, follow, lr_cont);
             if try_21_end > best { best = try_21_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if _kind_set_53(kind) {
-            return scan_expr_atom_alt_3(tokens, start, memo, follow);
+            return scan_expr_atom_alt_3(tokens, start, memo, follow, lr_cont);
         } else if _kind_set_54(kind) {
-            return scan_expr_atom_alt_0(tokens, start, memo, follow);
+            return scan_expr_atom_alt_0(tokens, start, memo, follow, lr_cont);
         } else if _kind_set_55(kind) {
             let mut best: i32 = -1;
-            let try_0_end = scan_expr_atom_alt_0(tokens, start, memo, follow);
+            let try_0_end = scan_expr_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow);
+            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow, lr_cont);
             if try_2_end > best { best = try_2_end; }
-            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if _kind_set_56(kind) {
             let mut best: i32 = -1;
-            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow);
+            let try_2_end = scan_expr_atom_alt_2(tokens, start, memo, follow, lr_cont);
             if try_2_end > best { best = try_2_end; }
-            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_expr_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
@@ -6655,7 +6656,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64
 }
 
 fn scan_expr__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
-    let mut pos = scan_expr_atom(tokens, pos, memo, follow);
+    let mut pos = scan_expr_atom(tokens, pos, memo, follow, lr_cont);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11547,7 +11548,7 @@ fn _parse_conflict_clause(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_expr__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_expr__inner_alt_2(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut shape_scan_pos: i32 = -1;
     shape_scan: {
@@ -11603,15 +11604,15 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_expr__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_expr__inner_alt_3(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
     p.site = 199;
     _parse_unary_operator(p);
     p.site = 200;
-    _parse_expr(p, follow, 15);
+    _parse_expr(p, follow, 15, lr_cont);
     return;
 }
 
-fn _parse_expr__inner_alt_13(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_expr__inner_alt_13(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
     p.site = 223;
     _parse_function_name(p);
     p.expect(TK_OPEN_PAR, &SYNC_52, false);
@@ -11731,7 +11732,7 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_expr__inner_alt_14(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_expr__inner_alt_14(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
     p.expect(TK_OPEN_PAR, &SYNC_0, false);
     p.site = 226;
     _parse_expr(p, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -11739,7 +11740,7 @@ fn _parse_expr__inner_alt_14(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_expr__inner_alt_15(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_expr__inner_alt_15(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
     p.expect(TK_K_CAST, &SYNC_42, false);
     p.expect(TK_OPEN_PAR, &SYNC_0, false);
     p.site = 227;
@@ -11751,7 +11752,7 @@ fn _parse_expr__inner_alt_15(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_expr__inner_alt_21(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_expr__inner_alt_21(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
     if !kind_set_has(&SYNC_55, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_55, &EXPECTED_55); }
     if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_EXISTS {
         if !kind_set_has(&SYNC_56, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_56, &EXPECTED_56); }
@@ -11769,7 +11770,7 @@ fn _parse_expr__inner_alt_21(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_expr__inner_alt_22(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_expr__inner_alt_22(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
     p.expect(TK_K_CASE, &SYNC_0, false);
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
@@ -11855,17 +11856,17 @@ fn _parse_expr__inner_alt_22(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
+fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_52(kind) {
         if kind == TK_OPEN_PAR {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_21 = scan_expr_atom_alt_21(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_14 = scan_expr_atom_alt_14(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_21 = scan_expr_atom_alt_21(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_14 = scan_expr_atom_alt_14(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -11885,21 +11886,21 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 _sd_best_i = 21;
             }
             if _sd_best_i == 21 {
-                return _parse_expr__inner_alt_21(p, follow);
+                return _parse_expr__inner_alt_21(p, follow, lr_cont);
             }
             if _sd_best_i == 14 {
-                return _parse_expr__inner_alt_14(p, follow);
+                return _parse_expr__inner_alt_14(p, follow, lr_cont);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_alt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow, lr_cont);
             }
-            return _parse_expr__inner_alt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow, lr_cont);
         } else if kind == TK_K_CAST {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_15 = scan_expr_atom_alt_15(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_15 = scan_expr_atom_alt_15(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -11915,18 +11916,18 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 _sd_best_i = 15;
             }
             if _sd_best_i == 15 {
-                return _parse_expr__inner_alt_15(p, follow);
+                return _parse_expr__inner_alt_15(p, follow, lr_cont);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_alt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow, lr_cont);
             }
-            return _parse_expr__inner_alt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow, lr_cont);
         } else if kind == TK_K_CASE {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_22 = scan_expr_atom_alt_22(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_22 = scan_expr_atom_alt_22(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -11942,18 +11943,18 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 _sd_best_i = 22;
             }
             if _sd_best_i == 22 {
-                return _parse_expr__inner_alt_22(p, follow);
+                return _parse_expr__inner_alt_22(p, follow, lr_cont);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_alt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow, lr_cont);
             }
-            return _parse_expr__inner_alt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow, lr_cont);
         } else if kind == TK_K_RAISE {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_23 = scan_expr_atom_alt_23(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_23 = scan_expr_atom_alt_23(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -11973,16 +11974,16 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 return _parse_raise_function(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_alt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow, lr_cont);
             }
-            return _parse_expr__inner_alt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow, lr_cont);
         } else if kind == TK_K_NOT {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_21 = scan_expr_atom_alt_21(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_3 = scan_expr_atom_alt_3(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_21 = scan_expr_atom_alt_21(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_3 = scan_expr_atom_alt_3(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -12002,21 +12003,21 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 _sd_best_i = 21;
             }
             if _sd_best_i == 21 {
-                return _parse_expr__inner_alt_21(p, follow);
+                return _parse_expr__inner_alt_21(p, follow, lr_cont);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_alt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow, lr_cont);
             }
             if _sd_best_i == 2 {
-                return _parse_expr__inner_alt_2(p, follow);
+                return _parse_expr__inner_alt_2(p, follow, lr_cont);
             }
-            return _parse_expr__inner_alt_3(p, follow);
+            return _parse_expr__inner_alt_3(p, follow, lr_cont);
         } else if kind == TK_K_EXISTS {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_21 = scan_expr_atom_alt_21(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_21 = scan_expr_atom_alt_21(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -12032,23 +12033,23 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 _sd_best_i = 21;
             }
             if _sd_best_i == 21 {
-                return _parse_expr__inner_alt_21(p, follow);
+                return _parse_expr__inner_alt_21(p, follow, lr_cont);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_alt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow, lr_cont);
             }
-            return _parse_expr__inner_alt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow, lr_cont);
         } else if _kind_set_53(kind) {
-            return _parse_expr__inner_alt_3(p, follow);
+            return _parse_expr__inner_alt_3(p, follow, lr_cont);
         } else if _kind_set_54(kind) {
             p.site = 195;
             return _parse_literal_value(p);
         } else if _kind_set_55(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_expr_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_expr_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -12068,14 +12069,14 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 return _parse_literal_value(p);
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_alt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow, lr_cont);
             }
-            return _parse_expr__inner_alt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow, lr_cont);
         } else if _kind_set_56(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_13 = scan_expr_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -12087,9 +12088,9 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
                 _sd_best_i = 13;
             }
             if _sd_best_i == 13 {
-                return _parse_expr__inner_alt_13(p, follow);
+                return _parse_expr__inner_alt_13(p, follow, lr_cont);
             }
-            return _parse_expr__inner_alt_2(p, follow);
+            return _parse_expr__inner_alt_2(p, follow, lr_cont);
         }
     }
     if kind == TK_BIND_PARAMETER {
@@ -12108,7 +12109,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_con
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner_atom(p, follow, min_prec);
+    _parse_expr__inner_atom(p, follow, min_prec, lr_cont);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }

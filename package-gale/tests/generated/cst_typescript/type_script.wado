@@ -1030,7 +1030,7 @@ pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<
     if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
     }
-    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    let kind = follow_kind_at(tokens, pos, eof_kind);
     return follow_open_has(cont, kind, sets, true);
 }
 
@@ -1040,7 +1040,16 @@ fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bo
         return false;
     }
     let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-    return if set_id == 0 { unknown_has } else { kind_set_has(&sets[(set_id - 1) as i32], kind) };
+    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
+}
+
+fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
+    return if pos < tokens.len() { tokens[pos] } else { eof_kind };
+}
+
+fn follow_set_has(sets: &List<List<i32>>, id: i64, kind: i32) -> bool {
+    let set = &sets[(id - 1) as i32];
+    return set.is_empty() || kind_set_has(set, kind);
 }
 
 fn follow_heads_have(
@@ -1054,7 +1063,7 @@ fn follow_heads_have(
     if cont == 0 {
         return unknown_has;
     }
-    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    let kind = follow_kind_at(tokens, pos, eof_kind);
     if follow_open_has(cont, kind, sets, unknown_has) {
         return true;
     }
@@ -1065,8 +1074,7 @@ fn follow_heads_have(
             head = true;
         }
         if head {
-            let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
-            if set.is_empty() || kind_set_has(set, kind) {
+            if follow_set_has(sets, c & FOLLOW_ID_MASK, kind) {
                 return true;
             }
             head = false;
@@ -1093,14 +1101,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
         if depth < FOLLOW_MAX_DEPTH {
             constrained = true;
             if alive {
-                let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
-                if !set.is_empty() {
-                    let idx = pos + depth;
-                    let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                    if !kind_set_has(set, kind) {
-                        alive = false;
-                    }
-                }
+                alive = follow_set_has(sets, c & FOLLOW_ID_MASK, follow_kind_at(tokens, pos + depth, eof_kind));
             }
             depth += 1;
         }
@@ -9742,7 +9743,14 @@ fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<(
     return pos;
 }
 
-fn scan_single_expression_atom_alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_anonymous_function(tokens, pos, memo, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom_alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Class { return -1; }
     pos += 1;
@@ -9763,7 +9771,7 @@ fn scan_single_expression_atom_alt_1(tokens: &Array<i32>, pos: i32, memo: &mut S
     return pos;
 }
 
-fn scan_single_expression_atom_alt_6(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_6(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_New { return -1; }
     pos += 1;
@@ -9779,7 +9787,7 @@ fn scan_single_expression_atom_alt_6(tokens: &Array<i32>, pos: i32, memo: &mut S
     return pos;
 }
 
-fn scan_single_expression_atom_alt_7(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_7(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_New { return -1; }
     pos += 1;
@@ -9789,57 +9797,71 @@ fn scan_single_expression_atom_alt_7(tokens: &Array<i32>, pos: i32, memo: &mut S
         let sp = pos;
         pos = scan_type_arguments(tokens, pos, memo, follow);
         if pos < 0 { pos = sp; }
-        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !(_kind_set_87((if pos < tokens.len() { tokens[pos] } else { TK_EOF })) || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
             pos = sp;
         }
     }
     return pos;
 }
 
-fn scan_single_expression_atom_alt_11(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_11(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Delete { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, memo, follow, 21);
+    pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_single_expression_atom_alt_12(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_12(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Void { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, memo, follow, 21);
+    pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_single_expression_atom_alt_13(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_13(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Typeof { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, memo, follow, 21);
+    pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_single_expression_atom_alt_20(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_20(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Await { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, memo, follow, 21);
+    pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_single_expression_atom_alt_43(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_41(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_generator_function_declaration(tokens, pos, memo, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom_alt_42(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_yield_statement(tokens, pos, memo, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom_alt_43(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_This { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression_atom_alt_44(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_44(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier_name(tokens, pos, memo);
     if pos < 0 { return -1; }
@@ -9847,21 +9869,35 @@ fn scan_single_expression_atom_alt_44(tokens: &Array<i32>, pos: i32, memo: &mut 
         let sp = pos;
         pos = scan_single_expression(tokens, pos, memo, follow, 0);
         if pos < 0 { pos = sp; }
-        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !(_kind_set_87((if pos < tokens.len() { tokens[pos] } else { TK_EOF })) || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
             pos = sp;
         }
     }
     return pos;
 }
 
-fn scan_single_expression_atom_alt_45(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_45(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Super { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression_atom_alt_49(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_46(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_literal(tokens, pos, memo, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom_alt_47(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_array_literal(tokens, pos, memo, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom_alt_49(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
@@ -9872,156 +9908,177 @@ fn scan_single_expression_atom_alt_49(tokens: &Array<i32>, pos: i32, memo: &mut 
     return pos;
 }
 
-fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_single_expression_atom_alt_39(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_iterator_block(tokens, pos, memo, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom_alt_40(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_generator_block(tokens, pos, memo, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom_alt_48(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_object_literal(tokens, pos, memo, follow);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_87(kind) {
+    if _kind_set_88(kind) {
         if kind == TK_Class {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_single_expression_atom_alt_1(tokens, start, memo, follow);
+            let try_1_end = scan_single_expression_atom_alt_1(tokens, start, memo, follow, lr_cont);
             if try_1_end > best { best = try_1_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_New {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_6_end = scan_single_expression_atom_alt_6(tokens, start, memo, follow);
+            let try_6_end = scan_single_expression_atom_alt_6(tokens, start, memo, follow, lr_cont);
             if try_6_end > best { best = try_6_end; }
-            let try_7_end = scan_single_expression_atom_alt_7(tokens, start, memo, follow);
+            let try_7_end = scan_single_expression_atom_alt_7(tokens, start, memo, follow, lr_cont);
             if try_7_end > best { best = try_7_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_Delete {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_11_end = scan_single_expression_atom_alt_11(tokens, start, memo, follow);
+            let try_11_end = scan_single_expression_atom_alt_11(tokens, start, memo, follow, lr_cont);
             if try_11_end > best { best = try_11_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_Void {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_12_end = scan_single_expression_atom_alt_12(tokens, start, memo, follow);
+            let try_12_end = scan_single_expression_atom_alt_12(tokens, start, memo, follow, lr_cont);
             if try_12_end > best { best = try_12_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_Typeof {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_13_end = scan_single_expression_atom_alt_13(tokens, start, memo, follow);
+            let try_13_end = scan_single_expression_atom_alt_13(tokens, start, memo, follow, lr_cont);
             if try_13_end > best { best = try_13_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_Await {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_20_end = scan_single_expression_atom_alt_20(tokens, start, memo, follow);
+            let try_20_end = scan_single_expression_atom_alt_20(tokens, start, memo, follow, lr_cont);
             if try_20_end > best { best = try_20_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_This {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_43_end = scan_single_expression_atom_alt_43(tokens, start, memo, follow);
+            let try_43_end = scan_single_expression_atom_alt_43(tokens, start, memo, follow, lr_cont);
             if try_43_end > best { best = try_43_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_Super {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
-            let try_45_end = scan_single_expression_atom_alt_45(tokens, start, memo, follow);
+            let try_45_end = scan_single_expression_atom_alt_45(tokens, start, memo, follow, lr_cont);
             if try_45_end > best { best = try_45_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_OpenBracket {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_47_end = scan_array_literal(tokens, start, memo, follow);
+            let try_47_end = scan_single_expression_atom_alt_47(tokens, start, memo, follow, lr_cont);
             if try_47_end > best { best = try_47_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_OpenParen {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_49_end = scan_single_expression_atom_alt_49(tokens, start, memo, follow);
+            let try_49_end = scan_single_expression_atom_alt_49(tokens, start, memo, follow, lr_cont);
             if try_49_end > best { best = try_49_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if _kind_set_88(kind) {
+        } else if _kind_set_89(kind) {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_41_end = scan_generator_function_declaration(tokens, start, memo, follow);
+            let try_41_end = scan_single_expression_atom_alt_41(tokens, start, memo, follow, lr_cont);
             if try_41_end > best { best = try_41_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_Yield {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_42_end = scan_yield_statement(tokens, start, memo, follow);
+            let try_42_end = scan_single_expression_atom_alt_42(tokens, start, memo, follow, lr_cont);
             if try_42_end > best { best = try_42_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_YieldStar {
-            return scan_yield_statement(tokens, start, memo, follow);
-        } else if _kind_set_89(kind) {
+            return scan_single_expression_atom_alt_42(tokens, start, memo, follow, lr_cont);
+        } else if _kind_set_90(kind) {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
-            let try_46_end = scan_literal(tokens, start, memo, follow);
+            let try_46_end = scan_single_expression_atom_alt_46(tokens, start, memo, follow, lr_cont);
             if try_46_end > best { best = try_46_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if _kind_set_85(kind) {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_46_end = scan_literal(tokens, start, memo, follow);
+            let try_46_end = scan_single_expression_atom_alt_46(tokens, start, memo, follow, lr_cont);
             if try_46_end > best { best = try_46_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if _kind_set_90(kind) {
-            return scan_literal(tokens, start, memo, follow);
         } else if _kind_set_91(kind) {
+            return scan_single_expression_atom_alt_46(tokens, start, memo, follow, lr_cont);
+        } else if _kind_set_92(kind) {
             let mut best: i32 = -1;
-            let try_0_end = scan_anonymous_function(tokens, start, memo, follow);
+            let try_0_end = scan_single_expression_atom_alt_0(tokens, start, memo, follow, lr_cont);
             if try_0_end > best { best = try_0_end; }
-            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow);
+            let try_44_end = scan_single_expression_atom_alt_44(tokens, start, memo, follow, lr_cont);
             if try_44_end > best { best = try_44_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
@@ -10030,7 +10087,7 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
     if kind == TK_PlusPlus {
         pos = start + 1;
         try_14: {
-            pos = scan_single_expression(tokens, pos, memo, follow, 21);
+            pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
             if pos < 0 { break try_14; }
             return pos;
         }
@@ -10039,7 +10096,7 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
     if kind == TK_MinusMinus {
         pos = start + 1;
         try_15: {
-            pos = scan_single_expression(tokens, pos, memo, follow, 21);
+            pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
             if pos < 0 { break try_15; }
             return pos;
         }
@@ -10048,7 +10105,7 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
     if kind == TK_Plus {
         pos = start + 1;
         try_16: {
-            pos = scan_single_expression(tokens, pos, memo, follow, 21);
+            pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
             if pos < 0 { break try_16; }
             return pos;
         }
@@ -10057,7 +10114,7 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
     if kind == TK_Minus {
         pos = start + 1;
         try_17: {
-            pos = scan_single_expression(tokens, pos, memo, follow, 21);
+            pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
             if pos < 0 { break try_17; }
             return pos;
         }
@@ -10066,7 +10123,7 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
     if kind == TK_BitNot {
         pos = start + 1;
         try_18: {
-            pos = scan_single_expression(tokens, pos, memo, follow, 21);
+            pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
             if pos < 0 { break try_18; }
             return pos;
         }
@@ -10075,7 +10132,7 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
     if kind == TK_Not {
         pos = start + 1;
         try_19: {
-            pos = scan_single_expression(tokens, pos, memo, follow, 21);
+            pos = scan_single_expression(tokens, pos, memo, follow, 21, lr_cont);
             if pos < 0 { break try_19; }
             return pos;
         }
@@ -10083,11 +10140,11 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
     }
     if kind == TK_OpenBrace {
         let mut best: i32 = -1;
-        let try_39_end = scan_iterator_block(tokens, start, memo, follow);
+        let try_39_end = scan_single_expression_atom_alt_39(tokens, start, memo, follow, lr_cont);
         if try_39_end > best { best = try_39_end; }
-        let try_40_end = scan_generator_block(tokens, start, memo, follow);
+        let try_40_end = scan_single_expression_atom_alt_40(tokens, start, memo, follow, lr_cont);
         if try_40_end > best { best = try_40_end; }
-        let try_48_end = scan_object_literal(tokens, start, memo, follow);
+        let try_48_end = scan_single_expression_atom_alt_48(tokens, start, memo, follow, lr_cont);
         if try_48_end > best { best = try_48_end; }
         if best >= 0 { pos = best; return pos; }
         return -1;
@@ -10100,7 +10157,7 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
                 let sp = pos;
                 pos = scan_expression_sequence(tokens, pos, memo, follow);
                 if pos < 0 { pos = sp; }
-                if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+                if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !(_kind_set_87((if pos < tokens.len() { tokens[pos] } else { TK_EOF })) || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     pos = sp;
                 }
             }
@@ -10150,7 +10207,7 @@ fn scan_single_expression_lr_4(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
         let sp = pos;
         pos = scan_type_generic(tokens, pos, memo, follow);
         if pos < 0 { pos = sp; }
-        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !(_kind_set_87((if pos < tokens.len() { tokens[pos] } else { TK_EOF })) || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
             pos = sp;
         }
     }
@@ -10173,7 +10230,7 @@ fn scan_single_expression_lr_5(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
         let sp = pos;
         pos = scan_type_generic(tokens, pos, memo, follow);
         if pos < 0 { pos = sp; }
-        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !(_kind_set_87((if pos < tokens.len() { tokens[pos] } else { TK_EOF })) || follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
             pos = sp;
         }
     }
@@ -10212,7 +10269,7 @@ fn scan_single_expression_lr_21(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
 
 fn scan_single_expression_lr_22(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_92(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_93(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_single_expression(tokens, pos, memo, follow, 20, lr_cont);
     if pos < 0 { return -1; }
@@ -10221,7 +10278,7 @@ fn scan_single_expression_lr_22(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
 
 fn scan_single_expression_lr_23(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_93(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_94(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_single_expression(tokens, pos, memo, follow, 19, lr_cont);
     if pos < 0 { return -1; }
@@ -10276,7 +10333,7 @@ fn scan_single_expression_lr_25(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
 
 fn scan_single_expression_lr_26(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_94(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_95(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_single_expression(tokens, pos, memo, follow, 16, lr_cont);
     if pos < 0 { return -1; }
@@ -10303,7 +10360,7 @@ fn scan_single_expression_lr_28(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
 
 fn scan_single_expression_lr_29(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_95(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_96(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_single_expression(tokens, pos, memo, follow, 13, lr_cont);
     if pos < 0 { return -1; }
@@ -10379,7 +10436,7 @@ fn scan_single_expression_lr_36(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
 
 fn scan_single_expression_lr_37(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_96(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_97(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_single_expression(tokens, pos, memo, follow, 5, lr_cont);
     if pos < 0 { return -1; }
@@ -10421,11 +10478,11 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>
 }
 
 fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
-    let mut pos = scan_single_expression_atom(tokens, pos, memo, follow);
+    let mut pos = scan_single_expression_atom(tokens, pos, memo, follow, lr_cont);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_97(suffix_kind) {
+        if _kind_set_98(suffix_kind) {
             if suffix_kind == TK_OpenBracket {
                 if 27 >= min_prec {
                     let lr_saved_pos = pos;
@@ -10456,7 +10513,7 @@ fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
                     }
                 }
             }
-        } else if _kind_set_98(suffix_kind) {
+        } else if _kind_set_99(suffix_kind) {
             if suffix_kind == TK_Not {
                 let _lr_scan_4 = scan_single_expression_lr_4(tokens, pos, memo, follow, lr_cont);
                 if _lr_scan_4 >= 0 {
@@ -10555,7 +10612,7 @@ fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
             } else {
                 break;
             }
-        } else if _kind_set_92(suffix_kind) {
+        } else if _kind_set_93(suffix_kind) {
             if 19 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_single_expression_lr_22(tokens, pos, memo, follow, lr_cont);
@@ -10564,7 +10621,7 @@ fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
             } else {
                 break;
             }
-        } else if _kind_set_93(suffix_kind) {
+        } else if _kind_set_94(suffix_kind) {
             if 18 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_single_expression_lr_23(tokens, pos, memo, follow, lr_cont);
@@ -10582,7 +10639,7 @@ fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
             } else {
                 break;
             }
-        } else if _kind_set_99(suffix_kind) {
+        } else if _kind_set_100(suffix_kind) {
             if suffix_kind == TK_LeftShiftArithmetic {
                 if 16 >= min_prec {
                     let lr_saved_pos = pos;
@@ -10592,7 +10649,7 @@ fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
                 } else {
                     break;
                 }
-            } else if _kind_set_100(suffix_kind) {
+            } else if _kind_set_101(suffix_kind) {
                 if 15 >= min_prec {
                     let lr_saved_pos = pos;
                     pos = scan_single_expression_lr_26(tokens, pos, memo, follow, lr_cont);
@@ -10641,7 +10698,7 @@ fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
             } else {
                 break;
             }
-        } else if _kind_set_95(suffix_kind) {
+        } else if _kind_set_96(suffix_kind) {
             if 12 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_single_expression_lr_29(tokens, pos, memo, follow, lr_cont);
@@ -10704,7 +10761,7 @@ fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMe
             } else {
                 break;
             }
-        } else if _kind_set_96(suffix_kind) {
+        } else if _kind_set_97(suffix_kind) {
             if 4 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_single_expression_lr_37(tokens, pos, memo, follow, lr_cont);
@@ -10770,7 +10827,7 @@ fn scan_as_expression(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fo
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_29(kind) {
-        if _kind_set_101(kind) {
+        if _kind_set_102(kind) {
             let mut best: i32 = -1;
             let try_0_end = scan_as_expression_alt_0(tokens, start, memo, follow);
             if try_0_end > best { best = try_0_end; }
@@ -10778,7 +10835,7 @@ fn scan_as_expression(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fo
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if _kind_set_102(kind) {
+        } else if _kind_set_103(kind) {
             return scan_as_expression_alt_1(tokens, start, memo, follow);
         }
     }
@@ -10803,10 +10860,10 @@ fn scan_assignable(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follo
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_103(kind) {
-        if _kind_set_104(kind) {
+    if _kind_set_104(kind) {
+        if _kind_set_105(kind) {
             return scan_assignable_alt_0(tokens, start, memo, follow);
-        } else if _kind_set_105(kind) {
+        } else if _kind_set_106(kind) {
             let mut best: i32 = -1;
             let try_0_end = scan_assignable_alt_0(tokens, start, memo, follow);
             if try_0_end > best { best = try_0_end; }
@@ -10814,7 +10871,7 @@ fn scan_assignable(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follo
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if _kind_set_106(kind) {
+        } else if _kind_set_107(kind) {
             return scan_assignable_alt_1(tokens, start, memo, follow);
         }
     }
@@ -10874,8 +10931,8 @@ fn scan_anonymous_function(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_107(kind) {
-        if _kind_set_88(kind) {
+    if _kind_set_108(kind) {
+        if _kind_set_89(kind) {
             let mut best: i32 = -1;
             let try_0_end = scan_function_declaration(tokens, start, memo, follow);
             if try_0_end > best { best = try_0_end; }
@@ -10885,7 +10942,7 @@ fn scan_anonymous_function(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()
             if try_2_end > best { best = try_2_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if _kind_set_108(kind) {
+        } else if _kind_set_109(kind) {
             return scan_arrow_function_declaration(tokens, start, memo, follow);
         }
     }
@@ -10993,7 +11050,7 @@ fn scan_arrow_function_body(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<(
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if _kind_set_109(kind) {
+        } else if _kind_set_110(kind) {
             return scan_arrow_function_body_alt_0(tokens, start, memo, follow);
         }
     }
@@ -11004,7 +11061,7 @@ fn scan_literal(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: 
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_110(kind) {
+    if _kind_set_111(kind) {
         pos = start + 1;
         return pos;
     } else if kind == TK_BackTick {
@@ -11014,7 +11071,7 @@ fn scan_literal(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: 
             return pos;
         }
         return -1;
-    } else if _kind_set_111(kind) {
+    } else if _kind_set_112(kind) {
         pos = start + 1;
         return pos;
     }
@@ -11090,9 +11147,9 @@ fn scan_identifier_name(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) 
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_8(kind) {
-        if _kind_set_104(kind) {
+        if _kind_set_105(kind) {
             return scan_identifier_name_alt_0(tokens, start, memo);
-        } else if _kind_set_105(kind) {
+        } else if _kind_set_106(kind) {
             let mut best: i32 = -1;
             let try_0_end = scan_identifier_name_alt_0(tokens, start, memo);
             if try_0_end > best { best = try_0_end; }
@@ -11134,7 +11191,7 @@ fn scan_identifier_or_key_word(tokens: &Array<i32>, pos: i32, memo: &mut ScanMem
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if _kind_set_112(kind) {
+        } else if _kind_set_113(kind) {
             return scan_identifier_or_key_word_alt_0(tokens, start, memo);
         }
     }
@@ -11149,7 +11206,7 @@ fn scan_reserved_word(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) ->
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_113(kind) {
+    if _kind_set_114(kind) {
         pos = start + 1;
         return pos;
     }
@@ -18748,14 +18805,14 @@ fn _parse_expression_sequence(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.sites.pop();
 }
 
-fn _parse_single_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(0);
     p.site = 392;
     _parse_anonymous_function(p, follow);
     return;
 }
 
-fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
     p.expect(TK_Class, &SYNC_0, false);
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
@@ -18775,7 +18832,7 @@ fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () 
     return;
 }
 
-fn _parse_single_expression__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_6(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(6);
     p.expect(TK_New, &SYNC_0, false);
     p.site = 407;
@@ -18790,13 +18847,13 @@ fn _parse_single_expression__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () 
     return;
 }
 
-fn _parse_single_expression__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_7(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(7);
     p.expect(TK_New, &SYNC_0, false);
     p.site = 410;
     _parse_single_expression(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     let mut opt_enter: bool = p.peek_kind() == TK_LessThan;
-    if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_114(p.peek_kind())) {
+    if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_87(p.peek_kind())) {
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -18805,7 +18862,7 @@ fn _parse_single_expression__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () 
             if pos < 0 { break opt_scan; }
             opt_scan_pos = pos;
         }
-        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_114((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
+        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_87((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
     }
     if opt_enter {
         p.site = 411;
@@ -18814,64 +18871,64 @@ fn _parse_single_expression__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> () 
     return;
 }
 
-fn _parse_single_expression__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_11(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(11);
     p.expect(TK_Delete, &SYNC_0, false);
     p.site = 416;
-    _parse_single_expression(p, follow, 21);
+    _parse_single_expression(p, follow, 21, lr_cont);
     return;
 }
 
-fn _parse_single_expression__inner_alt_12(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_12(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(12);
     p.expect(TK_Void, &SYNC_0, false);
     p.site = 417;
-    _parse_single_expression(p, follow, 21);
+    _parse_single_expression(p, follow, 21, lr_cont);
     return;
 }
 
-fn _parse_single_expression__inner_alt_13(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_13(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(13);
     p.expect(TK_Typeof, &SYNC_0, false);
     p.site = 418;
-    _parse_single_expression(p, follow, 21);
+    _parse_single_expression(p, follow, 21, lr_cont);
     return;
 }
 
-fn _parse_single_expression__inner_alt_20(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_20(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(20);
     p.expect(TK_Await, &SYNC_0, false);
     p.site = 425;
-    _parse_single_expression(p, follow, 21);
+    _parse_single_expression(p, follow, 21, lr_cont);
     return;
 }
 
-fn _parse_single_expression__inner_alt_41(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_41(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(41);
     p.site = 466;
     _parse_generator_function_declaration(p, follow);
     return;
 }
 
-fn _parse_single_expression__inner_alt_42(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_42(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(42);
     p.site = 467;
     _parse_yield_statement(p, follow);
     return;
 }
 
-fn _parse_single_expression__inner_alt_43(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_43(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(43);
     p.expect(TK_This, &SYNC_71, true);
     return;
 }
 
-fn _parse_single_expression__inner_alt_44(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_44(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(44);
     p.site = 468;
     _parse_identifier_name(p);
     let mut opt_enter: bool = _kind_set_29(p.peek_kind());
-    if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_114(p.peek_kind())) {
+    if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_87(p.peek_kind())) {
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -18880,7 +18937,7 @@ fn _parse_single_expression__inner_alt_44(p: &mut Parser, follow: i64 = 0) -> ()
             if pos < 0 { break opt_scan; }
             opt_scan_pos = pos;
         }
-        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_114((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
+        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_87((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
     }
     if opt_enter {
         p.site = 469;
@@ -18889,27 +18946,27 @@ fn _parse_single_expression__inner_alt_44(p: &mut Parser, follow: i64 = 0) -> ()
     return;
 }
 
-fn _parse_single_expression__inner_alt_45(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_45(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(45);
     p.expect(TK_Super, &SYNC_71, true);
     return;
 }
 
-fn _parse_single_expression__inner_alt_46(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_46(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(46);
     p.site = 470;
     _parse_literal(p, follow);
     return;
 }
 
-fn _parse_single_expression__inner_alt_47(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_47(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(47);
     p.site = 471;
     _parse_array_literal(p, follow);
     return;
 }
 
-fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(49);
     p.expect(TK_OpenParen, &SYNC_0, false);
     p.site = 473;
@@ -18918,37 +18975,37 @@ fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: i64 = 0) -> ()
     return;
 }
 
-fn _parse_single_expression__inner_alt_39(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_39(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(39);
     p.site = 464;
     _parse_iterator_block(p, follow);
     return;
 }
 
-fn _parse_single_expression__inner_alt_40(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_40(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(40);
     p.site = 465;
     _parse_generator_block(p, follow);
     return;
 }
 
-fn _parse_single_expression__inner_alt_48(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_alt_48(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     p.b.set_alt(48);
     p.site = 472;
     _parse_object_literal(p, follow);
     return;
 }
 
-fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () with TypeScriptParserBase {
+fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () with TypeScriptParserBase {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
-    if _kind_set_87(kind) {
+    if _kind_set_88(kind) {
         if kind == TK_Class {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_1 = scan_single_expression_atom_alt_1(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_1 = scan_single_expression_atom_alt_1(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -18964,19 +19021,19 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 1 {
-                return _parse_single_expression__inner_alt_1(p, follow);
+                return _parse_single_expression__inner_alt_1(p, follow, lr_cont);
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if kind == TK_New {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_6 = scan_single_expression_atom_alt_6(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_7 = scan_single_expression_atom_alt_7(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_6 = scan_single_expression_atom_alt_6(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_7 = scan_single_expression_atom_alt_7(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -18996,21 +19053,21 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 6 {
-                return _parse_single_expression__inner_alt_6(p, follow);
+                return _parse_single_expression__inner_alt_6(p, follow, lr_cont);
             }
             if _sd_best_i == 7 {
-                return _parse_single_expression__inner_alt_7(p, follow);
+                return _parse_single_expression__inner_alt_7(p, follow, lr_cont);
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if kind == TK_Delete {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_11 = scan_single_expression_atom_alt_11(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_11 = scan_single_expression_atom_alt_11(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19026,18 +19083,18 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 11 {
-                return _parse_single_expression__inner_alt_11(p, follow);
+                return _parse_single_expression__inner_alt_11(p, follow, lr_cont);
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if kind == TK_Void {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_12 = scan_single_expression_atom_alt_12(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_12 = scan_single_expression_atom_alt_12(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19053,18 +19110,18 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 12 {
-                return _parse_single_expression__inner_alt_12(p, follow);
+                return _parse_single_expression__inner_alt_12(p, follow, lr_cont);
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if kind == TK_Typeof {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_13 = scan_single_expression_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_13 = scan_single_expression_atom_alt_13(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19080,18 +19137,18 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 13 {
-                return _parse_single_expression__inner_alt_13(p, follow);
+                return _parse_single_expression__inner_alt_13(p, follow, lr_cont);
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if kind == TK_Await {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_20 = scan_single_expression_atom_alt_20(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_20 = scan_single_expression_atom_alt_20(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19107,18 +19164,18 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 20 {
-                return _parse_single_expression__inner_alt_20(p, follow);
+                return _parse_single_expression__inner_alt_20(p, follow, lr_cont);
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if kind == TK_This {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_43 = scan_single_expression_atom_alt_43(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_43 = scan_single_expression_atom_alt_43(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19134,18 +19191,18 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
             if _sd_best_i == 44 {
-                return _parse_single_expression__inner_alt_44(p, follow);
+                return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_43(p, follow);
+            return _parse_single_expression__inner_alt_43(p, follow, lr_cont);
         } else if kind == TK_Super {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_45 = scan_single_expression_atom_alt_45(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_45 = scan_single_expression_atom_alt_45(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19161,17 +19218,17 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 45;
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
             if _sd_best_i == 44 {
-                return _parse_single_expression__inner_alt_44(p, follow);
+                return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_45(p, follow);
+            return _parse_single_expression__inner_alt_45(p, follow, lr_cont);
         } else if kind == TK_OpenBracket {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_47 = scan_array_literal(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_47 = scan_single_expression_atom_alt_47(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19183,14 +19240,14 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 47;
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_47(p, follow);
+            return _parse_single_expression__inner_alt_47(p, follow, lr_cont);
         } else if kind == TK_OpenParen {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_49 = scan_single_expression_atom_alt_49(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_49 = scan_single_expression_atom_alt_49(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19202,15 +19259,15 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 49;
             }
             if _sd_best_i == 49 {
-                return _parse_single_expression__inner_alt_49(p, follow);
+                return _parse_single_expression__inner_alt_49(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_0(p, follow);
-        } else if _kind_set_88(kind) {
+            return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
+        } else if _kind_set_89(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_41 = scan_generator_function_declaration(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_41 = scan_single_expression_atom_alt_41(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19226,18 +19283,18 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
             if _sd_best_i == 41 {
-                return _parse_single_expression__inner_alt_41(p, follow);
+                return _parse_single_expression__inner_alt_41(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if kind == TK_Yield {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_42 = scan_yield_statement(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_42 = scan_single_expression_atom_alt_42(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19253,20 +19310,20 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
             if _sd_best_i == 42 {
-                return _parse_single_expression__inner_alt_42(p, follow);
+                return _parse_single_expression__inner_alt_42(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if kind == TK_YieldStar {
-            return _parse_single_expression__inner_alt_42(p, follow);
-        } else if _kind_set_89(kind) {
+            return _parse_single_expression__inner_alt_42(p, follow, lr_cont);
+        } else if _kind_set_90(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_46 = scan_literal(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_46 = scan_single_expression_atom_alt_46(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19282,17 +19339,17 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 46;
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
             if _sd_best_i == 46 {
-                return _parse_single_expression__inner_alt_46(p, follow);
+                return _parse_single_expression__inner_alt_46(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         } else if _kind_set_85(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_46 = scan_literal(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_46 = scan_single_expression_atom_alt_46(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19304,16 +19361,16 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 46;
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_46(p, follow);
-        } else if _kind_set_90(kind) {
-            return _parse_single_expression__inner_alt_46(p, follow);
+            return _parse_single_expression__inner_alt_46(p, follow, lr_cont);
         } else if _kind_set_91(kind) {
+            return _parse_single_expression__inner_alt_46(p, follow, lr_cont);
+        } else if _kind_set_92(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_anonymous_function(_sd_tokens, _sd_pos, &mut p.memo, follow);
-            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow);
+            let _sd_p_0 = scan_single_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+            let _sd_p_44 = scan_single_expression_atom_alt_44(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -19325,59 +19382,59 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 _sd_best_i = 44;
             }
             if _sd_best_i == 0 {
-                return _parse_single_expression__inner_alt_0(p, follow);
+                return _parse_single_expression__inner_alt_0(p, follow, lr_cont);
             }
-            return _parse_single_expression__inner_alt_44(p, follow);
+            return _parse_single_expression__inner_alt_44(p, follow, lr_cont);
         }
     }
     if kind == TK_PlusPlus {
         p.b.set_alt(14);
         p.take();
         p.site = 419;
-        _parse_single_expression(p, follow, 21);
+        _parse_single_expression(p, follow, 21, lr_cont);
         return;
     }
     if kind == TK_MinusMinus {
         p.b.set_alt(15);
         p.take();
         p.site = 420;
-        _parse_single_expression(p, follow, 21);
+        _parse_single_expression(p, follow, 21, lr_cont);
         return;
     }
     if kind == TK_Plus {
         p.b.set_alt(16);
         p.take();
         p.site = 421;
-        _parse_single_expression(p, follow, 21);
+        _parse_single_expression(p, follow, 21, lr_cont);
         return;
     }
     if kind == TK_Minus {
         p.b.set_alt(17);
         p.take();
         p.site = 422;
-        _parse_single_expression(p, follow, 21);
+        _parse_single_expression(p, follow, 21, lr_cont);
         return;
     }
     if kind == TK_BitNot {
         p.b.set_alt(18);
         p.take();
         p.site = 423;
-        _parse_single_expression(p, follow, 21);
+        _parse_single_expression(p, follow, 21, lr_cont);
         return;
     }
     if kind == TK_Not {
         p.b.set_alt(19);
         p.take();
         p.site = 424;
-        _parse_single_expression(p, follow, 21);
+        _parse_single_expression(p, follow, 21, lr_cont);
         return;
     }
     if kind == TK_OpenBrace {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_39 = scan_iterator_block(_sd_tokens, _sd_pos, &mut p.memo, follow);
-        let _sd_p_40 = scan_generator_block(_sd_tokens, _sd_pos, &mut p.memo, follow);
-        let _sd_p_48 = scan_object_literal(_sd_tokens, _sd_pos, &mut p.memo, follow);
+        let _sd_p_39 = scan_single_expression_atom_alt_39(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+        let _sd_p_40 = scan_single_expression_atom_alt_40(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
+        let _sd_p_48 = scan_single_expression_atom_alt_48(_sd_tokens, _sd_pos, &mut p.memo, follow, lr_cont);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_39 > _sd_best_p {
@@ -19393,19 +19450,19 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
             _sd_best_i = 48;
         }
         if _sd_best_i == 39 {
-            return _parse_single_expression__inner_alt_39(p, follow);
+            return _parse_single_expression__inner_alt_39(p, follow, lr_cont);
         }
         if _sd_best_i == 40 {
-            return _parse_single_expression__inner_alt_40(p, follow);
+            return _parse_single_expression__inner_alt_40(p, follow, lr_cont);
         }
-        return _parse_single_expression__inner_alt_48(p, follow);
+        return _parse_single_expression__inner_alt_48(p, follow, lr_cont);
     }
     if kind == TK_LessThan {
         p.b.set_alt(50);
         p.site = 474;
         _parse_type_arguments(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_46)));
         let mut opt_enter: bool = _kind_set_29(p.peek_kind());
-        if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_114(p.peek_kind())) {
+        if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_87(p.peek_kind())) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
                 let tokens = &p.kinds;
@@ -19414,7 +19471,7 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_pre
                 if pos < 0 { break opt_scan; }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_114((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_87((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
         }
         if opt_enter {
             p.site = 475;
@@ -19434,12 +19491,12 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_SINGLE_EXPRESSION, _start);
-    _parse_single_expression__inner_atom(p, follow, min_prec);
+    _parse_single_expression__inner_atom(p, follow, min_prec, lr_cont);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _kind_set_97(_sk) {
+        if _kind_set_98(_sk) {
             if _sk == TK_OpenBracket {
                 if 27 >= min_prec {
                     let _lr_end = scan_single_expression_lr_2(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
@@ -19495,7 +19552,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                     }
                 }
             }
-        } else if _kind_set_98(_sk) {
+        } else if _kind_set_99(_sk) {
             if _sk == TK_Not {
                 let _lr_scan_4 = scan_single_expression_lr_4(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
                 if _lr_scan_4 >= 0 {
@@ -19731,7 +19788,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
             } else {
                 break;
             }
-        } else if _kind_set_92(_sk) {
+        } else if _kind_set_93(_sk) {
             if 19 >= min_prec {
                 let _lr_end = scan_single_expression_lr_22(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
                 if _lr_end < 0 { break; }
@@ -19745,7 +19802,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
             } else {
                 break;
             }
-        } else if _kind_set_93(_sk) {
+        } else if _kind_set_94(_sk) {
             if 18 >= min_prec {
                 let _lr_end = scan_single_expression_lr_23(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
                 if _lr_end < 0 { break; }
@@ -19773,7 +19830,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
             } else {
                 break;
             }
-        } else if _kind_set_99(_sk) {
+        } else if _kind_set_100(_sk) {
             if _sk == TK_LeftShiftArithmetic {
                 if 16 >= min_prec {
                     let _lr_end = scan_single_expression_lr_25(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
@@ -19841,7 +19898,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
                 } else {
                     break;
                 }
-            } else if _kind_set_100(_sk) {
+            } else if _kind_set_101(_sk) {
                 if 15 >= min_prec {
                     let _lr_end = scan_single_expression_lr_26(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
                     if _lr_end < 0 { break; }
@@ -19967,7 +20024,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
             } else {
                 break;
             }
-        } else if _kind_set_95(_sk) {
+        } else if _kind_set_96(_sk) {
             if 12 >= min_prec {
                 let _lr_end = scan_single_expression_lr_29(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
                 if _lr_end < 0 { break; }
@@ -20065,7 +20122,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
             } else {
                 break;
             }
-        } else if _kind_set_96(_sk) {
+        } else if _kind_set_97(_sk) {
             if 4 >= min_prec {
                 let _lr_end = scan_single_expression_lr_37(&p.kinds, p.pos, &mut p.memo, follow, lr_cont);
                 if _lr_end < 0 { break; }
@@ -20137,7 +20194,7 @@ fn _parse_as_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
-        if _kind_set_101(kind) {
+        if _kind_set_102(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = scan_as_expression_alt_1(_sd_tokens, _sd_pos, &mut p.memo, follow);
@@ -20157,7 +20214,7 @@ fn _parse_as_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeS
                 return _parse_single_expression(p, follow);
             }
             return _parse_as_expression__inner_alt_0(p, follow);
-        } else if _kind_set_102(kind) {
+        } else if _kind_set_103(kind) {
             p.site = 480;
             return _parse_single_expression(p, follow);
         }
@@ -20184,11 +20241,11 @@ fn _parse_as_expression(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
 fn _parse_assignable__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
-    if _kind_set_103(kind) {
-        if _kind_set_104(kind) {
+    if _kind_set_104(kind) {
+        if _kind_set_105(kind) {
             p.site = 481;
             return _parse_identifier(p);
-        } else if _kind_set_105(kind) {
+        } else if _kind_set_106(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = scan_assignable_alt_0(_sd_tokens, _sd_pos, &mut p.memo, follow);
@@ -20209,7 +20266,7 @@ fn _parse_assignable__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
             }
             p.site = 482;
             return _parse_keyword(p);
-        } else if _kind_set_106(kind) {
+        } else if _kind_set_107(kind) {
             p.site = 482;
             return _parse_keyword(p);
         }
@@ -20275,8 +20332,8 @@ fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
 fn _parse_anonymous_function__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
-    if _kind_set_107(kind) {
-        if _kind_set_88(kind) {
+    if _kind_set_108(kind) {
+        if _kind_set_89(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = scan_anonymous_function_alt_1(_sd_tokens, _sd_pos, &mut p.memo, follow);
@@ -20305,7 +20362,7 @@ fn _parse_anonymous_function__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             }
             p.site = 489;
             return _parse_arrow_function_declaration(p, follow);
-        } else if _kind_set_108(kind) {
+        } else if _kind_set_109(kind) {
             p.site = 489;
             return _parse_arrow_function_declaration(p, follow);
         }
@@ -20448,7 +20505,7 @@ fn _parse_arrow_function_body__inner(p: &mut Parser, follow: i64 = 0) -> () with
             }
             p.site = 495;
             return _parse_single_expression(p, follow);
-        } else if _kind_set_109(kind) {
+        } else if _kind_set_110(kind) {
             p.site = 495;
             return _parse_single_expression(p, follow);
         }
@@ -20475,7 +20532,7 @@ fn _parse_arrow_function_body(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
 fn _parse_assignment_operator__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     if !kind_set_has(&SYNC_80, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_80, &EXPECTED_80); }
     let kind = p.peek_kind();
-    if _kind_set_96(kind) {
+    if _kind_set_97(kind) {
         p.take();
         return;
     }
@@ -20501,7 +20558,7 @@ fn _parse_assignment_operator(p: &mut Parser) -> () with TypeScriptParserBase {
 fn _parse_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
-    if _kind_set_110(kind) {
+    if _kind_set_111(kind) {
         p.take();
         return;
     } else if kind == TK_BackTick {
@@ -20703,10 +20760,10 @@ fn _parse_identifier_name__inner(p: &mut Parser) -> () with TypeScriptParserBase
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
-        if _kind_set_104(kind) {
+        if _kind_set_105(kind) {
             p.site = 506;
             return _parse_identifier(p);
-        } else if _kind_set_105(kind) {
+        } else if _kind_set_106(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = scan_identifier_name_alt_0(_sd_tokens, _sd_pos, &mut p.memo);
@@ -20806,7 +20863,7 @@ fn _parse_identifier_or_key_word__inner(p: &mut Parser) -> () with TypeScriptPar
                 return _parse_identifier(p);
             }
             return _parse_identifier_or_key_word__inner_alt_1(p);
-        } else if _kind_set_112(kind) {
+        } else if _kind_set_113(kind) {
             p.site = 508;
             return _parse_identifier(p);
         }
@@ -20841,7 +20898,7 @@ fn _parse_reserved_word__inner(p: &mut Parser) -> () with TypeScriptParserBase {
         p.site = 509;
         _parse_keyword(p);
         return;
-    } else if _kind_set_89(kind) {
+    } else if _kind_set_90(kind) {
         p.take();
         return;
     }
@@ -21970,115 +22027,115 @@ fn _kind_set_86(k: i32) -> bool {
 }
 
 fn _kind_set_87(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_New | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
+    return k matches { TK_And | TK_As | TK_Assign | TK_BackTick | TK_BitAnd | TK_BitAndAssign | TK_BitOr | TK_BitOrAssign | TK_BitXOr | TK_BitXorAssign | TK_Divide | TK_DivideAssign | TK_Dot | TK_Equals_ | TK_GreaterThanEquals | TK_IdentityEquals | TK_IdentityNotEquals | TK_In | TK_Instanceof | TK_LeftShiftArithmetic | TK_LeftShiftArithmeticAssign | TK_LessThan | TK_LessThanEquals | TK_Minus | TK_MinusAssign | TK_MinusMinus | TK_Modulus | TK_ModulusAssign | TK_MoreThan | TK_Multiply | TK_MultiplyAssign | TK_Not | TK_NotEquals | TK_NullCoalesce | TK_NullishCoalescingAssign | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Plus | TK_PlusAssign | TK_PlusPlus | TK_Power | TK_PowerAssign | TK_QuestionMark | TK_QuestionMarkDot | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign };
 }
 
 fn _kind_set_88(k: i32) -> bool {
-    return k matches { TK_Async | TK_Function_ };
+    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_New | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
 }
 
 fn _kind_set_89(k: i32) -> bool {
-    return k matches { TK_BooleanLiteral | TK_NullLiteral };
+    return k matches { TK_Async | TK_Function_ };
 }
 
 fn _kind_set_90(k: i32) -> bool {
-    return k matches { TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_RegularExpressionLiteral };
+    return k matches { TK_BooleanLiteral | TK_NullLiteral };
 }
 
 fn _kind_set_91(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Boolean | TK_Break | TK_Case | TK_Catch | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_Default | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_Number | TK_Object | TK_Of | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_Switch | TK_Symbol | TK_Throw | TK_Try | TK_TypeAlias | TK_Undefined | TK_Unique | TK_Var | TK_While | TK_With };
+    return k matches { TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_RegularExpressionLiteral };
 }
 
 fn _kind_set_92(k: i32) -> bool {
-    return k matches { TK_Divide | TK_Modulus | TK_Multiply };
+    return k matches { TK_Abstract | TK_Any | TK_As | TK_Boolean | TK_Break | TK_Case | TK_Catch | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_Default | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_Number | TK_Object | TK_Of | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_Switch | TK_Symbol | TK_Throw | TK_Try | TK_TypeAlias | TK_Undefined | TK_Unique | TK_Var | TK_While | TK_With };
 }
 
 fn _kind_set_93(k: i32) -> bool {
-    return k matches { TK_Minus | TK_Plus };
+    return k matches { TK_Divide | TK_Modulus | TK_Multiply };
 }
 
 fn _kind_set_94(k: i32) -> bool {
-    return k matches { TK_GreaterThanEquals | TK_LessThan | TK_LessThanEquals | TK_MoreThan };
+    return k matches { TK_Minus | TK_Plus };
 }
 
 fn _kind_set_95(k: i32) -> bool {
-    return k matches { TK_Equals_ | TK_IdentityEquals | TK_IdentityNotEquals | TK_NotEquals };
+    return k matches { TK_GreaterThanEquals | TK_LessThan | TK_LessThanEquals | TK_MoreThan };
 }
 
 fn _kind_set_96(k: i32) -> bool {
-    return k matches { TK_BitAndAssign | TK_BitOrAssign | TK_BitXorAssign | TK_DivideAssign | TK_LeftShiftArithmeticAssign | TK_MinusAssign | TK_ModulusAssign | TK_MultiplyAssign | TK_NullishCoalescingAssign | TK_PlusAssign | TK_PowerAssign | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign };
+    return k matches { TK_Equals_ | TK_IdentityEquals | TK_IdentityNotEquals | TK_NotEquals };
 }
 
 fn _kind_set_97(k: i32) -> bool {
-    return k matches { TK_OpenBracket | TK_QuestionMarkDot };
+    return k matches { TK_BitAndAssign | TK_BitOrAssign | TK_BitXorAssign | TK_DivideAssign | TK_LeftShiftArithmeticAssign | TK_MinusAssign | TK_ModulusAssign | TK_MultiplyAssign | TK_NullishCoalescingAssign | TK_PlusAssign | TK_PowerAssign | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign };
 }
 
 fn _kind_set_98(k: i32) -> bool {
-    return k matches { TK_Dot | TK_Not | TK_QuestionMark };
+    return k matches { TK_OpenBracket | TK_QuestionMarkDot };
 }
 
 fn _kind_set_99(k: i32) -> bool {
-    return k matches { TK_GreaterThanEquals | TK_LeftShiftArithmetic | TK_LessThan | TK_LessThanEquals | TK_MoreThan };
+    return k matches { TK_Dot | TK_Not | TK_QuestionMark };
 }
 
 fn _kind_set_100(k: i32) -> bool {
-    return k matches { TK_GreaterThanEquals | TK_LessThan | TK_LessThanEquals };
+    return k matches { TK_GreaterThanEquals | TK_LeftShiftArithmetic | TK_LessThan | TK_LessThanEquals | TK_MoreThan };
 }
 
 fn _kind_set_101(k: i32) -> bool {
-    return k matches { TK_Any | TK_Boolean | TK_BooleanLiteral | TK_DecimalLiteral | TK_Never | TK_NullLiteral | TK_Number | TK_Object | TK_String | TK_StringLiteral | TK_Symbol | TK_Undefined | TK_Unique | TK_Void };
+    return k matches { TK_GreaterThanEquals | TK_LessThan | TK_LessThanEquals };
 }
 
 fn _kind_set_102(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_As | TK_Async | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitNot | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LessThan | TK_Let | TK_Minus | TK_MinusMinus | TK_Module | TK_Namespace | TK_New | TK_Not | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Plus | TK_PlusPlus | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_Static | TK_Super | TK_Switch | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Var | TK_While | TK_With | TK_Yield | TK_YieldStar };
+    return k matches { TK_Any | TK_Boolean | TK_BooleanLiteral | TK_DecimalLiteral | TK_Never | TK_NullLiteral | TK_Number | TK_Object | TK_String | TK_StringLiteral | TK_Symbol | TK_Undefined | TK_Unique | TK_Void };
 }
 
 fn _kind_set_103(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Await | TK_Boolean | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_New | TK_Number | TK_Object | TK_Of | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield };
+    return k matches { TK_Abstract | TK_As | TK_Async | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitNot | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LessThan | TK_Let | TK_Minus | TK_MinusMinus | TK_Module | TK_Namespace | TK_New | TK_Not | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Plus | TK_PlusPlus | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_Static | TK_Super | TK_Switch | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Var | TK_While | TK_With | TK_Yield | TK_YieldStar };
 }
 
 fn _kind_set_104(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_Constructor | TK_Identifier | TK_KeyOf | TK_Namespace | TK_Never | TK_Object | TK_Of | TK_Symbol | TK_Undefined | TK_Unique };
+    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Await | TK_Boolean | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_New | TK_Number | TK_Object | TK_Of | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield };
 }
 
 fn _kind_set_105(k: i32) -> bool {
-    return k matches { TK_As | TK_Async | TK_Boolean | TK_From | TK_Number | TK_String | TK_TypeAlias | TK_Yield };
+    return k matches { TK_Abstract | TK_Any | TK_Constructor | TK_Identifier | TK_KeyOf | TK_Namespace | TK_Never | TK_Object | TK_Of | TK_Symbol | TK_Undefined | TK_Unique };
 }
 
 fn _kind_set_106(k: i32) -> bool {
-    return k matches { TK_Await | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Continue | TK_Debugger | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_Function_ | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_Let | TK_Module | TK_New | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_Super | TK_Switch | TK_This | TK_Throw | TK_Try | TK_Typeof | TK_Var | TK_Void | TK_While | TK_With };
+    return k matches { TK_As | TK_Async | TK_Boolean | TK_From | TK_Number | TK_String | TK_TypeAlias | TK_Yield };
 }
 
 fn _kind_set_107(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Await | TK_BinaryIntegerLiteral | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_New | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield };
+    return k matches { TK_Await | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Continue | TK_Debugger | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_Function_ | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_Let | TK_Module | TK_New | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_Super | TK_Switch | TK_This | TK_Throw | TK_Try | TK_Typeof | TK_Var | TK_Void | TK_While | TK_With };
 }
 
 fn _kind_set_108(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Await | TK_BinaryIntegerLiteral | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_New | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield };
+    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Await | TK_BinaryIntegerLiteral | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_New | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield };
 }
 
 fn _kind_set_109(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitNot | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LessThan | TK_Let | TK_Minus | TK_MinusMinus | TK_Module | TK_Namespace | TK_Never | TK_New | TK_Not | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Plus | TK_PlusPlus | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
+    return k matches { TK_Abstract | TK_Any | TK_As | TK_Await | TK_BinaryIntegerLiteral | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_Let | TK_Module | TK_Namespace | TK_Never | TK_New | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield };
 }
 
 fn _kind_set_110(k: i32) -> bool {
-    return k matches { TK_BooleanLiteral | TK_NullLiteral | TK_StringLiteral };
+    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitNot | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LessThan | TK_Let | TK_Minus | TK_MinusMinus | TK_Module | TK_Namespace | TK_Never | TK_New | TK_Not | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Plus | TK_PlusPlus | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
 }
 
 fn _kind_set_111(k: i32) -> bool {
-    return k matches { TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_RegularExpressionLiteral };
+    return k matches { TK_BooleanLiteral | TK_NullLiteral | TK_StringLiteral };
 }
 
 fn _kind_set_112(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Boolean | TK_Constructor | TK_From | TK_Identifier | TK_KeyOf | TK_Namespace | TK_Never | TK_Number | TK_Object | TK_Of | TK_String | TK_Symbol | TK_Undefined | TK_Unique | TK_Yield };
+    return k matches { TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_RegularExpressionLiteral };
 }
 
 fn _kind_set_113(k: i32) -> bool {
-    return k matches { TK_As | TK_Async | TK_Await | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Continue | TK_Debugger | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_Let | TK_Module | TK_New | TK_NullLiteral | TK_Number | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_Super | TK_Switch | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Var | TK_Void | TK_While | TK_With | TK_Yield };
+    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Boolean | TK_Constructor | TK_From | TK_Identifier | TK_KeyOf | TK_Namespace | TK_Never | TK_Number | TK_Object | TK_Of | TK_String | TK_Symbol | TK_Undefined | TK_Unique | TK_Yield };
 }
 
 fn _kind_set_114(k: i32) -> bool {
-    return k matches { TK_And | TK_As | TK_Assign | TK_BackTick | TK_BitAnd | TK_BitAndAssign | TK_BitOr | TK_BitOrAssign | TK_BitXOr | TK_BitXorAssign | TK_Divide | TK_DivideAssign | TK_Dot | TK_Equals_ | TK_GreaterThanEquals | TK_IdentityEquals | TK_IdentityNotEquals | TK_In | TK_Instanceof | TK_LeftShiftArithmetic | TK_LeftShiftArithmeticAssign | TK_LessThan | TK_LessThanEquals | TK_Minus | TK_MinusAssign | TK_MinusMinus | TK_Modulus | TK_ModulusAssign | TK_MoreThan | TK_Multiply | TK_MultiplyAssign | TK_Not | TK_NotEquals | TK_NullCoalesce | TK_NullishCoalescingAssign | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Plus | TK_PlusAssign | TK_PlusPlus | TK_Power | TK_PowerAssign | TK_QuestionMark | TK_QuestionMarkDot | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign };
+    return k matches { TK_As | TK_Async | TK_Await | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Continue | TK_Debugger | TK_Default | TK_Delete | TK_Do | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_Let | TK_Module | TK_New | TK_NullLiteral | TK_Number | TK_Package | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_Require | TK_Return | TK_Static | TK_String | TK_Super | TK_Switch | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Var | TK_Void | TK_While | TK_With | TK_Yield };
 }
 
 global EMPTY_SYNC: List<i32> = [];
