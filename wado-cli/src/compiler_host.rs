@@ -372,8 +372,8 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 }
 
-/// ` · rss …` for a span trace line, or nothing where no reading exists.
+/// A span trace line's RSS suffix, or nothing where no reading exists.
 fn span_rss_suffix(rss: Option<RssSample>, start: Option<RssSample>) -> String {
-    rss.map(|rss| format!(" · {}", rss.span_suffix(start.as_ref())))
+    rss.map(|rss| rss.suffix(start.as_ref()))
         .unwrap_or_default()
 }

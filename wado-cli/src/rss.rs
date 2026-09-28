@@ -24,16 +24,22 @@ impl RssSample {
         format!("{}/{} MiB", to_mib(self.current), to_mib(self.peak))
     }
 
-    /// What a span trace line carries: the reading, and how far the resident
-    /// set moved since `start` when the line closes a span.
-    pub(crate) fn span_suffix(&self, start: Option<&Self>) -> String {
+    /// The reading as a line's suffix, and how far the resident set moved
+    /// since `start` when the line closes a span.
+    pub(crate) fn suffix(&self, start: Option<&Self>) -> String {
         let reading = self.current_peak_mib();
         match start {
             Some(start) if self.current >= start.current => {
-                format!("rss {reading} (+{})", to_mib(self.current - start.current))
+                format!(
+                    " · rss {reading} (+{})",
+                    to_mib(self.current - start.current)
+                )
             }
-            Some(start) => format!("rss {reading} (-{})", to_mib(start.current - self.current)),
-            None => format!("rss {reading}"),
+            Some(start) => format!(
+                " · rss {reading} (-{})",
+                to_mib(start.current - self.current)
+            ),
+            None => format!(" · rss {reading}"),
         }
     }
 }
@@ -54,7 +60,7 @@ fn to_mib(bytes: u64) -> u64 {
 }
 
 pub(crate) fn live_suffix() -> Option<String> {
-    RssSample::read().map(|s| format!(" · rss {}", s.current_peak_mib()))
+    RssSample::read().map(|s| s.suffix(None))
 }
 
 pub(crate) fn summary_line() -> Option<String> {
@@ -103,14 +109,14 @@ Threads:\t8
     }
 
     #[test]
-    fn span_suffix_signs_the_move_since_the_start() {
+    fn suffix_signs_the_move_since_the_start() {
         let at = |mib: u64| RssSample {
             current: mib * 1024 * 1024,
             peak: 700 * 1024 * 1024,
         };
-        assert_eq!(at(512).span_suffix(None), "rss 512/700 MiB");
-        assert_eq!(at(512).span_suffix(Some(&at(500))), "rss 512/700 MiB (+12)");
-        assert_eq!(at(500).span_suffix(Some(&at(512))), "rss 500/700 MiB (-12)");
+        assert_eq!(at(512).suffix(None), " · rss 512/700 MiB");
+        assert_eq!(at(512).suffix(Some(&at(500))), " · rss 512/700 MiB (+12)");
+        assert_eq!(at(500).suffix(Some(&at(512))), " · rss 500/700 MiB (-12)");
     }
 
     #[test]
