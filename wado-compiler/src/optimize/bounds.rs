@@ -60,6 +60,7 @@ impl FromIterator<(ExprId, FuncId)> for Proofs {
 /// What [`analyze`] proves about one body.
 #[derive(Debug, Default)]
 pub(super) struct Bounds {
+    /// Builtin calls that cannot trap.
     pub proofs: Proofs,
     /// `Loop` statements that count a local up to a constant, so they end.
     pub counted: IndexSet<StmtId>,
