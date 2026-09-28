@@ -333,22 +333,6 @@ fn body_calls_any(instr: &WirInstr, ids: &IndexSet<u32>) -> bool {
     found
 }
 
-/// Locals a call site's function may already hold before flattening stops
-/// paying there.
-///
-/// Splicing the slot trades one heap object for `layout.len()` more values live
-/// across the call. Past the register file those are spill slots reloaded at
-/// every call boundary, which the removed allocation does not pay for. Every
-/// benchmark that gains decodes through callers of at most 93 locals; the one
-/// that loses, cbor-twitter, decodes `User` and `Status` at 307 and 186. The cut
-/// sits between them — the WEP holds the measurements.
-///
-/// One caller over the cut declines the callee at every site, because the slot
-/// is part of the result signature. Monomorphization keeps that from being
-/// blunt: `next_field<S>` is a distinct callee per struct, so answering per
-/// callee still lands per decoded type.
-const MAX_CALLER_LOCALS: usize = 128;
-
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
 pub(super) fn validate_slot_sites(
     module: &WirPackage,
@@ -359,19 +343,14 @@ pub(super) fn validate_slot_sites(
     // that references no candidate skips both the map build and the scan below.
     let cand_ids: IndexSet<u32> = cands.iter().map(|c| c.func_id_index).collect();
     // Taken once per function, not once per candidate landing in it.
-    let sites: Vec<Option<(LocalDefUse, usize)>> = module
+    let sites: Vec<Option<LocalDefUse>> = module
         .functions
         .iter()
         .map(|func| {
             func.body
                 .as_deref()
                 .filter(|body| body.iter().any(|i| body_calls_any(i, &cand_ids)))
-                .map(|body| {
-                    (
-                        LocalDefUse::of_body(body),
-                        func.declared_locals().iter().count(),
-                    )
-                })
+                .map(LocalDefUse::of_body)
         })
         .collect();
     cands
@@ -381,7 +360,7 @@ pub(super) fn validate_slot_sites(
             let mut saw_call = false;
             let mut all_ok = true;
             for (i, func) in module.functions.iter().enumerate() {
-                let Some((def_use, locals)) = &sites[i] else {
+                let Some(def_use) = &sites[i] else {
                     continue;
                 };
                 let body = func.body.as_ref().unwrap();
@@ -409,9 +388,6 @@ pub(super) fn validate_slot_sites(
                     }
                 });
                 if total_calls != mvbind_calls {
-                    all_ok = false;
-                }
-                if mvbind_calls > 0 && *locals > MAX_CALLER_LOCALS {
                     all_ok = false;
                 }
             }

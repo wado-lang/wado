@@ -615,29 +615,29 @@ diverge. A diverging node produces no value to declare. This is the hazard
 `all_returns_decompose` documents from the other side: the validator's coverage
 and the rewriter's have to move together.
 
-### The trade is priced against the caller, not the allocation
+### The slot is split whatever the caller holds
 
 Splicing the slot buys one fewer heap object and costs `layout.len()` more values
-live across the call, so it answers to the same rule SROA width does: past the
+live across the call. That reads like the rule SROA width answers to: past the
 register file, a value live across a call is a spill slot reloaded at every call
-boundary, and the allocation removed does not price it.
+boundary.
 
-`MAX_CALLER_LOCALS` declines the callee when any call site sits in a function
-already holding more locals than that — all of them or none, since the slot is
-part of the result signature. The benchmarks separate cleanly on it:
+It first measured that way. A cap declined the callee when any call site sat in
+a function declaring more than 128 locals, and cbor-twitter, whose `User` and
+`Status` decoders declared 307 and 186, lost 6.3% without it.
 
-| row             | caller locals | flattened |
-| --------------- | ------------: | --------: |
-| cbor-canada de  |            40 |    +20.1% |
-| cbor-catalog de |            93 |    +19.5% |
-| json-catalog de |            93 |     +9.9% |
-| cbor-twitter de |      307, 186 |     -6.3% |
+The cap is gone. A declared local is not a live one: by the time this pass runs,
+inlining has left `Area`'s two-field decoder declaring 200 locals and reading 70
+of them, so the cap declined `next_field` on json-catalog's hottest struct. And
+flattening everything no longer loses anywhere. Against the cap counted on the
+locals a caller reads, best of four alternating rounds on 2026-09-28:
 
-Every row that gains decodes through callers of at most 93 locals. cbor-twitter
-decodes `User` and `Status` at 307 and 186, so declining those two leaves that
-row flat and every gain intact. What keeps the all-or-nothing from being blunt is
-monomorphization: `next_field<S>` is a distinct callee per struct, so a rule that
-has to answer per callee still lands per decoded type.
+| row             | no cap |
+| --------------- | -----: |
+| json-catalog de |  +1.5% |
+| cbor-catalog de |  +3.1% |
+| cbor-twitter de |  +4.6% |
+| json-twitter de |  +1.0% |
 
 ### A settled binding is not a `mut` binding
 
