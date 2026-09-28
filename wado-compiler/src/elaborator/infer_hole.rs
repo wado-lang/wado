@@ -239,8 +239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_info: &VariantInfo,
         span: Span,
     ) -> TypeId {
-        let arity = variant_info.type_param_type_ids.len();
-        if arity == 0 {
+        if variant_info.type_param_type_ids.is_empty() {
             return type_id;
         }
         let is_bare_decl = self
@@ -253,11 +252,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
         let message = uninferable_type_param("variant", variant_name);
-        let holes: Vec<TypeId> = (0..arity)
-            .map(|_| {
-                self.mint_infer_hole(span, message.clone(), variant_name.to_string(), Vec::new())
+        let holes: Vec<TypeId> = variant_info
+            .type_params
+            .iter()
+            .map(|param| {
+                self.mint_infer_hole(span, message.clone(), param.name.clone(), Vec::new())
             })
             .collect();
+        assert_eq!(
+            holes.len(),
+            variant_info.type_param_type_ids.len(),
+            "a variant's parameters and their ids are one list"
+        );
         {
             let def = self
                 .tysys
