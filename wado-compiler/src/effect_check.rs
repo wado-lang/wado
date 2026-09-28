@@ -1655,14 +1655,9 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .iter()
                     .flat_map(|binding| self.binding_granted_effects(binding))
                     .collect();
-                let added: Vec<EffectRef> = granted
-                    .into_iter()
-                    .filter(|effect| self.current.insert(effect.clone()))
-                    .collect();
-                ast::walk_block(self, &with_handler.body);
-                for effect in added {
-                    self.current.shift_remove(&effect);
-                }
+                self.walk_granted(granted, |walker| {
+                    ast::walk_block(walker, &with_handler.body);
+                });
                 return;
             }
             Expr::Closure(closure) => {
@@ -1675,14 +1670,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .flat_map(|info| info.declared_effects.iter().cloned())
                     .collect();
                 let carried = expand_through_closure(&declared, self.index.closure);
-                let added: Vec<EffectRef> = carried
-                    .into_iter()
-                    .filter(|effect| self.current.insert(effect.clone()))
-                    .collect();
-                ast::walk_expr(self, expr);
-                for effect in added {
-                    self.current.shift_remove(&effect);
-                }
+                self.walk_granted(carried, |walker| ast::walk_expr(walker, expr));
                 return;
             }
             _ => {}
@@ -1692,6 +1680,22 @@ impl AstVisitor for SemEffectWalker<'_> {
 }
 
 impl SemEffectWalker<'_> {
+    /// Run `walk` holding `granted` besides what is held already.
+    fn walk_granted(
+        &mut self,
+        granted: impl IntoIterator<Item = EffectRef>,
+        walk: impl FnOnce(&mut Self),
+    ) {
+        let added: Vec<EffectRef> = granted
+            .into_iter()
+            .filter(|effect| self.current.insert(effect.clone()))
+            .collect();
+        walk(self);
+        for effect in added {
+            self.current.shift_remove(&effect);
+        }
+    }
+
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
         self.index.method_param_types(func_ref)
     }

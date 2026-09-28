@@ -860,7 +860,9 @@ pub(crate) struct CaptureEntry {
     pub(crate) type_id: TypeId,
 }
 
-/// Closure capture-analysis result recorded by [`super::super::Elaborator::resolve_closure`].
+/// What [`super::super::Elaborator::resolve_closure`] settles for reify and the
+/// effect checker: the capture analysis, and the types the closure was checked
+/// against.
 /// Keyed by the closure expression's [`AstId`] in
 /// [`TypeAnnotations::closure_captures`].
 #[derive(Clone)]
