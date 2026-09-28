@@ -1,0 +1,30 @@
+/// Test that every allocator hands out memory past 2 GiB: the asset leaves the
+/// heap 64 KiB below it, so a small allocation fits the memory as it is, and
+/// the large one crosses into the addresses a signed `i32` reads as negative.
+use { println, Stdout } from "core:cli";
+use { get } from "./sub/allocator_heap_past_2gib.wat" with { type: "wat" };
+
+export fn run() with Stdout {
+    let pages = builtin::memory_size();
+    let small = builtin::realloc(0, 0, 8, 1024);
+    assert builtin::memory_size() == pages, "a 1 KiB allocation grew the memory";
+
+    let size = 256 * 1024;
+    let large = builtin::realloc(0, 0, 8, size);
+    let end = large as u32 + size as u32;
+    assert (small as u32) < (large as u32) && end > 0x8000_0000;
+    builtin::memory_fill(large, 0x5A, size);
+    assert builtin::i32_load(large + size - 4) == 0x5A5A_5A5A;
+
+    let after = builtin::realloc(0, 0, 8, 1024);
+    assert after as u32 >= end;
+    builtin::realloc(large, size, 8, 0);
+    builtin::realloc(after, 1024, 8, 0);
+    let again = builtin::realloc(0, 0, 8, 1024);
+    builtin::i32_store(again, get());
+    assert builtin::i32_load(again) == 7;
+    println("ok");
+}
+
+__DATA__
+{"allocator": ["bump", "debug", "freelist"], "stdout": "ok\n"}

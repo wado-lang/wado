@@ -19,11 +19,21 @@ const { n: hfN, json: hfH } = readHeader(hf);
 const want = readHeader(readFileSync(headerPath)).json;
 delete want.__metadata__;
 
+const ITEM_BYTES = { F32: 4 };
+
 function hfTensor(name) {
   const t = hfH[name];
   if (!t) throw new Error(`missing ${name}`);
+  const item = ITEM_BYTES[t.dtype];
+  if (!item) throw new Error(`${name}: dtype ${t.dtype} is not supported`);
   const [b, e] = t.data_offsets;
-  return { dtype: t.dtype, shape: t.shape, bytes: hf.subarray(8 + hfN + b, 8 + hfN + e) };
+  // `subarray` clamps a range that runs past the end of a truncated file.
+  const bytes = hf.subarray(8 + hfN + b, 8 + hfN + e);
+  const want = item * t.shape.reduce((n, d) => n * d, 1);
+  if (bytes.length !== want) {
+    throw new Error(`${name}: ${bytes.length} bytes, its shape ${JSON.stringify(t.shape)} needs ${want}`);
+  }
+  return { dtype: t.dtype, shape: t.shape, bytes };
 }
 
 function expect(name, what, got, want) {

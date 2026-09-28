@@ -15,51 +15,83 @@
 /// The compiler selects one based on `--allocator` flag or target world,
 /// and DCE removes the unused implementations.
 
+// Addresses and sizes are `u32` here, and `realloc`'s `i32`s are cast at the
+// boundary: a 32-bit memory spans 4 GiB, and a signed comparison misorders the
+// upper half.
+
 /// The heap frontier, as an offset from `builtin::heap_base()`. Starts at 8 to
 /// avoid returning address 0 (null sentinel).
-global mut heap_offset: i32 = 8;
+global mut heap_offset: u32 = 8;
 
 /// The address of the heap frontier.
-fn frontier() -> i32 {
-    return builtin::heap_base() + heap_offset;
+fn frontier() -> u32 {
+    return builtin::heap_base() as u32 + heap_offset;
 }
 
 /// Move the heap frontier to address `addr`.
-fn set_frontier(addr: i32) {
-    heap_offset = addr - builtin::heap_base();
+fn set_frontier(addr: u32) {
+    heap_offset = addr - builtin::heap_base() as u32;
+}
+
+/// The word at `addr`.
+fn load(addr: u32) -> u32 {
+    return builtin::i32_load(addr as i32) as u32;
+}
+
+/// Store `value` as the word at `addr`.
+fn store(addr: u32, value: u32) {
+    builtin::i32_store(addr as i32, value as i32);
 }
 
 /// The Wasm linear memory page size, the unit `memory.size` and `memory.grow` count in.
-global PAGE_SIZE: i32 = 65536;
+global PAGE_SIZE: u64 = 65536;
 
-/// Grow linear memory using a doubling strategy up to 16 MB, then 16 MB steps.
-/// Traps when the host refuses to grow, rather than handing out a pointer past
-/// the end of memory.
-fn grow_memory(new_offset: i32) {
-    let current_bytes = builtin::memory_size() * PAGE_SIZE;
-    let deficit = new_offset - current_bytes;
+/// The size of linear memory, in bytes.
+fn memory_bytes() -> u64 {
+    return builtin::memory_size() as u64 * PAGE_SIZE;
+}
+
+/// The pages that hold `bytes`.
+fn pages(bytes: u64) -> i32 {
+    return ((bytes + PAGE_SIZE - 1) / PAGE_SIZE) as i32;
+}
+
+/// Grow linear memory to hold `end` bytes, using a doubling strategy up to
+/// 16 MB, then 16 MB steps. Traps when the host refuses to grow, rather than
+/// handing out a pointer past the end of memory.
+fn grow_memory(end: u64) {
+    let current_bytes = memory_bytes();
+    let deficit = end - current_bytes;
     // Normal growth: double current size, capped at 16 MB
-    let sixteen_mb = 16 * 1024 * 1024;
+    let sixteen_mb: u64 = 16 * 1024 * 1024;
     let normal_grow = if current_bytes < sixteen_mb { current_bytes } else { sixteen_mb };
     // If deficit exceeds normal growth, round up to next power of two
-    let grow_bytes = if deficit > normal_grow { 1 << 32 - builtin::i32_clz(deficit - 1) } else { normal_grow };
-    let grow_pages = (grow_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
-    if builtin::memory_grow(grow_pages) < 0 {
+    let grow_bytes = if deficit > normal_grow {
+        (1 as u64) << (64 - builtin::i64_clz((deficit - 1) as i64)) as u64
+    } else {
+        normal_grow
+    };
+    // Near the memory's limit the rounded step can ask for more than is left.
+    if builtin::memory_grow(pages(grow_bytes)) < 0 && builtin::memory_grow(pages(deficit)) < 0 {
         builtin::unreachable();
     }
 }
 
 /// Take `size` bytes at the heap frontier, aligned to `align`, growing memory to
-/// fit them.
-fn bump(align: i32, size: i32) -> i32 {
-    let start = builtin::i32_and(frontier() + align - 1, 0 - align);
-    let end = start + size;
-    if end > builtin::memory_size() * PAGE_SIZE {
+/// fit them. Traps when they would end past the 32-bit address space.
+fn bump(align: u32, size: u32) -> u32 {
+    let mask = align as u64 - 1;
+    let start = (frontier() as u64 + mask) & ~mask;
+    let end = start + size as u64;
+    if end > 0xFFFF_FFFF {
+        builtin::unreachable();
+    }
+    if end > memory_bytes() {
         builtin::cold_path();
         grow_memory(end);
     }
-    set_frontier(end);
-    return start;
+    set_frontier(end as u32);
+    return start as u32;
 }
 
 /// Bump allocator — advances a pointer with alignment.
@@ -69,12 +101,12 @@ fn bump(align: i32, size: i32) -> i32 {
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // Free: rewind if this was the most recent allocation
     if newsize == 0 {
-        if oldptr + oldsize == frontier() {
-            set_frontier(oldptr);
+        if (oldptr + oldsize) as u32 == frontier() {
+            set_frontier(oldptr as u32);
         }
         return 0;
     }
-    return bump(align, newsize);
+    return bump(align as u32, newsize as u32) as i32;
 }
 
 /// Debug allocator — advances a pointer with alignment, never reuses freed memory.
@@ -84,12 +116,12 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // Free: poison freed memory with 0xFF, never reuse
     if newsize == 0 {
-        if oldsize > 0 {
+        if oldsize != 0 {
             builtin::memory_fill(oldptr, 0xFF, oldsize);
         }
         return 0;
     }
-    return bump(align, newsize);
+    return bump(align as u32, newsize as u32) as i32;
 }
 
 /// Free-list allocator — reclaims freed memory with a *coalescing*,
@@ -124,51 +156,53 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
 /// Selected by `--allocator freelist` (default for HTTP service world).
 
 /// Block size encoded in a boundary tag (clears the low 3 bits).
-fn fl_size(tag: i32) -> i32 {
-    return builtin::i32_and(tag, -8);
+fn fl_size(tag: u32) -> u32 {
+    return tag & ~7;
 }
 
 /// Used-bit of a boundary tag (1 = in use, 0 = free).
-fn fl_used(tag: i32) -> i32 {
-    return builtin::i32_and(tag, 1);
+fn fl_used(tag: u32) -> u32 {
+    return tag & 1;
 }
 
 /// Size-class bin index for a block of `size` bytes: an exact bin per
 /// 16-byte step for small blocks, bin 32 for everything larger.
-fn fl_bin(size: i32) -> i32 {
-    // `size` is always a block size >= 32 (the minimum block), so
-    // `size - 32` is non-negative and `>> 4` yields the exact quotient
-    // without the sign-correction a signed `/ 16` would compile to.
+fn fl_bin(size: u32) -> u32 {
     let k = size - 32 >> 4;
     return if k < 32 { k } else { 32 };
 }
 
+/// The address of the head of size-class bin `k`.
+fn fl_bin_slot(k: u32) -> u32 {
+    return builtin::heap_base() as u32 + 8 + k * 4;
+}
+
 /// Head of size-class bin `k` (0 when empty).
-fn fl_bin_head(k: i32) -> i32 {
-    return builtin::i32_load(builtin::heap_base() + 8 + k * 4);
+fn fl_bin_head(k: u32) -> u32 {
+    return load(fl_bin_slot(k));
 }
 
 /// Set the head of size-class bin `k`.
-fn fl_set_bin_head(k: i32, head: i32) {
-    builtin::i32_store(builtin::heap_base() + 8 + k * 4, head);
+fn fl_set_bin_head(k: u32, head: u32) {
+    store(fl_bin_slot(k), head);
 }
 
 /// Write the header and footer boundary tags of the block at `block`.
-fn fl_set_tags(block: i32, size: i32, used: i32) {
+fn fl_set_tags(block: u32, size: u32, used: u32) {
     // `size` is a multiple of 16 and `used` is 0 or 1, so `+` acts as `|`.
     let tag = size + used;
-    builtin::i32_store(block, tag);
-    builtin::i32_store(block + size - 8, tag);
+    store(block, tag);
+    store(block + size - 8, tag);
 }
 
 /// Insert `block` (of `size` bytes) at the head of its size-class bin.
-fn fl_push(block: i32, size: i32) {
+fn fl_push(block: u32, size: u32) {
     let k = fl_bin(size);
     let head = fl_bin_head(k);
-    builtin::i32_store(block + 8, head);
-    builtin::i32_store(block + 12, 0);
+    store(block + 8, head);
+    store(block + 12, 0);
     if head != 0 {
-        builtin::i32_store(head + 12, block);
+        store(head + 12, block);
     }
     fl_set_bin_head(k, block);
 }
@@ -179,26 +213,26 @@ fn fl_push(block: i32, size: i32) {
 /// coalescing on free. Deferring coalescing to cut those calls was tried
 /// and reverted: it roughly halved `wado serve` throughput by
 /// fragmenting the heap. Eager coalescing — and this hot path — stays.
-fn fl_unlink(block: i32) {
-    let next = builtin::i32_load(block + 8);
-    let prev = builtin::i32_load(block + 12);
+fn fl_unlink(block: u32) {
+    let next = load(block + 8);
+    let prev = load(block + 12);
     if prev == 0 {
         // Only a head block needs its bin index, so compute it here
         // rather than on every unlink.
-        let k = fl_bin(fl_size(builtin::i32_load(block)));
+        let k = fl_bin(fl_size(load(block)));
         fl_set_bin_head(k, next);
     } else {
-        builtin::i32_store(prev + 8, next);
+        store(prev + 8, next);
     }
     if next != 0 {
-        builtin::i32_store(next + 12, prev);
+        store(next + 12, prev);
     }
 }
 
 /// Mark the block at `block` (currently sized `block_size`) used for an
 /// allocation of `size` bytes, splitting off the remainder as a free
 /// block when it is large enough (>= the 32-byte minimum).
-fn fl_carve(block: i32, block_size: i32, size: i32) {
+fn fl_carve(block: u32, block_size: u32, size: u32) {
     let remainder = block_size - size;
     if remainder >= 32 {
         fl_set_tags(block, size, 1);
@@ -234,8 +268,8 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
         if oldptr == 0 {
             return 0;
         }
-        let mut block = oldptr - 8;
-        let header = builtin::i32_load(block);
+        let mut block = oldptr as u32 - 8;
+        let header = load(block);
         // Double-free guard: the block is already marked free.
         if fl_used(header) == 0 {
             builtin::unreachable();
@@ -245,7 +279,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
         // Coalesce with the physically-following block when it is free.
         let next = block + size;
         if next < frontier() {
-            let next_header = builtin::i32_load(next);
+            let next_header = load(next);
             if fl_used(next_header) == 0 {
                 fl_unlink(next);
                 size += fl_size(next_header);
@@ -254,8 +288,8 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
         // Coalesce with the physically-preceding block when it is free.
         // The first block sits at heap offset 152, so a block past it has a
         // predecessor, and `block - 8` holds its footer.
-        if block > builtin::heap_base() + 152 {
-            let prev_footer = builtin::i32_load(block - 8);
+        if block > builtin::heap_base() as u32 + 152 {
+            let prev_footer = load(block - 8);
             if fl_used(prev_footer) == 0 {
                 let prev_size = fl_size(prev_footer);
                 let prev = block - prev_size;
@@ -273,7 +307,11 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     // Allocate. Round the payload up to 16 bytes and add the boundary-tag
     // overhead; the result is a multiple of 16 (keeping every block's
     // payload 16-byte aligned) and at least the 32-byte minimum block.
-    let size = builtin::i32_and(newsize + 15, -16) + 16;
+    let wide_size = ((newsize as u32 as u64 + 15) & ~15) + 16;
+    if wide_size > 0xFFFF_FFFF {
+        builtin::unreachable();
+    }
+    let size = wide_size as u32;
 
     // Exact size-class bin first, then larger small bins: any block in a
     // bin at index >= fl_bin(size) is large enough.
@@ -281,10 +319,10 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     while j < 32 {
         let b = fl_bin_head(j);
         if b != 0 {
-            let block_size = fl_size(builtin::i32_load(b));
+            let block_size = fl_size(load(b));
             fl_unlink(b);
             fl_carve(b, block_size, size);
-            return b + 8;
+            return (b + 8) as i32;
         }
         j += 1;
     }
@@ -292,18 +330,18 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     // Large bin: first-fit over the catch-all list.
     let mut curr = fl_bin_head(32);
     while curr != 0 {
-        let block_size = fl_size(builtin::i32_load(curr));
+        let block_size = fl_size(load(curr));
         if block_size >= size {
             fl_unlink(curr);
             fl_carve(curr, block_size, size);
-            return curr + 8;
+            return (curr + 8) as i32;
         }
-        curr = builtin::i32_load(curr + 8);
+        curr = load(curr + 8);
     }
 
     // No fit: bump-allocate a fresh block at the heap frontier, which keeps
     // its congruence to 8 (mod 16) because every block size is a multiple of 16.
     let block = bump(1, size);
     fl_set_tags(block, size, 1);
-    return block + 8;
+    return (block + 8) as i32;
 }
