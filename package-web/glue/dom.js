@@ -39,6 +39,7 @@ const $someObject = $some($object);
 const $nullableHandle = $nullable($handle);
 const $someNumber = $some(Number);
 const $nullableBigInt = $nullable(BigInt);
+const $list = (f) => (values) => Array.from(values, (value) => f(value));
 
 // The component's `wado:callback/callback` export, which calls a closure back.
 // The component hands it over once instantiated.
@@ -91,6 +92,9 @@ export const event = {
   },
   currentTarget(self) {
     return $nullableHandle($object(self).currentTarget);
+  },
+  composedPath(self) {
+    return $list($handle)($object(self).composedPath());
   },
   eventPhase(self) {
     return $object(self).eventPhase;
@@ -236,6 +240,9 @@ export const element = {
   getSpatialNavigationContainer(self) {
     return $handle($object(self).getSpatialNavigationContainer());
   },
+  focusableAreas(self) {
+    return $list($handle)($object(self).focusableAreas());
+  },
   checkVisibility(self) {
     return $object(self).checkVisibility();
   },
@@ -304,6 +311,9 @@ export const element = {
   },
   hasAttributes(self) {
     return $object(self).hasAttributes();
+  },
+  getAttributeNames(self) {
+    return $object(self).getAttributeNames();
   },
   getAttribute(self, qualifiedName) {
     return $object(self).getAttribute(qualifiedName);
@@ -476,11 +486,23 @@ export const element = {
   setAriaColSpan(self, value) {
     $object(self).ariaColSpan = value;
   },
+  ariaControlsElements(self) {
+    return $nullable($list($handle))($object(self).ariaControlsElements);
+  },
+  setAriaControlsElements(self, value) {
+    $object(self).ariaControlsElements = $some($list($object))(value);
+  },
   ariaCurrent(self) {
     return $object(self).ariaCurrent;
   },
   setAriaCurrent(self, value) {
     $object(self).ariaCurrent = value;
+  },
+  ariaDescribedByElements(self) {
+    return $nullable($list($handle))($object(self).ariaDescribedByElements);
+  },
+  setAriaDescribedByElements(self, value) {
+    $object(self).ariaDescribedByElements = $some($list($object))(value);
   },
   ariaDescription(self) {
     return $object(self).ariaDescription;
@@ -488,17 +510,35 @@ export const element = {
   setAriaDescription(self, value) {
     $object(self).ariaDescription = value;
   },
+  ariaDetailsElements(self) {
+    return $nullable($list($handle))($object(self).ariaDetailsElements);
+  },
+  setAriaDetailsElements(self, value) {
+    $object(self).ariaDetailsElements = $some($list($object))(value);
+  },
   ariaDisabled(self) {
     return $object(self).ariaDisabled;
   },
   setAriaDisabled(self, value) {
     $object(self).ariaDisabled = value;
   },
+  ariaErrorMessageElements(self) {
+    return $nullable($list($handle))($object(self).ariaErrorMessageElements);
+  },
+  setAriaErrorMessageElements(self, value) {
+    $object(self).ariaErrorMessageElements = $some($list($object))(value);
+  },
   ariaExpanded(self) {
     return $object(self).ariaExpanded;
   },
   setAriaExpanded(self, value) {
     $object(self).ariaExpanded = value;
+  },
+  ariaFlowToElements(self) {
+    return $nullable($list($handle))($object(self).ariaFlowToElements);
+  },
+  setAriaFlowToElements(self, value) {
+    $object(self).ariaFlowToElements = $some($list($object))(value);
   },
   ariaHasPopup(self) {
     return $object(self).ariaHasPopup;
@@ -529,6 +569,12 @@ export const element = {
   },
   setAriaLabel(self, value) {
     $object(self).ariaLabel = value;
+  },
+  ariaLabelledByElements(self) {
+    return $nullable($list($handle))($object(self).ariaLabelledByElements);
+  },
+  setAriaLabelledByElements(self, value) {
+    $object(self).ariaLabelledByElements = $some($list($object))(value);
   },
   ariaLevel(self) {
     return $object(self).ariaLevel;
@@ -565,6 +611,12 @@ export const element = {
   },
   setAriaOrientation(self, value) {
     $object(self).ariaOrientation = value;
+  },
+  ariaOwnsElements(self) {
+    return $nullable($list($handle))($object(self).ariaOwnsElements);
+  },
+  setAriaOwnsElements(self, value) {
+    $object(self).ariaOwnsElements = $some($list($object))(value);
   },
   ariaPlaceholder(self) {
     return $object(self).ariaPlaceholder;
@@ -1169,6 +1221,9 @@ export const document = {
   elementFromPoint(self, x, y) {
     return $nullableHandle($object(self).elementFromPoint(x, y));
   },
+  elementsFromPoint(self, x, y) {
+    return $list($handle)($object(self).elementsFromPoint(x, y));
+  },
   scrollingElement(self) {
     return $nullableHandle($object(self).scrollingElement);
   },
@@ -1267,6 +1322,12 @@ export const document = {
   },
   close(self) {
     $object(self).close();
+  },
+  write(self, text) {
+    $object(self).write(...text);
+  },
+  writeln(self, text) {
+    $object(self).writeln(...text);
   },
   hasFocus(self) {
     return $object(self).hasFocus();

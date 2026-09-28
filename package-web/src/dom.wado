@@ -32,6 +32,9 @@ pub resource Event {
     #[cm("wado-lang:web/event#current-target")]
     #[cm_params("self")]
     fn current_target(&self) -> Option<EventTarget>;
+    #[cm("wado-lang:web/event#composed-path")]
+    #[cm_params("self")]
+    fn composed_path(&self) -> List<EventTarget>;
     #[cm("wado-lang:web/event#event-phase")]
     #[cm_params("self")]
     fn event_phase(&self) -> u16;
@@ -178,6 +181,9 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#get-spatial-navigation-container")]
     #[cm_params("self")]
     fn get_spatial_navigation_container(&self) -> Node;
+    #[cm("wado-lang:web/element#focusable-areas")]
+    #[cm_params("self")]
+    fn focusable_areas(&self) -> List<Node>;
     #[cm("wado-lang:web/element#check-visibility")]
     #[cm_params("self")]
     fn check_visibility(&self) -> bool;
@@ -247,6 +253,9 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#has-attributes")]
     #[cm_params("self")]
     fn has_attributes(&self) -> bool;
+    #[cm("wado-lang:web/element#get-attribute-names")]
+    #[cm_params("self")]
+    fn get_attribute_names(&self) -> List<String>;
     #[cm("wado-lang:web/element#get-attribute")]
     #[cm_params("self", "qualified-name")]
     fn get_attribute(&self, qualified_name: String) -> Option<String>;
@@ -418,30 +427,60 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#set-aria-col-span")]
     #[cm_params("self", "value")]
     fn set_aria_col_span(&self, value: Option<String>);
+    #[cm("wado-lang:web/element#aria-controls-elements")]
+    #[cm_params("self")]
+    fn aria_controls_elements(&self) -> Option<List<Element>>;
+    #[cm("wado-lang:web/element#set-aria-controls-elements")]
+    #[cm_params("self", "value")]
+    fn set_aria_controls_elements(&self, value: Option<List<Element>>);
     #[cm("wado-lang:web/element#aria-current")]
     #[cm_params("self")]
     fn aria_current(&self) -> Option<String>;
     #[cm("wado-lang:web/element#set-aria-current")]
     #[cm_params("self", "value")]
     fn set_aria_current(&self, value: Option<String>);
+    #[cm("wado-lang:web/element#aria-described-by-elements")]
+    #[cm_params("self")]
+    fn aria_described_by_elements(&self) -> Option<List<Element>>;
+    #[cm("wado-lang:web/element#set-aria-described-by-elements")]
+    #[cm_params("self", "value")]
+    fn set_aria_described_by_elements(&self, value: Option<List<Element>>);
     #[cm("wado-lang:web/element#aria-description")]
     #[cm_params("self")]
     fn aria_description(&self) -> Option<String>;
     #[cm("wado-lang:web/element#set-aria-description")]
     #[cm_params("self", "value")]
     fn set_aria_description(&self, value: Option<String>);
+    #[cm("wado-lang:web/element#aria-details-elements")]
+    #[cm_params("self")]
+    fn aria_details_elements(&self) -> Option<List<Element>>;
+    #[cm("wado-lang:web/element#set-aria-details-elements")]
+    #[cm_params("self", "value")]
+    fn set_aria_details_elements(&self, value: Option<List<Element>>);
     #[cm("wado-lang:web/element#aria-disabled")]
     #[cm_params("self")]
     fn aria_disabled(&self) -> Option<String>;
     #[cm("wado-lang:web/element#set-aria-disabled")]
     #[cm_params("self", "value")]
     fn set_aria_disabled(&self, value: Option<String>);
+    #[cm("wado-lang:web/element#aria-error-message-elements")]
+    #[cm_params("self")]
+    fn aria_error_message_elements(&self) -> Option<List<Element>>;
+    #[cm("wado-lang:web/element#set-aria-error-message-elements")]
+    #[cm_params("self", "value")]
+    fn set_aria_error_message_elements(&self, value: Option<List<Element>>);
     #[cm("wado-lang:web/element#aria-expanded")]
     #[cm_params("self")]
     fn aria_expanded(&self) -> Option<String>;
     #[cm("wado-lang:web/element#set-aria-expanded")]
     #[cm_params("self", "value")]
     fn set_aria_expanded(&self, value: Option<String>);
+    #[cm("wado-lang:web/element#aria-flow-to-elements")]
+    #[cm_params("self")]
+    fn aria_flow_to_elements(&self) -> Option<List<Element>>;
+    #[cm("wado-lang:web/element#set-aria-flow-to-elements")]
+    #[cm_params("self", "value")]
+    fn set_aria_flow_to_elements(&self, value: Option<List<Element>>);
     #[cm("wado-lang:web/element#aria-has-popup")]
     #[cm_params("self")]
     fn aria_has_popup(&self) -> Option<String>;
@@ -472,6 +511,12 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#set-aria-label")]
     #[cm_params("self", "value")]
     fn set_aria_label(&self, value: Option<String>);
+    #[cm("wado-lang:web/element#aria-labelled-by-elements")]
+    #[cm_params("self")]
+    fn aria_labelled_by_elements(&self) -> Option<List<Element>>;
+    #[cm("wado-lang:web/element#set-aria-labelled-by-elements")]
+    #[cm_params("self", "value")]
+    fn set_aria_labelled_by_elements(&self, value: Option<List<Element>>);
     #[cm("wado-lang:web/element#aria-level")]
     #[cm_params("self")]
     fn aria_level(&self) -> Option<String>;
@@ -508,6 +553,12 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#set-aria-orientation")]
     #[cm_params("self", "value")]
     fn set_aria_orientation(&self, value: Option<String>);
+    #[cm("wado-lang:web/element#aria-owns-elements")]
+    #[cm_params("self")]
+    fn aria_owns_elements(&self) -> Option<List<Element>>;
+    #[cm("wado-lang:web/element#set-aria-owns-elements")]
+    #[cm_params("self", "value")]
+    fn set_aria_owns_elements(&self, value: Option<List<Element>>);
     #[cm("wado-lang:web/element#aria-placeholder")]
     #[cm_params("self")]
     fn aria_placeholder(&self) -> Option<String>;
@@ -1114,6 +1165,9 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#element-from-point")]
     #[cm_params("self", "x", "y")]
     fn element_from_point(&self, x: f64, y: f64) -> Option<Element>;
+    #[cm("wado-lang:web/document#elements-from-point")]
+    #[cm_params("self", "x", "y")]
+    fn elements_from_point(&self, x: f64, y: f64) -> List<Element>;
     #[cm("wado-lang:web/document#scrolling-element")]
     #[cm_params("self")]
     fn scrolling_element(&self) -> Option<Element>;
@@ -1212,6 +1266,12 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#close")]
     #[cm_params("self")]
     fn close(&self);
+    #[cm("wado-lang:web/document#write")]
+    #[cm_params("self", "text")]
+    fn write(&self, text: List<String>);
+    #[cm("wado-lang:web/document#writeln")]
+    #[cm_params("self", "text")]
+    fn writeln(&self, text: List<String>);
     #[cm("wado-lang:web/document#has-focus")]
     #[cm_params("self")]
     fn has_focus(&self) -> bool;

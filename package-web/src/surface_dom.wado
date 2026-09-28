@@ -48,6 +48,7 @@ struct SurfaceNode {
 struct SurfaceEvent {
     type: String,
     target: i32,
+    dispatching: bool,
 }
 
 struct Listener {
@@ -459,12 +460,15 @@ impl EventTarget for SurfaceDom {
 
     fn dispatch_event(&mut self, this: &EventTarget, event: Event) -> bool {
         let target = self.index(*this);
-        self.events[self.event_index(event)].target = target;
+        let index = self.event_index(event);
+        self.events[index].target = target;
+        self.events[index].dispatching = true;
         let path = self.event_path(target);
         for let mut i = path.len() - 1; i >= 0; i -= 1 {
             self.invoke(path[i], event, true);
         }
         self.invoke(target, event, false);
+        self.events[index].dispatching = false;
         resume true;
     }
 
@@ -473,7 +477,7 @@ impl EventTarget for SurfaceDom {
 
 impl Event for SurfaceDom {
     fn new(&mut self, type: String) -> Event {
-        self.events.push(SurfaceEvent { type, target: NO_NODE });
+        self.events.push(SurfaceEvent { type, target: NO_NODE, dispatching: false });
         resume (EVENT_CLASS * HANDLE_CLASS_STRIDE + (self.events.len() - 1) as f64) as Event;
     }
 
@@ -488,6 +492,17 @@ impl Event for SurfaceDom {
         } else {
             resume Option::Some(self.handle(target) as EventTarget);
         }
+    }
+
+    fn composed_path(&mut self, this: &Event) -> List<EventTarget> {
+        let event = &self.events[self.event_index(*this)];
+        let mut path: List<EventTarget> = [];
+        if event.dispatching {
+            for let index of self.event_path(event.target) {
+                path.push(self.handle(index) as EventTarget);
+            }
+        }
+        resume path;
     }
 
     ..trap
@@ -671,6 +686,14 @@ impl Element for SurfaceDom {
         let index = self.index(*this);
         self.nodes[index].attributes[qualified_name.to_ascii_lowercase()] = value;
         resume ();
+    }
+
+    fn get_attribute_names(&mut self, this: &Element) -> List<String> {
+        let mut names: List<String> = [];
+        for let [name, _] of self.nodes[self.index(*this)].attributes.entries() {
+            names.push(*name);
+        }
+        resume names;
     }
 
     fn has_attribute(&mut self, this: &Element, qualified_name: String) -> bool {

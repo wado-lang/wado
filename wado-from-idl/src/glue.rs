@@ -39,6 +39,7 @@ const $someObject = $some($object);
 const $nullableHandle = $nullable($handle);
 const $someNumber = $some(Number);
 const $nullableBigInt = $nullable(BigInt);
+const $list = (f) => (values) => Array.from(values, (value) => f(value));
 
 // The component's `wado:callback/callback` export, which calls a closure back.
 // The component hands it over once instantiated.
@@ -191,15 +192,30 @@ fn write_function(out: &mut String, function: &WadoFunction, member: &JsMember) 
         .map(|(p, name)| from_guest(&p.ty, name))
         .collect();
     let receiver = || args.first().expect("a member of the receiver");
-    let call_args = |skip: usize| args[skip..].join(", ");
+    let call_args = |skip: usize, spread: bool| {
+        let mut call = args[skip..].to_vec();
+        if spread {
+            let last = call
+                .last_mut()
+                .expect("a variadic operation takes an argument");
+            *last = format!("...{last}");
+        }
+        call.join(", ")
+    };
     let value = match member {
         JsMember::Get(attribute) => format!("{}.{attribute}", receiver()),
         JsMember::Set(attribute) => format!("{}.{attribute} = {}", receiver(), args[1]),
-        JsMember::Call(operation) => format!("{}.{operation}({})", receiver(), call_args(1)),
-        JsMember::Static { interface, name } => {
-            format!("globalThis.{interface}.{name}({})", call_args(0))
+        JsMember::Call { name, spread } => {
+            format!("{}.{name}({})", receiver(), call_args(1, *spread))
         }
-        JsMember::New { interface } => format!("new globalThis.{interface}({})", call_args(0)),
+        JsMember::Static {
+            interface,
+            name,
+            spread,
+        } => format!("globalThis.{interface}.{name}({})", call_args(0, *spread)),
+        JsMember::New { interface, spread } => {
+            format!("new globalThis.{interface}({})", call_args(0, *spread))
+        }
         JsMember::Global => "globalThis".to_string(),
         JsMember::GlobalGet(attribute) => format!("globalThis.{attribute}"),
     };
@@ -221,7 +237,7 @@ fn from_guest(ty: &WadoType, value: &str) -> String {
     if let WadoType::Callback { params, .. } = ty {
         return callback(params, value);
     }
-    apply(conversion(ty).map(|(to_dom, _)| to_dom), value)
+    apply(conversion(ty, Direction::ToDom), value)
 }
 
 /// The function calling back the closure `key` names, which takes `params`.
@@ -247,34 +263,43 @@ fn argument_word(ty: &WadoType) -> &'static str {
 
 /// `value`, as the DOM returns it, in the form jco lowers to the guest.
 fn to_guest(ty: &WadoType, value: &str) -> String {
-    apply(conversion(ty).map(|(_, to_guest)| to_guest), value)
+    apply(conversion(ty, Direction::ToGuest), value)
 }
 
-fn apply(function: Option<&str>, value: &str) -> String {
+fn apply(function: Option<String>, value: &str) -> String {
     function.map_or_else(|| value.to_string(), |f| format!("{f}({value})"))
 }
 
-/// The functions converting a `ty` to the DOM and back, where jco's own form
-/// differs. A `None` crosses as `undefined`, which the DOM reads as `null`.
-fn conversion(ty: &WadoType) -> Option<(&'static str, &'static str)> {
-    match ty {
-        WadoType::Option(inner) => Conversion::of(inner).map(|c| c.functions(true)),
-        ty => Conversion::of(ty).map(|c| c.functions(false)),
-    }
-}
-
 #[derive(Clone, Copy)]
-enum Conversion {
-    Handle,
-    BigInt,
+enum Direction {
+    ToDom,
+    ToGuest,
 }
 
-impl Conversion {
-    fn of(ty: &WadoType) -> Option<Self> {
-        match ty {
-            WadoType::Named(_) => Some(Self::Handle),
-            WadoType::Borrow(inner) => Self::of(inner),
-            WadoType::I64 | WadoType::U64 => Some(Self::BigInt),
+/// The function converting a `ty` in `direction`, where jco's own form differs
+/// from the DOM's. A `None` crosses as `undefined`, which the DOM reads as `null`.
+fn conversion(ty: &WadoType, direction: Direction) -> Option<String> {
+    let function = match (ty, direction) {
+        (WadoType::Named(_), Direction::ToDom) => "$object",
+        (WadoType::Named(_), Direction::ToGuest) => "$handle",
+        (WadoType::I64 | WadoType::U64, Direction::ToDom) => "Number",
+        (WadoType::I64 | WadoType::U64, Direction::ToGuest) => "BigInt",
+        (WadoType::Borrow(inner), _) => return conversion(inner, direction),
+        (WadoType::Option(inner), _) => {
+            let inner = conversion(inner, direction)?;
+            return Some(match (inner.as_str(), direction) {
+                ("$object", Direction::ToDom) => "$someObject".to_string(),
+                ("Number", Direction::ToDom) => "$someNumber".to_string(),
+                ("$handle", Direction::ToGuest) => "$nullableHandle".to_string(),
+                ("BigInt", Direction::ToGuest) => "$nullableBigInt".to_string(),
+                (_, Direction::ToDom) => format!("$some({inner})"),
+                (_, Direction::ToGuest) => format!("$nullable({inner})"),
+            });
+        }
+        (WadoType::List(element), _) => {
+            return conversion(element, direction).map(|f| format!("$list({f})"));
+        }
+        (
             WadoType::Bool
             | WadoType::I8
             | WadoType::I16
@@ -284,29 +309,21 @@ impl Conversion {
             | WadoType::U32
             | WadoType::F32
             | WadoType::F64
-            | WadoType::String => None,
-            WadoType::Option(_)
-            | WadoType::Char
+            | WadoType::String,
+            _,
+        ) => return None,
+        (
+            WadoType::Char
             | WadoType::I128
             | WadoType::U128
             | WadoType::Result { .. }
-            | WadoType::List(_)
             | WadoType::TreeMap(..)
             | WadoType::Tuple(_)
             | WadoType::Stream(_)
             | WadoType::Future(_)
-            | WadoType::Callback { .. } => {
-                unreachable!("the WebIDL frontend lowers to no {ty:?} here")
-            }
-        }
-    }
-
-    const fn functions(self, optional: bool) -> (&'static str, &'static str) {
-        match (self, optional) {
-            (Self::Handle, false) => ("$object", "$handle"),
-            (Self::Handle, true) => ("$someObject", "$nullableHandle"),
-            (Self::BigInt, false) => ("Number", "BigInt"),
-            (Self::BigInt, true) => ("$someNumber", "$nullableBigInt"),
-        }
-    }
+            | WadoType::Callback { .. },
+            _,
+        ) => unreachable!("the WebIDL frontend lowers to no {ty:?} here"),
+    };
+    Some(function.to_string())
 }

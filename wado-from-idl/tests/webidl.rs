@@ -332,13 +332,6 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             ],
             "",
         ),
-        // A variadic has no default to fall back on, so the member goes.
-        operation(
-            "prepend",
-            &plain("undefined"),
-            &[variadic("nodes", &plain("Node"))],
-            "",
-        ),
         // Two overloads that both lower are ambiguous, so neither is emitted.
         operation("alert", &plain("undefined"), &[], ""),
         operation(
@@ -370,10 +363,117 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             "Element.attributes: `NamedNodeMap` is outside the slice",
             "Element.request_fullscreen: `Promise<…>`",
             "Element.append: `nodes`: union of 2 expressible types",
-            "Element.prepend: `nodes`: variadic",
             "Element.alert: 2 overloads",
             "Element.(getter): getter operation",
         ]
+    );
+}
+
+fn generic(name: &str, argument: &str, nullable: bool) -> String {
+    format!(
+        r#"{{"type": "attribute-type", "extAttrs": [], "generic": "{name}", "nullable": {nullable}, "union": false, "idlType": [{argument}]}}"#
+    )
+}
+
+#[test]
+fn a_sequence_or_frozen_array_is_a_list() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "getAttributeNames",
+                &generic("sequence", &plain("DOMString"), false),
+                &[],
+                "",
+            ),
+            attribute(
+                "ariaOwnsElements",
+                &generic("FrozenArray", &plain("Element"), true),
+                false,
+            ),
+            operation(
+                "composedPath",
+                &generic("sequence", &nullable("Node"), false),
+                &[argument(
+                    "nodes",
+                    &generic("sequence", &plain("Node"), false),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+            attribute(
+                "attributes",
+                &generic("sequence", &plain("NamedNodeMap"), false),
+                true,
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains("fn get_attribute_names(&self) -> List<String>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn aria_owns_elements(&self) -> Option<List<Element>>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn set_aria_owns_elements(&self, value: Option<List<Element>>);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn composed_path(&self, nodes: List<Node>) -> List<Option<Node>>;"),
+        "{code}"
+    );
+    assert_eq!(
+        skipped,
+        ["Element.attributes: `NamedNodeMap` is outside the slice"]
+    );
+}
+
+#[test]
+fn a_variadic_argument_is_a_trailing_list() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "prepend",
+                &plain("undefined"),
+                &[variadic("nodes", &plain("Node"))],
+                "",
+            ),
+            operation(
+                "toggle",
+                &plain("undefined"),
+                &[
+                    argument("force", &plain("boolean"), false, "null"),
+                    variadic("tokens", &plain("DOMString")),
+                ],
+                "",
+            ),
+            operation(
+                "adopt",
+                &plain("undefined"),
+                &[variadic("maps", &plain("NamedNodeMap"))],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains("fn prepend(&self, nodes: List<Node>);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn toggle(&self, force: bool, tokens: List<String>);"),
+        "{code}"
+    );
+    assert_eq!(
+        skipped,
+        ["Element.adopt: `maps`: `NamedNodeMap` is outside the slice"]
     );
 }
 

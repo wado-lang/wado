@@ -216,6 +216,18 @@ test "attributes are set, read and removed" {
     };
 }
 
+test "attribute names come in the order the attributes were set" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let el = Dom::document().create_element("a", null);
+        assert el.get_attribute_names() == [];
+        el.set_attribute("title", "t");
+        el.set_attribute("HREF", "/home");
+        el.set_attribute("title", "u");
+        assert el.get_attribute_names() == ["title", "href"];
+    };
+}
+
 test "get_html serializes an element's children" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
@@ -428,5 +440,23 @@ test "a listener sees the event and may call the DOM" {
         assert event.target() == null;
         body.dispatch_event(event);
         assert body.id() == "pinged";
+    };
+}
+
+test "an event's composed path runs from its target to the window, while it is dispatched" {
+    let mut dom = SurfaceDom::new();
+    let mut path: List<EventTarget> = [];
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        body.add_event_listener("ping", |e: Event| path = e.composed_path(), null);
+        let event = Event::new("ping");
+        assert event.composed_path() == [];
+        body.dispatch_event(event);
+        assert path == [
+            body as EventTarget, doc.document_element().unwrap() as EventTarget, doc as EventTarget,
+            Dom::window() as EventTarget,
+        ];
+        assert event.composed_path() == [];
     };
 }

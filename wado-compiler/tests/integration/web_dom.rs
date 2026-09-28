@@ -6,7 +6,7 @@ use crate::common::{WEB_PACKAGE, compile_against_web};
 /// A program whose `body` runs with `el`, a fresh `Element`, in scope.
 fn on_an_element(body: &str) -> String {
     format!(
-        "use {{ Dom, Node }} from \"{WEB_PACKAGE}\";\n\
+        "use {{ Dom, Element, Node }} from \"{WEB_PACKAGE}\";\n\
          export fn run() with Dom {{\n\
              let doc = Dom::document();\n\
              let el = doc.create_element(\"div\", null);\n\
@@ -89,6 +89,21 @@ fn an_optional_extern_handle_argument_keeps_the_declared_option() {
          assert el.is_equal_node(other);",
     ));
     assert!(wat.contains("wado-lang:web/node"), "{wat}");
+}
+
+/// A `sequence` crosses as a CM `list`, of handles as of strings, in either
+/// direction, and a variadic argument as the list the glue spreads.
+#[test]
+fn a_list_of_handles_or_strings_crosses_the_boundary() {
+    let wat = compile_to_wat(&on_an_element(
+        "assert el.get_attribute_names().len() == 0;\n\
+         let areas: List<Element> = [el];\n\
+         el.set_aria_owns_elements(Option::Some(areas));\n\
+         assert el.focusable_areas().len() == 0;\n\
+         doc.write([\"a\", \"b\"]);",
+    ));
+    assert!(wat.contains("(list string)"), "{wat}");
+    assert!(wat.contains("(list f64)"), "{wat}");
 }
 
 /// Compile `source`, holding it to its warnings as well: a program this slice

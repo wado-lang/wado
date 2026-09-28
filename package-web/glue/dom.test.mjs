@@ -53,6 +53,33 @@ test("an element that is no input does not narrow to one", async () => {
   assert.equal(greeting.textContent, "Hello, stranger!");
 });
 
+test("a sequence crosses as a list, converting each element", async () => {
+  const { global, document: documentGlue, element, event, eventTarget } = await import(glue);
+  install('<div id="div" lang="en" title="t"></div>');
+  const div = documentGlue.getElementById(global.document(), "div");
+  assert.deepEqual(element.getAttributeNames(div), ["id", "lang", "title"]);
+
+  const ping = event.new("ping", undefined);
+  let path;
+  document.getElementById("div").addEventListener("ping", () => {
+    path = event.composedPath(ping);
+  });
+  eventTarget.dispatchEvent(div, ping);
+  const body = documentGlue.body(global.document());
+  // The path ends at the document and jsdom's own window.
+  assert.deepEqual(path.slice(0, 2), [div, body]);
+  assert.equal(path.length, 5);
+});
+
+test("a variadic argument is spread", async () => {
+  const { global, document: documentGlue } = await import(glue);
+  install("");
+  const calls = [];
+  document.write = (...text) => calls.push(text);
+  documentGlue.write(global.document(), ["a", "b"]);
+  assert.deepEqual(calls, [["a", "b"]]);
+});
+
 test("one object crosses as one handle, tagged with its nearest class", async () => {
   const { global, document: documentGlue } = await import(glue);
   install('<div id="div"></div><p id="p"></p><input id="input">');

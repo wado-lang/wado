@@ -158,18 +158,24 @@ pub struct WebIdlOutput {
 }
 
 /// What a function does with the JavaScript object it reaches. `Get`, `Set` and
-/// `Call` act on the receiver; the interface names are `WebIDL`'s.
+/// `Call` act on the receiver; the interface names are `WebIDL`'s. `spread` marks
+/// an operation whose last argument is variadic, which the glue spreads.
 #[derive(Debug)]
 pub enum JsMember {
     Get(String),
     Set(String),
-    Call(String),
+    Call {
+        name: String,
+        spread: bool,
+    },
     Static {
         interface: String,
         name: String,
+        spread: bool,
     },
     New {
         interface: String,
+        spread: bool,
     },
     /// The `[Global]` object itself.
     Global,
@@ -593,13 +599,21 @@ impl Lowering<'_> {
                 } else {
                     to_wado_identifier(name)
                 };
+                let spread = is_variadic(arguments);
                 let (receiver, js) = match special.as_str() {
-                    "" => (Some(self_param(iface)), JsMember::Call(name.clone())),
+                    "" => (
+                        Some(self_param(iface)),
+                        JsMember::Call {
+                            name: name.clone(),
+                            spread,
+                        },
+                    ),
                     "static" => (
                         None,
                         JsMember::Static {
                             interface: iface.to_string(),
                             name: name.clone(),
+                            spread,
                         },
                     ),
                     _ => return vec![Err((wado_name, format!("{special} operation")))],
@@ -623,6 +637,7 @@ impl Lowering<'_> {
                 }
                 let js = JsMember::New {
                     interface: iface.to_string(),
+                    spread: is_variadic(arguments),
                 };
                 vec![self.lower_operation(
                     iface,
@@ -658,21 +673,21 @@ impl Lowering<'_> {
         };
         let mut params: Vec<WadoParam> = receiver.into_iter().collect();
         for arg in arguments {
-            if arg.variadic {
-                return skip(format!("`{}`: variadic", arg.name));
-            }
             let ty = match self.lower_type(&arg.idl_type, Flow::In) {
-                Ok(ty) => ty,
+                // The glue spreads the list, so an empty one leaves the
+                // arguments out as the WebIDL call would.
+                Ok(ty) if arg.variadic => WadoType::List(Box::new(ty)),
+                Ok(ty) => optional(ty, arg.optional),
                 // A trailing optional the slice cannot express is left to
                 // its WebIDL default; a required one takes the member with it.
-                Err(_) if arg.optional => break,
+                Err(_) if arg.optional && !arg.variadic => break,
                 Err(reason) => return skip(format!("`{}`: {reason}", arg.name)),
             };
             // `None` is the argument left out, so the WebIDL default applies in
             // the browser. A CM operation admits no default argument.
             params.push(WadoParam {
                 name: to_wado_identifier(&arg.name),
-                ty: optional(ty, arg.optional),
+                ty,
                 wit_name: to_kebab_case(&arg.name),
             });
         }
@@ -682,12 +697,17 @@ impl Lowering<'_> {
     /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
     /// the one constituent the slice can express; `undefined` in it means nullable.
     fn lower_type(&self, ty: &IdlType, flow: Flow) -> std::result::Result<WadoType, String> {
-        if !ty.generic.is_empty() {
-            return Err(format!("`{}<…>`", ty.generic));
-        }
-        let (inner, nullable) = match &ty.inner {
-            IdlTypeInner::Name(name) => (self.lower_name(name, flow)?, ty.nullable),
-            IdlTypeInner::Types(constituents) => {
+        let (inner, nullable) = match (ty.generic.as_str(), &ty.inner) {
+            ("sequence" | "FrozenArray", IdlTypeInner::Types(arguments)) => {
+                let [element] = arguments.as_slice() else {
+                    panic!("`{}` takes one type argument", ty.generic);
+                };
+                let element = self.lower_type(element, flow)?;
+                (WadoType::List(Box::new(element)), ty.nullable)
+            }
+            (generic, _) if !generic.is_empty() => return Err(format!("`{generic}<…>`")),
+            (_, IdlTypeInner::Name(name)) => (self.lower_name(name, flow)?, ty.nullable),
+            (_, IdlTypeInner::Types(constituents)) => {
                 let mut expressible = Vec::new();
                 let mut reasons = Vec::new();
                 for constituent in constituents.iter().filter(|c| !is_undefined(c)) {
@@ -869,6 +889,10 @@ fn optional(ty: WadoType, wrap: bool) -> WadoType {
         ty if wrap => WadoType::Option(Box::new(ty)),
         ty => ty,
     }
+}
+
+fn is_variadic(arguments: &[Argument]) -> bool {
+    arguments.last().is_some_and(|arg| arg.variadic)
 }
 
 fn is_undefined(ty: &IdlType) -> bool {
