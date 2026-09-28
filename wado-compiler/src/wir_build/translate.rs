@@ -2404,18 +2404,13 @@ impl FunctionTranslator<'_, '_> {
             // the passes can add a divergent-width use). Behavior-neutral today
             // (late freeze sets `type_of` to the same type); load-bearing for
             // early promotion.
-            // A resource's zero is its handle scalar's: an unrestricted handle
-            // is the `u64` bits of an `f64`, so `sroa_variant_return`'s pad for
-            // its slot is an `i64`.
-            ValueKind::Int(value, int_ty) => {
-                let storage = self.type_table.handle_scalar(int_ty).unwrap_or(int_ty);
-                match self.type_table.get(storage) {
-                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-                        WirInstr::I64Const(value as i64)
-                    }
-                    _ => WirInstr::I32Const(value as i32),
-                }
-            }
+            // The width is the storage's, whatever the type: an unrestricted
+            // resource is the `u64` bits of an `f64`, so the zero
+            // `sroa_variant_return` pads its slot with is an `i64`.
+            ValueKind::Int(value, int_ty) => match self.wir_type(int_ty) {
+                WirType::I64 | WirType::U64 => WirInstr::I64Const(value as i64),
+                _ => WirInstr::I32Const(value as i32),
+            },
             ValueKind::Float(bits, float_ty) => match self.type_table.get(float_ty) {
                 ResolvedType::Primitive(PrimitiveType::F32) => {
                     WirInstr::F32Const(f64::from_bits(bits) as f32)

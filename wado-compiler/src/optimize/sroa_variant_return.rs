@@ -744,7 +744,11 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
                 continue;
             };
             assert!(
-                site.expected == layout.tuple_type,
+                same_type(
+                    &project.type_table.borrow(),
+                    site.expected,
+                    layout.tuple_type
+                ),
                 "variant-return SROA left local {local} in `{}` typed by the variant \
                  its callee no longer returns",
                 func.name
@@ -2045,8 +2049,10 @@ fn rewrite_call_sites(
             }
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
             let root = body.root;
-            let bound: IndexMap<u32, &Candidate> =
-                bound.iter().map(|(&l, f)| (l, &candidates[f])).collect();
+            let bound: IndexMap<u32, Candidate> = bound
+                .iter()
+                .map(|(&l, f)| (l, candidates[f].clone()))
+                .collect();
             let mut cx = SiteCx {
                 bound: &bound,
                 names: &names,
@@ -2077,66 +2083,79 @@ fn scalarize_variant_locals(project: &NirPackage, dirty: &[FuncId], touched: &mu
         let Some(mut body) = func.body.take() else {
             continue;
         };
-        // `sroa` splits only a local one `Let` binds; a tuple it leaves whole
-        // allocates at every write, `null` included.
-        let rebound = arena_query::rebound_locals(&body);
-        let mut candidates: IndexMap<u32, Candidate> = IndexMap::default();
-        for (local, l) in func.locals.iter().enumerate() {
-            let local = u32::try_from(local).expect("too many locals");
-            if func.address_taken_locals.contains(&local)
-                || func.stores_aliased_locals.contains(&local)
-                || rebound.contains(&local)
-                || func.params.iter().any(|p| p.local_index == local)
-            {
-                continue;
-            }
-            let key = project.type_table.borrow().type_key(l.type_id);
-            let cand = layouts
-                .entry(key)
-                .or_insert_with(|| local_candidate(project, l.type_id));
-            if let Some(cand) = cand {
-                candidates.insert(local, cand.clone());
-            }
-        }
-        if !candidates.is_empty() {
-            let type_table = project.type_table.borrow();
-            let rebind = Rebind::new(&func, &type_table);
-            retain_rewritable_locals(&body, &mut candidates, &rebind);
-            if !candidates.is_empty() {
-                let span = func.span;
-                for &local in candidates.keys() {
-                    compiler_trace!(
-                        "sroa_variant_return",
-                        "scalarizing local {} in {}",
-                        func.locals[local as usize].name,
-                        func.name
-                    );
-                }
-                rewrite_variant_local_defs(&mut body, &candidates, span);
-                let tuple_types: IndexMap<u32, TypeId> = candidates
-                    .iter()
-                    .map(|(&l, c)| (l, c.layout.tuple_type))
-                    .collect();
-                for (&local, &tuple_type) in &tuple_types {
-                    func.locals[local as usize].type_id = tuple_type;
-                }
-                retype_lets(&mut body, &tuple_types);
-                let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
-                let bound: IndexMap<u32, &Candidate> =
-                    candidates.iter().map(|(&l, c)| (l, c)).collect();
-                let mut cx = SiteCx {
-                    bound: &bound,
-                    names: &names,
-                    rebind: &rebind,
-                    span,
-                };
-                let root = body.root;
-                rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
-                touched.insert(fid.index());
-            }
+        if scalarize_locals_in(project, &mut func, &mut body, &mut layouts) {
+            touched.insert(fid.index());
         }
         func.body = Some(body);
     }
+}
+
+/// Phase 4 over one function, whose body the caller holds. Returns whether it
+/// rewrote anything.
+fn scalarize_locals_in(
+    project: &NirPackage,
+    func: &mut NirFunction,
+    body: &mut Body,
+    layouts: &mut IndexMap<TypeKey, Option<Candidate>>,
+) -> bool {
+    let mut candidates: IndexMap<u32, Candidate> = IndexMap::default();
+    for (local, l) in func.locals.iter().enumerate() {
+        let local = u32::try_from(local).expect("too many locals");
+        if func.address_taken_locals.contains(&local)
+            || func.stores_aliased_locals.contains(&local)
+            || func.params.iter().any(|p| p.local_index == local)
+        {
+            continue;
+        }
+        let key = project.type_table.borrow().type_key(l.type_id);
+        let cand = layouts
+            .entry(key)
+            .or_insert_with(|| local_candidate(project, l.type_id));
+        if let Some(cand) = cand {
+            candidates.insert(local, cand.clone());
+        }
+    }
+    if candidates.is_empty() {
+        return false;
+    }
+    // `sroa` splits only a local one `Let` binds; a tuple it leaves whole
+    // allocates at every write, `null` included.
+    let rebound = arena_query::rebound_locals(body);
+    candidates.retain(|local, _| !rebound.contains(local));
+    let type_table = project.type_table.borrow();
+    let rebind = Rebind::new(func, &type_table);
+    retain_rewritable_locals(body, &mut candidates, &rebind);
+    if candidates.is_empty() {
+        return false;
+    }
+    let span = func.span;
+    for &local in candidates.keys() {
+        compiler_trace!(
+            "sroa_variant_return",
+            "scalarizing local {} in {}",
+            func.locals[local as usize].name,
+            func.name
+        );
+    }
+    rewrite_variant_local_defs(body, &candidates, span);
+    let tuple_types: IndexMap<u32, TypeId> = candidates
+        .iter()
+        .map(|(&l, c)| (l, c.layout.tuple_type))
+        .collect();
+    for (&local, &tuple_type) in &tuple_types {
+        func.locals[local as usize].type_id = tuple_type;
+    }
+    retype_lets(body, &tuple_types);
+    let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
+    let mut cx = SiteCx {
+        bound: &candidates,
+        names: &names,
+        rebind: &rebind,
+        span,
+    };
+    let root = body.root;
+    rewrite_temp_uses(body, NodeRef::Block(root), &mut cx);
+    true
 }
 
 /// The candidate a local of `variant_type` would be.
@@ -2169,83 +2188,95 @@ fn retain_rewritable_locals(
     let mut defined: IndexSet<u32> = IndexSet::default();
     let mut sanctioned: IndexSet<ExprId> = IndexSet::default();
     let mut reads: Vec<(u32, ExprId)> = Vec::new();
+    // A promoted read is an operand the rewrite has no node to rebuild.
+    let mut promoted: IndexSet<u32> = IndexSet::default();
     let of = |op: Operand| temp_local(body, op, candidates);
-    body.for_each_reachable_node(|node| match node {
-        NodeRef::Stmt(s) => {
-            if let StmtKind::Let {
-                local_index, value, ..
-            } = &body.stmts[s].kind
-                && let Some(cand) = candidates.get(local_index)
-            {
-                defined.insert(*local_index);
-                if !builds_case(body, *value, cand) {
-                    refused.insert(*local_index);
+    body.for_each_reachable_node(|node| {
+        body.for_each_operand(node, |op| {
+            if let Some(v) = op.as_value() {
+                body.values.collect_opaque_locals(v, &mut promoted);
+            }
+        });
+        match node {
+            NodeRef::Stmt(s) => {
+                if let StmtKind::Let {
+                    local_index, value, ..
+                } = &body.stmts[s].kind
+                    && let Some(cand) = candidates.get(local_index)
+                {
+                    defined.insert(*local_index);
+                    if !builds_case(body, *value, cand) {
+                        refused.insert(*local_index);
+                    }
                 }
             }
+            NodeRef::Pat(p) => {
+                if let PatKind::Binding { local_index, .. } = body.pats[p].kind
+                    && candidates.contains_key(&local_index)
+                {
+                    refused.insert(local_index);
+                }
+            }
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Local { index, .. } if candidates.contains_key(index) => {
+                    reads.push((*index, e));
+                }
+                ExprKind::Assign { target, value } => {
+                    if let Some(local) = of(Operand::Expr(*target)) {
+                        sanctioned.insert(*target);
+                        if !builds_case(body, *value, &candidates[&local]) {
+                            refused.insert(local);
+                        }
+                    }
+                }
+                ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
+                    if of(*expr).is_some() {
+                        sanctioned.extend(expr.as_expr());
+                    }
+                }
+                // A payload read of a unit case has no slot to read. It only
+                // survives where nothing reaches it, but it still has to lower.
+                ExprKind::VariantPayload {
+                    expr, case_index, ..
+                } => {
+                    if let Some(local) = of(*expr) {
+                        sanctioned.extend(expr.as_expr());
+                        if candidates[&local]
+                            .layout
+                            .payload_read_type(*case_index)
+                            .is_none()
+                        {
+                            refused.insert(local);
+                        }
+                    }
+                }
+                // The rewritten match reads the payload slot again at each guard
+                // and arm body, which only a guard writing the local tells apart
+                // from the one read the scrutinee was.
+                ExprKind::Match { expr, arms } => {
+                    if let Some(local) = of(*expr) {
+                        sanctioned.extend(expr.as_expr());
+                        let guard_writes =
+                            arms.iter().filter_map(|a| a.guard?.as_expr()).any(|g| {
+                                body.find_in_live_node_under(NodeRef::Expr(g), |n| {
+                                    (arena_query::local_written_by(body, n) == Some(local))
+                                        .then_some(())
+                                })
+                                .is_some()
+                            });
+                        if guard_writes
+                            || !arms_are_one_level(body, arms, rebind, &candidates[&local].layout)
+                        {
+                            refused.insert(local);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            NodeRef::Block(_) => {}
         }
-        NodeRef::Pat(p) => {
-            if let PatKind::Binding { local_index, .. } = body.pats[p].kind
-                && candidates.contains_key(&local_index)
-            {
-                refused.insert(local_index);
-            }
-        }
-        NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Local { index, .. } if candidates.contains_key(index) => {
-                reads.push((*index, e));
-            }
-            ExprKind::Assign { target, value } => {
-                if let Some(local) = of(Operand::Expr(*target)) {
-                    sanctioned.insert(*target);
-                    if !builds_case(body, *value, &candidates[&local]) {
-                        refused.insert(local);
-                    }
-                }
-            }
-            ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
-                if of(*expr).is_some() {
-                    sanctioned.extend(expr.as_expr());
-                }
-            }
-            // A payload read of a unit case has no slot to read. It only
-            // survives where nothing reaches it, but it still has to lower.
-            ExprKind::VariantPayload {
-                expr, case_index, ..
-            } => {
-                if let Some(local) = of(*expr) {
-                    sanctioned.extend(expr.as_expr());
-                    if candidates[&local]
-                        .layout
-                        .payload_read_type(*case_index)
-                        .is_none()
-                    {
-                        refused.insert(local);
-                    }
-                }
-            }
-            // The rewritten match reads the payload slot again at each guard
-            // and arm body, which only a guard writing the local tells apart
-            // from the one read the scrutinee was.
-            ExprKind::Match { expr, arms } => {
-                if let Some(local) = of(*expr) {
-                    sanctioned.extend(expr.as_expr());
-                    let guard_writes = arms.iter().filter_map(|a| a.guard?.as_expr()).any(|g| {
-                        body.find_in_live_node_under(NodeRef::Expr(g), |n| {
-                            (arena_query::local_written_by(body, n) == Some(local)).then_some(())
-                        })
-                        .is_some()
-                    });
-                    if guard_writes
-                        || !arms_are_one_level(body, arms, rebind, &candidates[&local].layout)
-                    {
-                        refused.insert(local);
-                    }
-                }
-            }
-            _ => {}
-        },
-        NodeRef::Block(_) => {}
     });
+    refused.extend(promoted);
     refused.extend(
         reads
             .into_iter()
@@ -2367,13 +2398,15 @@ fn retype_lets(body: &mut Body, tuple_types: &IndexMap<u32, TypeId>) -> bool {
             changed = true;
         }
     }
+    let retyped: Vec<(u32, TypeId)> = tuple_types.iter().map(|(&l, &t)| (l, t)).collect();
+    body.values.retype_locals(&retyped);
     changed
 }
 
 /// Read-only context for the call-site rewrite over one body.
 struct SiteCx<'a> {
     /// Each tuple-bound local, with the candidate whose layout it holds.
-    bound: &'a IndexMap<u32, &'a Candidate>,
+    bound: &'a IndexMap<u32, Candidate>,
     /// Local names, so a rebuilt `Local` node keeps the binding's own name.
     names: &'a [String],
     /// How each payload binding is re-minted — directly or boxed.
