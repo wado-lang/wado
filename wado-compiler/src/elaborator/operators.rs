@@ -13,7 +13,7 @@ use crate::unparse::binary_op_str;
 
 use super::Elaborator;
 use super::coercion::{
-    is_numeric_literal_expr, is_primitive_literal_target, numeric_literal_pair_order,
+    is_literal_arithmetic, is_primitive_literal_target, numeric_literal_pair_order,
 };
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
@@ -109,10 +109,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, TypeId) {
-        let left_is_numeric_literal = is_numeric_literal_expr(left_ast);
-        let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
+        let left_is_literal = is_literal_arithmetic(left_ast);
+        let right_is_literal = is_literal_arithmetic(right_ast);
 
-        if left_is_numeric_literal && !right_is_numeric_literal {
+        if left_is_literal && !right_is_literal {
             let right = self.resolve_expr(right_ast, ctx, expected_type);
             let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), right)
             {
@@ -122,7 +122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             let left = self.resolve_expr(left_ast, ctx, coerce_type);
             (left, right)
-        } else if right_is_numeric_literal && !left_is_numeric_literal {
+        } else if right_is_literal && !left_is_literal {
             let left = self.resolve_expr(left_ast, ctx, expected_type);
             let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), left)
             {
@@ -135,7 +135,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             let right = self.resolve_expr(right_ast, ctx, coerce_type);
             (left, right)
-        } else if left_is_numeric_literal && right_is_numeric_literal {
+        } else if left_is_literal && right_is_literal {
             let order = numeric_literal_pair_order(
                 &self.tysys.type_table.borrow(),
                 left_ast,
@@ -916,10 +916,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
-            expected_type.and_then(|expected| self.tysys.pointee_of(expected))
-        } else {
-            None
+        let inner_expected = match unary.op {
+            UnaryOp::Ref | UnaryOp::MutRef => {
+                expected_type.and_then(|expected| self.tysys.pointee_of(expected))
+            }
+            UnaryOp::Neg | UnaryOp::BitNot if is_literal_arithmetic(&unary.expr) => expected_type,
+            UnaryOp::Neg | UnaryOp::BitNot | UnaryOp::Not | UnaryOp::Deref => None,
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the
         // subscript resolves through `IndexRefMut` and carries the mutability in

@@ -2,12 +2,18 @@
 //! named CM type alias in the compiled component's *structural* type, matching
 //! what `wado wit` renders (issue #1456). `wit_component::decode` recovers WIT
 //! from the component's own types, so a decoded `id-newtype` that reads
-//! `func(v: f64) -> f64` (with no `meters` type) is the drift this guards.
+//! `func(v: f64) -> f64` (with no `meters` type) is the drift this guards. A
+//! stdlib newtype the signature names is carried the same way.
 
 use crate::cm_catalog::{FIXTURE, LIB_WORLD_FQ};
-use crate::common::compile_source_with_compiler_options;
+use crate::common::{
+    DEFAULT_TIMEOUT_MS, WasiState, compile_lib_world, compile_source_with_compiler_options, engine,
+    lib_func, limit_store, linker, runtime,
+};
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
+use wasmtime::Store;
+use wasmtime::component::{Component, Val};
 
 fn compile_lib() -> Vec<u8> {
     let source = std::fs::read_to_string(FIXTURE).unwrap();
@@ -188,4 +194,93 @@ test "shape compiles" {}
         Some("meters"),
         "list element erased the newtype to its base"
     );
+}
+
+/// A stdlib newtype the library's types name is published beside them, yet it
+/// is no API of the library's own: one whose only type is private still exports
+/// nothing.
+#[test]
+fn lib_naming_only_a_stdlib_newtype_exports_nothing() {
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        lib_world: Some(LIB_WORLD_FQ.to_string()),
+        ..Default::default()
+    };
+    let Err(err) = compile_source_with_compiler_options(
+        Path::new("lib.wado"),
+        "struct Blob {\n    bytes: ByteList,\n}\n",
+        options,
+    ) else {
+        panic!("a library with no public API compiled");
+    };
+    assert!(
+        format!("{err:?}").contains("exports nothing"),
+        "rejected for another reason: {err:?}"
+    );
+}
+
+/// A library signature naming a stdlib newtype carries it as an alias, as it
+/// does a local one: `ByteList` is `byte-list`, in and out, and inside an
+/// `option`.
+#[test]
+fn lib_stdlib_newtype_crosses_as_its_alias() {
+    let source = r#"
+export fn reversed(b: ByteList) -> ByteList {
+    let mut out: ByteList = [];
+    for let i of 0..<b.len() {
+        out.push(b[b.len() - 1 - i]);
+    }
+    return out;
+}
+export fn head(b: Option<ByteList>) -> Option<u8> {
+    let Some(bytes) = b else {
+        return null;
+    };
+    return if bytes.is_empty() { null } else { Option::Some(bytes[0]) };
+}
+"#;
+    let wasm = compile_lib_world(source, LIB_WORLD_FQ, OptLevel::O2, None);
+    let decoded = wit_component::decode(&wasm).expect("decode structural type");
+    let resolve = decoded.resolve();
+    let reversed = resolve
+        .interfaces
+        .iter()
+        .find_map(|(_, i)| i.functions.get("reversed"))
+        .expect("reversed export present");
+    assert_eq!(
+        type_name(resolve, &reversed.params[0].ty).as_deref(),
+        Some("byte-list"),
+        "reversed param erased the stdlib newtype to its base"
+    );
+
+    let component = Component::new(engine(), &wasm).expect("component failed to load");
+    let bytes = |values: &[u8]| Val::List(values.iter().copied().map(Val::U8).collect());
+    runtime().block_on(async {
+        let linker = linker(engine()).expect("build linker");
+        let mut store = Store::new(engine(), WasiState::new());
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate library component");
+
+        let reversed = lib_func(&mut store, &instance, LIB_WORLD_FQ, "reversed");
+        let mut results = vec![Val::Bool(false)];
+        reversed
+            .call_async(&mut store, &[bytes(&[1, 2, 3])], &mut results)
+            .await
+            .expect("call `reversed`");
+        assert_eq!(results[0], bytes(&[3, 2, 1]));
+
+        let head = lib_func(&mut store, &instance, LIB_WORLD_FQ, "head");
+        let mut results = vec![Val::Bool(false)];
+        head.call_async(
+            &mut store,
+            &[Val::Option(Some(Box::new(bytes(&[7, 8]))))],
+            &mut results,
+        )
+        .await
+        .expect("call `head`");
+        assert_eq!(results[0], Val::Option(Some(Box::new(Val::U8(7)))));
+    });
 }

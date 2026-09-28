@@ -32,7 +32,7 @@ use crate::tir::{
 };
 
 use super::coercion::{
-    NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
+    NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,
     is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
 };
 use super::expr::UnionSource;
@@ -2717,13 +2717,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_expr(&unary.expr, ctx, expected_type);
                 }
                 let op = ast_unary_op_to_tir(unary.op);
-                // A `-<numeric literal>` operand shares the unary's type:
-                // propagate the expected/recorded type so the inner literal
-                // takes the right width (e.g. `-1.0` in an `f32` const body
-                // must be `f32`, not the default `f64`). Other unary operands
-                // are typed on their own.
-                let inner_expected = if unary.op == ast::UnaryOp::Neg
-                    && is_numeric_literal_expr(&unary.expr)
+                // A `-` or `~` operand built from literals shares the unary's
+                // type: propagate the recorded type so the inner literal takes
+                // the right width (e.g. `-1.0` in an `f32` const body must be
+                // `f32`, not the default `f64`). Other unary operands are typed
+                // on their own.
+                let inner_expected = if matches!(unary.op, ast::UnaryOp::Neg | ast::UnaryOp::BitNot)
+                    && is_literal_arithmetic(&unary.expr)
                     && recorded_type != TypeTable::UNKNOWN
                 {
                     Some(recorded_type)
@@ -4702,8 +4702,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         // A literal operand takes the other operand's type: an inlined
         // `f32::INFINITY = 1.0 / 0.0` records none for its literals.
-        let left_is_lit = is_numeric_literal_expr(&binary.left);
-        let right_is_lit = is_numeric_literal_expr(&binary.right);
+        let left_is_lit = is_literal_arithmetic(&binary.left);
+        let right_is_lit = is_literal_arithmetic(&binary.right);
         let (left, right) = if left_is_lit && !right_is_lit {
             let right = self.reify_expr(&binary.right, ctx, None);
             let coerce =

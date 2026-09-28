@@ -467,23 +467,12 @@ Marks a function in a `wasm_module` as the `realloc` implementation named `name`
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // Free: rewind if this was the most recent allocation
     if newsize == 0 {
-        if oldptr + oldsize == heap_offset {
-            heap_offset = oldptr;
+        if (oldptr + oldsize) as u32 == frontier() {
+            set_frontier(oldptr as u32);
         }
         return 0;
     }
-
-    let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
-    let new_offset = aligned + newsize;
-
-    if new_offset > builtin::memory_size() * PAGE_SIZE {
-        builtin::cold_path();
-        grow_memory(new_offset);
-    }
-
-    heap_offset = new_offset;
-
-    return aligned;
+    return bump(align as u32, newsize as u32) as i32;
 }
 ```
 

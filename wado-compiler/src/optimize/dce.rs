@@ -516,6 +516,7 @@ fn resolve_imports(
     project
         .imports
         .sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
+    project.reserve_asset_memory();
 
     project.used_wasi_functions = used_wasi_functions;
 }

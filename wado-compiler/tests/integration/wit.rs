@@ -166,6 +166,17 @@ fn wide_int_export_emits_its_prelude_record() {
     );
 }
 
+/// A stdlib newtype is an alias of its base, as a package's own newtype is.
+#[test]
+fn stdlib_newtype_export_emits_its_alias() {
+    check(
+        "export fn size(b: ByteList) -> i32 { return b.len(); }",
+        "package root:component;\n\n\
+         interface entry {\n  type byte-list = list<u8>;\n  size: func(b: byte-list) -> s32;\n}\n\n\
+         world command {\n  export entry;\n}",
+    );
+}
+
 /// Emit WIT as `wado wit` does: from the subset one compile retains.
 fn emit_compiled(source: &str, scope: WitScope) -> String {
     let host = InMemoryHost::new();

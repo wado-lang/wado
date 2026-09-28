@@ -298,13 +298,28 @@ impl Spec {
                 return Err(Excluded::UnsupportedDataKey(key.clone()));
             }
         }
+        // A list names allocators that must each give the recorded output, so
+        // any one of them is a baseline a mutant can be compared against.
+        let allocator = match object.get("allocator") {
+            None => "debug",
+            Some(serde_json::Value::String(one)) => one,
+            Some(serde_json::Value::Array(many)) => many
+                .first()
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| {
+                    Excluded::MalformedData(
+                        "`allocator` list does not start with a name".to_string(),
+                    )
+                })?,
+            Some(other) => {
+                return Err(Excluded::MalformedData(format!(
+                    "`allocator` is {other}, not a name or a list of names"
+                )));
+            }
+        };
         Ok(Self {
             test_world: object.contains_key("test"),
-            allocator: object
-                .get("allocator")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("debug")
-                .to_string(),
+            allocator: allocator.to_string(),
         })
     }
 

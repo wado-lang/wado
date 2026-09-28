@@ -124,6 +124,23 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     classify_numeric_literal(expr).is_some()
 }
 
+/// Whether `expr` is built from numeric literals alone, through `-`, `~` and
+/// the numeric binary operators, and so takes its type from its context as a
+/// bare literal does: `~7`, `1 << 40`.
+pub(super) fn is_literal_arithmetic(expr: &Expr) -> bool {
+    if let Expr::Unary(unary) = expr
+        && matches!(unary.op, UnaryOp::Neg | UnaryOp::BitNot)
+    {
+        return is_literal_arithmetic(&unary.expr);
+    }
+    if let Expr::Binary(binary) = expr
+        && binary.op.is_numeric()
+    {
+        return is_literal_arithmetic(&binary.left) && is_literal_arithmetic(&binary.right);
+    }
+    is_numeric_literal_expr(expr)
+}
+
 /// Whether a call argument takes its type from its context: a numeric literal or
 /// `null`. Inference defers it, so the other arguments bind the parameter first.
 pub(super) fn answers_last(arg: Option<&Expr>) -> bool {

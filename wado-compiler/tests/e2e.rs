@@ -210,10 +210,11 @@ struct TestSpec {
     #[serde(rename = "wasi:http/service")]
     http_service: Option<HttpServiceSpec>,
 
-    /// Override the allocator mode: "bump" or "debug".
-    /// If not set, auto-selects based on target world (debug for test world, bump otherwise).
-    #[serde(default)]
-    allocator: Option<String>,
+    /// The allocators to run under, one run each: a name (`"bump"`, `"debug"`,
+    /// `"freelist"`) or a list of them. Unset runs `debug`, which catches a
+    /// use-after-free.
+    #[serde(default, deserialize_with = "one_or_many")]
+    allocator: Vec<String>,
 
     /// Compile-time parameter overrides (`-D NAME=value`) for `#[param]` globals.
     #[serde(default)]
@@ -347,6 +348,31 @@ impl TestSpec {
         let name = common::opt_level_name(opt_level);
         !(self.skip_os && opt_level == OptLevel::Os)
             && (self.only_opt.is_empty() || self.only_opt.iter().any(|level| level == name))
+    }
+
+    /// The allocators the fixture runs under, in order.
+    fn allocators(&self) -> Vec<&str> {
+        if self.allocator.is_empty() {
+            return vec!["debug"];
+        }
+        self.allocator.iter().map(String::as_str).collect()
+    }
+}
+
+/// A `__DATA__` value that is one string or a list of them.
+fn one_or_many<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    match OneOrMany::deserialize(de)? {
+        OneOrMany::One(one) => Ok(vec![one]),
+        OneOrMany::Many(many) if many.is_empty() => {
+            Err(serde::de::Error::custom("an empty list names no allocator"))
+        }
+        OneOrMany::Many(many) => Ok(many),
     }
 }
 
@@ -770,12 +796,33 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
 }
 
-/// Run a normal (non-TODO) test, dispatching to the appropriate world runner
+/// Run a normal (non-TODO) test under each allocator the fixture names.
 fn run_normal_test(
     fixture_path: &Path,
     source: &str,
     opt_level: OptLevel,
     spec: &TestSpec,
+    test_id: &str,
+) {
+    let allocators = spec.allocators();
+    for allocator in &allocators {
+        let test_id = if allocators.len() > 1 {
+            format!("{test_id} [{allocator}]")
+        } else {
+            test_id.to_string()
+        };
+        run_with_allocator(fixture_path, source, opt_level, spec, allocator, &test_id);
+    }
+}
+
+/// Run a normal (non-TODO) test under `allocator`, dispatching to the
+/// appropriate world runner.
+fn run_with_allocator(
+    fixture_path: &Path,
+    source: &str,
+    opt_level: OptLevel,
+    spec: &TestSpec,
+    allocator: &str,
     test_id: &str,
 ) {
     // Determine target world from the world key present in the spec
@@ -787,13 +834,7 @@ fn run_normal_test(
         None
     };
 
-    // Default to debug allocator in e2e tests to catch use-after-free bugs,
-    // unless the fixture explicitly overrides it.
-    let allocator = Some(
-        spec.allocator
-            .clone()
-            .unwrap_or_else(|| "debug".to_string()),
-    );
+    let allocator = Some(allocator.to_string());
     let mut param_policy = wado_compiler::param_resolution::ParamPolicy::default();
     let parse_level = |s: &Option<String>, field: &str| {
         s.as_ref().map(|v| {

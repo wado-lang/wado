@@ -85,6 +85,8 @@ pub enum CtfeBuiltin {
     ColdPath,
     Select,
     I32AsChar,
+    /// `heap_base`, carrying the address it is for this package.
+    HeapBase(i32),
 }
 
 impl CtfeBuiltin {
@@ -100,7 +102,8 @@ impl CtfeBuiltin {
             | Self::ArrayClonePrefix
             | Self::ColdPath
             | Self::Select
-            | Self::I32AsChar => false,
+            | Self::I32AsChar
+            | Self::HeapBase(_) => false,
         }
     }
 }
@@ -272,6 +275,7 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("cold_path") => CtfeBuiltin::ColdPath,
             Some("select") => CtfeBuiltin::Select,
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
+            Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
             _ => continue,
         };
         map.insert(id, builtin);

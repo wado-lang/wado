@@ -245,6 +245,13 @@ pub fn memory_grow(delta: i32) -> i32;
 #[linear_memory(read)]
 pub fn memory_size() -> i32;
 
+/// Returns the address the allocator's heap starts at, a multiple of the page
+/// size. The embedded wasm modules share the one linear memory from address 0,
+/// and the heap starts past the memory they reserve: 0 when there are none.
+/// Lowers to an `i32.const`.
+#[trap(never)]
+pub fn heap_base() -> i32;
+
 /// Fills a region of linear memory with a byte value.
 /// Maps to Wasm memory.fill instruction.
 #[linear_memory(write)]
