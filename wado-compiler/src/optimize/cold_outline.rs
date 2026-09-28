@@ -18,6 +18,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
     FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam, ParamAbi,
@@ -479,8 +480,7 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
         kind: ExprKind::Call {
             func_id: id,
             type_args: Vec::new(),
-            args,
-            has_receiver: false,
+            args: CallArgs::free(args),
         },
         type_id: region.return_type,
         span,

@@ -1949,7 +1949,7 @@ fn lazy_guard_global(
     if !callee.is_builtin_named("is_uninitialized") {
         return None;
     }
-    let [arg] = args.as_slice() else {
+    let [arg] = &args[..] else {
         return None;
     };
     let read = arg.expr.as_expr()?;

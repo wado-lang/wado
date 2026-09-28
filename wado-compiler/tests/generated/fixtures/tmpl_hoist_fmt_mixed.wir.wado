@@ -90,9 +90,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(36)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar" = fn(f64, i32, ref "core:prelude/string.wado//String");  // TypeId(36)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar" = fn(f64, i32, ref "core:prelude/string.wado//String");  // TypeId(37)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(37)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(38)
 
@@ -194,8 +194,8 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
     let $fmt_buf_230: ref "core:prelude/format.wado//Formatter";
     let $fmt_buf_231: ref "core:prelude/format.wado//Formatter";
     let $tmpl_buf_232: ref "core:prelude/string.wado//String";
-    let new_used_384: i32;
-    let start_385: i32;
+    let new_used_438: i32;
+    let start_439: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:tmpl_hoist_fmt_mixed.wado::$modules_initialized);
         cold_path;
@@ -219,9 +219,9 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
             start_40 = $tmpl_buf_226.used;
             $tmpl_buf_226.used = new_used_39;
             builtin::array_copy<u8>($tmpl_buf_226.repr, start_40, global:tmpl_hoist_fmt_mixed.wado::$const_obj_22, 0, 2);
-            $inline_f64__fmt_into_scalar_spec1_0: block {
+            $inline_f64__fmt_into_scalar_spec1_scalar_0: block {
                 "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(builtin::f64_convert_i32_s(i_1), 2, $tmpl_buf_226);
-                break $inline_f64__fmt_into_scalar_spec1_0;
+                break $inline_f64__fmt_into_scalar_spec1_scalar_0;
             };
             total = total + $tmpl_buf_226.used;
             i_1 = i_1 + 1;
@@ -316,17 +316,17 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
                 }
                 break $inline_count_digits_u64_base_64: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_166))) - 1) / 4) + 1;
             };
-            new_used_384 = $tmpl_buf_232.used + digit_count_169;
-            if @unlikely(new_used_384 > builtin::array_len($load_27)) {
+            new_used_438 = $tmpl_buf_232.used + digit_count_169;
+            if @unlikely(new_used_438 > builtin::array_len($load_27)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_232, new_used_384);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_232, new_used_438);
             }
-            start_385 = $tmpl_buf_232.used;
-            $tmpl_buf_232.used = new_used_384;
+            start_439 = $tmpl_buf_232.used;
+            $tmpl_buf_232.used = new_used_438;
             arr = $tmpl_buf_232.repr;
-            pos = start_385 + digit_count_169;
+            pos = start_439 + digit_count_169;
             if val_i64_166 == 0_i64 {
-                builtin::array_set_u8(arr, start_385, 48);
+                builtin::array_set_u8(arr, start_439, 48);
             } else {
                 temp = val_i64_166;
                 b15: block {
@@ -1599,28 +1599,6 @@ fn "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0"(self, f) {
     "core:prelude/fpfmt.wado/write_decimal"(f.buf, $mv$result$digits, $mv$result$exponent, $mv$result$n_digits);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let new_used_25: i32;
-    let start_26: i32;
-    let new_used_66: i32;
-    let start_67: i32;
-    if is_negative {
-        new_used_25 = self.used + 1;
-        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
-        }
-        start_26 = self.used;
-        self.used = new_used_25;
-        builtin::array_set_u8(self.repr, start_26, 45);
-    } else {
-    }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
-}
-
 fn "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(self, precision, f) {
     let $load_9: ref Array<u8>;
     let $load_12: ref Array<u8>;
@@ -1744,6 +1722,28 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(self, precis
     } else {
     }
     "core:prelude/fpfmt.wado/write_decimal_prec"(f, $mv$result$digits, $mv$result$exponent, $mv$result$n_digits, precision);
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+    let new_used_25: i32;
+    let start_26: i32;
+    let new_used_66: i32;
+    let start_67: i32;
+    if is_negative {
+        new_used_25 = self.used + 1;
+        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
+        }
+        start_26 = self.used;
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, start_26, 45);
+    } else {
+    }
+    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+    }, start_67 = self.used, self.used = new_used_66, start_67;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {

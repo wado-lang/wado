@@ -7,6 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::call_args::CallArgs;
 use crate::compiler_item::SeqField;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
@@ -663,8 +664,7 @@ fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
         TirExprKind::Call {
             func: Box::new(func),
             type_args: vec![type_id],
-            args: vec![CallArg::new(expr, false)],
-            has_receiver: false,
+            args: CallArgs::free(vec![CallArg::new(expr, false)]),
         },
         type_id,
         span,
@@ -720,8 +720,7 @@ fn build_array_clone(
         TirExprKind::Call {
             func: Box::new(func),
             type_args: vec![elem_type],
-            args,
-            has_receiver: false,
+            args: CallArgs::free(args),
         },
         array_ty,
         span,

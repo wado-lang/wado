@@ -282,13 +282,8 @@ pub(super) fn builder_alias_sets(
         call_immutability,
         |body, node| {
             if let NodeRef::Expr(e) = node
-                && let ExprKind::Call {
-                    args,
-                    func_id,
-                    has_receiver: true,
-                    ..
-                } = &body.exprs[e].kind
-                && let Some(re) = args.first().and_then(|a| a.expr.as_expr())
+                && let ExprKind::Call { args, func_id, .. } = &body.exprs[e].kind
+                && let Some(re) = args.receiver().and_then(|a| a.expr.as_expr())
                 && method_mutates_receiver(
                     body,
                     re,
@@ -523,13 +518,7 @@ pub(super) fn call_verdicts(
         let NodeRef::Expr(e) = node else {
             return;
         };
-        let ExprKind::Call {
-            func_id,
-            args,
-            has_receiver,
-            ..
-        } = &body.exprs[e].kind
-        else {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
             return;
         };
         // An effect-free callee is pure whatever it is handed: it writes no slot
@@ -542,24 +531,23 @@ pub(super) fn call_verdicts(
         // A receiver is judged by the callee's declared `self` mode, which
         // stays conservative for a callee absent from `first_param_types`;
         // `arg_safe` alone would clear an unknown one.
-        let receiver_safe = !*has_receiver
-            || args
-                .first()
-                .and_then(|a| a.expr.as_expr())
-                .is_some_and(|re| {
-                    !method_mutates_receiver(
-                        body,
-                        re,
-                        *func_id,
-                        first_param_types,
-                        type_table,
-                        true,
-                        Some(call_immutability),
-                    )
-                });
+        let (receiver, rest) = args.split();
+        let receiver_safe = receiver.is_none_or(|r| {
+            r.expr.as_expr().is_some_and(|re| {
+                !method_mutates_receiver(
+                    body,
+                    re,
+                    *func_id,
+                    first_param_types,
+                    type_table,
+                    true,
+                    Some(call_immutability),
+                )
+            })
+        });
         if receiver_safe {
             out.receiver_immutable.insert(e);
-            if args.iter().skip(usize::from(*has_receiver)).all(&arg_safe) {
+            if rest.iter().all(&arg_safe) {
                 out.pure.insert(e);
             }
         }
@@ -841,13 +829,8 @@ fn summarize_receiver_writes(
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } if inner.as_expr().is_some_and(projects_p0) => direct = true,
-            ExprKind::Call {
-                func_id,
-                args,
-                has_receiver,
-                ..
-            } => {
-                if let Some(receiver) = has_receiver.then(|| args.first()).flatten()
+            ExprKind::Call { func_id, args, .. } => {
+                if let Some(receiver) = args.receiver()
                     && receiver.expr.as_expr().is_some_and(projects_p0)
                 {
                     // self-rooted receiver: mutated iff the callee mutates its
@@ -895,13 +878,11 @@ fn collect_ref_arg_escapes(
         return;
     };
     match &body.exprs[e].kind {
-        ExprKind::Call {
-            args, has_receiver, ..
-        } => {
+        ExprKind::Call { args, .. } => {
             // `is_mut` args are already aliased/escaped by the collectors above,
             // and so is a receiver — `collect_mut_escaped_node` judges it by the
             // callee's declared `self` mode instead of by argument type.
-            for arg in args.iter().skip(usize::from(*has_receiver)) {
+            for arg in args.split().1 {
                 if arg.is_mut {
                     continue;
                 }
@@ -968,17 +949,12 @@ fn collect_mut_escaped_node(
                 out.insert(r);
             }
         }
-        ExprKind::Call {
-            func_id,
-            args,
-            has_receiver,
-            ..
-        } => {
+        ExprKind::Call { func_id, args, .. } => {
             // Unknown callee (builtin / extern not in the project) → assume it
             // may mutate the receiver (`conservative_on_unknown = true`). A
             // promoted-value receiver carries no local root, so it aliases
             // nothing.
-            if let Some(receiver) = has_receiver.then(|| args.first()).flatten()
+            if let Some(receiver) = args.receiver()
                 && let Some(re) = receiver.expr.as_expr()
                 && method_mutates_receiver(
                     body,
@@ -1218,16 +1194,11 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                 }
             }
             // Calls with mut args may stash the reference — alias.
-            ExprKind::Call {
-                args, has_receiver, ..
-            } => {
+            ExprKind::Call { args, .. } => {
                 // A `mut` arg is a place (never a promoted constant); a constant
-                // arg references no local. Auto-ref: a receiver may be passed as
-                // `&mut self` whatever its own `is_mut`.
-                for (i, arg) in args.iter().enumerate() {
-                    if (arg.is_mut || (*has_receiver && i == 0))
-                        && let Some(index) = arg.expr.as_expr().and_then(local)
-                    {
+                // arg references no local.
+                for (arg, reaches_storage) in args.with_storage_reach(true) {
+                    if reaches_storage && let Some(index) = arg.expr.as_expr().and_then(local) {
                         out.insert(index);
                     }
                 }

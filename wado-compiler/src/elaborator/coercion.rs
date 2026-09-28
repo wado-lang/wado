@@ -149,6 +149,15 @@ impl PendingLiterals {
     }
 }
 
+/// A call's declared return type, in the frame its parameter types are in, and
+/// the type its context expects of the result. It answers a variable the
+/// arguments left open before the literals' default does.
+#[derive(Clone, Copy)]
+pub(super) struct ExpectedReturn {
+    pub(super) declared: TypeId,
+    pub(super) expected: TypeId,
+}
+
 /// The type `literals` take together where nothing else answers their
 /// variable: `f64` if one is a float, else `i32` unless every one is a byte
 /// literal.
@@ -515,8 +524,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve each literal `pending` deferred against what its variable was
-    /// answered with, answering the variables nothing answered with their
-    /// literals' default first. Answers each literal's type by its id.
+    /// answered with. A variable nothing answered takes what `expected_return`
+    /// answers it with, else its literals' default. Answers each literal's type
+    /// by its id.
     ///
     /// A variable only literals standing as `args` met stays theirs to answer
     /// as they did before any deferral: the call's own inference weighs its
@@ -530,6 +540,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         pending: PendingLiterals,
         args: &[Expr],
+        expected_return: Option<ExpectedReturn>,
         ctx: &mut FunctionContext,
     ) -> IndexMap<AstId, TypeId> {
         let mut by_var: IndexMap<TypeId, Vec<Expr>> = IndexMap::default();
@@ -540,8 +551,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {
             let default = shared_literal_default(&literals);
+            let yields_to_return =
+                self.apply_infer_holes(var) == var && literals.iter().all(is_arg);
+            if !yields_to_return
+                && let Some(ExpectedReturn { declared, expected }) = expected_return
+            {
+                let declared = self.apply_infer_holes(declared);
+                self.solve_own_infer_holes_against(declared, expected, &[var]);
+            }
             let mut answer = self.apply_infer_holes(var);
-            let yields_to_return = answer == var && literals.iter().all(is_arg);
             if answer == var && !yields_to_return {
                 self.solve_infer_var(var, default);
                 answer = default;

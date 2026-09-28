@@ -882,6 +882,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::call_args::CallArgs;
     use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{
         ArenaCallArg, ArenaStructField, ArmData, BlockNode, BlockRole, Body, ExprNode, PatNode,
@@ -1063,8 +1064,7 @@ mod tests {
             ExprKind::Call {
                 func_id: FuncId::new(0),
                 type_args: vec![],
-                args,
-                has_receiver: false,
+                args: CallArgs::free(args),
             },
         )
     }

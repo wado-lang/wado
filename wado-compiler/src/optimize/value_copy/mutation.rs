@@ -96,28 +96,22 @@ pub(in crate::optimize) fn expr_witnesses(
                 sink(Witness::MutBorrow(e));
             }
         }
-        ExprKind::Call {
-            func_id,
-            args,
-            has_receiver,
-            ..
-        } => {
-            for (i, arg) in args.iter().enumerate() {
+        ExprKind::Call { func_id, args, .. } => {
+            // A receiver reports as `Receiver` so a bodyless callee falls back
+            // to the receiver's type rather than to `is_mut`.
+            if let Some(ae) = args.receiver().and_then(|r| r.expr.as_expr()) {
+                let verdict = oracle.arg_mutates(*func_id, 0);
+                sink(Witness::Receiver { expr: ae, verdict });
+            }
+            for (i, arg) in args.rest_positioned() {
                 let Some(ae) = arg.expr.as_expr() else {
                     continue;
                 };
-                let verdict = oracle.arg_mutates(*func_id, i);
-                // A receiver reports as `Receiver` so a bodyless callee falls
-                // back to the receiver's type rather than to `is_mut`.
-                if *has_receiver && i == 0 {
-                    sink(Witness::Receiver { expr: ae, verdict });
-                } else {
-                    sink(Witness::CalleeArg {
-                        expr: ae,
-                        verdict,
-                        is_mut: arg.is_mut,
-                    });
-                }
+                sink(Witness::CalleeArg {
+                    expr: ae,
+                    verdict: oracle.arg_mutates(*func_id, i),
+                    is_mut: arg.is_mut,
+                });
             }
         }
         ExprKind::IndirectCall { args, .. } => {

@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::reify::ord_bool_from_cmp;
 use crate::name::LocalMethodName;
@@ -49,8 +50,7 @@ fn ctor_call(
         TirExprKind::Call {
             func: Box::new(method_ref(type_table, ctor)),
             type_args: vec![],
-            args: args.into_iter().map(|a| CallArg::new(a, false)).collect(),
-            has_receiver: false,
+            args: CallArgs::free(args.into_iter().map(|a| CallArg::new(a, false)).collect()),
         },
         type_id,
         span,

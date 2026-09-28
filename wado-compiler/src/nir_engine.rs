@@ -1495,18 +1495,13 @@ impl<'a> Engine<'a> {
                 func_id,
                 type_args,
                 args,
-                has_receiver,
             } => ExprKind::Call {
                 func_id,
                 type_args,
-                args: args
-                    .into_iter()
-                    .map(|a| ArenaCallArg {
-                        expr: self.clone_operand(a.expr),
-                        is_mut: a.is_mut,
-                    })
-                    .collect(),
-                has_receiver,
+                args: args.map(|a| ArenaCallArg {
+                    expr: self.clone_operand(a.expr),
+                    is_mut: a.is_mut,
+                }),
             },
             ExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
                 target,

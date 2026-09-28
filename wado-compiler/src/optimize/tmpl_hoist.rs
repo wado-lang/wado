@@ -1621,6 +1621,7 @@ fn collect_local_mentions(body: &Body, node: NodeRef, index: u32, out: &mut Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::call_args::CallArgs;
     use crate::nir::FuncId;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::tir::TypeId;
@@ -1674,11 +1675,10 @@ mod tests {
             kind: ExprKind::Call {
                 func_id: FuncId::new(0),
                 type_args: vec![],
-                args: vec![ArenaCallArg {
+                args: CallArgs::free(vec![ArenaCallArg {
                     expr: arg.into(),
                     is_mut: false,
-                }],
-                has_receiver: false,
+                }]),
             },
             type_id: TypeId(0),
             span: Span::default(),

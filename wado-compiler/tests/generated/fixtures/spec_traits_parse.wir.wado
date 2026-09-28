@@ -296,15 +296,15 @@ type "functype//core:prelude/intparse.wado/core:prelude/traits.wado/LenientParse
 
 type "functype//core:prelude/intparse.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/From<core:prelude/intparse.wado/ParseFloatError>::from$scalar" = fn("core:prelude/intparse.wado//enum:FloatErrorKind") -> ref "core:prelude/traits.wado//LenientParseError";  // TypeId(106)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(107)
+type "functype//core:prelude/primitive.wado/f64::inspect_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(107)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(108)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(108)
 
-type "functype//core:prelude/primitive.wado/f64::inspect_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(109)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(109)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(110)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(110)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(111)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(111)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(112)
 
@@ -2376,9 +2376,9 @@ fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix) {
     let b: u8;
     let $licm_repr_17: ref Array<u8>;
     let $licm_start_18: i32;
-    let $sroa_slot_37: i32;
-    let $sroa_slot_38: u64;
-    let $sroa_slot_39: "core:prelude/intparse.wado//enum:IntErrorKind";
+    let $sroa_slot_39: i32;
+    let $sroa_slot_40: u64;
+    let $sroa_slot_41: "core:prelude/intparse.wado//enum:IntErrorKind";
     if @unlikely((radix <u 2) | (radix >u 36)) {
         cold_path;
         "core:prelude/intparse.wado/assert_radix$cold0"();
@@ -2398,12 +2398,12 @@ fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix) {
     });
     is_negative = $pattern_temp_0.0;
     digits = $pattern_temp_0.1;
-    return $sroa_slot_37 = 0, $sroa_slot_38 = 0_i64, $sroa_slot_39 = 0, $inline_parse_u64_digits_0: block {
+    return $sroa_slot_39 = 0, $sroa_slot_40 = 0_i64, $sroa_slot_41 = 0, $inline_parse_u64_digits_0: block {
         len = digits.end - local.tee $load_3(digits.start);
         if len == 0 {
-            $sroa_slot_37 = 1;
-            $sroa_slot_38 = 0_i64;
-            $sroa_slot_39 = 0;
+            $sroa_slot_39 = 1;
+            $sroa_slot_40 = 0_i64;
+            $sroa_slot_41 = 0;
             break $inline_parse_u64_digits_0;
         }
         r = builtin::i64_extend_i32_u(radix);
@@ -2430,9 +2430,9 @@ fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix) {
                     break $inline_parse_u64_digits_0__$inline_digit_value_1: -1;
                 };
                 if (d < 0) | (d >= radix) {
-                    $sroa_slot_37 = 1;
-                    $sroa_slot_38 = 0_i64;
                     $sroa_slot_39 = 1;
+                    $sroa_slot_40 = 0_i64;
+                    $sroa_slot_41 = 1;
                     break $inline_parse_u64_digits_0;
                 }
                 d64 = builtin::i64_extend_i32_s(d);
@@ -2441,9 +2441,9 @@ fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix) {
                 } else {
                     (acc == max_before_mul) & (d64 >u max_digit_for_overflow);
                 }) {
-                    $sroa_slot_37 = 1;
-                    $sroa_slot_38 = 0_i64;
-                    $sroa_slot_39 = 2;
+                    $sroa_slot_39 = 1;
+                    $sroa_slot_40 = 0_i64;
+                    $sroa_slot_41 = 2;
                     break $inline_parse_u64_digits_0;
                 }
                 acc = (acc * r) + d64;
@@ -2451,27 +2451,27 @@ fn "core:prelude/intparse.wado/parse_i64_radix"(s, radix) {
                 continue l210;
             };
         };
-        $sroa_slot_37 = 0;
-        $sroa_slot_38 = acc;
         $sroa_slot_39 = 0;
+        $sroa_slot_40 = acc;
+        $sroa_slot_41 = 0;
         break $inline_parse_u64_digits_0;
-    }, let $match_scrut_1: i32; $match_scrut_1 = $sroa_slot_37; (if $match_scrut_1 == 0 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
+    }, let $match_scrut_1: i32; $match_scrut_1 = $sroa_slot_39; (if $match_scrut_1 == 0 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
         if is_negative -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
-            if $sroa_slot_38 >u 2147483648_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
+            if $sroa_slot_40 >u 2147483648_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
                 struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 3 } };
             } else {
-                struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: 0_i64 - $sroa_slot_38, 2: ref.null none };
+                struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: 0_i64 - $sroa_slot_40, 2: ref.null none };
             }
-        } else if $sroa_slot_38 >u 2147483647_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
+        } else if $sroa_slot_40 >u 2147483647_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
             struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 2 } };
         } else {
-            struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: $sroa_slot_38, 2: ref.null none };
+            struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: $sroa_slot_40, 2: ref.null none };
         }
     } else if @likely($match_scrut_1 == 1) -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
-        kind_8 = (if select i32(is_negative, $sroa_slot_39 == 2, 0) -> "core:prelude/intparse.wado//enum:IntErrorKind" {
+        kind_8 = (if select i32(is_negative, $sroa_slot_41 == 2, 0) -> "core:prelude/intparse.wado//enum:IntErrorKind" {
             3;
         } else {
-            $sroa_slot_39;
+            $sroa_slot_41;
         });
         struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: kind_8 } };
     } else {
@@ -3958,9 +3958,9 @@ fn "core:prelude/intparse.wado/parse_i64_radix$spec0"(s) {
     let b: u8;
     let $licm_repr_17: ref Array<u8>;
     let $licm_start_18: i32;
-    let $sroa_slot_36: i32;
-    let $sroa_slot_37: u64;
-    let $sroa_slot_38: "core:prelude/intparse.wado//enum:IntErrorKind";
+    let $sroa_slot_38: i32;
+    let $sroa_slot_39: u64;
+    let $sroa_slot_40: "core:prelude/intparse.wado//enum:IntErrorKind";
     let $mv$$vr_12$0: i32;
     let $mv$$vr_12$1: ref null "tuple//[bool, core:prelude/string.wado/StrSlice]";
     let $mv$$vr_12$2: "core:prelude/intparse.wado//enum:IntErrorKind";
@@ -3975,12 +3975,12 @@ fn "core:prelude/intparse.wado/parse_i64_radix$spec0"(s) {
     });
     is_negative = $pattern_temp_0.0;
     digits = $pattern_temp_0.1;
-    return $sroa_slot_36 = 0, $sroa_slot_37 = 0_i64, $sroa_slot_38 = 0, $inline_parse_u64_digits_spec0_0: block {
+    return $sroa_slot_38 = 0, $sroa_slot_39 = 0_i64, $sroa_slot_40 = 0, $inline_parse_u64_digits_spec0_0: block {
         len = digits.end - local.tee $load_3(digits.start);
         if len == 0 {
-            $sroa_slot_36 = 1;
-            $sroa_slot_37 = 0_i64;
-            $sroa_slot_38 = 0;
+            $sroa_slot_38 = 1;
+            $sroa_slot_39 = 0_i64;
+            $sroa_slot_40 = 0;
             break $inline_parse_u64_digits_spec0_0;
         }
         acc = 0_i64;
@@ -4004,9 +4004,9 @@ fn "core:prelude/intparse.wado/parse_i64_radix$spec0"(s) {
                     break $inline_parse_u64_digits_spec0_0__$inline_digit_value_1: -1;
                 };
                 if (d < 0) | (d >= 10) {
-                    $sroa_slot_36 = 1;
-                    $sroa_slot_37 = 0_i64;
                     $sroa_slot_38 = 1;
+                    $sroa_slot_39 = 0_i64;
+                    $sroa_slot_40 = 1;
                     break $inline_parse_u64_digits_spec0_0;
                 }
                 d64 = builtin::i64_extend_i32_s(d);
@@ -4015,9 +4015,9 @@ fn "core:prelude/intparse.wado/parse_i64_radix$spec0"(s) {
                 } else {
                     (acc == 1844674407370955161_i64) & (d64 >u 5_i64);
                 }) {
-                    $sroa_slot_36 = 1;
-                    $sroa_slot_37 = 0_i64;
-                    $sroa_slot_38 = 2;
+                    $sroa_slot_38 = 1;
+                    $sroa_slot_39 = 0_i64;
+                    $sroa_slot_40 = 2;
                     break $inline_parse_u64_digits_spec0_0;
                 }
                 acc = (acc * 10_i64) + d64;
@@ -4025,27 +4025,27 @@ fn "core:prelude/intparse.wado/parse_i64_radix$spec0"(s) {
                 continue l360;
             };
         };
-        $sroa_slot_36 = 0;
-        $sroa_slot_37 = acc;
         $sroa_slot_38 = 0;
+        $sroa_slot_39 = acc;
+        $sroa_slot_40 = 0;
         break $inline_parse_u64_digits_spec0_0;
-    }, let $match_scrut_1: i32; $match_scrut_1 = $sroa_slot_36; (if $match_scrut_1 == 0 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
+    }, let $match_scrut_1: i32; $match_scrut_1 = $sroa_slot_38; (if $match_scrut_1 == 0 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
         if is_negative -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
-            if $sroa_slot_37 >u 2147483648_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
+            if $sroa_slot_39 >u 2147483648_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
                 struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 3 } };
             } else {
-                struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: 0_i64 - $sroa_slot_37, 2: ref.null none };
+                struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: 0_i64 - $sroa_slot_39, 2: ref.null none };
             }
-        } else if $sroa_slot_37 >u 2147483647_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
+        } else if $sroa_slot_39 >u 2147483647_i64 -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
             struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 2 } };
         } else {
-            struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: $sroa_slot_37, 2: ref.null none };
+            struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 0, 1: $sroa_slot_39, 2: ref.null none };
         }
     } else if @likely($match_scrut_1 == 1) -> ref "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" {
-        kind_7 = (if select i32(is_negative, $sroa_slot_38 == 2, 0) -> "core:prelude/intparse.wado//enum:IntErrorKind" {
+        kind_7 = (if select i32(is_negative, $sroa_slot_40 == 2, 0) -> "core:prelude/intparse.wado//enum:IntErrorKind" {
             3;
         } else {
-            $sroa_slot_38;
+            $sroa_slot_40;
         });
         struct.new "tuple//[i32, i64, core:prelude/types.wado/Option<core:prelude/intparse.wado/ParseIntError>]" { 0: 1, 1: 0_i64, 2: struct.new "core:prelude/intparse.wado//ParseIntError" { kind: kind_7 } };
     } else {
@@ -4724,45 +4724,6 @@ fn "core:prelude/intparse.wado/core:prelude/traits.wado/LenientParseError^core:p
     return struct.new "core:prelude/traits.wado//LenientParseError" { reason: reason_1 };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {
-    let new_used_19: i32;
-    let start_20: i32;
-    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
-        new_used_19 = self.used + $mv$content$used;
-        if @unlikely(new_used_19 > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
-        }
-        start_20 = self.used;
-        self.used = new_used_19;
-        builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
-    };
-    return;
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let new_used_25: i32;
-    let start_26: i32;
-    let new_used_66: i32;
-    let start_67: i32;
-    if is_negative {
-        new_used_25 = self.used + 1;
-        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
-        }
-        start_26 = self.used;
-        self.used = new_used_25;
-        builtin::array_set_u8(self.repr, start_26, 45);
-    } else {
-    }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
-}
-
 fn "core:prelude/primitive.wado/f64::inspect_into$scalar$spec0$scalar"(self, f) {
     let abs_f: f64;
     let exp: i32;
@@ -4853,6 +4814,23 @@ fn "core:prelude/primitive.wado/f64::inspect_into$scalar$spec0$scalar"(self, f) 
     }
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {
+    let new_used_19: i32;
+    let start_20: i32;
+    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
+        new_used_19 = self.used + $mv$content$used;
+        if @unlikely(new_used_19 > builtin::array_len(self.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
+        }
+        start_20 = self.used;
+        self.used = new_used_19;
+        builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
+    };
+    return;
+}
+
 fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let digit_count_2: i32;
     let offset_3: i32;
@@ -4866,14 +4844,14 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_3 + digit_count_2;
     t = self;
     i = 0;
-    b458: block {
-        l459: loop {
-            break_if b458 i >= digit_count_2;
+    b455: block {
+        l456: loop {
+            break_if b455 i >= digit_count_2;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l459;
+            continue l456;
         };
     };
 }
@@ -4895,16 +4873,38 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b460: block {
-        l461: loop {
-            break_if b460 i >= digit_count_4;
+    b457: block {
+        l458: loop {
+            break_if b457 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l461;
+            continue l458;
         };
     };
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+    let new_used_25: i32;
+    let start_26: i32;
+    let new_used_66: i32;
+    let start_67: i32;
+    if is_negative {
+        new_used_25 = self.used + 1;
+        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
+        }
+        start_26 = self.used;
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, start_26, 45);
+    } else {
+    }
+    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+    }, start_67 = self.used, self.used = new_used_66, start_67;
 }
 
 export fn "spec_traits_parse.wado/$cm_export__$test_0" as "$test_0"
