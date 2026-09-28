@@ -1,0 +1,45 @@
+// Arithmetic on numeric literals answers last, as a single literal does: it
+// takes the type the call's other arguments settle, wherever it stands.
+use { println, Stdout } from "core:cli";
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+struct Box<T> {
+    v: T,
+}
+
+fn wrap<U>(u: U) -> Box<U> {
+    return Box { v: u };
+}
+
+fn second<T>(p: Pair<T>, fallback: T) -> T {
+    return if p.a == p.b { fallback } else { p.b };
+}
+
+fn unbox<T>(b: Box<T>, fallback: T) -> T {
+    return if b.v == fallback { fallback } else { b.v };
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+export fn run() with Stdout {
+    let wide: u64 = 7;
+    println(`${second(Pair { a: 1 + 2, b: 1 << 32 }, wide)}`);
+    println(`${unbox(wrap(0x1_0000_0000 * 2 - 1), wide)}`);
+    println(`${same(-(1 + 2) * 0x1_0000_0000, wide as i64)}`);
+    println(`${same(1 + 0.5, 2.0 as f32)}`);
+    println(`${second(Pair { a: 1 + 2, b: 3 * 3 }, 0)}`);
+    println(`${second(Pair { a: 1, b: 2 / 4 }, 0.0)}`);
+    let negated: i64 = -(1 + 2) * 0x1_0000_0000;
+    println(`${negated}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296\n8589934591\n-12884901888\n1.5\n9\n0.5\n-12884901888\n"
+}

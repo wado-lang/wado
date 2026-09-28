@@ -1,0 +1,107 @@
+// A literal in a method's receiver waits whatever declares the method, as
+// Rust's does: a bound is checked on the type the literal settles to, and one
+// impl that alone could answer settles it. `spec_types_receiver_literal.wado`
+// holds the case where several could.
+use { println, Stdout } from "core:cli";
+
+struct Bx<T> {
+    v: T,
+}
+
+fn wrap<U>(u: U) -> Bx<U> {
+    return Bx { v: u };
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+impl<T: Default> Bx<T> {
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+trait Pick<T> with () {
+    fn pick(&self) -> T;
+}
+
+impl<T: Default> Pick<T> for Bx<T> {
+    fn pick(&self) -> T {
+        return self.v;
+    }
+}
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+impl Tag for Bx<u64> {
+    fn tag(&self) -> String {
+        return "u64";
+    }
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+fn mk<U, V>(u: U, v: V) -> Pair<U, V> {
+    return Pair { a: u, b: v };
+}
+
+trait Twin with () {
+    fn twin(&self) -> String;
+}
+
+impl<T> Twin for Pair<T, T> {
+    fn twin(&self) -> String {
+        return "twin";
+    }
+}
+
+trait Seq with () {
+    type Elem;
+
+    fn at(&self) -> Self::Elem;
+
+    fn got(&self) -> Self::Elem {
+        return self.at();
+    }
+}
+
+impl<T> Seq for Bx<T> {
+    type Elem = T;
+
+    fn at(&self) -> T {
+        return self.v;
+    }
+}
+
+fn one<U>(u: U) -> List<U> {
+    let l: List<U> = [u];
+    return l;
+}
+
+export fn run() with Stdout {
+    let wide: u64 = 7;
+    // A bounded inherent impl.
+    println(`${same(wrap(0x1_0000_0000).get(), wide)}`);
+    // A bounded blanket trait impl.
+    println(`${same(wrap(0x1_0000_0001).pick(), wide)}`);
+    // The one impl that could answer settles a struct literal's field too.
+    println(Bx { v: 0x1_0000_0002 }.tag());
+    // `Pair<T, T>` meets `Pair<{integer}, u64>` at `T = u64`.
+    println(mk(1, wide).twin());
+    // A trait's default body reads `Self::Elem` off the impl that answers.
+    println(`${same(wrap(0x1_0000_0003).got(), wide)}`);
+    println(`${same(one(0x1_0000_0004).get(0).unwrap(), wide)}`);
+    // A subscript projects as a method does.
+    println(`${same(one(0x1_0000_0005)[0], wide)}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296\n4294967297\nu64\ntwin\n4294967299\n4294967300\n4294967301\n"
+}

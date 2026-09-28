@@ -95,7 +95,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: String,
         bounds: Vec<DeclaredBound>,
     ) -> TypeId {
-        let hole = self.mint_infer_var();
+        let hole = self.mint_infer_var_named(&param_name);
         self.attach_infer_var_diag(hole, span, message);
         if !bounds.is_empty() {
             self.infer_holes
@@ -178,6 +178,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_insert((param_name, bounds, span));
     }
 
+    /// Check `param`'s bounds against what `type_arg`, which still names
+    /// variables, becomes once they are solved: at finalize, through a fresh
+    /// variable chained to it. `type_arg`'s own variables keep the bounds of
+    /// the slots they stand for.
+    pub(super) fn defer_bounds_to_answer(
+        &mut self,
+        param: &GenericParam,
+        type_arg: TypeId,
+        self_binding: Option<SelfBinding>,
+        span: Span,
+    ) {
+        let bounds = self.declared_bounds(param, self_binding);
+        if bounds.is_empty() {
+            return;
+        }
+        let witness = self.mint_infer_var();
+        self.chain_infer_var(witness, type_arg);
+        self.attach_infer_var_bounds(witness, param.name.clone(), bounds, span);
+    }
+
     /// Set the diagnostic `var` raises if it is never solved. The first one
     /// wins, matching the solutions map's keep-the-first policy.
     pub(super) fn attach_infer_var_diag(&mut self, var: TypeId, span: Span, message: String) {
@@ -219,8 +239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_info: &VariantInfo,
         span: Span,
     ) -> TypeId {
-        let arity = variant_info.type_param_type_ids.len();
-        if arity == 0 {
+        if variant_info.type_param_type_ids.is_empty() {
             return type_id;
         }
         let is_bare_decl = self
@@ -233,11 +252,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
         let message = uninferable_type_param("variant", variant_name);
-        let holes: Vec<TypeId> = (0..arity)
-            .map(|_| {
-                self.mint_infer_hole(span, message.clone(), variant_name.to_string(), Vec::new())
+        let holes: Vec<TypeId> = variant_info
+            .type_params
+            .iter()
+            .map(|param| {
+                self.mint_infer_hole(span, message.clone(), param.name.clone(), Vec::new())
             })
             .collect();
+        assert_eq!(
+            holes.len(),
+            variant_info.type_param_type_ids.len(),
+            "a variant's parameters and their ids are one list"
+        );
         {
             let def = self
                 .tysys
@@ -249,6 +275,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .make_generic_instance(def, holes)
         }
+    }
+
+    /// Whether the type argument `t` is a slot nothing answers: a bare
+    /// parameter or variable, neither one of the enclosing declaration's
+    /// `scope_params` nor a variable an enclosing call's pending literals
+    /// answer.
+    pub(super) fn slot_unanswered(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
+        self.is_open_slot(t, scope_params) && !self.awaits_pending_call(t)
+    }
+
+    /// Whether a declared default fills the type argument `t`: a slot nothing
+    /// answers, or one that is an enclosing call's open variable, which the
+    /// default then answers in turn (`ident(it.collect())`). A variable an
+    /// enclosing call waits at for its literals keeps waiting: one chained to
+    /// that call's, or one it took over (`same(wrapd(1), x)`).
+    pub(super) fn slot_takes_default(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
+        let chained = self.apply_infer_holes(t) != t && self.awaits_pending_call(t);
+        self.is_open_slot(t, scope_params) && !chained && !self.annotate_ctx.literals_wait_at(t)
+    }
+
+    /// Whether `t` is a bare parameter or variable that is not one of the
+    /// enclosing declaration's `scope_params`.
+    fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
+        self.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
@@ -295,8 +345,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Record `answer` as the solution of the unsolved `var` even where it
+    /// still names other variables, which then answer for `var` once solved.
+    /// Refused where `answer` reaches `var` itself, which no type satisfies.
+    pub(super) fn chain_infer_var(&mut self, var: TypeId, answer: TypeId) {
+        let answer = self.apply_infer_holes(answer);
+        if says_nothing(answer)
+            || self
+                .tysys
+                .type_table
+                .borrow()
+                .infer_vars_in(answer)
+                .contains(&var)
+        {
+            return;
+        }
+        if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
+            *slot = Some(answer);
+        }
+    }
+
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
-    /// only when hole-free — a hole must resolve to a concrete type, not another.
+    /// when hole-free, or chained where it names only open variables of calls
+    /// whose arguments are still being read, which answer them in turn.
     pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
         self.solve_holes_against(holey, expected, None);
     }
@@ -324,14 +395,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty() {
             return;
         }
-        let usable: Vec<(TypeId, TypeId)> = bindings
+        let taken = bindings
             .into_iter()
-            .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)))
-            .filter(|&(_, concrete)| self.tysys.is_usable_answer(concrete))
-            .collect();
-        for (hole, concrete) in usable {
-            if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
-                *slot = Some(concrete);
+            .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)));
+        for (hole, answer) in taken {
+            if self.tysys.is_usable_answer(answer) {
+                if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
+                    *slot = Some(answer);
+                }
+            } else if self.awaits_pending_call(answer) {
+                // The enclosing call answers its variable once its arguments
+                // are read, and the hole with it.
+                self.chain_infer_var(hole, answer);
             }
         }
     }
@@ -347,11 +422,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Substitute solved holes into `ty` now — used before a site that records a
     /// mangled name derived from the type, which a later sweep could not fix.
-    pub(super) fn apply_infer_holes(&mut self, ty: TypeId) -> TypeId {
+    pub(super) fn apply_infer_holes(&self, ty: TypeId) -> TypeId {
         if !self.type_has_infer_hole(ty) {
             return ty;
         }
-        let subst = self.solved_hole_subst(false);
+        let mut subst = IndexMap::default();
+        self.reached_answers(ty, &mut subst);
         if subst.is_empty() {
             return ty;
         }
@@ -361,25 +437,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .substitute_infer_vars(ty, &subst)
     }
 
-    /// Build the `variable → replacement` map. With `pin_unsolved`, unsolved
-    /// variables map to `error` (used at finalize so nothing leaks); otherwise
-    /// only solved ones are included.
-    fn solved_hole_subst(&self, pin_unsolved: bool) -> IndexMap<InferVarId, TypeId> {
-        let tt = self.tysys.type_table.borrow();
-        self.infer_holes
-            .solutions
-            .iter()
-            .filter_map(|(hole, sol)| {
-                let ResolvedType::InferVar(var) = tt.get(*hole) else {
-                    panic!("infer-hole table holds a non-variable type");
-                };
-                match sol {
-                    Some(concrete) => Some((*var, *concrete)),
-                    None if pin_unsolved => Some((*var, TypeTable::ERROR)),
-                    None => None,
-                }
-            })
-            .collect()
+    /// Add to `subst` the final answer of each solved variable `ty` reaches,
+    /// following each chain [`Self::chain_infer_var`] started to its end.
+    fn reached_answers(&self, ty: TypeId, subst: &mut IndexMap<InferVarId, TypeId>) {
+        let reached = self.tysys.type_table.borrow().infer_vars_in(ty);
+        for hole in reached {
+            let ResolvedType::InferVar(var) = *self.tysys.type_table.borrow().get(hole) else {
+                panic!("infer_vars_in answers variables");
+            };
+            if subst.contains_key(&var) {
+                continue;
+            }
+            let Some(&Some(answer)) = self.infer_holes.solutions.get(&hole) else {
+                continue;
+            };
+            // The occurs check keeps chains acyclic, so this recursion ends.
+            self.reached_answers(answer, subst);
+            let answer = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .substitute_infer_vars(answer, subst);
+            subst.insert(var, answer);
+        }
+    }
+
+    /// The final `variable → replacement` map over every variable, an
+    /// unsolved one standing for `error` so nothing leaks past finalize.
+    fn pinned_hole_subst(&self) -> IndexMap<InferVarId, TypeId> {
+        let holes: Vec<TypeId> = self.infer_holes.solutions.keys().copied().collect();
+        let mut subst = IndexMap::default();
+        for &hole in &holes {
+            self.reached_answers(hole, &mut subst);
+        }
+        let mut tt = self.tysys.type_table.borrow_mut();
+        for &hole in &holes {
+            let ResolvedType::InferVar(var) = *tt.get(hole) else {
+                panic!("infer-hole table holds a non-variable type");
+            };
+            subst.entry(var).or_insert(TypeTable::ERROR);
+        }
+        // An unsolved variable an answer still names is now `error`, which
+        // names nothing, so one pass ends every chain.
+        for i in 0..subst.len() {
+            subst[i] = tt.substitute_infer_vars(subst[i], &subst);
+        }
+        subst
     }
 
     /// End-of-module finalize: raise diagnostics for unsolved holes and
@@ -421,8 +524,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: blame.span,
             });
         }
-        self.verify_solved_hole_bounds();
-        let subst = self.solved_hole_subst(true);
+        let subst = self.pinned_hole_subst();
+        self.verify_solved_hole_bounds(&subst);
         self.sweep_recorded_facts(&subst);
         self.infer_holes = InferHoleTable::default();
     }
@@ -430,7 +533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Verify each solved bounded hole satisfies its bound (the call-site check
     /// only saw the unconstrained hole), registering associated types on success
     /// or raising a clean trait-bound error on failure.
-    fn verify_solved_hole_bounds(&mut self) {
+    fn verify_solved_hole_bounds(&mut self, subst: &IndexMap<InferVarId, TypeId>) {
         // Collect first so the `type_implements_trait` borrow is released before
         // the mutable enforce calls.
         let tt = self.tysys.type_table.borrow();
@@ -439,7 +542,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .bounds
             .iter()
             .filter_map(|(hole, (param_name, bounds, span))| {
-                let solution = (*self.infer_holes.solutions.get(hole)?)?;
+                let ResolvedType::InferVar(var) = tt.get(*hole) else {
+                    panic!("infer-hole table holds a non-variable type");
+                };
+                let solution = subst[var];
                 // A still-parametric solution (forwarded param, or another hole)
                 // is checked when its owner is monomorphized; re-checking here,
                 // after the bound's scope closed, would spuriously fail.
@@ -571,13 +677,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 impl TypeSystem {
     /// Whether `answer` can stand as a variable's solution: not another variable,
-    /// nor `never` / `unknown` / `error`, which every check accepts anywhere.
+    /// nor one of the [`says_nothing`] types.
     fn is_usable_answer(&self, answer: TypeId) -> bool {
-        answer != TypeTable::NEVER
-            && answer != TypeTable::UNKNOWN
-            && answer != TypeTable::ERROR
-            && !self.type_table.borrow().contains_infer_var(answer)
+        !says_nothing(answer) && !self.type_table.borrow().contains_infer_var(answer)
     }
+}
+
+/// Whether `answer` is `never` / `unknown` / `error`, which every check
+/// accepts anywhere, so it answers no variable.
+fn says_nothing(answer: TypeId) -> bool {
+    matches!(
+        answer,
+        TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR
+    )
 }
 
 /// What an unsolved parameter of the `kind` spelled `name` reports.

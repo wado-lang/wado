@@ -436,6 +436,20 @@ impl Resolutions {
             .collect()
     }
 
+    /// Whether `def` is one of [`Self::decls_in_scope`], asked without
+    /// collecting the rest.
+    #[must_use]
+    pub fn decl_in_scope(&self, module: &ModuleSource, def: DefId) -> bool {
+        let named = |t: Option<&IndexMap<String, DefId>>| {
+            t.into_iter()
+                .flatten()
+                .any(|(name, &d)| d == def && self.scopes.resolve(module, name) == Some(def))
+        };
+        named(self.scopes.imports.get(module))
+            || named(self.scopes.own.get(module))
+            || named(Some(&self.scopes.prelude))
+    }
+
     /// The declaration a reference site names. `None` for a binder, a builtin
     /// shape, an unresolved name, or a site the walk never reached.
     #[must_use]

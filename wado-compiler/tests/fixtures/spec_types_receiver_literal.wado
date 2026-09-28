@@ -1,0 +1,34 @@
+// A literal in a method's receiver waits: one impl that alone could answer
+// settles it, and where several could, it takes its default first.
+
+struct Box<T> { value: T }
+
+fn wrap<U>(u: U) -> Box<U> {
+    return Box { value: u };
+}
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+impl Tag for Box<u64> {
+    fn tag(&self) -> String { return "u64"; }
+}
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for Box<i32> {
+    fn name(&self) -> String { return "i32"; }
+}
+
+impl Name for Box<u64> {
+    fn name(&self) -> String { return "u64"; }
+}
+
+test {
+    assert wrap(1).tag() == "u64";    // only `Box<u64>` could answer
+    assert wrap(1).name() == "i32";   // both could: the default answers
+    assert wrap(1 as u64).name() == "u64";
+}
