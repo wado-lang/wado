@@ -72,10 +72,9 @@ boundaries are:
 | ---------------------------------------------- | ------------------------------------------------- |
 | `fn`, method, closure                          | the body                                          |
 | `if`, `if let`                                 | each branch, including an `else` the source omits |
-| `match`                                        | each arm; a guard's success is its own region     |
+| `match`                                        | each arm                                          |
 | `for`, `while`, `while let`, `loop`            | the body                                          |
 | `let … else`                                   | the `else` block                                  |
-| labeled block                                  | the statements after a `break LABEL` inside it    |
 | `&&`, `\|\|`                                   | the right operand                                 |
 | `?`                                            | the early return                                  |
 | a statement that can leave its block early[^1] | the statements after it                           |
@@ -85,9 +84,9 @@ boundaries are:
 The three reports derive from regions:
 
 - A function is covered when its body region ran.
-- A branch is one row of the table above that picks between paths: each `if`
-  branch, each `match` arm, the right operand of `&&` and `||`, and the early
-  return of `?`. LCOV's `BRDA` takes one line per branch.
+- A branch is a region that one side of a choice starts: each `if` branch, each
+  `match` arm, the right operand of `&&` and `||`, and the early return of `?`.
+  LCOV's `BRDA` takes one line per branch.
 - A line counts when a statement starts on it. It is covered when the innermost
   region holding that statement ran. Blank lines, comments and lone braces do
   not count.
@@ -95,8 +94,8 @@ The three reports derive from regions:
 The plan is computed per module from its AST, in the annotate phase, as
 power-assert's is. It is a function of the source text alone, so every
 compilation that loads a module plans the same regions with the same numbers.
-It covers every function in the module, reached or not. A function liveness
-never reifies still has its regions in the plan, and reports them as not run.
+It covers every function in the module, including those liveness never
+reifies, which report as not run.
 
 A `test` block, including a `#[synopsis]` one, is not planned: it is the test,
 not the code under test. Neither is synthesized code (derived impls, bridges,
@@ -123,8 +122,8 @@ count before it, so a probe carries one global index.
 ### A probe is an effect, so the optimizer keeps what ran
 
 The optimizer treats `coverage_probe` like a write to a mutable global: it
-writes state and is never pure. Nothing that preserves program behavior can
-then delete, reorder or fold a probe away:
+writes state and is never pure. No pass that preserves program behavior can
+then remove a probe that could run:
 
 - DCE cannot remove a call whose body holds a probe, since that call is no
   longer pure.
@@ -134,9 +133,10 @@ then delete, reorder or fold a probe away:
   can never run, so reporting it as not run is correct.
 - Hoisting, CSE and select lowering skip what holds a probe.
 
-The last point costs speed: an instrumented build runs slower than the plain
-one. It does not change results, and the reported coverage does not depend on
-`-O`. That is an invariant the test suite checks (see Testing).
+Coverage is therefore counted from source, and it does not depend on `-O`. The
+test suite checks that invariant (see Testing). The price is speed: an
+instrumented build runs slower than the plain one. Timeouts stay as declared,
+so a test near its limit may need a larger `#[timeout_ms]` under coverage.
 
 ### A probe tells the host once, the first time it runs
 
@@ -211,16 +211,6 @@ the CLI world calls.
 - Integration tests cover what no fixture can: the CLI flags, the LCOV and JSON
   files, and merging plans from several test files.
 
-## Consequences
-
-- Coverage is exact per region at every optimization level, because it is
-  counted from source, not recovered from Wasm.
-- Instrumented builds are slower. Timeouts stay as declared; a test near its
-  limit may need a larger `#[timeout_ms]` under coverage.
-- The work is independent of DWARF. Line-level DWARF would not make coverage
-  simpler, since the optimizer would still have erased the regions coverage
-  needs.
-
 ## Alternatives considered
 
 ### Map Wasm offsets back through DWARF
@@ -243,8 +233,7 @@ Two walks over different trees would then have to agree on region identity.
 
 A counter per region, bumped on every run and read when the test ends, gives
 execution counts as well. Reading at the end loses every trapping test, and a
-host call on every run is too slow for loops. Counting can be added later as a
-second mode (see Known gaps).
+host call on every run is too slow for loops.
 
 ## Roadmap
 
@@ -269,8 +258,7 @@ second mode (see Known gaps).
       without probes.
 - [ ] Kiln generators run at compile time and are not measured, nor is a
       program `core:eval` compiles.
-- [ ] `wado run` and `wado serve` have no `--coverage`. The same probes would
-      work with the import linked in their worlds.
+- [ ] `wado run` and `wado serve` have no `--coverage`.
 
 ## References
 
