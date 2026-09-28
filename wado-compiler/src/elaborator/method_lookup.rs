@@ -25,7 +25,7 @@ use super::call::{
     DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, omits_a_default,
     slot_type_bindings, turbofish_leaves_slot,
 };
-use super::coercion::answers_last;
+use super::coercion::{ExpectedReturn, answers_last};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
@@ -3035,6 +3035,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_trait_name.as_ref().and_then(FqTraitName::canonical),
                 )),
             },
+            expected_type.map(|expected| ExpectedReturn {
+                declared: return_type,
+                expected,
+            }),
         );
 
         let subst;

@@ -400,9 +400,9 @@ type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$scalar" =
 
 type "functype//core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar" = fn(ref "core:prelude/types.wado//Box<serde_variant_no_unit_case.wado/NoUnit>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(130)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(131)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(131)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(132)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(132)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(133)
 
@@ -7076,6 +7076,31 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Serialize::seri
     return struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown case of NoUnit"), used: 22 } };
 }
 
+fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
+    let digit_count_2: i32;
+    let offset_3: i32;
+    let arr: ref Array<u8>;
+    let pos: i32;
+    let t: u64;
+    let i: i32;
+    digit_count_2 = "core:prelude/primitive.wado/count_digits_u64"(self);
+    offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(f, 0, digit_count_2);
+    arr = f.repr;
+    pos = offset_3 + digit_count_2;
+    t = self;
+    i = 0;
+    b720: block {
+        l721: loop {
+            break_if b720 i >= digit_count_2;
+            pos = pos - 1;
+            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            t = t /u 10_i64;
+            i = i + 1;
+            continue l721;
+        };
+    };
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(self, is_negative, digit_count) {
     let new_used_25: i32;
     let start_26: i32;
@@ -7096,31 +7121,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
     }, start_67 = self.used, self.used = new_used_66, start_67;
-}
-
-fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let digit_count_2: i32;
-    let offset_3: i32;
-    let arr: ref Array<u8>;
-    let pos: i32;
-    let t: u64;
-    let i: i32;
-    digit_count_2 = "core:prelude/primitive.wado/count_digits_u64"(self);
-    offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$scalar"(f, 0, digit_count_2);
-    arr = f.repr;
-    pos = offset_3 + digit_count_2;
-    t = self;
-    i = 0;
-    b723: block {
-        l724: loop {
-            break_if b723 i >= digit_count_2;
-            pos = pos - 1;
-            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
-            t = t /u 10_i64;
-            i = i + 1;
-            continue l724;
-        };
-    };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {

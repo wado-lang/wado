@@ -1,0 +1,92 @@
+// A numeric literal nested in a generic call's argument — returned by a closure
+// or held in a struct — answers last, as one standing as the argument does: the
+// other arguments settle its parameter first, then the type expected of the
+// call's result, and only a parameter neither settles takes its default.
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+fn id<B>(x: B) -> B {
+    return x;
+}
+
+fn unbox<B>(b: Box<B>) -> B {
+    return b.value;
+}
+
+fn call<B>(op: fn() -> B) -> B {
+    return op();
+}
+
+fn apply<A, B>(x: A, op: fn(A) -> B) -> B {
+    return op(x);
+}
+
+fn pick<B>(op: fn() -> B, other: B) -> B {
+    return if other == op() { other } else { op() };
+}
+
+fn map_list<A, B>(xs: List<A>, op: fn(A) -> B) -> List<B> {
+    let mut out: List<B> = [];
+    for let x of xs {
+        out.push(op(x));
+    }
+    return out;
+}
+
+struct Mapper {}
+
+impl Mapper {
+    fn apply<A, B>(&self, x: A, op: fn(A) -> B) -> B {
+        return op(x);
+    }
+
+    fn call<B>(op: fn() -> B) -> B {
+        return op();
+    }
+}
+
+fn wide() -> i64 {
+    return apply(true, |v| if v { 0x1_0000_0000 } else { 0 });
+}
+
+fn narrow() -> f32 {
+    return call(|| 0.5);
+}
+
+export fn run() with Stdout {
+    let a: f32 = id(1.0);
+    let f: fn() -> f32 = || 1.0;
+    let b: f32 = call(f);
+    let c: f32 = call(|| {
+        return 1.5;
+    });
+    let d: f32 = apply(true, |v| if v { 2.5 } else { 0.0 });
+    let e: i64 = apply(true, |v| 0x1_0000_0001);
+    let g: List<f32> = map_list([true], |v| 3.5);
+    let m = Mapper {};
+    let h: i64 = m.apply(1, |v| 0x1_0000_0002);
+    let i: u64 = Mapper::call(|| 0x1_0000_0003);
+    let some: Option<i32> = Option::Some(1);
+    let j: Option<i64> = some.map(|v| 0x1_0000_0004);
+    let fallback: u64 = 7;
+    let k = pick(|| 0x1_0000_0005, fallback);
+    let l = call(|| 1.25);
+    let n = call(|| 9);
+    let checks: [f32, f32, f32, f32, i64, List<f32>, i64, u64, Option<i64>, u64, f64, i32] = [
+        a, b, c, d, e, g, h, i, j, k, l, n,
+    ];
+    println(`${checks:?}`);
+    let wide_box: i64 = unbox(Box { value: 0x1_0000_0006 });
+    let narrow_box: f32 = unbox(Box { value: 0.25 });
+    let boxes: [i64, f32] = [wide_box, narrow_box];
+    println(`${boxes:?}`);
+    println(`${wide()} ${narrow()}`);
+}
+
+__DATA__
+{
+    "stdout": "[1.0, 1.0, 1.5, 2.5, 4294967297, [3.5], 4294967298, 4294967299, Option::Some(4294967300), 4294967301, 1.25, 9]\n[4294967302, 0.25]\n4294967296 0.5\n"
+}

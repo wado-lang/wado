@@ -18,7 +18,7 @@ use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
 };
 use super::callee::StaticMethodRef;
-use super::coercion::answers_last;
+use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -696,6 +696,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types
         };
 
+        // Substitute return type for inherited newtype methods
+        // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
+        if let Some(base_type_id) = owner.newtype_base() {
+            let newtype_id = self.tysys.get_base_type(receiver);
+            return_type =
+                self.tysys
+                    .substitute_newtype_in_type(return_type, base_type_id, newtype_id);
+        }
+
         // Only the method's own slots: the lookup instantiated the declaring
         // level already, so `Self::Item` is concrete here and `Acc` is not.
         let mut args: Vec<TypeId> = self.resolve_args_through_slots(
@@ -714,6 +723,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
                 }),
             },
+            expected_type.map(|expected| ExpectedReturn {
+                declared: return_type,
+                expected,
+            }),
         );
 
         // The module that declares this method: the scope its own defaults —
@@ -816,15 +829,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         self.verify_arg_synthesis(&synthesized, args_ast, ctx, &args, span);
-
-        // Substitute return type for inherited newtype methods
-        // e.g., Point::clone_point() -> Point becomes Location::clone_point() -> Location
-        if let Some(base_type_id) = owner.newtype_base() {
-            let newtype_id = self.tysys.get_base_type(receiver);
-            return_type =
-                self.tysys
-                    .substitute_newtype_in_type(return_type, base_type_id, newtype_id);
-        }
 
         // Address-taken tracking for an implicit `&mut self` borrow on a
         // primitive local receiver is owned by reify (`reify.rs` method-call
@@ -2344,7 +2348,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<TypeId> {
         let key = ImplTargetKey::TypeParam(blanket_module.clone(), blanket_param.to_string());
         let template = self
-            .lookup_static_method_param_types_keyed(blanket_param, method, Some(&key))
+            .lookup_static_method_sig_keyed(blanket_param, method, Some(&key))
+            .map(|sig| sig.value_param_types())
             .unwrap_or_default();
         let blanket_slot = self.tysys.blanket_param_slot(blanket_param);
         let mut tt = self.tysys.type_table.borrow_mut();
@@ -2363,7 +2368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolution's to fill, so only these are left for a call site.
     fn qualified_method_own_slots(&self, struct_name: &str, method_name: &str) -> Vec<TypeId> {
         self.qualified_method_sig(struct_name, method_name)
-            .map(|sig| sig.own_type_params().iter().map(|(_, id)| *id).collect())
+            .map(|sig| sig.own_type_param_ids())
             .unwrap_or_default()
     }
 
@@ -2569,26 +2574,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved.return_type()
     }
 
-    /// A static method's value parameters, in the declaration's own frame — its
-    /// slots still `TypeParam`, for the caller to substitute after inference.
+    /// A static method's signature, in the declaration's own frame — its slots
+    /// still `TypeParam`, for the caller to substitute after inference.
     ///
     /// `target_hint` is the receiver's canonical key, from a call site that
     /// already resolved the target to a `TypeId`. Without it the bare
     /// `struct_name` canonicalises against a global "first matching name"
     /// bucket, which picks another module's same-named struct.
     ///
-    /// `None` is a receiver / method pair nothing declares, which an empty list
-    /// would otherwise report as "declares no parameters" — and a count checked
-    /// against that drops the arguments a caller wrote.
-    pub(super) fn lookup_static_method_param_types_keyed(
-        &mut self,
+    /// `None` is a receiver / method pair nothing declares, which an empty
+    /// parameter list would otherwise report as "declares no parameters" — and
+    /// a count checked against that drops the arguments a caller wrote.
+    pub(super) fn lookup_static_method_sig_keyed(
+        &self,
         struct_name: &str,
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
-    ) -> Option<Vec<TypeId>> {
+    ) -> Option<MethodSig> {
         let static_key = self.static_receiver_key(struct_name, target_hint);
         if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
-            return Some(sig.value_param_types());
+            return Some(sig.clone());
         }
         // A resource declares its statics in Wado like any other declaration,
         // so they answer from the same signature table at the same point in the
@@ -2598,7 +2603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(sig) = self.tysys.signatures.resource_method_sig(*def, method_name)
             && sig.self_kind == ast::SelfKind::None
         {
-            return Some(sig.value_param_types());
+            return Some(sig.clone());
         }
         // The index holds only the declaring resource's own methods, so an
         // inherited one is reached by walking the chain. Instance methods only:
@@ -2608,7 +2613,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.tysys.declares_resource_static(*def, method_name)
             && let Some((_, sig)) = self.tysys.resource_instance_method(*def, method_name)
         {
-            return Some(sig.value_param_types());
+            return Some(sig);
         }
         None
     }
@@ -2684,7 +2689,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_key: &ImplTargetKey,
     ) -> Vec<TypeId> {
         self.unique_static_method_sig(static_key, method_name)
-            .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
+            .map(|sig| sig.decl.type_param_ids())
             .unwrap_or_default()
     }
 

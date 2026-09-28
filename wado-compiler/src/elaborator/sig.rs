@@ -551,6 +551,11 @@ pub(crate) struct InstantiatedSig {
 }
 
 impl DeclSig {
+    /// The slots, as bare ids.
+    pub(crate) fn type_param_ids(&self) -> Vec<TypeId> {
+        self.type_params.iter().map(|(_, id)| *id).collect()
+    }
+
     /// Fill the signature's slots with `type_args`, positionally.
     ///
     /// Arity is the caller's contract: it owns the diagnostic for a

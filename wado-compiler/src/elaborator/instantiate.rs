@@ -10,6 +10,7 @@ use crate::tir::{ResolvedType, SubstitutionContext, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::coercion::ExpectedReturn;
 use super::trait_query::SelfBinding;
 use super::types::FunctionContext;
 use crate::ast::{self, GenericParam};
@@ -159,6 +160,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots`, carry their bounds, resolve the arguments against
     /// them, and settle the answers back. One call, so no path can take part of
     /// the sequence and hand a closure a rigid slot nothing can construct.
+    /// `expected_return` is in the frame `param_types` is.
     pub(super) fn resolve_args_through_slots(
         &mut self,
         ctx: &mut FunctionContext,
@@ -167,14 +169,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slots: &[TypeId],
         own_params: &[GenericParam],
         of: &Instantiation<'_>,
+        expected_return: Option<ExpectedReturn>,
     ) -> Vec<TypeId> {
         if slots.is_empty() {
-            return self.resolve_args_against_params(args_ast, ctx, param_types, None);
+            return self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
         }
         let inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.span);
         let param_types = self.instantiate_types(param_types, &inst);
-        let mut args = self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst));
+        let expected_return = expected_return.map(|r| ExpectedReturn {
+            declared: self.instantiate_type(r.declared, &inst),
+            ..r
+        });
+        let mut args = self.resolve_args_against_params(
+            args_ast,
+            ctx,
+            &param_types,
+            Some(&inst),
+            expected_return,
+        );
         self.settle_onto_slots(&inst, slots, &mut args);
         args
     }
