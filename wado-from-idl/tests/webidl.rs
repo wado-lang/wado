@@ -74,7 +74,7 @@ fn argument(name: &str, ty: &str, optional: bool, default: &str) -> String {
 }
 
 fn variadic(name: &str, ty: &str) -> String {
-    argument(name, ty, true, "null").replace(r#""variadic": false"#, r#""variadic": true"#)
+    argument(name, ty, false, "null").replace(r#""variadic": false"#, r#""variadic": true"#)
 }
 
 fn operation(name: &str, ret: &str, args: &[String], special: &str) -> String {

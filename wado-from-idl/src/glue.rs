@@ -35,10 +35,6 @@ function $handle(object) {
 const $object = (handle) => $objects[handle % $STRIDE];
 const $some = (f) => (value) => (value === undefined ? undefined : f(value));
 const $nullable = (f) => (value) => (value === null ? undefined : f(value));
-const $someObject = $some($object);
-const $nullableHandle = $nullable($handle);
-const $someNumber = $some(Number);
-const $nullableBigInt = $nullable(BigInt);
 const $list = (f) => (values) => Array.from(values, (value) => f(value));
 
 // The component's `wado:callback/callback` export, which calls a closure back.
@@ -286,15 +282,11 @@ fn conversion(ty: &WadoType, direction: Direction) -> Option<String> {
         (WadoType::I64 | WadoType::U64, Direction::ToGuest) => "BigInt",
         (WadoType::Borrow(inner), _) => return conversion(inner, direction),
         (WadoType::Option(inner), _) => {
-            let inner = conversion(inner, direction)?;
-            return Some(match (inner.as_str(), direction) {
-                ("$object", Direction::ToDom) => "$someObject".to_string(),
-                ("Number", Direction::ToDom) => "$someNumber".to_string(),
-                ("$handle", Direction::ToGuest) => "$nullableHandle".to_string(),
-                ("BigInt", Direction::ToGuest) => "$nullableBigInt".to_string(),
-                (_, Direction::ToDom) => format!("$some({inner})"),
-                (_, Direction::ToGuest) => format!("$nullable({inner})"),
-            });
+            let wrapper = match direction {
+                Direction::ToDom => "$some",
+                Direction::ToGuest => "$nullable",
+            };
+            return conversion(inner, direction).map(|f| format!("{wrapper}({f})"));
         }
         (WadoType::List(element), _) => {
             return conversion(element, direction).map(|f| format!("$list({f})"));

@@ -35,10 +35,6 @@ function $handle(object) {
 const $object = (handle) => $objects[handle % $STRIDE];
 const $some = (f) => (value) => (value === undefined ? undefined : f(value));
 const $nullable = (f) => (value) => (value === null ? undefined : f(value));
-const $someObject = $some($object);
-const $nullableHandle = $nullable($handle);
-const $someNumber = $some(Number);
-const $nullableBigInt = $nullable(BigInt);
 const $list = (f) => (values) => Array.from(values, (value) => f(value));
 
 // The component's `wado:callback/callback` export, which calls a closure back.
@@ -85,13 +81,13 @@ export const event = {
     return $object(self).type;
   },
   target(self) {
-    return $nullableHandle($object(self).target);
+    return $nullable($handle)($object(self).target);
   },
   srcElement(self) {
-    return $nullableHandle($object(self).srcElement);
+    return $nullable($handle)($object(self).srcElement);
   },
   currentTarget(self) {
-    return $nullableHandle($object(self).currentTarget);
+    return $nullable($handle)($object(self).currentTarget);
   },
   composedPath(self) {
     return $list($handle)($object(self).composedPath());
@@ -157,31 +153,31 @@ export const node = {
     return $object(self).isConnected;
   },
   ownerDocument(self) {
-    return $nullableHandle($object(self).ownerDocument);
+    return $nullable($handle)($object(self).ownerDocument);
   },
   getRootNode(self) {
     return $handle($object(self).getRootNode());
   },
   parentNode(self) {
-    return $nullableHandle($object(self).parentNode);
+    return $nullable($handle)($object(self).parentNode);
   },
   parentElement(self) {
-    return $nullableHandle($object(self).parentElement);
+    return $nullable($handle)($object(self).parentElement);
   },
   hasChildNodes(self) {
     return $object(self).hasChildNodes();
   },
   firstChild(self) {
-    return $nullableHandle($object(self).firstChild);
+    return $nullable($handle)($object(self).firstChild);
   },
   lastChild(self) {
-    return $nullableHandle($object(self).lastChild);
+    return $nullable($handle)($object(self).lastChild);
   },
   previousSibling(self) {
-    return $nullableHandle($object(self).previousSibling);
+    return $nullable($handle)($object(self).previousSibling);
   },
   nextSibling(self) {
-    return $nullableHandle($object(self).nextSibling);
+    return $nullable($handle)($object(self).nextSibling);
   },
   nodeValue(self) {
     return $object(self).nodeValue;
@@ -202,16 +198,16 @@ export const node = {
     return $handle($object(self).cloneNode(subtree));
   },
   isEqualNode(self, otherNode) {
-    return $object(self).isEqualNode($someObject(otherNode));
+    return $object(self).isEqualNode($some($object)(otherNode));
   },
   isSameNode(self, otherNode) {
-    return $object(self).isSameNode($someObject(otherNode));
+    return $object(self).isSameNode($some($object)(otherNode));
   },
   compareDocumentPosition(self, other) {
     return $object(self).compareDocumentPosition($object(other));
   },
   contains(self, other) {
-    return $object(self).contains($someObject(other));
+    return $object(self).contains($some($object)(other));
   },
   lookupPrefix(self, namespace) {
     return $object(self).lookupPrefix(namespace);
@@ -223,7 +219,7 @@ export const node = {
     return $object(self).isDefaultNamespace(namespace);
   },
   insertBefore(self, node, child) {
-    return $handle($object(self).insertBefore($object(node), $someObject(child)));
+    return $handle($object(self).insertBefore($object(node), $some($object)(child)));
   },
   appendChild(self, node) {
     return $handle($object(self).appendChild($object(node)));
@@ -343,7 +339,7 @@ export const element = {
     return $object(self).hasAttributeNS(namespace, localName);
   },
   closest(self, selectors) {
-    return $nullableHandle($object(self).closest(selectors));
+    return $nullable($handle)($object(self).closest(selectors));
   },
   matches(self, selectors) {
     return $object(self).matches(selectors);
@@ -352,7 +348,7 @@ export const element = {
     return $object(self).webkitMatchesSelector(selectors);
   },
   insertAdjacentElement(self, where, element) {
-    return $nullableHandle($object(self).insertAdjacentElement(where, $object(element)));
+    return $nullable($handle)($object(self).insertAdjacentElement(where, $object(element)));
   },
   insertAdjacentText(self, where, data) {
     $object(self).insertAdjacentText(where, data);
@@ -391,25 +387,25 @@ export const element = {
     return $object(self).hasPointerCapture(pointerId);
   },
   firstElementChild(self) {
-    return $nullableHandle($object(self).firstElementChild);
+    return $nullable($handle)($object(self).firstElementChild);
   },
   lastElementChild(self) {
-    return $nullableHandle($object(self).lastElementChild);
+    return $nullable($handle)($object(self).lastElementChild);
   },
   childElementCount(self) {
     return $object(self).childElementCount;
   },
   moveBefore(self, node, child) {
-    $object(self).moveBefore($object(node), $someObject(child));
+    $object(self).moveBefore($object(node), $some($object)(child));
   },
   querySelector(self, selectors) {
-    return $nullableHandle($object(self).querySelector(selectors));
+    return $nullable($handle)($object(self).querySelector(selectors));
   },
   previousElementSibling(self) {
-    return $nullableHandle($object(self).previousElementSibling);
+    return $nullable($handle)($object(self).previousElementSibling);
   },
   nextElementSibling(self) {
-    return $nullableHandle($object(self).nextElementSibling);
+    return $nullable($handle)($object(self).nextElementSibling);
   },
   remove(self) {
     $object(self).remove();
@@ -421,10 +417,10 @@ export const element = {
     $object(self).role = value;
   },
   ariaActiveDescendantElement(self) {
-    return $nullableHandle($object(self).ariaActiveDescendantElement);
+    return $nullable($handle)($object(self).ariaActiveDescendantElement);
   },
   setAriaActiveDescendantElement(self, value) {
-    $object(self).ariaActiveDescendantElement = $someObject(value);
+    $object(self).ariaActiveDescendantElement = $some($object)(value);
   },
   ariaAtomic(self) {
     return $object(self).ariaAtomic;
@@ -745,10 +741,10 @@ export const htmlElement = {
     $object(self).containerTimingIgnore = value;
   },
   scrollParent(self) {
-    return $nullableHandle($object(self).scrollParent);
+    return $nullable($handle)($object(self).scrollParent);
   },
   offsetParent(self) {
-    return $nullableHandle($object(self).offsetParent);
+    return $nullable($handle)($object(self).offsetParent);
   },
   offsetTop(self) {
     return $object(self).offsetTop;
@@ -1204,10 +1200,10 @@ export const htmlInputElement = {
     $object(self).capture = value;
   },
   popoverTargetElement(self) {
-    return $nullableHandle($object(self).popoverTargetElement);
+    return $nullable($handle)($object(self).popoverTargetElement);
   },
   setPopoverTargetElement(self, value) {
-    $object(self).popoverTargetElement = $someObject(value);
+    $object(self).popoverTargetElement = $some($object)(value);
   },
   popoverTargetAction(self) {
     return $object(self).popoverTargetAction;
@@ -1219,13 +1215,13 @@ export const htmlInputElement = {
 
 export const document = {
   elementFromPoint(self, x, y) {
-    return $nullableHandle($object(self).elementFromPoint(x, y));
+    return $nullable($handle)($object(self).elementFromPoint(x, y));
   },
   elementsFromPoint(self, x, y) {
     return $list($handle)($object(self).elementsFromPoint(x, y));
   },
   scrollingElement(self) {
-    return $nullableHandle($object(self).scrollingElement);
+    return $nullable($handle)($object(self).scrollingElement);
   },
   new() {
     return $handle(new globalThis.Document());
@@ -1252,7 +1248,7 @@ export const document = {
     return $object(self).contentType;
   },
   documentElement(self) {
-    return $nullableHandle($object(self).documentElement);
+    return $nullable($handle)($object(self).documentElement);
   },
   createElement(self, localName, options) {
     return $handle($object(self).createElement(localName, options));
@@ -1312,10 +1308,10 @@ export const document = {
     $object(self).dir = value;
   },
   body(self) {
-    return $nullableHandle($object(self).body);
+    return $nullable($handle)($object(self).body);
   },
   setBody(self, value) {
-    $object(self).body = $someObject(value);
+    $object(self).body = $some($object)(value);
   },
   open(self, unused1, unused2) {
     return $handle($object(self).open(unused1, unused2));
@@ -1411,34 +1407,34 @@ export const document = {
     return $object(self).prerendering;
   },
   getElementById(self, elementId) {
-    return $nullableHandle($object(self).getElementById(elementId));
+    return $nullable($handle)($object(self).getElementById(elementId));
   },
   fullscreenElement(self) {
-    return $nullableHandle($object(self).fullscreenElement);
+    return $nullable($handle)($object(self).fullscreenElement);
   },
   activeElement(self) {
-    return $nullableHandle($object(self).activeElement);
+    return $nullable($handle)($object(self).activeElement);
   },
   pictureInPictureElement(self) {
-    return $nullableHandle($object(self).pictureInPictureElement);
+    return $nullable($handle)($object(self).pictureInPictureElement);
   },
   pointerLockElement(self) {
-    return $nullableHandle($object(self).pointerLockElement);
+    return $nullable($handle)($object(self).pointerLockElement);
   },
   firstElementChild(self) {
-    return $nullableHandle($object(self).firstElementChild);
+    return $nullable($handle)($object(self).firstElementChild);
   },
   lastElementChild(self) {
-    return $nullableHandle($object(self).lastElementChild);
+    return $nullable($handle)($object(self).lastElementChild);
   },
   childElementCount(self) {
     return $object(self).childElementCount;
   },
   moveBefore(self, node, child) {
-    $object(self).moveBefore($object(node), $someObject(child));
+    $object(self).moveBefore($object(node), $some($object)(child));
   },
   querySelector(self, selectors) {
-    return $nullableHandle($object(self).querySelector(selectors));
+    return $nullable($handle)($object(self).querySelector(selectors));
   },
   createNsResolver(self, nodeResolver) {
     return $handle($object(self).createNSResolver($object(nodeResolver)));
@@ -1510,7 +1506,7 @@ export const window = {
     return $object(self).devicePixelRatio;
   },
   event(self) {
-    return $nullableHandle($object(self).event);
+    return $nullable($handle)($object(self).event);
   },
   document(self) {
     return $handle($object(self).document);
@@ -1546,7 +1542,7 @@ export const window = {
     return $object(self).length;
   },
   frameElement(self) {
-    return $nullableHandle($object(self).frameElement);
+    return $nullable($handle)($object(self).frameElement);
   },
   originAgentCluster(self) {
     return $object(self).originAgentCluster;

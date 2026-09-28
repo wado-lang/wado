@@ -680,7 +680,7 @@ impl Lowering<'_> {
                 Ok(ty) => optional(ty, arg.optional),
                 // A trailing optional the slice cannot express is left to
                 // its WebIDL default; a required one takes the member with it.
-                Err(_) if arg.optional && !arg.variadic => break,
+                Err(_) if arg.optional => break,
                 Err(reason) => return skip(format!("`{}`: {reason}", arg.name)),
             };
             // `None` is the argument left out, so the WebIDL default applies in
