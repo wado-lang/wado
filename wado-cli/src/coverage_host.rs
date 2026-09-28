@@ -8,11 +8,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use wado_compiler::coverage::{
-    self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Region,
+    self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Region, Registered,
 };
+#[cfg(debug_assertions)]
+use wado_compiler::stdlib::DEV_STDLIB_ROOT;
+use wado_compiler::stdlib::core_module_file;
 use wasmtime::component::{HasSelf, Linker};
 
 use crate::args::CliExit;
+use crate::compile::build_dir;
 use crate::sync::lock;
 use crate::test_report::TestReporter;
 
@@ -126,30 +130,47 @@ pub struct CoverageOptions {
 
 /// The plans and hits a run has seen so far.
 pub struct CoverageRun {
-    /// Report paths are relative to this directory.
+    options: CoverageOptions,
+    /// Report paths are relative to this directory, the current one.
     root: PathBuf,
     coverage: Mutex<Result<Coverage, PlanMismatch>>,
 }
 
 impl CoverageRun {
-    #[must_use]
-    pub fn new(root: PathBuf) -> Self {
-        Self {
+    /// # Errors
+    ///
+    /// Returns an error when the current directory cannot be read.
+    pub fn new(options: CoverageOptions) -> Result<Self, CliExit> {
+        let root = std::env::current_dir()
+            .and_then(|dir| dir.canonicalize())
+            .map_err(|e| CliExit::error(format!("reading the current directory: {e}")))?;
+        Ok(Self {
+            options,
             root,
             coverage: Mutex::new(Ok(Coverage::default())),
-        }
+        })
     }
 
-    /// Record the plans of the component compiled from `entry`, and what
-    /// `test` hit in them.
-    pub fn add(&self, entry: &str, plans: &DecodedPlans, hits: &BTreeSet<u32>, test: Option<&str>) {
+    /// Add the plans of the component compiled from `entry`: where the hits
+    /// of each land, or none once plans have disagreed.
+    pub fn register(&self, entry: &str, plans: &DecodedPlans) -> Vec<Registered> {
         let base = Path::new(entry).parent().unwrap_or(Path::new(""));
         let mut guard = lock(&self.coverage);
-        if let Ok(coverage) = guard.as_mut()
-            && let Err(mismatch) =
-                coverage.add(plans, hits, test, |path| self.report_path(base, path))
-        {
-            *guard = Err(mismatch);
+        let Ok(coverage) = guard.as_mut() else {
+            return Vec::new();
+        };
+        coverage
+            .register(plans, |path| self.report_path(base, path))
+            .unwrap_or_else(|mismatch| {
+                *guard = Err(mismatch);
+                Vec::new()
+            })
+    }
+
+    /// Record what `test` hit in the plans `registered` names.
+    pub fn record(&self, registered: &[Registered], hits: &BTreeSet<u32>, test: &str) {
+        if let Ok(coverage) = lock(&self.coverage).as_mut() {
+            coverage.record(registered, hits, Some(test));
         }
     }
 
@@ -157,7 +178,13 @@ impl CoverageRun {
     /// root where it lies under it. A plan names a file relative to its entry
     /// module's directory, `base`, and a `core:` module by its import path.
     fn report_path(&self, base: &Path, path: &str) -> String {
-        let file = stdlib_file(path).unwrap_or_else(|| base.join(path));
+        let file = match core_module_file(path) {
+            Some(file) => match dev_stdlib_file(file) {
+                Some(file) => file,
+                None => return path.to_string(),
+            },
+            None => base.join(path),
+        };
         let Ok(absolute) = file.canonicalize() else {
             return path.to_string();
         };
@@ -174,12 +201,9 @@ impl CoverageRun {
     ///
     /// Returns an error when plans for one path disagree, or a report cannot
     /// be written.
-    pub(crate) fn finish(
-        self,
-        options: &CoverageOptions,
-        out_dir: &Path,
-        reporter: &dyn TestReporter,
-    ) -> Result<(), CliExit> {
+    pub(crate) fn finish(self, reporter: &dyn TestReporter) -> Result<(), CliExit> {
+        let options = &self.options;
+        let out_dir = &build_dir(&self.root).join("coverage");
         let coverage = self
             .coverage
             .into_inner()
@@ -213,17 +237,17 @@ impl CoverageRun {
     }
 }
 
-/// Where a dev build reads the `core:` module `path` names from. A release
-/// build embeds the stdlib, so its modules are reported by import path.
-fn stdlib_file(path: &str) -> Option<PathBuf> {
-    let file = wado_compiler::stdlib::core_module_file(path)?;
-    #[cfg(debug_assertions)]
-    return Some(Path::new(wado_compiler::stdlib::DEV_STDLIB_ROOT).join(file));
-    #[cfg(not(debug_assertions))]
-    {
-        let _ = file;
-        None
-    }
+/// Where a dev build reads the stdlib `file` from.
+#[cfg(debug_assertions)]
+fn dev_stdlib_file(file: &str) -> Option<PathBuf> {
+    Some(Path::new(DEV_STDLIB_ROOT).join(file))
+}
+
+/// A release build embeds the stdlib, so its modules are reported by import
+/// path.
+#[cfg(not(debug_assertions))]
+fn dev_stdlib_file(_file: &str) -> Option<PathBuf> {
+    None
 }
 
 /// The regions no test ran: by file, then by function, each as
@@ -345,10 +369,9 @@ fn totals(file: &FileCoverage) -> Totals {
     }
 }
 
-/// The summary `--coverage` prints after the run: the totals, then each file
+/// The summary `--coverage` reports after the run: the totals, then each file
 /// that plans a function.
-#[must_use]
-pub fn summary(coverage: &Coverage) -> String {
+fn summary(coverage: &Coverage) -> String {
     let per_file: Vec<(&String, Totals)> = coverage
         .files
         .iter()
@@ -393,8 +416,7 @@ pub fn summary(coverage: &Coverage) -> String {
 
 /// `coverage.json`: every file's regions with their spans and the tests that
 /// ran them.
-#[must_use]
-pub fn to_json(coverage: &Coverage) -> String {
+fn to_json(coverage: &Coverage) -> String {
     use serde_json::{Value, json};
 
     let files: Vec<Value> = coverage

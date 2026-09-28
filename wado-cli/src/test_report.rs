@@ -109,7 +109,9 @@ pub(crate) trait TestReporter: Send + Sync {
     fn on_package_done(&self, args: PackageDoneArgs);
     fn on_run_done(&self, grand: &PackageTotals, multi_pkg: bool, wall: Duration);
     /// The `--coverage` summary, after the run is done.
-    fn on_coverage(&self, summary: &str);
+    fn on_coverage(&self, summary: &str) {
+        print!("{summary}");
+    }
 }
 
 /// Reproduces `wado test`'s original output: per-file compile/load lines
@@ -229,10 +231,6 @@ impl TestReporter for VerboseReporter {
                 println!("{line}");
             }
         }
-    }
-
-    fn on_coverage(&self, summary: &str) {
-        print!("{summary}");
     }
 }
 
@@ -480,10 +478,6 @@ impl TestReporter for HeartbeatReporter {
             println!("{line}");
         }
     }
-
-    fn on_coverage(&self, summary: &str) {
-        print!("{summary}");
-    }
 }
 
 /// One YAML diagnostic block (TAP13/14 `---` … `...`), rendered as a
@@ -661,8 +655,8 @@ impl TapDoc {
 /// honestly as `ok … # TODO resolved` rather than forced to `not ok` —
 /// whether that counts as a failure is `wado test`'s own policy (see
 /// `on_run_done`/the exit code in `test::run`), not something the raw TAP
-/// text should misrepresent. Compile/load progress and the final summary
-/// are `#` comments, which TAP consumers ignore but a human or an agent
+/// text should misrepresent. Compile/load progress, the final summary and
+/// the `--coverage` summary are `#` comments, which TAP consumers ignore but a human or an agent
 /// tailing the stream can still read.
 pub(crate) struct TapReporter {
     overall_start: Instant,

@@ -17,6 +17,7 @@ use bytes::Bytes;
 use futures::future::{Either, select};
 use http_body_util::{BodyExt, Full};
 use serde::Deserialize;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -27,6 +28,7 @@ use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi_http::p3::Request;
 use wasmtime_wasi_http::p3::bindings::Service;
 
+use wado_compiler::coverage::{Branch, Coverage, CoverageScope, read_from_component, render_plan};
 use wado_compiler::{CompilerOptions, OptLevel};
 
 // ---------------------------------------------------------------------------
@@ -322,7 +324,7 @@ struct CoverageSpec {
     #[serde(default)]
     uncovered_lines: Vec<u32>,
 
-    /// Each as [`Branch::describe`](wado_compiler::coverage::Branch) spells it:
+    /// Each as [`Branch::describe`] spells it:
     /// `"12:5 else"`.
     #[serde(default)]
     uncovered_branches: Vec<String>,
@@ -592,7 +594,7 @@ async fn run_http_request_async(
             mocks: outgoing_mocks,
         },
         tls_ctx: common::build_tls_ctx(tls_mocks),
-        coverage_hits: std::collections::BTreeSet::new(),
+        coverage_hits: BTreeSet::new(),
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)
@@ -895,10 +897,7 @@ fn run_with_allocator(
                 .collect(),
             policy: param_policy,
         },
-        coverage: spec
-            .coverage
-            .as_ref()
-            .map(|_| wado_compiler::coverage::CoverageScope::default()),
+        coverage: spec.coverage.as_ref().map(|_| CoverageScope::default()),
         ..Default::default()
     };
 
@@ -1081,18 +1080,17 @@ fn run_with_allocator(
 fn assert_coverage(
     wasm: &[u8],
     fixture_path: &Path,
-    hits: &std::collections::BTreeSet<u32>,
+    hits: &BTreeSet<u32>,
     expected: &CoverageSpec,
     test_id: &str,
 ) {
-    use wado_compiler::coverage::{Coverage, read_from_component};
-
     let plans = read_from_component(wasm)
         .unwrap_or_else(|| panic!("[{test_id}] the component carries no coverage section"));
     let mut coverage = Coverage::default();
-    coverage
-        .add(&plans, hits, None, str::to_string)
+    let registered = coverage
+        .register(&plans, str::to_string)
         .unwrap_or_else(|mismatch| panic!("[{test_id}] plans disagree on {}", mismatch.path));
+    coverage.record(&registered, hits, None);
     let name = fixture_path.file_name().unwrap().to_string_lossy();
     let file = coverage
         .files
@@ -1104,7 +1102,7 @@ fn assert_coverage(
         .branches()
         .iter()
         .filter(|b| !b.taken)
-        .map(wado_compiler::coverage::Branch::describe)
+        .map(Branch::describe)
         .collect();
     let functions: Vec<String> = file
         .functions()
@@ -1112,7 +1110,7 @@ fn assert_coverage(
         .filter(|(_, ran)| !ran)
         .map(|(f, _)| f.name.clone())
         .collect();
-    let plan = || wado_compiler::coverage::render_plan(&file.plan);
+    let plan = || render_plan(&file.plan);
     assert_eq!(
         lines,
         expected.uncovered_lines,

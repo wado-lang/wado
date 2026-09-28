@@ -469,7 +469,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) probes_emitted: IndexSet<u32>,
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
     /// over no elements.
-    pub(crate) probes_unrolled_away: IndexSet<u32>,
+    pub(crate) probes_without_instance: IndexSet<u32>,
 }
 
 /// Call site captured for location literals in defaults.
@@ -530,7 +530,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             pending_local_newtypes: IndexMap::default(),
             coverage: None,
             probes_emitted: IndexSet::default(),
-            probes_unrolled_away: IndexSet::default(),
+            probes_without_instance: IndexSet::default(),
         }
     }
 
@@ -3813,7 +3813,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_tuple_through_ref(tuple_type_id)
             .unwrap_or_default();
         if elems.is_empty() {
-            self.unroll_away_probes(for_of.id);
+            self.skip_for_of_body(for_of.id);
         }
 
         let temp_name = format!("$tuple_{unique_id}");

@@ -7,6 +7,7 @@ use crate::call_args::CallArgs;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::coverage::ProbeSite;
+use crate::hashmap::IndexSet;
 use crate::tir::{
     CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable,
 };
@@ -107,12 +108,12 @@ impl<H: CompilerHost> Reify<'_, H> {
         }
     }
 
-    /// Account for the probes of the `for-of` `id`, whose body reify unrolls
+    /// Skip the probes of the body of the `for-of` `id`, which reify unrolls
     /// no instance of: its regions never run, and report so.
-    pub(super) fn unroll_away_probes(&mut self, id: AstId) {
+    pub(super) fn skip_for_of_body(&mut self, id: AstId) {
         if let Some(coverage) = self.coverage {
-            self.probes_unrolled_away
-                .extend(coverage.for_of_probes(id).iter().copied());
+            self.probes_without_instance
+                .extend(coverage.for_of_body(id));
         }
     }
 
@@ -123,22 +124,28 @@ impl<H: CompilerHost> Reify<'_, H> {
         let Some(coverage) = self.coverage else {
             return;
         };
-        for &probe in &self.probes_emitted {
-            let regions = coverage
-                .function_probes(probe)
-                .expect("an emitted probe is a planned one");
-            let missing: Vec<u32> = regions
+        let functions: IndexSet<usize> = self
+            .probes_emitted
+            .iter()
+            .map(|&probe| {
+                coverage
+                    .function_of(probe)
+                    .expect("an emitted probe is a planned one")
+            })
+            .collect();
+        for function in functions {
+            let missing: Vec<u32> = coverage
+                .function_probes(function)
                 .iter()
                 .copied()
                 .filter(|region| {
                     !self.probes_emitted.contains(region)
-                        && !self.probes_unrolled_away.contains(region)
+                        && !self.probes_without_instance.contains(region)
                 })
                 .collect();
             assert!(
                 missing.is_empty(),
-                "coverage regions {missing:?} of the function holding region {probe} \
-                 in {} took no probe",
+                "coverage regions {missing:?} of function {function} in {} took no probe",
                 self.current_module_source
             );
         }

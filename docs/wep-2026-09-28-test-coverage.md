@@ -49,12 +49,13 @@ wado test --coverage --coverage-include=deps
 wado test --coverage --coverage-baseline scripts/stdlib-coverage.json
 ```
 
-After the run, the summary lists each file and the totals:
+After the run, the summary lists each file and the totals. Under
+`--format tap`, each of its lines is a `#` comment.
 
 ```text
 coverage: lines 182/204 (89.2%), branches 61/74 (82.4%), functions 40/41 (97.6%)
-  src/lexer.wado    lines  62/64   branches 20/22   functions 14/14
-  src/parser.wado   lines 120/140  branches 41/52   functions 26/27
+  src/lexer.wado   lines     62/64  branches     20/22  functions   14/14
+  src/parser.wado  lines   120/140  branches     41/52  functions   26/27
 ```
 
 Three files can be written to `build/coverage/`:
@@ -130,7 +131,9 @@ three consequences:
 
 Reify checks itself: for each function one of whose probes it emitted, every
 probed region of that function must have taken its probe. A region reify
-reached without one would report as never run.
+reached without one would report as never run. The one exception is a region
+with no instance to take one: the body of a tuple `for-of` over no elements,
+which never runs and reports so.
 
 ### A region its children account for takes no probe
 

@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
@@ -15,13 +14,13 @@ use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
-use wado_compiler::coverage::{CoverageScope, DecodedPlans};
+use wado_compiler::coverage::{CoverageScope, Registered, read_from_component};
 use wado_compiler::hashmap::IndexMap;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, CompileFlags, build_dir};
+use crate::compile::{self, CompileFlags};
 use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_coverage_include};
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession};
@@ -556,8 +555,8 @@ struct LoadedModule {
     /// `--profile`: the run's one sampler and its sampling period, shared with
     /// `run` so it can write the profile once every test has fed it.
     profiler: Option<(GuestProfilerSlot, Duration)>,
-    /// `--coverage`: the run's report and this component's plans.
-    coverage: Option<(Arc<CoverageRun>, Arc<DecodedPlans>)>,
+    /// `--coverage`: the run's report, and where this component's hits land.
+    coverage: Option<(Arc<CoverageRun>, Vec<Registered>)>,
     _module_permit: OwnedSemaphorePermit,
 }
 
@@ -1006,9 +1005,8 @@ fn load_module(
             // A component without the section measured no module, so every
             // one it counts is in a component that has it.
             let coverage = coverage_run.and_then(|run| {
-                let plans = wado_compiler::coverage::read_from_component(&artifact.wasm)?;
-                run.add(&artifact.path, &plans, &BTreeSet::new(), None);
-                Some((Arc::clone(run), Arc::new(plans)))
+                let plans = read_from_component(&artifact.wasm)?;
+                Some((Arc::clone(run), run.register(&artifact.path, &plans)))
             });
             reporter.on_load(
                 &artifact.path,
@@ -1828,10 +1826,10 @@ async fn run_single_test(
         ),
     };
 
-    if let Some((run, plans)) = &module.coverage {
+    if let Some((run, registered)) = &module.coverage {
         let hits = std::mem::take(&mut store.data_mut().coverage_hits().0);
         let test = format!("{}::{}", module.path, job.display_name);
-        run.add(&module.path, plans, &hits, Some(&test));
+        run.record(registered, &hits, &test);
     }
 
     TestResult {
@@ -2409,13 +2407,11 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let runtime_knobs = opts.runtime;
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
-    let coverage_options = opts.coverage;
-    let invocation_root = std::env::current_dir()
-        .and_then(|dir| dir.canonicalize())
-        .map_err(|e| CliExit::error(format!("reading the current directory: {e}")))?;
-    let coverage_run = coverage_options
-        .as_ref()
-        .map(|_| Arc::new(CoverageRun::new(invocation_root.clone())));
+    let coverage_run = opts
+        .coverage
+        .map(CoverageRun::new)
+        .transpose()?
+        .map(Arc::new);
 
     // `jobs` (= `--parallel N`, default `cpus`) is the **true** cap
     // on peak in-flight CPU work, enforced by the run's shared `cpu`
@@ -2479,13 +2475,9 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
     write_profile(&profile, profiler_slot.as_ref())?;
-    if let (Some(options), Some(run)) = (&coverage_options, coverage_run) {
+    if let Some(run) = coverage_run {
         let run = Arc::into_inner(run).expect("every stage holding the coverage run has finished");
-        run.finish(
-            options,
-            &build_dir(&invocation_root).join("coverage"),
-            reporter.as_ref(),
-        )?;
+        run.finish(reporter.as_ref())?;
     }
 
     if report_changed_inputs(&run_cache) {

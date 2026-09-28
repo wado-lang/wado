@@ -209,8 +209,8 @@ pub struct CoverageMap {
     probe_function: IndexMap<u32, usize>,
     /// The probed regions of each function, in the order planned.
     function_probes: Vec<Vec<u32>>,
-    /// The probed regions of each `for-of` body, by the loop's node.
-    for_of_probes: IndexMap<AstId, Vec<u32>>,
+    /// The regions of each `for-of` body, by the loop's node, as global ids.
+    for_of_bodies: IndexMap<AstId, Range<u32>>,
 }
 
 impl CoverageMap {
@@ -233,11 +233,8 @@ impl CoverageMap {
                 map.function_probes[function].push(global);
             }
             for (id, regions) in for_of_bodies {
-                let probed = regions
-                    .filter(|&region| plan.regions[region as usize].derived.is_empty())
-                    .map(|region| base + region)
-                    .collect();
-                map.for_of_probes.insert(id, probed);
+                map.for_of_bodies
+                    .insert(id, base + regions.start..base + regions.end);
             }
             map.modules.push(plan);
             map.bases.push(base);
@@ -251,17 +248,23 @@ impl CoverageMap {
         self.probes.get(&(site, id)).copied()
     }
 
-    /// The probed regions of the function holding the probed region `probe`.
+    /// The function holding the probed region `probe`.
     #[must_use]
-    pub fn function_probes(&self, probe: u32) -> Option<&[u32]> {
-        let function = *self.probe_function.get(&probe)?;
-        Some(&self.function_probes[function])
+    pub fn function_of(&self, probe: u32) -> Option<usize> {
+        self.probe_function.get(&probe).copied()
     }
 
-    /// The probed regions of the body of the `for-of` `id`.
+    /// The probed regions of `function`.
     #[must_use]
-    pub fn for_of_probes(&self, id: AstId) -> &[u32] {
-        self.for_of_probes.get(&id).map_or(&[], Vec::as_slice)
+    pub fn function_probes(&self, function: usize) -> &[u32] {
+        &self.function_probes[function]
+    }
+
+    /// The regions of the body of the `for-of` `id`, none where its module
+    /// is not measured.
+    #[must_use]
+    pub fn for_of_body(&self, id: AstId) -> Range<u32> {
+        self.for_of_bodies.get(&id).map_or(0..0, Range::clone)
     }
 
     /// Whether no module is measured.
@@ -469,11 +472,7 @@ pub fn plan_module(
         last_choice: Vec::new(),
         for_of_bodies: Vec::new(),
     };
-    let off = module
-        .inner_attributes
-        .iter()
-        .any(|attr| attr.name == attribute::COVERAGE);
-    if !off {
+    if !module.has_coverage_off() {
         for item in &module.items {
             planner.item(item);
         }
@@ -921,34 +920,56 @@ pub struct PlanMismatch {
     pub path: String,
 }
 
+/// Where the hits of one registered plan land: the path its file is reported
+/// under, and its global ids.
+#[derive(Debug, Clone)]
+pub struct Registered {
+    path: String,
+    ids: Range<u32>,
+}
+
 impl Coverage {
-    /// Add one compile's plans under `rename(path)`, and the global ids
-    /// `test` hit in them. Plans with no hits still count every region.
-    pub fn add(
+    /// Add one compile's plans under `rename(path)`, each counting every
+    /// region whether any test runs it.
+    pub fn register(
         &mut self,
         plans: &DecodedPlans,
-        hits: &BTreeSet<u32>,
-        test: Option<&str>,
         mut rename: impl FnMut(&str) -> String,
-    ) -> Result<(), PlanMismatch> {
-        for (plan, base) in plans {
-            let (mut plan, base) = (plan.clone(), *base);
-            let count = plan.regions.len() as u32;
+    ) -> Result<Vec<Registered>, PlanMismatch> {
+        plans
+            .iter()
+            .map(|(plan, base)| {
+                let plan = ModulePlan {
+                    path: rename(&plan.path),
+                    ..plan.clone()
+                };
+                let ids = *base..base + plan.regions.len() as u32;
+                let file = self
+                    .files
+                    .entry(plan.path.clone())
+                    .or_insert_with(|| FileCoverage {
+                        plan: plan.clone(),
+                        hit: BTreeSet::new(),
+                        tests: BTreeMap::new(),
+                    });
+                if file.plan != plan {
+                    return Err(PlanMismatch { path: plan.path });
+                }
+                Ok(Registered {
+                    path: plan.path,
+                    ids,
+                })
+            })
+            .collect()
+    }
+
+    /// Record the global ids `test` hit in the plans `registered` names.
+    pub fn record(&mut self, registered: &[Registered], hits: &BTreeSet<u32>, test: Option<&str>) {
+        for Registered { path, ids } in registered {
+            let file = self.files.get_mut(path).expect("`register` added the file");
             let mut local: BTreeSet<u32> =
-                hits.range(base..base + count).map(|id| id - base).collect();
-            plan.derive(&mut local);
-            plan.path = rename(&plan.path);
-            let file = self
-                .files
-                .entry(plan.path.clone())
-                .or_insert_with(|| FileCoverage {
-                    plan: plan.clone(),
-                    hit: BTreeSet::new(),
-                    tests: BTreeMap::new(),
-                });
-            if file.plan != plan {
-                return Err(PlanMismatch { path: plan.path });
-            }
+                hits.range(ids.clone()).map(|id| id - ids.start).collect();
+            file.plan.derive(&mut local);
             if let Some(test) = test {
                 for &region in &local {
                     file.tests
@@ -959,7 +980,6 @@ impl Coverage {
             }
             file.hit.extend(local);
         }
-        Ok(())
     }
 }
 
@@ -1097,7 +1117,7 @@ pub fn to_lcov(coverage: &Coverage) -> String {
     out
 }
 
-/// The plan of `module` as `wado dump --coverage-plan` prints it.
+/// `plan` as `wado dump --coverage-plan` prints it.
 #[must_use]
 pub fn render_plan(plan: &ModulePlan) -> String {
     use std::fmt::Write;
