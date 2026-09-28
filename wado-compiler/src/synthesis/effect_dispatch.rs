@@ -17,13 +17,12 @@ use crate::name::{
 };
 use crate::package::Package;
 use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
-use crate::tir::LetStorage;
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
-    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture, TirEffectOp, TirExpr,
-    TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
-    positional_substitution,
+    LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
+    TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
+    TypeTable, positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::{Span, hashmap, tir, token};

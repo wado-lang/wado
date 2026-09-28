@@ -8,10 +8,9 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
-use crate::tir::LetStorage;
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    LetStorage, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
@@ -592,11 +591,23 @@ impl WriteBack<'_> {
             self.borrowed_temps.push(temp.index);
             // An identity witness, never a copy: a copy would make every call
             // look like a whole-value write.
-            let before = self.bind(&mut prefix, "before_", temp.read(), false, LetStorage::Aliased);
+            let before = self.bind(
+                &mut prefix,
+                "before_",
+                temp.read(),
+                false,
+                LetStorage::Aliased,
+            );
             // The store is the temp's last read, so it hands the storage over
             // rather than copying the whole payload.
             let mut store_back: Vec<TirStmt> = Vec::new();
-            let moved = self.bind(&mut store_back, "moved_", temp.read(), false, LetStorage::Taken);
+            let moved = self.bind(
+                &mut store_back,
+                "moved_",
+                temp.read(),
+                false,
+                LetStorage::Taken,
+            );
             store_back.push(TirStmt::new(
                 TirStmtKind::Expr(TirExpr::new(
                     TirExprKind::Assign {

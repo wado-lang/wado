@@ -16,9 +16,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStructField, TirTypeParam, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, ResolvedType, StructDef,
+    TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStructField, TirTypeParam, TraitRef, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -36,7 +37,6 @@ use crate::name::{
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
 use crate::synthesis::template::{blanket_dispatch_for, ref_blanket_call, trait_call_template};
-use crate::tir::{LetStorage, StructDef, TemplateId, TemplateShape, TraitRef};
 use crate::{hashmap, tir};
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the

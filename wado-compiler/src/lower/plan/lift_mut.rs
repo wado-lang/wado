@@ -7,8 +7,8 @@
 use crate::flat_package::FlatPackage;
 use crate::name::minted_name;
 use crate::tir::{
-    LetStorage, TirBlock, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirStructPatternField, TypeId, TypeTable,
+    LetStorage, TirBlock, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt,
+    TirStmtKind, TirStructPatternField, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt, remap_local_reads};
 use crate::token::Span;

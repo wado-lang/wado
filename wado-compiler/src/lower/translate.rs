@@ -46,11 +46,11 @@ use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, LetStorage, MonomorphInfo,
-    ResolvedType,
-    StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
-    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirMatchArm,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
-    TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
+    ResolvedType, StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind,
+    TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern, TirLocal,
+    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
+    TypeTable, receiver_value,
 };
 use crate::token::Span;
 use crate::{nir, tir};

@@ -11,10 +11,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, RefKind, mangle_generic_name};
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable, method_param_offset,
-    transpose_tuple_expr,
+    CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
+    TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -27,7 +27,6 @@ use crate::synthesis::template::{
     ranked_value_blanket, ref_blanket_call, trait_call_template,
 };
 use crate::tir;
-use crate::tir::{LetStorage, TemplateId};
 use crate::token::Span;
 
 /// Lower remaining comparison operators on non-primitive types in all module functions.

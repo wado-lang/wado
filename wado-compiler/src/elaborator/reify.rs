@@ -25,10 +25,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, LetStorage, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
-    TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule,
-    TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
-    TypeId, TypeTable, transpose_tuple_expr,
+    self as tir, CallArg, GlobalInit, LetStorage, LocalFrame, ResolvedType, TirBinaryOp, TirBlock,
+    TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
+    TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp,
+    TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{

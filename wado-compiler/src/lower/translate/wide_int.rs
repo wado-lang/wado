@@ -6,10 +6,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::lower::wide_int_literal::create_literal;
-use crate::tir::LetStorage;
 use crate::tir::{
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TypeId, TypeTable,
+    LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
 

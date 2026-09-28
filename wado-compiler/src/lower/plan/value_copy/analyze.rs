@@ -9,8 +9,8 @@ use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::last_use::{RefTargets, names_held_storage};
 use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
 use crate::tir::{
-    BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 

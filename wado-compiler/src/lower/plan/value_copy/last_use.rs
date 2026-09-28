@@ -12,8 +12,8 @@ use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::tir;
 use crate::tir::{
-    FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
     capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
