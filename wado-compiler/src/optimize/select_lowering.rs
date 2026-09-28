@@ -1,6 +1,7 @@
 //! Select lowering: a post-optimization [`Rule`] turning `if c { a } else { b }`
 //! into the branchless `builtin::select(c, a, b)` where both arms are pure leaves.
 
+use crate::call_args::CallArgs;
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
@@ -122,8 +123,7 @@ pub(super) fn select_call(
     ExprKind::Call {
         func_id: select_id,
         type_args: vec![ty],
-        args: vec![arg(cond), arg(a), arg(b)],
-        has_receiver: false,
+        args: CallArgs::free(vec![arg(cond), arg(a), arg(b)]),
     }
 }
 

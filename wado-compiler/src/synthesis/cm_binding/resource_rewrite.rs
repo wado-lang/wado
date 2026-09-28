@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{AstId, NamedType, Type};
+use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, CmTypeKind};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1391,11 +1392,10 @@ fn synthesize_stream_read_func(
                 method_info: Some(with_capacity),
             }),
             type_args: vec![],
-            args: vec![CallArg::new(
+            args: CallArgs::free(vec![CallArg::new(
                 local_ref(count_idx, "count", TypeTable::I32),
                 false,
-            )],
-            has_receiver: false,
+            )]),
         },
         array_type_id,
         synth_span(),
@@ -1834,8 +1834,11 @@ impl CmMethodRewriter<'_> {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             return;
         };
-        let mut taken_args: Vec<TirExpr> =
-            std::mem::take(args).into_iter().map(|a| a.expr).collect();
+        let mut taken_args: Vec<TirExpr> = std::mem::take(args)
+            .into_vec()
+            .into_iter()
+            .map(|a| a.expr)
+            .collect();
         if let Some(handle) = taken_args.first_mut()
             && let Some(scalar) = handle_scalar(self.tt, handle.type_id)
         {
@@ -1914,8 +1917,7 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
                 method_info: None,
             }),
             type_args: vec![payload_tid],
-            args: vec![CallArg::new(packed, false)],
-            has_receiver: false,
+            args: CallArgs::free(vec![CallArg::new(packed, false)]),
         },
         result_type,
         synth_span(),

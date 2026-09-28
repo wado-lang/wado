@@ -866,11 +866,7 @@ pub(super) fn is_place_read(e: &Engine, expr: ExprId) -> bool {
         ExprKind::FieldAccess { expr: recv, .. } | ExprKind::Index { expr: recv, .. } => {
             *recv == op
         }
-        ExprKind::Call {
-            args,
-            has_receiver: true,
-            ..
-        } => args.first().is_some_and(|a| a.expr == op),
+        ExprKind::Call { args, .. } => args.receiver().is_some_and(|a| a.expr == op),
         _ => false,
     }
 }

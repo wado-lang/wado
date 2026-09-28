@@ -200,17 +200,12 @@ fn stmt_disturbs_place(
                         disturbs = true;
                     }
                 }
-                ExprKind::Call {
-                    func_id,
-                    args,
-                    has_receiver,
-                    ..
-                } => {
+                ExprKind::Call { func_id, args, .. } => {
                     if call_disturbs_root(root, address_taken) {
                         return Some(());
                     }
                     if let PlaceRoot::Local(r) = root
-                        && let Some(receiver) = has_receiver.then(|| args.first()).flatten()
+                        && let Some(receiver) = args.receiver()
                         && let Some(re) = receiver.expr.as_expr()
                         && root_local(body, re) == Some(*r)
                         && method_mutates_receiver(body, re, *func_id, fpt, type_table, true, None)

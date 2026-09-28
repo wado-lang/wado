@@ -131,12 +131,8 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 }
                 // A receiver call may rebind what it is handed with no `&mut`
                 // node to say so.
-                if let ExprKind::Call {
-                    args,
-                    has_receiver: true,
-                    ..
-                } = &body.exprs[e].kind
-                    && let Some(Operand::Expr(recv)) = args.first().map(|a| a.expr)
+                if let ExprKind::Call { args, .. } = &body.exprs[e].kind
+                    && let Some(Operand::Expr(recv)) = args.receiver().map(|a| a.expr)
                     && let Some(root) = storage_root(body, recv)
                 {
                     written.push(root);

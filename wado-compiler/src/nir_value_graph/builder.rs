@@ -1363,7 +1363,7 @@ impl<'a> Builder<'a> {
             ExprKind::Call { func_id, args, .. } => {
                 let builtin = self.ctfe_builtins.get(&func_id).copied();
                 let arg = args.first().map(|a| a.expr);
-                for a in args {
+                for a in &args {
                     self.walk_operand(a.expr);
                 }
                 self.bump_call_effects(expr);
@@ -2230,23 +2230,13 @@ fn record_loop_heap_write(
             },
             _ => eff.has_external_writes = true,
         },
-        ExprKind::Call {
-            func_id,
-            args,
-            has_receiver,
-            ..
-        } => {
+        ExprKind::Call { func_id, args, .. } => {
             // A receiver is borrowed unless the callee cannot write through it.
             // The verdict already accounts for a declared `&mut self`, so it
             // replaces `arg.is_mut` for that slot rather than joining it.
-            let receiver_borrowed = *has_receiver && !facts.receiver_immutable.contains(&e);
-            for (i, arg) in args.iter().enumerate() {
-                let borrowed = if *has_receiver && i == 0 {
-                    receiver_borrowed
-                } else {
-                    arg.is_mut
-                };
-                if borrowed
+            let receiver_reaches = !facts.receiver_immutable.contains(&e);
+            for (arg, reaches_storage) in args.with_storage_reach(receiver_reaches) {
+                if reaches_storage
                     && let Some(ExprKind::Local { index, .. }) =
                         arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
                 {
@@ -2372,6 +2362,7 @@ fn collect_writes_in_pattern(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::call_args::CallArgs;
     use crate::nir_value_graph::ValueKind;
     use crate::niri::CtfeBuiltinMap;
     use TypeTable;
@@ -2456,8 +2447,7 @@ mod tests {
             kind: ExprKind::Call {
                 func_id: FuncId::from_u32(0),
                 type_args: vec![],
-                args: vec![],
-                has_receiver: false,
+                args: CallArgs::free(vec![]),
             },
             type_id: TypeTable::I32,
             span,
@@ -2542,7 +2532,7 @@ mod tests {
     /// `is_mut` (a `&mut self` method's own parameter type) as given.
     fn receiver_call_block_with(body: &mut Body, receiver_is_mut: bool) -> (BlockId, ExprId) {
         use crate::nir::{FuncId, NirLocal};
-        use crate::nir_arena::{ArenaCallArg, BlockNode, ExprNode, StmtNode};
+        use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
         use crate::token::Span;
         let span = Span::new(0, 0, 0, 0);
         body.locals = vec![NirLocal {
@@ -2559,15 +2549,12 @@ mod tests {
             span,
         });
         let call = body.exprs.push(ExprNode {
-            kind: ExprKind::Call {
-                func_id: FuncId::from_u32(0),
-                type_args: vec![],
-                args: vec![ArenaCallArg {
-                    expr: Operand::Expr(recv),
-                    is_mut: receiver_is_mut,
-                }],
-                has_receiver: true,
-            },
+            kind: ExprKind::method_call(
+                FuncId::from_u32(0),
+                Operand::Expr(recv),
+                receiver_is_mut,
+                vec![],
+            ),
             type_id: TypeTable::I32,
             span,
         });

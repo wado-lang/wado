@@ -1560,15 +1560,7 @@ impl Analyzer<'_> {
                     self.scan_place_uses(inner, conflict);
                 }
             }
-            TirExprKind::Call {
-                func,
-                args,
-                has_receiver: true,
-                ..
-            } => {
-                let Some((receiver, rest)) = args.split_first() else {
-                    return;
-                };
+            TirExprKind::Call { func, args, .. } if let (Some(receiver), _) = args.split() => {
                 let retained = self.retained_by(func, args.len(), expr);
                 let receiver = &receiver.expr;
                 let (recv_place, recv_ref) = match &receiver.kind {
@@ -1591,8 +1583,8 @@ impl Analyzer<'_> {
                     }
                     None => self.scan_place_uses(recv_place, conflict),
                 }
-                for (pos, a) in rest.iter().enumerate() {
-                    self.scan_call_arg_place_use(&a.expr, Some(&retained), pos + 1, conflict);
+                for (pos, a) in args.rest_positioned() {
+                    self.scan_call_arg_place_use(&a.expr, Some(&retained), pos, conflict);
                 }
             }
             TirExprKind::Call { func, args, .. } => {
@@ -1990,18 +1982,10 @@ impl Analyzer<'_> {
             TirExprKind::LabeledBlock { label, block, .. } => {
                 self.walk_labeled_block(label, block, live, record);
             }
-            TirExprKind::Call {
-                func,
-                args,
-                has_receiver,
-                ..
-            } => {
+            TirExprKind::Call { func, args, .. } => {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
-                let (receiver, siblings) = match has_receiver.then(|| args.split_first()).flatten()
-                {
-                    Some((receiver, rest)) => (Some(&receiver.expr), rest),
-                    None => (None, args.as_slice()),
-                };
+                let (receiver, siblings) = args.split();
+                let receiver = receiver.map(|r| &r.expr);
                 let mutated_receiver = receiver.filter(|_| {
                     self.mut_receiver_methods
                         .contains(&func.module_source, &func.name)

@@ -29,7 +29,6 @@ impl<'a> CallSite<'a> {
                 func,
                 type_args,
                 args,
-                has_receiver,
             } => {
                 let FunctionRef {
                     template: Some(template),
@@ -39,12 +38,8 @@ impl<'a> CallSite<'a> {
                 else {
                     return None;
                 };
-                let (receiver, args) = if *has_receiver {
-                    let (receiver, rest) = args.split_first()?;
-                    (Some(receiver.expr.type_id), rest)
-                } else {
-                    (None, args.as_slice())
-                };
+                let (receiver, args) = args.split();
+                let receiver = receiver.map(|r| r.expr.type_id);
                 Some(Self {
                     template,
                     monomorph: monomorph_info.as_ref(),
