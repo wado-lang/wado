@@ -69,9 +69,10 @@ const frameName = (i: number): string => {
   if (!match) throw new Error(`unrecognized DHAT frame: ${entry}`);
   return match[1].replace(/::h[0-9a-f]{16}\b/g, "");
 };
-const frameLine = (i: number): string => {
-  const match = dhat.ftbl[i].match(/\(([^()]*:\d+)\)$/);
-  return match ? match[1] : "";
+// A frame in a library without debug info has no line to show.
+const frameLabel = (i: number): string => {
+  const line = dhat.ftbl[i].match(/\(([^()]*:\d+)\)$/);
+  return line ? `${frameName(i)} (${line[1]})` : frameName(i);
 };
 const mib = (bytes: number): string => (bytes / 1048576).toFixed(1).padStart(7);
 
@@ -99,7 +100,7 @@ for (const pp of kept) {
   const siteFrames = callers.length ? callers : pp.fs.filter((i) => !isAllocator(frameName(i)));
   const site = siteFrames
     .slice(0, 3)
-    .map((i) => `${frameName(i)} (${frameLine(i)})`)
+    .map(frameLabel)
     .join("\n            <- ");
   sites.set(site, (sites.get(site) ?? 0) + pp.gb);
   const seen = new Set<string>();
