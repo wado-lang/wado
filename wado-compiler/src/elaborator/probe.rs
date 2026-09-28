@@ -97,16 +97,16 @@ impl<H: CompilerHost> Reify<'_, H> {
         }
     }
 
-    /// Check that every region of each function reify emitted took its probe:
-    /// a region reify reached without one would report as never run.
+    /// Check that every probed region of each function reify emitted took its
+    /// probe: a region reify reached without one would report as never run.
     pub(super) fn assert_probes_complete(&self) {
         let Some(coverage) = self.coverage else {
             return;
         };
         for &probe in &self.probes_emitted {
-            let Some(regions) = coverage.function_regions(probe) else {
-                continue;
-            };
+            let regions = coverage
+                .function_probes(probe)
+                .expect("an emitted probe is a planned one");
             let missing: Vec<u32> = regions
                 .iter()
                 .copied()
@@ -114,7 +114,7 @@ impl<H: CompilerHost> Reify<'_, H> {
                 .collect();
             assert!(
                 missing.is_empty(),
-                "coverage regions {missing:?} of the function whose body is region {probe} \
+                "coverage regions {missing:?} of the function holding region {probe} \
                  in {} took no probe",
                 self.current_module_source
             );

@@ -275,3 +275,9 @@ fn format_ms(ns: u64) -> String {
     }
     return `${ms}.00${us}`;
 }
+
+test "format_ms pads the microseconds to three digits" {
+    assert format_ms(1_234_000) == "1.234";
+    assert format_ms(1_045_000) == "1.045";
+    assert format_ms(1_003_000) == "1.003";
+}

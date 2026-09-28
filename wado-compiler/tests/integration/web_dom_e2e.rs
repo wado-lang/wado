@@ -322,6 +322,7 @@ fn run_against_stub(program: &str) -> DomObjects {
                     mocks: indexmap::IndexMap::default(),
                 },
                 tls_ctx: build_tls_ctx(indexmap::IndexMap::default()),
+                coverage_hits: Default::default(),
             };
             let mut store = Store::new(engine, state);
             limit_store(&mut store, DEFAULT_TIMEOUT_MS);

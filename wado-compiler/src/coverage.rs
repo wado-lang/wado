@@ -157,6 +157,9 @@ pub struct Region {
     pub parent: Option<u32>,
     /// For a branch, where its choice is written and which side it is.
     pub choice: Option<(Pos, u32)>,
+    /// The regions whose runs this one's runs are, when it takes no probe of
+    /// its own: every run of it enters one of them. Empty for a probed region.
+    pub derived: Vec<u32>,
 }
 
 /// One function of a module plan: a `fn`, a method, or a closure.
@@ -203,8 +206,10 @@ pub struct CoverageMap {
     pub modules: Vec<ModulePlan>,
     pub bases: Vec<u32>,
     probes: IndexMap<(ProbeSite, AstId), u32>,
-    /// The global ids of each function's regions, by the global id of its body.
-    function_regions: IndexMap<u32, Vec<u32>>,
+    /// The function holding each probed region, by global id.
+    probe_function: IndexMap<u32, usize>,
+    /// The probed regions of each function, in the order planned.
+    function_probes: Vec<Vec<u32>>,
 }
 
 impl CoverageMap {
@@ -216,18 +221,15 @@ impl CoverageMap {
         for (source, module) in modules {
             let (plan, sites) = plan_module(source, module);
             let base = map.modules.iter().map(|m| m.regions.len() as u32).sum();
+            let first_function = map.function_probes.len();
+            map.function_probes
+                .resize(first_function + plan.functions.len(), Vec::new());
             for (site, id, region) in sites {
-                map.probes.insert((site, id), base + region);
-            }
-            for function in &plan.functions {
-                let regions = (0..plan.regions.len() as u32)
-                    .filter(|&r| {
-                        plan.functions[plan.regions[r as usize].function as usize].region
-                            == function.region
-                    })
-                    .map(|r| base + r)
-                    .collect();
-                map.function_regions.insert(base + function.region, regions);
+                let global = base + region;
+                let function = first_function + plan.regions[region as usize].function as usize;
+                map.probes.insert((site, id), global);
+                map.probe_function.insert(global, function);
+                map.function_probes[function].push(global);
             }
             map.modules.push(plan);
             map.bases.push(base);
@@ -241,11 +243,11 @@ impl CoverageMap {
         self.probes.get(&(site, id)).copied()
     }
 
-    /// The regions of the function whose body region is `body`, when `body`
-    /// is one.
+    /// The probed regions of the function holding the probed region `probe`.
     #[must_use]
-    pub fn function_regions(&self, body: u32) -> Option<&[u32]> {
-        self.function_regions.get(&body).map(Vec::as_slice)
+    pub fn function_probes(&self, probe: u32) -> Option<&[u32]> {
+        let function = *self.probe_function.get(&probe)?;
+        Some(&self.function_probes[function])
     }
 
     /// Whether no module is measured.
@@ -282,6 +284,10 @@ impl CoverageMap {
                         w.u32(side);
                     }
                     None => w.0.push(0),
+                }
+                w.u32(r.derived.len() as u32);
+                for &child in &r.derived {
+                    w.u32(child);
                 }
             }
             w.u32(plan.lines.len() as u32);
@@ -327,6 +333,10 @@ pub fn decode(data: &[u8]) -> Option<DecodedPlans> {
                 0 => None,
                 _ => Some((r.pos()?, r.u32()?)),
             };
+            let mut derived = Vec::new();
+            for _ in 0..r.u32()? {
+                derived.push(r.u32()?);
+            }
             plan.regions.push(Region {
                 kind,
                 start,
@@ -334,6 +344,7 @@ pub fn decode(data: &[u8]) -> Option<DecodedPlans> {
                 function,
                 parent,
                 choice,
+                derived,
             });
         }
         for _ in 0..r.u32()? {
@@ -437,6 +448,7 @@ pub fn plan_module(source: &ModuleSource, module: &ast::Module) -> (ModulePlan, 
         function: 0,
         region: None,
         owner: None,
+        last_choice: Vec::new(),
     };
     let off = module
         .inner_attributes
@@ -449,7 +461,11 @@ pub fn plan_module(source: &ModuleSource, module: &ast::Module) -> (ModulePlan, 
     }
     planner.plan.lines.sort_unstable();
     planner.plan.lines.dedup();
-    (planner.plan, planner.sites)
+    let Planner {
+        plan, mut sites, ..
+    } = planner;
+    sites.retain(|&(_, _, region)| plan.regions[region as usize].derived.is_empty());
+    (plan, sites)
 }
 
 struct Planner {
@@ -460,6 +476,8 @@ struct Planner {
     region: Option<u32>,
     /// The type or trait a method is declared under.
     owner: Option<String>,
+    /// The sides of the choice the walk finished last.
+    last_choice: Vec<u32>,
 }
 
 impl Planner {
@@ -499,7 +517,7 @@ impl Planner {
         let region = self.new_function(name, f.name_span, RegionKind::Function, body.span);
         self.sites.push((ProbeSite::BlockStart, body.id, region));
         self.region = Some(region);
-        self.block(body);
+        self.block_of(region, body);
         (self.function, self.region) = saved;
     }
 
@@ -518,6 +536,7 @@ impl Planner {
             function: self.function,
             parent: None,
             choice: None,
+            derived: Vec::new(),
         });
         region
     }
@@ -537,6 +556,7 @@ impl Planner {
             function: self.function,
             parent: self.region,
             choice,
+            derived: Vec::new(),
         });
         region
     }
@@ -562,7 +582,7 @@ impl Planner {
             Some(choice),
         );
         self.sites.push((ProbeSite::BlockStart, block.id, region));
-        self.in_region(region, |p| p.block(block));
+        self.in_region(region, |p| p.block_of(region, block));
     }
 
     /// An `if`, statement or expression. Both branches are regions, and an
@@ -575,24 +595,28 @@ impl Planner {
         else_block: Option<&Block>,
     ) {
         let at = Pos::start(span);
+        let then_region = self.plan.regions.len() as u32;
         self.branch_block(RegionKind::Then, then_block, (at, 0));
+        let else_region = self.plan.regions.len() as u32;
         match else_block {
             Some(block) => self.branch_block(RegionKind::Else, block, (at, 1)),
             None => {
-                let region = self.new_region(
+                self.new_region(
                     RegionKind::Else,
                     Pos::end(span),
                     Pos::end(span),
                     Some((at, 1)),
                 );
-                self.sites.push((ProbeSite::ImplicitElse, id, region));
+                self.sites.push((ProbeSite::ImplicitElse, id, else_region));
             }
         }
+        self.last_choice = vec![then_region, else_region];
     }
 
     fn match_arms(&mut self, m: &MatchExpr) {
         self.visit_expr(&m.expr);
         let at = Pos::start(m.span);
+        let mut sides = Vec::new();
         for (side, arm) in m.arms.iter().enumerate() {
             if let Some(guard) = &arm.guard {
                 self.visit_expr(guard);
@@ -605,17 +629,22 @@ impl Planner {
                 Some((at, side as u32)),
             );
             self.sites.push((ProbeSite::Around, arm.body.id(), region));
-            self.in_region(region, |p| p.expr_body(&arm.body));
+            self.in_region(region, |p| p.expr_body(region, &arm.body));
+            sides.push(region);
         }
+        self.last_choice = sides;
     }
 
-    /// A body written as an expression: a block counts its statements, any
-    /// other expression is one line.
-    fn expr_body(&mut self, body: &Expr) {
-        if !matches!(body, Expr::Block(_)) {
-            self.line(body.span());
+    /// The body of `region` written as an expression: a block counts its
+    /// statements, any other expression is one line.
+    fn expr_body(&mut self, region: u32, body: &Expr) {
+        match body {
+            Expr::Block(block) => self.block_of(region, block),
+            _ => {
+                self.line(body.span());
+                self.visit_expr(body);
+            }
         }
-        self.visit_expr(body);
     }
 
     fn loop_body(&mut self, body: &Block) {
@@ -626,10 +655,22 @@ impl Planner {
             None,
         );
         self.sites.push((ProbeSite::BlockStart, body.id, region));
-        self.in_region(region, |p| p.block(body));
+        self.in_region(region, |p| p.block_of(region, body));
     }
 
     fn block(&mut self, block: &Block) {
+        self.statements(block, None);
+    }
+
+    /// `block`, which `region` starts with.
+    fn block_of(&mut self, region: u32, block: &Block) {
+        self.statements(block, Some(region));
+    }
+
+    /// Walk `block`'s statements. A run of statements that some region
+    /// starts with, `open`, derives that region from the first choice it
+    /// reaches, when nothing before the choice can leave the block.
+    fn statements(&mut self, block: &Block, mut open: Option<u32>) {
         let saved = self.region;
         let mut leaves = false;
         for stmt in &block.stmts {
@@ -642,12 +683,26 @@ impl Planner {
                 );
                 self.sites.push((ProbeSite::BeforeStmt, stmt.id(), region));
                 self.region = Some(region);
+                open = Some(region);
             }
             if !matches!(stmt, Stmt::Item(_) | Stmt::Error(_)) {
                 self.line(stmt.span());
             }
             self.visit_stmt(stmt);
             leaves = leaves_early(stmt);
+            if let Some(region) = open {
+                if enters_choice(stmt) {
+                    // The choice `stmt` is finishes after any nested in it, so
+                    // its sides are the last recorded. A `match` with no arm
+                    // has none, and never completes.
+                    let sides = std::mem::take(&mut self.last_choice);
+                    assert!(sides.iter().all(|&side| side > region));
+                    self.plan.regions[region as usize].derived = sides;
+                    open = None;
+                } else if leaves {
+                    open = None;
+                }
+            }
         }
         self.region = saved;
     }
@@ -676,7 +731,7 @@ impl AstVisitor for Planner {
                         Some((Pos::start(s.span), 0)),
                     );
                     self.sites.push((ProbeSite::BlockStart, block.id, region));
-                    self.in_region(region, |p| p.block(block));
+                    self.in_region(region, |p| p.block_of(region, block));
                 }
             }
             Stmt::If(s) => {
@@ -743,7 +798,7 @@ impl AstVisitor for Planner {
                 self.plan.regions[region as usize].parent = Some(outer);
                 self.sites.push((ProbeSite::Around, c.body.id(), region));
                 self.region = Some(region);
-                self.expr_body(&c.body);
+                self.expr_body(region, &c.body);
                 (self.function, self.region) = saved;
             }
             Expr::TryOp(t) => {
@@ -762,32 +817,78 @@ impl AstVisitor for Planner {
 }
 
 /// Whether `stmt` can leave its block before the next statement: a `return`,
-/// `break`, `continue` or `?` outside a closure. A `break` of a loop nested in
-/// `stmt` counts too, which costs a probe and loses nothing.
+/// `break`, `continue`, `resume` or `?` outside a closure. A `break` of a
+/// loop nested in `stmt` counts too, which costs a probe and loses nothing.
 fn leaves_early(stmt: &Stmt) -> bool {
-    struct Leaves(bool);
-
-    impl AstVisitor for Leaves {
-        fn visit_stmt(&mut self, stmt: &Stmt) {
-            match stmt {
-                Stmt::Return(_) | Stmt::Break(_) | Stmt::Continue(_) => self.0 = true,
-                Stmt::Item(_) => {}
-                _ => walk_stmt(self, stmt),
-            }
-        }
-
-        fn visit_expr(&mut self, expr: &Expr) {
-            match expr {
-                Expr::TryOp(_) => self.0 = true,
-                Expr::Closure(_) => {}
-                _ => walk_expr(self, expr),
-            }
-        }
-    }
-
     let mut leaves = Leaves(false);
     leaves.visit_stmt(stmt);
     leaves.0
+}
+
+/// Whether evaluating `expr` can leave its block, as [`leaves_early`] asks.
+fn may_leave(expr: &Expr) -> bool {
+    let mut leaves = Leaves(false);
+    leaves.visit_expr(expr);
+    leaves.0
+}
+
+/// Whether every run of `stmt` enters one side of the choice it is: an `if`
+/// or a `match`, alone or as the value a `let` binds or a `return` returns,
+/// whose condition, scrutinee and guards cannot leave first.
+fn enters_choice(stmt: &Stmt) -> bool {
+    let choice = match stmt {
+        Stmt::If(s) => return !condition_may_leave(&s.condition),
+        Stmt::Match(m) => return !match_head_may_leave(m),
+        Stmt::Expr(s) => &s.expr,
+        Stmt::Let(s) if s.else_block.is_none() => match &s.value {
+            Some(value) => value,
+            None => return false,
+        },
+        Stmt::Return(r) => match &r.value {
+            Some(value) => value,
+            None => return false,
+        },
+        _ => return false,
+    };
+    match choice {
+        Expr::If(e) => !condition_may_leave(&e.condition),
+        Expr::Match(m) => !match_head_may_leave(m),
+        _ => false,
+    }
+}
+
+fn condition_may_leave(condition: &ast::Condition) -> bool {
+    let mut leaves = Leaves(false);
+    leaves.visit_condition(condition);
+    leaves.0
+}
+
+fn match_head_may_leave(m: &MatchExpr) -> bool {
+    may_leave(&m.expr)
+        || m.arms
+            .iter()
+            .any(|arm| arm.guard.as_ref().is_some_and(may_leave))
+}
+
+/// Finds what can leave the enclosing block: see [`leaves_early`].
+struct Leaves(bool);
+
+impl AstVisitor for Leaves {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Return(_) | Stmt::Break(_) | Stmt::Continue(_) => self.0 = true,
+            Stmt::Item(_) => {}
+            _ => walk_stmt(self, stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::TryOp(_) | Expr::Resume(_) => self.0 = true,
+            Expr::Closure(_) => {}
+            _ => walk_expr(self, expr),
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -828,7 +929,9 @@ impl Coverage {
         for (plan, base) in plans {
             let (mut plan, base) = (plan.clone(), *base);
             let count = plan.regions.len() as u32;
-            let local: Vec<u32> = hits.range(base..base + count).map(|id| id - base).collect();
+            let mut local: BTreeSet<u32> =
+                hits.range(base..base + count).map(|id| id - base).collect();
+            plan.derive(&mut local);
             plan.path = rename(&plan.path);
             let file = self
                 .files
@@ -852,6 +955,19 @@ impl Coverage {
             file.hit.extend(local);
         }
         Ok(())
+    }
+}
+
+impl ModulePlan {
+    /// Add to `hit` each derived region one of whose children it holds. A
+    /// child is numbered after its parent, so one pass from the last region
+    /// reaches a derived region's children before it.
+    pub fn derive(&self, hit: &mut BTreeSet<u32>) {
+        for (index, region) in self.regions.iter().enumerate().rev() {
+            if region.derived.iter().any(|child| hit.contains(child)) {
+                hit.insert(index as u32);
+            }
+        }
     }
 }
 
@@ -977,9 +1093,15 @@ pub fn render_plan(plan: &ModulePlan) -> String {
         let choice = region.choice.map_or(String::new(), |(at, side)| {
             format!(" choice {}:{} side {side}", at.line, at.column)
         });
+        let derived = if region.derived.is_empty() {
+            String::new()
+        } else {
+            let children: Vec<String> = region.derived.iter().map(|c| format!("r{c}")).collect();
+            format!(" derived from {}", children.join(" "))
+        };
         let _ = writeln!(
             out,
-            "  r{index} {} {}:{}-{}:{} ({}){parent}{choice}",
+            "  r{index} {} {}:{}-{}:{} ({}){parent}{choice}{derived}",
             region.kind.label(),
             region.start.line,
             region.start.column,
@@ -1001,9 +1123,9 @@ pub fn render_plan(plan: &ModulePlan) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn section_round_trips() {
-        let plan = ModulePlan {
+    /// `fn f` whose body derives from an `if` and its omitted `else`.
+    fn plan() -> ModulePlan {
+        ModulePlan {
             path: "a.wado".to_string(),
             functions: vec![PlannedFunction {
                 name: "f".to_string(),
@@ -1021,6 +1143,7 @@ mod tests {
                     function: 0,
                     parent: None,
                     choice: None,
+                    derived: vec![1, 2],
                 },
                 Region {
                     kind: RegionKind::Then,
@@ -1032,16 +1155,42 @@ mod tests {
                     function: 0,
                     parent: Some(0),
                     choice: Some((Pos { line: 2, column: 5 }, 0)),
+                    derived: Vec::new(),
+                },
+                Region {
+                    kind: RegionKind::Else,
+                    start: Pos { line: 4, column: 6 },
+                    end: Pos { line: 4, column: 6 },
+                    function: 0,
+                    parent: Some(0),
+                    choice: Some((Pos { line: 2, column: 5 }, 1)),
+                    derived: Vec::new(),
                 },
             ],
             lines: vec![(2, 0), (3, 1)],
-        };
+        }
+    }
+
+    #[test]
+    fn section_round_trips() {
+        let plan = plan();
         let map = CoverageMap {
             modules: vec![plan.clone()],
             bases: vec![7],
             ..CoverageMap::default()
         };
         assert_eq!(decode(&map.encode()), Some(vec![(plan, 7)]));
+    }
+
+    #[test]
+    fn a_derived_region_ran_when_a_child_did() {
+        let plan = plan();
+        let mut hit = BTreeSet::from([2]);
+        plan.derive(&mut hit);
+        assert_eq!(hit, BTreeSet::from([0, 2]));
+        let mut none = BTreeSet::new();
+        plan.derive(&mut none);
+        assert!(none.is_empty());
     }
 
     #[test]
