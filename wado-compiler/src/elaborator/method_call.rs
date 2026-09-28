@@ -2368,7 +2368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolution's to fill, so only these are left for a call site.
     fn qualified_method_own_slots(&self, struct_name: &str, method_name: &str) -> Vec<TypeId> {
         self.qualified_method_sig(struct_name, method_name)
-            .map(|sig| sig.own_type_params().iter().map(|(_, id)| *id).collect())
+            .map(|sig| sig.own_type_param_ids())
             .unwrap_or_default()
     }
 
@@ -2689,7 +2689,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_key: &ImplTargetKey,
     ) -> Vec<TypeId> {
         self.unique_static_method_sig(static_key, method_name)
-            .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
+            .map(|sig| sig.decl.type_param_ids())
             .unwrap_or_default()
     }
 
