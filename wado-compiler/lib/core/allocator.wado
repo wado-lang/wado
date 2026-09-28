@@ -46,6 +46,9 @@ fn store(addr: u32, value: u32) {
 /// The Wasm linear memory page size, the unit `memory.size` and `memory.grow` count in.
 global PAGE_SIZE: u64 = 65536;
 
+/// The last address a 32-bit memory holds.
+global MAX_ADDRESS: u64 = 0xFFFF_FFFF;
+
 /// The size of linear memory, in bytes.
 fn memory_bytes() -> u64 {
     return builtin::memory_size() as u64 * PAGE_SIZE;
@@ -67,9 +70,9 @@ fn grow_memory(end: u64) {
     let normal_grow = if current_bytes < sixteen_mb { current_bytes } else { sixteen_mb };
     // If deficit exceeds normal growth, round up to next power of two
     let grow_bytes = if deficit > normal_grow {
-        (1 as u64) << (64 - builtin::i64_clz((deficit - 1) as i64)) as u64
+        1 as u64 << (64 - builtin::i64_clz((deficit - 1) as i64)) as u64;
     } else {
-        normal_grow
+        normal_grow;
     };
     // Near the memory's limit the rounded step can ask for more than is left.
     if builtin::memory_grow(pages(grow_bytes)) < 0 && builtin::memory_grow(pages(deficit)) < 0 {
@@ -81,9 +84,9 @@ fn grow_memory(end: u64) {
 /// fit them. Traps when they would end past the 32-bit address space.
 fn bump(align: u32, size: u32) -> u32 {
     let mask = align as u64 - 1;
-    let start = (frontier() as u64 + mask) & ~mask;
+    let start = frontier() as u64 + mask & ~mask;
     let end = start + size as u64;
-    if end > 0xFFFF_FFFF {
+    if end > MAX_ADDRESS {
         builtin::unreachable();
     }
     if end > memory_bytes() {
@@ -257,7 +260,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     // 16-byte aligned. Wasm memory is zero-initialised, so the bins start
     // empty.
     if heap_offset < 152 {
-        if builtin::i32_and(builtin::heap_base(), 15) != 0 {
+        if builtin::heap_base() & 15 != 0 {
             builtin::unreachable();
         }
         heap_offset = 152;
@@ -307,8 +310,8 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     // Allocate. Round the payload up to 16 bytes and add the boundary-tag
     // overhead; the result is a multiple of 16 (keeping every block's
     // payload 16-byte aligned) and at least the 32-byte minimum block.
-    let wide_size = ((newsize as u32 as u64 + 15) & ~15) + 16;
-    if wide_size > 0xFFFF_FFFF {
+    let wide_size = (newsize as u32 as u64 + 15 & ~15) + 16;
+    if wide_size > MAX_ADDRESS {
         builtin::unreachable();
     }
     let size = wide_size as u32;
