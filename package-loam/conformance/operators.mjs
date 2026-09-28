@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
 import {
-  BOOL, FLOAT, INT32, INT64, f32, modelProto, nodeProto, tensorProto, text, valueInfo,
+  BFLOAT16, BOOL, FLOAT, FLOAT16, INT32, INT64, f32, modelProto, nodeProto, tensorProto, text, valueInfo,
 } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
@@ -311,6 +311,19 @@ add('ConstantOfShape', {
   ],
   layout: { A: ['Row', 'Col'], Y: ['Row', 'Col'] },
 });
+// A half constant by its bit patterns: 1.5, -2, the half nearest 0.1, and the
+// smallest subnormal.
+const halfConstant = (type, bits) => ({
+  inputs: { A: float([2, 4]) },
+  nodes: [
+    node('Constant', [], 'C', { value: { tensor: tensorProto('c', type, [4], new Uint16Array(bits).buffer) } }),
+    node('Cast', ['C'], 'D', { to: FLOAT }),
+    node('Add', ['A', 'D'], 'Y'),
+  ],
+  layout: { A: ['Row', 'Col'], C: ['Col'], D: ['Col'] },
+});
+add('ConstantFloat16', halfConstant(FLOAT16, [0x3e00, 0xc000, 0x2e66, 0x0001]));
+add('ConstantBFloat16', halfConstant(BFLOAT16, [0x3fc0, 0xc000, 0x3dcd, 0x0001]));
 add('ShapeWindow', {
   inputs: { A: float([2, 3, 4]) },
   nodes: [node('Shape', ['A'], 'Y', { start: 1, end: -1 })],

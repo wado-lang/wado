@@ -15,6 +15,7 @@ use {
     Node,
     Rank,
     ReadError,
+    Stored,
     ValueInfo,
     bit_pattern,
     check_element_count,
@@ -225,7 +226,8 @@ fn read_known(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &Valu
 }
 
 /// Elements written as text, in the type stage 0 computes `dtype` in, or `None`
-/// for a type it does not read. ONNX writes a bool as the integer `int32_data` holds.
+/// for a type it does not read. ONNX writes a bool, and a half's bit pattern, as
+/// the integer `int32_data` holds.
 fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<String>) -> Result<Option<Known>, String> {
     if *dtype == "float" {
         let mut values: List<f32> = [];
@@ -236,6 +238,13 @@ fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<Strin
             values.push(v);
         }
         return Result::Ok(Option::Some(Known { extents, elements: Elements::Floats(values) }));
+    }
+    if let Some(stored) = Stored::half(dtype) {
+        let mut values: List<f32> = [];
+        for let text of texts {
+            values.push(stored.widened(element_bits(name, &text, dtype, 2)? as u16));
+        }
+        return Result::Ok(Option::Some(Known { extents, elements: Elements::Floats(values), stored }));
     }
     if !is_build_time(dtype) {
         return Result::Ok(null);
@@ -256,7 +265,8 @@ fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<Strin
     } else {
         Elements::Ints(values);
     };
-    return Result::Ok(Option::Some(Known { extents, elements, int32 }));
+    let stored = if int32 { Stored::Int32 } else { Stored::Computed };
+    return Result::Ok(Option::Some(Known { extents, elements, stored }));
 }
 
 /// A tensor attribute, which travels whole as the protobuf reader carries it.

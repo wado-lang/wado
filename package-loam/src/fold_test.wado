@@ -3,7 +3,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { axis_indices, fold } from "./fold.wado";
-use { Attr, Elements, Known, Node } from "./graph.wado";
+use { Attr, Elements, Known, Node, Stored } from "./graph.wado";
 use { Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 
@@ -317,7 +317,7 @@ test "Cast to int32 keeps a known integer's low 32 bits beside a symbolic one" {
     assert folded(node("Cast", ["D"], [attr("to", ["6"])]), k) == Known {
         extents: [2],
         elements: Elements::Symbolic([n, Poly::constant(705032704)]),
-        int32: true,
+        stored: Stored::Int32,
     };
 }
 

@@ -13,6 +13,7 @@ use {
     Elements,
     Graph,
     Known,
+    Stored,
     Node,
     Rank,
     ReadError,
@@ -42,10 +43,13 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
     let Some(element) = onnx::TensorProtoDataType::from_number(t.data_type.unwrap_or(0)) else {
         return Result::Ok(null);
     };
-    let width = match element {
-        Float | Int32 => 4,
-        Int64 => 8,
-        Bool => 1,
+    let [width, stored] = match element {
+        Float => [4, Stored::Computed],
+        Int32 => [4, Stored::Int32],
+        Int64 => [8, Stored::Computed],
+        Bool => [1, Stored::Computed],
+        Float16 => [2, Stored::Float16],
+        Bfloat16 => [2, Stored::BFloat16],
         _ => {
             return Result::Ok(null);
         },
@@ -69,9 +73,21 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
             };
             Elements::Bools(values.into_iter().map(|v| v != 0).collect());
         },
+        Float16 | Bfloat16 => {
+            let mut bits: List<u16> = [];
+            if typed {
+                let dtype = dtype_name(element.number()).unwrap();
+                for let v of t.int32_data {
+                    bits.push(bit_pattern(&name, &dtype, v, width)? as u16);
+                }
+            } else {
+                bits = List::<u16>::from_le_bytes(raw);
+            }
+            Elements::Floats(bits.into_iter().map(|b| stored.widened(b)).collect());
+        },
         _ => unreachable(),
     };
-    let known = Known { extents: extents_of(t, &name)?, elements, int32: element == Int32 };
+    let known = Known { extents: extents_of(t, &name)?, elements, stored };
     if known.len() == 0 && check_element_count(&name, 0, &known.extents).is_err() {
         return Result::Err(constant_without_values(&name));
     }

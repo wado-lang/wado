@@ -147,9 +147,49 @@ pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) 
 pub struct Known {
     pub extents: List<i32>,
     pub elements: Elements,
-    /// Whether the integers are ONNX's int32, which wraps at 32 bits where
-    /// int64 does not, though `i64` holds both.
-    pub int32: bool = false,
+    pub stored: Stored = Stored::Computed,
+}
+
+/// The ONNX element type a known tensor is stored as, where it is narrower
+/// than the type stage 0 computes its elements in.
+pub enum Stored {
+    /// int64, float or bool, each computed as it is stored.
+    Computed,
+    /// Held in `i64`, but wrapping at 32 bits where int64 does not.
+    Int32,
+    /// Computed in f32, which holds each of its values exactly.
+    Float16,
+    /// Computed in f32, which holds each of its values exactly.
+    BFloat16,
+}
+
+impl Stored {
+    /// The half type `dtype` names, or `None` for any other.
+    pub fn half(dtype: &String) -> Option<Stored> {
+        return match dtype.as_str_slice() {
+            "float16" => Option::Some(Stored::Float16),
+            "bfloat16" => Option::Some(Stored::BFloat16),
+            _ => null,
+        };
+    }
+
+    /// A half's bit pattern as the f32 that holds it.
+    pub fn widened(&self, bits: u16) -> f32 {
+        return match self {
+            Float16 => f32::from(f16::from_bits(bits)),
+            BFloat16 => f32::from(bf16::from_bits(bits)),
+            _ => unreachable(),
+        };
+    }
+
+    /// The bit pattern of the half `widened` gave `v` for.
+    pub fn narrowed(&self, v: f32) -> u16 {
+        return match self {
+            Float16 => f16::from_f32(v).to_bits(),
+            BFloat16 => bf16::from_f32(v).to_bits(),
+            _ => unreachable(),
+        };
+    }
 }
 
 /// A known tensor's elements, in the type stage 0 computes them in. ONNX's

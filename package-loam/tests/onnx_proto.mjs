@@ -5,6 +5,8 @@ export const FLOAT = 1;
 export const INT32 = 6;
 export const INT64 = 7;
 export const BOOL = 9;
+export const FLOAT16 = 10;
+export const BFLOAT16 = 16;
 
 function varint(n) {
   const out = [];

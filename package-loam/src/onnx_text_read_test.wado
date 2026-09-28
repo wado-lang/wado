@@ -1,6 +1,6 @@
 //! What the reader takes out of a graph, on the forms a real model carries.
 
-use { AttrError, Dim, Elements, Graph, Known, Rank, ReadError } from "./graph.wado";
+use { AttrError, Dim, Elements, Graph, Known, Rank, ReadError, Stored } from "./graph.wado";
 use { read } from "./onnx_text.wado";
 
 fn is_error<E: Error>() {
@@ -193,10 +193,30 @@ test "a tensor attribute is read as the tensor it spells" {
     });
 }
 
+test "a half tensor attribute is read widened to float, keeping the type it is stored as" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            S = Constant <value = float16[2] {15360, 48128}> ()
+            T = Constant <value = bfloat16 {16256}> ()
+            Y = Identity(X)
+        }`,
+    ).unwrap();
+    assert g.nodes[0].attrs[0].tensor == Option::Some(Known {
+        extents: [2],
+        elements: Elements::Floats([1.0, -1.0]),
+        stored: Stored::Float16,
+    });
+    assert g.nodes[1].attrs[0].tensor == Option::Some(Known {
+        extents: [],
+        elements: Elements::Floats([1.0]),
+        stored: Stored::BFloat16,
+    });
+}
+
 test "a tensor attribute of an element type not read carries no value" {
     let g = read(
         `agraph (float[2] X) => (float[2] Y) {
-            S = Constant <value = float16 {15360}> ()
+            S = Constant <value = double {1.0}> ()
             Y = Identity(X)
         }`,
     ).unwrap();

@@ -3,7 +3,7 @@
 
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
-use { Elements, Known, Node, data_type, trailing_axes } from "./graph.wado";
+use { Elements, Known, Node, Stored, data_type, trailing_axes } from "./graph.wado";
 use { Condition, Poly, ceiling, owe } from "./poly.wado";
 use {
     broadcast_extents,
@@ -29,7 +29,7 @@ pub fn fold(
 /// value, which the run derives where only it knows the value, as the node
 /// `site` names computes it.
 fn in_width(k: Known, site: &String) -> Known {
-    if !k.int32 {
+    if k.stored != Stored::Int32 {
         return k;
     }
     let elements = match k.elements {
@@ -494,10 +494,10 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
 /// converts one to anything else.
 fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
     let target = data_type(to);
-    let int32 = target matches { Some(Int32) };
+    let stored = if target matches { Some(Int32) } { Stored::Int32 } else { Stored::Computed };
     if x.elements matches { Symbolic(_) } {
         return Result::Ok(if target matches { Some(Int32 | Int64) } {
-            Option::Some(Known { ..*x, int32 });
+            Option::Some(Known { ..*x, stored });
         } else {
             null;
         });
@@ -529,7 +529,7 @@ fn cast(x: &Known, to: i64) -> Result<Option<Known>, String> {
             return Result::Err(`\`to\` is element type ${to}, which the build does not compute in`);
         },
     };
-    return Result::Ok(Option::Some(Known { extents: x.extents, elements, int32 }));
+    return Result::Ok(Option::Some(Known { extents: x.extents, elements, stored }));
 }
 
 /// Element `i` as a float. `cast` has taken the symbolic case already.
@@ -593,7 +593,7 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
             Result::Ok(Option::Some(Known {
                 extents: [values.len()],
                 elements: Elements::Ints(values),
-                int32: start.int32,
+                stored: start.stored,
             }));
         },
         [Floats(s), Floats(l), Floats(d)] => {
@@ -692,7 +692,7 @@ fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
         },
     };
     // ONNX computes in the operands' one element type.
-    return Result::Ok(Known { extents, elements, int32: a.int32 });
+    return Result::Ok(Known { extents, elements, stored: a.stored });
 }
 
 /// B's extents, followed by an extent of 1 for each of A's axes after it where

@@ -381,6 +381,14 @@ test "Softmax along the first axis" {
     assert_agrees(#include_bytes("./operators/SoftmaxFirst.onnx"), #include_str("./operators/SoftmaxFirst.txt"));
 }
 
+test "a float16 Constant widens to float exactly" {
+    assert_agrees(#include_bytes("./operators/ConstantFloat16.onnx"), #include_str("./operators/ConstantFloat16.txt"));
+}
+
+test "a bfloat16 Constant widens to float exactly" {
+    assert_agrees(#include_bytes("./operators/ConstantBFloat16.onnx"), #include_str("./operators/ConstantBFloat16.txt"));
+}
+
 test "Add before opset 7 aligns B at A's axis" {
     assert_agrees(#include_bytes("./operators/AddAtAxis.onnx"), #include_str("./operators/AddAtAxis.txt"));
 }
