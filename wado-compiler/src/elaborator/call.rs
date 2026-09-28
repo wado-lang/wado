@@ -80,12 +80,7 @@ impl CalleeSignature {
     fn of(decl: &DeclSig) -> Self {
         Self {
             param_types: decl.param_types.clone(),
-<<<<<<< HEAD
-            slots: decl.type_params.iter().map(|(_, id)| *id).collect(),
-||||||| 7d13d5c6fc1
-=======
             slots: decl.type_param_ids(),
->>>>>>> origin/main
             return_type: decl.return_type,
         }
     }
