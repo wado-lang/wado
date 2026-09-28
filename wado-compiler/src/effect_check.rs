@@ -1665,6 +1665,26 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
                 return;
             }
+            Expr::Closure(closure) => {
+                // A closure's body performs what its type carries, not what the
+                // function it is written in holds: it runs wherever it is called.
+                let declared: IndexSet<EffectRef> = self
+                    .annotations
+                    .into_iter()
+                    .flat_map(|ann| ann.all(|facts| &facts.closure_captures, closure.id))
+                    .flat_map(|info| info.declared_effects.iter().cloned())
+                    .collect();
+                let carried = expand_through_closure(&declared, self.index.closure);
+                let added: Vec<EffectRef> = carried
+                    .into_iter()
+                    .filter(|effect| self.current.insert(effect.clone()))
+                    .collect();
+                ast::walk_expr(self, expr);
+                for effect in added {
+                    self.current.shift_remove(&effect);
+                }
+                return;
+            }
             _ => {}
         }
         ast::walk_expr(self, expr);

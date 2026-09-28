@@ -6117,12 +6117,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let address_taken_locals = closure_ctx.address_taken_locals;
 
         let declared_effects =
-            expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-                ResolvedType::Function { effects, .. } if !effects.is_empty() => {
-                    Some(effects.clone())
-                }
-                _ => None,
-            });
+            Some(cap_info.declared_effects.clone()).filter(|effects| !effects.is_empty());
 
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {
