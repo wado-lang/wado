@@ -665,19 +665,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(ret) = ret else {
             return;
         };
+        let walked = pending
+            .walks
+            .iter()
+            .flat_map(|walk| &walk.bindings)
+            .filter_map(|binding| binding.settled.type_id());
+        let applied: Vec<TypeId> = pending
+            .literals
+            .iter()
+            .map(|(_, var)| *var)
+            .chain(walked)
+            .map(|ty| self.apply_infer_holes(ty))
+            .collect();
         let waited: Vec<TypeId> = {
             let tt = self.tysys.type_table.borrow();
-            let walked = pending
-                .walks
-                .iter()
-                .flat_map(|walk| &walk.bindings)
-                .filter_map(|binding| binding.settled.type_id());
-            pending
-                .literals
-                .iter()
-                .map(|(_, var)| *var)
-                .chain(walked)
-                .flat_map(|ty| tt.infer_vars_in(self.apply_infer_holes(ty)))
+            applied
+                .into_iter()
+                .flat_map(|ty| tt.infer_vars_in(ty))
                 .collect()
         };
         for (var, answer) in self.unify_expected_return(ret) {
