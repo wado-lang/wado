@@ -1,0 +1,65 @@
+// A closure performs the effects its type carries, whether it dispatches an
+// operation itself or calls a function declaring the effect. The function the
+// closure is written in holds neither: it only hands the closure on.
+
+interface Tick {
+    fn tick() -> i32;
+}
+
+interface Tock {
+    fn tock() -> i32;
+}
+
+struct Count {
+    n: i32,
+}
+
+impl Tick for Count {
+    fn tick(&mut self) -> i32 {
+        self.n += 1;
+        resume self.n
+    }
+}
+
+impl Tock for Count {
+    fn tock(&mut self) -> i32 {
+        self.n += 10;
+        resume self.n
+    }
+}
+
+fn one() -> i32 with Tick {
+    return Tick::tick();
+}
+
+fn both() -> i32 with (Tick, Tock) {
+    return Tick::tick() + Tock::tock();
+}
+
+fn with_tick<T>(f: fn() -> T with Tick) -> T {
+    let mut c = Count { n: 0 };
+    with Tick => &mut c do {
+        return f();
+    };
+}
+
+fn with_both<T>(f: fn() -> T with (Tick, Tock)) -> T {
+    let mut a = Count { n: 0 };
+    let mut b = Count { n: 0 };
+    with Tick => &mut a, Tock => &mut b do {
+        return f();
+    };
+}
+
+fn twice() -> i32 {
+    return with_tick(|| one() + one());
+}
+
+fn run_both() -> i32 {
+    return with_both(|| both());
+}
+
+test "a closure calls a function declaring the effect its type carries" {
+    assert twice() == 3;
+    assert run_both() == 11;
+}

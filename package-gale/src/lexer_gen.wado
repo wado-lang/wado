@@ -14,6 +14,7 @@ use {
     AltAction,
     find_lexer_rule,
     lexer_alias_text,
+    NO_MODE,
 } from "./ir.wado";
 use { gen_visibility_comment } from "./gen_util.wado";
 use { literal_const_name } from "./ident.wado";
@@ -1129,23 +1130,33 @@ fn fragment_is_callable(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
 /// Rewrite each group or fragment reference hiding a contested alternation from
 /// what follows it, so the alternation scores its arms against that suffix.
 pub fn splice_suffixed_alternations(grammar: &mut Grammar) {
-    let rules = grammar.lexer_rules;
+    let mut scope = SpliceScope { rules: grammar.lexer_rules, grammar_options: grammar.options, ci: false };
     for let rule of &mut grammar.lexer_rules {
+        scope.ci = resolve_ci(&scope.grammar_options, &rule.options);
         for let alt of &mut rule.body {
-            splice_alt(alt, &rules);
+            splice_alt(alt, &scope);
         }
     }
 }
 
-fn splice_alt(alt: &mut LexerAlternative, rules: &List<LexerRule>) {
+/// What a splice reads besides the rule it rewrites.
+struct SpliceScope {
+    rules: List<LexerRule>,
+    grammar_options: List<GrammarOption>,
+    /// The rewritten rule's case folding, which a token rule spliced into it
+    /// must share: a splice folds the body with its new owner.
+    ci: bool,
+}
+
+fn splice_alt(alt: &mut LexerAlternative, scope: &SpliceScope) {
     // Re-reading `i` after a splice reaches what the splice exposed, which a
     // nested group's own last element may now be followed by.
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        splice_within(&mut alt.elements[i], rules);
-        if i + 1 == alt.elements.len() {
+        splice_within(&mut alt.elements[i], scope);
+        if i + 1 == alt.elements.len() && !is_spliced_token_ref(&alt.elements[i], scope) {
             continue;
         }
-        let Some(inner) = spliced_elements(&alt.elements[i], rules) else {
+        let Some(inner) = spliced_elements(&alt.elements[i], scope) else {
             continue;
         };
         let added = inner.len() - 1;
@@ -1167,35 +1178,42 @@ fn splice_alt(alt: &mut LexerAlternative, rules: &List<LexerRule>) {
     }
 }
 
-fn splice_within(elem: &mut LexerElement, rules: &List<LexerRule>) {
+fn splice_within(elem: &mut LexerElement, scope: &SpliceScope) {
     match elem {
         Group(arms) => {
             for let arm of arms {
-                splice_alt(arm, rules);
+                splice_alt(arm, scope);
             }
         },
-        Repeat(rep) => splice_within(&mut rep.element, rules),
+        Repeat(rep) => splice_within(&mut rep.element, scope),
         _ => {
         },
     }
 }
 
 /// The elements `elem` stands for in its sequence, when a contested alternation
-/// sits at its end: a single alternative's own, or a fragment body as a group.
-fn spliced_elements(elem: &LexerElement, rules: &List<LexerRule>) -> Option<List<LexerElement>> {
+/// sits at its end: a single alternative's own, or a rule body as a group.
+fn spliced_elements(elem: &LexerElement, scope: &SpliceScope) -> Option<List<LexerElement>> {
+    let rules = &scope.rules;
     let body = match elem {
         Group(arms) => *arms,
         RuleRef(name) => match find_fragment(rules, name) {
             Some(f) && !fragment_is_recursive(f, rules) => f.body,
-            _ => {
+            Some(_) => {
                 return null;
+            },
+            None => match spliceable_token_body(name, scope) {
+                Some(b) => b,
+                None => {
+                    return null;
+                },
             },
         },
         _ => {
             return null;
         },
     };
-    if body.len() == 1 && body[0].actions.is_empty() && seq_ends_contested(&body[0], rules) {
+    if body.len() == 1 && body[0].actions.is_empty() && seq_ends_contested(&body[0], scope) {
         return Option::Some(body[0].elements);
     }
     // Read wide: a splice rewrites to an equal sequence, so a superset only
@@ -1206,15 +1224,83 @@ fn spliced_elements(elem: &LexerElement, rules: &List<LexerRule>) -> Option<List
     return null;
 }
 
-fn seq_ends_contested(seq: &LexerAlternative, rules: &List<LexerRule>) -> bool {
+/// The body of a token rule another rule reaches, which splices in as a
+/// fragment's would. A called rule's actions run only for a token of its own, so
+/// the splice leaves them out. It keeps its call where a splice would change
+/// what the call means: a command belongs to the token it emits itself, an
+/// action reached through a fragment would run for the caller, a spliced body
+/// folds case as its caller does, and a rule reaching itself would unroll
+/// forever.
+fn spliceable_token_body<S: AsStrSlice>(name: S, scope: &SpliceScope) -> Option<List<LexerAlternative>> {
+    let rules = &scope.rules;
+    let Some(r) = find_lexer_rule(rules, name) else {
+        return null;
+    };
+    let commanded = r.skip
+        || r.more
+        || r.type_override matches { Some(_) }
+        || r.channel != 0
+        || r.set_mode != NO_MODE
+        || r.push_mode != NO_MODE
+        || r.pop_mode;
+    if r.is_fragment
+        || r.is_virtual
+        || commanded
+        || resolve_ci(&scope.grammar_options, &r.options) != scope.ci
+        || lexer_rule_reaches_self(r, rules) {
+        return null;
+    }
+    let body = without_actions(&r.body);
+    if body.iter_ref().any(|a| lexer_alt_has_any_action(a, rules)) {
+        return null;
+    }
+    return Option::Some(body);
+}
+
+fn without_actions(arms: &List<LexerAlternative>) -> List<LexerAlternative> {
+    let mut out: List<LexerAlternative> = [];
+    for let arm of arms {
+        let mut kept = LexerAlternative { elements: [], actions: [] };
+        for let e of &arm.elements {
+            kept.elements.push(element_without_actions(e));
+        }
+        for let a of &arm.actions {
+            if a.kind matches { Predicate } {
+                kept.actions.push(*a);
+            }
+        }
+        out.push(kept);
+    }
+    return out;
+}
+
+fn element_without_actions(elem: &LexerElement) -> LexerElement {
+    return match *elem {
+        Group(arms) => LexerElement::Group(without_actions(&arms)),
+        Repeat(rep) => LexerElement::Repeat(
+            LexerRepeatElement { ..rep, element: element_without_actions(&rep.element) },
+        ),
+        _ => *elem,
+    };
+}
+
+/// Whether `elem` names a token rule `spliced_elements` would splice. Unlike a
+/// fragment it has one matcher for its own token and for every call, planned
+/// as a call, so a splice is the only way it keeps its own tail position.
+fn is_spliced_token_ref(elem: &LexerElement, scope: &SpliceScope) -> bool {
+    return elem matches { RuleRef(name) && find_fragment(&scope.rules, &name) matches { None } }
+        && spliced_elements(elem, scope) matches { Some(_) };
+}
+
+fn seq_ends_contested(seq: &LexerAlternative, scope: &SpliceScope) -> bool {
     if seq.elements.is_empty() {
         return false;
     }
     let last = &seq.elements[seq.elements.len() - 1];
-    if let Group(arms) = last && lexer_alts_contested(arms, rules, Casing::Unknown) {
+    if let Group(arms) = last && lexer_alts_contested(arms, &scope.rules, Casing::Unknown) {
         return true;
     }
-    return spliced_elements(last, rules) matches { Some(_) };
+    return spliced_elements(last, scope) matches { Some(_) };
 }
 
 /// Whether an alternation takes the longest arm and two arms can match the same text.
@@ -1228,18 +1314,26 @@ pub fn lexer_alts_contested(arms: &List<LexerAlternative>, rules: &List<LexerRul
 /// fragment), which is what keeps it from being inlined at its use sites.
 pub fn fragment_is_recursive(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     let mut visited: List<String> = [];
-    return fragment_refs_self(&rule.name, &rule.body, all_rules, &mut visited);
+    return refs_self(&rule.name, &rule.body, all_rules, false, &mut visited);
 }
 
-fn fragment_refs_self<S: AsStrSlice>(
+/// `fragment_is_recursive` through token rules too, which a splice inlines as
+/// it does fragments.
+fn lexer_rule_reaches_self(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+    let mut visited: List<String> = [];
+    return refs_self(&rule.name, &rule.body, all_rules, true, &mut visited);
+}
+
+fn refs_self<S: AsStrSlice>(
     target: S,
     alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
+    through_tokens: bool,
     visited: &mut List<String>,
 ) -> bool {
     for let alt of alts {
         for let elem of &alt.elements {
-            if fragment_elem_refs_self(target, elem, all_rules, visited) {
+            if elem_refs_self(target, elem, all_rules, through_tokens, visited) {
                 return true;
             }
         }
@@ -1247,10 +1341,11 @@ fn fragment_refs_self<S: AsStrSlice>(
     return false;
 }
 
-fn fragment_elem_refs_self<S: AsStrSlice>(
+fn elem_refs_self<S: AsStrSlice>(
     target: S,
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
+    through_tokens: bool,
     visited: &mut List<String>,
 ) -> bool {
     match *elem {
@@ -1262,20 +1357,24 @@ fn fragment_elem_refs_self<S: AsStrSlice>(
                 return false;
             }
             visited.push(name);
-            let frag = find_fragment(all_rules, &name);
-            if let Some(f) = frag {
-                return fragment_refs_self(target, &f.body, all_rules, visited);
+            let callee = if through_tokens {
+                find_lexer_rule(all_rules, &name);
+            } else {
+                find_fragment(all_rules, &name);
+            };
+            if let Some(f) = callee {
+                return refs_self(target, &f.body, all_rules, through_tokens, visited);
             }
             return false;
         },
         Group(alts) => {
-            return fragment_refs_self(target, &alts, all_rules, visited);
+            return refs_self(target, &alts, all_rules, through_tokens, visited);
         },
         Repeat(rep) => {
-            return fragment_elem_refs_self(target, &rep.element, all_rules, visited);
+            return elem_refs_self(target, &rep.element, all_rules, through_tokens, visited);
         },
         Not(not_elem) => {
-            return fragment_elem_refs_self(target, &not_elem.element, all_rules, visited);
+            return elem_refs_self(target, &not_elem.element, all_rules, through_tokens, visited);
         },
         _ => {
             return false;

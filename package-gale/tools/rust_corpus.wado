@@ -1,5 +1,5 @@
-//! What both Rust tools here need: the recognizer with its base ports
-//! installed.
+//! The Rust recognizer with its base ports installed, for the tools here and
+//! the driver test.
 
 use rust from "../tests/grammars/RustLexer.g4"
     with {
@@ -11,8 +11,10 @@ use rust from "../tests/grammars/RustLexer.g4"
     };
 use { RustLexerBase, RustParserBase, LexerView, Parser } from "../tests/grammars/RustLexer.g4";
 
-// The Wado twin of `grammars/java/RustLexerBase.java`, which the ANTLR4 oracle
-// runs; `tests/driver_cst_rust_test.wado` holds the copy that pins the pair.
+// A hand-written RustLexerBase port (the real base class is Java, outside the
+// .g4). Stateless: the predicates read only the match window.
+// `grammars/java/RustLexerBase.java` is its Java twin, which
+// `antlr4-oracle.sh --super` runs ANTLR4 against. Edit both or neither.
 struct RustBase {
 }
 
@@ -37,6 +39,9 @@ impl RustLexerBase for RustBase {
     }
 }
 
+// The parser base, likewise a port. The lexer emits `<` and `>` one character
+// at a time so nested generics close cleanly, so `shl` / `shr` reassemble a
+// shift only for a pair one start offset apart — what `NextLT` / `NextGT` ask.
 struct RustPBase {
 }
 
@@ -50,10 +55,16 @@ impl RustParserBase for RustPBase {
     }
 }
 
-pub fn parse_rust<S: AsStrSlice>(source: S) -> rust::ParseResult {
+/// Runs `recognize` with the base ports installed.
+pub fn with_rust_bases<T>(recognize: fn() -> T with (RustLexerBase, RustParserBase)) -> T {
     let mut base = RustBase {};
     let mut pbase = RustPBase {};
     with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
-        return rust::parse(source);
+        return recognize();
     };
+}
+
+/// Parses a whole Rust source file.
+pub fn parse_rust<S: AsStrSlice>(source: S) -> rust::ParseResult {
+    return with_rust_bases(|| rust::parse(source));
 }

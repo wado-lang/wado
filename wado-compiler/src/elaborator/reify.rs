@@ -34,6 +34,7 @@ use crate::tir::{
 use super::coercion::{
     NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,
     is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
+    unary_passes_expected_type,
 };
 use super::expr::UnionSource;
 use super::sem::{ModuleSemantics, TypeAnnotations};
@@ -2744,19 +2745,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_expr(&unary.expr, ctx, expected_type);
                 }
                 let op = ast_unary_op_to_tir(unary.op);
-                // A `-` or `~` operand built from literals shares the unary's
-                // type: propagate the recorded type so the inner literal takes
-                // the right width (e.g. `-1.0` in an `f32` const body must be
-                // `f32`, not the default `f64`). Other unary operands are typed
-                // on their own.
-                let inner_expected = if matches!(unary.op, ast::UnaryOp::Neg | ast::UnaryOp::BitNot)
-                    && is_literal_arithmetic(&unary.expr)
-                    && recorded_type != TypeTable::UNKNOWN
-                {
-                    Some(recorded_type)
-                } else {
-                    None
-                };
+                let inner_expected = Some(recorded_type)
+                    .filter(|&t| t != TypeTable::UNKNOWN && unary_passes_expected_type(unary));
                 let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
                 if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a
@@ -6212,12 +6202,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let address_taken_locals = closure_ctx.address_taken_locals;
 
         let declared_effects =
-            expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-                ResolvedType::Function { effects, .. } if !effects.is_empty() => {
-                    Some(effects.clone())
-                }
-                _ => None,
-            });
+            Some(cap_info.declared_effects.clone()).filter(|effects| !effects.is_empty());
 
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {

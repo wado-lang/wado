@@ -660,15 +660,69 @@ pub fn follow_forward_args() -> String {
 /// positions early — `{ x, y }` inside `[ … ]` handing its own comma to the
 /// list, whose next iteration also starts with one. Only the reading this
 /// composition opens is at a position the gate can still place.
+///
+/// An empty continuation is an unknown one. Behind `prefix` it only stops
+/// constraining, but as an alternative to it, it is a reading the slots cannot
+/// hold, so the result carries `FOLLOW_OPEN_READING` for `follow_admits`. An
+/// open reading behind `prefix` is dropped: `follow_admits` asks only where a
+/// reading can start, and every reading here starts with the prefix. Carried as
+/// a bare mark it would admit any kind, and `[b, c]` would give its `,` to the
+/// element before it.
 pub fn follow_composed<S: AsStrSlice>(prefix: S, positions: i32, opens: bool) -> String {
     let sequenced = `${FOLLOW_PARAM} & FOLLOW_SEQUENCED`;
-    let shifted = if opens { `(${sequenced} | FOLLOW_OPENS_BIT)` } else { `(${sequenced})` };
-    return `(${prefix} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+    if !opens {
+        return `(${prefix} | (${sequenced}) << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+    }
+    return `(${prefix} | (${sequenced} | FOLLOW_OPENS_BIT) << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK | follow_open_mark(${FOLLOW_PARAM})`;
+}
+
+/// `prefix` or `alternative`, each read from the gate's position. Unlike the
+/// forwarded half in `follow_composed`, `alternative` is spelled here, so every
+/// reading it opens already begins at the gate and keeps its mark.
+pub fn follow_alternative<S: AsStrSlice, S1: AsStrSlice>(prefix: S, positions: i32, alternative: S1) -> String {
+    return `(${prefix} | (${alternative} | FOLLOW_OPENS_BIT) << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK | (${alternative}) & FOLLOW_OPEN_FIELD`;
+}
+
+/// `cont` with one more reading the slots cannot hold, `open` being
+/// `follow_open_set` of the kinds it starts with or a bare
+/// `FOLLOW_OPEN_READING`. One field holds one set, so two different sets
+/// widen to any kind.
+pub fn follow_opened<S: AsStrSlice, S1: AsStrSlice>(cont: S, open: S1) -> String {
+    return `follow_open_with(${cont}, ${open})`;
 }
 
 /// A `follow_yields` call on the forwarded continuation.
 pub fn follow_yields_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
     return follow_yields_call_of(tokens, pos, &FOLLOW_PARAM);
+}
+
+/// A `follow_admits` call on the forwarded continuation: whether it can start
+/// at `pos`, which an unknown continuation always can.
+pub fn follow_admits_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
+    return follow_query("follow_admits", tokens, pos, &FOLLOW_PARAM);
+}
+
+/// A `follow_resumes` call on the forwarded continuation: whether it is known
+/// to start at `pos`. An unknown continuation never is, so it cannot overturn a
+/// continuation that yields.
+pub fn follow_resumes_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
+    return follow_query("follow_resumes", tokens, pos, &FOLLOW_PARAM);
+}
+
+/// A `follow_exit_viable` call on the forwarded continuation: whether leaving
+/// the rule at `pos` can go on. A known continuation must match as far as it is
+/// known; one the caller did not pass on is taken at its first token.
+pub fn follow_exit_viable_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
+    return follow_query("follow_exit_viable", tokens, pos, &FOLLOW_PARAM);
+}
+
+fn follow_query<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
+    query: S,
+    tokens: S1,
+    pos: S2,
+    cont: S3,
+) -> String {
+    return `${query}(${tokens}, ${pos}, ${cont}, &FOLLOW_SETS, TK_EOF)`;
 }
 
 /// `follow_yields_call` where the site is `gated` on the caller's FOLLOW, else "".
@@ -678,7 +732,12 @@ pub fn follow_yields_call_if<S: AsStrSlice, S1: AsStrSlice>(gated: bool, tokens:
 
 /// A `follow_yields` call on a continuation held in one local.
 pub fn follow_yields_call_of<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(tokens: S, pos: S1, head: S2) -> String {
-    return `follow_yields(${tokens}, ${pos}, ${head}, &FOLLOW_SETS, TK_EOF)`;
+    return follow_query("follow_yields", tokens, pos, head);
+}
+
+/// The caller's own `lr_cont`, handed on where the callee's trailing operand reads it.
+pub fn lr_cont_forward(mid_operand_gated: bool) -> String {
+    return if mid_operand_gated { ", lr_cont" } else { "" };
 }
 
 /// `", <forwarded continuation>"` when the callee declares the parameter, else

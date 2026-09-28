@@ -3,8 +3,8 @@
 /// `tools/rust_corpus_check.wado`; what belongs here is the shape a corpus
 /// failure narrowed to.
 ///
-/// The lexer's superClass predicates (`SOF`, float disambiguation) run through
-/// the base handler installed below.
+/// The superClass predicates run through the base ports
+/// `tools/rust_corpus.wado` installs.
 use rust from "./grammars/RustLexer.g4"
     with {
         generator: {
@@ -14,68 +14,15 @@ use rust from "./grammars/RustLexer.g4"
         },
     };
 use { normalize_tree } from "./support/tree_compare.wado";
-use { RustLexerBase, RustParserBase, LexerView, Parser } from "./grammars/RustLexer.g4";
-
-// A representative hand-written RustLexerBase port (the real base class is Java,
-// outside the .g4; the user ports it to Wado). Stateless here — the predicates
-// read only the match window. Installed around every recognizer call.
-// `grammars/java/RustLexerBase.java` is its Java twin, which
-// `antlr4-oracle.sh --super` runs ANTLR4 against. Edit both or neither.
-struct RustBase {
-}
-
-impl RustLexerBase for RustBase {
-    fn sof(&self, view: LexerView) -> bool {
-        resume view.la(-1) == -1;
-    }
-
-    fn float_literal_possible(&self, view: LexerView) -> bool {
-        resume view.la(-1) != '.' as i32;
-    }
-
-    fn float_dot_possible(&self, view: LexerView) -> bool {
-        let c = view.la(1);
-        if c == '.' as i32 || c == '_' as i32 {
-            resume false;
-        }
-        if c >= 'a' as i32 && c <= 'z' as i32 || c >= 'A' as i32 && c <= 'Z' as i32 {
-            resume false;
-        }
-        resume true;
-    }
-}
-
-// The parser base, likewise a port. The lexer emits `<` and `>` one character
-// at a time so nested generics close cleanly, so `shl` / `shr` reassemble a
-// shift only for a pair one start offset apart — what `NextLT` / `NextGT` ask.
-struct RustPBase {
-}
-
-impl RustParserBase for RustPBase {
-    fn next_lt(&self, p: &Parser) -> bool {
-        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
-    }
-
-    fn next_gt(&self, p: &Parser) -> bool {
-        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
-    }
-}
+use { with_rust_bases } from "../tools/rust_corpus.wado";
 
 fn rlex_tok<S: AsStrSlice>(input: S) -> rust::TokenStream {
-    let mut base = RustBase {};
-    with RustLexerBase => &mut base do {
-        return rust::tokenize(input);
-    };
+    return with_rust_bases(|| rust::tokenize(input));
 }
 
 fn rlex_prs<S: AsStrSlice>(input: S) -> rust::ParseResult {
-    let mut base = RustBase {};
-    let mut pbase = RustPBase {};
-    with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
-        return rust::parse(input);
-    };
+    return with_rust_bases(|| rust::parse(input));
 }
-
 
 test "tokenize fn declaration" {
     let tokens = rlex_tok("fn main() {}");
