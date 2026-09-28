@@ -200,7 +200,7 @@ pub fn analyze_ownership(
         declared_owned: IndexSet::default(),
         share_sources: IndexMap::default(),
         consumed: IndexMap::default(),
-        value_reads: IndexSet::default(),
+        value_reads: IndexMap::default(),
         mutations: Vec::new(),
     };
     let mut live = IndexSet::default();
@@ -240,15 +240,16 @@ pub fn analyze_ownership(
         .collect();
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|site| site.base).collect();
     let place_spans: IndexSet<Span> = moved_places.iter().map(|site| site.span).collect();
-    let read_spans = local_reads(body)
-        .filter(|(local, span)| {
-            final_reads.contains(span)
-                && a.value_reads.contains(span)
-                && !borrowed_params.contains(local)
-                && !a.place_escaped(*local, None)
-                && !a.mut_aliased_reads.contains(span)
+    let read_spans = a
+        .value_reads
+        .iter()
+        .filter(|(span, local)| {
+            final_reads.contains(*span)
+                && !borrowed_params.contains(*local)
+                && !a.place_escaped(**local, None)
+                && !a.mut_aliased_reads.contains(*span)
         })
-        .map(|(_, span)| span)
+        .map(|(span, _)| *span)
         .collect();
 
     Ownership {
@@ -826,24 +827,6 @@ fn has_unsupported_form(body: &TirBlock) -> bool {
     s.found
 }
 
-/// Every whole-local read in `body`, as the local and the read's span.
-fn local_reads(body: &TirBlock) -> impl Iterator<Item = (u32, Span)> {
-    struct Scan {
-        reads: Vec<(u32, Span)>,
-    }
-    impl TirRefVisitor for Scan {
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            if let TirExprKind::Local { index, .. } = &expr.kind {
-                self.reads.push((*index, expr.span));
-            }
-            self.walk_expr(expr);
-        }
-    }
-    let mut s = Scan { reads: Vec::new() };
-    s.visit_block(body);
-    s.reads.into_iter()
-}
-
 struct MaxLocal {
     max: u32,
 }
@@ -942,9 +925,10 @@ struct Analyzer<'a> {
     /// Locals read in a value position, each with the locals live where that
     /// happens. A projection base and a borrow referent consume nothing.
     consumed: IndexMap<u32, IndexSet<u32>>,
-    /// The spans of those reads. A final read elsewhere — a borrow's referent,
-    /// a projection base — takes no value, so it moves nothing.
-    value_reads: IndexSet<Span>,
+    /// Each of those reads by span, with the local it reads. A final read
+    /// elsewhere — a borrow's referent, a projection base — takes no value, so
+    /// it moves nothing.
+    value_reads: IndexMap<Span, u32>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation>,
 }
@@ -976,7 +960,7 @@ impl Analyzer<'_> {
         if record {
             let at = self.consumed.entry(index).or_default();
             at.extend(live.iter().copied());
-            self.value_reads.insert(span);
+            self.value_reads.insert(span, index);
         }
         self.read_base(index, live, record);
     }
