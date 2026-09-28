@@ -162,7 +162,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`).
     /// Identifies the active `ModuleSemantics`, which the driver swaps by
-    /// `IndexMap<ModuleSource, ModuleSemantics>` key.
+    /// this key.
     current_module_source: ModuleSource,
     /// Entry module source (for cross-module import dedup)
     entry_module_source: ModuleSource,
@@ -1738,7 +1738,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.record_impl_decls(impl_block);
             }
         }
-        self.sem.decls.function_sigs = Rc::new(function_sigs);
+        self.sem.decls.function_sigs = function_sigs;
         for item in &module.items {
             if let Item::Function(func) = item {
                 self.precompute_generic_function_cache(func);

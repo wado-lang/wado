@@ -403,7 +403,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// callee module when reifying a default-argument expression that
     /// resolves in the callee's lexical scope (it may reference items
     /// private to the callee module).
-    pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
+    pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
     /// Symbol table from analyzer (cross-module).
     pub(crate) symbols: &'a SymbolTable,
     /// All loaded modules. Used by cross-module lookups (e.g. resolving
@@ -494,7 +494,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     pub(crate) fn new(
         tysys: TypeSystem,
         sem: &'a ModuleSemantics,
-        all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
+        all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
@@ -8101,7 +8101,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.loaded_modules.get(module),
                 self.all_module_semantics.get(module),
             ) {
-                (Some(m), Some(sem)) => Some((m.items.as_slice(), sem)),
+                (Some(m), Some(sem)) => Some((m.items.as_slice(), &**sem)),
                 _ => None,
             }
         };

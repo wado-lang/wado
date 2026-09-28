@@ -1334,6 +1334,27 @@ mod tests {
         assert!(stdlib_facts);
     }
 
+    /// A stdlib module served from the snapshot reads the snapshot's facts in
+    /// place: a copy per compile was the largest allocation after the snapshot.
+    #[test]
+    fn a_compile_shares_the_snapshot_facts() {
+        let snap = get_or_init_snapshot().expect("not re-entering the builder");
+        let snap_state = snap.state.as_ref().expect("the stdlib snapshot is complete");
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics("fn main() {}", &host, Some("entry.wado")));
+        let state = sem.state.as_ref().expect("annotate state");
+
+        let prelude = state
+            .module_semantics
+            .keys()
+            .find(|source| source.to_string() == "core:prelude")
+            .expect("every compile loads the prelude");
+        assert!(std::rc::Rc::ptr_eq(
+            &state.module_semantics[prelude],
+            &snap_state.module_semantics[prelude],
+        ));
+    }
+
     /// What an `iter_*` yields is what a point lookup answers, so the entry a
     /// node's other walk recorded is not handed out.
     #[test]
