@@ -29,6 +29,7 @@ use {
     dims_of,
     element_of,
     is_binary_elementwise,
+    trailing_axes,
 } from "./graph.wado";
 use { Condition, Poly, owe as owe_at } from "./poly.wado";
 use { from_end, spatial_extents } from "./runtime/tensor.wado";
@@ -683,7 +684,8 @@ fn infer_node(
     }
     if is_binary_elementwise(&op) {
         let [a, b] = binary_operands(node, shapes)?;
-        return at_node(node, a.elementwise(&b, op, owed));
+        let trailing = trailing_axes(node, a.rank(), b.rank()).map_err(|reason| refusal(node, reason))?;
+        return at_node(node, a.elementwise(&b.followed_by_units(&a, trailing.unwrap_or(0)), op, owed));
     }
     if op == "Gemm" {
         let [_, _, trans_a, trans_b] = gemm_options(node)?;

@@ -381,6 +381,14 @@ test "Softmax along the first axis" {
     assert_agrees(#include_bytes("./operators/SoftmaxFirst.onnx"), #include_str("./operators/SoftmaxFirst.txt"));
 }
 
+test "Add before opset 7 aligns B at A's axis" {
+    assert_agrees(#include_bytes("./operators/AddAtAxis.onnx"), #include_str("./operators/AddAtAxis.txt"));
+}
+
+test "Sub before opset 7 aligns B at A's leading axes" {
+    assert_agrees(#include_bytes("./operators/SubAtLeadingAxes.onnx"), #include_str("./operators/SubAtLeadingAxes.txt"));
+}
+
 test "Softmax before opset 13 normalizes the axes from its default on as one" {
     assert_agrees(
         #include_bytes("./operators/SoftmaxFlattenedDefault.onnx"),

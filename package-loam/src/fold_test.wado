@@ -95,6 +95,15 @@ test "shape arithmetic over a symbol folds as a polynomial" {
     assert gone == ints([1], [0]);
 }
 
+test "arithmetic aligned at an axis, as before opset 7, stretches B along the axes after it" {
+    let k = knowns([
+        ["A", ints([2, 3], [1, 2, 3, 4, 5, 6])],
+        ["B", ints([2], [10, 20])],
+    ]);
+    let aligned = folded(node("Add", ["A", "B"], [attr("axis", ["0"])]), k);
+    assert aligned == ints([2, 3], [11, 12, 13, 24, 25, 26]);
+}
+
 test "a quotient of a length by a positive number rounds down, and one any rounding might differ on stops the build" {
     let k = knowns([
         [

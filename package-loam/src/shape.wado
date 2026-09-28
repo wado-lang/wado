@@ -213,6 +213,16 @@ impl Shape {
         return &self.axes[self.rank() - 1 - back];
     }
 
+    /// This shape followed by the last `count` of `whole`'s axes at extent 1,
+    /// which broadcasting against `whole` stretches back under their own names.
+    pub fn followed_by_units(&self, whole: &Shape, count: i32) -> Shape {
+        let mut axes = self.axes;
+        for let i of whole.rank() - count..<whole.rank() {
+            axes.push(Axis { name: whole.axes[i].name, extent: Extent::Static(1) });
+        }
+        return Shape { axes };
+    }
+
     /// Elementwise over two operands under ONNX's multidirectional
     /// broadcasting, which every unary operation is the one-operand case of.
     /// `owed` gains what the inputs owe for the operands' axes to meet.

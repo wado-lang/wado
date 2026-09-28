@@ -256,6 +256,22 @@ pub fn zip_suffix_lhs<..Pre, ..Suf>(
     return Tensor { data: out, extents: b.extents };
 }
 
+/// Arithmetic before opset 7 aligned at an axis: `b` meets `a`'s axes from
+/// there, and repeats across the `trailing` axes after them as well as those
+/// before.
+pub fn zip_at<..Pre, ..Mid, ..Post>(
+    a: &Tensor<f32, [..Pre, ..Mid, ..Post]>,
+    b: &Tensor<f32, [..Mid]>,
+    trailing: i32,
+    op: fn(f32, f32) -> f32,
+) -> Tensor<f32, [..Pre, ..Mid, ..Post]> {
+    let mut b_extents = b.extents;
+    for let _ of 0..<trailing {
+        b_extents.push(1);
+    }
+    return stretched_zip(a.data, a.extents, b.data, b_extents, op);
+}
+
 fn ends_with(whole: &List<i32>, suffix: &List<i32>) -> bool {
     assert suffix.len() <= whole.len();
     let offset = whole.len() - suffix.len();

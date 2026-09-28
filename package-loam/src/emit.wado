@@ -6,7 +6,7 @@ use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_res
 use { Extent } from "./extent.wado";
 use { Condition, Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
-use { Elements, Graph, Node, data_type, element_of, is_binary_elementwise } from "./graph.wado";
+use { Elements, Graph, Node, data_type, element_of, is_binary_elementwise, trailing_axes } from "./graph.wado";
 use { fill_of } from "./fold.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { expected } from "./safetensors.wado";
@@ -889,7 +889,7 @@ fn axis_run(shape: &Shape, from: i32, to: i32) -> String {
 }
 
 /// What stage 0 read already: a failure stopped the build there.
-fn settled<T>(read: Result<T, InferError>) -> T {
+fn settled<T, E>(read: Result<T, E>) -> T {
     let Ok(value) = read else {
         unreachable();
     };
@@ -1147,7 +1147,13 @@ fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operan
     }
     let [a, b, left, right] = binary_call(node, shapes, exprs);
     let body = binary_body(&op, &"x", &"y");
-    let Some(call) = elementwise_call(&a, &b, &left, &right, &body) else {
+    let trailing = settled(trailing_axes(node, left.rank(), right.rank())).unwrap_or(0);
+    let lowered = if trailing == 0 {
+        elementwise_call(&a, &b, &left, &right, &body);
+    } else {
+        aligned_call(&a, &b, &left, &right, trailing, &body);
+    };
+    let Some(call) = lowered else {
         builtin::cold_path();
         return Result::Err(broadcast_error(node, &left, &right));
     };
@@ -1237,6 +1243,20 @@ fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &
     }
     let turbofish = `::<[${axis_run(right, 0, right.rank() - left.rank())}], [${axis_list(left)}]>`;
     return Option::Some(`zip_suffix_lhs${turbofish}(${a}, ${b}, |x, y| ${body})`);
+}
+
+/// The kernel for arithmetic aligning B at the axis of A that `trailing` of A's
+/// axes follow, or `None` where B's axes are not A's there.
+fn aligned_call(a: &String, b: &String, left: &Shape, right: &Shape, trailing: i32, body: &String) -> Option<String> {
+    let axis = left.rank() - right.rank() - trailing;
+    for let i of 0..<right.rank() {
+        if !stretchable_axis(&left.axes[axis + i], &right.axes[i]) {
+            return null;
+        }
+    }
+    let after = axis_run(left, left.rank() - trailing, left.rank());
+    let turbofish = `::<[${axis_run(left, 0, axis)}], [${axis_list(right)}], [${after}]>`;
+    return Option::Some(`zip_at${turbofish}(${a}, ${b}, ${trailing}, |x, y| ${body})`);
 }
 
 /// `Gemm`'s `alpha * A' * B' + beta * C`, as a `matmul` under optional

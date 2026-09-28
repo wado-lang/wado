@@ -3,7 +3,7 @@
 
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
-use { Elements, Known, Node, data_type } from "./graph.wado";
+use { Elements, Known, Node, data_type, trailing_axes } from "./graph.wado";
 use { Condition, Poly, ceiling, owe } from "./poly.wado";
 use {
     broadcast_extents,
@@ -662,11 +662,12 @@ pub fn fill_of(node: &Node) -> Known {
 
 fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
     let op = &node.op;
-    let Some(extents) = broadcast_extents(&a.extents, &b.extents) else {
+    let b_extents = aligned_extents(node, &a.extents, &b.extents)?;
+    let Some(extents) = broadcast_extents(&a.extents, &b_extents) else {
         return Result::Err(`operands of extents ${a.extents:?} and ${b.extents:?} do not broadcast`);
     };
     let x = picked(&a.elements, &positions(&a.extents, &extents));
-    let y = picked(&b.elements, &positions(&b.extents, &extents));
+    let y = picked(&b.elements, &positions(&b_extents, &extents));
     let elements = match [&x, &y] {
         [Floats(l), Floats(r)] => {
             let mut out: List<f32> = [];
@@ -692,6 +693,18 @@ fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
     };
     // ONNX computes in the operands' one element type.
     return Result::Ok(Known { extents, elements, int32: a.int32 });
+}
+
+/// B's extents, followed by an extent of 1 for each of A's axes after it where
+/// the node aligns B at an axis, so that broadcasting from the end stretches it.
+fn aligned_extents(node: &Node, a: &List<i32>, b: &List<i32>) -> Result<List<i32>, String> {
+    let mut extents = *b;
+    if let Some(trailing) = trailing_axes(node, a.len(), b.len())? {
+        for let _ of 0..<trailing {
+            extents.push(1);
+        }
+    }
+    return Result::Ok(extents);
 }
 
 /// Integer arithmetic, where a symbol may stand for an operand, as the node

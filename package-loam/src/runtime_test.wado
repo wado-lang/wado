@@ -31,6 +31,7 @@ use {
     unmet,
     widen,
     zip,
+    zip_at,
     zip_suffix,
     zip_suffix_lhs,
 } from "./runtime/tensor.wado";
@@ -205,6 +206,15 @@ test "zip_suffix broadcasts a trailing axis across a rank-3 operand" {
     let c = zip_suffix::<[Batch, Row], [Col]>(&a, &b, |x, y| x * y);
     assert c.extents == [2, 1, 2] as List<i32>;
     assert c.data == [10.0, 40.0, 30.0, 80.0] as List<f32>;
+}
+
+test "zip_at repeats the shorter operand along the axes after it and before it" {
+    let a: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 2], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+    let b: Tensor<f32, [Row]> = tensor([2], [10.0, 20.0]);
+
+    let c = zip_at::<[Batch], [Row], [Col]>(&a, &b, 1, |x, y| x + y);
+    assert c.extents == [2, 2, 2] as List<i32>;
+    assert c.data == [11.0, 12.0, 23.0, 24.0, 15.0, 16.0, 27.0, 28.0] as List<f32>;
 }
 
 test "zip stretches an extent-1 axis on either side" {

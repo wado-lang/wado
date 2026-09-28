@@ -347,17 +347,19 @@ pub fn default_opset(imports: &List<[String, i64]>) -> Option<i64> {
 }
 
 /// `nodes` as the current opset defines them, read from `opset`'s definitions.
-/// A spelling whose older meaning no later opset has stops the read.
+/// A graph naming no opset is read as the current one. Arithmetic keeps its
+/// `axis` only where it aligns B at it, as before opset 7 with `broadcast`,
+/// which no later opset spells.
 pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, String> {
-    let Some(version) = opset else {
-        return Result::Ok(nodes);
-    };
+    let version = opset.unwrap_or(i64::MAX);
     let mut out: List<Node> = [];
     for let node of nodes {
-        if version < 7 && is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
-            return Result::Err(
-                `${node.outputs.join(", ")} = ${node.op}: opset ${version} aligns the operands at attribute axis, which no later opset does`,
-            );
+        if is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
+            let aligns = version < 7 && node.int_attr("broadcast", 0).map_err(|e| `${node.site()}: ${e}`)? != 0;
+            if !aligns {
+                out.push(Node { ..node, attrs: node.attrs.into_iter().filter(|a| a.name != "axis").collect() });
+                continue;
+            }
         }
         if version < 4 && node.op == "Concat" && node.attr("axis") matches { None } {
             let mut attrs = node.attrs;
@@ -377,6 +379,20 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
 /// The operators that broadcast two operands against each other.
 pub fn is_binary_elementwise(op: &String) -> bool {
     return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
+}
+
+/// How many of A's axes follow B's where arithmetic aligns B at A's `axis`, or
+/// `None` where it aligns B at A's end, as numpy does.
+pub fn trailing_axes(node: &Node, a_rank: i32, b_rank: i32) -> Result<Option<i32>, String> {
+    assert is_binary_elementwise(&node.op);
+    if node.attr("axis") matches { None } {
+        return Result::Ok(null);
+    }
+    let axis = node.int_attr("axis", 0).map_err(|e| `${e}`)?;
+    if !(0 <= axis <= (a_rank - b_rank) as i64) {
+        return Result::Err(`attribute axis is ${axis}, and B's ${b_rank} axes from there pass A's ${a_rank}`);
+    }
+    return Result::Ok(Option::Some(a_rank - b_rank - axis as i32));
 }
 
 /// A model neither reader can take, and why.

@@ -578,6 +578,31 @@ test "Softmax before opset 13 along the last axis is the one-axis Softmax" {
     assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
 }
 
+test "arithmetic before opset 7 aligns B at A's axis and stretches it over the axes after" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+    g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y) {
+        Y = Add <broadcast = 1, axis = 1> (X, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("B", ["Seq"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=2,Seq=4,Embed=8";
+}
+
+test "arithmetic before opset 7 aligning B past A's last axis stops the build" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+    g (float[2, 4, 8] X, float[4, 8] B) => (float[2, 4, 8] Y) {
+        Y = Add <broadcast = 1, axis = 2> (X, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("B", ["Seq", "Embed"]),
+    ];
+    let e = y_axes(source, layout).unwrap_err();
+    assert e == "Y = Add: attribute axis is 2, and B's 2 axes from there pass A's 3";
+}
+
 test "a reduction that keeps its axes leaves each at extent 1 under its name" {
     let source = `g (float[2, 4, 8] X) => (float[2, 4, 1] Y) {
         Y = ReduceMean <axes = [-1]> (X)

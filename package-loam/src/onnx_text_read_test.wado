@@ -56,13 +56,19 @@ test "a Concat before opset 4 without an axis reads as the axis 1 it defaulted t
     assert g.nodes[0].attr("axis").unwrap().values == ["1"] as List<String>;
 }
 
-test "arithmetic before opset 7 aligned at an axis stops the build" {
-    let e = read(
-        `<ir_version: 3, opset_import: ["" : 6]> g (float[2, 3] X, float[2] B) => (float[2, 3] Y) {
-            Y = Add <broadcast = 1, axis = 0> (X, B)
-        }`,
-    ).unwrap_err().reason;
-    assert e == "Y = Add: opset 6 aligns the operands at attribute axis, which no later opset does";
+test "arithmetic keeps its axis only where the opset aligns the operands at it" {
+    let axis_kept = |opset: i32, attrs: String| -> bool {
+        let g = read(
+            `<ir_version: 3, opset_import: ["" : ${opset}]> g (float[2, 3] X, float[2] B) => (float[2, 3] Y) {
+                Y = Add <${attrs}> (X, B)
+            }`,
+        ).unwrap();
+        return g.nodes[0].attr("axis") matches { Some(_) };
+    };
+    assert axis_kept(6, "broadcast = 1, axis = 0");
+    assert !axis_kept(6, "broadcast = 0, axis = 0");
+    assert !axis_kept(6, "axis = 0");
+    assert !axis_kept(13, "axis = 0");
 }
 
 test "an input's dtype and dimensions come off its type" {

@@ -593,6 +593,36 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     assert lowered("<axis = 2>").contains("let Y = softmax(X, 2);");
 }
 
+test "arithmetic before opset 7 aligned at an axis lowers to zip_at" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y)
+{
+    Y = Add <broadcast = 1, axis = 1> (X, B)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("B", ["Seq"]),
+    ]).unwrap();
+
+    assert out.contains("let Y = zip_at::<[Batch], [Seq], [Embed]>(X, B, 1, |x, y| x + y);");
+}
+
+test "arithmetic before opset 7 aligned at the axis numpy would take lowers as numpy's" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+g (float[2, 4, 8] X, float[8] B) => (float[2, 4, 8] Y)
+{
+    Y = Add <broadcast = 1, axis = 2> (X, B)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("B", ["Embed"]),
+    ]).unwrap();
+
+    assert out.contains("let Y = zip_suffix::<[Batch, Seq], [Embed]>(X, B, |x, y| x + y);");
+}
+
 test "a layer norm's mean stretches back over the axis it reduced" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 8] Y)

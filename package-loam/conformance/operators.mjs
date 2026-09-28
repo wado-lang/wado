@@ -29,7 +29,9 @@ const halves = (count) => Array.from({ length: count }, (_, i) => (((i * 7) % 13
 const node = (op, inputs, outputs, attrs = {}) => ({ op, inputs, outputs: [outputs].flat(), attrs });
 
 // Each case computes `Y`. `inputs` are fed, `inits` are initializers, and
-// `layout` names the axes of each tensor that needs them, by tensor name.
+// `layout` names the axes of each tensor that needs them, by tensor name. A case
+// whose opset onnxruntime does not run names in `oracle` the nodes, initializers
+// and opset of a graph that computes the same, which onnxruntime runs instead.
 const cases = [];
 const add = (name, spec) => cases.push({ name, out: FLOAT, inits: {}, opset: 13, ...spec });
 
@@ -181,6 +183,31 @@ add('ConvGrouped', {
 
 add('SoftmaxLast', { inputs: { A: float([2, 3]) }, nodes: [node('Softmax', ['A'], 'Y')], layout: { A: ['Row', 'Col'] } });
 add('SoftmaxFirst', { inputs: { A: float([2, 3]) }, nodes: [node('Softmax', ['A'], 'Y', { axis: 0 })], layout: { A: ['Row', 'Col'] } });
+// Before opset 7, arithmetic with `broadcast` aligned B at A's `axis`, which a
+// B unsqueezed along the axes after it restates.
+add('AddAtAxis', {
+  inputs: pair([2, 3, 4], [3]),
+  nodes: [node('Add', ['A', 'B'], 'Y', { broadcast: 1, axis: 1 })],
+  layout: { ...cube, B: ['Col'] },
+  opset: 6,
+  oracle: {
+    inits: { S: int64([1], [1]) },
+    nodes: [node('Unsqueeze', ['B', 'S'], 'U'), node('Add', ['A', 'U'], 'Y')],
+    opset: 13,
+  },
+});
+add('SubAtLeadingAxes', {
+  inputs: pair([2, 3, 4], [2, 3]),
+  nodes: [node('Sub', ['A', 'B'], 'Y', { broadcast: 1, axis: 0 })],
+  layout: { ...cube, B: ['Row', 'Col'] },
+  opset: 6,
+  oracle: {
+    inits: { S: int64([1], [2]) },
+    nodes: [node('Unsqueeze', ['B', 'S'], 'U'), node('Sub', ['A', 'U'], 'Y')],
+    opset: 13,
+  },
+});
+
 // Before opset 13, Softmax normalized every axis from `axis` on as one lane.
 add('SoftmaxFlattenedDefault', { inputs: { A: float([2, 3, 4]) }, nodes: [node('Softmax', ['A'], 'Y')], layout: cube, opset: 11 });
 add('SoftmaxFlattenedFirst', {
@@ -340,7 +367,7 @@ for (const c of cases) {
     feeds[i] = feed(t.type, t.dims, values);
     lines.push(line(['input', i, elementName[t.type], list(t.dims), list(spelled(t.type, values))]));
   }
-  const session = await ort.InferenceSession.create(path);
+  const session = await ort.InferenceSession.create(c.oracle ? model({ ...c, ...c.oracle }) : path);
   const y = (await session.run(feeds, ['Y'])).Y;
   lines.push(line(['output', elementName[c.out], list(y.dims), list(spelled(c.out, y.data))]));
   writeFileSync(join(here, 'operators', `${c.name}.txt`), lines.join(''));
