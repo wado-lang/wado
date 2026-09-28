@@ -582,6 +582,22 @@ impl WriteBack<'_> {
             // An identity witness, never a copy: a copy would make every call
             // look like a whole-value write.
             let before = self.bind(&mut prefix, "before_", temp.read(), false, true);
+            // The store is the temp's last read, so it hands the storage over:
+            // a copy would duplicate the whole payload, which a decoder filling
+            // a message field in place grows to the whole message.
+            let mut store_back: Vec<TirStmt> = Vec::new();
+            let moved = self.bind(&mut store_back, "moved_", temp.read(), false, true);
+            store_back.push(TirStmt::new(
+                TirStmtKind::Expr(TirExpr::new(
+                    TirExprKind::Assign {
+                        target: Box::new(place),
+                        value: Box::new(moved.read()),
+                    },
+                    TypeTable::UNIT,
+                    span,
+                )),
+                span,
+            ));
             // Store back only what the callee replaced. An unconditional store
             // would also undo a write the callee made through another route to
             // the same place — `self`, or a sibling `&mut` argument.
@@ -597,17 +613,7 @@ impl WriteBack<'_> {
                         span,
                     ),
                     then_block: TirBlock {
-                        stmts: vec![TirStmt::new(
-                            TirStmtKind::Expr(TirExpr::new(
-                                TirExprKind::Assign {
-                                    target: Box::new(place),
-                                    value: Box::new(temp.read()),
-                                },
-                                TypeTable::UNIT,
-                                span,
-                            )),
-                            span,
-                        )],
+                        stmts: store_back,
                         span,
                     },
                     else_block: None,

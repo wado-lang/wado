@@ -1,0 +1,76 @@
+// The write-back after a call handed a detached `&mut` to a variant field
+// stores the temp into the place. Nothing reads the temp after that store, so
+// it moves: copying would duplicate everything the payload holds, which for a
+// decoder filling a message field in place is the whole message.
+
+use { println, Stdout } from "core:cli";
+
+trait Message with () {
+    fn merge(&mut self, r: &mut Reader) -> Result<bool, String>;
+}
+
+struct Reader {
+    depth: i32,
+}
+
+impl Reader {
+    fn optional<M: Message + Default>(&mut self, slot: &mut Option<M>) -> Result<bool, String> {
+        if *slot matches { None } {
+            *slot = Option::Some(M::default());
+        }
+        if let Some(m) = slot {
+            self.depth += 1;
+            m.merge(self)?;
+            self.depth -= 1;
+        }
+        return Result::Ok(true);
+    }
+}
+
+struct Graph {
+    data: List<i32> = [],
+    sub: Option<Graph> = null,
+}
+
+impl Message for Graph {
+    fn merge(&mut self, r: &mut Reader) -> Result<bool, String> {
+        self.data.push(r.depth);
+        if r.depth < 3 {
+            return r.optional(&mut self.sub);
+        }
+        return Result::Ok(false);
+    }
+}
+
+struct Model {
+    graph: Option<Graph> = null,
+}
+
+impl Message for Model {
+    fn merge(&mut self, r: &mut Reader) -> Result<bool, String> {
+        return r.optional(&mut self.graph);
+    }
+}
+
+export fn run() with Stdout {
+    let mut m = Model {};
+    let mut r = Reader { depth: 0 };
+    m.merge(&mut r).unwrap();
+    m.merge(&mut r).unwrap();
+    if let Some(g) = &m.graph {
+        println(`${g.data.len()} ${g.sub.unwrap().data.len()}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "2 2\n",
+    "wir_not_expect:O0": [
+        "self.graph = \"mut_ref_write_back_moves_temp.wado/$value_copy",
+        "self.sub = \"mut_ref_write_back_moves_temp.wado/$value_copy"
+    ],
+    "wir_not_expect:O2": [
+        "self.graph = \"mut_ref_write_back_moves_temp.wado/$value_copy",
+        "self.sub = \"mut_ref_write_back_moves_temp.wado/$value_copy"
+    ]
+}
