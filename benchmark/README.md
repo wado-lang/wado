@@ -197,16 +197,11 @@ JSON serialize:
 
 JSON deserialize:
 
-| Implementation        |  Throughput |  ms/iter | vs best |
-| --------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)     | 996.86 MB/s | 1.733 ms | 1.00x   |
-| JavaScript (JSON)     | 733.89 MB/s | 2.353 ms | 1.36x   |
-| **Wado** (PoC parser) | 444.51 MB/s | 3.885 ms | 2.24x   |
-| **Wado** (core:json)  | 424.28 MB/s | 4.070 ms | 2.35x   |
-
-The PoC row (`json_catalog_v2.wado`) is a hand-written parser for this one
-schema, not a general decoder. It is the mark `core:json` has to reach while
-decoding any schema.
+| Implementation       |  Throughput |  ms/iter | vs best |
+| -------------------- | ----------: | -------: | ------- |
+| Rust (serde_json)    | 996.86 MB/s | 1.733 ms | 1.00x   |
+| JavaScript (JSON)    | 733.89 MB/s | 2.353 ms | 1.36x   |
+| **Wado** (core:json) | 424.28 MB/s | 4.070 ms | 2.35x   |
 
 CBOR serialize:
 
