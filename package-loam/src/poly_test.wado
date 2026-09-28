@@ -167,14 +167,36 @@ test "a derived term is compared through the operation that derives it" {
 
 test "a rounded quotient is exact where the build can show it" {
     let n = s("N");
-    assert Poly::ceil_div(&times(n, c(2)), 2, &ORIGIN) == n;
-    assert Poly::ceil_div(&c(7), 2, &ORIGIN) == c(4);
-    assert Poly::ceil_div(&c(-7), 2, &ORIGIN) == c(-3);
-    let half = Poly::ceil_div(&n, 2, &ORIGIN);
+    assert Poly::ceil_div(&times(n, c(2)), &c(2), &ORIGIN) == n;
+    assert Poly::ceil_div(&c(7), &c(2), &ORIGIN) == c(4);
+    assert Poly::ceil_div(&c(-7), &c(2), &ORIGIN) == c(-3);
+    assert Poly::floor_div(&c(7), &c(2), &ORIGIN) == c(3);
+    assert Poly::floor_div(&c(-7), &c(2), &ORIGIN) == c(-4);
+    assert Poly::floor_div(&times(n, c(4)), &n, &ORIGIN) == c(4);
+    let half = Poly::ceil_div(&n, &c(2), &ORIGIN);
     assert `${half}` == "ceil(N / 2)";
-    assert `${Poly::ceil_div(&plus(n, c(1)), 2, &ORIGIN)}` == "ceil((N + 1) / 2)";
+    assert `${Poly::ceil_div(&plus(n, c(1)), &c(2), &ORIGIN)}` == "ceil((N + 1) / 2)";
     assert half.is_nonnegative();
     assert minus(n, half).is_nonnegative();
+    let low = Poly::floor_div(&n, &c(2), &ORIGIN);
+    assert `${low}` == "floor(N / 2)";
+    assert low.spelled(&TreeMap::<String, String>::new()) == "floor_div(N, 2)";
+    assert minus(n, low).is_nonnegative();
+}
+
+test "a quotient by a symbol the inputs make positive is bounded by the divisor's least value of 1" {
+    let [n, m] = [
+        s("N"),
+        s("M"),
+    ];
+    let q = Poly::ceil_div(&plus(n, c(1)), &plus(m, c(1)), &ORIGIN);
+    assert `${q}` == "ceil((N + 1) / (M + 1))";
+    assert q.spelled(&TreeMap::<String, String>::new()) == "ceil_div(N + 1, M + 1)";
+    assert q.is_nonnegative();
+    assert minus(plus(n, c(1)), q).is_nonnegative();
+    let mut conditions: List<Condition> = [];
+    assert q.presumed(&mut conditions) == Option::Some(q);
+    assert conditions.is_empty();
 }
 
 test "an index counts from the end only where it may be negative" {

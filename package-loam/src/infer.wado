@@ -29,7 +29,7 @@ use {
     element_of,
     is_binary_elementwise,
 } from "./graph.wado";
-use { Condition, Poly } from "./poly.wado";
+use { Condition, Poly, owe as owe_at } from "./poly.wado";
 use { ceil_div, from_end, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
 use { Window, ints, window_over } from "./window.wado";
@@ -291,23 +291,9 @@ pub struct Checked {
     pub owed: List<Condition>,
 }
 
-/// Owe `slack >= 0`, unless every value of the symbols makes it so. A slack
-/// every value makes negative is no condition on the inputs but a graph wrong
-/// for every one of them.
+/// `owe_at` the node, which a graph wrong for every input stops at.
 fn owe(node: &Node, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), InferError> {
-    return owe_at(node.site(), owed, slack, condition).map_err(|reason| refusal(node, reason));
-}
-
-/// `owe` at `site`, whatever relies on the condition there.
-fn owe_at(site: String, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), String> {
-    if slack.is_nonnegative() {
-        return Result::Ok(());
-    }
-    if slack.is_negative() {
-        return Result::Err(`${condition}, and it is not`);
-    }
-    owed.push(Condition { slack, reason: `${site}: ${condition}` });
-    return Result::Ok(());
+    return owe_at(owed, &node.site(), &slack, condition).map_err(|reason| refusal(node, reason));
 }
 
 /// Check a graph. Producing a shape for every tensor a kernel reads is what
@@ -548,8 +534,8 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
                     stated.try_sub(&p),
                 ] {
                     [Some(above), Some(below)] => {
-                        owe_at(vi.name, owed, above, condition).is_ok()
-                            && owe_at(vi.name, owed, below, condition).is_ok();
+                        owe_at(owed, &vi.name, &above, condition).is_ok()
+                            && owe_at(owed, &vi.name, &below, condition).is_ok();
                     },
                     // A difference no polynomial holds is one the build cannot owe.
                     _ => false,
@@ -634,9 +620,6 @@ fn infer_node(
         let operand = operand_at(node, shapes, 0);
         let input = extents_of(node, &operand)?;
         let targets = regrouped_extents(node, known, &input, owed).map_err(|reason| refusal(node, reason))?;
-        if op == "Reshape" {
-            owe_reshape_target(node, known, &input, &targets, owed)?;
-        }
         return regrouped(node, &operand, &targets, schema);
     }
     if op == "Flatten" {
@@ -646,7 +629,7 @@ fn infer_node(
         return sliced(node, &operand_at(node, shapes, 0), known, schema);
     }
     if op == "Range" {
-        let count = range_count(node, known)?;
+        let count = range_count(node, known, owed)?;
         return Result::Ok(Shape {
             axes: [output_layout_axis(node, &node.outputs[0], schema, 0, 1, count, "is a range")?],
         });
@@ -907,7 +890,10 @@ pub fn slice_cuts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Res
         };
         let begin = slice_bound(node, &starts[i], &dim, 0, &top)?;
         let end = slice_bound(node, &ends[i], &dim, floor, &top)?;
-        let count = stepped_count(node, &begin, &end, step)?;
+        // A step is a number other than 0, which owes nothing.
+        let mut unowed: List<Condition> = [];
+        let count = stepped_count(node, &begin, &end, &Poly::constant(step), &mut unowed)?;
+        assert unowed.is_empty();
         if begin != Poly::constant(0) || count != dim || step != 1 {
             cuts.push(Cut { axis: a, start: begin, extent: counted(node, count)?, step });
         }
@@ -947,71 +933,37 @@ fn counted(node: &Node, count: Poly) -> Result<Extent, InferError> {
 
 /// How many elements a `Range` the run computes yields. Its operands are one
 /// element each, and the build knows them, symbolic or not.
-pub fn range_count(node: &Node, known: &TreeMap<String, Known>) -> Result<Extent, InferError> {
+fn range_count(node: &Node, known: &TreeMap<String, Known>, owed: &mut List<Condition>) -> Result<Extent, InferError> {
     let [start, limit, delta] = range_bounds(node, known)?;
-    let Some(step) = delta.as_constant() else {
-        return Result::Err(refusal(node, `delta is ${delta}, and the build counts by a number`));
-    };
-    if step == 0 {
+    if delta == Poly::constant(0) {
         return Result::Err(refusal(node, "delta is 0"));
     }
-    return counted(node, stepped_count(node, &start, &limit, step)?);
-}
-
-/// What a `Reshape` target, read as `targets`, owes where only the run knows
-/// an extent. ONNX finds no extent for a `-1` beside extents multiplying to 0,
-/// so the inputs owe that they do not. A symbolic extent is read as written,
-/// which is ONNX's reading save where it is 0: unless `allowzero` is set, ONNX
-/// then reads the input's extent at that position. The inputs owe that it is
-/// not, where the input's extent there is not the same length, or what
-/// `Extent::agreement` owes to read it as one.
-fn owe_reshape_target(
-    node: &Node,
-    known: &TreeMap<String, Known>,
-    input: &List<Extent>,
-    targets: &List<Extent>,
-    owed: &mut List<Condition>,
-) -> Result<(), InferError> {
-    // `regrouped_extents` has read the target.
-    let written = polys_at(node, known, 1, "shape").unwrap().unwrap();
-    if let Some(inferred) = written.position(|w| w == Poly::constant(-1)) {
-        let mut rest = *targets;
-        rest.remove(inferred);
-        let stated = count_of(&rest).expect("`reshape_extents` multiplied these");
-        let condition = `the target's extents besides -1 multiply to ${stated}, which must not be 0`;
-        owe(node, owed, difference(node, &stated, &Poly::constant(1))?, condition)?;
-    }
-    if int_attr(node, "allowzero", 0)? != 0 {
-        return Result::Ok(());
-    }
-    for let [i, w] of written.into_iter().enumerate() {
-        if w.as_constant() matches { Some(_) } {
-            continue;
-        }
-        if i < input.len() && let Some(agreed) = input[i].agreement(&Extent::Symbolic(w)) {
-            owed.extend(&agreed);
-            continue;
-        }
-        let zero = if i < input.len() {
-            `which reads the input's extent ${input[i]} instead`;
-        } else {
-            "which ONNX reads nowhere past the input's axes";
-        };
-        owe(node, owed, difference(node, &w, &Poly::constant(1))?, `the target's ${w} must not be 0, ${zero}`)?;
-    }
-    return Result::Ok(());
+    return counted(node, stepped_count(node, &start, &limit, &delta, owed)?);
 }
 
 /// How many steps of `step` fit from `from` to `to`, as ONNX counts them for
 /// `Slice` and `Range`: the last may fall short, and a span running against
-/// the step holds none.
-fn stepped_count(node: &Node, from: &Poly, to: &Poly, step: i64) -> Result<Poly, InferError> {
-    let span = if step > 0 { difference(node, to, from)? } else { difference(node, from, to)? };
+/// the step holds none. The step's sign must be one the build can tell, and a
+/// symbolic step owes that it is not 0.
+fn stepped_count(
+    node: &Node,
+    from: &Poly,
+    to: &Poly,
+    step: &Poly,
+    owed: &mut List<Condition>,
+) -> Result<Poly, InferError> {
+    let zero = Poly::constant(0);
+    let forward = step.is_nonnegative();
     // `i64::MIN` has no magnitude in `i64`. A span is an `i64`, so a step of
     // `i64::MAX` counts it as the one step `i64::MIN` would.
-    let magnitude = if step == i64::MIN { i64::MAX } else { i64::abs(step) };
+    let magnitude = if forward { *step } else { zero.try_sub(step).unwrap_or(Poly::constant(i64::MAX)) };
+    if !magnitude.is_nonnegative() {
+        return Result::Err(refusal(node, `the step is ${*step}, whose sign the build cannot tell`));
+    }
+    owe(node, owed, difference(node, &magnitude, &Poly::constant(1))?, `the step ${*step} must not be 0`)?;
+    let span = if forward { difference(node, to, from)? } else { difference(node, from, to)? };
     let site = node.site();
-    return Result::Ok(Poly::max_of(&Poly::ceil_div(&span, magnitude, &site), &Poly::constant(0), &site));
+    return Result::Ok(Poly::max_of(&Poly::ceil_div(&span, &magnitude, &site), &zero, &site));
 }
 
 /// A `Range`'s start, limit and delta, each one integer the build knows.

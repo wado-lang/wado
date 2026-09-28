@@ -4,7 +4,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Elements, Known, Node, data_type } from "./graph.wado";
-use { Condition, Poly, ceiling } from "./poly.wado";
+use { Condition, Poly, ceiling, owe } from "./poly.wado";
 use {
     broadcast_extents,
     checked_element_count,
@@ -72,7 +72,7 @@ fn evaluated(
         "Reshape" | "Unsqueeze" | "Squeeze" => regrouped(node, known, x)?,
         "Concat" => concat(&operands, int_attr(node, "axis", 0)?)?,
         "ConstantOfShape" => constant_of_shape(node, x)?,
-        "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(&op, x, &operands[1])?,
+        "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(node, x, &operands[1])?,
         "Slice" => {
             return slice(x, node, known);
         },
@@ -121,6 +121,7 @@ pub fn regrouped_extents(
             input,
             int_attr(node, "allowzero", 0)? != 0,
             owed,
+            &node.site(),
         ),
         "Unsqueeze" => unsqueezed(input, &axes_of(node, known, 1, "axes")?.ok_or("axes is absent")?),
         "Squeeze" => squeezed(input, axes_of(node, known, 1, "axes")?),
@@ -132,12 +133,15 @@ pub fn regrouped_extents(
 /// position unless `allowzero` is set, and one `-1` is what the rest leave.
 /// The target holds as many elements as the input for every value of the
 /// symbols, or once its derived symbols are read as `Poly::presumed` reads
-/// them, which `owed` gains; else the build cannot show the reshape sound.
+/// them, or where a `-1` the build cannot divide out divides exactly, which
+/// `owed` gains for the node `site` names; else the build cannot show the
+/// reshape sound.
 fn reshape_extents(
     written: &List<Poly>,
     input: &List<Extent>,
     allow_zero: bool,
     owed: &mut List<Condition>,
+    site: &String,
 ) -> Result<List<Extent>, String> {
     let total = count_of(input).expect("`held` or a known tensor bounded the operand's count");
     let mut extents: List<Extent> = [];
@@ -156,6 +160,9 @@ fn reshape_extents(
         let Some(extent) = e else {
             return Result::Err(`the target shape holds ${*w}`);
         };
+        if !allow_zero && w.as_constant() matches { None } {
+            owe_not_zero(w, input.get(i), owed, site)?;
+        }
         extents.push(extent);
     }
     if !fits(&extents) {
@@ -166,14 +173,46 @@ fn reshape_extents(
         if stated == Poly::constant(0) {
             return Result::Err(`the target shape ${spelled(written)} leaves -1 no extent, since the rest multiply to 0`);
         }
-        if let Some(rest) = total.divided_by(&stated) && let Some(e) = Extent::of(rest) {
-            extents[inferred] = e;
+        // ONNX finds no extent for a `-1` beside extents multiplying to 0.
+        let rest = `the target's extents besides -1 multiply to ${stated}`;
+        let above_zero = stated.try_sub(&Poly::constant(1)).ok_or(`${stated} - 1 leaves i64`)?;
+        owe(owed, site, &above_zero, `${rest}, which must not be 0`)?;
+        if let Some(q) = total.divided_by(&stated) {
+            if let Some(e) = Extent::of(q) {
+                extents[inferred] = e;
+            }
+        } else {
+            let q = Poly::floor_div(&total, &stated, site);
+            extents[inferred] = Extent::of(q).ok_or(`${total} / ${stated} is more than a list holds`)?;
+            // The quotient rounds down, so it holds at most `total`, and the
+            // count check below is this one.
+            let shortfall = count_of(&extents).unwrap().try_sub(&total).ok_or(`${stated} * ${q} leaves i64`)?;
+            owe(owed, site, &shortfall, `${rest}, which must divide ${total}`)?;
+            return Result::Ok(extents);
         }
     }
     if excess(&extents, &total, owed) != Option::Some(Poly::constant(0)) {
         return Result::Err(`${total} elements cannot take the shape ${spelled(written)}`);
     }
     return Result::Ok(extents);
+}
+
+/// What a symbolic target extent `w` owes. It is read as written, which is
+/// ONNX's reading save where it is 0: without `allowzero`, ONNX then reads
+/// the input's extent at that position, `copied`. So `w` owes that it is not
+/// 0, unless `copied` is the same length, or reads as it under what
+/// `Extent::agreement` owes.
+fn owe_not_zero(w: &Poly, copied: Option<Extent>, owed: &mut List<Condition>, site: &String) -> Result<(), String> {
+    if let Some(e) = copied && let Some(agreed) = e.agreement(&Extent::Symbolic(*w)) {
+        owed.extend(&agreed);
+        return Result::Ok(());
+    }
+    let instead = match copied {
+        Some(e) => `which reads the input's extent ${e} instead`,
+        None => "which ONNX reads nowhere past the input's axes",
+    };
+    let above_zero = w.try_sub(&Poly::constant(1)).ok_or(`${*w} - 1 leaves i64`)?;
+    return owe(owed, site, &above_zero, `the target's ${*w} must not be 0, ${instead}`);
 }
 
 /// How many more elements `extents` hold than `total`, read as `Poly::presumed`
@@ -606,7 +645,8 @@ fn constant_of_shape(node: &Node, shape: &Known) -> Result<Known, String> {
     return Result::Ok(Known { ..fill, extents, elements: picked(&fill.elements, &List::<i32>::filled(count, 0)) });
 }
 
-fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
+fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
+    let op = &node.op;
     let Some(extents) = broadcast_extents(&a.extents, &b.extents) else {
         return Result::Err(`operands of extents ${a.extents:?} and ${b.extents:?} do not broadcast`);
     };
@@ -628,8 +668,9 @@ fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
                 return Result::Err("the operands are not one element type the build computes in");
             };
             let mut out: List<Poly> = [];
+            let site = node.site();
             for let i of 0..<l.len() {
-                out.push(poly_op(op, &l[i], &r[i])?);
+                out.push(poly_op(op, &l[i], &r[i], &site)?);
             }
             Elements::integers(out);
         },
@@ -638,27 +679,21 @@ fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
     return Result::Ok(Known { extents, elements, int32: a.int32 });
 }
 
-/// Integer arithmetic, where a symbol may stand for an operand. A quotient of
-/// numbers is one where every rounding agrees, since ONNX leaves the rounding
-/// of a negative one unstated. A quotient over a symbol is one the build can
-/// show exact for every value of the symbols, which needs no rounding, and a
-/// divisor that is a positive number, since a symbol may be 0.
-fn poly_op(op: &String, l: &Poly, r: &Poly) -> Result<Poly, String> {
+/// Integer arithmetic, where a symbol may stand for an operand, as the node
+/// `site` names computes it. A quotient is one where every rounding agrees,
+/// since ONNX leaves the rounding of a negative one unstated: a dividend not
+/// negative for any input, over a positive number, since a symbol may be 0.
+fn poly_op(op: &String, l: &Poly, r: &Poly, site: &String) -> Result<Poly, String> {
     let overflow = `${*l} ${*op} ${*r} leaves i64`;
     return match op.as_str_slice() {
         "Add" => in_int64(l.try_add(r), overflow),
         "Sub" => in_int64(l.try_sub(r), overflow),
         "Mul" => in_int64(l.try_mul(r), overflow),
         "Div" => {
-            if let Some(a) = l.as_constant() && let Some(b) = r.as_constant() {
-                if a < 0 || b <= 0 {
-                    return Result::Err(`${a} / ${b} has no rounding every implementation shares`);
-                }
-                return Result::Ok(Poly::constant(a / b));
+            if !l.is_nonnegative() || !r.as_constant() matches { Some(d) && d > 0 } {
+                return Result::Err(`${*l} / ${*r} has no rounding every implementation shares`);
             }
-            let positive = r.as_constant() matches { Some(d) && d > 0 };
-            let exact = if l.is_nonnegative() && positive { l.divided_by(r) } else { null };
-            exact.ok_or(`${*l} / ${*r} is not a quotient the build can show exact`);
+            Result::Ok(Poly::floor_div(l, r, site));
         },
         _ => Result::Err(`${*op} of integers is not evaluated`),
     };

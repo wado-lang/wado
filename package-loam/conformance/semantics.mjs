@@ -33,6 +33,7 @@ const scalars = {
   ScalarZero: 0n,
   ScalarOne: 1n,
   ScalarTwo: 2n,
+  ScalarEight: 8n,
   ScalarMinusOne: -1n,
   ScalarMinusTwo: -2n,
 };
@@ -64,6 +65,17 @@ const cases = [
   ['RangeByTwoToLength', [length, node('Range', ['ScalarZero', 'N', 'ScalarTwo'], 'RangeByTwoToLength')]],
   ['RangeBackFromLength', [length, node('Range', ['N', 'ScalarZero', 'ScalarMinusOne'], 'RangeBackFromLength')]],
   ['RangeBackByTwo', [length, node('Range', ['N', 'ScalarZero', 'ScalarMinusTwo'], 'RangeBackByTwo')]],
+  ['RangeByLength', [length, node('Range', ['ScalarZero', 'ScalarEight', 'N'], 'RangeByLength')]],
+  ['RangeBackByLength', [
+    length,
+    node('Sub', ['ScalarZero', 'N'], 'MinusN'),
+    node('Range', ['ScalarEight', 'ScalarZero', 'MinusN'], 'RangeBackByLength'),
+  ]],
+  ['RangeToHalfLength', [
+    length,
+    node('Div', ['N', 'ScalarTwo'], 'HalfN'),
+    node('Range', ['ScalarZero', 'HalfN', 'ScalarOne'], 'RangeToHalfLength'),
+  ]],
   ['CastWraps', [
     node('Cast', ['Big'], 'BigInt32', { to: INT32 }),
     node('Cast', ['BigInt32'], 'CastWraps', { to: INT64 }),

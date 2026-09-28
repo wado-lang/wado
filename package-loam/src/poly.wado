@@ -35,8 +35,12 @@ enum Op {
     Min,
     /// The greater of two operands.
     Max,
-    /// The first operand divided by the second, a positive number, rounded up.
+    /// The first operand divided by the second, rounded up. The divisor is
+    /// positive for every input the build accepts: a positive number, or a
+    /// polynomial the inputs owe positive before `forward` divides by it.
     CeilDiv,
+    /// `CeilDiv` rounded down.
+    FloorDiv,
     /// An index into an axis of the second operand's extent, which counts from
     /// the end where negative.
     FromEnd,
@@ -96,36 +100,43 @@ impl Symbol {
         }
         let a = operands[0];
         let presumed = match d.op {
-            Min => owe(conditions, &d.origin, operands[1].try_sub(&a), `${a} must be at most ${operands[1]}`),
-            Max => owe(conditions, &d.origin, a.try_sub(&operands[1]), `${a} must be at least ${operands[1]}`),
-            FromEnd => owe(conditions, &d.origin, Option::Some(a), `${a} must not be negative`),
+            Min => owes(conditions, &d.origin, operands[1].try_sub(&a), `${a} must be at most ${operands[1]}`),
+            Max => owes(conditions, &d.origin, a.try_sub(&operands[1]), `${a} must be at least ${operands[1]}`),
+            FromEnd => owes(conditions, &d.origin, Option::Some(a), `${a} must not be negative`),
             Wrap32 => {
                 let condition = `${a} must fit in int32`;
-                owe(conditions, &d.origin, Poly::constant(i32::MAX as i64).try_sub(&a), condition)
-                    && owe(conditions, &d.origin, a.try_sub(&Poly::constant(i32::MIN as i64)), condition);
+                owes(conditions, &d.origin, Poly::constant(i32::MAX as i64).try_sub(&a), condition)
+                    && owes(conditions, &d.origin, a.try_sub(&Poly::constant(i32::MIN as i64)), condition);
             },
-            CeilDiv => {
-                return Option::Some(Poly::ceil_div(&a, operands[1].as_constant().unwrap(), &d.origin));
+            CeilDiv | FloorDiv => {
+                return Option::Some(Poly::quotient(d.op, &a, &operands[1], &d.origin));
             },
         };
         return if presumed { Option::Some(a) } else { null };
     }
 }
 
-/// Owe `slack >= 0` for the node `origin` names, as `Poly::presumed` does, or
-/// `false` where no input meets it or no polynomial holds it.
-fn owe(conditions: &mut List<Condition>, origin: &String, slack: Option<Poly>, condition: String) -> bool {
+/// Owe `slack >= 0` at `site`, unless every value of the symbols makes it so.
+/// A slack every value makes negative is no condition on the inputs but a
+/// graph wrong for every one of them, which the error says.
+pub fn owe(conditions: &mut List<Condition>, site: &String, slack: &Poly, condition: String) -> Result<(), String> {
+    if slack.is_nonnegative() {
+        return Result::Ok(());
+    }
+    if slack.is_negative() {
+        return Result::Err(`${condition}, and it is not`);
+    }
+    conditions.push(Condition { slack: *slack, reason: `${*site}: ${condition}` });
+    return Result::Ok(());
+}
+
+/// `owe` for `Poly::presumed`: whether the reading holds, which it does not
+/// where no input meets it or no polynomial holds the slack.
+fn owes(conditions: &mut List<Condition>, origin: &String, slack: Option<Poly>, condition: String) -> bool {
     let Some(s) = slack else {
         return false;
     };
-    if s.is_nonnegative() {
-        return true;
-    }
-    if s.is_negative() {
-        return false;
-    }
-    conditions.push(Condition { slack: s, reason: `${*origin}: ${condition}` });
-    return true;
+    return owe(conditions, origin, &s, condition) matches { Ok(_) };
 }
 
 impl Derivation {
@@ -136,13 +147,12 @@ impl Derivation {
         return match self.op {
             Min => if code { `i64::min(${args[0]}, ${args[1]})` } else { `min(${args[0]}, ${args[1]})` },
             Max => if code { `i64::max(${args[0]}, ${args[1]})` } else { `max(${args[0]}, ${args[1]})` },
-            CeilDiv => {
+            CeilDiv | FloorDiv => {
+                let rounding = if self.op matches { CeilDiv } { "ceil" } else { "floor" };
                 if code {
-                    `ceil_div(${args[0]}, ${args[1]})`;
-                } else if self.operands[0].terms.len() > 1 {
-                    `ceil((${args[0]}) / ${args[1]})`;
+                    `${rounding}_div(${args[0]}, ${args[1]})`;
                 } else {
-                    `ceil(${args[0]} / ${args[1]})`;
+                    `${rounding}(${grouped(&self.operands[0], &args[0])} / ${grouped(&self.operands[1], &args[1])})`;
                 }
             },
             FromEnd => `from_end(${args[0]}, ${args[1]})`,
@@ -168,11 +178,22 @@ impl Derivation {
                     i128::max(high, h),
                 ];
             },
-            CeilDiv => {
-                let d = self.operands[1].as_constant().unwrap() as i128;
+            // A quotient is monotonic in each operand for a positive divisor,
+            // so its bounds lie at the corners.
+            CeilDiv | FloorDiv => {
+                let [l, h] = self.operands[1].bounds();
+                let mut corners: List<i128> = [];
+                for let a of [low, high] {
+                    for let d of [
+                        i128::max(l, 1),
+                        i128::max(h, 1),
+                    ] {
+                        corners.push(rounded(self.op, a, d));
+                    }
+                }
                 [
-                    ceiling(low, d),
-                    ceiling(high, d),
+                    corners.into_iter().min().unwrap(),
+                    corners.into_iter().max().unwrap(),
                 ];
             },
             // The index where it is not negative, and past it the extent's reach.
@@ -195,8 +216,9 @@ impl Derivation {
         return match self.op {
             Min => x.at_most(a) && x.at_most(&self.operands[1]),
             Max => x.at_most(a) || x.at_most(&self.operands[1]),
-            // `ceil(a / d) >= x` exactly where `a >= d * x`.
-            CeilDiv => match x.try_mul(&self.operands[1]) {
+            // `floor(a / d) >= x` exactly where `a >= d * x`, and the ceiling is
+            // never below the floor.
+            CeilDiv | FloorDiv => match x.try_mul(&self.operands[1]) {
                 Some(dx) => dx.at_most(a),
                 None => false,
             },
@@ -216,10 +238,23 @@ impl Derivation {
                 Some(dx) => a.at_most(&dx),
                 None => false,
             },
+            FloorDiv => floor_at_most(a, &self.operands[1], x).unwrap_or(false),
             FromEnd => a.at_most(x) && a.try_add(&self.operands[1]).map(|past| past.at_most(x)).unwrap_or(false),
             Wrap32 => false,
         };
     }
+}
+
+/// Whether every input makes `floor(a / d) <= x`, which holds exactly where
+/// `a + 1 <= d * (x + 1)`; `None` where no polynomial holds a side.
+fn floor_at_most(a: &Poly, d: &Poly, x: &Poly) -> Option<bool> {
+    let one = Poly::constant(1);
+    return Option::Some(a.try_add(&one)?.at_most(&x.try_add(&one)?.try_mul(d)?));
+}
+
+/// `text`, spelling `p`, as a factor: in parentheses where it has more than one term.
+fn grouped(p: &Poly, text: &String) -> String {
+    return if p.terms.len() > 1 { `(${*text})` } else { *text };
 }
 
 impl Poly {
@@ -297,17 +332,28 @@ impl Poly {
         return Poly::min_of(&Poly::max_of(x, lo, origin), hi, origin);
     }
 
-    /// `a / d` rounded up, for a positive number `d`.
-    pub fn ceil_div(a: &Poly, d: i64, origin: &String) -> Poly {
-        assert d > 0;
-        if let Some(c) = a.as_constant() {
-            return Poly::constant(ceiling(c as i128, d as i128) as i64);
+    /// `a / d` rounded up, for a `d` positive for every input the build
+    /// accepts: a positive number, or a polynomial the caller has owed positive.
+    pub fn ceil_div(a: &Poly, d: &Poly, origin: &String) -> Poly {
+        return Poly::quotient(Op::CeilDiv, a, d, origin);
+    }
+
+    /// `ceil_div` rounded down.
+    pub fn floor_div(a: &Poly, d: &Poly, origin: &String) -> Poly {
+        return Poly::quotient(Op::FloorDiv, a, d, origin);
+    }
+
+    fn quotient(op: Op, a: &Poly, d: &Poly, origin: &String) -> Poly {
+        if let Some(n) = d.as_constant() {
+            assert n > 0;
+            if let Some(m) = a.as_constant() {
+                return Poly::constant(rounded(op, m as i128, n as i128) as i64);
+            }
         }
-        let divisor = Poly::constant(d);
-        if let Some(q) = a.divided_by(&divisor) {
+        if let Some(q) = a.divided_by(d) {
             return q;
         }
-        return Poly::derived(Op::CeilDiv, [*a, divisor], origin);
+        return Poly::derived(op, [*a, *d], origin);
     }
 
     /// Index `i` into an axis of `extent`, counted from the end where negative,
@@ -619,6 +665,15 @@ fn product(a: i128, b: i128) -> i128 {
 pub fn ceiling(a: i128, d: i128) -> i128 {
     assert d > 0;
     return if a >= 0 { (a + d - 1) / d } else { a / d };
+}
+
+/// `a / d` rounded as the quotient `op` rounds it, for a positive `d`.
+fn rounded(op: Op, a: i128, d: i128) -> i128 {
+    return match op {
+        CeilDiv => ceiling(a, d),
+        FloorDiv => -ceiling(-a, d),
+        _ => unreachable(),
+    };
 }
 
 /// Higher degree first, then by the symbols, so the constant is last.

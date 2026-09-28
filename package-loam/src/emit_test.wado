@@ -896,6 +896,21 @@ test "a clamp the run computes, read as its operand, is checked before any kerne
     assert check < slice;
 }
 
+test "a Reshape -1 the build rounds is checked to divide before the kernel runs" {
+    let source = `g (float[N] X) => (float[?, 2] Y) <int64[2] T = {-1, 2}> {
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Pair", "Two"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    let check = out.find("refuse(unmet(-dim_N + 2 * floor_div(dim_N, 2), ").unwrap();
+    let reshape = out.find("let Y = reshape::<f32, [Seq], [Pair, Two]>(X, [to_extent(floor_div(dim_N, 2)), 2]);").unwrap(
+    );
+    assert check < reshape;
+}
+
 test "a Slice by a negative step walks back from its start" {
     let source = `g (float[N] X) => (float[N] Y) <int64[1] B = {-1}, int64[1] E = {-4000000000}, int64[1] Z = {0}, int64[1] Back = {-1}> {
         Y = Slice(X, B, E, Z, Back)

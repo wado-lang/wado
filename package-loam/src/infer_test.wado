@@ -1283,3 +1283,17 @@ test "a Reshape whose count agrees once a clamp is read as its operand owes that
     assert owed_by(source, layout) == ["A = Slice: N must be at most 8 (-N + 8 >= 0)"] as List<String>;
     assert y_axes(source, layout).unwrap() == "Seq=N";
 }
+
+test "a Reshape -1 the build cannot divide out rounds down, and owes that the rest divide the count" {
+    let source = `g (float[N] X) => (float[?, 2] Y) <int64[2] T = {-1, 2}> {
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Pair", "Two"]),
+    ];
+    assert owed_by(source, layout) == [
+        "Y = Reshape: the target's extents besides -1 multiply to 2, which must divide N (-N + 2 * floor(N / 2) >= 0)",
+    ] as List<String>;
+    assert y_axes(source, layout).unwrap() == "Pair=floor(N / 2),Two=2";
+}

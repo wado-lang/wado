@@ -176,6 +176,24 @@ test "Range from N to 0 by -2 counts down by two" {
     assert_agrees(#include_bytes("./semantics/RangeBackByTwo.onnx"), #include_str("./semantics/RangeBackByTwo.txt"));
 }
 
+test "Range by N counts the steps of N that fit" {
+    assert_agrees(#include_bytes("./semantics/RangeByLength.onnx"), #include_str("./semantics/RangeByLength.txt"));
+}
+
+test "Range back by -N counts the steps of N that fit" {
+    assert_agrees(
+        #include_bytes("./semantics/RangeBackByLength.onnx"),
+        #include_str("./semantics/RangeBackByLength.txt"),
+    );
+}
+
+test "Div of N by 2 rounds down" {
+    assert_agrees(
+        #include_bytes("./semantics/RangeToHalfLength.onnx"),
+        #include_str("./semantics/RangeToHalfLength.txt"),
+    );
+}
+
 test "Cast of a known int64 to int32 wraps" {
     assert_agrees(#include_bytes("./semantics/CastWraps.onnx"), #include_str("./semantics/CastWraps.txt"));
 }

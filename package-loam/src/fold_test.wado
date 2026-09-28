@@ -95,7 +95,7 @@ test "shape arithmetic over a symbol folds as a polynomial" {
     assert gone == ints([1], [0]);
 }
 
-test "a quotient the build cannot show exact stops it" {
+test "a quotient of a length by a positive number rounds down, and one any rounding might differ on stops the build" {
     let k = knowns([
         [
             "S",
@@ -105,10 +105,13 @@ test "a quotient the build cannot show exact stops it" {
             },
         ],
         ["T", ints([1], [2])],
+        ["M", ints([1], [-7])],
     ]);
-    assert fold(&node("Div", ["S", "T"], []), &k, &runtime([])).unwrap_err() == "N / 2 is not a quotient the build can show exact";
+    let half = folded(node("Div", ["S", "T"], []), k);
+    assert half.elements == Elements::integers([Poly::floor_div(&Poly::symbol(&"N"), &Poly::constant(2), &"Y = Div")]);
     // N may be 0, where ONNX divides by zero.
-    assert fold(&node("Div", ["S", "S"], []), &k, &runtime([])).unwrap_err() == "N / N is not a quotient the build can show exact";
+    assert fold(&node("Div", ["S", "S"], []), &k, &runtime([])).unwrap_err() == "N / N has no rounding every implementation shares";
+    assert fold(&node("Div", ["M", "T"], []), &k, &runtime([])).unwrap_err() == "-7 / 2 has no rounding every implementation shares";
 }
 
 test "an axis list naming one axis twice, once from the end, stops the build" {

@@ -18,7 +18,6 @@ use {
     has_bias,
     is_reduction,
     range_bounds,
-    range_count,
     reduced_axes,
     slice_cuts,
     softmax_axis,
@@ -918,10 +917,9 @@ fn node_call(
     }
     if op == "Range" {
         let [start, _, delta] = settled(range_bounds(node, &checked.known));
-        let count = settled(range_count(node, &checked.known));
-        let axis = shapes.get(node.outputs[0]).unwrap().axes[0].name;
+        let axis = shapes.get(node.outputs[0]).unwrap().axes[0];
         return Result::Ok(
-            `range_i64::<${axis}>(${symbols.spell(&start)?}, ${symbols.spell_extent(&count.poly())?}, ${symbols.spell(
+            `range_i64::<${axis.name}>(${symbols.spell(&start)?}, ${symbols.spell_extent(&axis.extent.poly())?}, ${symbols.spell(
                 &delta,
             )?})`,
         );

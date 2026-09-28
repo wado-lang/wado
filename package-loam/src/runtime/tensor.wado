@@ -91,6 +91,13 @@ pub fn ceil_div(a: i64, d: i64) -> i64 {
     return if a % d > 0 { q + 1 } else { q };
 }
 
+/// `a / d` rounded down, for a positive `d`.
+pub fn floor_div(a: i64, d: i64) -> i64 {
+    assert d > 0;
+    let q = a / d;
+    return if a % d < 0 { q - 1 } else { q };
+}
+
 /// An ONNX index into an axis of `extent` positions, which counts from the end
 /// where negative.
 pub fn from_end(i: i64, extent: i64) -> i64 {
