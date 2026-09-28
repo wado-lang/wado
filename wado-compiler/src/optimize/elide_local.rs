@@ -10,7 +10,7 @@ use crate::nir_engine::{Engine, Rule};
 
 use super::arena_query;
 use crate::optimize::dce::deletable_value;
-use crate::optimize::mod_ref::FnEffect;
+use crate::optimize::mod_ref::CallFacts;
 
 /// What to do with a statement that binds / assigns a write-only local.
 enum Action {
@@ -24,13 +24,10 @@ enum Action {
 
 pub(super) struct ElideRule<'a> {
     stores_aliased: &'a IndexSet<u32>,
-    /// Whole-function effect summaries, so a dead binding whose value is a call
+    /// What this body's calls may do, so a dead binding whose value is a call
     /// can still go: the structural purity predicate refuses every call on
     /// sight, while a summary can prove one has no effect and cannot trap.
-    effects: &'a [FnEffect],
-    /// The builtin calls in this body whose `#[trap(...)]` checks
-    /// [`super::bounds::analyze`] proves pass, so a dead one goes too.
-    in_bounds: &'a IndexSet<ExprId>,
+    calls: CallFacts<'a>,
 }
 
 impl<'a> ElideRule<'a> {
@@ -40,15 +37,10 @@ impl<'a> ElideRule<'a> {
     /// before the engine borrows its body. Every other live read comes from
     /// `Engine::is_local_read`, so `address_taken_locals` — stale after `inline`
     /// / `ref_elim` — is deliberately not consulted.
-    pub(super) fn new(
-        stores_aliased: &'a IndexSet<u32>,
-        effects: &'a [FnEffect],
-        in_bounds: &'a IndexSet<ExprId>,
-    ) -> Self {
+    pub(super) fn new(stores_aliased: &'a IndexSet<u32>, calls: CallFacts<'a>) -> Self {
         Self {
             stores_aliased,
-            effects,
-            in_bounds,
+            calls,
         }
     }
 }
@@ -166,21 +158,15 @@ fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> A
 }
 
 /// Whether the value of a dead binding may go with it: no observable effect and
-/// no trap, since a trap is observable too. The structural predicate answers
-/// first; a call it refuses on sight is answered by its whole-function summary
-/// ([`super::dce::deletable_value`]), which is what lets a dead call to a pure
-/// helper leave rather than linger as a `drop(f(x))`.
+/// no trap, since a trap is observable too. With a type table this is
+/// [`super::dce::deletable_value`], which answers a call by its summary: that is
+/// what lets a dead call to a pure helper leave rather than linger as a
+/// `drop(f(x))`. Without one only the structural predicate can answer.
 fn deletable(engine: &Engine, value: Operand, rule: &ElideRule) -> bool {
-    if arena_query::is_pure_nontrapping_operand_typed(
-        engine.body,
-        value,
-        engine.value_graph_type_table(),
-    ) {
-        return true;
+    match engine.value_graph_type_table() {
+        Some(types) => deletable_value(engine.body, value, types, rule.calls),
+        None => arena_query::is_pure_nontrapping_operand_typed(engine.body, value, None),
     }
-    engine.value_graph_type_table().is_some_and(|types| {
-        deletable_value(engine.body, value, types, rule.effects, rule.in_bounds)
-    })
 }
 
 /// A local is kept (not elidable) when a retaining callee aliased its
@@ -195,9 +181,14 @@ fn is_kept(engine: &Engine, local: u32, stores_aliased: &IndexSet<u32>) -> bool 
 mod tests {
     use super::*;
 
-    use crate::nir::NirLocal;
-    use crate::nir_arena::{BlockNode, Body, StmtNode};
+    use cranelift_entity::EntityRef;
+
+    use crate::call_args::CallArgs;
+    use crate::nir::{FuncId, NirLocal};
+    use crate::nir_arena::{BlockNode, Body, ExprNode, StmtNode};
     use crate::nir_engine::EngineBuffers;
+    use crate::optimize::bounds::Proofs;
+    use crate::optimize::mod_ref::FnEffect;
     use crate::tir::TypeTable;
     use crate::token::Span;
 
@@ -242,23 +233,22 @@ mod tests {
 
     fn run_elide(body: &mut Body, locals: &mut Vec<NirLocal>) {
         let stores_aliased = IndexSet::default();
-        let in_bounds = IndexSet::default();
+        let proofs = Proofs::default();
         // No callees in these bodies, so the summaries are unused.
-        let rule = ElideRule::new(&stores_aliased, &[], &in_bounds);
+        let calls = CallFacts {
+            effects: &[],
+            proofs: &proofs,
+        };
+        let rule = ElideRule::new(&stores_aliased, calls);
         let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule]);
     }
 
-    /// `let x = f();` where `f` may trap by its summary, run with `in_bounds`
-    /// either proving that call or not. Answers the root's statements.
-    fn elide_binding_of_trapping_call(proven: bool) -> Vec<StmtKind> {
-        use cranelift_entity::EntityRef;
-
-        use crate::call_args::CallArgs;
-        use crate::nir::FuncId;
-        use crate::nir_arena::ExprNode;
-
+    /// `let x = f();` where `f`, function 0, may trap by its summary. The call
+    /// carries a proof made against `proven_callee`, if any. Answers the
+    /// root's statements.
+    fn elide_binding_of_trapping_call(proven_callee: Option<usize>) -> Vec<StmtKind> {
         let mut body = Body::empty();
         let call = body.exprs.push(ExprNode {
             kind: ExprKind::Call {
@@ -295,9 +285,13 @@ mod tests {
             ..FnEffect::default()
         }];
         let stores_aliased = IndexSet::default();
-        let in_bounds: IndexSet<ExprId> = proven.then_some(call).into_iter().collect();
+        let proofs = Proofs::from_iter(proven_callee.map(|f| (call, FuncId::new(f))));
         let types = TypeTable::new();
-        let rule = ElideRule::new(&stores_aliased, &effects, &in_bounds);
+        let calls = CallFacts {
+            effects: &effects,
+            proofs: &proofs,
+        };
+        let rule = ElideRule::new(&stores_aliased, calls);
         let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
         engine.set_value_graph_type_table(&types);
@@ -311,16 +305,18 @@ mod tests {
 
     #[test]
     fn drops_a_dead_call_whose_trap_checks_are_proven() {
-        assert!(elide_binding_of_trapping_call(true).is_empty());
+        assert!(elide_binding_of_trapping_call(Some(0)).is_empty());
     }
 
     #[test]
     fn demotes_a_dead_call_that_may_trap() {
-        let stmts = elide_binding_of_trapping_call(false);
-        assert!(
-            matches!(stmts.as_slice(), [StmtKind::Expr(Operand::Expr(_))]),
-            "the call still runs, for its trap: {stmts:?}"
-        );
+        for proven_callee in [None, Some(1)] {
+            let stmts = elide_binding_of_trapping_call(proven_callee);
+            assert!(
+                matches!(stmts.as_slice(), [StmtKind::Expr(Operand::Expr(_))]),
+                "a call proven against {proven_callee:?} still runs, for its trap: {stmts:?}"
+            );
+        }
     }
 
     #[test]

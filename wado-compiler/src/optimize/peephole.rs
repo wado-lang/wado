@@ -30,7 +30,7 @@ use super::string_push::{AppendFuseRule, ConstAsciiPushRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
 use crate::optimize::heap_effect::{HeapEffectsCache, LazyHeapFrame};
 use crate::optimize::match_to_switch::intern_cold_markers;
-use crate::optimize::mod_ref::compute_fn_effects_and_bounds;
+use crate::optimize::mod_ref::summarize;
 use crate::optimize::select_lowering::intern_select;
 
 /// Run the unified peephole rule set over every function body. Returns whether
@@ -92,13 +92,13 @@ pub(super) fn run_peephole(
          built for a run that visits no function. `gated!` owns that skip."
     );
     // Once for the run.
-    let (effects, in_bounds) = compute_fn_effects_and_bounds(project);
+    let summaries = summarize(project).0;
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
         // rebuilt for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
-        let elide_rule = ElideRule::new(&stores_aliased, &effects, &in_bounds[fid.index()]);
+        let elide_rule = ElideRule::new(&stores_aliased, summaries.of_body(fid.index()));
         // Per function, as its CTFE budget and remembered misses are: what one
         // body spends must not decide whether the next one folds.
         let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
