@@ -1405,9 +1405,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The struct `type_id` is an instance of; see [`TypeSystem::variant_of_type`].
+    /// Read through the head, so an anonymous shape answers too.
     pub(super) fn struct_fields_of_type(&self, type_id: TypeId) -> Option<&StructFieldInfo> {
-        let def = self.tysys.type_def(type_id)?;
-        self.lookup_struct_fields_of_decl(def)
+        let head = {
+            let table = self.tysys.type_table.borrow();
+            match table.get(table.peel_refs(type_id)) {
+                ResolvedType::Struct { def, .. } => Some(*def),
+                _ => None,
+            }
+        };
+        match head {
+            Some(head) => self.lookup_struct_fields_of(head),
+            None => self.lookup_struct_fields_of_decl(self.tysys.type_def(type_id)?),
+        }
     }
 
     /// The impl target a receiver spelling names in the current frame.

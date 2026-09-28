@@ -1,0 +1,25 @@
+// An anonymous struct carrying an affine resource is move-only by composition,
+// as a declared struct is (see resource_aggregate_move.wado): the move check
+// reads the shape's fields through its head, since it has no declaration to
+// reach them through.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+fn eat<T>(v: T) {
+    let _ = v;
+}
+
+fn misuse(c: Counter) {
+    let h = { c };
+    eat(h);
+    let _ = h;
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": "resource `h` used after it was moved"}

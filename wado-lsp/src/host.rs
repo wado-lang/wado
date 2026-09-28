@@ -16,7 +16,7 @@ use wado_compiler::{
 pub mod discovery;
 pub mod prefetch;
 
-use discovery::{DependencyEntry, absolutize};
+use discovery::{DependencyEntry, absolutize, normalize_path};
 
 /// Read the stdlib `wado-compiler` was built beside and hand it over, so a dev
 /// build serves what is on disk now and the compiler itself reads no file.
@@ -182,7 +182,7 @@ fn read_manifest(dir: &Path) -> Result<wado_manifest::Manifest, String> {
 
 /// The absolute path of the `wado.toml` in `dir`, as diagnostics name it.
 fn manifest_path(dir: &Path) -> String {
-    absolutize(dir)
+    normalize_path(&absolutize(dir))
         .join(wado_manifest::MANIFEST_FILENAME)
         .display()
         .to_string()
@@ -225,6 +225,8 @@ fn normalized_components(p: &Path) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Engine;
+    use crate::uri::Uri;
 
     #[test]
     fn source_exists_answers_without_reading() {
@@ -239,5 +241,39 @@ mod tests {
             assert!(!host.source_exists("missing.wado").await);
             assert!(!host.source_exists("sub").await);
         });
+    }
+
+    // The editor keeps answering on an invalid manifest, so the index carries
+    // the reason for the loader to report at each dependency import.
+    #[test]
+    fn an_invalid_manifest_is_carried_by_the_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("wado.toml"),
+            "[dependencies]\n\"lib:x\" = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let host = FilesystemCompilerHost::new(tmp.path().join("src"));
+
+        let index = host.dependency_index();
+        let manifest = index.manifest.expect("the manifest is named");
+        assert_eq!(manifest.path, manifest_path(tmp.path()));
+        assert!(manifest.error.is_some());
+        assert!(index.resolved.is_empty());
+
+        let uri = Uri::from_file_path(&tmp.path().join("src/main.wado"))
+            .as_str()
+            .to_string();
+        let mut engine = Engine::new();
+        engine.open_document(&uri, "use { x } from \"lib:x\";\n".to_string());
+        let diagnostics = futures::executor::block_on(engine.diagnostics(&uri, &host));
+        let reason = format!(
+            "cannot resolve dependency 'lib:x': {} is invalid: ",
+            manifest_path(tmp.path())
+        );
+        assert!(
+            diagnostics.iter().any(|d| d.message.starts_with(&reason)),
+            "{diagnostics:#?}"
+        );
     }
 }
