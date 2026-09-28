@@ -651,6 +651,10 @@ let carol: User = { name: "Carol", age: 30, active: true };
 assert carol.age == user.age;
 ```
 
+A literal's field values are evaluated once each, in the order the source
+writes them, not the order the struct declares them.
+`P { y: f(), x: g() }` calls `f` before `g`.
+
 Functional update (`..base`): a leading `..base` fills every field the literal
 does not list explicitly from the struct value `base` (same type). The listed
 fields override; `base` is evaluated once and left unchanged (value semantics).

@@ -5230,21 +5230,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Fill omitted fields from `base.field` (not defaults), evaluating a
         // non-trivial `base` once via a `$base_N` temporary.
         let mut base_binding = Vec::new();
-        if let Some(spread) = struct_lit.spreads.first() {
+        let base_ref = struct_lit.spreads.first().map(|spread| {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
-            let base_ref = Self::hoist_once(ctx, base_expr, "base", &mut base_binding);
-            // The members evaluate in source order, `base` first, but the
-            // literal holds its fields by declaration index: a field written
-            // out of that order is bound ahead of it.
-            if !fields.is_sorted_by_key(|f| f.field_index) {
-                fields = fields
-                    .into_iter()
-                    .map(|f| TirStructField {
-                        value: Self::hoist_once(ctx, f.value, "field", &mut base_binding),
+            Self::hoist_once(ctx, base_expr, "base", &mut base_binding)
+        });
+        // The members evaluate in source order, `base` first, but the literal
+        // holds its fields by declaration index: out of that order, every field
+        // but a constant is bound ahead of it. A local read is bound too, since
+        // a later field may write the local.
+        if !fields.is_sorted_by_key(|f| f.field_index) {
+            fields = fields
+                .into_iter()
+                .map(|f| {
+                    if tir::is_constant_initializer(&f.value, &self.tysys.type_table.borrow()) {
+                        return f;
+                    }
+                    let name = minted_name("field", ctx.fresh_serial());
+                    TirStructField {
+                        value: bind_to_local(ctx, name, f.value, &mut base_binding),
                         ..f
-                    })
-                    .collect();
-            }
+                    }
+                })
+                .collect();
+        }
+        if let Some(base_ref) = base_ref {
             for (name, field_index, raw_ty, _default) in &decl_fields {
                 if provided.contains(name) {
                     continue;

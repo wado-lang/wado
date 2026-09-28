@@ -1,0 +1,37 @@
+// A struct literal's members evaluate once each, in source order, a spread's
+// `base` first. The literal holds its fields by declaration index, so `y`
+// written before `x` has to run first all the same.
+use { println, Stdout } from "core:cli";
+
+struct P { x: i32, y: i32 }
+
+fn log(n: i32) -> i32 with Stdout {
+    println(`${n}`);
+    return n;
+}
+
+fn base() -> P with Stdout {
+    println("base");
+    return P { x: 0, y: 0 };
+}
+
+fn bump(n: &mut i32) -> i32 {
+    *n += 10;
+    return *n;
+}
+
+export fn run() with Stdout {
+    let plain = P { y: log(2), x: log(1) };
+    println(`${plain.x + plain.y}`);
+    let spread = P { ..base(), y: log(4), x: log(3) };
+    println(`${spread.x + spread.y}`);
+    // `y` reads `a` before `x` writes it.
+    let mut a = builtin::black_box(5);
+    let read_first = P { y: a, x: bump(&mut a) };
+    println(`${read_first.x} ${read_first.y}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n1\n3\nbase\n4\n3\n7\n15 5\n"
+}
