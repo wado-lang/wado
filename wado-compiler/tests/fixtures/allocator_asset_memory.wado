@@ -1,4 +1,4 @@
-/// Test that the allocator hands out none of the memory an embedded wasm asset
+/// Test that no allocator hands out any of the memory an embedded wasm asset
 /// reserves: libm keeps its tables in the component's one memory, so filling
 /// every allocated byte must leave `f32::exp` as it was.
 use { println, Stdout } from "core:cli";
@@ -20,4 +20,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "ok\n"}
+{"allocator": ["bump", "debug", "freelist"], "stdout": "ok\n"}
