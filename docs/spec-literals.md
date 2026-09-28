@@ -196,6 +196,18 @@ test {
 }
 ```
 
+An expression built from literals alone, through unary `-` and `~` and the
+arithmetic, bitwise and shift operators, takes its type from its context the
+same way. As an operand, it takes the type of the other operand:
+
+<!-- {"fixture":"literal_coercion_through_operators.wado"} -->
+
+```wado
+let t: u32 = builtin::black_box(0xFFFF_FFFF as u32);
+assert t & ~7 == 0xFFFF_FFF8;
+assert t & (1 << 31) == 0x8000_0000;
+```
+
 #### Compile-time range checking
 
 The compiler rejects literal coercions whose value falls outside the target type's range. All literal bases (decimal, hex `0x`, octal `0o`, binary `0b`) use strict numeric range: the value must lie within `[MIN, MAX]` for signed types or `[0, MAX]` for unsigned types.

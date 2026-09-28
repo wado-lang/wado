@@ -3313,6 +3313,31 @@ impl BinaryOp {
             Self::Eq | Self::NotEq | Self::Lt | Self::LtEq | Self::Gt | Self::GtEq
         )
     }
+
+    /// Whether this answers a number: an arithmetic, bitwise or shift operator.
+    #[must_use]
+    pub fn is_numeric(self) -> bool {
+        match self {
+            Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::Mod
+            | Self::BitAnd
+            | Self::BitOr
+            | Self::BitXor
+            | Self::Shl
+            | Self::Shr => true,
+            Self::Eq
+            | Self::NotEq
+            | Self::Lt
+            | Self::LtEq
+            | Self::Gt
+            | Self::GtEq
+            | Self::And
+            | Self::Or => false,
+        }
+    }
 }
 
 /// A comparison in a chain (e.g., the `< b` part of `a < b < c`)
