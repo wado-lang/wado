@@ -276,13 +276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `scope_params` nor a variable an enclosing call's pending literals
     /// answer.
     pub(super) fn slot_unanswered(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
-        if !self.tysys.is_unbound_type_param(t) || scope_params.contains(&t) {
-            return false;
-        }
-        let answered = self.apply_infer_holes(t);
-        !self
-            .annotate_ctx
-            .awaits_pending_call(&self.tysys.type_table.borrow(), answered)
+        self.is_open_slot(t, scope_params) && !self.awaits_pending_call(t)
     }
 
     /// Whether a declared default fills the type argument `t`: a slot nothing
@@ -290,14 +284,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// default then answers in turn (`ident(it.collect())`). Only a variable
     /// chained to an enclosing call for its literals keeps waiting.
     pub(super) fn slot_takes_default(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
-        if !self.tysys.is_unbound_type_param(t) || scope_params.contains(&t) {
-            return false;
-        }
-        let answered = self.apply_infer_holes(t);
-        answered == t
-            || !self
-                .annotate_ctx
-                .awaits_pending_call(&self.tysys.type_table.borrow(), answered)
+        self.is_open_slot(t, scope_params)
+            && (self.apply_infer_holes(t) == t || !self.awaits_pending_call(t))
+    }
+
+    /// Whether `t` is a bare parameter or variable that is not one of the
+    /// enclosing declaration's `scope_params`.
+    fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
+        self.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
     }
 
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {

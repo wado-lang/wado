@@ -203,11 +203,21 @@ impl MethodCallOutcome {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The bounds the trait's `type A: Bound` puts on the projection `ty`,
-    /// as a method or an operator on it looks them up; empty for any other
-    /// type. A rebuilt bound has no walked site, so it carries its declaration;
-    /// one naming none was reported where written.
-    pub(super) fn projection_bounds(&self, ty: TypeId, span: Span) -> Vec<ScopedBound> {
+    /// The trait bounds `ty` carries, which answer a method or an operator on
+    /// it: a type parameter's declared ones, or those the trait's
+    /// `type A: Bound` puts on the projection `ty`. Empty for any other type.
+    /// A projection's rebuilt bound has no walked site, so it carries its
+    /// declaration; one naming none was reported where written.
+    pub(super) fn carried_bounds(&self, ty: TypeId, span: Span) -> Vec<ScopedBound> {
+        if let Some(name) = self.tysys.binder_name(ty) {
+            return self
+                .annotate_ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(&name)
+                .cloned()
+                .unwrap_or_default();
+        }
         let tt = self.tysys.type_table.borrow();
         let ResolvedType::AssocTypeProjection { bounds, .. } = tt.get(ty) else {
             return Vec::new();
@@ -521,41 +531,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_binder = trait_match.blanket_binder;
         }
 
-        // If still not found and receiver is a TypeParam, try trait bounds
-        // e.g., T: Ord -> look up cmp() in Ord trait declaration
+        // `T: Ord` gives `T` its `cmp`, and `type Seq: SerializeSeq` gives
+        // `S::Seq` its `element`.
         if method_info.is_none() {
-            // Resolved into a local so the probe's borrow ends here: a `let`
-            // chain would hold it across the body, which still needs the probe.
-            let from_bounds = self
-                .tysys
-                .binder_name(base_type_id)
-                .and_then(|name| {
-                    self.annotate_ctx
-                        .trait_ctx
-                        .type_param_bounds
-                        .get(&name)
-                        .cloned()
-                })
-                .and_then(|bounds| {
-                    self.find_method_in_trait_bounds(
-                        &bounds,
-                        method_name,
-                        base_type_id,
-                        span,
-                        required_trait,
-                        ArgSource::Exprs(&mut probe),
-                    )
-                });
-            if let Some((found_trait, info)) = from_bounds {
-                trait_name = Some(found_trait);
-                method_info = Some(info);
-            }
-        }
-
-        // If still not found and receiver is an AssocTypeProjection, try its bounds
-        // e.g., S::SeqSerializer: SerializeSeq -> look up element() in SerializeSeq
-        if method_info.is_none() {
-            let bounds = self.projection_bounds(base_type_id, span);
+            let bounds = self.carried_bounds(base_type_id, span);
             if !bounds.is_empty()
                 && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
                     &bounds,

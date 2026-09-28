@@ -1767,31 +1767,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `ty` as an operand its bounds give operators to: a type parameter, or a
     /// projection its trait bounds (`type Item: Eq`). `None` for any other type.
     fn bounded_operand(&self, ty: TypeId, span: Span) -> Option<BoundedOperand> {
-        let tt = self.tysys.type_table.borrow();
-        let resolved = tt.get(ty);
-        if let Some(param) = bound_param_name(resolved) {
-            return Some(BoundedOperand {
-                receiver: FqTypeName::binder(param),
-                spelled: param.clone(),
-                bounds: self
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .get(param)
-                    .cloned()
-                    .unwrap_or_default(),
-            });
-        }
-        if !matches!(resolved, ResolvedType::AssocTypeProjection { .. }) {
-            return None;
-        }
-        let receiver = tt.fq_type_name(ty);
-        let spelled = tt.type_name(ty);
-        drop(tt);
+        let (receiver, spelled) = {
+            let tt = self.tysys.type_table.borrow();
+            let resolved = tt.get(ty);
+            if let Some(param) = bound_param_name(resolved) {
+                (FqTypeName::binder(param), param.clone())
+            } else if matches!(resolved, ResolvedType::AssocTypeProjection { .. }) {
+                (tt.fq_type_name(ty), tt.type_name(ty))
+            } else {
+                return None;
+            }
+        };
         Some(BoundedOperand {
             receiver,
             spelled,
-            bounds: self.projection_bounds(ty, span),
+            bounds: self.carried_bounds(ty, span),
         })
     }
 
