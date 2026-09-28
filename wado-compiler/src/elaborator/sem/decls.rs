@@ -39,32 +39,12 @@ pub(crate) struct FunctionSig {
     pub(crate) effects: Vec<EffectRef>,
 }
 
-impl ModuleDecls {
-    /// Carry a snapshot module's decl digests into this compile. The digest
-    /// field list lives only here; a digest missing from this method would
-    /// silently lose stdlib facts on snapshot-hit builds only.
-    pub(crate) fn clone_digests_from(&mut self, other: &ModuleDecls) {
-        self.associated_constants
-            .clone_from(&other.associated_constants);
-        self.effect_ops.clone_from(&other.effect_ops);
-        self.method_sigs.clone_from(&other.method_sigs);
-        self.resource_method_ids
-            .clone_from(&other.resource_method_ids);
-        self.impl_sigs.clone_from(&other.impl_sigs);
-        self.trait_sigs.clone_from(&other.trait_sigs);
-        self.function_sigs = std::rc::Rc::clone(&other.function_sigs);
-        self.current_module_globals
-            .clone_from(&other.current_module_globals);
-    }
-}
-
 /// Per-module declaration tables produced by elaboration.
 #[derive(Default, Clone)]
 pub(crate) struct ModuleDecls {
-    /// Canonical signatures of this module's own free functions, frozen
-    /// behind `Rc` so the program-wide assembly and the stdlib-snapshot
-    /// seeding share the map instead of deep-cloning every signature.
-    pub(crate) function_sigs: std::rc::Rc<IndexMap<DefId, std::rc::Rc<FunctionSig>>>,
+    /// Canonical signatures of this module's own free functions, behind `Rc`
+    /// so the program-wide assembly shares each rather than deep-cloning it.
+    pub(crate) function_sigs: IndexMap<DefId, std::rc::Rc<FunctionSig>>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of

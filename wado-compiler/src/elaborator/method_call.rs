@@ -21,7 +21,7 @@ use super::callee::StaticMethodRef;
 use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
 use super::infer::InferCtx;
-use super::instantiate::Instantiation;
+use super::instantiate::{InstanceKind, Instantiation};
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::scope::ScopedBound;
@@ -203,6 +203,44 @@ impl MethodCallOutcome {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// The trait bounds `ty` carries, which answer a method or an operator on
+    /// it: a type parameter's declared ones, or those the trait's
+    /// `type A: Bound` puts on the projection `ty`. Empty for any other type.
+    /// A projection's rebuilt bound has no walked site, so it carries its
+    /// declaration; one naming none was reported where written.
+    pub(super) fn carried_bounds(&self, ty: TypeId, span: Span) -> Vec<ScopedBound> {
+        if let Some(name) = self.tysys.binder_name(ty) {
+            return self
+                .annotate_ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(&name)
+                .cloned()
+                .unwrap_or_default();
+        }
+        let tt = self.tysys.type_table.borrow();
+        let ResolvedType::AssocTypeProjection { bounds, .. } = tt.get(ty) else {
+            return Vec::new();
+        };
+        bounds
+            .iter()
+            .filter_map(|b| {
+                Some(ScopedBound::new(
+                    ast::TraitBound {
+                        id: AstId::fresh(),
+                        name: b.base_name().to_string(),
+                        type_args: Vec::new(),
+                        assoc_types: Vec::new(),
+                        span,
+                        fn_signature: None,
+                        resolved: Some(b.canonical()?),
+                    },
+                    None,
+                ))
+            })
+            .collect()
+    }
+
     pub(super) fn resolve_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -219,26 +257,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return result;
         }
 
-        let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
-
-        // A `_` resolves to UNKNOWN, so these are their own hole mask.
-        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
-
-        let outcome = self.resolve_method_call_with(
-            MethodCallInput {
-                receiver,
-                receiver_ast: Some(&method_call.receiver),
-                method_name: &method_call.method,
-                method_id: Some(method_call.method_id),
-                call_id: Some(method_call.id),
-                defaults_site: None,
-                type_args,
-                args: &method_call.args,
-                expected_type,
-                span: method_call.span,
-                required_trait: None,
-            },
+        let mut dispatch = None;
+        let type_id = self.resolve_projection(
+            &method_call.receiver,
             ctx,
+            expected_type,
+            |this, receiver, _| {
+                this.receiver_waits(receiver, &method_call.method, method_call.span, |_, _| true)
+            },
+            |this, receiver, ctx| {
+                // A `_` resolves to UNKNOWN, so these are their own hole mask.
+                let type_args: Vec<TypeId> = this.resolve_turbofish_args(&method_call.type_args);
+                let outcome = this.resolve_method_call_with(
+                    MethodCallInput {
+                        receiver,
+                        receiver_ast: Some(&method_call.receiver),
+                        method_name: &method_call.method,
+                        method_id: Some(method_call.method_id),
+                        call_id: Some(method_call.id),
+                        defaults_site: None,
+                        type_args,
+                        args: &method_call.args,
+                        expected_type,
+                        span: method_call.span,
+                        required_trait: None,
+                    },
+                    ctx,
+                );
+                dispatch = outcome.dispatch;
+                outcome.type_id
+            },
         );
 
         // A `&mut self` method mutates the element `xs[i]` names, so the
@@ -248,7 +296,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // which is the borrow `&mut xs[i]` takes, and leave the write-back pass
         // to write it back or refuse it.
         if let ast::Expr::Index(index_expr) = &method_call.receiver
-            && outcome.dispatch.as_ref().is_some_and(|dispatch| {
+            && dispatch.is_some_and(|dispatch| {
                 dispatch.self_kind == ast::SelfKind::MutRef && !dispatch.is_ref_impl
             })
             && self.index_element_denies_ref_mut(index_expr, ctx)
@@ -256,7 +304,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.resolve_index_access(index_expr, ctx, IndexAccess::Mutable);
         }
 
-        outcome.type_id
+        type_id
     }
 
     /// Dispatch a method call from an already-resolved receiver TIR. See
@@ -483,82 +531,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_binder = trait_match.blanket_binder;
         }
 
-        // If still not found and receiver is a TypeParam, try trait bounds
-        // e.g., T: Ord -> look up cmp() in Ord trait declaration
+        // `T: Ord` gives `T` its `cmp`, and `type Seq: SerializeSeq` gives
+        // `S::Seq` its `element`.
         if method_info.is_none() {
-            // Resolved into a local so the probe's borrow ends here: a `let`
-            // chain would hold it across the body, which still needs the probe.
-            let from_bounds = self
-                .tysys
-                .binder_name(base_type_id)
-                .and_then(|name| {
-                    self.annotate_ctx
-                        .trait_ctx
-                        .type_param_bounds
-                        .get(&name)
-                        .cloned()
-                })
-                .and_then(|bounds| {
-                    self.find_method_in_trait_bounds(
-                        &bounds,
-                        method_name,
-                        base_type_id,
-                        span,
-                        required_trait,
-                        ArgSource::Exprs(&mut probe),
-                    )
-                });
-            if let Some((found_trait, info)) = from_bounds {
-                trait_name = Some(found_trait);
-                method_info = Some(info);
-            }
-        }
-
-        // If still not found and receiver is an AssocTypeProjection, try its bounds
-        // e.g., S::SeqSerializer: SerializeSeq -> look up element() in SerializeSeq
-        if method_info.is_none() {
-            let assoc_bounds = {
-                let resolved = self.tysys.type_table.borrow().get(base_type_id).clone();
-                if let ResolvedType::AssocTypeProjection { bounds, .. } = resolved {
-                    if bounds.is_empty() {
-                        None
-                    } else {
-                        Some(bounds)
-                    }
-                } else {
-                    None
-                }
-            };
-            if let Some(bounds) = assoc_bounds
-                && let Some((found_trait, info)) = {
-                    // A rebuilt bound has no walked site, so it carries its
-                    // declaration; one naming none was reported where written.
-                    let bounds: Vec<ScopedBound> = bounds
-                        .iter()
-                        .filter_map(|b| {
-                            Some(ScopedBound::new(
-                                ast::TraitBound {
-                                    id: AstId::fresh(),
-                                    name: b.base_name().to_string(),
-                                    type_args: Vec::new(),
-                                    assoc_types: Vec::new(),
-                                    span,
-                                    fn_signature: None,
-                                    resolved: Some(b.canonical()?),
-                                },
-                                None,
-                            ))
-                        })
-                        .collect();
-                    self.find_method_in_trait_bounds(
-                        &bounds,
-                        method_name,
-                        base_type_id,
-                        span,
-                        required_trait,
-                        ArgSource::Exprs(&mut probe),
-                    )
-                }
+            let bounds = self.carried_bounds(base_type_id, span);
+            if !bounds.is_empty()
+                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    &bounds,
+                    method_name,
+                    base_type_id,
+                    span,
+                    required_trait,
+                    ArgSource::Exprs(&mut probe),
+                )
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
@@ -714,7 +699,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_type_param_ids,
             &method_own_params,
             &Instantiation {
-                kind: "method",
+                kind: InstanceKind::Method,
                 name: method_name,
                 span,
                 type_args: &type_args,
@@ -2679,18 +2664,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         self.tysys.signatures.method_sig(only.method_id)
-    }
-
-    /// The declared type-param slots of a static method, keyed like
-    /// [`Self::lookup_static_method_param_types_keyed`].
-    pub(super) fn lookup_static_method_slots(
-        &self,
-        method_name: &str,
-        static_key: &ImplTargetKey,
-    ) -> Vec<TypeId> {
-        self.unique_static_method_sig(static_key, method_name)
-            .map(|sig| sig.decl.type_param_ids())
-            .unwrap_or_default()
     }
 
     /// Whether `impl From<from_type> for target;` requests a body-less derivation,

@@ -1,0 +1,41 @@
+//! A field read on a type parameter or an associated-type projection is
+//! answered on each instance the body is monomorphized at, not rejected where
+//! the generic body is checked.
+use { println, Stdout } from "core:cli";
+
+trait HasItem with () {
+    type Item;
+
+    fn item(&self) -> Self::Item;
+}
+
+struct P {
+    x: i32,
+}
+
+struct S {}
+
+impl HasItem for S {
+    type Item = P;
+
+    fn item(&self) -> P {
+        return P { x: 3 };
+    }
+}
+
+fn param_field<T>(t: T) -> i32 {
+    return t.x;
+}
+
+fn projected_field<H: HasItem>(h: H) -> i32 {
+    return h.item().x;
+}
+
+export fn run() with Stdout {
+    println(`${param_field(P { x: 1 })} ${projected_field(S {})}`);
+}
+
+__DATA__
+{
+    "stdout": "1 3\n"
+}

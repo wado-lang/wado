@@ -15,6 +15,7 @@ use {
     Node,
     Rank,
     ReadError,
+    Stored,
     ValueInfo,
     bit_pattern,
     check_element_count,
@@ -22,6 +23,7 @@ use {
     default_opset,
     element_of,
     is_build_time,
+    is_float_word,
     parameters,
     push_element,
     static_extents,
@@ -210,7 +212,11 @@ fn element_texts(
     check_element_count(name, elements.len(), &extents)?;
     let mut texts: List<String> = [];
     for let e of elements {
-        texts.push(literal_text(toks, first_token(s, e)));
+        let token = first_token(s, e);
+        if toks.kind_at(token) == onnx::TK_STRING {
+            return Result::Err(`${name}: ${toks.token_text(token)} is a string, and the tensor holds numbers`);
+        }
+        texts.push(literal_text(toks, token, name)?);
     }
     return Result::Ok(texts);
 }
@@ -224,7 +230,8 @@ fn read_known(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &Valu
 }
 
 /// Elements written as text, in the type stage 0 computes `dtype` in, or `None`
-/// for a type it does not read. ONNX writes a bool as the integer `int32_data` holds.
+/// for a type it does not read. ONNX writes a bool, and a half's bit pattern, as
+/// the integer `int32_data` holds.
 fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<String>) -> Result<Option<Known>, String> {
     if *dtype == "float" {
         let mut values: List<f32> = [];
@@ -235,6 +242,13 @@ fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<Strin
             values.push(v);
         }
         return Result::Ok(Option::Some(Known { extents, elements: Elements::Floats(values) }));
+    }
+    if let Some(stored) = Stored::half(dtype) {
+        let mut values: List<f32> = [];
+        for let text of texts {
+            values.push(stored.widened(element_bits(name, &text, dtype, 2)? as u16));
+        }
+        return Result::Ok(Option::Some(Known { extents, elements: Elements::Floats(values), stored }));
     }
     if !is_build_time(dtype) {
         return Result::Ok(null);
@@ -255,7 +269,8 @@ fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<Strin
     } else {
         Elements::Ints(values);
     };
-    return Result::Ok(Option::Some(Known { extents, elements, int32 }));
+    let stored = if int32 { Stored::Int32 } else { Stored::Computed };
+    return Result::Ok(Option::Some(Known { extents, elements, stored }));
 }
 
 /// A tensor attribute, which travels whole as the protobuf reader carries it.
@@ -292,13 +307,22 @@ fn element_bits(name: &String, text: &String, dtype: &String, width: i32) -> Res
 }
 
 /// A literal token's value as text `FromStr` reads: a string without its
-/// quotes, and a float with a digit after its point.
-fn literal_text(toks: &onnx::TokenStream, token: i32) -> String {
+/// quotes, and a float with a digit after its point. `name` is what an error
+/// names: the tensor or the attribute the literal belongs to.
+fn literal_text(toks: &onnx::TokenStream, token: i32, name: &String) -> Result<String, String> {
     let text = toks.token_text(token);
-    if toks.kind_at(token) == onnx::TK_FLOAT {
-        return digit_after_point(&text);
+    let kind = toks.kind_at(token);
+    if kind == onnx::TK_STRING {
+        return Result::Ok(unquote(text));
     }
-    return unquote(text);
+    if kind == onnx::TK_INT || is_float_word(&text) {
+        return Result::Ok(text);
+    }
+    // The grammar lexes a signed word as a `FLOAT`, and only a number has a digit.
+    if kind == onnx::TK_ID || !text.chars().any(|c| c.is_ascii_digit()) {
+        return Result::Err(`${name}: ${text} is not a value`);
+    }
+    return Result::Ok(digit_after_point(&text));
 }
 
 /// ONNX's float literal may end its fraction at the point (`1.`, `1.e5`), which
@@ -425,10 +449,16 @@ fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<
     };
     if let Some(list) = first_child_of_kind(s, value, onnx::RK_ATTR_VALUE_LIST) {
         let mut values: List<String> = [];
+        let mut strings = 0;
         for let c of children_of_kind(s, list, onnx::RK_SINGLE_ATTR_VALUE) {
-            values.push(single_attr_text(s, toks, c, &name)?);
+            let [text, is_string] = single_attr_text(s, toks, c, &name)?;
+            values.push(text);
+            strings += is_string as i32;
         }
-        return Result::Ok(Attr { name, values, is_list: true });
+        if strings != 0 && strings != values.len() {
+            return Result::Err(`${name}: a list mixing strings and numbers`);
+        }
+        return Result::Ok(Attr { name, values, is_list: true, is_string: strings > 0 });
     }
     let Some(single) = first_child_of_kind(s, value, onnx::RK_SINGLE_ATTR_VALUE) else {
         return Result::Err(`${name}: an attribute without a value`);
@@ -436,23 +466,29 @@ fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<
     if let Some(tensor) = first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) {
         return read_tensor_attr(s, toks, tensor, name);
     }
-    let text = single_attr_text(s, toks, single, &name)?;
+    let [text, is_string] = single_attr_text(s, toks, single, &name)?;
     return Result::Ok(Attr {
         name,
         values: [text],
         is_list: false,
+        is_string,
     });
 }
 
+/// A single attribute value's text, and whether it is a string.
 fn single_attr_text(
     s: &onnx::CstStore,
     toks: &onnx::TokenStream,
     single: i32,
     attr_name: &String,
-) -> Result<String, String> {
+) -> Result<[String, bool], String> {
     for let c of children(s, single) {
         if s.is_token(c) {
-            return Result::Ok(literal_text(toks, s.token_index(c)));
+            let token = s.token_index(c);
+            return Result::Ok([
+                literal_text(toks, token, attr_name)?,
+                toks.kind_at(token) == onnx::TK_STRING,
+            ]);
         }
         if s.is_node(c) {
             if first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) matches { Some(_) } {

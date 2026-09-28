@@ -1,0 +1,183 @@
+//! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
+//! token greedily.
+
+pub use { Tokenizer } from "../gpt2_tokenizer.wado";
+use gpt2 from "./gpt2.onnxtext"
+    with {
+        generator: {
+            module: "../../src/generator.wado",
+            inputs: ["./gpt2-header.safetensors"],
+            options: {
+                dims: { batch_size: 1 },
+                outputs: ["logits"],
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_f.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*c_proj.bias",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    // The language-model head: the token embedding, transposed.
+                    {
+                        pattern: "onnx::MatMul_3718",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    {
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    // The causal mask, sliced from a buffer the size of the
+                    // context to the sequence the run gives.
+                    {
+                        pattern: "onnx::Slice_335",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                ],
+            },
+        },
+    };
+
+/// GPT-2's byte-pair tokenizer, with `<|endoftext|>` as its one special token.
+pub fn gpt2_tokenizer() -> Tokenizer {
+    return Tokenizer::new(&#include_str("./vocab.json"), &#include_str("./merges.txt"), ["<|endoftext|>"]);
+}
+
+/// GPT-2 with its weights loaded.
+pub struct Model {
+    weights: gpt2::Weights,
+}
+
+impl Model {
+    /// Loads the weights from a safetensors checkpoint laid out as
+    /// `gpt2-header.safetensors` says.
+    pub fn load(checkpoint: &ByteList) -> Result<Model, gpt2::LoadError> {
+        return Ok(Model { weights: gpt2::Weights::load(checkpoint)? });
+    }
+
+    /// How many positions the model reads: one per row of `wpe`.
+    pub fn positions(&self) -> i32 {
+        return self.weights.transformer_wpe_weight.extents[0];
+    }
+
+    /// The token the model ranks first after `ids`.
+    pub fn next_token(&self, ids: &List<i32>) -> i32 {
+        assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
+        let vocab = gpt2::Vocab::EXTENT;
+        for let id of ids {
+            assert 0 <= *id < vocab, "every token id is in the vocabulary";
+        }
+        let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
+        let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
+        let logits = gpt2::forward(
+            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
+            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
+            &self.weights,
+        );
+        let row = (ids.len() - 1) * vocab;
+        let mut best = 0;
+        for let v of 1..<vocab {
+            if logits.data[row + v] > logits.data[row + best] {
+                best = v;
+            }
+        }
+        return best;
+    }
+}

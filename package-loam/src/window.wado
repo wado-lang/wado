@@ -2,54 +2,104 @@
 //! attributes ONNX gives both, and the output extents they imply.
 
 use { AttrError, Node } from "./graph.wado";
-pub use { Window } from "./runtime/tensor.wado";
+use { Condition, Poly, owe } from "./poly.wado";
+
+/// A window as stage 0 reads it. The input's spatial extents may be symbolic,
+/// and so may the padding `SAME` derives from them and the output extents.
+pub struct Geometry {
+    pub kernel: List<i32>,
+    pub strides: List<i32>,
+    pub dilations: List<i32>,
+    /// Every spatial axis's leading padding, then every one's trailing.
+    pub pads: List<Poly>,
+    pub output: List<Poly>,
+}
 
 /// The window of `kernel` extents that `node` slides over the spatial extents
-/// `input`. `ceil` rounds a partial last step up, as `MaxPool`'s `ceil_mode` does.
-pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool) -> Result<Window, AttrError> {
+/// `input`. `ceil` rounds a partial last step up, as `MaxPool`'s `ceil_mode`
+/// does. `owed` gains that the padded input holds the kernel, where only the
+/// run knows.
+pub fn window_over(
+    node: &Node,
+    input: &List<Poly>,
+    kernel: List<i32>,
+    ceil: bool,
+    owed: &mut List<Condition>,
+) -> Result<Geometry, AttrError> {
     let spatial = input.len();
     let strides = ints(node, "strides", spatial, 1)?;
     let dilations = ints(node, "dilations", spatial, 1)?;
     let mode = match node.attr("auto_pad") {
-        Some(a) => a.values[0],
+        Some(a) => a.string()?,
         None => "NOTSET",
     };
-    let mut pads = ints(node, "pads", 2 * spatial, 0)?;
-    let mut output: List<i32> = [];
+    let written = ints(node, "pads", 2 * spatial, 0)?;
+    let site = node.site();
+    let mut leading: List<Poly> = [];
+    let mut trailing: List<Poly> = [];
+    let mut output: List<Poly> = [];
     for let i of 0..<spatial {
-        let reach = dilations[i] * (kernel[i] - 1) + 1;
+        let x = &input[i];
+        let stride = Poly::constant(strides[i] as i64);
+        let reach = dilations[i] as i64 * (kernel[i] as i64 - 1) + 1;
         if mode == "SAME_UPPER" || mode == "SAME_LOWER" {
-            let out = (input[i] + strides[i] - 1) / strides[i];
-            let total = i32::max((out - 1) * strides[i] + reach - input[i], 0);
-            let upper = if mode == "SAME_UPPER" { total / 2 } else { total - total / 2 };
-            pads[i] = upper;
-            pads[spatial + i] = total - upper;
+            let out = Poly::ceil_div(x, &stride, &site);
+            let last_start = times(&diff(&out, &Poly::constant(1)), &stride);
+            let covered = diff(&add(&last_start, &Poly::constant(reach)), x);
+            let total = Poly::max_of(&covered, &Poly::constant(0), &site);
+            let half = Poly::floor_div(&total, &Poly::constant(2), &site);
+            let before = if mode == "SAME_UPPER" { half } else { diff(&total, &half) };
+            leading.push(before);
+            trailing.push(diff(&total, &before));
             output.push(out);
             continue;
         }
-        if mode == "VALID" {
-            pads[i] = 0;
-            pads[spatial + i] = 0;
-        } else if mode != "NOTSET" {
+        let [before, after] = if mode == "VALID" {
+            [0 as i64, 0 as i64];
+        } else if mode == "NOTSET" {
+            [written[i] as i64, written[spatial + i] as i64];
+        } else {
             return Result::Err(AttrError { attr: "auto_pad", reason: `is ${mode}, which ONNX does not define` });
+        };
+        let padded = add(x, &Poly::constant(before + after));
+        let span = diff(&padded, &Poly::constant(reach));
+        owe(
+            owed,
+            &site,
+            &span,
+            `the padded input's ${padded} must hold the kernel's reach of ${reach} along spatial axis ${i}`,
+        ).map_err(|reason| AttrError { attr: "kernel_shape", reason })?;
+        let steps = if ceil { Poly::ceil_div(&span, &stride, &site) } else { Poly::floor_div(&span, &stride, &site) };
+        let mut out = add(&steps, &Poly::constant(1));
+        if ceil {
+            // A last window that would start in the trailing pad covers no
+            // input, and ONNX drops it: once, where it starts there.
+            let starts = Poly::ceil_div(&add(x, &Poly::constant(before)), &stride, &site);
+            let dropped = Poly::clamped(&diff(&out, &starts), &Poly::constant(0), &Poly::constant(1), &site);
+            out = diff(&out, &dropped);
         }
-        let span = input[i] + pads[i] + pads[spatial + i] - reach;
-        if span < 0 {
-            return Result::Err(
-                AttrError {
-                    attr: "kernel_shape",
-                    reason: `reaches ${reach} along spatial axis ${i}, past the ${input[i] + pads[i] + pads[spatial + i]} the padded input holds`,
-                },
-            );
-        }
-        let mut out = if ceil { (span + strides[i] - 1) / strides[i] } else { span / strides[i] } + 1;
-        // A last window that would start in the trailing pad covers no input.
-        if ceil && (out - 1) * strides[i] >= input[i] + pads[i] {
-            out -= 1;
-        }
+        leading.push(Poly::constant(before));
+        trailing.push(Poly::constant(after));
         output.push(out);
     }
-    return Result::Ok(Window { kernel, strides, dilations, pads, output });
+    let mut pads = leading;
+    pads.extend(&trailing);
+    return Result::Ok(Geometry { kernel, strides, dilations, pads, output });
+}
+
+// A window's arithmetic stays within `i64`, which each helper's `unwrap`
+// asserts: an extent is at most `i32::MAX`, and an attribute is an `i32`.
+
+fn add(a: &Poly, b: &Poly) -> Poly {
+    return a.try_add(b).unwrap();
+}
+
+fn diff(a: &Poly, b: &Poly) -> Poly {
+    return a.try_sub(b).unwrap();
+}
+
+fn times(a: &Poly, b: &Poly) -> Poly {
+    return a.try_mul(b).unwrap();
 }
 
 /// An integer list attribute of `count` entries no smaller than `least`, each
@@ -58,21 +108,22 @@ pub fn ints(node: &Node, name: String, count: i32, least: i32) -> Result<List<i3
     let Some(attr) = node.attr(name) else {
         return Result::Ok(List::<i32>::filled(count, least));
     };
-    if attr.values.len() != count {
+    let written = attr.ints()?;
+    if written.len() != count {
         return Result::Err(AttrError {
             attr: name,
-            reason: `holds ${attr.values.len()} values and the operator reads ${count}`,
+            reason: `holds ${written.len()} values and the operator reads ${count}`,
         });
     }
     let mut values: List<i32> = [];
-    for let text of attr.values {
-        let Ok(v) = i32::from_str(&text) else {
-            return Result::Err(AttrError { attr: name, reason: `holds '${text}', which is not an integer` });
-        };
-        if v < least {
+    for let v of written {
+        if v < least as i64 {
             return Result::Err(AttrError { attr: name, reason: `holds ${v}, below ${least}` });
         }
-        values.push(v);
+        if v > i32::MAX as i64 {
+            return Result::Err(AttrError { attr: name, reason: `holds ${v}, past i32::MAX` });
+        }
+        values.push(v as i32);
     }
     return Result::Ok(values);
 }

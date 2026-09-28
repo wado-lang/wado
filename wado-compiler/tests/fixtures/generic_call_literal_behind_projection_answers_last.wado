@@ -1,0 +1,95 @@
+// A numeric literal behind a field of a generic call's or constructor's result
+// answers last too: `wrap(5).v` takes the type the enclosing call settles for
+// it, and so does one behind a method. A method two impls could answer
+// (`impl<T> Tag for Box<T>` and `impl Tag for Box<i32>`) takes its receiver's
+// literals' default first, since which impl answers turns on it.
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    v: T,
+}
+
+impl<T> Box<T> {
+    fn new(v: T) -> Box<T> {
+        return Box { v };
+    }
+
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+fn wrap<U>(u: U) -> Box<U> {
+    return Box { v: u };
+}
+
+fn pair<U>(a: U, b: U) -> Pair<U> {
+    return Pair { a, b };
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+fn unbox<T>(b: Box<T>, fallback: T) -> T {
+    return if b.v == fallback { fallback } else { b.v };
+}
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+impl<T> Tag for Box<T> {
+    fn tag(&self) -> String {
+        return "general";
+    }
+}
+
+impl Tag for Box<i32> {
+    fn tag(&self) -> String {
+        return "i32";
+    }
+}
+
+export fn run() with Stdout {
+    let wide: u64 = 7;
+    println(`${same(wrap(0x1_0000_0000).v, wide)}`);
+    println(`${same(wide, wrap(0x1_0000_0001).v)}`);
+    println(`${unbox(wrap(wide), wrap(5).v)}`);
+    println(`${same(pair(1, 0x1_0000_0002).b, wide)}`);
+    println(`${same(wrap(wrap(0x1_0000_0003)).v.v, wide)}`);
+    println(`${same(wrap(1.5).v, 2.0 as f32)}`);
+    println(`${same(wrap(3).v, 4)}`);
+    let annotated: u64 = wrap(0x1_0000_0004).v;
+    println(`${annotated}`);
+    let nested: Box<u64> = wrap(wrap(0x1_0000_0005)).v;
+    println(`${nested.v}`);
+    println(`${same(Box::new(0x1_0000_0006).v, wide)}`);
+
+    // A struct literal naming none of its parameters waits as a call does.
+    println(`${same(Box { v: 0x1_0000_0007 }.v, wide)}`);
+    println(`${same(Box { v: wrap(0x1_0000_0008) }.v.v, wide)}`);
+    let field: u64 = Pair { a: 0x1_0000_0009, b: 0 }.a;
+    println(`${field}`);
+
+    // Two impls could answer, and a bare receiver has no head to ask: the
+    // receiver defaults first.
+    println(`${wrap(5).tag()} ${Box { v: 5 }.tag()} ${wrap(5).v.to_string()}`);
+    // One impl answers every instance, so the receiver waits.
+    println(`${same(wrap(0x1_0000_000A).get(), wide)}`);
+    let unwrapped: u64 = Option::Some(0x1_0000_000B).unwrap();
+    println(`${unwrapped}`);
+    println(`${same(Box::new(wrap(0x1_0000_000C)).get().get(), wide)}`);
+    println(`${same(Box { v: 0x1_0000_000D }.get(), wide)}`);
+    println(`${same(wrap(5).get(), 6)}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296\n7\n7\n4294967298\n4294967299\n1.5\n3\n4294967300\n4294967301\n4294967302\n4294967303\n4294967304\n4294967305\ni32 i32 5\n4294967306\n4294967307\n4294967308\n4294967309\n5\n"
+}

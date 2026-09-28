@@ -1,0 +1,21 @@
+// A call no argument answers defers its slot to a later sink. Where a sink
+// needs the type before anything answers it, the message names the slot the
+// variable stands for (`C`), not the variable's own identity.
+
+fn mk<C: Default>(v: i64) -> C {
+    return C::default();
+}
+
+fn apply<A, B>(a: A, f: fn(A) -> B) -> B {
+    return f(a);
+}
+
+export fn run() {
+    let n = apply(1 as i64, |v| mk(v).len());
+}
+
+__DATA__
+{
+    "compile_error": ":14:33: analysis error: no method 'len' found on type 'C'",
+    "compile_errors_contains": ["cannot infer type parameter `C` of function `mk`"]
+}

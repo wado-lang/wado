@@ -1,0 +1,30 @@
+// A receiver variable standing at two places the target writes differently
+// (`Pair<U, U>` against `Pair<u64, i32>`) takes neither, so the impl cannot
+// answer and the literal settles to its default first.
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+fn dup<U>(u: U) -> Pair<U, U> {
+    return Pair { a: u, b: u };
+}
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for Pair<u64, i32> {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let t = dup(1).tag();
+}
+
+__DATA__
+{
+    "compile_error": "no method 'tag' found on type 'Pair<i32, i32>'"
+}

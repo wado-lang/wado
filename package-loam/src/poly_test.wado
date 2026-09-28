@@ -1,5 +1,5 @@
 use { TreeMap } from "core:collections";
-use { Poly } from "./poly.wado";
+use { Condition, Poly } from "./poly.wado";
 
 fn s(name: String) -> Poly {
     return Poly::symbol(&name);
@@ -90,11 +90,21 @@ test "a polynomial renders highest degree first, the constant last" {
     assert `${c(i64::MIN)}` == "-9223372036854775808";
 }
 
-test "a polynomial spells each symbol as the generated module binds it" {
+/// Each symbol `p` reads, bound under its own name.
+fn as_named(p: &Poly) -> TreeMap<String, String> {
     let mut names = TreeMap::<String, String>::new();
-    names["past + 1"] = "past_1";
+    for let symbol of p.symbols() {
+        names[symbol] = symbol;
+    }
+    return names;
+}
+
+test "a polynomial spells each symbol as the generated module binds it" {
     let p = plus(times(s("past + 1"), c(2)), s("seq"));
+    let mut names = as_named(&p);
+    names["past + 1"] = "past_1";
     assert p.spelled(&names) == "2 * past_1 + seq";
+    assert `${p}` == "2 * \"past + 1\" + seq";
 }
 
 test "the symbols a polynomial reads are listed once each" {
@@ -126,4 +136,156 @@ test "a polynomial fits i64 where no input carries it, or a step on the way, pas
 
 test "a polynomial ending in i64::MIN spells a literal i64 holds" {
     assert `${plus(s("N"), c(i64::MIN))}` == "N + -9223372036854775808";
+}
+
+global ORIGIN: String = "Y = Slice";
+
+test "a clamp the build can decide is the operand it takes" {
+    let n = s("N");
+    assert Poly::min_of(&n, &plus(n, c(1)), &ORIGIN) == n;
+    assert Poly::max_of(&n, &c(0), &ORIGIN) == n;
+    assert Poly::min_of(&c(3), &c(8), &ORIGIN) == c(3);
+    assert Poly::clamped(&plus(n, c(8)), &c(0), &c(8), &ORIGIN) == c(8);
+}
+
+test "a clamp the build cannot decide is a symbol the run derives" {
+    let n = s("N");
+    let clamp = Poly::min_of(&n, &c(8), &ORIGIN);
+    assert `${clamp}` == "min(N, 8)";
+    assert clamp == Poly::min_of(&n, &c(8), &"Z = Slice");
+    assert clamp.symbols() == ["N"] as List<String>;
+    let mut names = TreeMap::<String, String>::new();
+    names["N"] = "dim_N";
+    assert clamp.spelled(&names) == "i64::min(dim_N, 8)";
+    assert minus(c(8), clamp).is_nonnegative();
+    assert !minus(clamp, c(1)).is_nonnegative();
+}
+
+test "a clamp's operand is clamped only once" {
+    let n = s("N");
+    let last = minus(n, c(1));
+    assert Poly::clamped(&last, &c(0), &last, &ORIGIN) == last;
+}
+
+test "a derived term is compared through the operation that derives it" {
+    let n = s("N");
+    let raised = Poly::max_of(&minus(n, c(1)), &c(0), &ORIGIN);
+    assert minus(n, raised).is_nonnegative();
+    assert Poly::min_of(&raised, &n, &ORIGIN) == raised;
+    assert !minus(raised, n).is_nonnegative();
+}
+
+test "a bound past any i64 on one side is not cancelled by another term's" {
+    let [a, b, c3, d] = [
+        s("a"),
+        s("b"),
+        s("c"),
+        s("d"),
+    ];
+    let raised = Poly::max_of(&times(times(a, b), c3), &c(1 << 40), &ORIGIN);
+    let square = times(raised, raised);
+    assert !minus(square, times(times(a, b), times(c3, d))).is_nonnegative();
+}
+
+test "a quotient of a bound past any i64 is past it too" {
+    let [a, b, c3, d] = [
+        s("a"),
+        s("b"),
+        s("c"),
+        s("d"),
+    ];
+    let q = Poly::floor_div(&times(times(a, b), times(c3, d)), &c(1 << 40), &ORIGIN);
+    assert !minus(c(1 << 30), q).is_nonnegative();
+}
+
+test "derived symbols over names that read alike are two symbols" {
+    let first = Poly::min_of(&s("A, B"), &s("C"), &ORIGIN);
+    let second = Poly::min_of(&s("A"), &s("B, C"), &ORIGIN);
+    assert `${first}` == "min(\"A, B\", C)";
+    assert first != second;
+    assert minus(first, second) != c(0);
+}
+
+/// `x0 - max(x0 - 1, 0) + x1 - ...` over `count` symbols, never negative, and
+/// that sum less `offset`.
+fn clamped_sum(count: i32, offset: i64) -> Poly {
+    let mut p = c(-offset);
+    for let i of 0..<count {
+        let x = s(`x${i}`);
+        p = plus(p, minus(x, Poly::max_of(&minus(x, c(1)), &c(0), &ORIGIN)));
+    }
+    return p;
+}
+
+test "a sum of many derived terms is proven in time" {
+    assert clamped_sum(12, 0).is_nonnegative();
+}
+
+test "a sum of many derived terms is refused in time" {
+    assert !clamped_sum(12, 1).is_nonnegative();
+}
+
+test "a rounded quotient is exact where the build can show it" {
+    let n = s("N");
+    assert Poly::ceil_div(&times(n, c(2)), &c(2), &ORIGIN) == n;
+    assert Poly::ceil_div(&c(7), &c(2), &ORIGIN) == c(4);
+    assert Poly::ceil_div(&c(-7), &c(2), &ORIGIN) == c(-3);
+    assert Poly::floor_div(&c(7), &c(2), &ORIGIN) == c(3);
+    assert Poly::floor_div(&c(-7), &c(2), &ORIGIN) == c(-4);
+    assert Poly::floor_div(&times(n, c(4)), &n, &ORIGIN) == c(4);
+    let half = Poly::ceil_div(&n, &c(2), &ORIGIN);
+    assert `${half}` == "ceil(N / 2)";
+    assert `${Poly::ceil_div(&plus(n, c(1)), &c(2), &ORIGIN)}` == "ceil((N + 1) / 2)";
+    assert half.is_nonnegative();
+    assert minus(n, half).is_nonnegative();
+    let low = Poly::floor_div(&n, &c(2), &ORIGIN);
+    assert `${low}` == "floor(N / 2)";
+    assert low.spelled(&as_named(&low)) == "floor_div(N, 2)";
+    assert minus(n, low).is_nonnegative();
+}
+
+test "a quotient by a symbol the inputs make positive is bounded by the divisor's least value of 1" {
+    let [n, m] = [
+        s("N"),
+        s("M"),
+    ];
+    let q = Poly::ceil_div(&plus(n, c(1)), &plus(m, c(1)), &ORIGIN);
+    assert `${q}` == "ceil((N + 1) / (M + 1))";
+    assert q.spelled(&as_named(&q)) == "ceil_div(N + 1, M + 1)";
+    assert q.is_nonnegative();
+    assert minus(plus(n, c(1)), q).is_nonnegative();
+    let mut conditions: List<Condition> = [];
+    assert q.presumed(&mut conditions) == Option::Some(q);
+    assert conditions.is_empty();
+}
+
+test "an index counts from the end only where it may be negative" {
+    let n = s("N");
+    assert Poly::from_end(&c(-1), &n, &ORIGIN) == Option::Some(minus(n, c(1)));
+    assert Poly::from_end(&n, &c(8), &ORIGIN) == Option::Some(n);
+    assert `${Poly::from_end(&minus(c(0), n), &c(8), &ORIGIN).unwrap()}` == "from_end(-N, 8)";
+}
+
+test "an int32 keeps a value it holds for every input, and wraps one it may not" {
+    let n = s("N");
+    assert Poly::wrapped32(&n, &ORIGIN) == n;
+    assert Poly::wrapped32(&c(3_000_000_000), &ORIGIN) == c(-1_294_967_296);
+    let wrapped = Poly::wrapped32(&times(n, c(3_000_000_000)), &ORIGIN);
+    assert `${wrapped}` == "wrap32(3000000000 * N)";
+    assert wrapped.spelled(&as_named(&wrapped)) == "((3000000000 * N) as i32 as i64)";
+    assert !wrapped.is_nonnegative();
+}
+
+test "a derived symbol presumed is the operand it takes unchanged, under what that owes" {
+    let n = s("N");
+    let mut conditions: List<Condition> = [];
+    assert Poly::min_of(&n, &c(8), &ORIGIN).presumed(&mut conditions) == Option::Some(n);
+    assert conditions.len() == 1;
+    assert conditions[0].slack == minus(c(8), n);
+    assert conditions[0].reason == "Y = Slice: N must be at most 8";
+
+    let mut none: List<Condition> = [];
+    let count = minus(n, Poly::max_of(&minus(n, c(1)), &c(0), &ORIGIN));
+    assert count.presumed(&mut none) == Option::Some(c(1));
+    assert none.len() == 1 && none[0].reason == "Y = Slice: N - 1 must be at least 0";
 }

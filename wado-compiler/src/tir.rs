@@ -4425,10 +4425,34 @@ impl TypeTable {
     /// answered are not what a use site is still waiting on. Reading them as
     /// such left `Ok(v)` in `f32::from_str_lenient` with no resolved type.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
+        self.any_infer_var(id, &mut |_| true)
+    }
+
+    /// Whether `id` is an inference variable itself, not a type naming one.
+    pub fn is_infer_var(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::InferVar(_))
+    }
+
+    /// The inference variables [`Self::contains_infer_var`] finds in `id`,
+    /// each once, in the order it meets them.
+    pub fn infer_vars_in(&self, id: TypeId) -> Vec<TypeId> {
+        let mut out = Vec::new();
+        self.any_infer_var(id, &mut |var| {
+            if !out.contains(&var) {
+                out.push(var);
+            }
+            false
+        });
+        out
+    }
+
+    /// Whether `pred` holds of an inference variable
+    /// [`Self::contains_infer_var`] reaches in `id`, visiting them in order.
+    fn any_infer_var(&self, id: TypeId, pred: &mut impl FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
-            ResolvedType::InferVar(_) => true,
+            ResolvedType::InferVar(_) => pred(id),
             ResolvedType::AssocTypeProjection { .. } => false,
-            _ => self.any_constituent(id, &mut |t| self.contains_infer_var(t)),
+            _ => self.any_constituent(id, &mut |t| self.any_infer_var(t, pred)),
         }
     }
 
@@ -6314,6 +6338,25 @@ struct ImplTarget {
     args: Vec<TypeId>,
 }
 
+/// What an impl target binds at a receiver's arguments.
+#[derive(Debug, Default)]
+pub struct TargetBinding {
+    /// The type each of the target's parameter slots takes.
+    pub slots: IndexMap<u32, TypeId>,
+    /// The type each open receiver variable must take for the target to match.
+    pub answers: IndexMap<TypeId, TypeId>,
+}
+
+impl TargetBinding {
+    /// `ty` read through the answers, where it is an answered variable.
+    fn answered(&self, mut ty: TypeId) -> TypeId {
+        while let Some(&answer) = self.answers.get(&ty) {
+            ty = answer;
+        }
+        ty
+    }
+}
+
 impl TypeTable {
     /// Record what impl block `def`'s target writes: `whole`, and `args` for
     /// the head it names.
@@ -6345,6 +6388,22 @@ impl TypeTable {
     /// reference, a binder as its own `TypeParam`; empty for a non-generic one.
     pub fn impl_target_args(&self, def: DefId) -> &[TypeId] {
         &self.impl_target(def).args
+    }
+
+    /// The slots each of impl block `def`'s target positions holds, at any
+    /// depth, filled from the receiver's arguments: `T` in `Pair<List<T>, i32>`
+    /// from `Pair<List<String>, i32>`. The target is recorded as its module's
+    /// decl pass reaches the block, so an earlier module's bound check can ask.
+    pub fn impl_slots(&self, def: DefId, receiver_args: &[TypeId]) -> IndexMap<u32, TypeId> {
+        let mut slots = IndexMap::default();
+        for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
+            if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
+                }
+            }
+        }
+        slots
     }
 
     fn impl_target(&self, def: DefId) -> &ImplTarget {
@@ -6432,8 +6491,24 @@ impl TypeTable {
         written: &[TypeId],
         receiver_args: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
+        self.open_impl_target_binding(written, receiver_args, &|_| false)
+            .map(|binding| binding.slots)
+    }
+
+    /// [`Self::impl_target_binding`] where the receiver's arguments hold
+    /// variables still to be answered, which `open` tells. A variable takes the
+    /// one closed type the target puts at its place; it cannot take two, nor a
+    /// type naming another variable, nor a type naming the impl's parameters,
+    /// where its answer would have to be found first.
+    pub fn open_impl_target_binding(
+        &self,
+        written: &[TypeId],
+        receiver_args: &[TypeId],
+        open: &dyn Fn(TypeId) -> bool,
+    ) -> Option<TargetBinding> {
+        let mut binding = TargetBinding::default();
         if written.is_empty() || receiver_args.is_empty() {
-            return Some(IndexMap::default());
+            return Some(binding);
         }
         let fixed = written
             .iter()
@@ -6442,7 +6517,13 @@ impl TypeTable {
         if receiver_args.len() < written.len() && fixed == written.len() {
             return None;
         }
-        self.bind_type_params(&written[..fixed], receiver_args.get(..fixed)?)
+        self.bind_all(
+            &written[..fixed],
+            receiver_args.get(..fixed)?,
+            open,
+            &mut binding,
+        )
+        .then_some(binding)
     }
 
     /// The type-parameter slots `concrete` fills in `written`, at any depth;
@@ -6452,33 +6533,42 @@ impl TypeTable {
         written: &[TypeId],
         concrete: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
-        let mut bound = IndexMap::default();
-        self.bind_all(written, concrete, &mut bound)
-            .then_some(bound)
+        let mut binding = TargetBinding::default();
+        self.bind_all(written, concrete, &|_| false, &mut binding)
+            .then_some(binding.slots)
     }
 
     fn bind_all(
         &self,
         written: &[TypeId],
         concrete: &[TypeId],
-        bound: &mut IndexMap<u32, TypeId>,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
     ) -> bool {
         written.len() == concrete.len()
             && written
                 .iter()
                 .zip(concrete)
-                .all(|(&w, &c)| self.bind_one(w, c, bound))
+                .all(|(&w, &c)| self.bind_one(w, c, open, binding))
     }
 
     fn bind_one(
         &self,
         written: TypeId,
         concrete: TypeId,
-        bound: &mut IndexMap<u32, TypeId>,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
     ) -> bool {
         if let Some(slot) = self.param_slot(written) {
-            let prior = *bound.entry(slot).or_insert(concrete);
-            return self.type_key(prior) == self.type_key(concrete);
+            if let Some(&prior) = binding.slots.get(&slot) {
+                return self.agree(prior, concrete, open, binding);
+            }
+            binding.slots.insert(slot, concrete);
+            return true;
+        }
+        if open(concrete) {
+            return !self.contains_type_param(written)
+                && self.agree(concrete, written, open, binding);
         }
         // An `_` or an unresolvable name: nothing written to match against.
         if matches!(
@@ -6487,7 +6577,8 @@ impl TypeTable {
         ) {
             return true;
         }
-        if let Some(agrees) = self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, bound))
+        if let Some(agrees) =
+            self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, open, binding))
         {
             return agrees;
         }
@@ -6501,6 +6592,33 @@ impl TypeTable {
                 == self.fq_base_type_name(concrete).head();
         }
         self.type_key(written) == self.type_key(concrete)
+    }
+
+    /// Whether two receiver-side types can be one, answering an open variable
+    /// on either side with the other where that settles it.
+    fn agree(
+        &self,
+        a: TypeId,
+        b: TypeId,
+        open: &dyn Fn(TypeId) -> bool,
+        binding: &mut TargetBinding,
+    ) -> bool {
+        let (a, b) = (binding.answered(a), binding.answered(b));
+        if self.type_key(a) == self.type_key(b) {
+            return true;
+        }
+        let closed = |ty: TypeId| !self.any_infer_var(ty, &mut |var| open(var));
+        for (var, answer) in [(a, b), (b, a)] {
+            if open(var) {
+                if !closed(answer) {
+                    return false;
+                }
+                binding.answers.insert(var, answer);
+                return true;
+            }
+        }
+        self.zip_shapes(a, b, |x, y| self.agree(x, y, open, binding))
+            .unwrap_or(false)
     }
 
     /// Whether `each` holds of every pair of parts `a` and `b` line up, or

@@ -32,11 +32,11 @@ use crate::tir::{
 };
 
 use super::coercion::{
-    NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
+    NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,
     is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
 };
 use super::expr::UnionSource;
-use super::sem::ModuleSemantics;
+use super::sem::{ModuleSemantics, TypeAnnotations};
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
 use super::util;
@@ -116,7 +116,7 @@ macro_rules! reify_annotation_accessors {
     (base { $($name:ident => $map:ident : $val:ty),+ $(,)? }) => {
         $(
             fn $name(&self, id: AstId) -> Option<$val> {
-                self.sem.types.$map.get(&id).cloned()
+                self.types.$map.get(&id).cloned()
             }
         )+
     };
@@ -393,14 +393,17 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// intern new monomorphic instances; the trait/impl tables are
     /// treated as read-only per the WEP `Reify surface` contract.
     pub(crate) tysys: TypeSystem,
-    /// Per-module semantic facts produced by `annotate_bodies`. Read
-    /// only — reify never mutates the recorded decisions.
+    /// The module reify stands in: its declarations and imports, which name
+    /// resolution reads. Read only — reify never mutates the recorded decisions.
     pub(crate) sem: &'a ModuleSemantics,
+    /// The per-node facts of the walk reify replays: `sem.types`, except
+    /// inside a trait default method, where they are the impl's own record.
+    pub(crate) types: &'a TypeAnnotations,
     /// All modules' semantics, keyed by source. Used to swap `sem` to a
     /// callee module when reifying a default-argument expression that
     /// resolves in the callee's lexical scope (it may reference items
     /// private to the callee module).
-    pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
+    pub(crate) all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
     /// Symbol table from analyzer (cross-module).
     pub(crate) symbols: &'a SymbolTable,
     /// All loaded modules. Used by cross-module lookups (e.g. resolving
@@ -452,16 +455,24 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// `sem.decls`, which is `&`-only from here) because a local item has
     /// no `Item::Struct` entry in `module.items` for the per-item dispatch
     /// loop to walk — `reify_stmt`'s `Stmt::Item` arm is the only place
-    /// that discovers it. See `reify_local_item`.
-    pub(crate) pending_local_structs: Vec<TirStruct>,
+    /// that discovers it. See `reify_local_item`. Keyed by declaration: a
+    /// trait default body is reified once per impl inheriting it, yet each
+    /// local item in it is declared once.
+    pub(crate) pending_local_structs: IndexMap<DefId, TirStruct>,
     /// Local newtype declarations (`Stmt::Item`) — same reasoning as
     /// `pending_local_structs`.
+<<<<<<< HEAD
     pub(crate) pending_local_newtypes: Vec<TirNewtype>,
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
     /// The probe ids reify has put in so far.
     pub(crate) probes_emitted: IndexSet<u32>,
+||||||| 0cb9810fd
+    pub(crate) pending_local_newtypes: Vec<TirNewtype>,
+=======
+    pub(crate) pending_local_newtypes: IndexMap<DefId, TirNewtype>,
+>>>>>>> origin/main
 }
 
 /// Call site captured for location literals in defaults.
@@ -496,7 +507,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     pub(crate) fn new(
         tysys: TypeSystem,
         sem: &'a ModuleSemantics,
-        all_module_semantics: &'a IndexMap<ModuleSource, ModuleSemantics>,
+        all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
         logger: &'a Logger<'a, H>,
@@ -505,6 +516,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Self {
             tysys,
             sem,
+            types: &sem.types,
             all_module_semantics,
             symbols,
             loaded_modules,
@@ -517,10 +529,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             emit_live,
             compound_overrides: IndexMap::default(),
             call_site_location: None,
+<<<<<<< HEAD
             pending_local_structs: Vec::new(),
             pending_local_newtypes: Vec::new(),
             coverage: None,
             probes_emitted: IndexSet::default(),
+||||||| 0cb9810fd
+            pending_local_structs: Vec::new(),
+            pending_local_newtypes: Vec::new(),
+=======
+            pending_local_structs: IndexMap::default(),
+            pending_local_newtypes: IndexMap::default(),
+>>>>>>> origin/main
         }
     }
 
@@ -540,7 +560,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .rev()
             .copied()
-            .chain(std::iter::once(&self.sem.types.body))
+            .chain(std::iter::once(&self.types.body))
             .find_map(|facts| map(facts).get(&id))
     }
 
@@ -714,8 +734,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     // Reify is the sole producer of
                     // trait default-method `TirFunction`s, synthesised here
-                    // from the per-impl `ModuleSemantics` snapshots the
-                    // body walk recorded on `sem.default_method_semantics`.
+                    // from the per-impl facts the body walk recorded on
+                    // `sem.default_method_facts`.
                     for tir_func in self.reify_impl_default_methods(impl_block) {
                         tir_module.add_function(tir_func);
                     }
@@ -801,10 +821,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Local item declarations (`Stmt::Item`) discovered and built by
         // `reify_local_item` while reifying the item loop above (function/
         // method/test bodies). Reify-owned, so drained rather than cloned.
-        for local_struct in std::mem::take(&mut self.pending_local_structs) {
+        for local_struct in std::mem::take(&mut self.pending_local_structs).into_values() {
             tir_module.add_struct(local_struct);
         }
-        for local_newtype in std::mem::take(&mut self.pending_local_newtypes) {
+        for local_newtype in std::mem::take(&mut self.pending_local_newtypes).into_values() {
             tir_module.add_newtype(local_newtype);
         }
 
@@ -1005,6 +1025,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// come from the AST, as for a top-level struct: `StructFieldInfo` carries neither.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         let def = self.tysys.def_at(struct_decl.id);
+        if self.pending_local_structs.contains_key(&def) {
+            return;
+        }
         let info = &self.sem.decls.local.struct_fields[&def];
         let name = info.name.clone();
         let field_types: Vec<TypeId> = info.fields.iter().map(|&(_, ty, _)| ty).collect();
@@ -1014,18 +1037,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self.ann_decl_type_params(struct_decl.id).expect(
             "resolve_local_struct records the type params for every local struct reify emits",
         );
-        self.pending_local_structs.push(TirStruct {
-            def: StructDef::Decl(def),
-            type_args: Vec::new(),
-            name,
-            module_source: self.current_module_source.clone(),
-            visibility: ast::Visibility::Private,
-            type_params,
-            monomorph_info: None,
-            fields,
-            span: struct_decl.span,
-            wire_name_policy: wire_name_policy_of(&struct_decl.attrs),
-        });
+        self.pending_local_structs.insert(
+            def,
+            TirStruct {
+                def: StructDef::Decl(def),
+                type_args: Vec::new(),
+                name,
+                module_source: self.current_module_source.clone(),
+                visibility: ast::Visibility::Private,
+                type_params,
+                monomorph_info: None,
+                fields,
+                span: struct_decl.span,
+                wire_name_policy: wire_name_policy_of(&struct_decl.attrs),
+            },
+        );
     }
 
     /// Reify a newtype declared in a function body.
@@ -1033,19 +1059,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let def = self.tysys.def_at(newtype_decl.id);
         let generic = !newtype_decl.type_params.is_empty();
         let type_id = self.sem.decls.local.newtypes.get(&def).copied();
-        if !generic && type_id.is_none() {
+        if (!generic && type_id.is_none()) || self.pending_local_newtypes.contains_key(&def) {
             return;
         }
-        self.pending_local_newtypes.push(TirNewtype {
-            name: mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
-            module_source: self.current_module_source.clone(),
-            visibility: ast::Visibility::Private,
+        self.pending_local_newtypes.insert(
             def,
-            type_params: Self::declared_type_params(&newtype_decl.type_params),
-            type_id: type_id.filter(|_| !generic),
-            wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
-            span: newtype_decl.span,
-        });
+            TirNewtype {
+                name: mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
+                module_source: self.current_module_source.clone(),
+                visibility: ast::Visibility::Private,
+                def,
+                type_params: Self::declared_type_params(&newtype_decl.type_params),
+                type_id: type_id.filter(|_| !generic),
+                wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
+                span: newtype_decl.span,
+            },
+        );
     }
 
     /// Reify a `variant V<T> { … }` declaration.
@@ -1138,8 +1167,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// records it for free functions only; a method falls back to `declared`.
     fn declared_task_return(&self, func: &ast::Function, declared: TypeId) -> Option<TypeId> {
         func.is_async.then(|| {
-            self.sem
-                .types
+            self.types
                 .function_task_returns
                 .get(&func.id)
                 .copied()
@@ -1242,15 +1270,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             params,
             return_type,
             task_return_type,
-            effects: self
-                .sem
-                .types
-                .function_effects
-                .get(&func.id)
-                .cloned()
-                .expect(
-                    "the declaring walk records function_effects for every function reify emits",
-                ),
+            effects: self.types.function_effects.get(&func.id).cloned().expect(
+                "the declaring walk records function_effects for every function reify emits",
+            ),
             retains,
             immediates,
             trap,
@@ -1289,7 +1311,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if impl_block.is_synthesize_request {
             return None;
         }
-        let facts = self.sem.types.impl_facts.get(&impl_block.id)?;
+        let facts = self.types.impl_facts.get(&impl_block.id)?;
 
         // Derive the target's name the way `reify_method` derives it for this
         // block's methods, so the block and its methods agree on the key the
@@ -1325,7 +1347,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Vec::new();
         }
         let impl_key = impl_block.id;
-        let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
+        let Some(facts) = self.types.impl_facts.get(&impl_key).cloned() else {
             // Annotate did not record facts — the impl block was
             // diagnosed by annotate (e.g. unknown trait reference)
             // and skipped. Reify follows by emitting no methods.
@@ -1355,7 +1377,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Synthesise a `Struct^Trait::method` `TirFunction` for each default method
     /// the impl does not override, reading the body-walk facts from
-    /// `sem.default_method_semantics[(impl_block.id, default_method.id)]`. The
+    /// `sem.default_method_facts[(impl_block.id, default_method.id)]`. The
     /// module perspective is swapped to the trait module for the walk, since the
     /// facts are keyed by `AstId`s that name it.
     fn reify_impl_default_methods(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
@@ -1366,7 +1388,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Vec::new();
         };
         let impl_key = impl_block.id;
-        let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
+        let Some(facts) = self.types.impl_facts.get(&impl_key).cloned() else {
             return Vec::new();
         };
         let Some(trait_name_mangled) = facts.trait_name.clone() else {
@@ -1407,23 +1429,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut out = Vec::with_capacity(default_methods.len());
         for default_method in &default_methods {
-            // The per-impl `ModuleSemantics` snapshot lives on the parent
-            // `self.sem.default_method_semantics`. Borrow it at `'a` — the
-            // parent is `&'a ModuleSemantics`, so `IndexMap::get` returns
-            // `Option<&'a ModuleSemantics>`, which is exactly what
-            // `self.sem` accepts in the swap.
             let key = (impl_block.id, default_method.id);
-            let Some(synth_sem) = self.sem.default_method_semantics.get(&key) else {
+            let sem = self.sem;
+            let Some(walk) = sem.default_method_facts.get(&key) else {
                 // Combined walk did not record a synthesis for this default
                 // method (e.g. `resolve_method` returned `None` in
                 // error-recovery). Skip — reify produces no TIR for it.
                 continue;
             };
 
-            let mut tir_func =
-                self.with_perspective(trait_module.clone(), trait_items, synth_sem, |this| {
-                    this.reify_method(default_method, &facts, concrete_owner.as_ref(), origin)
-                });
+            let mut tir_func = self.with_perspective(
+                trait_module.clone(),
+                trait_items,
+                sem,
+                &walk.types,
+                |this| this.reify_method(default_method, &facts, concrete_owner.as_ref(), origin),
+            );
 
             // No declaring walk recorded `method_names` for a synthesized default.
             tir_func.name = MethodName::format_local(
@@ -2733,13 +2754,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_expr(&unary.expr, ctx, expected_type);
                 }
                 let op = ast_unary_op_to_tir(unary.op);
-                // A `-<numeric literal>` operand shares the unary's type:
-                // propagate the expected/recorded type so the inner literal
-                // takes the right width (e.g. `-1.0` in an `f32` const body
-                // must be `f32`, not the default `f64`). Other unary operands
-                // are typed on their own.
-                let inner_expected = if unary.op == ast::UnaryOp::Neg
-                    && is_numeric_literal_expr(&unary.expr)
+                // A `-` or `~` operand built from literals shares the unary's
+                // type: propagate the recorded type so the inner literal takes
+                // the right width (e.g. `-1.0` in an `f32` const body must be
+                // `f32`, not the default `f64`). Other unary operands are typed
+                // on their own.
+                let inner_expected = if matches!(unary.op, ast::UnaryOp::Neg | ast::UnaryOp::BitNot)
+                    && is_literal_arithmetic(&unary.expr)
                     && recorded_type != TypeTable::UNKNOWN
                 {
                     Some(recorded_type)
@@ -3822,12 +3843,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Annotate recorded one overlay set per instantiation in walk order, and a
         // nested for-of is instantiated once per outer element, so a visit counter picks it.
         let instantiation: &'a [BodyFacts] = {
-            let sem: &'a ModuleSemantics = self.sem;
+            let types: &'a TypeAnnotations = self.types;
             let for_of_key = for_of.id;
             let visit = self.tuple_overlay_visits.entry(for_of_key).or_insert(0);
             let k = *visit;
             *visit += 1;
-            sem.types
+            types
                 .tuple_overlays
                 .get(&for_of_key)
                 .and_then(|insts| insts.get(k))
@@ -4730,8 +4751,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         // A literal operand takes the other operand's type: an inlined
         // `f32::INFINITY = 1.0 / 0.0` records none for its literals.
-        let left_is_lit = is_numeric_literal_expr(&binary.left);
-        let right_is_lit = is_numeric_literal_expr(&binary.right);
+        let left_is_lit = is_literal_arithmetic(&binary.left);
+        let right_is_lit = is_literal_arithmetic(&binary.right);
         let (left, right) = if left_is_lit && !right_is_lit {
             let right = self.reify_expr(&binary.right, ctx, None);
             let coerce =
@@ -6116,7 +6137,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // expected fn return type; fall back to the block-return type.
         let block_return_type = if let Expr::Block(ref block) = closure.body {
             let ctrl_ctx = CtrlFlowCtx {
-                expression_types: &self.sem.types.expression_types,
+                expression_types: &self.types.expression_types,
                 type_table: &self.tysys.type_table,
             };
             find_return_type_in_block(ctrl_ctx, block)
@@ -8132,23 +8153,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.loaded_modules.get(module),
                 self.all_module_semantics.get(module),
             ) {
-                (Some(m), Some(sem)) => Some((m.items.as_slice(), sem)),
+                (Some(m), Some(sem)) => Some((m.items.as_slice(), &**sem)),
                 _ => None,
             }
         };
         match swap {
-            Some((items, sem)) => self.with_perspective(module.clone(), items, sem, body),
+            Some((items, sem)) => {
+                self.with_perspective(module.clone(), items, sem, &sem.types, body)
+            }
             None => body(self),
         }
     }
 
-    /// Run `body` standing in another module: its source, its items and its
-    /// facts, all three restored on return.
+    /// Run `body` standing in another module: its source, its items, the scope
+    /// its names resolve in and the facts of the walk replayed, all restored on
+    /// return.
     fn with_perspective<R>(
         &mut self,
         module: ModuleSource,
         items: &'a [Item],
         sem: &'a ModuleSemantics,
+        types: &'a TypeAnnotations,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         util::replaced(
@@ -8160,7 +8185,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     r,
                     |r| &mut r.current_module_items,
                     items,
-                    |r| util::replaced(r, |r| &mut r.sem, sem, body).0,
+                    |r| {
+                        util::replaced(
+                            r,
+                            |r| &mut r.sem,
+                            sem,
+                            |r| util::replaced(r, |r| &mut r.types, types, body).0,
+                        )
+                        .0
+                    },
                 )
                 .0
             },

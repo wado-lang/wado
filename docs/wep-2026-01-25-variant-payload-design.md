@@ -521,6 +521,12 @@ if let Shape::Rectangle([w, _]) = shape {
 - [x] Unit payload patterns (`if let Point = shape`) (Phase 1)
 - [x] `while let` / `for let` with custom variants (Phase 1)
 
+## Known gaps
+
+- `Self` in a payload type names the variant being declared, but the compiler
+  leaves it unresolved. `variant List { Cons([i32, Self]), Nil }` fails with a
+  "has no resolved type" error once the payload is used.
+
 ## See Also
 
 - [Variant Wasm GC Representation](./wep-2026-02-08-variant-representation.md) — how variants are laid out in Wasm GC (NullableRef vs SubtypeHierarchy)

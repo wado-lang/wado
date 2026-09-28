@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
-import { FLOAT, INT32, INT64, message, tensorProto, text } from '../tests/onnx_proto.mjs';
+import { FLOAT, INT32, INT64, graphProto, modelProto, node, tensorProto, valueInfo } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
 
@@ -33,14 +33,14 @@ const scalars = {
   ScalarZero: 0n,
   ScalarOne: 1n,
   ScalarTwo: 2n,
+  ScalarEight: 8n,
   ScalarMinusOne: -1n,
   ScalarMinusTwo: -2n,
 };
 
-// Every case reads `S = Shape(X)`, and the nodes it lists after that.
-const node = (op, inputs, output, attrs = []) => ({ op, inputs, output, attrs });
 // `N` as a scalar: a scalar index gathers one element out of `S`, dropping the axis.
 const length = node('Gather', ['S', 'ScalarZero'], 'N');
+// Every case reads `S = Shape(X)`, and the nodes it lists after that.
 const cases = [
   ['SliceToLength', [node('Slice', ['M', 'Zero', 'S'], 'SliceToLength')]],
   ['SliceFromMinusLength', [
@@ -64,72 +64,84 @@ const cases = [
   ['RangeByTwoToLength', [length, node('Range', ['ScalarZero', 'N', 'ScalarTwo'], 'RangeByTwoToLength')]],
   ['RangeBackFromLength', [length, node('Range', ['N', 'ScalarZero', 'ScalarMinusOne'], 'RangeBackFromLength')]],
   ['RangeBackByTwo', [length, node('Range', ['N', 'ScalarZero', 'ScalarMinusTwo'], 'RangeBackByTwo')]],
+  ['RangeByLength', [length, node('Range', ['ScalarZero', 'ScalarEight', 'N'], 'RangeByLength')]],
+  ['RangeBackByLength', [
+    length,
+    node('Sub', ['ScalarZero', 'N'], 'MinusN'),
+    node('Range', ['ScalarEight', 'ScalarZero', 'MinusN'], 'RangeBackByLength'),
+  ]],
+  ['RangeToHalfLength', [
+    length,
+    node('Div', ['N', 'ScalarTwo'], 'HalfN'),
+    node('Range', ['ScalarZero', 'HalfN', 'ScalarOne'], 'RangeToHalfLength'),
+  ]],
   ['CastWraps', [
-    node('Cast', ['Big'], 'BigInt32', [['to', INT32]]),
-    node('Cast', ['BigInt32'], 'CastWraps', [['to', INT64]]),
+    node('Cast', ['Big'], 'BigInt32', { to: INT32 }),
+    node('Cast', ['BigInt32'], 'CastWraps', { to: INT64 }),
   ]],
   ['CastWrapsLength', [
     node('Mul', ['S', 'Big'], 'SBig'),
-    node('Cast', ['SBig'], 'SBigInt32', [['to', INT32]]),
-    node('Cast', ['SBigInt32'], 'CastWrapsLength', [['to', INT64]]),
+    node('Cast', ['SBig'], 'SBigInt32', { to: INT32 }),
+    node('Cast', ['SBigInt32'], 'CastWrapsLength', { to: INT64 }),
   ]],
   ['ReshapeKeepSplit', [
-    node('Concat', ['Zero', 'Two', 'MinusOne'], 'KeepSplitShape', [['axis', 0]]),
+    node('Concat', ['Zero', 'Two', 'MinusOne'], 'KeepSplitShape', { axis: 0 }),
     node('Reshape', ['P', 'KeepSplitShape'], 'ReshapeKeepSplit'),
   ]],
   ['ReshapeFlat', [node('Reshape', ['P', 'MinusOne'], 'ReshapeFlat')]],
+  ['MaxPoolOverLength', [node('MaxPool', ['I'], 'MaxPoolOverLength', { kernel_shape: [2], strides: [2] })]],
+  ['MaxPoolCeilOverLength', [
+    node('MaxPool', ['I'], 'MaxPoolCeilOverLength', { kernel_shape: [2], strides: [2], ceil_mode: 1 }),
+  ]],
+  ['MaxPoolSameOverLength', [
+    node('MaxPool', ['I'], 'MaxPoolSameOverLength', { kernel_shape: [3], strides: [2], auto_pad: 'SAME_UPPER' }),
+  ]],
+  ['ConvOverLength', [node('Conv', ['I', 'W'], 'ConvOverLength', { pads: [1, 1], strides: [2] })]],
+  ['SplitTailOfLength', [
+    node('Sub', ['S', 'One'], 'SMinusOne'),
+    node('Concat', ['One', 'SMinusOne'], 'Sizes', { axis: 0 }),
+    node('Split', ['X', 'Sizes'], ['Head', 'SplitTailOfLength']),
+  ]],
+  ['ConstantOfShapeOfLength', [
+    node('Concat', ['S', 'Two'], 'FilledShape', { axis: 0 }),
+    node('ConstantOfShape', ['FilledShape'], 'ConstantOfShapeOfLength', {
+      value: { tensor: tensorProto('v', FLOAT, [1], new Float32Array([2.5]).buffer) },
+    }),
+  ]],
   ['ReshapeRestFirst', [
-    node('Concat', ['MinusOne', 'Two'], 'RestFirstShape', [['axis', 0]]),
+    node('Concat', ['MinusOne', 'Two'], 'RestFirstShape', { axis: 0 }),
     node('Reshape', ['P', 'RestFirstShape'], 'ReshapeRestFirst'),
   ]],
 ];
 
-// ValueInfoProto: name = 1, type = 2; TypeProto.tensor_type = 1;
-// Tensor: elem_type = 1, shape = 2; TensorShapeProto.dim = 1;
-// Dimension: dim_value = 1, dim_param = 2.
-function valueInfo(name, elemType, dims) {
-  const dim = (d) => [1, typeof d === 'string' ? [[2, text(d)]] : [[1, d]]];
-  const shape = dims === null ? [] : [[2, dims.map(dim)]];
-  return [[1, text(name)], [2, [[1, [[1, elemType], ...shape]]]]];
-}
-
 function int64Initializer(name, value, dims) {
   return tensorProto(name, INT64, dims, new Uint8Array(new BigInt64Array([value]).buffer));
-}
-
-// NodeProto: input = 1, output = 2, op_type = 4, attribute = 5;
-// AttributeProto: name = 1, i = 3, type = 20 (INT = 2).
-function nodeProto({ op, inputs, output, attrs }) {
-  return [
-    ...inputs.map((i) => [1, text(i)]),
-    [2, text(output)],
-    [4, text(op)],
-    ...attrs.map(([name, i]) => [5, [[1, text(name)], [3, i], [20, 2]]]),
-  ];
 }
 
 const inputs = {
   X: { dims: ['N'], feed: (n) => new ort.Tensor('float32', iota(n).map((v) => v + 10), [n]) },
   M: { dims: [8], feed: () => new ort.Tensor('float32', iota(8), [8]) },
   P: { dims: ['N', 4], feed: (n) => new ort.Tensor('float32', iota(n * 4), [n, 4]) },
+  I: { dims: [1, 2, 'N'], feed: (n) => new ort.Tensor('float32', iota(2 * n), [1, 2, n]) },
+  W: { dims: [3, 2, 2], feed: () => new ort.Tensor('float32', iota(12), [3, 2, 2]) },
 };
 const iota = (count) => Float32Array.from({ length: count }, (_, i) => i);
 
-// GraphProto: node = 1, name = 2, initializer = 5, input = 11, output = 12.
-// ModelProto: ir_version = 1, graph = 7, opset_import = 8 (version = 2).
 function model(name, nodes) {
   const read = new Set(nodes.flatMap((n) => n.inputs));
   const all = read.has('S') ? [node('Shape', ['X'], 'S'), ...nodes] : nodes;
   const elemType = ['Range', 'Cast'].includes(nodes.at(-1).op) ? INT64 : FLOAT;
-  const graph = [
-    ...all.map((n) => [1, nodeProto(n)]),
-    [2, text(name)],
-    ...Object.entries(constants).filter(([c]) => read.has(c)).map(([c, v]) => [5, int64Initializer(c, v, [1])]),
-    ...Object.entries(scalars).filter(([c]) => read.has(c)).map(([c, v]) => [5, int64Initializer(c, v, [])]),
-    ...Object.entries(inputs).filter(([i]) => all.some((n) => n.inputs.includes(i))).map(([i, { dims }]) => [11, valueInfo(i, FLOAT, dims)]),
-    [12, valueInfo(name, elemType, null)],
-  ];
-  return message([[1, 8], [7, graph], [8, [[2, 13]]]]);
+  const graph = graphProto({
+    name,
+    nodes: all,
+    initializers: [
+      ...Object.entries(constants).filter(([c]) => read.has(c)).map(([c, v]) => int64Initializer(c, v, [1])),
+      ...Object.entries(scalars).filter(([c]) => read.has(c)).map(([c, v]) => int64Initializer(c, v, [])),
+    ],
+    inputs: Object.entries(inputs).filter(([i]) => all.some((n) => n.inputs.includes(i))).map(([i, { dims }]) => valueInfo(i, FLOAT, dims)),
+    outputs: [valueInfo(name, elemType, null)],
+  });
+  return modelProto(graph, 13);
 }
 
 mkdirSync(join(here, 'semantics'), { recursive: true });

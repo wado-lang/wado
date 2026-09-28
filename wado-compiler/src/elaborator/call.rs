@@ -12,11 +12,11 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
-use super::coercion::{ExpectedReturn, answers_last};
+use super::coercion::{ExpectedReturn, PendingLiterals, answers_last};
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
 use super::infer_hole::uninferable_type_param;
-use super::instantiate::{Instantiated, Instantiation};
+use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
 use super::sem::types::{BodyFacts, CalleeParams, IndirectCallee, StaticMethodDispatch};
@@ -177,6 +177,28 @@ pub(super) struct DefaultTypeBinding {
     /// argument is itself a parameter.
     pub(super) bounds: Vec<ScopedBound>,
     pub(super) settled: SettledAs,
+}
+
+/// The defaults a site left out, walked in the module that wrote them under
+/// the type arguments the site settled on.
+pub(super) struct DefaultWalk {
+    pub(super) site: Option<AstId>,
+    pub(super) home: Option<ModuleSource>,
+    pub(super) bindings: Vec<DefaultTypeBinding>,
+    /// Bound ahead of the first default: the parameters the site wrote.
+    pub(super) written: Vec<(String, TypeId)>,
+    pub(super) defaults: Vec<WalkedDefault>,
+}
+
+/// One default of a [`DefaultWalk`].
+pub(super) struct WalkedDefault {
+    /// The parameter it binds for the defaults after it.
+    pub(super) binds: Option<String>,
+    pub(super) expr: Expr,
+    pub(super) expected: TypeId,
+    /// Where the walk reports a default its expected type does not take; a
+    /// walk with none leaves the check to its site.
+    pub(super) check_at: Option<Span>,
 }
 
 /// Add each of `nearer` to `bindings`, replacing a same-named entry: several
@@ -475,17 +497,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a call's arguments, each pinning the variables of `inst` it
     /// answers. A closure whose parameter type is still open waits for the
     /// arguments that can answer it, and a numeric literal, at any depth,
-    /// answers last (see [`PendingLiterals`]), after `expected_return`.
+    /// answers last (see [`PendingLiterals`]), after `ret`, the type the call's
+    /// site expects of its declared return.
     pub(super) fn resolve_args_against_params(
         &mut self,
         args: &[ast::Expr],
         ctx: &mut FunctionContext,
         param_types: &[TypeId],
         inst: Option<&Instantiated>,
-        expected_return: Option<ExpectedReturn>,
+        ret: Option<ExpectedReturn>,
     ) -> Vec<TypeId> {
         let own_vars = inst.map_or(&[][..], |inst| &inst.vars);
-        let (mut resolved, pending) = self.collecting_pending_literals(own_vars, |this| {
+        self.chain_expected_return(own_vars, ret);
+        let collection = PendingLiterals::of_call(own_vars);
+        let (mut resolved, pending) = self.collecting_pending_literals(collection, |this| {
             let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
             let mut deferred: Vec<usize> = Vec::new();
             for (i, arg) in args.iter().enumerate() {
@@ -505,7 +530,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|r| r.expect("every argument is resolved in one of the two passes"))
                 .collect::<Vec<TypeId>>()
         });
-        let settled = self.settle_pending_literals(pending, args, expected_return, ctx);
+        let settled = self.settle_pending_literals(pending, args, ret, ctx);
         for (i, arg) in args.iter().enumerate() {
             if let Some(&ty) = settled.get(&arg.id()) {
                 resolved[i] = ty;
@@ -513,7 +538,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(param) = param_types.get(i).copied()
             {
                 let expected = self.apply_infer_holes(param);
-                self.solve_own_infer_holes_against(expected, resolved[i], own_vars);
+                let answerable = self.answerable_vars(own_vars);
+                self.solve_own_infer_holes_against(expected, resolved[i], &answerable);
             }
         }
         resolved
@@ -543,7 +569,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected = self.apply_infer_holes(param_type);
         let resolved = self.resolve_expr(arg, ctx, Some(expected));
         if !answers_last(Some(arg)) {
-            self.solve_own_infer_holes_against(expected, resolved, own_vars);
+            let answerable = self.answerable_vars(own_vars);
+            self.solve_own_infer_holes_against(expected, resolved, &answerable);
         }
         resolved
     }
@@ -1211,7 +1238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.instantiate(
                 &callee_slots,
                 &Instantiation {
-                    kind: "function",
+                    kind: InstanceKind::Function,
                     name: effective_name,
                     span: call.span,
                     type_args: &type_args,
@@ -1222,7 +1249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(inst) = &arg_inst {
             param_types = self.instantiate_types(&param_types, inst);
         }
-        let expected_return = match (&arg_inst, declared_return, expected_type) {
+        let ret = match (&arg_inst, declared_return, expected_type) {
             (Some(inst), Some(declared), Some(expected)) => Some(ExpectedReturn {
                 declared: self.instantiate_type(declared, inst),
                 expected,
@@ -1264,12 +1291,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx,
                 &param_types,
                 arg_inst.as_ref(),
-                expected_return,
+                ret,
             ),
         };
 
         if let Some(inst) = &arg_inst {
-            self.settle_onto_slots(inst, &callee_slots, &mut args);
+            self.settle_onto_slots(inst, &callee_slots, &mut args, ret);
         }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
@@ -2350,8 +2377,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         return Some(CalleeSignature {
                             param_types: sig.value_param_types(),
-                            slots: self.lookup_static_method_slots(method_name, &ns_key),
-                            return_type: sig.decl.return_type,
+                            ..CalleeSignature::of(&sig.decl)
                         });
                     }
                 }
@@ -2489,28 +2515,125 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if args.len() >= param_types.len() || !omits_a_default(args.len(), defaults) {
             return;
         }
-        self.resolving_defaults_at(site, callee_module, type_bindings, |s| {
+        let first = args.len();
+        // A position no default covers is left to the arity check.
+        let walked: Vec<WalkedDefault> = (first..param_types.len())
+            .map_while(|i| match defaults.get(i) {
+                Some((name, Some(expr))) => Some(WalkedDefault {
+                    binds: Some(name.clone()),
+                    expr: expr.clone(),
+                    expected: param_types[i],
+                    check_at: None,
+                }),
+                _ => None,
+            })
+            .collect();
+        let walk = DefaultWalk {
+            site,
+            home: callee_module,
+            bindings: type_bindings.to_vec(),
+            written: args
+                .iter()
+                .zip(defaults)
+                .map(|(arg_type, (name, _))| (name.clone(), *arg_type))
+                .collect(),
+            defaults: walked,
+        };
+        let resolved = self.walk_defaults(walk, ctx);
+        for (i, resolved) in (first..).zip(resolved) {
+            let (_, default_expr) = &defaults[i];
+            let default_expr = default_expr
+                .as_ref()
+                .expect("a walked position has a default");
+            filled(self, i, default_expr, resolved);
+            args.push(resolved);
+        }
+    }
+
+    /// Run `walk`, answering the type of each default it walks. Where a type
+    /// argument it reads is a variable a call pending its literals owns
+    /// (`same(defaulted(1), x)`), the walk waits in that call's collection
+    /// until the variable is answered, and each default answers its expected
+    /// type meanwhile.
+    pub(super) fn walk_defaults(
+        &mut self,
+        walk: DefaultWalk,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TypeId> {
+        let expected: Vec<TypeId> = walk.defaults.iter().map(|d| d.expected).collect();
+        match self.defer_default_walk(walk) {
+            Some(walk) => self.run_default_walk(walk, ctx),
+            None => expected
+                .into_iter()
+                .map(|expected| self.apply_infer_holes(expected))
+                .collect(),
+        }
+    }
+
+    /// Hand `walk` to the collection owning a variable its type arguments
+    /// still read, or back where none does.
+    pub(super) fn defer_default_walk(&mut self, mut walk: DefaultWalk) -> Option<DefaultWalk> {
+        for binding in &mut walk.bindings {
+            if let SettledAs::Type(type_id) = &mut binding.settled {
+                *type_id = self.apply_infer_holes(*type_id);
+            }
+        }
+        let read = walk
+            .bindings
+            .iter()
+            .filter_map(|binding| binding.settled.type_id());
+        let Some(owner) = self.pending_owner_in(read) else {
+            return Some(walk);
+        };
+        // The site checks the types answered meanwhile, so the walk checks
+        // what the defaults really are.
+        for default in &mut walk.defaults {
+            default.check_at.get_or_insert(default.expr.span());
+        }
+        self.annotate_ctx.pending_literals[owner].walks.push(walk);
+        None
+    }
+
+    /// Run `walk` now, answering the type of each default it walks.
+    pub(super) fn run_default_walk(
+        &mut self,
+        walk: DefaultWalk,
+        ctx: &mut FunctionContext,
+    ) -> Vec<TypeId> {
+        let DefaultWalk {
+            site,
+            home,
+            bindings,
+            written,
+            defaults,
+        } = walk;
+        self.resolving_defaults_at(site, home, &bindings, |s| {
             ctx.with_caller_bindings_hidden(|ctx| {
                 let bind = |ctx: &mut FunctionContext, name: &str, type_id: TypeId| {
                     if name != RECEIVER {
                         ctx.add_local(name.to_string(), type_id, false, None);
                     }
                 };
-                for (arg_type, (name, _)) in args.iter().zip(defaults) {
-                    bind(ctx, name, *arg_type);
+                for (name, type_id) in &written {
+                    let type_id = s.apply_infer_holes(*type_id);
+                    bind(ctx, name, type_id);
                 }
-                for i in args.len()..param_types.len() {
-                    // A position no default covers is left to the arity check.
-                    let Some((name, Some(default_expr))) = defaults.get(i) else {
-                        break;
-                    };
-                    let resolved = s.resolve_expr(default_expr, ctx, Some(param_types[i]));
-                    filled(s, i, default_expr, resolved);
-                    args.push(resolved);
-                    bind(ctx, name, resolved);
-                }
-            });
-        });
+                defaults
+                    .iter()
+                    .map(|default| {
+                        let expected = s.apply_infer_holes(default.expected);
+                        let resolved = s.resolve_expr(&default.expr, ctx, Some(expected));
+                        if let Some(span) = default.check_at {
+                            s.typecheck(resolved, expected, span);
+                        }
+                        if let Some(name) = &default.binds {
+                            bind(ctx, name, resolved);
+                        }
+                        resolved
+                    })
+                    .collect()
+            })
+        })
     }
 
     /// Run a walk of the defaults `site` left out, in the module that wrote
@@ -2607,8 +2730,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|b| {
                     let type_id = b.settled.type_id();
-                    if type_id.is_some_and(|id| matches!(table.get(id), ResolvedType::InferVar(_)))
-                    {
+                    if type_id.is_some_and(|id| table.is_infer_var(id)) {
                         return None;
                     }
                     if !b.bounds.is_empty() {
@@ -2752,7 +2874,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inst = self.instantiate(
                 &param_ids,
                 &Instantiation {
-                    kind: "builtin",
+                    kind: InstanceKind::Builtin,
                     name: func_name,
                     span,
                     // A builtin has no turbofish to read.
@@ -2836,7 +2958,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(
             &param_ids,
             &Instantiation {
-                kind: "function",
+                kind: InstanceKind::Function,
                 name: func_name,
                 span,
                 // The inference pass itself: its caller merges the turbofish in
@@ -2947,8 +3069,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     !p.is_effect
                         && p.default.is_none()
                         && !p.has_fn_bound()
-                        && self.tysys.is_unbound_type_param(tid)
-                        && !scope_params.contains(&tid)
+                        && self.slot_unanswered(tid, &scope_params)
                 })
                 .map(|(p, _)| p.name.as_str())
                 .collect()
@@ -2994,10 +3115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let scope_params = self.scope_type_param_ids();
         let unresolved = |this: &Self, slot: Option<&TypeId>| -> bool {
-            match slot {
-                None => true,
-                Some(&t) => this.tysys.is_unbound_type_param(t) && !scope_params.contains(&t),
-            }
+            slot.is_none_or(|&t| this.slot_unanswered(t, &scope_params))
         };
 
         // `impl_type_args` is indexed by slot, which a parameter nested in the
@@ -3090,8 +3208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // param (`U = T`) sees `T`'s slot already resolved.
         for i in 0..n {
             let slot = type_args[i];
-            if self.tysys.is_unbound_type_param(slot)
-                && !scope_params.contains(&slot)
+            if self.slot_takes_default(slot, &scope_params)
                 && let Some(default_ty) = defaults[i]
             {
                 let snapshot = type_args.clone();
@@ -3166,11 +3283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let scope_params = self.scope_type_param_ids();
 
         let unresolved = |this: &Self, i: usize| -> bool {
-            if from_empty {
-                return true;
-            }
-            let t = type_args[i];
-            this.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
+            from_empty || this.slot_unanswered(type_args[i], &scope_params)
         };
 
         let unresolved_names: Vec<String> = space
@@ -3894,7 +4007,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(
             slots,
             &Instantiation {
-                kind: "variant",
+                kind: InstanceKind::Variant,
                 name: case.owner,
                 span: case.span,
                 type_args: &hints,
@@ -3907,12 +4020,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             Vec::new()
         };
+        let ret = expected_type.map(|expected| {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let def = tt.defs().def_at(case.variant.defined_at);
+            let declared = tt.make_generic_instance(def, inst.vars.clone());
+            ExpectedReturn { declared, expected }
+        });
         let mut args = match given_args {
             Some(args) => args,
-            // `hints` already answered what the expected type says.
-            None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), None),
+            None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret),
         };
-        self.settle_onto_slots(&inst, slots, &mut args);
+        self.settle_onto_slots(&inst, slots, &mut args, ret);
         // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
         for (arg, &expected) in args.iter_mut().zip(&payload) {
             let expected = self.apply_infer_holes(expected);
@@ -4230,10 +4348,14 @@ impl TypeSystem {
 
         let type_args = infer.solve();
 
-        // If unresolved type params remain in concrete code, fall back to bare Variant
-        let has_unresolved = type_args
-            .iter()
-            .any(|&t| self.type_table.borrow().contains_type_param(t));
+        // If unresolved type params remain in concrete code, fall back to bare
+        // Variant. A variable an enclosing call answers is not unresolved.
+        let has_unresolved = {
+            let tt = self.type_table.borrow();
+            type_args
+                .iter()
+                .any(|&t| tt.contains_type_param(t) && !ctx.awaits_pending_call(&tt, t))
+        };
 
         if has_unresolved && ctx.trait_ctx.type_params.is_empty() {
             return self

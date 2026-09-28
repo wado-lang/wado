@@ -1,0 +1,15 @@
+// A static called through a namespace (`geo::Box::pick`) reads its whole
+// signature, so the literals in its arguments answer to the type its return
+// meets, as they do under a bare name.
+use { println, Stdout } from "core:cli";
+use geo from "./sub/namespaced_static_call_literal_geo.wado";
+
+export fn run() with Stdout {
+    let wide: u64 = geo::Box::pick(geo::Box { value: 0x1_0000_0000 }, 2);
+    println(`${wide}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296\n"
+}
