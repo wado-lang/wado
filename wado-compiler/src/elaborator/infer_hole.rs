@@ -287,11 +287,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a declared default fills the type argument `t`: a slot nothing
     /// answers, or one that is an enclosing call's open variable, which the
-    /// default then answers in turn (`ident(it.collect())`). Only a variable
-    /// chained to an enclosing call for its literals keeps waiting.
+    /// default then answers in turn (`ident(it.collect())`). A variable an
+    /// enclosing call waits at for its literals keeps waiting: one chained to
+    /// that call's, or one it took over (`same(wrapd(1), x)`).
     pub(super) fn slot_takes_default(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
-        self.is_open_slot(t, scope_params)
-            && (self.apply_infer_holes(t) == t || !self.awaits_pending_call(t))
+        let chained = self.apply_infer_holes(t) != t && self.awaits_pending_call(t);
+        self.is_open_slot(t, scope_params) && !chained && !self.annotate_ctx.literals_wait_at(t)
     }
 
     /// Whether `t` is a bare parameter or variable that is not one of the

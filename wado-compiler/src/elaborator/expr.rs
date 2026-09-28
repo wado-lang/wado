@@ -54,6 +54,7 @@ use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::primitive::PrimitiveType;
 use crate::tir::{AnonStructId, StructDef};
+use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
@@ -1609,7 +1610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &field_access.expr,
             ctx,
             expected_type,
-            |this, receiver| !this.tysys.type_table.borrow().is_infer_var(receiver),
+            |this, receiver, _| !this.tysys.type_table.borrow().is_infer_var(receiver),
             |this, receiver, _| this.resolve_field_of(field_access, receiver),
         )
     }
@@ -1918,18 +1919,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // A subscript selects its impl by key type, so the key is synthesized
         // before the impl is chosen — the ordering an overloaded method call
-        // has, answered the same way.
-        let key_class = self.synthesize_arg_class(&index.index, ctx);
-        let waiting_key = match access {
-            IndexAccess::Value => self.index_key_type(&key_class),
-            IndexAccess::Shared | IndexAccess::Mutable => None,
-        };
+        // has, answered the same way. Only a struct receiver selects one.
+        let key_class = OnceCell::new();
         self.resolve_projection(
             &index.expr,
             ctx,
             expected,
-            |this, receiver| {
-                waiting_key.is_some_and(|key| {
+            |this, receiver, ctx| {
+                // A constant subscript reads a tuple's element as `.N` does.
+                let base = this.tysys.through_ref(receiver);
+                if this.tysys.type_table.borrow().is_tuple(base) {
+                    return true;
+                }
+                if access != IndexAccess::Value {
+                    return false;
+                }
+                let class = key_class.get_or_init(|| this.synthesize_arg_class(&index.index, ctx));
+                this.index_key_type(class).is_some_and(|key| {
                     this.receiver_waits(receiver, "index_value", index.span, |this, def| {
                         this.impl_takes_key(def, key)
                     })
@@ -1939,14 +1945,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Index a receiver of `expr_type` by a key of `key_class`.
+    /// Index a receiver of `expr_type` by `index`'s key, whose class
+    /// `key_class` holds once synthesized.
     fn resolve_index_of(
         &mut self,
         index: &ast::IndexExpr,
         expr_type: TypeId,
         ctx: &mut FunctionContext,
         access: IndexAccess,
-        key_class: &ArgClass,
+        key_class: &OnceCell<ArgClass>,
     ) -> TypeId {
         let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
@@ -2006,6 +2013,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Only a key synthesis cannot type (a compound literal, whose type
             // the impl supplies) falls back to pre-selecting an impl for its
             // expected type.
+            let key_class = key_class.get_or_init(|| self.synthesize_arg_class(&index.index, ctx));
             let expected_key = self.index_key_type(key_class).or_else(|| {
                 self.index_lookup_or_newtype_base(
                     &struct_name,
@@ -4972,8 +4980,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if has_spread {
                 return None;
             }
+            let arity = tuple_lit.elements.len();
+            if let Some(elems) =
+                self.open_shape_at_pending_var(Some(ty), arity, TypeTable::make_tuple)
+            {
+                return Some(elems);
+            }
             let elems = self.tysys.type_table.borrow().as_tuple(ty)?;
-            if elems.len() != tuple_lit.elements.len() {
+            if elems.len() != arity {
                 return None;
             }
             Some(elems)

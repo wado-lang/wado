@@ -1,0 +1,76 @@
+// A literal inside an argument waits for the call to answer its variable
+// whatever builds the argument's value around it: a reference, a tuple, a
+// call passing it through, a negation or arithmetic on a field, a constant
+// tuple subscript, or a slot with a declared default. Each literal here is out
+// of `i32`'s range, so taking the default instead would be reported.
+
+struct Box<T> {
+    value: T,
+}
+
+fn wrap<U>(u: U) -> Box<U> {
+    return Box { value: u };
+}
+
+fn wrapd<U = u8>(u: U) -> Box<U> {
+    return Box { value: u };
+}
+
+fn tup<T>(t: T) -> [T, T] {
+    return [t, t];
+}
+
+fn any<S>(s: S) -> S {
+    return s;
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+test "through a reference" {
+    let bx: Box<u64> = Box { value: 7 };
+    let x: u64 = 7;
+    assert same(&wrap(3000000000), &bx).value == 3000000000;
+    assert same(&Box { value: 3000000000 }, &bx).value == 3000000000;
+    assert *same(&wrap(3000000000).value, &x) == 3000000000;
+}
+
+test "through a tuple" {
+    let bx: Box<u64> = Box { value: 7 };
+    let x: u64 = 7;
+    let t = same([wrap(3000000000), 3000000000], [bx, x]);
+    assert t.0.value == 3000000000 && t.1 == 3000000000;
+}
+
+test "through a call passing it on" {
+    let bx: Box<u64> = Box { value: 7 };
+    assert same(any(wrap(3000000000)), bx).value == 3000000000;
+    assert same(any(any(wrap(3000000000))), bx).value == 3000000000;
+}
+
+test "through an operator on a field" {
+    let x: u64 = 7;
+    let y: i64 = 7;
+    let big: i128 = 7;
+    assert same(-wrap(3000000000).value, y) == -3000000000;
+    assert same(wrap(3000000000).value + 1, x) == 3000000001;
+    assert same(~wrap(3).value, x) == 18446744073709551612;
+    // `i128`'s operators are its impls', dispatched once `big` answers.
+    assert same(wrap(3000000000).value + 1, big) == 3000000001;
+    assert same(-wrap(3000000000).value, big) == -3000000000;
+}
+
+test "through a constant tuple subscript" {
+    let x: u64 = 7;
+    assert same(tup(3000000000)[1], x) == 3000000000;
+}
+
+test "through a defaulted slot" {
+    let bx: Box<u64> = Box { value: 7 };
+    let x: u64 = 7;
+    assert same(wrapd(3000000000), bx).value == 3000000000;
+    assert same(bx, wrapd(3000000000)).value == 7;
+    assert same(wrapd(3000000000).value, x) == 3000000000;
+    assert wrapd(200).value == 200;
+}

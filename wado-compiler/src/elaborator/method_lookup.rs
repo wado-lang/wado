@@ -954,19 +954,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         admits: impl Fn(&Self, DefId) -> bool,
     ) -> bool {
         let base = self.tysys.get_base_type(receiver);
-        {
-            let tt = self.tysys.type_table.borrow();
-            // No head to look the method up on.
-            if tt.is_infer_var(base) {
-                return false;
-            }
-            if !tt
-                .infer_vars_in(base)
-                .iter()
-                .any(|&var| self.pending_owner_index(var).is_some())
-            {
-                return true;
-            }
+        // No head to look the method up on.
+        if self.tysys.type_table.borrow().is_infer_var(base) {
+            return false;
+        }
+        if !self.names_pending_var(base) {
+            return true;
         }
         let mut candidates =
             self.open_receiver_candidates(base, method_name, ImplKind::Inherent, &admits);
@@ -1047,12 +1040,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declares = |methods: &[ImplMethodHeader]| methods.iter().any(|m| m.name == method_name);
         // As the order has it: a trait's methods are candidates only where the
         // trait is in scope.
-        let in_scope = match kind {
-            ImplKind::Inherent => IndexSet::default(),
-            ImplKind::Trait => self
-                .tysys
+        let in_scope = |trait_: DefId| {
+            self.tysys
                 .resolutions
-                .decls_in_scope(&self.current_module_source),
+                .decl_in_scope(&self.current_module_source, trait_)
         };
         let mut candidates = Vec::new();
         for def in trait_env.all_impl_keys(&key) {
@@ -1060,11 +1051,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let declared = match (kind, header.trait_def()) {
                 (ImplKind::Inherent, None) => declares(&header.methods),
                 (ImplKind::Trait, Some(trait_)) => {
-                    in_scope.contains(&trait_)
-                        && (declares(&header.methods)
-                            || trait_env
-                                .decl_header_of(&trait_)
-                                .is_some_and(|decl| declares(&decl.methods)))
+                    (declares(&header.methods)
+                        || trait_env
+                            .decl_header_of(&trait_)
+                            .is_some_and(|decl| declares(&decl.methods)))
+                        && in_scope(trait_)
                 }
                 (ImplKind::Inherent, Some(_)) | (ImplKind::Trait, None) => false,
             };
@@ -2240,7 +2231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(receiver) = receiver_type_id
             && type_key.ref_kind().is_none()
             && required_trait.is_none()
-            && self.tysys.type_table.borrow().contains_infer_var(receiver)
+            && self.names_pending_var(receiver)
             && let [(def, _)] = self
                 .open_receiver_candidates(receiver, method_name, ImplKind::Trait, &|_, _| true)
                 .as_slice()

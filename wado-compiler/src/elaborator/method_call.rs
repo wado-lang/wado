@@ -262,7 +262,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method_call.receiver,
             ctx,
             expected_type,
-            |this, receiver| {
+            |this, receiver, _| {
                 this.receiver_waits(receiver, &method_call.method, method_call.span, |_, _| true)
             },
             |this, receiver, ctx| {

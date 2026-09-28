@@ -141,7 +141,36 @@ fn literal_operands(expr: &Expr) -> Option<Vec<&Expr>> {
             Some(operands)
         }
         Expr::Unary(unary) if unary.op == UnaryOp::Neg => literal_operands(&unary.expr),
-        _ => None,
+        Expr::Binary(_)
+        | Expr::Unary(_)
+        | Expr::Literal(_)
+        | Expr::Ident(_)
+        | Expr::Assign(_)
+        | Expr::CompoundAssign(_)
+        | Expr::ComparisonChain(_)
+        | Expr::Call(_)
+        | Expr::MethodCall(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::FieldAccess(_)
+        | Expr::Index(_)
+        | Expr::Block(_)
+        | Expr::If(_)
+        | Expr::Match(_)
+        | Expr::Matches(_)
+        | Expr::Closure(_)
+        | Expr::TemplateString(_)
+        | Expr::TaggedTemplate(_)
+        | Expr::Cast(_)
+        | Expr::StructLiteral(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::LabeledBlock(_)
+        | Expr::TryOp(_)
+        | Expr::Spread(..)
+        | Expr::Range(_)
+        | Expr::WithHandler(_)
+        | Expr::Resume(_)
+        | Expr::Error(_) => None,
     }
 }
 
@@ -201,6 +230,37 @@ pub(super) struct PendingLiterals {
     awaits_receiver: bool,
     /// The default walks reading one of `own_vars`, run once it is answered.
     pub(super) walks: Vec<DefaultWalk>,
+    /// The operators over one of `own_vars`, dispatched again once it is
+    /// answered: `wrap(1).v + 1` is `i128`'s `Add` where `x: i128` answers.
+    operators: Vec<DeferredOperator>,
+}
+
+/// An operator dispatched while an operand still named a variable a pending
+/// call is to answer, with what dispatching it again reads.
+pub(super) enum DeferredOperator {
+    Unary {
+        op: UnaryOp,
+        operand: TypeId,
+        span: Span,
+        id: AstId,
+    },
+    Binary {
+        left: TypeId,
+        op: BinaryOp,
+        right: TypeId,
+        right_span: Span,
+        span: Span,
+        id: AstId,
+    },
+}
+
+impl DeferredOperator {
+    fn operands(&self) -> Vec<TypeId> {
+        match *self {
+            Self::Unary { operand, .. } => vec![operand],
+            Self::Binary { left, right, .. } => vec![left, right],
+        }
+    }
 }
 
 impl PendingLiterals {
@@ -210,6 +270,7 @@ impl PendingLiterals {
             literals: Vec::new(),
             awaits_receiver: false,
             walks: Vec::new(),
+            operators: Vec::new(),
         }
     }
 
@@ -222,7 +283,10 @@ impl PendingLiterals {
 
     /// Whether nothing waits here.
     fn is_empty(&self) -> bool {
-        self.own_vars.is_empty() && self.literals.is_empty() && self.walks.is_empty()
+        self.own_vars.is_empty()
+            && self.literals.is_empty()
+            && self.walks.is_empty()
+            && self.operators.is_empty()
     }
 }
 
@@ -241,6 +305,13 @@ impl Scope {
                     .iter()
                     .any(|pending| pending.own_vars.contains(var))
             })
+    }
+
+    /// Whether a pending call holds literals waiting at the variable `var`.
+    pub(super) fn literals_wait_at(&self, var: TypeId) -> bool {
+        self.pending_literals
+            .iter()
+            .any(|pending| pending.literals.iter().any(|&(_, at)| at == var))
     }
 }
 
@@ -689,6 +760,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.chain_infer_var(var, answer);
             }
         }
+        // The other direction: in `same(any(wrap(1)), x)` the enclosing `T`
+        // is expected of `any`'s result `Box<U>`, which unifying the declared
+        // side against it cannot bind.
+        let expected = self.apply_infer_holes(ret.expected);
+        let declared = self.apply_infer_holes(ret.declared);
+        let names_waited = self
+            .tysys
+            .type_table
+            .borrow()
+            .infer_vars_in(declared)
+            .iter()
+            .any(|var| waited.contains(var));
+        if names_waited && self.is_open_pending_var(expected) {
+            self.chain_infer_var(expected, declared);
+        }
+    }
+
+    /// Where `expected` is an open variable a pending call owns, answer it with
+    /// the shape `build` makes of `arity` fresh variables that call owns too,
+    /// and hand those back. The operands of `&e` or `[a, b]` then meet
+    /// variables their literals wait at, as a call's arguments do.
+    pub(super) fn open_shape_at_pending_var(
+        &mut self,
+        expected: Option<TypeId>,
+        arity: usize,
+        build: impl FnOnce(&mut TypeTable, Vec<TypeId>) -> TypeId,
+    ) -> Option<Vec<TypeId>> {
+        let var = self.apply_infer_holes(expected?);
+        let owner = self.pending_owner_index(var)?;
+        let vars: Vec<TypeId> = (0..arity).map(|_| self.mint_infer_var()).collect();
+        self.annotate_ctx.pending_literals[owner]
+            .own_vars
+            .extend(&vars);
+        let shape = build(&mut self.tysys.type_table.borrow_mut(), vars.clone());
+        self.chain_infer_var(var, shape);
+        Some(vars)
+    }
+
+    /// Whether `ty` names a variable a pending call owns, still open.
+    pub(super) fn names_pending_var(&self, ty: TypeId) -> bool {
+        if self.annotate_ctx.pending_literals.is_empty() {
+            return false;
+        }
+        let vars = self.tysys.type_table.borrow().infer_vars_in(ty);
+        vars.into_iter()
+            .any(|var| self.pending_owner_index(var).is_some())
+    }
+
+    /// Whether `ty` is itself a variable a pending call owns, still open.
+    pub(super) fn is_open_pending_var(&self, ty: TypeId) -> bool {
+        self.pending_owner_index(self.apply_infer_holes(ty))
+            .is_some()
     }
 
     /// What `ret` says of each variable its declared type names, where that is
@@ -759,7 +882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &Expr,
         ctx: &mut FunctionContext,
         expected: Option<TypeId>,
-        waits: impl FnOnce(&mut Self, TypeId) -> bool,
+        waits: impl FnOnce(&mut Self, TypeId, &mut FunctionContext) -> bool,
         project: impl FnOnce(&mut Self, TypeId, &mut FunctionContext) -> TypeId,
     ) -> TypeId {
         if !matches!(
@@ -787,7 +910,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if receiver_pending {
                 receiver_type = this.apply_infer_holes(receiver_type);
-                if !waits(this, receiver_type) {
+                if !waits(this, receiver_type, ctx) {
                     this.settle_receiver(ctx);
                 }
                 receiver_type = this.apply_infer_holes(receiver_type);
@@ -867,6 +990,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Scope::awaits_pending_call`] on `ty` with the solved variables
     /// substituted.
     pub(super) fn awaits_pending_call(&self, ty: TypeId) -> bool {
+        if self.annotate_ctx.pending_literals.is_empty() {
+            return false;
+        }
         let ty = self.apply_infer_holes(ty);
         self.annotate_ctx
             .awaits_pending_call(&self.tysys.type_table.borrow(), ty)
@@ -960,7 +1086,69 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.run_default_walk(walk, ctx);
             }
         }
+        for operator in pending.operators {
+            if let Some(operator) = self.defer_operator(operator) {
+                self.dispatch_deferred_operator(operator);
+            }
+        }
         settled
+    }
+
+    /// Hand `operator` to the pending call owning a variable one of its
+    /// operands names, or back where none does.
+    pub(super) fn defer_operator(
+        &mut self,
+        operator: DeferredOperator,
+    ) -> Option<DeferredOperator> {
+        let applied: Vec<TypeId> = operator
+            .operands()
+            .into_iter()
+            .map(|operand| self.apply_infer_holes(operand))
+            .collect();
+        let vars: Vec<TypeId> = {
+            let tt = self.tysys.type_table.borrow();
+            applied
+                .into_iter()
+                .flat_map(|t| tt.infer_vars_in(t))
+                .collect()
+        };
+        let owner = vars
+            .into_iter()
+            .find_map(|var| self.pending_owner_index(var));
+        let Some(owner) = owner else {
+            return Some(operator);
+        };
+        self.annotate_ctx.pending_literals[owner]
+            .operators
+            .push(operator);
+        None
+    }
+
+    /// Dispatch `operator` again at the types its operands were answered with.
+    fn dispatch_deferred_operator(&mut self, operator: DeferredOperator) {
+        match operator {
+            DeferredOperator::Unary {
+                op,
+                operand,
+                span,
+                id,
+            } => {
+                let operand = self.apply_infer_holes(operand);
+                self.dispatch_unary_operator(op, operand, span, id);
+            }
+            DeferredOperator::Binary {
+                left,
+                op,
+                right,
+                right_span,
+                span,
+                id,
+            } => {
+                let left = self.apply_infer_holes(left);
+                let right = self.apply_infer_holes(right);
+                self.resolve_binary_op(left, op, right, right_span, span, Some(id));
+            }
+        }
     }
 
     /// Try to coerce an expression to the expected type — numeric literals,
