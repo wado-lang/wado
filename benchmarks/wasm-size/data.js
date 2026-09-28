@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790596843941,
+  "lastUpdate": 1790598750686,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61481,6 +61481,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1b8eb2fb428513cb69a5e608a532c02ae5eb3618"
         },
         "date": 1790596842935,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1947,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6804,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20295,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288412,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7b8fcd3aa119dc9fae14087e900e91d463e75be5",
+          "message": "Merge pull request #2209 from wado-lang/claude/wado-lang-site-maintenance-8dxwx5\n\nfix(loam): hf2loam names a malformed header, and next_token asserts its input",
+          "timestamp": "2026-09-28T20:41:59+09:00",
+          "tree_id": "3c5090d37b562d4ce82062402d52ea4170ec34e4",
+          "url": "https://github.com/wado-lang/wado/commit/7b8fcd3aa119dc9fae14087e900e91d463e75be5"
+        },
+        "date": 1790598749795,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
