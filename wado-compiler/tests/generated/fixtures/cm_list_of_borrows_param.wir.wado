@@ -79,13 +79,14 @@ fn "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(items) with Api {
     let $items_elem: i32;
     let $licm_repr_18: ref "Array<&cm_list_of_borrows_param.wado/Item>";
     $items_len = items.used;
-    $items_base = "mem/realloc"(0, 0, 4, if @unlikely(($items_len < 0) | ($items_len > 536870911)) {
+    if @unlikely(($items_len < 0) | ($items_len > 536870911)) {
         cold_path;
         let $mv_field_1: ref Array<u8>;
         $mv_field_1 = array.new_data<u8>("a buffer's length is negative or past what linear memory can address");
         "core:rt/panic"($mv_field_1, 68);
         unreachable;
-    }; $items_len * 4);
+    }
+    $items_base = "mem/realloc"(0, 0, 4, $items_len * 4);
     $items_i = 0;
     $licm_repr_18 = items.repr;
     b1: block {
@@ -104,8 +105,8 @@ fn "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(items) with Api {
 fn "cm_list_of_borrows_param.wado/$cm_export__run"() {
     let a: i32;
     let elements: ref "Array<&cm_list_of_borrows_param.wado/Item>";
-    a = "cm_list_of_borrows_param.wado/$cm_binding__Api_get_item"();
-    "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(elements = array.new_fixed<i32>(a); struct.new "core:prelude//List<&cm_list_of_borrows_param.wado/Item>" { repr: elements, used: builtin::array_len(elements) });
+    elements = array.new_fixed<i32>(local.tee a("cm_list_of_borrows_param.wado/$cm_binding__Api_get_item"()));
+    "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(struct.new "core:prelude//List<&cm_list_of_borrows_param.wado/Item>" { repr: elements, used: builtin::array_len(elements) });
     "wasi/resource-drop:cm_list_of_borrows_param.wado#item"(a);
     "wasi/task-return"(0);
 }

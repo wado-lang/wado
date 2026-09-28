@@ -1,0 +1,42 @@
+// An unrestricted handle is the `u64` bits of an `f64`, not an `i32`, so the
+// zero padding its slot in a scalarized `Option<Node>` has to be a `u64` too.
+// Padded as an `i32`, the module failed to validate.
+#[cm("wasi:demo/dom@0.1.0#node", linearity = "unrestricted", classes = "0..=1")]
+resource Node {}
+
+#[inline("never")]
+fn maybe(x: f64) -> Option<Node> {
+    if x > 0.0 {
+        return Option::Some(x as Node);
+    }
+    return null;
+}
+
+#[inline("never")]
+fn last_positive(xs: &List<f64>) -> f64 {
+    let mut found: Option<Node> = null;
+    for let x of xs {
+        if *x > 0.0 {
+            found = Option::Some(*x as Node);
+        }
+    }
+    return match found {
+        Some(n) => n as f64,
+        None => -1.0,
+    };
+}
+
+test "a returned handle round-trips" {
+    assert maybe(builtin::black_box(2.5)) matches { Some(n) && n as f64 == 2.5 };
+    assert maybe(builtin::black_box(-2.5)) matches { None };
+}
+
+test "a handle local round-trips" {
+    let xs: List<f64> = [1.5, -1.0, 3.5, -2.0];
+    assert last_positive(&builtin::black_box(xs)) == 3.5;
+    let none: List<f64> = [-1.0];
+    assert last_positive(&builtin::black_box(none)) == -1.0;
+}
+
+__DATA__
+{"test": {}}

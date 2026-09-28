@@ -128,13 +128,14 @@ fn "cm_option_of_own_param.wado/$cm_binding__Gfx_pick"(d, label, bytes) with Gfx
     if ref.is_null(bytes) == 0 {
         $local_17 = ref.as_non_null(bytes);
         $local_19 = $local_17.used;
-        $local_20 = "mem/realloc"(0, 0, 1, if @unlikely(($local_19 < 0) | ($local_19 > 2147483647)) {
+        if @unlikely(($local_19 < 0) | ($local_19 > 2147483647)) {
             cold_path;
             let $mv_field_1: ref Array<u8>;
             $mv_field_1 = array.new_data<u8>("a buffer's length is negative or past what linear memory can address");
             "core:rt/panic"($mv_field_1, 68);
             unreachable;
-        }; $local_19);
+        }
+        $local_20 = "mem/realloc"(0, 0, 1, $local_19);
         $local_21 = 0;
         $licm_repr_49 = $local_17.repr;
         b6: block {

@@ -25,7 +25,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_multi_value_param_arg_order.wado/after" = fn(i32, i32, i32) -> i32;  // TypeId(10)
+type "functype//opt_multi_value_param_arg_order.wado/after" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//opt_multi_value_param_arg_order.wado/around" = fn(i32, i32, i32, i32, i32, i32) -> i32;  // TypeId(11)
 
@@ -78,8 +78,8 @@ global mut global:opt_multi_value_param_arg_order.wado::LOG: ref null "core:prel
 global mut global:opt_multi_value_param_arg_order.wado::$modules_initialized: bool = 0;
 global global:opt_multi_value_param_arg_order.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(32);
 
-fn "opt_multi_value_param_arg_order.wado/after"(first, $mv$p$a, $mv$p$b) {
-    return (first + $mv$p$a) + $mv$p$b;
+fn "opt_multi_value_param_arg_order.wado/after"($mv$p$a, $mv$p$b) {
+    return (1 + $mv$p$a) + $mv$p$b;
 }
 
 fn "opt_multi_value_param_arg_order.wado/around"($mv$p$a, $mv$p$b, middle, $mv$t$x, $mv$t$y, $mv$t$z) {
@@ -135,34 +135,34 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
         "opt_multi_value_param_arg_order.wado/$initialize_module"();
         global:opt_multi_value_param_arg_order.wado::$modules_initialized = 1;
     };
+    $local_1_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
+    let $mv_arg_2: ref "core:prelude/string.wado//String";
+    v_116 = global:opt_multi_value_param_arg_order.wado::LOG;
+    $av_221 = v_116.used;
+    $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = v_116.repr; let $array_clone_dst_4: ref Array<u8>; $array_clone_dst_4 = builtin::array_new<u8>($av_221); builtin::array_copy<u8>($array_clone_dst_4, 0, $array_clone_src_3, 0, $av_221); $array_clone_dst_4), used: $av_221 };
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, $mv_arg_2.repr, $av_221);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $local_1_7);
+    global:opt_multi_value_param_arg_order.wado::LOG = $local_1_7;
     a = block -> i32 {
-        $local_1_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-        let $mv_arg_3: ref "core:prelude/string.wado//String";
-        v_116 = global:opt_multi_value_param_arg_order.wado::LOG;
-        $av_221 = v_116.used;
-        $mv_arg_3 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = v_116.repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($av_221); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $av_221); $array_clone_dst_5), used: $av_221 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_7, $mv_arg_3.repr, $av_221);
-        "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $local_1_7);
-        global:opt_multi_value_param_arg_order.wado::LOG = $local_1_7;
         $local_1_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-        let $mv_arg_9: ref "core:prelude/string.wado//String";
+        let $mv_arg_8: ref "core:prelude/string.wado//String";
         v_123 = global:opt_multi_value_param_arg_order.wado::LOG;
         $av_222 = v_123.used;
-        $mv_arg_9 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_10: ref Array<u8>; $array_clone_src_10 = v_123.repr; let $array_clone_dst_11: ref Array<u8>; $array_clone_dst_11 = builtin::array_new<u8>($av_222); builtin::array_copy<u8>($array_clone_dst_11, 0, $array_clone_src_10, 0, $av_222); $array_clone_dst_11), used: $av_222 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_10, $mv_arg_9.repr, $av_222);
+        $mv_arg_8 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_9: ref Array<u8>; $array_clone_src_9 = v_123.repr; let $array_clone_dst_10: ref Array<u8>; $array_clone_dst_10 = builtin::array_new<u8>($av_222); builtin::array_copy<u8>($array_clone_dst_10, 0, $array_clone_src_9, 0, $av_222); $array_clone_dst_10), used: $av_222 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_10, $mv_arg_8.repr, $av_222);
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $local_1_10);
         global:opt_multi_value_param_arg_order.wado::LOG = $local_1_10;
-        "opt_multi_value_param_arg_order.wado/after"(1, 2, 0);
+        "opt_multi_value_param_arg_order.wado/after"(2, 0);
     };
     $local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     v_20 = global:opt_multi_value_param_arg_order.wado::LOG;
-    let $array_clone_src_14: ref Array<u8>;
-    $array_clone_src_14 = v_20.repr;
-    let $array_clone_len_16: i32;
-    $array_clone_len_16 = local.tee $load_7(v_20.used);
-    let $array_clone_dst_15: ref Array<u8>;
-    $array_clone_dst_15 = builtin::array_new<u8>($array_clone_len_16);
-    builtin::array_copy<u8>($array_clone_dst_15, 0, $array_clone_src_14, 0, $array_clone_len_16);
+    let $array_clone_src_13: ref Array<u8>;
+    $array_clone_src_13 = v_20.repr;
+    let $array_clone_len_15: i32;
+    $array_clone_len_15 = local.tee $load_7(v_20.used);
+    let $array_clone_dst_14: ref Array<u8>;
+    $array_clone_dst_14 = builtin::array_new<u8>($array_clone_len_15);
+    builtin::array_copy<u8>($array_clone_dst_14, 0, $array_clone_src_13, 0, $array_clone_len_15);
     $sroa_other_used_151 = $load_7;
     $inline_core_prelude_string_wado_String__internal_push_string_8: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_8 $sroa_other_used_151 == 0;
@@ -173,7 +173,7 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
         }
         start_30 = $local_2_2.used;
         $local_2_2.used = new_used_29;
-        builtin::array_copy<u8>($local_2_2.repr, start_30, $array_clone_dst_15, 0, $sroa_other_used_151);
+        builtin::array_copy<u8>($local_2_2.repr, start_30, $array_clone_dst_14, 0, $sroa_other_used_151);
     };
     new_used_42 = $local_2_2.used + 1;
     if @unlikely(new_used_42 > builtin::array_len($local_2_2.repr)) {
@@ -192,40 +192,40 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
     global:opt_multi_value_param_arg_order.wado::LOG = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     b = block -> i32 {
         $local_1_58 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-        let $mv_arg_21: ref "core:prelude/string.wado//String";
+        let $mv_arg_20: ref "core:prelude/string.wado//String";
         v_130 = global:opt_multi_value_param_arg_order.wado::LOG;
         $av_223 = v_130.used;
-        $mv_arg_21 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_22: ref Array<u8>; $array_clone_src_22 = v_130.repr; let $array_clone_dst_23: ref Array<u8>; $array_clone_dst_23 = builtin::array_new<u8>($av_223); builtin::array_copy<u8>($array_clone_dst_23, 0, $array_clone_src_22, 0, $av_223); $array_clone_dst_23), used: $av_223 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_58, $mv_arg_21.repr, $av_223);
+        $mv_arg_20 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_21: ref Array<u8>; $array_clone_src_21 = v_130.repr; let $array_clone_dst_22: ref Array<u8>; $array_clone_dst_22 = builtin::array_new<u8>($av_223); builtin::array_copy<u8>($array_clone_dst_22, 0, $array_clone_src_21, 0, $av_223); $array_clone_dst_22), used: $av_223 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_58, $mv_arg_20.repr, $av_223);
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $local_1_58);
         global:opt_multi_value_param_arg_order.wado::LOG = $local_1_58;
         $local_1_61 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-        let $mv_arg_28: ref "core:prelude/string.wado//String";
+        let $mv_arg_27: ref "core:prelude/string.wado//String";
         v_137 = global:opt_multi_value_param_arg_order.wado::LOG;
         $av_224 = v_137.used;
-        $mv_arg_28 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_29: ref Array<u8>; $array_clone_src_29 = v_137.repr; let $array_clone_dst_30: ref Array<u8>; $array_clone_dst_30 = builtin::array_new<u8>($av_224); builtin::array_copy<u8>($array_clone_dst_30, 0, $array_clone_src_29, 0, $av_224); $array_clone_dst_30), used: $av_224 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_61, $mv_arg_28.repr, $av_224);
+        $mv_arg_27 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_28: ref Array<u8>; $array_clone_src_28 = v_137.repr; let $array_clone_dst_29: ref Array<u8>; $array_clone_dst_29 = builtin::array_new<u8>($av_224); builtin::array_copy<u8>($array_clone_dst_29, 0, $array_clone_src_28, 0, $av_224); $array_clone_dst_29), used: $av_224 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_61, $mv_arg_27.repr, $av_224);
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $local_1_61);
         global:opt_multi_value_param_arg_order.wado::LOG = $local_1_61;
         $local_1_64 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-        let $mv_arg_34: ref "core:prelude/string.wado//String";
+        let $mv_arg_33: ref "core:prelude/string.wado//String";
         v_144 = global:opt_multi_value_param_arg_order.wado::LOG;
         $av_225 = v_144.used;
-        $mv_arg_34 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_35: ref Array<u8>; $array_clone_src_35 = v_144.repr; let $array_clone_dst_36: ref Array<u8>; $array_clone_dst_36 = builtin::array_new<u8>($av_225); builtin::array_copy<u8>($array_clone_dst_36, 0, $array_clone_src_35, 0, $av_225); $array_clone_dst_36), used: $av_225 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_64, $mv_arg_34.repr, $av_225);
+        $mv_arg_33 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_34: ref Array<u8>; $array_clone_src_34 = v_144.repr; let $array_clone_dst_35: ref Array<u8>; $array_clone_dst_35 = builtin::array_new<u8>($av_225); builtin::array_copy<u8>($array_clone_dst_35, 0, $array_clone_src_34, 0, $av_225); $array_clone_dst_35), used: $av_225 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_64, $mv_arg_33.repr, $av_225);
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(3, $local_1_64);
         global:opt_multi_value_param_arg_order.wado::LOG = $local_1_64;
         "opt_multi_value_param_arg_order.wado/around"(1, 0, 2, 3, 0, 0);
     };
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     v_74 = global:opt_multi_value_param_arg_order.wado::LOG;
-    let $array_clone_src_40: ref Array<u8>;
-    $array_clone_src_40 = v_74.repr;
-    let $array_clone_len_42: i32;
-    $array_clone_len_42 = local.tee $load_27(v_74.used);
-    let $array_clone_dst_41: ref Array<u8>;
-    $array_clone_dst_41 = builtin::array_new<u8>($array_clone_len_42);
-    builtin::array_copy<u8>($array_clone_dst_41, 0, $array_clone_src_40, 0, $array_clone_len_42);
+    let $array_clone_src_39: ref Array<u8>;
+    $array_clone_src_39 = v_74.repr;
+    let $array_clone_len_41: i32;
+    $array_clone_len_41 = local.tee $load_27(v_74.used);
+    let $array_clone_dst_40: ref Array<u8>;
+    $array_clone_dst_40 = builtin::array_new<u8>($array_clone_len_41);
+    builtin::array_copy<u8>($array_clone_dst_40, 0, $array_clone_src_39, 0, $array_clone_len_41);
     $sroa_other_used_155 = $load_27;
     $inline_core_prelude_string_wado_String__internal_push_string_30: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_30 $sroa_other_used_155 == 0;
@@ -236,7 +236,7 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
         }
         start_84 = $local_4_4.used;
         $local_4_4.used = new_used_83;
-        builtin::array_copy<u8>($local_4_4.repr, start_84, $array_clone_dst_41, 0, $sroa_other_used_155);
+        builtin::array_copy<u8>($local_4_4.repr, start_84, $array_clone_dst_40, 0, $sroa_other_used_155);
     };
     new_used_96 = $local_4_4.used + 1;
     if @unlikely(new_used_96 > builtin::array_len($local_4_4.repr)) {
@@ -466,10 +466,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+    new_used_66 = self.used + digit_count;
+    if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
+    }
+    start_67 = self.used;
+    self.used = new_used_66;
+    return start_67;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
