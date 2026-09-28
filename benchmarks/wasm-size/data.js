@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790558661333,
+  "lastUpdate": 1790561540179,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61173,6 +61173,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c013e91abe6b03ea2a7026a23cf1a2f718cc2680"
         },
         "date": 1790558661134,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6728,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20219,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 290120,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7d13d5c6fc160a7720883e8882db50b80d9bf180",
+          "message": "Merge pull request #2201 from wado-lang/claude/nir-optimizer-receiver-derivation-x6ndmz\n\nrefactor(compiler): a method call without its receiver cannot be built, in TIR or NIR",
+          "timestamp": "2026-09-28T10:42:44+09:00",
+          "tree_id": "a7ca2b49d18c9df6ebee0a4947c5ae883e7fdb1d",
+          "url": "https://github.com/wado-lang/wado/commit/7d13d5c6fc160a7720883e8882db50b80d9bf180"
+        },
+        "date": 1790561539067,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
