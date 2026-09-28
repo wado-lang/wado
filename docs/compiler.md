@@ -197,4 +197,4 @@ The world selects the allocator, and `--allocator` overrides it.
 
 - A `||` / `&&` chain of thousands of operands overflows the compiler's stack.
 - A GC array cannot be passed to `stream<u8>` directly. It is copied to linear
-  memory first ([component-model#525](https://github.com/WebAssembly/component-model/issues/525)).
+  memory first ([WebAssembly/component-model#525](https://github.com/WebAssembly/component-model/issues/525)).

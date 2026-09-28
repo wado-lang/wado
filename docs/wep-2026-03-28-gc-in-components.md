@@ -4,7 +4,7 @@
 
 Wado uses Wasm GC internally for all heap-allocated values (structs, arrays, strings, closures, variants). At Component Model (CM) boundaries, these GC values are **serialized to linear memory** and deserialized back, because the current CM Canonical ABI only supports linear-memory-based data exchange. Every WASI call copies data twice: GC→linear memory on export, linear memory→GC on import.
 
-A [pre-proposal (component-model#525)](https://github.com/WebAssembly/component-model/issues/525) extends the Canonical ABI with a `gc` mode that passes GC references directly across component boundaries — eliminating the linear memory round-trip. When this lands, Wado should migrate its CM bindings to GC mode for significant performance gains.
+A [pre-proposal (WebAssembly/component-model#525)](https://github.com/WebAssembly/component-model/issues/525) extends the Canonical ABI with a `gc` mode that passes GC references directly across component boundaries — eliminating the linear memory round-trip. When this lands, Wado should migrate its CM bindings to GC mode for significant performance gains.
 
 This WEP defines the migration strategy.
 
@@ -56,12 +56,12 @@ Components choose nullability and mutability. The engine can pass values **zero-
 
 ### Upstream Status
 
-| Item                | Status                                                                                                               |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Wasm GC (core spec) | Shipped in Wasm 3.0 (Sept 2025)                                                                                      |
-| Core GC in wasmtime | Feature-complete (v27.0+)                                                                                            |
-| CM GC pre-proposal  | [component-model#525](https://github.com/WebAssembly/component-model/issues/525) (June 2025, open)                   |
-| CM GC in wasmtime   | [wasmtime#10325](https://github.com/bytecodealliance/wasmtime/issues/10325) (prototyping, 🛸 flag "very incomplete") |
+| Item                | Status                                                                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Wasm GC (core spec) | Shipped in Wasm 3.0 (Sept 2025)                                                                                                       |
+| Core GC in wasmtime | Feature-complete (v27.0+)                                                                                                             |
+| CM GC pre-proposal  | [WebAssembly/component-model#525](https://github.com/WebAssembly/component-model/issues/525) (June 2025, open)                        |
+| CM GC in wasmtime   | [bytecodealliance/wasmtime#10325](https://github.com/bytecodealliance/wasmtime/issues/10325) (prototyping, 🛸 flag "very incomplete") |
 
 ## Phase 1: Align Internal Representations
 
@@ -235,9 +235,9 @@ For HTTP handlers processing request/response bodies, this eliminates the domina
 
 ## References
 
-- [Pre-Proposal: Wasm GC Support in the Canonical ABI (component-model#525)](https://github.com/WebAssembly/component-model/issues/525)
-- [Prototype Wasm GC and CM canonical ABI support (wasmtime#10325)](https://github.com/bytecodealliance/wasmtime/issues/10325)
-- [Implement the WebAssembly GC Proposal (wasmtime#5032)](https://github.com/bytecodealliance/wasmtime/issues/5032)
+- [Pre-Proposal: Wasm GC Support in the Canonical ABI (WebAssembly/component-model#525)](https://github.com/WebAssembly/component-model/issues/525)
+- [Prototype Wasm GC and CM canonical ABI support (bytecodealliance/wasmtime#10325)](https://github.com/bytecodealliance/wasmtime/issues/10325)
+- [Implement the WebAssembly GC Proposal (bytecodealliance/wasmtime#5032)](https://github.com/bytecodealliance/wasmtime/issues/5032)
 - [Wasm GC Proposal Overview (archived)](https://github.com/WebAssembly/gc/blob/main/proposals/gc/Overview.md)
 - [Wasm 3.0 (GC shipped)](https://webassembly.org/news/2025-09-17-wasm-3.0/)
 - [Wasmtime 27.0: Complete Wasm GC support](https://bytecodealliance.org/articles/wasmtime-27.0)
