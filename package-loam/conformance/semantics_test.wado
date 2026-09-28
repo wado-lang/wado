@@ -23,6 +23,8 @@ global INPUTS: TreeMap<String, String> = {
     X: "Tensor { data: iota(10.0, n), extents: [n] }",
     M: "Tensor { data: iota(0.0, 8), extents: [8] }",
     P: "Tensor { data: iota(0.0, 4 * n), extents: [n, 4] }",
+    I: "Tensor { data: iota(0.0, 2 * n), extents: [1, 2, n] }",
+    W: "Tensor { data: iota(0.0, 12), extents: [3, 2, 2] }",
 } as TreeMap<String, String>;
 
 /// What Loam computes from `model` at each of `LENGTHS`, in the oracle's
@@ -54,6 +56,19 @@ fn built(graph: &Graph, output_axes: List<String>) -> Result<String, String> {
             LayoutRule {
                 pattern: "P",
                 axes: ["Seq", "Wide"],
+            },
+            LayoutRule {
+                pattern: "I",
+                axes: ["Batch", "Chan", "Seq"],
+            },
+            LayoutRule {
+                pattern: "W",
+                axes: ["Out", "Chan", "Tap"],
+            },
+            // The part of a `Split` a case does not return.
+            LayoutRule {
+                pattern: "Head",
+                axes: ["First"],
             },
             LayoutRule { pattern: output, axes: output_axes },
         ],
@@ -184,6 +199,47 @@ test "Range back by -N counts the steps of N that fit" {
     assert_agrees(
         #include_bytes("./semantics/RangeBackByLength.onnx"),
         #include_str("./semantics/RangeBackByLength.txt"),
+    );
+}
+
+global POOLED: List<String> = ["Batch", "Chan", "Part"];
+
+test "MaxPool over N counts the windows that fit" {
+    assert_agrees(
+        #include_bytes("./semantics/MaxPoolOverLength.onnx"),
+        #include_str("./semantics/MaxPoolOverLength.txt"),
+        POOLED,
+    );
+}
+
+test "MaxPool with ceil_mode over N keeps a partial last window" {
+    assert_agrees(
+        #include_bytes("./semantics/MaxPoolCeilOverLength.onnx"),
+        #include_str("./semantics/MaxPoolCeilOverLength.txt"),
+        POOLED,
+    );
+}
+
+test "MaxPool with SAME_UPPER over N pads to cover every position" {
+    assert_agrees(
+        #include_bytes("./semantics/MaxPoolSameOverLength.onnx"),
+        #include_str("./semantics/MaxPoolSameOverLength.txt"),
+        POOLED,
+    );
+}
+
+test "Conv over N with padding and a stride" {
+    assert_agrees(
+        #include_bytes("./semantics/ConvOverLength.onnx"),
+        #include_str("./semantics/ConvOverLength.txt"),
+        ["Batch", "Out", "Part"],
+    );
+}
+
+test "Split of N by sizes the graph computes from N" {
+    assert_agrees(
+        #include_bytes("./semantics/SplitTailOfLength.onnx"),
+        #include_str("./semantics/SplitTailOfLength.txt"),
     );
 }
 

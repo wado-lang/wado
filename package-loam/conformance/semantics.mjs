@@ -39,7 +39,7 @@ const scalars = {
 };
 
 // Every case reads `S = Shape(X)`, and the nodes it lists after that.
-const node = (op, inputs, output, attrs = {}) => ({ op, inputs, outputs: [output], attrs });
+const node = (op, inputs, outputs, attrs = {}) => ({ op, inputs, outputs: [outputs].flat(), attrs });
 // `N` as a scalar: a scalar index gathers one element out of `S`, dropping the axis.
 const length = node('Gather', ['S', 'ScalarZero'], 'N');
 const cases = [
@@ -90,6 +90,19 @@ const cases = [
     node('Reshape', ['P', 'KeepSplitShape'], 'ReshapeKeepSplit'),
   ]],
   ['ReshapeFlat', [node('Reshape', ['P', 'MinusOne'], 'ReshapeFlat')]],
+  ['MaxPoolOverLength', [node('MaxPool', ['I'], 'MaxPoolOverLength', { kernel_shape: [2], strides: [2] })]],
+  ['MaxPoolCeilOverLength', [
+    node('MaxPool', ['I'], 'MaxPoolCeilOverLength', { kernel_shape: [2], strides: [2], ceil_mode: 1 }),
+  ]],
+  ['MaxPoolSameOverLength', [
+    node('MaxPool', ['I'], 'MaxPoolSameOverLength', { kernel_shape: [3], strides: [2], auto_pad: 'SAME_UPPER' }),
+  ]],
+  ['ConvOverLength', [node('Conv', ['I', 'W'], 'ConvOverLength', { pads: [1, 1], strides: [2] })]],
+  ['SplitTailOfLength', [
+    node('Sub', ['S', 'One'], 'SMinusOne'),
+    node('Concat', ['One', 'SMinusOne'], 'Sizes', { axis: 0 }),
+    node('Split', ['X', 'Sizes'], ['Head', 'SplitTailOfLength']),
+  ]],
   ['ReshapeRestFirst', [
     node('Concat', ['MinusOne', 'Two'], 'RestFirstShape', { axis: 0 }),
     node('Reshape', ['P', 'RestFirstShape'], 'ReshapeRestFirst'),
@@ -104,6 +117,8 @@ const inputs = {
   X: { dims: ['N'], feed: (n) => new ort.Tensor('float32', iota(n).map((v) => v + 10), [n]) },
   M: { dims: [8], feed: () => new ort.Tensor('float32', iota(8), [8]) },
   P: { dims: ['N', 4], feed: (n) => new ort.Tensor('float32', iota(n * 4), [n, 4]) },
+  I: { dims: [1, 2, 'N'], feed: (n) => new ort.Tensor('float32', iota(2 * n), [1, 2, n]) },
+  W: { dims: [3, 2, 2], feed: () => new ort.Tensor('float32', iota(12), [3, 2, 2]) },
 };
 const iota = (count) => Float32Array.from({ length: count }, (_, i) => i);
 

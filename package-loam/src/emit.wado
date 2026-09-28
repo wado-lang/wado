@@ -4,7 +4,7 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
 use { Extent } from "./extent.wado";
-use { Poly } from "./poly.wado";
+use { Condition, Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, Node, data_type, element_of, is_binary_elementwise } from "./graph.wado";
 use { Expected } from "./runtime/checkpoint.wado";
@@ -529,9 +529,14 @@ impl Symbols {
     }
 
     fn spell_all(&mut self, extents: &List<Extent>) -> Result<String, EmitError> {
+        return self.spell_polys(&extents.into_iter().map(|e| e.poly()).collect());
+    }
+
+    /// Lengths or positions as the list literal of `i32` a kernel takes.
+    fn spell_polys(&mut self, polys: &List<Poly>) -> Result<String, EmitError> {
         let mut spelled: List<String> = [];
-        for let e of *extents {
-            spelled.push(self.spell_extent(&e.poly())?);
+        for let p of *polys {
+            spelled.push(self.spell_extent(&p)?);
         }
         return Result::Ok(`[${spelled.join(", ")}]`);
     }
@@ -672,7 +677,7 @@ fn emit_forward(
             continue;
         }
         let calls = if node.op == "Split" {
-            split_calls(node, checked, &exprs);
+            split_calls(node, checked, &exprs, &mut symbols)?;
         } else {
             [node_call(node, checked, &exprs, &mut symbols, graph.opset)?] as List<String>;
         };
@@ -937,7 +942,7 @@ fn node_call(
         return Result::Ok(`gather_rows(${exprs.reference(&node.inputs[0])}, ${exprs.reference(&node.inputs[1])})`);
     }
     if op == "MaxPool" || op == "Conv" {
-        return Result::Ok(window_call(node, shapes, exprs));
+        return window_call(node, shapes, exprs, symbols);
     }
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
@@ -993,24 +998,34 @@ fn node_call(
 }
 
 /// A `Split` as one `slice_axis` per output, each cutting the next run.
-fn split_calls(node: &Node, checked: &Checked, exprs: &Operands) -> List<String> {
+fn split_calls(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+) -> Result<List<String>, EmitError> {
     let shapes = &checked.shapes;
     let x = shapes.get(node.inputs[0]).unwrap();
-    let parts = settled(split_parts(node, &checked.known, &x));
+    // Stage 0 owed these already.
+    let mut restated: List<Condition> = [];
+    let parts = settled(split_parts(node, &checked.known, &x, &mut restated));
     let axis = settled(split_axis(node, x.rank()));
     let element = checked.primitives.get(node.inputs[0]).unwrap();
     let pre = axis_run(&x, 0, axis);
     let post = axis_run(&x, axis + 1, x.rank());
     let operand = exprs.reference(&node.inputs[0]);
     let mut calls: List<String> = [];
-    let mut start = 0;
+    let mut start = Poly::constant(0);
     for let [i, part] of parts.into_iter().enumerate() {
         let part_axis = shapes.get(node.outputs[i]).unwrap().axes[axis].name;
         let turbofish = `::<${element}, [${pre}], ${x.axes[axis].name}, ${part_axis}, [${post}]>`;
-        calls.push(`slice_axis${turbofish}(${operand}, ${axis}, ${start}, ${part}, 1)`);
-        start += part;
+        calls.push(
+            `slice_axis${turbofish}(${operand}, ${axis}, ${symbols.spell(&start)?}, ${symbols.spell_extent(&part)?}, 1)`,
+        );
+        // The parts sum to the axis, so every running sum is within it.
+        start = start.try_add(&part).unwrap();
     }
-    return calls;
+    return Result::Ok(calls);
 }
 
 /// A `Slice` as one `slice_axis` per axis it narrows, each call reading the
@@ -1131,14 +1146,25 @@ fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operan
 
 /// A `MaxPool` or `Conv` as its kernel, over the window stage 0 read. Each
 /// spatial axis list is a pack, so the turbofish spells the output's.
-fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> String {
+fn window_call(
+    node: &Node,
+    shapes: &TreeMap<String, Shape>,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
     let x = shapes.get(node.inputs[0]).unwrap();
     let y = shapes.get(node.outputs[0]).unwrap();
-    let window = settled(window_of(node, &x, shapes));
-    let geometry = `&Window { kernel: ${window.kernel}, strides: ${window.strides}, dilations: ${window.dilations}, pads: ${window.pads}, output: ${window.output} }`;
+    // Stage 0 owed these already.
+    let mut restated: List<Condition> = [];
+    let window = settled(window_of(node, &x, shapes, &mut restated));
+    let pads = symbols.spell_polys(&window.pads)?;
+    let output = symbols.spell_polys(&window.output)?;
+    let geometry = `&Window { kernel: ${window.kernel}, strides: ${window.strides}, dilations: ${window.dilations}, pads: ${pads}, output: ${output} }`;
     let input = exprs.reference(&node.inputs[0]);
     if node.op == "MaxPool" {
-        return `max_pool::<${x.axes[0].name}, ${x.axes[1].name}, [${spatial_axes(&x)}], [${spatial_axes(&y)}]>(${input}, ${geometry})`;
+        return Result::Ok(
+            `max_pool::<${x.axes[0].name}, ${x.axes[1].name}, [${spatial_axes(&x)}], [${spatial_axes(&y)}]>(${input}, ${geometry})`,
+        );
     }
     let w = shapes.get(node.inputs[1]).unwrap();
     let turbofish = `::<${x.axes[0].name}, ${x.axes[1].name}, ${w.axes[0].name}, [${spatial_axes(&x)}], [${spatial_axes(
@@ -1146,9 +1172,11 @@ fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
     )}], [${spatial_axes(&y)}]>`;
     let weight = exprs.reference(&node.inputs[1]);
     if has_bias(node) {
-        return `conv_bias${turbofish}(${input}, ${weight}, ${exprs.reference(&node.inputs[2])}, ${geometry})`;
+        return Result::Ok(
+            `conv_bias${turbofish}(${input}, ${weight}, ${exprs.reference(&node.inputs[2])}, ${geometry})`,
+        );
     }
-    return `conv${turbofish}(${input}, ${weight}, ${geometry})`;
+    return Result::Ok(`conv${turbofish}(${input}, ${weight}, ${geometry})`);
 }
 
 /// The axes past a shape's first two, which a window slides over.

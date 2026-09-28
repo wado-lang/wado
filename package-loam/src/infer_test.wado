@@ -327,7 +327,7 @@ test "Split sizes that miss the axis's extent stop the build" {
         S = Constant<value_ints = [8, 8, 4]>()
         Q, Y, V = Split<axis = 2>(X, S)
     }`;
-    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: the parts sum to 20, and axis 2 is 24";
+    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: the parts sum to 20, which must be axis 2's 24, and it is not";
 }
 
 test "a Split size past the axis stops the build rather than wrapping into it" {
@@ -335,7 +335,7 @@ test "a Split size past the axis stops the build rather than wrapping into it" {
         S = Constant<value_ints = [4294967304, 8, 8]>()
         Q, Y, V = Split<axis = 2>(X, S)
     }`;
-    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: a part is 4294967304, and axis 2 is 24";
+    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: a part is 4294967304, which must lie within axis 2's 24, and it is not";
 }
 
 test "a scalar operand to MatMul stops the build rather than trapping" {

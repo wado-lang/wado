@@ -30,9 +30,9 @@ use {
     is_binary_elementwise,
 } from "./graph.wado";
 use { Condition, Poly, owe as owe_at } from "./poly.wado";
-use { ceil_div, from_end, spatial_extents } from "./runtime/tensor.wado";
+use { from_end, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
-use { Window, ints, window_over } from "./window.wado";
+use { Geometry, ints, window_over } from "./window.wado";
 
 /// A tensor the schema does not reach. Loam does not fall back to positional
 /// axes, for the same reason stage 0 has no runtime tier to defer an unproven
@@ -344,7 +344,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
             }
         }
         let produced = if node.op == "Split" {
-            split(node, &shapes, &known, schema)?;
+            split(node, &shapes, &known, schema, &mut owed)?;
         } else {
             [infer_node(node, &shapes, &known, schema, graph.opset, &mut owed)?] as List<Shape>;
         };
@@ -645,7 +645,7 @@ fn infer_node(
     }
     if op == "MaxPool" {
         let x = operand_at(node, shapes, 0);
-        let window = window_of(node, &x, shapes)?;
+        let window = window_of(node, &x, shapes, owed)?;
         return windowed(node, [x.axes[0], x.axes[1]], &window, schema);
     }
     if op == "Conv" {
@@ -655,7 +655,7 @@ fn infer_node(
         if group != 1 {
             return Result::Err(attribute_error(node, "group", `is ${group}, and only a single group is read`));
         }
-        let window = window_of(node, &x, shapes)?;
+        let window = window_of(node, &x, shapes, owed)?;
         agree_at(node, &x.axes[1], &w.axes[1], owed)?;
         if has_bias(node) {
             let b = operand_at(node, shapes, 2);
@@ -736,11 +736,12 @@ fn split(
     shapes: &TreeMap<String, Shape>,
     known: &TreeMap<String, Known>,
     schema: &Schema,
+    owed: &mut List<Condition>,
 ) -> Result<List<Shape>, InferError> {
     let x = operand_at(node, shapes, 0);
-    let parts = split_parts(node, known, &x)?;
+    let parts = split_parts(node, known, &x, owed)?;
     let axis = split_axis(node, x.rank())?;
-    let whole = x.axes[axis].static_extent();
+    let whole = x.axes[axis].extent.poly();
     let mut produced: List<Shape> = [];
     for let [i, part] of parts.into_iter().enumerate() {
         let mut axes = x.axes;
@@ -751,7 +752,7 @@ fn split(
                 schema,
                 axis,
                 x.rank(),
-                Extent::Static(part),
+                counted(node, part)?,
                 "is a part of a split axis",
             )?;
         }
@@ -765,42 +766,52 @@ pub fn split_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
 }
 
 /// The extent of each part `Split` cuts its operand's axis into: the sizes it
-/// reads, or equal parts with the last taking what remains.
-pub fn split_parts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Result<List<i32>, InferError> {
+/// reads, or equal parts with the last taking what remains. `owed` gains what
+/// only the run can check: that each part lies within the axis, and that the
+/// parts sum to it.
+pub fn split_parts(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    x: &Shape,
+    owed: &mut List<Condition>,
+) -> Result<List<Poly>, InferError> {
     let axis = split_axis(node, x.rank())?;
-    let Extent::Static(whole) = x.axes[axis].extent else {
-        return Result::Err(refusal(node, `axis ${axis} is ${x.axes[axis].extent}, and Split reads its extent`));
-    };
+    let whole = extents_of(node, x)?[axis].poly();
     let count = node.outputs.len();
-    let mut sizes: List<i64> = [];
-    match axes_of(node, known, 1, "split").map_err(|reason| refusal(node, reason))? {
+    let sizes = match polys_at(node, known, 1, "split").map_err(|reason| refusal(node, reason))? {
         Some(given) => {
             if given.len() != count {
                 return Result::Err(refusal(node, `${given.len()} sizes are given for ${count} outputs`));
             }
-            sizes = given;
+            given;
         },
         None => {
-            let chunk = ceil_div(whole as i64, count as i64);
-            for let _ of 0..<count - 1 {
-                sizes.push(chunk);
-            }
-            sizes.push(whole as i64 - chunk * (count - 1) as i64);
+            let chunk = Poly::ceil_div(&whole, &Poly::constant(count as i64), &node.site());
+            let mut equal = List::<Poly>::filled(count - 1, chunk);
+            let others = chunk.try_mul(&Poly::constant(count as i64 - 1)).ok_or(refusal(
+                node,
+                `${chunk} * ${count - 1} leaves i64`,
+            ))?;
+            equal.push(difference(node, &whole, &others)?);
+            equal;
+        },
+    };
+    let mut sum = Poly::constant(0);
+    for let size of sizes {
+        let within = `a part is ${size}, which must lie within axis ${axis}'s ${whole}`;
+        owe(node, owed, size, within)?;
+        owe(node, owed, difference(node, &whole, &size)?, within)?;
+        sum = sum.try_add(&size).ok_or(refusal(node, `${sum} + ${size} leaves i64`))?;
+    }
+    match Extent::Symbolic(sum).agreement(&Extent::Symbolic(whole)) {
+        Some(presumed) => owed.extend(&presumed),
+        None => {
+            let exact = `the parts sum to ${sum}, which must be axis ${axis}'s ${whole}`;
+            owe(node, owed, difference(node, &sum, &whole)?, exact)?;
+            owe(node, owed, difference(node, &whole, &sum)?, exact)?;
         },
     }
-    let mut parts: List<i32> = [];
-    let mut sum = 0 as i64;
-    for let size of sizes {
-        if !(0 <= size <= whole as i64) {
-            return Result::Err(refusal(node, `a part is ${size}, and axis ${axis} is ${whole}`));
-        }
-        parts.push(size as i32);
-        sum += size;
-    }
-    if sum != whole as i64 {
-        return Result::Err(refusal(node, `the parts sum to ${sum}, and axis ${axis} is ${whole}`));
-    }
-    return Result::Ok(parts);
+    return Result::Ok(sizes);
 }
 
 /// `Flatten` regroups the axes ahead of `axis` into one and the rest into
@@ -984,11 +995,11 @@ pub fn range_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<[Poly
 
 /// A window's output: the two leading axes it carries through, and one axis
 /// per spatial position, which the output layout names.
-fn windowed(node: &Node, lead: [Axis, Axis], window: &Window, schema: &Schema) -> Result<Shape, InferError> {
+fn windowed(node: &Node, lead: [Axis, Axis], window: &Geometry, schema: &Schema) -> Result<Shape, InferError> {
     let [batch, channels] = lead;
     let mut extents = [batch.extent, channels.extent] as List<Extent>;
     for let e of window.output {
-        extents.push(Extent::Static(e));
+        extents.push(counted(node, e)?);
     }
     let mut axes = [batch, channels] as List<Axis>;
     for let i of 2..<extents.len() {
@@ -1035,14 +1046,19 @@ fn output_layout_axis(
 
 /// The window a `Conv` or `MaxPool` slides over its first operand. `emit`
 /// reads it again to write the kernel's geometry.
-pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Result<Window, InferError> {
+pub fn window_of(
+    node: &Node,
+    x: &Shape,
+    shapes: &TreeMap<String, Shape>,
+    owed: &mut List<Condition>,
+) -> Result<Geometry, InferError> {
     if x.rank() < 3 {
         return Result::Err(refusal(
             node,
             `the operand has rank ${x.rank()}, and a window slides over axes past the second`,
         ));
     }
-    let spatial = spatial_extents(&static_extents_of(node, x)?);
+    let spatial: List<Poly> = extents_of(node, x)?[2..<x.rank()].to_list().into_iter().map(|e| e.poly()).collect();
     let kernel = if node.op == "Conv" {
         let w = operand_at(node, shapes, 1);
         if w.rank() != x.rank() {
@@ -1056,7 +1072,7 @@ pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Res
         attr_read(node, ints(node, "kernel_shape", spatial.len(), 1))?;
     };
     let ceil = int_attr(node, "ceil_mode", 0)? != 0;
-    return attr_read(node, window_over(node, &spatial, kernel, ceil));
+    return attr_read(node, window_over(node, &spatial, kernel, ceil, owed));
 }
 
 /// An attribute read, its failure said at `node`.
