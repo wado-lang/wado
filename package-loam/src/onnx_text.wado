@@ -22,6 +22,7 @@ use {
     default_opset,
     element_of,
     is_build_time,
+    is_float_word,
     parameters,
     push_element,
     static_extents,
@@ -210,7 +211,7 @@ fn element_texts(
     check_element_count(name, elements.len(), &extents)?;
     let mut texts: List<String> = [];
     for let e of elements {
-        texts.push(literal_text(toks, first_token(s, e)));
+        texts.push(literal_text(toks, first_token(s, e), name)?);
     }
     return Result::Ok(texts);
 }
@@ -292,13 +293,22 @@ fn element_bits(name: &String, text: &String, dtype: &String, width: i32) -> Res
 }
 
 /// A literal token's value as text `FromStr` reads: a string without its
-/// quotes, and a float with a digit after its point.
-fn literal_text(toks: &onnx::TokenStream, token: i32) -> String {
+/// quotes, and a float with a digit after its point. `name` is what an error
+/// names: the tensor or the attribute the literal belongs to.
+fn literal_text(toks: &onnx::TokenStream, token: i32, name: &String) -> Result<String, String> {
     let text = toks.token_text(token);
-    if toks.kind_at(token) == onnx::TK_FLOAT {
-        return digit_after_point(&text);
+    let kind = toks.kind_at(token);
+    if kind == onnx::TK_STRING {
+        return Result::Ok(unquote(text));
     }
-    return unquote(text);
+    if kind == onnx::TK_INT || is_float_word(&text) {
+        return Result::Ok(text);
+    }
+    // The grammar lexes a signed word as a `FLOAT`, and only a number has a digit.
+    if kind == onnx::TK_ID || !text.chars().any(|c| c.is_ascii_digit()) {
+        return Result::Err(`${name}: ${text} is not a value`);
+    }
+    return Result::Ok(digit_after_point(&text));
 }
 
 /// ONNX's float literal may end its fraction at the point (`1.`, `1.e5`), which
@@ -452,7 +462,7 @@ fn single_attr_text(
 ) -> Result<String, String> {
     for let c of children(s, single) {
         if s.is_token(c) {
-            return Result::Ok(literal_text(toks, s.token_index(c)));
+            return literal_text(toks, s.token_index(c), attr_name);
         }
         if s.is_node(c) {
             if first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) matches { Some(_) } {

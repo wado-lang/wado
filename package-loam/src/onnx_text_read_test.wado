@@ -370,6 +370,68 @@ test "a float may end its fraction at the point" {
     assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x20\x41\x00\x00\x20\xc0");
 }
 
+test "a float may be a word, in any case, as ONNX's parser reads it" {
+    let g = read(
+        `agraph (float[3] X) => (float[3] Y)
+        <float[3] W = {nan, -INF, Infinity}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap();
+    // The quiet NaN 0x7fc00000, then 0xff800000 and 0x7f800000, little-endian.
+    assert g.initializers[0].data == Option::Some(b"\x00\x00\xc0\x7f\x00\x00\x80\xff\x00\x00\x80\x7f");
+}
+
+test "a float attribute may be a word" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = Clip <min = -inf, max = inf> (X)
+        }`,
+    ).unwrap();
+    assert g.nodes[0].attrs[0].values == ["-inf"];
+    assert g.nodes[0].attrs[1].values == ["inf"];
+}
+
+test "a word that is no float names itself where a value goes" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = LeakyRelu <alpha = infinite> (X)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "alpha: infinite is not a value";
+}
+
+test "a subgraph attribute is refused as one, not read as a word" {
+    let e = read(
+        `agraph (bool C, float[2] X) => (float[2] Y) {
+            Y = If <then_branch = t () => (float[2] A) { A = Relu(X) }> (C)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "then_branch: a subgraph attribute is not read";
+}
+
+test "a signed word that is no float names itself" {
+    let e = read(
+        `agraph (float[1] X) => (float[1] Y)
+        <float[1] W = {-infinite}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "W: -infinite is not a value";
+}
+
+test "a float word in an integer tensor names itself" {
+    let e = read(
+        `agraph (float[2, 3] X) => (float[6] Y)
+        <int64[1] S = {inf}>
+        {
+            Y = Reshape(X, S)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "S: inf is not an integer";
+}
+
 test "a float may not start at the point" {
     let e = read(
         `agraph (float[1] X) => (float[1] Y)

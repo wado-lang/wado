@@ -51,11 +51,15 @@ attr  : ID (COLON ID)? EQ attrValue ;
 
 attrValue       : singleAttrValue | attrValueList ;
 attrValueList   : LBRACK (singleAttrValue (COMMA singleAttrValue)*)? RBRACK ;
-singleAttrValue : INT | FLOAT | STRING | tensorConstant | graph ;
+// A bare `ID` is a float spelled as a word (`nan`, `inf`, `infinity`, in any
+// case), which ONNX's parser accepts wherever a number goes. It stays an `ID`
+// so that a tensor named `inf` still parses; the generator checks the word.
+// Signed, it cannot be a name, so `FLOAT` takes it.
+singleAttrValue : INT | FLOAT | STRING | ID | tensorConstant | graph ;
 
 tensorConstant : type quotableId? EQ? tensorValues ;
 tensorValues   : LBRACE (tensorElem (COMMA tensorElem)*)? RBRACE ;
-tensorElem     : INT | FLOAT | STRING ;
+tensorElem     : INT | FLOAT | STRING | ID ;
 
 // `ID (` is `seq(T)` or `map(K, V)`; the generator decides which and rejects
 // the rest. Nothing else in a type position is followed by `(`.
@@ -86,7 +90,7 @@ COLON    : ':' ;
 DOT      : '.' ;
 QUESTION : '?' ;
 
-FLOAT  : '-'? [0-9]+ ('.' [0-9]* EXPONENT? | EXPONENT) ;
+FLOAT  : '-'? [0-9]+ ('.' [0-9]* EXPONENT? | EXPONENT) | '-' [a-zA-Z]+ ;
 INT    : '-'? [0-9]+ ;
 STRING : '"' ~["]* '"' ;
 ID     : [a-zA-Z_] [a-zA-Z0-9_]* ;

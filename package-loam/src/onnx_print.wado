@@ -1,7 +1,7 @@
 //! A graph in the ONNX textual format, spelled so `onnx_text.wado` reads the
 //! same graph back.
 
-use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo, element_of } from "./graph.wado";
+use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo, element_of, is_float_word } from "./graph.wado";
 use { Refusal } from "./infer.wado";
 
 /// What the textual format has no spelling for.
@@ -128,12 +128,16 @@ fn known_values(tensor: &String, known: &Known) -> Result<String, PrintError> {
     return Result::Ok(`{${elements.join(", ")}}`);
 }
 
-/// The grammar has no literal for a float that is not finite.
+/// A float as the reader takes it back, bit for bit. The word `nan` reads as
+/// one NaN, so a NaN with any other sign or payload has no spelling.
 fn float_text(tensor: &String, v: f32) -> Result<String, PrintError> {
-    if !v.is_finite() {
-        return fail(`${tensor}: ${v} has no text form`);
+    if !v.is_nan() {
+        return Result::Ok(`${v}`);
     }
-    return Result::Ok(`${v}`);
+    if v.to_bits() != f32::NAN.to_bits() {
+        return fail(`${tensor}: the NaN 0x${v.to_bits():x} has no text form`);
+    }
+    return Result::Ok("nan");
 }
 
 fn node_line(node: &Node) -> Result<String, PrintError> {
@@ -160,7 +164,7 @@ fn attr_value(node: &Node, a: &Attr) -> Result<String, PrintError> {
     }
     let mut values: List<String> = [];
     for let v of a.values {
-        if is_number(&v) {
+        if is_number(&v) || is_float_word(&v) {
             values.push(v);
         } else if v.contains("\"") {
             return Result::Err(refused(`attribute ${a.name} holds a quote, which the grammar cannot spell`));
