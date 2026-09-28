@@ -159,6 +159,11 @@ impl Model {
 
     /// The token the model ranks first after `ids`.
     pub fn next_token(&self, ids: &List<i32>) -> i32 {
+        assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
+        let vocab = gpt2::Vocab::EXTENT;
+        for let id of ids {
+            assert 0 <= *id < vocab, "every token id is in the vocabulary";
+        }
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
         let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
         let logits = gpt2::forward(
@@ -166,7 +171,6 @@ impl Model {
             &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
             &self.weights,
         );
-        let vocab = gpt2::Vocab::EXTENT;
         let row = (ids.len() - 1) * vocab;
         let mut best = 0;
         for let v of 1..<vocab {
