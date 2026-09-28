@@ -215,22 +215,58 @@ wado-compiler`). `--coverage-include=deps` adds `Dependency` and `Remote`
 modules. Kiln output (`Redirected`) is never measured, and neither is the
 standard library under another package's tests.
 
-Within the standard library, two kinds of module have no plan:
-
-- a `#![wasm_module]` module such as `core:allocator`, compiled into a core
-  module of its own that has no import for a probe to call;
-- a Wasm asset such as `libm.wat`, which is not Wado source.
-
-A probe must also never run where the Canonical ABI forbids calling an import:
-inside `realloc` and `post-return`. Both reach only the allocator and
-synthesized glue, which carry no probes. The WIR lowering asserts that no
-function they reach holds one.
+A Wasm asset such as `libm.wat` has no plan, since it is not Wado source.
 
 `#[coverage(off)]` on a `fn`, an `impl` or a module (`#![coverage(off)]`)
 removes it from the plan, as Rust's attribute of the same name does. It is for
 code that cannot be reached from a test, such as a `run` entry point that only
 the CLI world calls. It is the only way to exempt code, so every exemption is
 visible where the code is.
+
+### The allocator reports through its own module
+
+`core:allocator` is `#![wasm_module("mem")]`: it compiles into a core module of
+its own, which defines the linear memory the main module imports. It runs in
+two situations:
+
+- The guest calls it, through `builtin::realloc` or the glue that lowers an
+  argument for an import. Calling an import from there is allowed.
+- The host calls it as the `realloc` canonical option, to place a value it
+  hands the guest. The Canonical ABI clears `may_leave` for that call
+  (`LiftLowerContext.reallocate`), and calling any import while it is clear
+  traps.
+
+A probe in `mem` must therefore know which situation it is in:
+
+- `mem` imports `wado:coverage/hit` as the main module does. The import takes
+  one `u32`, so lowering it needs no memory or `realloc`, and the module that
+  defines the memory can import it.
+- In a coverage build, the `realloc` canonical option names a wrapper that
+  `mem` exports. The wrapper sets a flag for the length of the call, and it is
+  the only way the host enters `mem`.
+- On a first hit, a probe in `mem` calls the host when the flag is clear. When
+  it is set, the probe records the id as pending.
+- The host can have called `realloc` only while the guest was waiting on it.
+  After every call the main module makes to the host, it checks a pending flag
+  `mem` exports, and when it is set, calls a function `mem` exports that
+  reports the pending ids.
+
+The Canonical ABI also clears `may_leave` in `post-return`. The test world lifts
+every export `async`, and an `async` lift has no `post-return`, so no probe
+runs there. The WIR lowering asserts it.
+
+### A test file chooses its allocator
+
+A build links exactly one allocator, and `wado test` picks `debug`. The `bump`
+and `freelist` allocators would stay uncovered. Their tests today are e2e
+fixtures (`allocator_freelist_*.wado`), which choose the allocator in
+`__DATA__`, and which `wado test` never runs.
+
+A test file names its allocator with `#![allocator("freelist")]`, and the
+allocator's tests move to `lib/core/allocator_*_test.wado`. Each file compiles
+on its own, so one run covers all three allocators, and merging by path joins
+them into one plan for `core:allocator`. An explicit `--allocator` that
+disagrees with the file's is an error for that file.
 
 ### The standard library gates on a baseline
 
@@ -299,7 +335,9 @@ host call on every run is too slow for loops.
        `-O0`/`-O3` corpus check.
 6. [ ] The standard library: the snapshot keyed by instrumentation,
        `--coverage-baseline`, and the CI job with its first baseline.
-7. [ ] 100% for the standard library: the baseline emptied.
+7. [ ] The allocator: the import and the `realloc` wrapper in `mem`, the
+       pending drain, `#![allocator]`, and its fixtures moved to test files.
+8. [ ] 100% for the standard library: the baseline emptied.
 
 ## Known gaps
 
@@ -308,8 +346,8 @@ host call on every run is too slow for loops.
       trap. A 100% report can therefore include a statement no test ran to its
       end.
 - [ ] Hit or not only, no execution counts. `FNDA` and `DA` report `1` or `0`.
-- [ ] `core:allocator` and the other `#![wasm_module]` modules are not
-      measured.
+- [ ] A hit in the allocator is lost when the allocator traps while the host
+      is calling it: the pending ids are never reported.
 - [ ] Kiln generators run at compile time and are not measured, nor is a
       program `core:eval` compiles.
 - [ ] `wado run` and `wado serve` have no `--coverage`.
