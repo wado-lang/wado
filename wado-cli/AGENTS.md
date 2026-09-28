@@ -37,8 +37,6 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   both live in `main.rs`.
 - The binary sets mimalloc as the global allocator: `wado serve` is
   allocation-heavy per request and the system allocator contends across threads.
-  It is the default `mimalloc` feature, off only for a heap profiler, which sees
-  the system allocator alone.
 
 ## Module Map
 
