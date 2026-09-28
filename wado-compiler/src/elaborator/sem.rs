@@ -32,7 +32,8 @@ pub(crate) struct ModuleSemantics {
     /// `(impl_block.id, trait_default_method.ast_id)`. The same trait body is
     /// synthesised once per impl, so one trait node legitimately carries a fact
     /// set per impl, which snapshot isolation gives and a flat map could not.
-    /// Each value's `decls` / `imports` are cloned from the impl module.
+    /// Each value holds `bindings` and `types` alone: its declarations and
+    /// imports are the impl module's, which reify reads them from.
     pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
 }
 

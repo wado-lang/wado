@@ -2079,16 +2079,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or_default();
 
             // One default body serves every impl taking it, so each impl records its
-            // per-node facts apart; declarations stay the impl module's own.
+            // per-node facts apart; declarations and imports stay the impl module's
+            // own, lent to the walk and taken back.
             for default_method in &default_methods {
                 let synthetic = ModuleSemantics {
                     bindings: ModuleBindings::default(),
-                    imports: scope.sem.imports.clone(),
+                    imports: std::mem::take(&mut scope.sem.imports),
                     types: TypeAnnotations::default(),
                     decls: std::mem::take(&mut scope.sem.decls),
                     default_method_semantics: hashmap::IndexMap::default(),
                 };
-                let ((), populated) = util::replaced(
+                let ((), mut populated) = util::replaced(
                     &mut *scope,
                     |elab| &mut elab.sem,
                     synthetic,
@@ -2107,7 +2108,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     },
                 );
 
-                scope.sem.decls = populated.decls.clone();
+                scope.sem.imports = std::mem::take(&mut populated.imports);
+                scope.sem.decls = std::mem::take(&mut populated.decls);
                 scope
                     .sem
                     .default_method_semantics
