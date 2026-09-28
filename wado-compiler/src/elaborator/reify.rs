@@ -712,8 +712,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     // Reify is the sole producer of
                     // trait default-method `TirFunction`s, synthesised here
-                    // from the per-impl `ModuleSemantics` snapshots the
-                    // body walk recorded on `sem.default_method_semantics`.
+                    // from the per-impl facts the body walk recorded on
+                    // `sem.default_method_semantics`.
                     for tir_func in self.reify_impl_default_methods(impl_block) {
                         tir_module.add_function(tir_func);
                     }

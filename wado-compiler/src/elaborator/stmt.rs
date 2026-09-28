@@ -282,8 +282,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             def,
             StructFieldInfo {
                 name: mangled_name,
-                // The declaring module, which a trait default body walked for
-                // an impl elsewhere is not standing in.
+                // The declaring file, not the walk's: a trait default body is
+                // walked standing in each inheriting impl's module.
                 ..StructFieldInfo::of_decl(
                     self.tysys.resolutions.defs().module(def).clone(),
                     struct_decl,
