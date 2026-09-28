@@ -312,7 +312,11 @@ fn a_directory_below_the_package_is_walked_from_below_it() {
         "[package]\nname = \"p\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    fs::write(src_dir.join("sub/a.wado"), "test {\n    assert 1 == 1;\n}\n").unwrap();
+    fs::write(
+        src_dir.join("sub/a.wado"),
+        "test {\n    assert 1 == 1;\n}\n",
+    )
+    .unwrap();
 
     for dir in ["sub", "."] {
         wado_in(&src_dir)

@@ -33,6 +33,7 @@ use crate::tir::{
 use super::coercion::{
     NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
     is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
+    unary_passes_expected_type,
 };
 use super::expr::UnionSource;
 use super::sem::ModuleSemantics;
@@ -2717,22 +2718,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_expr(&unary.expr, ctx, expected_type);
                 }
                 let op = ast_unary_op_to_tir(unary.op);
-                // The elaborator's rule (`resolve_unary`): a primitive `-x` /
-                // `~x` has its operand's type, so the operand is expected to be
-                // what the unary is. `-1.0` in an `f32` const body is `f32`, not
-                // the default `f64`.
-                let inner_expected = match unary.op {
-                    ast::UnaryOp::Neg | ast::UnaryOp::BitNot
-                        if recorded_type != TypeTable::UNKNOWN
-                            && is_primitive_literal_target(
-                                &self.tysys.type_table.borrow(),
-                                recorded_type,
-                            ) =>
-                    {
-                        Some(recorded_type)
-                    }
-                    _ => None,
-                };
+                let inner_expected = Some(recorded_type).filter(|&expected| {
+                    unary_passes_expected_type(&self.tysys.type_table.borrow(), unary.op, expected)
+                });
                 let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
                 if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a

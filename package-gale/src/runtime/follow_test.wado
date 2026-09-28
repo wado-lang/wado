@@ -18,7 +18,9 @@ test "an empty open set admits any kind, as an empty slot set does" {
 
 test "a non-empty open set admits only its kinds" {
     let tokens = ([5, 6] as List<i32>).to_array();
-    let sets: List<List<i32>> = [[1 << 5]];
+    let sets: List<List<i32>> = [
+        [1 << 5],
+    ];
     let open = follow_open_set(1);
     assert follow_admits(&tokens, 0, open, &sets, EOF_KIND);
     assert !follow_resumes(&tokens, 1, open, &sets, EOF_KIND);

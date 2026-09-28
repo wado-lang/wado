@@ -202,6 +202,13 @@ pub(super) fn is_primitive_literal_target(tt: &TypeTable, operand: TypeId) -> bo
     tt.is_numeric(operand) || tt.is_half(operand)
 }
 
+/// Whether the type expected of a unary `op` is expected of its operand too. A
+/// primitive `-x` / `~x` has its operand's type: `~0x00FF_FFFF_FFFF_FFFF` is an
+/// `i64` where one is expected, as `0x00FF_FFFF_FFFF_FFFF ^ 1` is.
+pub(super) fn unary_passes_expected_type(tt: &TypeTable, op: UnaryOp, expected: TypeId) -> bool {
+    matches!(op, UnaryOp::Neg | UnaryOp::BitNot) && is_primitive_literal_target(tt, expected)
+}
+
 /// Which of two operands resolves first, so the other can take its type.
 pub(super) enum LiteralPairOrder {
     /// Nothing distinguishes the two: resolve both against the carried hint,
