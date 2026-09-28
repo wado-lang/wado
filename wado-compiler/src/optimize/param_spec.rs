@@ -1178,7 +1178,9 @@ fn mint_clones(
     let mut retarget: Vec<Retarget> = Vec::new();
     let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
-    let settler = BranchSettler::new(project);
+    // Built on the first clone: a round whose sites all reuse a clone or fall
+    // outside the budget mints none.
+    let mut settler: Option<BranchSettler> = None;
     let hot_then_cold = [false, true].into_iter().flat_map(|cold| {
         per_caller.iter().flat_map(move |(caller, sites)| {
             sites
@@ -1212,7 +1214,8 @@ fn mint_clones(
             project.functions[site.callee.index()].borrow().name,
             site.bindings.len()
         );
-        let clone = build_clone(project, site, FuncId::new(next_id), ordinal, &settler);
+        let settler = settler.get_or_insert_with(|| BranchSettler::new(project));
+        let clone = build_clone(project, site, FuncId::new(next_id), ordinal, settler);
         next_id += 1;
         state.clones.insert(key, clone.id);
         state.per_callee.insert(site.callee, ordinal + 1);
