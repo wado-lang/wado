@@ -1,0 +1,57 @@
+// A generic function is one function of the plan however many times it is
+// instantiated, and a trait's default method is planned under the trait. A
+// test that traps still reports what it ran before the trap.
+trait Named {
+    fn name(&self) -> String;
+
+    fn greet(&self) -> String {
+        return `hi ${self.name()}`;
+    }
+
+    fn shout(&self) -> String {
+        return `HI ${self.name()}`;
+    }
+}
+
+struct Cat {}
+
+impl Named for Cat {
+    fn name(&self) -> String {
+        return "cat";
+    }
+}
+
+fn pick<T>(flag: bool, a: T, b: T) -> T {
+    if flag {
+        return a;
+    }
+    return b;
+}
+
+fn check(n: i32) -> i32 {
+    if n < 0 {
+        panic("negative");
+    }
+    return n;
+}
+
+test "generic and default" {
+    assert pick(true, 1, 2) == 1;
+    assert pick(true, "a", "b") == "a";
+    assert Cat {}.greet() == "hi cat";
+}
+
+#[expect_trap]
+test "traps after a region" {
+    check(-1);
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "uncovered_lines": [12, 28],
+    "uncovered_branches": ["25:5 else", "32:5 else"],
+    "uncovered_functions": ["Named::shout"]
+  }
+}

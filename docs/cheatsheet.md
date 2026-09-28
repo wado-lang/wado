@@ -1544,7 +1544,11 @@ wado test --filter '*pattern*'       # keep files whose path matches the wildcar
 wado test --test-name 'addition'     # run only test blocks whose name contains "addition"
 wado test file.wado --test-name add  # narrow both: this file, those test names
 wado compile --world test file.wado  # compile a single file with the test world
+wado test --coverage                 # also report the lines, branches and functions run
 ```
+
+`#[coverage(off)]` on a `fn` or an `impl` (`#![coverage(off)]` on a module)
+leaves code no test can reach out of the report.
 
 Discovery walks the project root for every `*.wado` file, honouring
 `.gitignore`, `.gitmodules`, dot-prefixed entries, and nested `wado.toml`

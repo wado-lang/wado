@@ -643,6 +643,8 @@ pub enum CompilerItem {
     FormatterWriteStr,
     /// `core:rt::assert_failed`.
     AssertFailed,
+    /// `core:rt::coverage_probe`.
+    CoverageProbe,
     /// `core:rt::handle_class`.
     HandleClass,
     /// `core:rt::inspect_handle`.
@@ -905,6 +907,7 @@ impl CompilerItem {
         Self::FormatterWriteLiteral,
         Self::FormatterWriteStr,
         Self::AssertFailed,
+        Self::CoverageProbe,
         Self::HandleClass,
         Self::InspectHandle,
         Self::CmFuturePair,
@@ -1079,6 +1082,7 @@ impl CompilerItem {
             Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::FormatterWriteStr => "formatter_write_str",
             Self::AssertFailed => "assert_failed",
+            Self::CoverageProbe => "coverage_probe",
             Self::HandleClass => "handle_class",
             Self::InspectHandle => "inspect_handle",
             Self::CmFuturePair => "cm_future_pair",
@@ -1181,6 +1185,7 @@ impl CompilerItem {
             // Always loaded — `core:prelude` is auto-imported, and `core:rt`
             // carries the CM ABI helpers the binding synthesis calls.
             | Self::AssertFailed
+            | Self::CoverageProbe
             | Self::HandleClass
             | Self::InspectHandle
             | Self::CmFuturePair
@@ -1452,6 +1457,7 @@ impl CompilerItem {
                 CompilerItemKind::Method
             }
             Self::AssertFailed
+            | Self::CoverageProbe
             | Self::HandleClass
             | Self::InspectHandle
             | Self::CmFuturePair

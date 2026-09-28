@@ -43,6 +43,7 @@ use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
+use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
@@ -456,6 +457,11 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Local newtype declarations (`Stmt::Item`) — same reasoning as
     /// `pending_local_structs`.
     pub(crate) pending_local_newtypes: Vec<TirNewtype>,
+    /// The coverage plan whose probes reify puts in, under
+    /// `wado test --coverage`. See `probe.rs`.
+    pub(crate) coverage: Option<&'a CoverageMap>,
+    /// The probe ids reify has put in so far.
+    pub(crate) probes_emitted: IndexSet<u32>,
 }
 
 /// Call site captured for location literals in defaults.
@@ -513,6 +519,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             call_site_location: None,
             pending_local_structs: Vec::new(),
             pending_local_newtypes: Vec::new(),
+            coverage: None,
+            probes_emitted: IndexSet::default(),
         }
     }
 
@@ -809,6 +817,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         tir_module.wasm_module = module.wasm_module().map(String::from);
 
+        self.assert_probes_complete();
         self.logger.ok_or_bail(tir_module)
     }
 
@@ -2118,7 +2127,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             expected_type,
             tail_value,
         );
-        TirBlock::new(stmts, block.span)
+        self.probe_block(
+            ProbeSite::BlockStart,
+            block.id,
+            TirBlock::new(stmts, block.span),
+        )
     }
 
     /// Reify a statement slice at block position. `block_span` is the enclosing
@@ -2136,6 +2149,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let len = slice.len();
         let mut stmts = Vec::new();
         for (i, s) in slice.iter().enumerate() {
+            if let Some(probe) = self.probe(ProbeSite::BeforeStmt, s.id(), s.span()) {
+                stmts.push(probe);
+            }
             // `reify_let_else` consumes the rest of the block as its then-arm,
             // so stop here after emitting it.
             if let ast::Stmt::Let(l) = s
@@ -4486,10 +4502,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Vec<TirStmt> {
         match &if_stmt.condition {
             ast::Condition::LetChain { elements, .. } => {
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block_with_position(b, ctx, expected_type, tail_value));
+                let else_block = match &if_stmt.else_block {
+                    Some(b) => {
+                        Some(self.reify_block_with_position(b, ctx, expected_type, tail_value))
+                    }
+                    None => self.implicit_else(if_stmt.id, if_stmt.span),
+                };
                 self.reify_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
@@ -4508,10 +4526,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     expected_type,
                     tail_value,
                 );
-                let else_branch = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block_with_position(b, ctx, expected_type, tail_value));
+                let else_branch = match &if_stmt.else_block {
+                    Some(b) => {
+                        Some(self.reify_block_with_position(b, ctx, expected_type, tail_value))
+                    }
+                    None => self.implicit_else(if_stmt.id, if_stmt.span),
+                };
                 let tt = self.tysys.type_table.borrow();
                 let then_type = tir::block_result_type(&tt, &then_branch);
                 let else_type = else_branch
@@ -4545,10 +4565,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Condition::Expr(cond_expr) => {
                 let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block(b, ctx, None));
+                let else_block = match &if_stmt.else_block {
+                    Some(b) => Some(self.reify_block(b, ctx, None)),
+                    None => self.implicit_else(if_stmt.id, if_stmt.span),
+                };
                 vec![TirStmt::new(
                     TirStmtKind::If {
                         condition,
@@ -4566,10 +4586,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Else-branch resolves in the outer scope (chain
                 // bindings aren't visible there); the chain body
                 // gets its own scope.
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block(b, ctx, None));
+                let else_block = match &if_stmt.else_block {
+                    Some(b) => Some(self.reify_block(b, ctx, None)),
+                    None => self.implicit_else(if_stmt.id, if_stmt.span),
+                };
                 self.reify_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
@@ -4609,10 +4629,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // overall block's result type is the recorded
                 // `expected_type` (or `recorded_type` as a
                 // fallback when no expectation propagated).
-                let else_block = if_expr
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block_value(b, ctx, branch_expected));
+                let else_block = match &if_expr.else_block {
+                    Some(b) => Some(self.reify_block_value(b, ctx, branch_expected)),
+                    None => self.implicit_else(if_expr.id, if_expr.span),
+                };
                 let stmts = self.reify_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
@@ -4628,10 +4648,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let condition = self.reify_condition_expr(cond_expr, ctx);
         let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
-        let else_branch = if_expr
-            .else_block
-            .as_ref()
-            .map(|b| self.reify_block_value(b, ctx, branch_expected));
+        let else_branch = match &if_expr.else_block {
+            Some(b) => Some(self.reify_block_value(b, ctx, branch_expected)),
+            None => self.implicit_else(if_expr.id, if_expr.span),
+        };
         TirExpr::new(
             TirExprKind::If {
                 condition: Box::new(condition),
@@ -4746,6 +4766,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right = self.reify_expr(&binary.right, ctx, None);
             (left, right)
         };
+        let right = self.probe_expr(ProbeSite::Around, binary.right.id(), right);
         self.reify_binary_op(
             binary.id,
             binary.op,
@@ -5532,7 +5553,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         };
 
-        if is_option {
+        let mut desugared = if is_option {
             self.reify_question_mark_option(inner, ctx, qm.span)
         } else if is_result {
             self.reify_question_mark_result(inner, ctx, qm.span, qm.id)
@@ -5540,8 +5561,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Annotate already diagnosed; produce a Unit-typed
             // placeholder of `ERROR` so downstream phases see the
             // same shape annotate's recovery path produced.
-            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span)
+            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+        };
+        // The early return is the desugared match's last arm.
+        if let TirExprKind::Match { arms, .. } = &mut desugared.kind
+            && let Some(exit) = arms.last_mut()
+        {
+            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+            let body = std::mem::replace(&mut exit.body, placeholder);
+            exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
         }
+        desugared
     }
 
     /// `Option<T>`'s `?`-op desugar — mirrors
@@ -6106,6 +6136,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .or(block_return_type)
             .or_else(|| tir_block_return_type(&body))
             .unwrap_or(body.type_id);
+        let body = self.probe_expr(ProbeSite::Around, closure.body.id(), body);
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
@@ -6938,6 +6969,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .as_ref()
                     .map(|g| self.reify_expr(g, ctx, Some(TypeTable::BOOL)));
                 let body = self.reify_expr(&arm.body, ctx, branch_expected);
+                let body = self.probe_expr(ProbeSite::Around, arm.body.id(), body);
                 TirMatchArm {
                     pattern,
                     guard,

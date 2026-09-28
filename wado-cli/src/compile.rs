@@ -157,6 +157,8 @@ pub struct CompileFlags {
     /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`
     /// section (issue #1654). Set by `wado compile` when embedding.
     pub embed_wit_contract: Option<wado_compiler::wit_emit::WitContract>,
+    /// `wado test --coverage`. Forwarded to `CompilerOptions::coverage`.
+    pub coverage: Option<wado_compiler::coverage::CoverageScope>,
 }
 
 #[derive(Clone, Copy)]
@@ -411,6 +413,7 @@ pub async fn try_compile_with_run_cache(
         lib_interface_export: flags.lib_interface_export,
         retain_wir: flags.retain_wir,
         embed_wit_contract: flags.embed_wit_contract.clone(),
+        coverage: flags.coverage,
         ..Default::default()
     };
 

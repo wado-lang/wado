@@ -299,6 +299,13 @@ with none has no section. `wado doc` runs nothing.
 
 Rationale: [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
 
+### `#[coverage(off)]`
+
+On a `fn`, an `impl` or a module (`#![coverage(off)]`), leaves that code out of
+what [`wado test --coverage`](./spec-testing.md#coverage) measures. It is for
+code no test can reach, such as an entry point only another world calls. `off`
+is its only argument, since measuring is the default.
+
 ### `#[wire(...)]`
 
 Controls how a declaration is serialized and deserialized. The framework it

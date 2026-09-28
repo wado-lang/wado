@@ -21,6 +21,7 @@ pub mod compiler_host;
 pub mod compiler_item;
 pub mod component_model;
 pub mod const_eval;
+pub mod coverage;
 pub mod defs;
 pub mod doc;
 pub mod effect_check;
@@ -388,6 +389,9 @@ pub struct CompilerOptions {
     /// `component-type` section / `wado wit` text from this compile rather than
     /// re-analyzing the frontend (issue #1654). `None` skips the clone.
     pub embed_wit_contract: Option<wit_emit::WitContract>,
+    /// When `Some`, instrument the modules this scope measures and carry
+    /// their plan in the `org.wado-lang.coverage` section. Test world only.
+    pub coverage: Option<coverage::CoverageScope>,
 }
 
 impl Default for CompilerOptions {
@@ -410,6 +414,7 @@ impl Default for CompilerOptions {
             providers: Vec::new(),
             params: param_resolution::ParamInputs::default(),
             embed_wit_contract: None,
+            coverage: None,
         }
     }
 }
@@ -1145,7 +1150,10 @@ fn compile_after_load<H: CompilerHost>(
     // compilation refuses to continue on an incomplete one — the downstream
     // phases assume populated `state` / `tir_modules` — and its diagnostics have
     // already reached the host.
-    let sem = semantics::semantics_with_logger(load_result, logger, true);
+    let coverage = options
+        .coverage
+        .filter(|_| options.target_world.as_deref() == Some("test"));
+    let sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
     if !sem.is_complete() {
         return Err(Bail);
     }
@@ -1476,6 +1484,7 @@ fn compile_after_load<H: CompilerHost>(
         tir_modules,
         interner,
         liveness,
+        coverage,
         ..
     } = sem;
 
@@ -1572,6 +1581,7 @@ fn compile_after_load<H: CompilerHost>(
         package.lib_world_info = Some(lib_world);
     }
     package.skip_validation = options.skip_validation;
+    package.coverage_section = coverage.map(|map| map.encode());
     package.test_name_filters = options.test_name_filters;
     package.wasm_assets = wasm_assets;
     package.codegen_flags =
@@ -2028,7 +2038,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
-    let sem = semantics::semantics_with_logger(load_result, &logger, true);
+    let sem = semantics::semantics_with_logger(load_result, &logger, true, None);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();

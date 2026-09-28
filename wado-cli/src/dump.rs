@@ -22,6 +22,7 @@ pub struct DumpOptions {
     pub show_tir_resolved: bool,
     pub show_tir_monomorphized: bool,
     pub show_assert_plan: bool,
+    pub show_coverage_plan: bool,
     pub show_nir_lowered: bool,
     pub show_nir: bool,
     pub show_wir: bool,
@@ -40,6 +41,7 @@ enum Opt {
     TirResolved,
     TirMonomorphized,
     AssertPlan,
+    CoveragePlan,
     NirLowered,
     Nir,
     Wir,
@@ -57,6 +59,7 @@ impl Opt {
         Self::TirResolved,
         Self::TirMonomorphized,
         Self::AssertPlan,
+        Self::CoveragePlan,
         Self::NirLowered,
         Self::Nir,
         Self::Wir,
@@ -86,6 +89,7 @@ impl Opt {
             | Self::TirResolved
             | Self::TirMonomorphized
             | Self::AssertPlan
+            | Self::CoveragePlan
             | Self::NirLowered
             | Self::Nir
             | Self::Wir => true,
@@ -136,6 +140,12 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Show which operands each `assert` captures",
+            },
+            Self::CoveragePlan => args::OptSpec {
+                long: Some("coverage-plan"),
+                short: None,
+                value: None,
+                desc: "Show the regions `wado test --coverage` counts in the entry module",
             },
             Self::TirMonomorphized => args::OptSpec {
                 long: Some("tir-monomorphized"),
@@ -209,6 +219,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_modules = false;
     let mut show_types = false;
     let mut show_assert_plan = false;
+    let mut show_coverage_plan = false;
     let mut show_tir_resolved = false;
     let mut show_tir_monomorphized = false;
     let mut show_nir_lowered = false;
@@ -257,6 +268,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     show_assert_plan = true;
                     any_phase = true;
                 }
+                Opt::CoveragePlan => {
+                    show_coverage_plan = true;
+                    any_phase = true;
+                }
                 Opt::NirLowered => {
                     show_nir_lowered = true;
                     any_phase = true;
@@ -296,6 +311,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_tir_resolved,
         show_tir_monomorphized,
         show_assert_plan,
+        show_coverage_plan,
         show_nir_lowered,
         show_nir,
         show_wir,
@@ -578,6 +594,13 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
             Some(_) => println!("(no assert in this program)"),
             None => println!("(elaboration failed or not available)"),
         }
+    }
+    if opts.show_coverage_plan {
+        println!("=== Coverage Plan ===");
+        let (plan, _) =
+            wado_compiler::coverage::plan_module(&result.entry_module_source, &result.ast);
+        print!("{}", wado_compiler::coverage::render_plan(&plan));
+        println!();
     }
     if opts.show_tir_monomorphized {
         if let Some(ref text) = result.monomorphized_tir_text {

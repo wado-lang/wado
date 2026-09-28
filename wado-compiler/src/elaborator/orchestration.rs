@@ -21,6 +21,7 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::{Code, CompilerHost};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
+use crate::coverage::CoverageMap;
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
@@ -1182,6 +1183,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         logger: &'a Logger<'a, H>,
         snapshot: Option<&Semantics>,
         build_tir: bool,
+        coverage: Option<&CoverageMap>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
         // Per-rehydration memo: maps each cached function `Rc`'s pointer
@@ -1523,6 +1525,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // reify-emitted call site keeps its callee live.
                         gate,
                     );
+                    reify.coverage = coverage;
                     if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
                         result.insert(module_source.clone(), reified);
                     }

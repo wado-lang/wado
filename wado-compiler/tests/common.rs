@@ -915,6 +915,8 @@ pub struct WasiState {
     pub http_ctx: WasiHttpCtx,
     pub http_hooks: TestHttpCtx,
     pub tls_ctx: WasiTlsCtx,
+    /// The coverage regions the guest reported, under `CompilerOptions::coverage`.
+    pub coverage_hits: std::collections::BTreeSet<u32>,
 }
 
 impl WasiView for WasiState {
@@ -958,6 +960,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
+            coverage_hits: std::collections::BTreeSet::new(),
         }
     }
 
@@ -970,6 +973,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
+            coverage_hits: std::collections::BTreeSet::new(),
         }
     }
 }
@@ -990,6 +994,14 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     timezone_host::add_to_linker(&mut linker)?;
+    linker
+        .root()
+        .instance("core:coverage/coverage-host@0.1.0")?
+        .func_wrap("hit", |mut store, (id,): (u32,)| {
+            let state: &mut WasiState = store.data_mut();
+            state.coverage_hits.insert(id);
+            Ok(())
+        })?;
     Ok(linker)
 }
 
@@ -1408,6 +1420,8 @@ pub struct WasmRunResult {
     /// Set on a clean `wasi:cli/exit` (recorded here, not as a trap); `None`
     /// otherwise.
     pub exit_code: Option<i32>,
+    /// The coverage regions any test reported, under `CompilerOptions::coverage`.
+    pub coverage_hits: std::collections::BTreeSet<u32>,
 }
 
 /// Run a compiled Wasm component and capture its output
@@ -1491,6 +1505,7 @@ pub fn run_wasm_with_full_options(
                 mocks: outgoing_mocks,
             },
             tls_ctx: build_tls_ctx(tls_mocks),
+            coverage_hits: std::collections::BTreeSet::new(),
         };
         let mut store = Store::new(engine, state);
         limit_store(&mut store, DEFAULT_TIMEOUT_MS);
@@ -1524,6 +1539,7 @@ pub fn run_wasm_with_full_options(
             stderr,
             trapped,
             exit_code,
+            coverage_hits: std::collections::BTreeSet::new(),
         })
     })
 }
@@ -1594,6 +1610,7 @@ pub fn run_test_world(
 
         let mut all_stdout = String::new();
         let mut all_stderr = String::new();
+        let mut coverage_hits = std::collections::BTreeSet::new();
 
         for test_name in &test_names {
             let expect_trap = test_name.starts_with("test-trap-");
@@ -1656,6 +1673,7 @@ pub fn run_test_world(
                 }
             }
 
+            coverage_hits.append(&mut store.data_mut().coverage_hits);
             all_stdout.push_str(&String::from_utf8_lossy(&stdout_clone.contents()));
             all_stderr.push_str(&String::from_utf8_lossy(&stderr_clone.contents()));
         }
@@ -1665,6 +1683,7 @@ pub fn run_test_world(
             stderr: all_stderr,
             trapped: false,
             exit_code: None,
+            coverage_hits,
         })
     })
 }

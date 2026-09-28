@@ -1,8 +1,9 @@
 use std::any::Any;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -14,12 +15,14 @@ use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
+use wado_compiler::coverage::{CoverageScope, DecodedPlans};
 use wado_compiler::hashmap::IndexMap;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, CompileFlags};
+use crate::compile::{self, CompileFlags, build_dir};
+use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_coverage_include};
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
@@ -68,6 +71,8 @@ pub struct TestOptions {
     /// `--profile`: sample the guest across the one file's tests, serially and
     /// without the per-test timeout, which is counted in the epoch it samples on.
     pub profile: ProfileMode,
+    /// `--coverage`: instrument the package and report what the tests ran.
+    pub coverage: Option<CoverageOptions>,
 }
 
 /// `--format` selects how a run's progress is rendered.
@@ -104,6 +109,7 @@ impl TestOptions {
             knobs: self.knobs.clone(),
             target_world: Some("test".to_string()),
             test_name_filters: self.test_name_filters.clone(),
+            coverage: self.coverage.as_ref().map(|c| c.scope),
             ..CompileFlags::default()
         }
     }
@@ -126,6 +132,9 @@ enum Opt {
     NoDir,
     NoRun,
     Profile,
+    Coverage,
+    CoverageInclude,
+    CoverageBaseline,
     Help,
 }
 
@@ -140,6 +149,9 @@ impl Opt {
         Self::NoDir,
         Self::NoRun,
         Self::Profile,
+        Self::Coverage,
+        Self::CoverageInclude,
+        Self::CoverageBaseline,
         Self::Help,
     ];
 
@@ -203,6 +215,28 @@ impl Opt {
                        (default: profile.json, 10ms). Runs serially, and nothing\n\
                        bounds a test that hangs — the profiler samples on the epoch\n\
                        deadline the per-test timeout was counted in",
+            },
+            Self::Coverage => args::OptSpec {
+                long: Some("coverage"),
+                short: None,
+                value: None,
+                desc: "Report the lines, branches and functions the tests ran; \
+                       `--coverage=lcov,json`\n\
+                       picks the files written to build/coverage/ (default: lcov)",
+            },
+            Self::CoverageInclude => args::OptSpec {
+                long: Some("coverage-include"),
+                short: None,
+                value: Some("deps,stdlib"),
+                desc: "Measure the dependencies' modules too, or the `core:` modules\n\
+                       when the package under test is the standard library",
+            },
+            Self::CoverageBaseline => args::OptSpec {
+                long: Some("coverage-baseline"),
+                short: None,
+                value: Some("FILE"),
+                desc: "Fail unless the regions left unrun are exactly those FILE lists\n\
+                       (`--coverage=baseline` writes one)",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -300,6 +334,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut no_run = false;
     let mut format = TestFormat::Heartbeat;
     let mut profile = ProfileMode::None;
+    let mut coverage: Option<CoverageOptions> = None;
+    let mut include: Option<CoverageScope> = None;
+    let mut baseline: Option<PathBuf> = None;
     let mut runtime_knobs = RuntimeKnobs::default();
     // Tests compile unoptimized by default: the compile stage dominates a run,
     // and `-O` opts back in.
@@ -353,6 +390,22 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                 Opt::NoRun => no_run = true,
                 Opt::Profile => {
                     profile = runtime::parse_profile(&args::require_string(&mut parser)?)?;
+                }
+                Opt::Coverage => {
+                    let formats = match parser.optional_value() {
+                        Some(list) => CoverageFormats::parse(&list.to_string_lossy())?,
+                        None => CoverageFormats::default(),
+                    };
+                    coverage = Some(CoverageOptions {
+                        formats,
+                        ..CoverageOptions::default()
+                    });
+                }
+                Opt::CoverageInclude => {
+                    include = Some(parse_coverage_include(&args::require_string(&mut parser)?)?);
+                }
+                Opt::CoverageBaseline => {
+                    baseline = Some(PathBuf::from(args::require_string(&mut parser)?));
                 }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -449,6 +502,20 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         jobs = 1;
     }
 
+    if let Some(coverage) = &mut coverage {
+        if no_run {
+            return Err(CliExit::error(
+                "--coverage has nothing to measure under --no-run",
+            ));
+        }
+        coverage.scope = include.unwrap_or_default();
+        coverage.baseline = baseline;
+    } else if include.is_some() {
+        return Err(CliExit::error("--coverage-include needs --coverage"));
+    } else if baseline.is_some() {
+        return Err(CliExit::error("--coverage-baseline needs --coverage"));
+    }
+
     Ok(TestOptions {
         package_runs,
         jobs,
@@ -459,6 +526,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         test_name_filters,
         format,
         profile,
+        coverage,
     })
 }
 
@@ -488,6 +556,8 @@ struct LoadedModule {
     /// `--profile`: the run's one sampler and its sampling period, shared with
     /// `run` so it can write the profile once every test has fed it.
     profiler: Option<(GuestProfilerSlot, Duration)>,
+    /// `--coverage`: the run's report and this component's plans.
+    coverage: Option<(Arc<CoverageRun>, Arc<DecodedPlans>)>,
     _module_permit: OwnedSemaphorePermit,
 }
 
@@ -851,6 +921,7 @@ fn load_module(
     profile: &ProfileMode,
     runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<&GuestProfilerSlot>,
+    coverage_run: Option<&Arc<CoverageRun>>,
     module_permit: OwnedSemaphorePermit,
     observer: Arc<StageObserver>,
     reporter: &Arc<dyn TestReporter>,
@@ -932,6 +1003,13 @@ fn load_module(
                 }
             }
 
+            // A component without the section measured no module, so every
+            // one it counts is in a component that has it.
+            let coverage = coverage_run.and_then(|run| {
+                let plans = wado_compiler::coverage::read_from_component(&artifact.wasm)?;
+                run.add(&artifact.path, &plans, &BTreeSet::new(), None);
+                Some((Arc::clone(run), Arc::new(plans)))
+            });
             reporter.on_load(
                 &artifact.path,
                 LoadEvent::Ok {
@@ -946,6 +1024,7 @@ fn load_module(
                 linker,
                 tests,
                 profiler,
+                coverage,
                 _module_permit: module_permit,
             })
         }
@@ -1146,6 +1225,7 @@ async fn run_load_stage(
     lfail_tx: mpsc::Sender<LoadFailure>,
     epoch_ticker: Arc<EpochTicker>,
     profiler_slot: Option<GuestProfilerSlot>,
+    coverage_run: Option<Arc<CoverageRun>>,
     reporter: Arc<dyn TestReporter>,
 ) -> (usize, usize) {
     let mut ok_count = 0_usize;
@@ -1162,6 +1242,7 @@ async fn run_load_stage(
             let reporter_for_join_err = Arc::clone(&reporter);
             let profile_for_load = profile.clone();
             let slot_for_load = profiler_slot.clone();
+            let coverage_for_load = coverage_run.clone();
             // Each load worker is its own task so its progress is not
             // gated by `buffer_unordered`'s outer poll.
             tokio::spawn(async move {
@@ -1187,6 +1268,7 @@ async fn run_load_stage(
                         &profile_for_load,
                         runtime_knobs,
                         slot_for_load.as_ref(),
+                        coverage_for_load.as_ref(),
                         module_permit,
                         observer_inner,
                         &reporter,
@@ -1460,6 +1542,7 @@ async fn run_pipeline(
     profiler_slot: Option<GuestProfilerSlot>,
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
+    coverage_run: Option<Arc<CoverageRun>>,
 ) -> PipelineOutcome {
     let opt_level = flags.knobs.opt_level.to_wasmtime();
     let budget = Arc::new(PipelineBudget::new(cpu, compile_jobs, execute_jobs));
@@ -1522,6 +1605,7 @@ async fn run_pipeline(
                 lfail_tx,
                 ticker.clone(),
                 profiler_slot.clone(),
+                coverage_run,
                 reporter.clone(),
             ))
         } else {
@@ -1743,6 +1827,12 @@ async fn run_single_test(
             Some(format!("failed to get test function: {e:#}")),
         ),
     };
+
+    if let Some((run, plans)) = &module.coverage {
+        let hits = std::mem::take(&mut store.data_mut().coverage_hits().0);
+        let test = format!("{}::{}", module.path, job.display_name);
+        run.add(&module.path, plans, &hits, Some(&test));
+    }
 
     TestResult {
         file_path: module.path.clone(),
@@ -2134,6 +2224,7 @@ async fn run_one_package(
     profiler_slot: Option<GuestProfilerSlot>,
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
+    coverage_run: Option<Arc<CoverageRun>>,
 ) -> PackageTotals {
     reporter.on_package_start(pkg_run, show_banner);
 
@@ -2152,6 +2243,7 @@ async fn run_one_package(
         profiler_slot,
         reporter.clone(),
         run_cache,
+        coverage_run,
     )
     .await;
 
@@ -2317,6 +2409,13 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let runtime_knobs = opts.runtime;
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
+    let coverage_options = opts.coverage;
+    let invocation_root = std::env::current_dir()
+        .and_then(|dir| dir.canonicalize())
+        .map_err(|e| CliExit::error(format!("reading the current directory: {e}")))?;
+    let coverage_run = coverage_options
+        .as_ref()
+        .map(|_| Arc::new(CoverageRun::new(invocation_root.clone())));
 
     // `jobs` (= `--parallel N`, default `cpus`) is the **true** cap
     // on peak in-flight CPU work, enforced by the run's shared `cpu`
@@ -2371,6 +2470,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             profiler_slot.clone(),
             reporter.clone(),
             Arc::clone(&run_cache),
+            coverage_run.clone(),
         )
         .await;
         grand.merge(&totals);
@@ -2379,6 +2479,10 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
     write_profile(&profile, profiler_slot.as_ref())?;
+    if let (Some(options), Some(run)) = (&coverage_options, coverage_run) {
+        let run = Arc::into_inner(run).expect("every stage holding the coverage run has finished");
+        run.finish(options, &build_dir(&invocation_root).join("coverage"))?;
+    }
 
     if report_changed_inputs(&run_cache) {
         return Err(CliExit::silent_failure(1));
