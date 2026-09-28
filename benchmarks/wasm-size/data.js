@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790598750686,
+  "lastUpdate": 1790600962837,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61525,6 +61525,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7b8fcd3aa119dc9fae14087e900e91d463e75be5"
         },
         "date": 1790598749795,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1947,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6804,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20295,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288412,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2faa88b40f5334ed7d31c0d57265d977eb5d0e53",
+          "message": "Merge pull request #2210 from wado-lang/claude/wado-compiler-memory-analysis-yalqqt\n\nperf(elaborator): 30–40% lower peak RSS by sharing the stdlib snapshot's facts",
+          "timestamp": "2026-09-28T21:32:28+09:00",
+          "tree_id": "2d4026b48ba0c52ddd4f1bc608c4f4c9a6c003dd",
+          "url": "https://github.com/wado-lang/wado/commit/2faa88b40f5334ed7d31c0d57265d977eb5d0e53"
+        },
+        "date": 1790600961917,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
