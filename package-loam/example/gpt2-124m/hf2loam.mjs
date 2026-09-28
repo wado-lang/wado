@@ -27,7 +27,10 @@ function hfTensor(name) {
   const item = ITEM_BYTES[t.dtype];
   if (!item) throw new Error(`${name}: dtype ${t.dtype} is not supported`);
   const [b, e] = t.data_offsets;
-  // `subarray` clamps a range that runs past the end of a truncated file.
+  const dataBytes = hf.length - 8 - hfN;
+  if (!Number.isSafeInteger(b) || !Number.isSafeInteger(e) || b < 0 || b > e || e > dataBytes) {
+    throw new Error(`${name}: data_offsets [${b}, ${e}] lie outside the file's ${dataBytes} data bytes`);
+  }
   const bytes = hf.subarray(8 + hfN + b, 8 + hfN + e);
   const want = item * t.shape.reduce((n, d) => n * d, 1);
   if (bytes.length !== want) {
