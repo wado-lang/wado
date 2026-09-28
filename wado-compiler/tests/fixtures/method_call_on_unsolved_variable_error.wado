@@ -1,0 +1,21 @@
+// A method called on a value whose type is still an unsolved variable reports
+// the slot nothing answers, not a missing method on a type the source never
+// spells.
+
+fn mk<C: Default>(v: i64) -> C {
+    return C::default();
+}
+
+fn apply<A, B>(a: A, f: fn(A) -> B) -> B {
+    return f(a);
+}
+
+export fn run() {
+    let n = apply(1 as i64, |v| mk(v).len());
+}
+
+__DATA__
+{
+    "compile_error": ":14:33: error: cannot infer type parameter `C` of function `mk`; add a turbofish (`mk::<...>()`) or a type annotation",
+    "compile_errors_not_contains": ["no method"]
+}

@@ -586,13 +586,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = if let Some(info) = method_info {
             info
         } else {
-            let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
-            let _ = self.emit(TypeError::MethodNotFound {
-                type_name,
-                method_name: method_name.to_string(),
-                hint: String::new(),
-                span,
-            });
+            // An unsolved variable is reported where it stays unsolved, as a
+            // field access on one is.
+            if !self.tysys.type_table.borrow().is_infer_var(base_type_id) {
+                let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
+                let _ = self.emit(TypeError::MethodNotFound {
+                    type_name,
+                    method_name: method_name.to_string(),
+                    hint: String::new(),
+                    span,
+                });
+            }
             MethodInfo::undeclared(TypeTable::ERROR)
         };
 
