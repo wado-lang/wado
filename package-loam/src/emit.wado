@@ -21,11 +21,9 @@ use { Expected } from "./runtime/checkpoint.wado";
 use { expected } from "./safetensors.wado";
 use {
     Checked,
-    InferError,
-    Refusal,
+    conv_group,
     gather_axis,
     gemm_options,
-    conv_group,
     has_bias,
     is_reduction,
     range_bounds,
@@ -44,15 +42,6 @@ pub struct UnmappedDtype {
     pub dtype: String,
 }
 
-/// A broadcast the kernels do not cover: one operand's axes must be the
-/// other's, or a suffix of them.
-pub struct UnimplementedBroadcast {
-    pub node: String,
-    pub op: String,
-    pub left: String,
-    pub right: String,
-}
-
 /// Two tensor names that become one Wado identifier.
 pub struct NameCollision {
     pub tensor: String,
@@ -65,9 +54,6 @@ pub variant EmitError {
     /// tensor, it is not renamed: the schema's author chose the word.
     ReservedAxis(String),
     Dtype(UnmappedDtype),
-    /// A node stage 0 checks in a form no kernel computes.
-    Refused(Refusal),
-    Broadcast(UnimplementedBroadcast),
     Collision(NameCollision),
     /// A graph whose outputs `forward` cannot return: it delivers one value.
     OutputCount(i32),
@@ -80,14 +66,6 @@ pub variant EmitError {
 impl Display for UnmappedDtype {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(`${self.tensor}: no kernel holds ${self.dtype}`);
-    }
-}
-
-impl Display for UnimplementedBroadcast {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(
-            `${self.node} = ${self.op}: no kernel broadcasts [${self.left}] against [${self.right}]`,
-        );
     }
 }
 
@@ -104,8 +82,6 @@ impl Display for EmitError {
                 f.write_str(`${axis}: an axis cannot be named as the generated module names something`);
             },
             Dtype(e) => e.fmt(f),
-            Refused(e) => e.fmt(f),
-            Broadcast(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
             Unbound(symbol) => f.write_str(`${symbol}: the run needs this length, and no input's axis gives it`),
@@ -115,9 +91,6 @@ impl Display for EmitError {
 }
 
 impl Error for UnmappedDtype {
-}
-
-impl Error for UnimplementedBroadcast {
 }
 
 impl Error for NameCollision {
@@ -990,7 +963,9 @@ fn node_call(
         let out = shapes.get(node.outputs[0]).unwrap();
         let mut operands: List<String> = [];
         for let tensor of node.inputs {
-            operands.push(lifted(node, &tensor, &out, checked, exprs)?);
+            let shape = shapes.get(tensor).unwrap();
+            let element = checked.primitives.get(tensor).unwrap();
+            operands.push(under_axes_of(&exprs.reference(&tensor), &shape, &out, &element));
         }
         return Result::Ok(`select(${operands.join(", ")})`);
     }
@@ -1079,25 +1054,6 @@ fn slice_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     return Result::Ok(call);
 }
 
-/// An operand as a tensor of `out`'s rank, for a kernel whose operands share
-/// one axis list. A shorter one is lifted under `out`'s leading axes.
-fn lifted(node: &Node, tensor: &String, out: &Shape, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
-    let shape = checked.shapes.get(*tensor).unwrap();
-    if !shared_axes_agree(&shape, out) {
-        builtin::cold_path();
-        return Result::Err(broadcast_error(node, &shape, out));
-    }
-    let operand = exprs.reference(tensor);
-    if shape.rank() == out.rank() {
-        return Result::Ok(operand);
-    }
-    // The shared axes agree by name, so the lifted operand's are `out`'s.
-    let element = checked.primitives.get(*tensor).unwrap();
-    return Result::Ok(
-        `&lift::<${element}, [${axis_list(&shape)}], [${axis_list(out)}]>(${operand}, ${out.rank()})`,
-    );
-}
-
 /// `operand`, whose axes are `node`'s first input's, laid out as `node`'s output.
 fn reshaped(
     node: &Node,
@@ -1178,16 +1134,11 @@ fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operan
     let [a, b, left, right] = binary_call(node, shapes, exprs);
     let body = binary_body(&op, &"x", &"y");
     let trailing = settled(trailing_axes(node, left.rank(), right.rank())).unwrap_or(0);
-    let lowered = if trailing == 0 {
-        elementwise_call(&a, &b, &left, &right, &body);
-    } else {
-        aligned_call(&a, &b, &left, &right, trailing, &body);
-    };
-    let Some(call) = lowered else {
-        builtin::cold_path();
-        return Result::Err(broadcast_error(node, &left, &right));
-    };
-    return Result::Ok(call);
+    if trailing > 0 {
+        return Result::Ok(aligned_call(&a, &b, &left, &right, trailing, &body));
+    }
+    let out = shapes.get(node.outputs[0]).unwrap();
+    return Result::Ok(elementwise_call(&a, &b, &left, &right, &out, &body));
 }
 
 /// A `MaxPool` or `Conv` as its kernel, over the window stage 0 read. Each
@@ -1263,35 +1214,51 @@ fn float_literal(value: f32) -> String {
     return `(${value} as f32)`;
 }
 
-/// The kernel that combines two operands elementwise, chosen by which is the
-/// shorter, or `None` where no kernel broadcasts one against the other.
-fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &String) -> Option<String> {
+/// The kernel that combines two operands elementwise into `out`, chosen by
+/// which is the shorter where their shared axes are one list.
+fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, out: &Shape, body: &String) -> String {
     if !shared_axes_agree(left, right) {
-        return null;
+        let [x, y] = [
+            under_axes_of(a, left, out, &KERNEL_ELEMENT),
+            under_axes_of(b, right, out, &KERNEL_ELEMENT),
+        ];
+        return `zip(${x}, ${y}, |x, y| ${body})`;
     }
     if left.rank() == right.rank() {
-        return Option::Some(`zip(${a}, ${b}, |x, y| ${body})`);
+        return `zip(${a}, ${b}, |x, y| ${body})`;
     }
     if right.rank() < left.rank() {
         let turbofish = `::<[${axis_run(left, 0, left.rank() - right.rank())}], [${axis_list(right)}]>`;
-        return Option::Some(`zip_suffix${turbofish}(${a}, ${b}, |x, y| ${body})`);
+        return `zip_suffix${turbofish}(${a}, ${b}, |x, y| ${body})`;
     }
     let turbofish = `::<[${axis_run(right, 0, right.rank() - left.rank())}], [${axis_list(left)}]>`;
-    return Option::Some(`zip_suffix_lhs${turbofish}(${a}, ${b}, |x, y| ${body})`);
+    return `zip_suffix_lhs${turbofish}(${a}, ${b}, |x, y| ${body})`;
 }
 
 /// The kernel for arithmetic aligning B at the axis of A that `trailing` of A's
-/// axes follow, or `None` where B's axes are not A's there.
-fn aligned_call(a: &String, b: &String, left: &Shape, right: &Shape, trailing: i32, body: &String) -> Option<String> {
+/// axes follow. B is read under A's axes there.
+fn aligned_call(a: &String, b: &String, left: &Shape, right: &Shape, trailing: i32, body: &String) -> String {
     let axis = left.rank() - right.rank() - trailing;
-    for let i of 0..<right.rank() {
-        if !stretchable_axis(&left.axes[axis + i], &right.axes[i]) {
-            return null;
-        }
-    }
+    let met = Shape { axes: left.axes[axis..<axis + right.rank()].to_list() };
+    let b_read = under_axes_of(b, right, &met, &KERNEL_ELEMENT);
     let after = axis_run(left, left.rank() - trailing, left.rank());
-    let turbofish = `::<[${axis_run(left, 0, axis)}], [${axis_list(right)}], [${after}]>`;
-    return Option::Some(`zip_at${turbofish}(${a}, ${b}, ${trailing}, |x, y| ${body})`);
+    let turbofish = `::<[${axis_run(left, 0, axis)}], [${axis_list(&met)}], [${after}]>`;
+    return `zip_at${turbofish}(${a}, ${b_read}, ${trailing}, |x, y| ${body})`;
+}
+
+/// `operand` read under `out`'s axes: itself where they are its own, and
+/// otherwise lifted to `out`'s rank under `out`'s names. Stage 0 proved the
+/// extents broadcast and every elementwise kernel stretches an extent of 1, so
+/// an axis of 1 named apart from the one it meets differs in its type alone.
+fn under_axes_of(operand: &String, shape: &Shape, out: &Shape, element: &String) -> String {
+    let [own, theirs] = [
+        axis_list(shape),
+        axis_list(out),
+    ];
+    if own == theirs {
+        return *operand;
+    }
+    return `&lift::<${element}, [${own}], [${theirs}]>(${operand}, ${out.rank()})`;
 }
 
 /// `Gemm`'s `alpha * A' * B' + beta * C`, as a `matmul` under optional
@@ -1317,11 +1284,7 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     }
     let produced = shapes.get(node.outputs[0]).unwrap();
     let c = shapes.get(node.inputs[2]).unwrap();
-    let Some(call) = elementwise_call(&`&${product}`, &bias, &produced, &c, &"x + y") else {
-        builtin::cold_path();
-        return Result::Err(broadcast_error(node, &produced, &c));
-    };
-    return Result::Ok(call);
+    return Result::Ok(elementwise_call(&`&${product}`, &bias, &produced, &c, &produced, &"x + y"));
 }
 
 fn transposed(operand: &String, flag: bool) -> String {
@@ -1338,15 +1301,6 @@ fn is_identity(perm: &List<i32>) -> bool {
         }
     }
     return true;
-}
-
-fn broadcast_error(node: &Node, left: &Shape, right: &Shape) -> EmitError {
-    return EmitError::Broadcast(UnimplementedBroadcast {
-        node: node.outputs[0],
-        op: node.op,
-        left: axis_list(left),
-        right: axis_list(right),
-    });
 }
 
 /// Whether one axis of a kernel's signature can stand for both of these. Stage

@@ -43,6 +43,9 @@ add('AddPrefix', binary('Add', [3], [2, 3], { A: ['Col'], B: ['Row', 'Col'] }));
 add('MulStretchRight', binary('Mul', [2, 3], [2, 1], { A: ['Row', 'Col'], B: ['Row', 'Col'] }));
 add('SubStretchLeft', binary('Sub', [1, 3], [2, 3], { A: ['Row', 'Col'], B: ['Row', 'Col'] }));
 add('AddStretchBoth', binary('Add', [2, 1], [1, 3], { A: ['Row', 'Col'], B: ['Row', 'Col'], Y: ['Row', 'Col'] }));
+// An axis of 1 the layout names apart from the axis it stretches over.
+add('MulStretchRenamed', binary('Mul', [2, 1], [2, 3], { A: ['Row', 'One'], B: ['Row', 'Col'], Y: ['Row', 'Col'] }));
+add('SubStretchRenamedRanks', binary('Sub', [3, 1, 4], [2, 4], { A: ['Depth', 'One', 'Col'], B: ['Row', 'Col'], Y: ['Depth', 'Row', 'Col'] }));
 add('DivByZero', {
   inputs: { A: float([2, 3], [1, -1, 0, 3, -3, 0.5]), B: float([2, 3], [0, 0, 0, 2, -0.5, 4]) },
   nodes: [node('Div', ['A', 'B'], 'Y')],

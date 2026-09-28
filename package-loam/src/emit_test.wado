@@ -1,6 +1,6 @@
-use { EmitError, GRAPH_BANNER, NameCollision, UnimplementedBroadcast, UnmappedDtype, emit } from "./emit.wado";
+use { EmitError, GRAPH_BANNER, NameCollision, UnmappedDtype, emit } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
-use { Refusal, infer } from "./infer.wado";
+use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 
@@ -325,7 +325,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
     assert out.contains("map(X, |v| f32::erf(v))");
 }
 
-test "a broadcast no kernel covers names both operands" {
+test "an axis of 1 named apart from the one it stretches over is read under the result's axes" {
     let source = `
 g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
 <>
@@ -338,9 +338,27 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
         rule("Z", ["Batch", "Wide"]),
         rule("Y", ["Batch", "Wide"]),
     ];
-    let e = generate(source, layout).unwrap_err();
+    let out = generate(source, layout).unwrap();
 
-    assert `${e}` == "Y = Add: no kernel broadcasts [Batch, One] against [Batch, Wide]";
+    assert out.contains("let Y = zip(&lift::<f32, [Batch, One], [Batch, Wide]>(X, 2), Z, |x, y| x + y);");
+}
+
+test "a Where operand whose axis of 1 is named apart is read under the result's axes" {
+    let source = `
+g (float[N, 1] M, float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
+{
+    C = Cast <to = 9> (M)
+    Y = Where(C, X, Z)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("M", ["Batch", "One"]),
+        rule("C", ["Batch", "One"]),
+        rule("*", ["Batch", "Wide"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("let Y = select(&lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2), X, Z);");
 }
 
 test "an extent-1 axis stretches under the name the other operand gives it" {
@@ -686,9 +704,7 @@ fn is_error<E: Error>() {
 
 test "every error emit reports is an Error" {
     is_error::<EmitError>();
-    is_error::<Refusal>();
     is_error::<UnmappedDtype>();
-    is_error::<UnimplementedBroadcast>();
     is_error::<NameCollision>();
 }
 

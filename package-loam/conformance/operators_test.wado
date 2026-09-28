@@ -166,6 +166,20 @@ test "Add stretches an extent of 1 on each side" {
     assert_agrees(#include_bytes("./operators/AddStretchBoth.onnx"), #include_str("./operators/AddStretchBoth.txt"));
 }
 
+test "Mul stretches an axis of 1 the layout names apart" {
+    assert_agrees(
+        #include_bytes("./operators/MulStretchRenamed.onnx"),
+        #include_str("./operators/MulStretchRenamed.txt"),
+    );
+}
+
+test "Sub stretches an axis of 1 named apart, the operands of two ranks" {
+    assert_agrees(
+        #include_bytes("./operators/SubStretchRenamedRanks.onnx"),
+        #include_str("./operators/SubStretchRenamedRanks.txt"),
+    );
+}
+
 test "Div by 0 is an infinity, and 0 by 0 is NaN" {
     assert_agrees(#include_bytes("./operators/DivByZero.onnx"), #include_str("./operators/DivByZero.txt"));
 }
