@@ -45,15 +45,15 @@ If conflicting, resolve with the `git-upstream-sync` skill.
 
 ## Title
 
-One line saying what the branch is worth, not what was edited. A reader scanning
-a list of PRs is deciding whether to care.
+A short summary of the value the branch creates, not of what was edited. A
+reader scanning a list of PRs is deciding whether to care.
 
 `<type>(<scope>): <the value>`
 
-Leave numbers out of the title: they belong in the description, beside what
-they were measured against. Name two things if two are worth it, on the same
-line. If there are more, name the largest and leave the rest to
-the description.
+Name the value, not the mechanism behind it or the measurement of it. Numbers
+belong in the description, beside what they were measured against. If the
+branch is worth more than one thing, name the largest and leave the rest to the
+description.
 
 `type` is `feat`, `fix`, `docs`, `perf`, `refactor` or `chore`, with `!` for a
 breaking change. The scope is optional.
