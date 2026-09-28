@@ -358,30 +358,6 @@ mod tests {
         );
     }
 
-    /// A default method's record holds the walk's per-node facts alone. Its
-    /// declarations are the impl module's, and a copy per inherited default
-    /// method once made up most of the snapshot.
-    #[test]
-    fn default_method_records_carry_no_declarations() {
-        let snap = get_or_init_snapshot().expect("not re-entering the builder");
-        let state = snap
-            .state
-            .as_ref()
-            .expect("the stdlib snapshot is complete");
-        let records: Vec<_> = state
-            .module_semantics
-            .values()
-            .flat_map(|sem| sem.default_method_semantics.values())
-            .collect();
-        assert!(!records.is_empty(), "the stdlib inherits default methods");
-        for record in records {
-            assert!(record.decls.method_sigs.is_empty());
-            assert!(record.decls.impl_sigs.is_empty());
-            assert!(record.decls.function_return_types.is_empty());
-            assert!(record.imports.namespace_imports.is_empty());
-        }
-    }
-
     #[test]
     fn snapshot_is_cached_per_thread() {
         let a = get_or_init_snapshot().expect("not building");

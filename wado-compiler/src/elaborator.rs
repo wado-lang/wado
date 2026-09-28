@@ -60,7 +60,9 @@ use crate::elaborator::item::OperationOwner;
 use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
-use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
+use crate::elaborator::sem::{
+    DefaultMethodFacts, ModuleBindings, ModuleSemantics, TypeAnnotations,
+};
 use crate::elaborator::trait_query::{OnBoundTrait, SelfBinding};
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
@@ -2089,7 +2091,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     decls: std::mem::take(&mut scope.sem.decls),
                     default_method_semantics: hashmap::IndexMap::default(),
                 };
-                let ((), mut populated) = util::replaced(
+                let ((), populated) = util::replaced(
                     &mut *scope,
                     |elab| &mut elab.sem,
                     synthetic,
@@ -2108,12 +2110,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     },
                 );
 
-                scope.sem.imports = std::mem::take(&mut populated.imports);
-                scope.sem.decls = std::mem::take(&mut populated.decls);
-                scope
-                    .sem
-                    .default_method_semantics
-                    .insert((impl_block.id, default_method.id), populated);
+                let ModuleSemantics {
+                    bindings,
+                    imports,
+                    types,
+                    decls,
+                    default_method_semantics,
+                } = populated;
+                assert!(
+                    default_method_semantics.is_empty(),
+                    "a default method's walk synthesises no default methods of its own"
+                );
+                scope.sem.imports = imports;
+                scope.sem.decls = decls;
+                scope.sem.default_method_semantics.insert(
+                    (impl_block.id, default_method.id),
+                    DefaultMethodFacts { bindings, types },
+                );
             }
         }
     }

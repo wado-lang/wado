@@ -9,6 +9,7 @@ pub(crate) struct RssSample {
 }
 
 impl RssSample {
+    /// This process's reading now, or `None` where procfs cannot be read.
     pub(crate) fn read() -> Option<Self> {
         let status = std::fs::read_to_string("/proc/self/status").ok()?;
         Self::parse(&status)
@@ -24,21 +25,18 @@ impl RssSample {
         format!("{}/{} MiB", to_mib(self.current), to_mib(self.peak))
     }
 
-    /// The reading as a line's suffix, and how far the resident set moved
-    /// since `start` when the line closes a span.
+    /// The reading as a line's suffix and, when the line closes a span, the
+    /// net change in current RSS since `start`: a span that grows and frees
+    /// again shows in the peak, not here. The change is taken between the
+    /// MiB both lines print, so the two always agree.
     pub(crate) fn suffix(&self, start: Option<&Self>) -> String {
         let reading = self.current_peak_mib();
         match start {
-            Some(start) if self.current >= start.current => {
-                format!(
-                    " · rss {reading} (+{})",
-                    to_mib(self.current - start.current)
-                )
+            Some(start) => {
+                let change =
+                    to_mib(self.current).cast_signed() - to_mib(start.current).cast_signed();
+                format!(" · rss {reading} ({change:+})")
             }
-            Some(start) => format!(
-                " · rss {reading} (-{})",
-                to_mib(start.current - self.current)
-            ),
             None => format!(" · rss {reading}"),
         }
     }
@@ -59,10 +57,12 @@ fn to_mib(bytes: u64) -> u64 {
     (bytes + 512 * 1024) / (1024 * 1024)
 }
 
+/// The current reading as a progress line's suffix.
 pub(crate) fn live_suffix() -> Option<String> {
     RssSample::read().map(|s| s.suffix(None))
 }
 
+/// The run's peak, as a summary line.
 pub(crate) fn summary_line() -> Option<String> {
     RssSample::read().map(|s| format!("rss:     peak {} MiB", to_mib(s.peak)))
 }
@@ -117,6 +117,24 @@ Threads:\t8
         assert_eq!(at(512).suffix(None), " · rss 512/700 MiB");
         assert_eq!(at(512).suffix(Some(&at(500))), " · rss 512/700 MiB (+12)");
         assert_eq!(at(500).suffix(Some(&at(512))), " · rss 500/700 MiB (-12)");
+    }
+
+    #[test]
+    fn suffix_move_is_the_difference_of_the_readings_shown() {
+        let at_kib = |kib: u64| RssSample {
+            current: kib * 1024,
+            peak: 700 * 1024 * 1024,
+        };
+        let below_512 = at_kib(511 * 1024 + 700);
+        let above_512 = at_kib(512 * 1024 + 300);
+        assert_eq!(
+            above_512.suffix(Some(&below_512)),
+            " · rss 512/700 MiB (+0)"
+        );
+        assert_eq!(
+            below_512.suffix(Some(&at_kib(511 * 1024 + 400))),
+            " · rss 512/700 MiB (+1)"
+        );
     }
 
     #[test]

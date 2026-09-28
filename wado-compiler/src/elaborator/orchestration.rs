@@ -2238,17 +2238,20 @@ fn spelled_references(
 fn dispatched_callee_edges(state: &AnnotateState) -> IndexMap<ast::AstId, IndexSet<ast::AstId>> {
     let defs = state.tysys.resolutions.defs();
     let mut edges: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
-    let sems = state
-        .module_semantics
-        .values()
-        .flat_map(|sem| std::iter::once(&**sem).chain(sem.default_method_semantics.values()));
-    for sem in sems {
-        for (use_id, def) in sem.types.dispatched_callees() {
+    let walks = state.module_semantics.values().flat_map(|sem| {
+        std::iter::once(&sem.types).chain(
+            sem.default_method_semantics
+                .values()
+                .map(|facts| &facts.types),
+        )
+    });
+    for types in walks {
+        for (use_id, def) in types.dispatched_callees() {
             edges.entry(use_id).or_default().insert(defs.ast_id(def));
         }
         // A handler binding installs a whole block: the dispatch wrapper may
         // route any of the effect's operations to it.
-        for (use_id, impl_def) in sem.types.handler_impl_blocks() {
+        for (use_id, impl_def) in types.handler_impl_blocks() {
             edges
                 .entry(use_id)
                 .or_default()

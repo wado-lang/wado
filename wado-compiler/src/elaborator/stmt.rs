@@ -282,8 +282,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             def,
             StructFieldInfo {
                 name: mangled_name,
+                // The declaring module, which a trait default body walked for
+                // an impl elsewhere is not standing in.
                 ..StructFieldInfo::of_decl(
-                    self.current_module_source.clone(),
+                    self.tysys.resolutions.defs().module(def).clone(),
                     struct_decl,
                     Vec::new(),
                     type_param_type_ids,

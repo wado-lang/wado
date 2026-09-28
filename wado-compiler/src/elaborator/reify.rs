@@ -36,7 +36,7 @@ use super::coercion::{
     is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
 };
 use super::expr::UnionSource;
-use super::sem::ModuleSemantics;
+use super::sem::{ModuleSemantics, TypeAnnotations};
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
 use super::util;
@@ -115,7 +115,7 @@ macro_rules! reify_annotation_accessors {
     (base { $($name:ident => $map:ident : $val:ty),+ $(,)? }) => {
         $(
             fn $name(&self, id: AstId) -> Option<$val> {
-                self.sem.types.$map.get(&id).cloned()
+                self.types.$map.get(&id).cloned()
             }
         )+
     };
@@ -392,13 +392,12 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// intern new monomorphic instances; the trait/impl tables are
     /// treated as read-only per the WEP `Reify surface` contract.
     pub(crate) tysys: TypeSystem,
-    /// Per-module semantic facts produced by `annotate_bodies`. Read
-    /// only — reify never mutates the recorded decisions.
+    /// The module reify stands in: its declarations and imports, which name
+    /// resolution reads. Read only — reify never mutates the recorded decisions.
     pub(crate) sem: &'a ModuleSemantics,
-    /// The semantics whose declarations and imports name resolution reads.
-    /// The same as `sem` except inside a trait default method, whose per-node
-    /// facts are the impl's own record while its names stay the impl module's.
-    pub(crate) scope: &'a ModuleSemantics,
+    /// The per-node facts of the walk reify replays: `sem.types`, except
+    /// inside a trait default method, where they are the impl's own record.
+    pub(crate) types: &'a TypeAnnotations,
     /// All modules' semantics, keyed by source. Used to swap `sem` to a
     /// callee module when reifying a default-argument expression that
     /// resolves in the callee's lexical scope (it may reference items
@@ -455,11 +454,13 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// `sem.decls`, which is `&`-only from here) because a local item has
     /// no `Item::Struct` entry in `module.items` for the per-item dispatch
     /// loop to walk — `reify_stmt`'s `Stmt::Item` arm is the only place
-    /// that discovers it. See `reify_local_item`.
-    pub(crate) pending_local_structs: Vec<TirStruct>,
+    /// that discovers it. See `reify_local_item`. Keyed by declaration: a
+    /// trait default body is reified once per impl inheriting it, yet each
+    /// local item in it is declared once.
+    pub(crate) pending_local_structs: IndexMap<DefId, TirStruct>,
     /// Local newtype declarations (`Stmt::Item`) — same reasoning as
     /// `pending_local_structs`.
-    pub(crate) pending_local_newtypes: Vec<TirNewtype>,
+    pub(crate) pending_local_newtypes: IndexMap<DefId, TirNewtype>,
 }
 
 /// Call site captured for location literals in defaults.
@@ -503,7 +504,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Self {
             tysys,
             sem,
-            scope: sem,
+            types: &sem.types,
             all_module_semantics,
             symbols,
             loaded_modules,
@@ -516,8 +517,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             emit_live,
             compound_overrides: IndexMap::default(),
             call_site_location: None,
-            pending_local_structs: Vec::new(),
-            pending_local_newtypes: Vec::new(),
+            pending_local_structs: IndexMap::default(),
+            pending_local_newtypes: IndexMap::default(),
         }
     }
 
@@ -537,7 +538,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .rev()
             .copied()
-            .chain(std::iter::once(&self.sem.types.body))
+            .chain(std::iter::once(&self.types.body))
             .find_map(|facts| map(facts).get(&id))
     }
 
@@ -584,8 +585,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // annotate clears `fn_local_items`, and reify never refills it.
         self.tysys.type_lookup(
             &self.current_module_source,
-            &self.scope.imports.namespace_imports,
-            &self.scope.decls,
+            &self.sem.imports.namespace_imports,
+            &self.sem.decls,
         )
     }
 
@@ -792,23 +793,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `annotate_bodies` live on `sem.decls.pending_anonymous_structs`.
         // Reify clones them into the emitted module rather than draining,
         // because `sem` is `&` here.
-        for anon_struct in &self.scope.decls.pending_anonymous_structs {
+        for anon_struct in &self.sem.decls.pending_anonymous_structs {
             tir_module.add_struct(anon_struct.clone());
         }
         // Local item declarations (`Stmt::Item`) discovered and built by
         // `reify_local_item` while reifying the item loop above (function/
         // method/test bodies). Reify-owned, so drained rather than cloned.
-        for local_struct in std::mem::take(&mut self.pending_local_structs) {
+        for local_struct in std::mem::take(&mut self.pending_local_structs).into_values() {
             tir_module.add_struct(local_struct);
         }
-        for local_newtype in std::mem::take(&mut self.pending_local_newtypes) {
+        for local_newtype in std::mem::take(&mut self.pending_local_newtypes).into_values() {
             tir_module.add_newtype(local_newtype);
         }
 
         // Forward the per-module synthesis requests annotate recorded on
         // `ModuleDecls`. Default-method synthesis is reify's own job, handled
         // per impl by `reify_impl_default_methods` in the `Item::Impl` arm.
-        for req in &self.scope.decls.pending_synthesis_requests {
+        for req in &self.sem.decls.pending_synthesis_requests {
             tir_module.synthesis_requests.push(req.clone());
         }
 
@@ -1001,7 +1002,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// come from the AST, as for a top-level struct: `StructFieldInfo` carries neither.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         let def = self.tysys.def_at(struct_decl.id);
-        let info = &self.scope.decls.local.struct_fields[&def];
+        if self.pending_local_structs.contains_key(&def) {
+            return;
+        }
+        let info = &self.sem.decls.local.struct_fields[&def];
         let name = info.name.clone();
         let field_types: Vec<TypeId> = info.fields.iter().map(|&(_, ty, _)| ty).collect();
         let fields = self.reify_fields(struct_decl, &field_types);
@@ -1010,38 +1014,44 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self.ann_decl_type_params(struct_decl.id).expect(
             "resolve_local_struct records the type params for every local struct reify emits",
         );
-        self.pending_local_structs.push(TirStruct {
-            def: StructDef::Decl(def),
-            type_args: Vec::new(),
-            name,
-            module_source: self.current_module_source.clone(),
-            visibility: ast::Visibility::Private,
-            type_params,
-            monomorph_info: None,
-            fields,
-            span: struct_decl.span,
-            wire_name_policy: wire_name_policy_of(&struct_decl.attrs),
-        });
+        self.pending_local_structs.insert(
+            def,
+            TirStruct {
+                def: StructDef::Decl(def),
+                type_args: Vec::new(),
+                name,
+                module_source: self.current_module_source.clone(),
+                visibility: ast::Visibility::Private,
+                type_params,
+                monomorph_info: None,
+                fields,
+                span: struct_decl.span,
+                wire_name_policy: wire_name_policy_of(&struct_decl.attrs),
+            },
+        );
     }
 
     /// Reify a newtype declared in a function body.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
         let def = self.tysys.def_at(newtype_decl.id);
         let generic = !newtype_decl.type_params.is_empty();
-        let type_id = self.scope.decls.local.newtypes.get(&def).copied();
-        if !generic && type_id.is_none() {
+        let type_id = self.sem.decls.local.newtypes.get(&def).copied();
+        if (!generic && type_id.is_none()) || self.pending_local_newtypes.contains_key(&def) {
             return;
         }
-        self.pending_local_newtypes.push(TirNewtype {
-            name: mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
-            module_source: self.current_module_source.clone(),
-            visibility: ast::Visibility::Private,
+        self.pending_local_newtypes.insert(
             def,
-            type_params: Self::declared_type_params(&newtype_decl.type_params),
-            type_id: type_id.filter(|_| !generic),
-            wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
-            span: newtype_decl.span,
-        });
+            TirNewtype {
+                name: mangle_local_item_name(&newtype_decl.name, newtype_decl.id),
+                module_source: self.current_module_source.clone(),
+                visibility: ast::Visibility::Private,
+                def,
+                type_params: Self::declared_type_params(&newtype_decl.type_params),
+                type_id: type_id.filter(|_| !generic),
+                wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
+                span: newtype_decl.span,
+            },
+        );
     }
 
     /// Reify a `variant V<T> { … }` declaration.
@@ -1134,8 +1144,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// records it for free functions only; a method falls back to `declared`.
     fn declared_task_return(&self, func: &ast::Function, declared: TypeId) -> Option<TypeId> {
         func.is_async.then(|| {
-            self.sem
-                .types
+            self.types
                 .function_task_returns
                 .get(&func.id)
                 .copied()
@@ -1238,15 +1247,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             params,
             return_type,
             task_return_type,
-            effects: self
-                .sem
-                .types
-                .function_effects
-                .get(&func.id)
-                .cloned()
-                .expect(
-                    "the declaring walk records function_effects for every function reify emits",
-                ),
+            effects: self.types.function_effects.get(&func.id).cloned().expect(
+                "the declaring walk records function_effects for every function reify emits",
+            ),
             retains,
             immediates,
             trap,
@@ -1285,7 +1288,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if impl_block.is_synthesize_request {
             return None;
         }
-        let facts = self.sem.types.impl_facts.get(&impl_block.id)?;
+        let facts = self.types.impl_facts.get(&impl_block.id)?;
 
         // Derive the target's name the way `reify_method` derives it for this
         // block's methods, so the block and its methods agree on the key the
@@ -1321,7 +1324,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Vec::new();
         }
         let impl_key = impl_block.id;
-        let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
+        let Some(facts) = self.types.impl_facts.get(&impl_key).cloned() else {
             // Annotate did not record facts — the impl block was
             // diagnosed by annotate (e.g. unknown trait reference)
             // and skipped. Reify follows by emitting no methods.
@@ -1362,7 +1365,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Vec::new();
         };
         let impl_key = impl_block.id;
-        let Some(facts) = self.sem.types.impl_facts.get(&impl_key).cloned() else {
+        let Some(facts) = self.types.impl_facts.get(&impl_key).cloned() else {
             return Vec::new();
         };
         let Some(trait_name_mangled) = facts.trait_name.clone() else {
@@ -1403,25 +1406,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut out = Vec::with_capacity(default_methods.len());
         for default_method in &default_methods {
-            // The per-impl `ModuleSemantics` snapshot lives on the parent
-            // `self.sem.default_method_semantics`. Borrow it at `'a` — the
-            // parent is `&'a ModuleSemantics`, so `IndexMap::get` returns
-            // `Option<&'a ModuleSemantics>`, which is exactly what
-            // `self.sem` accepts in the swap.
             let key = (impl_block.id, default_method.id);
-            let Some(synth_sem) = self.sem.default_method_semantics.get(&key) else {
+            let sem = self.sem;
+            let Some(walk) = sem.default_method_semantics.get(&key) else {
                 // Combined walk did not record a synthesis for this default
                 // method (e.g. `resolve_method` returned `None` in
                 // error-recovery). Skip — reify produces no TIR for it.
                 continue;
             };
 
-            let scope = self.scope;
             let mut tir_func = self.with_perspective(
                 trait_module.clone(),
                 trait_items,
-                synth_sem,
-                scope,
+                sem,
+                &walk.types,
                 |this| this.reify_method(default_method, &facts, concrete_owner.as_ref(), origin),
             );
 
@@ -1595,7 +1593,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // global it sees before any per-item reify runs, so the lookup
         // never misses; reify is a pure read.
         let ty = self
-            .scope
+            .sem
             .decls
             .current_module_globals
             .get(&global_decl.name)
@@ -3815,12 +3813,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Annotate recorded one overlay set per instantiation in walk order, and a
         // nested for-of is instantiated once per outer element, so a visit counter picks it.
         let instantiation: &'a [BodyFacts] = {
-            let sem: &'a ModuleSemantics = self.sem;
+            let types: &'a TypeAnnotations = self.types;
             let for_of_key = for_of.id;
             let visit = self.tuple_overlay_visits.entry(for_of_key).or_insert(0);
             let k = *visit;
             *visit += 1;
-            sem.types
+            types
                 .tuple_overlays
                 .get(&for_of_key)
                 .and_then(|insts| insts.get(k))
@@ -6087,7 +6085,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // expected fn return type; fall back to the block-return type.
         let block_return_type = if let Expr::Block(ref block) = closure.body {
             let ctrl_ctx = CtrlFlowCtx {
-                expression_types: &self.sem.types.expression_types,
+                expression_types: &self.types.expression_types,
                 type_table: &self.tysys.type_table,
             };
             find_return_type_in_block(ctrl_ctx, block)
@@ -7292,7 +7290,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             (IndirectCallee::Global, ast::Expr::Ident(ident)) => {
                 let Some((module_source, name, global_type, _mutable)) = self
-                    .scope
+                    .sem
                     .decls
                     .lookup_global(&ident.name, &self.current_module_source)
                 else {
@@ -7543,7 +7541,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !ident.name.contains("::")
             && (ctx.lookup(&ident.name).is_some()
                 || self
-                    .scope
+                    .sem
                     .decls
                     .lookup_global(&ident.name, &self.current_module_source)
                     .is_some())
@@ -7564,7 +7562,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !ident.name.contains("::")
         {
             let (callee_module, callee_name) = if self
-                .scope
+                .sem
                 .decls
                 .function_return_types
                 .contains_key(&ident.name)
@@ -7584,7 +7582,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let ns_prefix = &ident.name[..double_colon];
                     let rest = &ident.name[double_colon + 2..];
                     if let Some(ns_source) =
-                        self.scope.imports.namespace_imports.get(ns_prefix).cloned()
+                        self.sem.imports.namespace_imports.get(ns_prefix).cloned()
                         && !rest.contains("::")
                     {
                         // `resolve_call`'s free-function path records the
@@ -8106,19 +8104,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
         match swap {
-            Some((items, sem)) => self.with_perspective(module.clone(), items, sem, sem, body),
+            Some((items, sem)) => {
+                self.with_perspective(module.clone(), items, sem, &sem.types, body)
+            }
             None => body(self),
         }
     }
 
-    /// Run `body` standing in another module: its source, its items, its facts
-    /// and the scope its names resolve in, all restored on return.
+    /// Run `body` standing in another module: its source, its items, the scope
+    /// its names resolve in and the facts of the walk replayed, all restored on
+    /// return.
     fn with_perspective<R>(
         &mut self,
         module: ModuleSource,
         items: &'a [Item],
         sem: &'a ModuleSemantics,
-        scope: &'a ModuleSemantics,
+        types: &'a TypeAnnotations,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         util::replaced(
@@ -8135,7 +8136,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             r,
                             |r| &mut r.sem,
                             sem,
-                            |r| util::replaced(r, |r| &mut r.scope, scope, body).0,
+                            |r| util::replaced(r, |r| &mut r.types, types, body).0,
                         )
                         .0
                     },
@@ -8158,7 +8159,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let canonical_ident;
-        let ident = if let Some(name) = self.scope.imports.canonical_ns_ref(&ident.name) {
+        let ident = if let Some(name) = self.sem.imports.canonical_ns_ref(&ident.name) {
             canonical_ident = ast::IdentExpr {
                 name,
                 ..ident.clone()
@@ -8183,7 +8184,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // 2. Current-module global.
         if self
-            .scope
+            .sem
             .decls
             .current_module_globals
             .contains_key(&ident.name)
@@ -8200,7 +8201,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // 3. Imported global.
         if let Some((src, original_name, _ty, _is_mut)) =
-            self.scope.decls.imported_globals.get(&ident.name)
+            self.sem.decls.imported_globals.get(&ident.name)
         {
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
@@ -8328,7 +8329,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    Emit `TirExprKind::FuncRef` with the recorded
         //    instantiation's type_args when present.
         if self
-            .scope
+            .sem
             .decls
             .function_return_types
             .contains_key(&ident.name)
@@ -8378,7 +8379,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //     name functions rather than types). Mirrors annotate's
         //     `resolve_func_ref_ident` → `lookup_func_ast_for_ref` and emits a
         //     `FuncRef` keyed by the function's defining module + original name.
-        if self.scope.decls.imported_functions.contains(&ident.name)
+        if self.sem.decls.imported_functions.contains(&ident.name)
             && let Some(symbol) = self.symbol_at(ident.id)
             && matches!(symbol.kind, SymbolKind::Function(_))
         {
@@ -9042,7 +9043,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// binding (mirrors `Elaborator::resolve_if_pattern_inner`). Mutable
     /// globals are not constants and fall through to a binding.
     fn reify_immutable_global_pattern(&self, name: &str, span: Span) -> Option<TirPattern> {
-        if let Some(&(ty, mutable)) = self.scope.decls.current_module_globals.get(name)
+        if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(name)
             && !mutable
         {
             return Some(TirPattern::ConstantValue {
@@ -9057,7 +9058,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
         if let Some((source_module, original_name, ty, mutable)) =
-            self.scope.decls.imported_globals.get(name)
+            self.sem.decls.imported_globals.get(name)
             && !*mutable
         {
             return Some(TirPattern::ConstantValue {
@@ -9308,7 +9309,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // is a constant-value pattern, as the bare `NAME` is.
                 if bindings.is_empty()
                     && let Some(alias) = self
-                        .scope
+                        .sem
                         .imports
                         .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
                     && let Some(const_pat) = self.reify_immutable_global_pattern(&alias, *span)

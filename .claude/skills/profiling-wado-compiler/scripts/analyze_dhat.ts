@@ -48,10 +48,18 @@ const top = Number(values.top);
 const where = values.where.map((re) => new RegExp(re));
 const not = values.not.map((re) => new RegExp(re));
 
-// An allocation is credited to the first frames that name `wado` code: the
-// rest (std, the collection crates, inlined helpers like `try_allocate_in`)
-// only move bytes around.
-const isWado = (name: string): boolean => name.includes("wado");
+// The crate a frame's own function lives in: `<Vec<wado_compiler::X> as
+// Clone>::clone` is `alloc`'s, whatever its type arguments name.
+const crateOf = (name: string): string => name.replace(/^</, "").split(/::|<| /)[0];
+
+// An allocation is credited to the first frames of `wado` code: the rest (std,
+// the collection crates, inlined helpers like `try_allocate_in`) only move
+// bytes around. A stack with none (wasmtime, cranelift) is credited to its
+// first frames past the allocator instead.
+const isWado = (name: string): boolean => crateOf(name).startsWith("wado");
+const isAllocator = (name: string): boolean =>
+  /^(malloc|calloc|realloc|memalign|posix_memalign|__rust|__rdl|__rg)/.test(name) ||
+  ["alloc", "core", "std"].includes(crateOf(name));
 
 // `0xADDR: name (file:line)` → name, without the hash suffix.
 const frameName = (i: number): string => {
@@ -86,7 +94,8 @@ const sites = new Map<string, number>();
 const inclusive = new Map<string, number>();
 for (const pp of kept) {
   const callers = pp.fs.filter((i) => isWado(frameName(i)));
-  const site = callers
+  const siteFrames = callers.length ? callers : pp.fs.filter((i) => !isAllocator(frameName(i)));
+  const site = siteFrames
     .slice(0, 3)
     .map((i) => `${frameName(i)} (${frameLine(i)})`)
     .join("\n            <- ");

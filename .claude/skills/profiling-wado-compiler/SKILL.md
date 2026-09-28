@@ -134,14 +134,16 @@ Measure peak RSS first, per phase second, per allocation site last.
 ### Per phase: the span trace
 
 `--log-level debug` prints every compiler span with the process's resident set
-(Linux only). An end line adds how far RSS moved inside the span:
+(Linux only). An end line adds the net change in current RSS since the span
+began:
 
 ```sh
 wado compile --log-level debug hello.wado 2>&1 | grep '<< '
 # [00:00:02.1547] << stdlib_snapshot · rss 343/343 MiB (+225)
 ```
 
-The pair is current/peak MiB. RSS is process-wide, so under `wado test` with
+The pair is current/peak MiB. A span that allocates and frees again nets out
+near `+0`, so read a jump in the peak as well as the change. RSS is process-wide, so under `wado test` with
 more than one worker the moves mix every worker's compile. Use `-p 1` there.
 
 ### Per allocation site: DHAT
