@@ -2575,25 +2575,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
-<<<<<<< HEAD
-    ) -> Option<Vec<TypeId>> {
-        self.static_method_sig_keyed(struct_name, method_name, target_hint)
-            .map(|sig| sig.value_param_types())
-    }
-
-    /// The one signature a static call names, keyed like
-    /// [`Self::lookup_static_method_param_types_keyed`].
-    pub(super) fn static_method_sig_keyed(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        target_hint: Option<&ImplTargetKey>,
-    ) -> Option<sig::MethodSig> {
-||||||| 7d13d5c6f
-    ) -> Option<Vec<TypeId>> {
-=======
     ) -> Option<MethodSig> {
->>>>>>> origin/main
         let static_key = self.static_receiver_key(struct_name, target_hint);
         if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
             return Some(sig.clone());
@@ -2684,34 +2666,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.signatures.method_sig(only.method_id)
     }
 
-<<<<<<< HEAD
-||||||| 7d13d5c6f
-    /// The declared type-param slots of a static method, keyed like
-    /// [`Self::lookup_static_method_param_types_keyed`].
-    pub(super) fn lookup_static_method_slots(
-        &self,
-        method_name: &str,
-        static_key: &ImplTargetKey,
-    ) -> Vec<TypeId> {
-        self.unique_static_method_sig(static_key, method_name)
-            .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
-            .unwrap_or_default()
-    }
-
-=======
-    /// The declared type-param slots of a static method, keyed like
-    /// [`Self::lookup_static_method_param_types_keyed`].
-    pub(super) fn lookup_static_method_slots(
-        &self,
-        method_name: &str,
-        static_key: &ImplTargetKey,
-    ) -> Vec<TypeId> {
-        self.unique_static_method_sig(static_key, method_name)
-            .map(|sig| sig.decl.type_param_ids())
-            .unwrap_or_default()
-    }
-
->>>>>>> origin/main
     /// Whether `impl From<from_type> for target;` requests a body-less derivation,
     /// so a call may name a conversion no impl block declares yet.
     pub(super) fn requests_from_synthesis(

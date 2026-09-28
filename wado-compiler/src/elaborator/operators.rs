@@ -13,14 +13,8 @@ use crate::unparse::binary_op_str;
 
 use super::Elaborator;
 use super::coercion::{
-<<<<<<< HEAD
-    DeferredOperator, is_literal_operation, is_numeric_literal_expr, is_primitive_literal_target,
+    DeferredOperator, is_literal_arithmetic, is_primitive_literal_target,
     numeric_literal_pair_order,
-||||||| 7d13d5c6f
-    is_numeric_literal_expr, is_primitive_literal_target, numeric_literal_pair_order,
-=======
-    is_literal_arithmetic, is_primitive_literal_target, numeric_literal_pair_order,
->>>>>>> origin/main
 };
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
@@ -137,18 +131,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, TypeId) {
-<<<<<<< HEAD
         // A comparison is a `bool` whatever its operands are.
         let expected_type = expected_type.filter(|_| !op.is_comparison());
-        let left_is_numeric_literal = is_numeric_literal_expr(left_ast);
-        let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
-||||||| 7d13d5c6f
-        let left_is_numeric_literal = is_numeric_literal_expr(left_ast);
-        let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
-=======
         let left_is_literal = is_literal_arithmetic(left_ast);
         let right_is_literal = is_literal_arithmetic(right_ast);
->>>>>>> origin/main
 
         if left_is_literal && !right_is_literal {
             let right = self.resolve_expr(right_ast, ctx, expected_type);
@@ -961,7 +947,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let inner_expected = match unary.op {
-<<<<<<< HEAD
             UnaryOp::Ref | UnaryOp::MutRef => expected_type
                 .and_then(|expected| self.tysys.pointee_of(expected))
                 .or_else(|| {
@@ -976,8 +961,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })?;
                     Some(pointee[0])
                 }),
-            // Negating a literal operation keeps its type, as reify reads it.
-            UnaryOp::Neg if is_literal_operation(&unary.expr) => expected_type,
+            UnaryOp::Neg | UnaryOp::BitNot if is_literal_arithmetic(&unary.expr) => expected_type,
             // Either keeps the variable a pending call is still to answer,
             // dispatched again once it is.
             UnaryOp::Neg | UnaryOp::BitNot
@@ -985,19 +969,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 expected_type
             }
-            _ => None,
-||||||| 7d13d5c6f
-        let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
-            expected_type.and_then(|expected| self.tysys.pointee_of(expected))
-        } else {
-            None
-=======
-            UnaryOp::Ref | UnaryOp::MutRef => {
-                expected_type.and_then(|expected| self.tysys.pointee_of(expected))
-            }
-            UnaryOp::Neg | UnaryOp::BitNot if is_literal_arithmetic(&unary.expr) => expected_type,
             UnaryOp::Neg | UnaryOp::BitNot | UnaryOp::Not | UnaryOp::Deref => None,
->>>>>>> origin/main
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the
         // subscript resolves through `IndexRefMut` and carries the mutability in

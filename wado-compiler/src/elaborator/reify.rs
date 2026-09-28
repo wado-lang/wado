@@ -32,13 +32,7 @@ use crate::tir::{
 };
 
 use super::coercion::{
-<<<<<<< HEAD
-    NumericLiteralKind, classify_numeric_literal, is_literal_operation, is_numeric_literal_expr,
-||||||| 7d13d5c6f
-    NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
-=======
     NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,
->>>>>>> origin/main
     is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
 };
 use super::expr::UnionSource;
@@ -2723,23 +2717,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_expr(&unary.expr, ctx, expected_type);
                 }
                 let op = ast_unary_op_to_tir(unary.op);
-<<<<<<< HEAD
-                // A negated literal operation shares the unary's type:
-                // propagate the expected/recorded type so the inner literal
-                // takes the right width (e.g. `-1.0` in an `f32` const body
-                // must be `f32`, not the default `f64`). Other unary operands
-                // are typed on their own.
-                let inner_expected = if unary.op == ast::UnaryOp::Neg
-                    && is_literal_operation(&unary.expr)
-||||||| 7d13d5c6f
-                // A `-<numeric literal>` operand shares the unary's type:
-                // propagate the expected/recorded type so the inner literal
-                // takes the right width (e.g. `-1.0` in an `f32` const body
-                // must be `f32`, not the default `f64`). Other unary operands
-                // are typed on their own.
-                let inner_expected = if unary.op == ast::UnaryOp::Neg
-                    && is_numeric_literal_expr(&unary.expr)
-=======
                 // A `-` or `~` operand built from literals shares the unary's
                 // type: propagate the recorded type so the inner literal takes
                 // the right width (e.g. `-1.0` in an `f32` const body must be
@@ -2747,7 +2724,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // on their own.
                 let inner_expected = if matches!(unary.op, ast::UnaryOp::Neg | ast::UnaryOp::BitNot)
                     && is_literal_arithmetic(&unary.expr)
->>>>>>> origin/main
                     && recorded_type != TypeTable::UNKNOWN
                 {
                     Some(recorded_type)

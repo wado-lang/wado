@@ -127,21 +127,22 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     classify_numeric_literal(expr).is_some()
 }
 
-<<<<<<< HEAD
 /// The numeric literals `expr` is built from, where it is one, or an
-/// arithmetic, bitwise or shift operation over such (`1 << 32`,
+/// arithmetic, bitwise or shift operation over such (`1 << 32`, `~7`,
 /// `-(1 + 2)`): a value whose type is the one its literals take.
 fn literal_operands(expr: &Expr) -> Option<Vec<&Expr>> {
     if is_numeric_literal_expr(expr) {
         return Some(vec![expr]);
     }
     match expr {
-        Expr::Binary(binary) if is_literal_operator(binary.op) => {
+        Expr::Binary(binary) if binary.op.is_numeric() => {
             let mut operands = literal_operands(&binary.left)?;
             operands.extend(literal_operands(&binary.right)?);
             Some(operands)
         }
-        Expr::Unary(unary) if unary.op == UnaryOp::Neg => literal_operands(&unary.expr),
+        Expr::Unary(unary) if matches!(unary.op, UnaryOp::Neg | UnaryOp::BitNot) => {
+            literal_operands(&unary.expr)
+        }
         Expr::Binary(_)
         | Expr::Unary(_)
         | Expr::Literal(_)
@@ -175,52 +176,11 @@ fn literal_operands(expr: &Expr) -> Option<Vec<&Expr>> {
     }
 }
 
-/// Whether `expr` is a numeric literal or an operation [`literal_operands`]
-/// reads, typed as a whole by the type expected of it.
-pub(super) fn is_literal_operation(expr: &Expr) -> bool {
-    literal_operands(expr).is_some()
-}
-
-/// Whether `op` on two operands of one numeric type yields that type.
-fn is_literal_operator(op: BinaryOp) -> bool {
-    match op {
-        BinaryOp::Add
-        | BinaryOp::Sub
-        | BinaryOp::Mul
-        | BinaryOp::Div
-        | BinaryOp::Mod
-        | BinaryOp::BitAnd
-        | BinaryOp::BitOr
-        | BinaryOp::BitXor
-        | BinaryOp::Shl
-        | BinaryOp::Shr => true,
-        BinaryOp::Eq
-        | BinaryOp::NotEq
-        | BinaryOp::Lt
-        | BinaryOp::LtEq
-        | BinaryOp::Gt
-        | BinaryOp::GtEq
-        | BinaryOp::And
-        | BinaryOp::Or => false,
-    }
-||||||| 7d13d5c6f
-=======
 /// Whether `expr` is built from numeric literals alone, through `-`, `~` and
 /// the numeric binary operators, and so takes its type from its context as a
 /// bare literal does: `~7`, `1 << 40`.
 pub(super) fn is_literal_arithmetic(expr: &Expr) -> bool {
-    if let Expr::Unary(unary) = expr
-        && matches!(unary.op, UnaryOp::Neg | UnaryOp::BitNot)
-    {
-        return is_literal_arithmetic(&unary.expr);
-    }
-    if let Expr::Binary(binary) = expr
-        && binary.op.is_numeric()
-    {
-        return is_literal_arithmetic(&binary.left) && is_literal_arithmetic(&binary.right);
-    }
-    is_numeric_literal_expr(expr)
->>>>>>> origin/main
+    literal_operands(expr).is_some()
 }
 
 /// Whether a call argument takes its type from its context: a numeric literal or
@@ -229,7 +189,7 @@ pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
     arg.is_some_and(|arg| is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg))
 }
 
-/// The numeric literals, and operations over them ([`is_literal_operation`]), a
+/// The numeric literals, and operations over them ([`is_literal_arithmetic`]), a
 /// call's arguments hold, at any depth, where the type expected of them is one
 /// of the call's own open variables: `second(Pair { a: 1, b: 2 }, x)`. Each
 /// answers last, as a literal argument does: it takes what the other arguments
@@ -332,14 +292,6 @@ impl Scope {
             .iter()
             .any(|pending| pending.literals.iter().any(|&(_, at)| at == var))
     }
-}
-
-/// A generic call's declared return type in its use site's variables, beside
-/// the type the site expects of the call.
-#[derive(Clone, Copy)]
-pub(super) struct ExpectedReturn {
-    pub(super) declared: TypeId,
-    pub(super) expected: TypeId,
 }
 
 /// A call's declared return type, in the frame its parameter types are in, and
@@ -693,7 +645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// variables [`PendingLiterals`] collects for, answering that variable as
     /// its type until [`Self::settle_pending_literals`].
     pub(super) fn defer_literal_at_var(&mut self, expr: &Expr, expected: TypeId) -> Option<TypeId> {
-        if self.annotate_ctx.pending_literals.is_empty() || !is_literal_operation(expr) {
+        if self.annotate_ctx.pending_literals.is_empty() || !is_literal_arithmetic(expr) {
             return None;
         }
         let var = self.apply_infer_holes(expected);
@@ -1035,19 +987,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve each literal `pending` deferred against what its variable was
-<<<<<<< HEAD
     /// answered with, answering the variables nothing answered with what `ret`
     /// says of them, else with their literals' default, first. A literal whose
     /// variable is chained to an enclosing call's is handed to that call's
     /// collection instead. Answers each literal's type by its id.
-||||||| 7d13d5c6f
-    /// answered with, answering the variables nothing answered with their
-    /// literals' default first. Answers each literal's type by its id.
-=======
-    /// answered with. A variable nothing answered takes what `expected_return`
-    /// answers it with, else its literals' default. Answers each literal's type
-    /// by its id.
->>>>>>> origin/main
     ///
     /// A variable only literals standing as `args` met stays theirs to answer
     /// as they did before any deferral: the call's own inference weighs its
@@ -1061,12 +1004,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         pending: PendingLiterals,
         args: &[Expr],
-<<<<<<< HEAD
         ret: Option<ExpectedReturn>,
-||||||| 7d13d5c6f
-=======
-        expected_return: Option<ExpectedReturn>,
->>>>>>> origin/main
         ctx: &mut FunctionContext,
     ) -> IndexMap<AstId, TypeId> {
         self.chain_waiting_to_enclosing(&pending, ret);
@@ -1085,7 +1023,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut settled = IndexMap::default();
         for (var, literals) in by_var {
             let default = shared_literal_default(&literals);
-<<<<<<< HEAD
             let open = self.tysys.type_table.borrow().is_infer_var(var);
             let hint = hints.get(&var).copied();
             if open && hint.is_none() && self.enclosing_takes_over(var) {
@@ -1111,26 +1048,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if open && !yields_to_return {
                 answer = hint.unwrap_or(default);
                 self.solve_infer_var(var, answer);
-||||||| 7d13d5c6f
-            let mut answer = self.apply_infer_holes(var);
-            let yields_to_return = answer == var && literals.iter().all(is_arg);
-            if answer == var && !yields_to_return {
-                self.solve_infer_var(var, default);
-                answer = default;
-=======
-            let yields_to_return =
-                self.apply_infer_holes(var) == var && literals.iter().all(is_arg);
-            if !yields_to_return
-                && let Some(ExpectedReturn { declared, expected }) = expected_return
-            {
-                let declared = self.apply_infer_holes(declared);
-                self.solve_own_infer_holes_against(declared, expected, &[var]);
-            }
-            let mut answer = self.apply_infer_holes(var);
-            if answer == var && !yields_to_return {
-                self.solve_infer_var(var, default);
-                answer = default;
->>>>>>> origin/main
             }
             for expr in &literals {
                 let ty = self.resolve_expr(expr, ctx, Some(answer));

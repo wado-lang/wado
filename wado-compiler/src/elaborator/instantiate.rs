@@ -192,12 +192,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots`, carry their bounds, resolve the arguments against
     /// them, and settle the answers back. One call, so no path can take part of
     /// the sequence and hand a closure a rigid slot nothing can construct.
-<<<<<<< HEAD
     /// `ret` declares its return type in the slots' frame.
-||||||| 7d13d5c6f
-=======
-    /// `expected_return` is in the frame `param_types` is.
->>>>>>> origin/main
     pub(super) fn resolve_args_through_slots(
         &mut self,
         ctx: &mut FunctionContext,
@@ -206,12 +201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slots: &[TypeId],
         own_params: &[GenericParam],
         of: &Instantiation<'_>,
-<<<<<<< HEAD
         ret: Option<ExpectedReturn>,
-||||||| 7d13d5c6f
-=======
-        expected_return: Option<ExpectedReturn>,
->>>>>>> origin/main
     ) -> Vec<TypeId> {
         if slots.is_empty() {
             return self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
@@ -219,7 +209,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.span);
         let param_types = self.instantiate_types(param_types, &inst);
-<<<<<<< HEAD
         let ret = ret.map(|ret| ExpectedReturn {
             declared: self.instantiate_type(ret.declared, &inst),
             ..ret
@@ -227,23 +216,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut args =
             self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst), ret);
         self.settle_onto_slots(&inst, slots, &mut args, ret);
-||||||| 7d13d5c6f
-        let mut args = self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst));
-        self.settle_onto_slots(&inst, slots, &mut args);
-=======
-        let expected_return = expected_return.map(|r| ExpectedReturn {
-            declared: self.instantiate_type(r.declared, &inst),
-            ..r
-        });
-        let mut args = self.resolve_args_against_params(
-            args_ast,
-            ctx,
-            &param_types,
-            Some(&inst),
-            expected_return,
-        );
-        self.settle_onto_slots(&inst, slots, &mut args);
->>>>>>> origin/main
         args
     }
 
