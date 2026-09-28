@@ -103,11 +103,10 @@ struct Layout {
 }
 
 impl Layout {
-    /// The payload a binding for `case_index` receives. `None` for a unit case,
-    /// which has no slot to read.
-    fn payload_read_type(&self, case_index: u32) -> Option<TypeId> {
-        self.case_slots.get(case_index as usize)?.flat()?;
-        self.case_payloads.get(case_index as usize).copied()
+    /// The payload a binding or read of `case_index` receives. A unit case's is
+    /// `()`, which [`slot_read`] produces without a slot.
+    fn payload_read_type(&self, case_index: u32) -> TypeId {
+        self.case_payloads[case_index as usize]
     }
 }
 
@@ -1721,9 +1720,9 @@ fn arm_is_one_level(body: &Body, arm: &ArmData, rebind: &Rebind, layout: &Layout
         } => match bindings.as_slice() {
             [] => true,
             [b] => match body.pats[*b].kind {
-                PatKind::Binding { local_index, .. } => layout
-                    .payload_read_type(*case_index)
-                    .is_some_and(|payload| rebind.rebound(local_index, payload).is_some()),
+                PatKind::Binding { local_index, .. } => rebind
+                    .rebound(local_index, layout.payload_read_type(*case_index))
+                    .is_some(),
                 PatKind::Wildcard => true,
                 _ => false,
             },
@@ -2234,20 +2233,9 @@ fn retain_rewritable_locals(
                         sanctioned.extend(expr.as_expr());
                     }
                 }
-                // A payload read of a unit case has no slot to read. It only
-                // survives where nothing reaches it, but it still has to lower.
-                ExprKind::VariantPayload {
-                    expr, case_index, ..
-                } => {
-                    if let Some(local) = of(*expr) {
+                ExprKind::VariantPayload { expr, .. } => {
+                    if of(*expr).is_some() {
                         sanctioned.extend(expr.as_expr());
-                        if candidates[&local]
-                            .layout
-                            .payload_read_type(*case_index)
-                            .is_none()
-                        {
-                            refused.insert(local);
-                        }
                     }
                 }
                 // The rewritten match reads the payload slot again at each guard
@@ -2732,15 +2720,12 @@ fn tag_read(body: &mut Body, local: u32, tuple_type: TypeId, cx: &SiteCx) -> Exp
     }
 }
 
-/// `t.k`, unwrapped through `Some` when the slot is an `Option` wrapper.
-///
-/// Panics on a unit case: validation only admits a `VariantPayload` /
-/// pattern binding for a case the layout gave a slot, so a missing one is a
-/// hole in that check, not an input the rewrite may silently drop.
+/// `t.k`, unwrapped through `Some` when the slot is an `Option` wrapper, or
+/// `{ () }` for a unit case, which has no slot.
 fn slot_read(body: &mut Body, local: u32, layout: &Layout, case_index: u32, cx: &SiteCx) -> ExprId {
-    let slot = layout.case_slots[case_index as usize]
-        .flat()
-        .unwrap_or_else(|| panic!("variant-return SROA: payload read on unit case {case_index}"));
+    let Some(slot) = layout.case_slots[case_index as usize].flat() else {
+        return unit_block(body, cx.span);
+    };
     let slot_type = layout.slot_types[slot.index];
     let field = slot.index + 1;
     let recv = local_read(body, local, layout.tuple_type, cx);
@@ -2765,6 +2750,24 @@ fn slot_read(body: &mut Body, local: u32, layout: &Layout, case_index: u32, cx: 
         },
         type_id: payload_type,
         span: cx.span,
+    })
+}
+
+/// `{ () }`: the unit constant as an expression, for a node that must stay one.
+fn unit_block(body: &mut Body, span: Span) -> ExprId {
+    let unit = constant(body, ValueKind::Unit, TypeTable::UNIT);
+    let stmt = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(unit),
+        span,
+    });
+    let block = body.blocks.push(BlockNode {
+        stmts: vec![stmt],
+        span,
+    });
+    body.exprs.push(ExprNode {
+        kind: ExprKind::plain_block(block, TypeTable::UNIT, "unit_payload"),
+        type_id: TypeTable::UNIT,
+        span,
     })
 }
 
@@ -2853,9 +2856,7 @@ fn bind_payload_before(
     cx: &SiteCx,
 ) -> Operand {
     let read = slot_read(body, local, layout, case_index, cx);
-    let payload_type = layout
-        .payload_read_type(case_index)
-        .expect("variant-return SROA: payload binding on a unit case");
+    let payload_type = layout.payload_read_type(case_index);
     let (init, init_type) = match cx
         .rebind
         .rebound(binding_local, payload_type)

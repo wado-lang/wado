@@ -1,0 +1,38 @@
+// Test: variant-return SROA takes a `Result<(), E>` whose `Ok(())` payload a
+// `?` binds.
+//
+// `check(i)?` desugars to `match check(i) { Ok(v) => v, Err(e) => return … }`,
+// binding the `()` payload. A `()` payload has no slot in the result tuple, and
+// the arm check refused any binding of a slotless case, so the candidate was
+// dropped: after inlining, every call built a `Result<(), i32>` on the heap.
+// A `()` payload now reads as the unit constant.
+use { println, Stdout } from "core:cli";
+
+fn check(x: i32) -> Result<(), i32> {
+    if x == 7 {
+        return Result::Err(x);
+    }
+    return Result::Ok(());
+}
+
+fn sum(n: i32) -> Result<i32, i32> {
+    let mut s = 0;
+    for let mut i = 0; i < n; i += 1 {
+        check(i)?;
+        s += i;
+    }
+    return Result::Ok(s);
+}
+
+export fn run() with Stdout {
+    println(`${sum(builtin::black_box(5)):?}`);
+    println(`${sum(builtin::black_box(9)):?}`);
+}
+
+__DATA__
+{
+    "stdout": "Result::Ok(10)\nResult::Err(7)\n",
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Result<(),i32>"
+    ]
+}
