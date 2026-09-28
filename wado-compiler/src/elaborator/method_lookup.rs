@@ -3352,9 +3352,11 @@ impl TypeSystem {
         let header = impl_header(&self.trait_env, impl_ref);
         let method_header = header.methods.iter().find(|m| m.name == method_name)?;
         let sig = self.signatures.method_sig(method_header.def)?;
-        let impl_sig = self.signatures.impl_sig(impl_ref.0);
         let receiver_type_args = receiver_type_args.unwrap_or(&[]);
-        let slots = impl_sig.slots(&self.type_table, receiver_type_args);
+        let slots = self
+            .type_table
+            .borrow()
+            .impl_slots(impl_ref.0, receiver_type_args);
         let instantiated = sig.decl.instantiate_slots(&self.type_table, &slots);
         let table = &self.type_table;
         Some(MethodInfo {

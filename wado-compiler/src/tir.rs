@@ -6402,6 +6402,22 @@ impl TypeTable {
         &self.impl_target(def).args
     }
 
+    /// The slots each of impl block `def`'s target positions holds, at any
+    /// depth, filled from the receiver's arguments: `T` in `Pair<List<T>, i32>`
+    /// from `Pair<List<String>, i32>`. The target is recorded as its module's
+    /// decl pass reaches the block, so an earlier module's bound check can ask.
+    pub fn impl_slots(&self, def: DefId, receiver_args: &[TypeId]) -> IndexMap<u32, TypeId> {
+        let mut slots = IndexMap::default();
+        for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
+            if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
+                }
+            }
+        }
+        slots
+    }
+
     fn impl_target(&self, def: DefId) -> &ImplTarget {
         self.impl_targets.get(&def).unwrap_or_else(|| {
             panic!("impl block {def:?} is asked about before its target is recorded")
