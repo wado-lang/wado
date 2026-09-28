@@ -980,14 +980,42 @@ pub fn follow_open_with(cont: i64, open: i64) -> i64 {
 }
 
 pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    if cont == 0 {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
+}
+
+pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
+}
+
+pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
+    }
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open == 0 {
+        return false;
+    }
+    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    return set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind);
+}
+
+fn follow_heads_have(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    sets: &List<List<i32>>,
+    eof_kind: i32,
+    unknown_has: bool,
+) -> bool {
+    if cont == 0 {
+        return unknown_has;
     }
     let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
     let open = cont & FOLLOW_OPEN_FIELD;
     if open != 0 {
         let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-        if set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind) {
+        if set_id == 0 && unknown_has || set_id != 0 && kind_set_has(&sets[(set_id - 1) as i32], kind) {
             return true;
         }
     }
@@ -19707,7 +19735,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     pos = sp;
                     dcl_15: {
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_35(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_15_exit = true; }
+                        if _kind_set_35(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_15_exit = true; }
                     }
                     if dc_15_exit { pos = sp; break; }
                     pos = dc_15;
@@ -19742,7 +19770,7 @@ fn scan_media_query(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     pos = sp;
                     dcl_17: {
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_35(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_17_exit = true; }
+                        if _kind_set_35(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_17_exit = true; }
                     }
                     if dc_17_exit { pos = sp; break; }
                     pos = dc_17;
@@ -20557,7 +20585,7 @@ fn scan_declaration_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
                     let sp = pos;
                     pos = scan_declaration(tokens, pos, follow);
                     if pos < 0 { pos = sp; }
-                    if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+                    if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                         pos = sp;
                     }
                 }
@@ -20574,7 +20602,7 @@ fn scan_declaration_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             pos = sp;
             dcl_33: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_41(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_33_exit = true; }
+                if _kind_set_41(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_33_exit = true; }
             }
             if dc_33_exit { pos = sp; break; }
             pos = dc_33;
@@ -20597,7 +20625,7 @@ fn scan_declaration_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         let sp = pos;
         pos = scan_prio(tokens, pos, follow);
         if pos < 0 { pos = sp; }
-        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
             pos = sp;
         }
     }
@@ -20703,7 +20731,7 @@ fn scan_value(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = sp;
             dcl_36: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_42(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_36_exit = true; }
+                if _kind_set_42(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_36_exit = true; }
             }
             if dc_36_exit { pos = sp; break; }
             pos = dc_36;
@@ -20740,7 +20768,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = sp;
             dcl_38: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_44(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_38_exit = true; }
+                if _kind_set_44(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_38_exit = true; }
             }
             if dc_38_exit { pos = sp; break; }
             pos = dc_38;
@@ -21706,7 +21734,7 @@ fn scan_supports_conjunction(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
             pos = sp;
             dcl_46: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_47(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_46_exit = true; }
+                if _kind_set_47(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_46_exit = true; }
             }
             if dc_46_exit { pos = sp; break; }
             pos = dc_46;
@@ -21774,7 +21802,7 @@ fn scan_supports_disjunction(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
             pos = sp;
             dcl_49: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_47(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_49_exit = true; }
+                if _kind_set_47(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_49_exit = true; }
             }
             if dc_49_exit { pos = sp; break; }
             pos = dc_49;
@@ -22314,7 +22342,7 @@ fn scan_font_family_name_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             pos = sp;
             dcl_57: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_49(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_57_exit = true; }
+                if _kind_set_49(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_57_exit = true; }
             }
             if dc_57_exit { pos = sp; break; }
             pos = dc_57;
@@ -22353,7 +22381,7 @@ fn scan_font_family_name(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
                 pos = sp;
                 dcl_59: {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_48(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_59_exit = true; }
+                    if _kind_set_48(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_59_exit = true; }
                 }
                 if dc_59_exit { pos = sp; break; }
                 pos = dc_59;
@@ -22441,7 +22469,7 @@ fn scan_feature_value_definition(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
             pos = sp;
             dcl_62: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_52(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_62_exit = true; }
+                if _kind_set_52(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_62_exit = true; }
             }
             if dc_62_exit { pos = sp; break; }
             pos = dc_62;
@@ -22464,7 +22492,7 @@ fn scan_ws(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = sp;
             dcl_63: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_53(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_63_exit = true; }
+                if _kind_set_53(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_63_exit = true; }
             }
             if dc_63_exit { pos = sp; break; }
             pos = dc_63;
@@ -23141,7 +23169,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_35(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                        if _kind_set_35(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -23187,7 +23215,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_35(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                        if _kind_set_35(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -24244,7 +24272,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let sp = pos;
                         pos = scan_declaration(tokens, pos, follow);
                         if pos < 0 { pos = sp; }
-                        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+                        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                             pos = sp;
                         }
                     }
@@ -24263,7 +24291,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_41(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if _kind_set_41(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -24282,7 +24310,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 if pos < 0 { break opt_scan; }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF));
+            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF));
         }
         if opt_enter {
             p.site = 141;
@@ -24322,7 +24350,7 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
             if pos < 0 { break opt_scan; }
             opt_scan_pos = pos;
         }
-        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF));
+        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF));
     }
     if opt_enter {
         p.site = 145;
@@ -24454,7 +24482,7 @@ fn _parse_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_42(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                        if _kind_set_42(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -24525,7 +24553,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_44(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if _kind_set_44(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -25781,7 +25809,7 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_47(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                        if _kind_set_47(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -25863,7 +25891,7 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_47(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                        if _kind_set_47(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -26555,7 +26583,7 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_49(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if _kind_set_49(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -26620,7 +26648,7 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_48(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                        if _kind_set_48(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -26745,7 +26773,7 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: i64 = 0) -> ()
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_52(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if _kind_set_52(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -26817,7 +26845,7 @@ fn _parse_ws__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_53(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if _kind_set_53(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }

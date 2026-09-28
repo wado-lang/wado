@@ -975,14 +975,42 @@ pub fn follow_open_with(cont: i64, open: i64) -> i64 {
 }
 
 pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    if cont == 0 {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
+}
+
+pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
+}
+
+pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
+    }
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open == 0 {
+        return false;
+    }
+    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    return set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind);
+}
+
+fn follow_heads_have(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    sets: &List<List<i32>>,
+    eof_kind: i32,
+    unknown_has: bool,
+) -> bool {
+    if cont == 0 {
+        return unknown_has;
     }
     let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
     let open = cont & FOLLOW_OPEN_FIELD;
     if open != 0 {
         let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-        if set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind) {
+        if set_id == 0 && unknown_has || set_id != 0 && kind_set_has(&sets[(set_id - 1) as i32], kind) {
             return true;
         }
     }
@@ -2969,7 +2997,7 @@ fn scan_re_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 =
         pos = scan_re(tokens, pos, atn, follow, 0);
         atn.stack.pop();
         if pos < 0 { pos = sp; }
-        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
             pos = sp;
         }
     }

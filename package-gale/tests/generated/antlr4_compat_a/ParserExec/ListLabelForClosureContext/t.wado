@@ -975,14 +975,42 @@ pub fn follow_open_with(cont: i64, open: i64) -> i64 {
 }
 
 pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    if cont == 0 {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
+}
+
+pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
+}
+
+pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
+    }
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open == 0 {
+        return false;
+    }
+    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    return set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind);
+}
+
+fn follow_heads_have(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    sets: &List<List<i32>>,
+    eof_kind: i32,
+    unknown_has: bool,
+) -> bool {
+    if cont == 0 {
+        return unknown_has;
     }
     let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
     let open = cont & FOLLOW_OPEN_FIELD;
     if open != 0 {
         let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-        if set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind) {
+        if set_id == 0 && unknown_has || set_id != 0 && kind_set_has(&sets[(set_id - 1) as i32], kind) {
             return true;
         }
     }
@@ -1659,7 +1687,7 @@ fn scan_else_if_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             pos = sp;
             dcl_3: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_3_exit = true; }
+                if _kind_set_0(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_3_exit = true; }
             }
             if dc_3_exit { pos = sp; break; }
             pos = dc_3;
@@ -1818,7 +1846,7 @@ fn _parse_else_if_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_0(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if _kind_set_0(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }

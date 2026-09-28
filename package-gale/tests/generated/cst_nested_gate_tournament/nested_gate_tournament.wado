@@ -978,14 +978,42 @@ pub fn follow_open_with(cont: i64, open: i64) -> i64 {
 }
 
 pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    if cont == 0 {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
+}
+
+pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
+}
+
+pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
+    }
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open == 0 {
+        return false;
+    }
+    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    return set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind);
+}
+
+fn follow_heads_have(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    sets: &List<List<i32>>,
+    eof_kind: i32,
+    unknown_has: bool,
+) -> bool {
+    if cont == 0 {
+        return unknown_has;
     }
     let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
     let open = cont & FOLLOW_OPEN_FIELD;
     if open != 0 {
         let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-        if set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind) {
+        if set_id == 0 && unknown_has || set_id != 0 && kind_set_has(&sets[(set_id - 1) as i32], kind) {
             return true;
         }
     }
@@ -1725,7 +1753,7 @@ fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             pos = sp;
             *gate = sp_gate;
         }
-        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
             pos = sp;
             *gate = sp_gate;
         }
@@ -1983,7 +2011,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
             if pos < 0 { break opt_scan; }
             opt_scan_pos = pos;
         }
-        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF));
+        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF));
     }
     if opt_enter {
         p.site = 3;

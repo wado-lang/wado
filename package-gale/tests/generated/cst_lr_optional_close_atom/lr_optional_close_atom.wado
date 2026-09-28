@@ -975,14 +975,42 @@ pub fn follow_open_with(cont: i64, open: i64) -> i64 {
 }
 
 pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    if cont == 0 {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
+}
+
+pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
+}
+
+pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
         return true;
+    }
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open == 0 {
+        return false;
+    }
+    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    return set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind);
+}
+
+fn follow_heads_have(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    sets: &List<List<i32>>,
+    eof_kind: i32,
+    unknown_has: bool,
+) -> bool {
+    if cont == 0 {
+        return unknown_has;
     }
     let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
     let open = cont & FOLLOW_OPEN_FIELD;
     if open != 0 {
         let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
-        if set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind) {
+        if set_id == 0 && unknown_has || set_id != 0 && kind_set_has(&sets[(set_id - 1) as i32], kind) {
             return true;
         }
     }
@@ -1591,7 +1619,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         try_1: {
             pos = scan_expr(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_1)), 0);
             if pos < 0 { break try_1; }
-            if pos < tokens.len() && tokens[pos] == TK_LIT_RPAREN && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
+            if pos < tokens.len() && tokens[pos] == TK_LIT_RPAREN && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos += 1;
             }
             return pos;
@@ -1680,7 +1708,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
         p.take();
         p.site = 1;
         _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_1)));
-        if p.peek_kind() == TK_LIT_RPAREN && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_1((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_admits(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
+        if p.peek_kind() == TK_LIT_RPAREN && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_1((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
             p.take();
         }
         return;
