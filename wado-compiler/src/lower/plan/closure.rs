@@ -1720,7 +1720,7 @@ impl ClosureCallSiteLowerer<'_> {
     fn try_redirect_to_specialized_callee(
         &mut self,
         func: &mut FunctionRef,
-        args: &mut [CallArg],
+        args: &mut CallArgs<CallArg>,
         arg_offset: usize,
     ) {
         // Closure args with `functor_id` that map to a known functor.

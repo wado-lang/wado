@@ -325,7 +325,7 @@ pub(super) fn aggregate_safe_locals(
             }
             | ExprKind::Cast { expr, .. } => read_value(*expr, &mut value_reads),
             ExprKind::Call { args, .. } => {
-                for (arg, reaches_storage) in args.with_storage_reach() {
+                for (arg, reaches_storage) in args.with_storage_reach(true) {
                     if !reaches_storage {
                         read_value(arg.expr, &mut value_reads);
                     } else if !reached.covers(body, arg.expr) {
@@ -410,7 +410,7 @@ pub(super) fn clobbered_locals(
                 }
             }
             ExprKind::Call { args, .. } => {
-                for (arg, reaches_storage) in args.with_storage_reach() {
+                for (arg, reaches_storage) in args.with_storage_reach(true) {
                     if reaches_storage && !reached.covers(body, arg.expr) {
                         disqualify(body, arg.expr, &mut set);
                     }

@@ -1197,7 +1197,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             ExprKind::Call { args, .. } => {
                 // A `mut` arg is a place (never a promoted constant); a constant
                 // arg references no local.
-                for (arg, reaches_storage) in args.with_storage_reach() {
+                for (arg, reaches_storage) in args.with_storage_reach(true) {
                     if reaches_storage && let Some(index) = arg.expr.as_expr().and_then(local) {
                         out.insert(index);
                     }

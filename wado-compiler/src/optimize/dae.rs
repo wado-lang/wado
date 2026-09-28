@@ -249,6 +249,11 @@ fn validate_call(
     if rejected.contains(&key) {
         return;
     }
+    assert_eq!(
+        args.len(),
+        dead.len(),
+        "[NIR] dae: a call passes one argument per parameter of its callee"
+    );
     for (i, dead_at_i) in dead.iter().enumerate() {
         if !*dead_at_i {
             continue;

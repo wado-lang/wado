@@ -2234,11 +2234,11 @@ fn record_loop_heap_write(
             // A receiver is borrowed unless the callee cannot write through it.
             // The verdict already accounts for a declared `&mut self`, so it
             // replaces `arg.is_mut` for that slot rather than joining it.
-            let (receiver, rest) = args.split();
-            let receiver = receiver.filter(|_| !facts.receiver_immutable.contains(&e));
-            for arg in receiver.into_iter().chain(rest.iter().filter(|a| a.is_mut)) {
-                if let Some(ExprKind::Local { index, .. }) =
-                    arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
+            let receiver_reaches = !facts.receiver_immutable.contains(&e);
+            for (arg, reaches_storage) in args.with_storage_reach(receiver_reaches) {
+                if reaches_storage
+                    && let Some(ExprKind::Local { index, .. }) =
+                        arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
                 {
                     eff.mut_borrowed.insert(*index);
                 }

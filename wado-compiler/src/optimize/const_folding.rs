@@ -1155,7 +1155,7 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
             }
         }
         ExprKind::Call { args, .. } => {
-            for (arg, reaches_storage) in args.with_storage_reach() {
+            for (arg, reaches_storage) in args.with_storage_reach(true) {
                 if reaches_storage
                     && let Some(ae) = arg.expr.as_expr()
                     && let ExprKind::Local { index, .. } = &body.exprs[ae].kind

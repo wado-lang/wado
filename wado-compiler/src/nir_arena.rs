@@ -483,11 +483,16 @@ impl ExprKind {
 
 impl CallArgs<ArenaCallArg> {
     /// Each argument with whether the callee may reach the caller's storage
-    /// through it: a `mut` argument does, and so does a receiver, whatever
-    /// `self` mode its callee declares.
-    pub fn with_storage_reach(&self) -> impl Iterator<Item = (&ArenaCallArg, bool)> {
+    /// through it: a `mut` argument does, and the receiver does as
+    /// `receiver_reaches` says. A walk that does not ask the callee passes
+    /// `true`, since a receiver reaches the caller's storage whatever `self`
+    /// mode its callee declares.
+    pub fn with_storage_reach(
+        &self,
+        receiver_reaches: bool,
+    ) -> impl Iterator<Item = (&ArenaCallArg, bool)> {
         let (receiver, rest) = self.split();
-        let receiver = receiver.map(|r| (r, true));
+        let receiver = receiver.map(|r| (r, receiver_reaches));
         receiver
             .into_iter()
             .chain(rest.iter().map(|a| (a, a.is_mut)))
@@ -2053,6 +2058,26 @@ mod tests {
             type_id: TypeId(0),
             span: Span::default(),
         })
+    }
+
+    #[test]
+    fn storage_reach_takes_the_receiver_from_its_verdict_and_the_rest_from_mut() {
+        let arg = |i: usize, is_mut: bool| ArenaCallArg {
+            expr: Operand::Expr(ExprId::new(i)),
+            is_mut,
+        };
+        let args = CallArgs::method(arg(0, false), [arg(1, true), arg(2, false)]);
+        let reach = |receiver_reaches| {
+            args.with_storage_reach(receiver_reaches)
+                .map(|(a, reaches)| (a.expr, reaches))
+                .collect::<Vec<_>>()
+        };
+        let at = |i| Operand::Expr(ExprId::new(i));
+        assert_eq!(reach(true), [(at(0), true), (at(1), true), (at(2), false)]);
+        assert_eq!(
+            reach(false),
+            [(at(0), false), (at(1), true), (at(2), false)]
+        );
     }
 
     #[test]

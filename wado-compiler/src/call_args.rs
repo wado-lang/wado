@@ -1,6 +1,7 @@
 //! The argument list of a direct call, shared by TIR and NIR.
 
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, Index, IndexMut};
+use std::slice::SliceIndex;
 
 /// A call's arguments in the callee's parameter order, knowing whether the
 /// first is an instance method's receiver.
@@ -10,8 +11,9 @@ use std::ops::{Deref, DerefMut};
 /// receiver's mode itself (`Trait::m(&mut x, …)`).
 ///
 /// A method call without its receiver cannot be built, so no reader has to
-/// decide what one would mean. The length is fixed once built, apart from
-/// [`Self::retain_positions`], which keeps the receiver flag in step with it.
+/// decide what one would mean. Arguments can be replaced but not reordered, and
+/// only [`Self::retain_positions`] changes the length, keeping the receiver
+/// flag in step with it.
 #[derive(Debug, Clone)]
 pub struct CallArgs<A> {
     list: Vec<A>,
@@ -67,12 +69,6 @@ impl<A> CallArgs<A> {
         self.list
     }
 
-    /// Every argument, the receiver first if there is one.
-    #[must_use]
-    pub fn as_slice(&self) -> &[A] {
-        &self.list
-    }
-
     /// The receiver, or `None` for a call without one.
     #[must_use]
     pub fn receiver(&self) -> Option<&A> {
@@ -90,6 +86,11 @@ impl<A> CallArgs<A> {
             .split_first()
             .expect("a method call has its receiver");
         (Some(receiver), rest)
+    }
+
+    /// Every argument, mutably, in place.
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, A> {
+        self.list.iter_mut()
     }
 
     /// [`Self::split`], mutably.
@@ -118,15 +119,17 @@ impl<A> CallArgs<A> {
     /// Keep the arguments whose position `keep` accepts. Dropping the receiver
     /// leaves a call without one.
     pub fn retain_positions(&mut self, mut keep: impl FnMut(usize) -> bool) {
-        if self.has_receiver && !keep(0) {
-            self.has_receiver = false;
-        }
         let mut position = 0;
+        let mut receiver_kept = true;
         self.list.retain(|_| {
             let kept = keep(position);
+            if position == 0 {
+                receiver_kept = kept;
+            }
             position += 1;
             kept
         });
+        self.has_receiver &= receiver_kept;
     }
 
     /// Make the receiver an ordinary first argument, for a callee whose first
@@ -151,9 +154,17 @@ impl<A> Deref for CallArgs<A> {
     }
 }
 
-impl<A> DerefMut for CallArgs<A> {
-    fn deref_mut(&mut self) -> &mut [A] {
-        &mut self.list
+impl<A, I: SliceIndex<[A]>> Index<I> for CallArgs<A> {
+    type Output = I::Output;
+
+    fn index(&self, index: I) -> &I::Output {
+        &self.list[index]
+    }
+}
+
+impl<A> IndexMut<usize> for CallArgs<A> {
+    fn index_mut(&mut self, position: usize) -> &mut A {
+        &mut self.list[position]
     }
 }
 
@@ -214,6 +225,14 @@ mod tests {
         let mut args = CallArgs::method(0, [1, 2]);
         args.retain_positions(|p| p != 1);
         assert_eq!(args.split(), (Some(&0), &[2][..]));
+    }
+
+    #[test]
+    fn retain_asks_once_per_position() {
+        let mut args = CallArgs::method(0, [1, 2]);
+        let mut verdicts = [false, true, true].into_iter();
+        args.retain_positions(|_| verdicts.next().expect("one verdict per position"));
+        assert_eq!(args.split(), (None, &[1, 2][..]));
     }
 
     #[test]

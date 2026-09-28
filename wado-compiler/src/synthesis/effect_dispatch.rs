@@ -2736,7 +2736,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                     .map(|wrapper| {
                         wrapper_call(
                             wrapper,
-                            args.clone().into_vec(),
+                            args.to_vec(),
                             return_type,
                             expr.span,
                             ctx.entry_source,
@@ -2749,7 +2749,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             {
                 Some(wrapper_call(
                     wrapper.clone(),
-                    args.clone().into_vec(),
+                    args.to_vec(),
                     return_type,
                     expr.span,
                     ctx.entry_source,

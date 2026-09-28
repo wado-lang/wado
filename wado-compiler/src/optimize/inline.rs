@@ -2647,9 +2647,8 @@ fn try_inline_call_expr(
     reval: &mut Vec<InlineRevalInfo>,
     site: Site,
 ) -> Option<(ExprId, FuncId)> {
-    let (func_id, args) = match &caller.exprs[call_id].kind {
-        ExprKind::Call { func_id, args, .. } => (*func_id, args.clone()),
-        _ => return None,
+    let ExprKind::Call { func_id, .. } = caller.exprs[call_id].kind else {
+        return None;
     };
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
@@ -2672,6 +2671,10 @@ fn try_inline_call_expr(
     }
     let callee = candidate.body.as_ref()?;
     let call_span = caller.exprs[call_id].span;
+    let ExprKind::Call { args, .. } = &caller.exprs[call_id].kind else {
+        unreachable!("matched a Call above")
+    };
+    let args = args.clone();
 
     // Args are already in the caller arena (operands of the discarded call); bind
     // each to its param `Let` directly.
@@ -3150,17 +3153,18 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             func_id,
             type_args,
             args,
-        } => {
-            let (func_id, type_args, args) = (*func_id, type_args.clone(), args.clone());
-            ExprKind::Call {
-                func_id,
-                type_args,
-                args: args.map(|a| ArenaCallArg {
-                    expr: splice_operand(caller, callee, a.expr, ctx),
-                    is_mut: a.is_mut,
-                }),
-            }
-        }
+        } => ExprKind::Call {
+            func_id: *func_id,
+            type_args: type_args.clone(),
+            args: args.rebuild(
+                args.iter()
+                    .map(|a| ArenaCallArg {
+                        expr: splice_operand(caller, callee, a.expr, ctx),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
+            ),
+        },
         ExprKind::CmRawCall { target, args } => {
             let (target, args) = (target.clone(), args.clone());
             ExprKind::CmRawCall {

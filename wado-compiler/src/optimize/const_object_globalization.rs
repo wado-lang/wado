@@ -1180,11 +1180,9 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
                 ExprKind::Call { func_id, args, .. } => {
                     // A receiver is written unless the callee is known not to
                     // mutate `self`; every other arg only by `is_mut`.
-                    let (receiver, rest) = args.split();
-                    let receiver =
-                        receiver.filter(|_| gate.callee_mutates_self(*func_id) != Some(false));
-                    for a in receiver.into_iter().chain(rest.iter().filter(|a| a.is_mut)) {
-                        if let Some(r) = a.expr.as_expr().and_then(root_of) {
+                    let receiver_reaches = gate.callee_mutates_self(*func_id) != Some(false);
+                    for (a, reaches_storage) in args.with_storage_reach(receiver_reaches) {
+                        if reaches_storage && let Some(r) = a.expr.as_expr().and_then(root_of) {
                             out.insert(r);
                         }
                     }
@@ -1907,6 +1905,7 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                 // A by-value `self` receiver hands the storage to the callee,
                 // which may return or store it in turn; `&self` only reads it.
                 ExprKind::Call { func_id, args, .. } => {
+                    let (receiver, _) = args.split();
                     // Handing the storage on as a read-only borrow is not an
                     // escape when the callee keeps it one — the same question
                     // this walk answers, asked of the callee. A Wasm
@@ -1924,7 +1923,7 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                         }
                         return Some(());
                     }
-                    if let Some(receiver) = args.receiver()
+                    if let Some(receiver) = receiver
                         && escapes(receiver.expr)
                         && !gate.callee_borrows_self(*func_id)
                     {
