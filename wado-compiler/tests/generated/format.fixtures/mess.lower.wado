@@ -2670,6 +2670,10 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
 
 pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     if (core::allocator::heap_offset < 152) {
+        if (core::builtin::i32_and(core::builtin::heap_base(), 15) != 0) {
+            core::builtin::cold_path();
+            core::builtin::unreachable();
+        }
         core::allocator::heap_offset = 152;
     }
     if (newsize == 0) {

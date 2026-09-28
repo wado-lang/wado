@@ -84,6 +84,10 @@ fn fl_unlink(block: i32) {
 
 pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     if (core::allocator::heap_offset < 152) {
+        if (core::builtin::i32_and(0, 15) != 0) {
+            core::builtin::cold_path();
+            core::builtin::unreachable();
+        }
         core::allocator::heap_offset = 152;
     }
     if (newsize == 0) {
@@ -225,7 +229,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         }
         curr = core::builtin::i32_load((curr + 8));
     }
-    let block: i32 = $unbroken_64: {
+    let block: i32 = $unbroken_65: {
         let start: i32 = core::builtin::i32_and(((core::allocator::heap_offset + 1) - 1), -1);
         let end: i32 = (start + size);
         if (end > (core::builtin::memory_size() * 65536)) {
