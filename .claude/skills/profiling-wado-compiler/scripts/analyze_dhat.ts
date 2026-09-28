@@ -61,11 +61,13 @@ const isAllocator = (name: string): boolean =>
   /^(malloc|calloc|realloc|memalign|posix_memalign|__rust|__rdl|__rg)/.test(name) ||
   ["alloc", "core", "std"].includes(crateOf(name));
 
-// `0xADDR: name (file:line)` → name, without the hash suffix.
+// `0xADDR: name (file:line)` → name, without the hash suffix. valgrind writes
+// the address in upper case and the `dhat` crate in lower.
 const frameName = (i: number): string => {
   const entry = dhat.ftbl[i];
-  const match = entry.match(/^0x[0-9A-F]+: (.*?)(?: \((?:in )?[^()]*\))?$/);
-  return (match ? match[1] : entry).replace(/::h[0-9a-f]{16}\b/g, "");
+  const match = entry.match(/^0x[0-9a-f]+: (.*?)(?: \((?:in )?[^()]*\))?$/i);
+  if (!match) throw new Error(`unrecognized DHAT frame: ${entry}`);
+  return match[1].replace(/::h[0-9a-f]{16}\b/g, "");
 };
 const frameLine = (i: number): string => {
   const match = dhat.ftbl[i].match(/\(([^()]*:\d+)\)$/);
