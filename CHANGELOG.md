@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.0.32](https://github.com/wado-lang/wado/compare/v0.0.31...v0.0.32) - 2026-09-28
+
+- refactor(loam): GPT-2 as a library a browser page can build, with hf2loam's convert as a function by @gfx in https://github.com/wado-lang/wado/pull/2206
+
 ## [v0.0.31](https://github.com/wado-lang/wado/compare/v0.0.30...v0.0.31) - 2026-09-28
 
 - test(gale): pin four antlr/antlr4 parse-bug reports; ANTLR4's own bugs are not reproduced by @gfx in https://github.com/wado-lang/wado/pull/2200
