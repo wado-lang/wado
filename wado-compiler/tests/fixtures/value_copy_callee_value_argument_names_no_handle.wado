@@ -5,8 +5,8 @@
 // Read as unclassifiable instead, it tags the callee's writes with a handle
 // that could be any of them. `sub` writes nothing at all, yet `take` was
 // reported as writing `P` through its receiver, and `scan`'s field read had
-// to copy the whole input buffer. That is json_catalog_v2's `parse_area`,
-// whose every call goes through a stdlib helper carrying one such write.
+// to copy the whole input buffer. A hand-written parser whose every call goes
+// through a stdlib helper carrying one such write copies it per field.
 
 use { println, Stdout } from "core:cli";
 

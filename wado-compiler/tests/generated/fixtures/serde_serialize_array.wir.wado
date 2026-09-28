@@ -591,7 +591,10 @@ fn "serde_serialize_array.wado/i32^serde_serialize_array.wado/Serialize::seriali
     let n_20: i32;
     let new_used: i32;
     let start_25: i32;
-    return v = self.value, $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }, "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(v, $local_2), $inline_core_prelude_string_wado_String__internal_push_string_8: block {
+    v = self.value;
+    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(v, $local_2);
+    $inline_core_prelude_string_wado_String__internal_push_string_8: block {
         n_20 = $local_2.used;
         break_if $inline_core_prelude_string_wado_String__internal_push_string_8 n_20 == 0;
         new_used = s.used + n_20;
@@ -602,7 +605,8 @@ fn "serde_serialize_array.wado/i32^serde_serialize_array.wado/Serialize::seriali
         start_25 = s.used;
         s.used = new_used;
         builtin::array_copy<u8>(s.repr, start_25, $local_2.repr, 0, n_20);
-    }, ref.null none;
+    };
+    return ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
@@ -621,10 +625,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+    new_used_66 = self.used + digit_count;
+    if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
+    }
+    start_67 = self.used;
+    self.used = new_used_66;
+    return start_67;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {

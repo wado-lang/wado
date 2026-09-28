@@ -56,14 +56,14 @@ fn "result_if_let_mismatch.wado/$cm_binding__Stdout_write_via_stream"(data) with
 fn "result_if_let_mismatch.wado/$cm_export__run"() {
     let handle: i32;
     let packed: i64;
-    let rx_10: i32;
-    let tx_11: i32;
-    rx_10 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "result_if_let_mismatch.wado/$cm_binding__Stdout_write_via_stream"(rx_10);
+    let rx_13: i32;
+    let tx_14: i32;
+    rx_13 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_14 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "result_if_let_mismatch.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("not ok");
-    "core:rt/write_string_to_stream$spec0"(tx_11, $mv_field_2, 6);
+    "core:rt/write_string_to_stream$spec0"(tx_14, $mv_field_2, 6);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
     "wasi/task-return"(0);
 }

@@ -1,4 +1,5 @@
-//! Flatten block-tailed `let` bindings to expose their values to later passes.
+//! Flatten a block a statement evaluates first to expose its value to later
+//! passes.
 
 use cranelift_entity::EntityRef;
 
@@ -8,10 +9,10 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKin
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
-use super::arena_query::strip_refs;
+use super::arena_query::{block_contains_loop, strip_refs};
 use super::gate::{FunctionGate, GatedPass};
 
-/// Flatten every block-tailed `let` binding across the package.
+/// Flatten every block a statement evaluates first, across the package.
 ///
 /// Its own pass between the post-inline peephole and `sroa`, never a peephole
 /// rule: the session's pristine-map rules (`ref_elim`, `elide_box_local`,
@@ -79,17 +80,12 @@ impl Rule for LetBlockFlattenRule {
     }
 }
 
-/// If `sid` is `let x = { … }` whose value is an unbroken block with
-/// leading statements and a tail-value `Expr` statement, return the block
-/// wrapper expression and the block.
+/// If the operand `sid` evaluates first runs an unbroken block with leading
+/// statements and a tail-value `Expr` statement, return the block wrapper
+/// expression and the block.
 fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)> {
-    let StmtKind::Let { value, .. } = &body.stmts[sid].kind else {
-        return None;
-    };
-    // A reference around the block applies to the tail's value either way, so
-    // the leading statements hoist the same. `&mut { …; Struct { … } }` is
-    // what an inlined by-reference receiver leaves.
-    let value_e = strip_refs(body, value.as_expr()?);
+    let bound = strip_refs(body, leading_operand(&body.stmts[sid].kind)?.as_expr()?);
+    let value_e = first_evaluated(body, bound);
     // Flattening a block a `break` names would strip the target the jump needs.
     let inner = body.unbroken_block(value_e)?;
     let (&tail, leading) = body.blocks[inner].stmts.split_last()?;
@@ -99,23 +95,19 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     let StmtKind::Expr(tail_value) = body.stmts[tail].kind else {
         return None;
     };
-    let straight_line = leading.iter().all(|s| {
-        matches!(
-            body.stmts[*s].kind,
-            StmtKind::Let { .. } | StmtKind::Expr(_) | StmtKind::LetDestructure { .. }
-        )
-    });
-    // Keep control-flow regions available to CTFE unless their tail exposes a
-    // literal for SROA. Flattening a list-building loop strands its evaluation
-    // outside the value region (`ctfe_list_result`).
-    if !straight_line
-        && !tail_value.as_expr().is_some_and(|e| {
+    // Keep a loop available to CTFE: flattening a list-building loop strands
+    // its evaluation outside the value region (`ctfe_list_result`). A bound
+    // block gives that up where its tail exposes a literal for SROA. An
+    // argument never does, since it is the callee that reads the value
+    // (`ctfe_struct_result`).
+    let literal_tail = value_e == bound
+        && tail_value.as_expr().is_some_and(|e| {
             matches!(
                 body.exprs[e].kind,
                 ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
             )
-        })
-    {
+        });
+    if !literal_tail && block_contains_loop(body, inner) {
         return None;
     }
     // Defer while a leading statement is a shadow a session dissolver owns: a
@@ -143,6 +135,44 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
         })
     });
     no_shadow_copy.then_some((value_e, inner))
+}
+
+/// The operand a statement evaluates before it does anything else. A loop's
+/// body runs again, so nothing in it is first.
+fn leading_operand(kind: &StmtKind) -> Option<Operand> {
+    match kind {
+        StmtKind::Let { value, .. }
+        | StmtKind::LetDestructure { value, .. }
+        | StmtKind::Expr(value)
+        | StmtKind::If {
+            condition: value, ..
+        } => Some(*value),
+        StmtKind::Return { value } | StmtKind::Break { value, .. } => *value,
+        StmtKind::Loop { .. } | StmtKind::Continue | StmtKind::LabeledBlock { .. } => None,
+    }
+}
+
+/// The subexpression of `e` that runs first, which is where a block's leading
+/// statements can hoist to the binding's place without reordering anything.
+///
+/// A reference around it applies to the tail's value either way:
+/// `&mut { …; Struct { … } }` is what an inlined by-reference receiver leaves.
+/// A call's argument is first when every argument ahead of it is a constant:
+/// `f({ …; Slice { … } })` is what an inlined constructor leaves in argument
+/// position, and hoisting it hands the literal to the split parameter ABI.
+fn first_evaluated(body: &Body, e: ExprId) -> ExprId {
+    let ExprKind::Call { args, .. } = &body.exprs[e].kind else {
+        return e;
+    };
+    for arg in args {
+        match arg.expr {
+            Operand::Expr(first) => return first_evaluated(body, strip_refs(body, first)),
+            Operand::Value(v) if body.values.kind(v).is_constant() => {}
+            // A promoted read of a local a leading statement may assign.
+            Operand::Value(_) => return e,
+        }
+    }
+    e
 }
 
 /// A place expression — the lvalue forms `ref_elim` dissolves a `&`/`&mut` of.

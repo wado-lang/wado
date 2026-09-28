@@ -5224,12 +5224,47 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let provided: hashmap::IndexSet<String> =
             struct_lit.fields.iter().map(|f| f.name.clone()).collect();
 
-        // Fill omitted fields from `base.field` (not defaults), evaluating a
-        // non-trivial `base` once via a `$base_N` temporary.
+        // The members evaluate in source order, `base` first, but the literal
+        // holds its fields by declaration index. A constant observes no order,
+        // so only the other fields count: those up to the last one out of
+        // declaration order are bound ahead of the literal, a local read like
+        // any other, since a later field may write the local. So is `base`,
+        // which the literal reads at each omitted field's index, once any
+        // field could write it.
+        let constant = |this: &Self, e: &TirExpr| {
+            tir::is_constant_initializer(e, &this.tysys.type_table.borrow())
+        };
         let mut base_binding = Vec::new();
-        if let Some(spread) = struct_lit.spreads.first() {
+        let base_ref = struct_lit.spreads.first().map(|spread| {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
-            let base_ref = Self::hoist_once(ctx, base_expr, "base", &mut base_binding);
+            if fields.iter().all(|f| constant(self, &f.value)) {
+                return Self::hoist_once(ctx, base_expr, "base", &mut base_binding);
+            }
+            let name = minted_name("base", ctx.fresh_serial());
+            bind_to_local(ctx, name, base_expr, &mut base_binding)
+        });
+        let ordered: Vec<usize> = (0..fields.len())
+            .filter(|&i| !constant(self, &fields[i].value))
+            .collect();
+        let in_order_from = (1..ordered.len())
+            .rev()
+            .find(|&k| fields[ordered[k - 1]].field_index > fields[ordered[k]].field_index)
+            .map_or(0, |k| ordered[k]);
+        fields = fields
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| {
+                if i >= in_order_from || constant(self, &f.value) {
+                    return f;
+                }
+                let name = minted_name("field", ctx.fresh_serial());
+                TirStructField {
+                    value: bind_to_local(ctx, name, f.value, &mut base_binding),
+                    ..f
+                }
+            })
+            .collect();
+        if let Some(base_ref) = base_ref {
             for (name, field_index, raw_ty, _default) in &decl_fields {
                 if provided.contains(name) {
                     continue;

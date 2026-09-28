@@ -369,12 +369,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 
 fn "effect_handler_bundled_helper_effects.wado/effect_handler_bundled_helper_effects.wado/$Closure_0::$call"(self) {
     let self_1: ref "effect_handler_bundled_helper_effects.wado//Mock";
-    return self_1 = self.$capture_0, self_1.n = self_1.n + 1, self_1.n;
+    self_1 = self.$capture_0;
+    self_1.n = self_1.n + 1;
+    return self_1.n;
 }
 
 fn "effect_handler_bundled_helper_effects.wado/effect_handler_bundled_helper_effects.wado/$Closure_1::$call"(self) {
     let self_1: ref "effect_handler_bundled_helper_effects.wado//Mock";
-    return self_1 = self.$capture_0, self_1.n = self_1.n + 10, self_1.n;
+    self_1 = self.$capture_0;
+    self_1.n = self_1.n + 10;
+    return self_1.n;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
@@ -393,10 +397,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+    new_used_66 = self.used + digit_count;
+    if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
+    }
+    start_67 = self.used;
+    self.used = new_used_66;
+    return start_67;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {

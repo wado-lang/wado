@@ -226,7 +226,8 @@ fn "variadic_bare_pack_names_element.wado/$test_0_a_bare_pack_name_annotates_the
     let a_end_51: i32;
     let b_52: ref Array<u8>;
     let i_56: i32;
-    $v2_2 = "variadic_bare_pack_names_element.wado/variadic_bare_pack_names_element.wado/payload_text<variadic_bare_pack_names_element.wado/Shape,[i32,core:prelude/string.wado/String,()]>$scalar"($v1_1 = struct.new "core:prelude/types.wado//Box<variadic_bare_pack_names_element.wado/Shape>" { value: ref.as_non_null($v0_0 = struct.new "variadic_bare_pack_names_element.wado//Shape::Circle" { discriminant: 0, payload_0: 3 }; $v0_0) }; $v1_1.value);
+    $v1_1 = struct.new "core:prelude/types.wado//Box<variadic_bare_pack_names_element.wado/Shape>" { value: ref.as_non_null($v0_0 = struct.new "variadic_bare_pack_names_element.wado//Shape::Circle" { discriminant: 0, payload_0: 3 }; $v0_0) };
+    $v2_2 = "variadic_bare_pack_names_element.wado/variadic_bare_pack_names_element.wado/payload_text<variadic_bare_pack_names_element.wado/Shape,[i32,core:prelude/string.wado/String,()]>$scalar"($v1_1.value);
     $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
         a_29 = $v2_2.repr;
         a_end_31 = $v2_2.used;
@@ -281,7 +282,8 @@ condition: payload_text(&Shape::Circle(3)) == \"3\"
         "core:rt/panic"($local_10.repr, $local_10.used);
         unreachable;
     }
-    $v2_6 = "variadic_bare_pack_names_element.wado/variadic_bare_pack_names_element.wado/payload_text<variadic_bare_pack_names_element.wado/Shape,[i32,core:prelude/string.wado/String,()]>$scalar"($v1_5 = struct.new "core:prelude/types.wado//Box<variadic_bare_pack_names_element.wado/Shape>" { value: ref.as_non_null($v0_4 = struct.new "variadic_bare_pack_names_element.wado//Shape::Named" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } }; $v0_4) }; $v1_5.value);
+    $v1_5 = struct.new "core:prelude/types.wado//Box<variadic_bare_pack_names_element.wado/Shape>" { value: ref.as_non_null($v0_4 = struct.new "variadic_bare_pack_names_element.wado//Shape::Named" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } }; $v0_4) };
+    $v2_6 = "variadic_bare_pack_names_element.wado/variadic_bare_pack_names_element.wado/payload_text<variadic_bare_pack_names_element.wado/Shape,[i32,core:prelude/string.wado/String,()]>$scalar"($v1_5.value);
     $cond_7 = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
         a_39 = $v2_6.repr;
         a_end_41 = $v2_6.used;
@@ -1681,9 +1683,11 @@ fn "core:prelude/traits.wado/variadic_bare_pack_names_element.wado/Shape^core:pr
         start_57 = self_44.used;
         self_44.used = new_used_56;
         builtin::array_copy<u8>(self_44.repr, start_57, case_4.case_name.repr, 0, 6);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(v_61 = self.value; if @unlikely(v_61.discriminant != 0) {
+        v_61 = self.value;
+        if @unlikely(v_61.discriminant != 0) {
             unreachable;
-        }; ref.cast "variadic_bare_pack_names_element.wado//Shape::Circle"(v_61).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(ref.cast "variadic_bare_pack_names_element.wado//Shape::Circle"(v_61).payload_0, f);
     }
     case_5 = global:core:prelude/traits.wado::$const_obj_19.1;
     if self.value.discriminant == 1 {
@@ -1714,9 +1718,11 @@ fn "core:prelude/traits.wado/variadic_bare_pack_names_element.wado/Shape^core:pr
         start_112 = self_99.used;
         self_99.used = new_used_111;
         builtin::array_copy<u8>(self_99.repr, start_112, case_5.case_name.repr, 0, 5);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"(v_116 = self.value; if @unlikely(v_116.discriminant != 1) {
+        v_116 = self.value;
+        if @unlikely(v_116.discriminant != 1) {
             unreachable;
-        }; ref.cast "variadic_bare_pack_names_element.wado//Shape::Named"(v_116).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"(ref.cast "variadic_bare_pack_names_element.wado//Shape::Named"(v_116).payload_0, f);
     }
     case_6 = global:core:prelude/traits.wado::$const_obj_19.2;
     if self.value.discriminant == 2 {
@@ -1887,10 +1893,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_49.repr, start_63, prefix.repr, 0, n_57);
             };
         }
-        return self_65 = self.buf, new_used_67 = self_65.used + digit_count, if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
+        self_65 = self.buf;
+        new_used_67 = self_65.used + digit_count;
+        if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
-        }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
+        }
+        start_68 = self_65.used;
+        self_65.used = new_used_67;
+        return start_68;
     }
     padding = $load_2 - content_len;
     if self.zero_pad {
@@ -1947,10 +1958,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 continue l187;
             };
         };
-        return self_120 = self.buf, new_used_122 = self_120.used + digit_count, if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
+        self_120 = self.buf;
+        new_used_122 = self_120.used + digit_count;
+        if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_120, new_used_122);
-        }, start_123 = self_120.used, self_120.used = new_used_122, start_123;
+        }
+        start_123 = self_120.used;
+        self_120.used = new_used_122;
+        return start_123;
     }
     align = self.align;
     if align == 0 {
@@ -2128,10 +2144,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_273.repr, start_287, prefix.repr, 0, n_281);
             };
         }
-        return self_289 = self.buf, new_used_291 = self_289.used + digit_count, if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
+        self_289 = self.buf;
+        new_used_291 = self_289.used + digit_count;
+        if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_289, new_used_291);
-        }, start_292 = self_289.used, self_289.used = new_used_291, start_292;
+        }
+        start_292 = self_289.used;
+        self_289.used = new_used_291;
+        return start_292;
     }
 }
 
@@ -2206,10 +2227,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+    new_used_66 = self.used + digit_count;
+    if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
+    }
+    start_67 = self.used;
+    self.used = new_used_66;
+    return start_67;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
