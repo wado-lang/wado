@@ -167,6 +167,25 @@ test "an exponent needs no decimal point" {
     );
 }
 
+test "a float spelled as a word parses where a number does" {
+    parse_ok(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[4] W = {nan, -inf, Infinity, -NaN}>
+        {
+            M = Clip <min = -inf, max = inf> (X)
+            Y = Add(M, W)
+        }`,
+    );
+}
+
+test "a tensor named like a float word still parses" {
+    parse_ok(
+        `agraph (float[2] inf) => (float[2] nan) {
+            nan = Relu(inf)
+        }`,
+    );
+}
+
 test "a graph with no node list does not parse" {
     parse_fails("agraph (float[2] X) => (float[2] Y)");
 }

@@ -1,62 +1,125 @@
 (component
   (type $result-unit (;0;) (result))
   (core module $mem-mod (;0;)
-    (type (;0;) (func (param i32)))
-    (type (;1;) (func (param i32 i32 i32 i32) (result i32)))
+    (type (;0;) (func (param i64)))
+    (type (;1;) (func (param i32 i32) (result i32)))
+    (type (;2;) (func (param i32 i32 i32 i32) (result i32)))
     (memory (;0;) 1)
     (global (;0;) (mut i32) (i32.const 8))
     (export "realloc" (func $realloc))
     (export "memory" (memory 0))
-    (func $grow_memory (;0;) (type 0) (param i32)
-      (local i32 i32 i32 i32)
+    (func $grow_memory (;0;) (type 0) (param i64)
+      (local i64 i64 i64 i64)
       (local.set 1
-        (i32.mul
-          (memory.size)
-          (i32.const 65536)))
+        (i64.mul
+          (i64.extend_i32_s
+            (memory.size))
+          (i64.const 65536)))
       (local.set 2
-        (i32.sub
+        (i64.sub
           (local.get 0)
           (local.get 1)))
       (local.set 3
-        (select (result i32)
+        (select (result i64)
           (local.get 1)
-          (i32.const 16777216)
-          (i32.lt_s
+          (i64.const 16777216)
+          (i64.lt_u
             (local.get 1)
-            (i32.const 16777216))))
+            (i64.const 16777216))))
       (local.set 4
-        (if (result i32) ;; label = @1
-          (i32.gt_s
+        (if (result i64) ;; label = @1
+          (i64.gt_u
             (local.get 2)
             (local.get 3))
           (then
-            (i32.shl
-              (i32.const 1)
-              (i32.sub
-                (i32.const 32)
-                (i32.clz
-                  (i32.sub
+            (i64.shl
+              (i64.const 1)
+              (i64.sub
+                (i64.const 64)
+                (i64.clz
+                  (i64.sub
                     (local.get 2)
-                    (i32.const 1))))))
+                    (i64.const 1))))))
           (else
             (local.get 3))))
       (@metadata.code.branch_hint "\00")
       (if ;; label = @1
-        (i32.lt_s
-          (memory.grow
-            (i32.div_s
-              (i32.sub
-                (i32.add
-                  (local.get 4)
-                  (i32.const 65536))
-                (i32.const 1))
-              (i32.const 65536)))
-          (i32.const 0))
+        (if (result i32) ;; label = @1
+          (i32.lt_s
+            (memory.grow
+              (i32.wrap_i64
+                (i64.div_u
+                  (i64.sub
+                    (i64.add
+                      (local.get 4)
+                      (i64.const 65536))
+                    (i64.const 1))
+                  (i64.const 65536))))
+            (i32.const 0))
+          (then
+            (i32.lt_s
+              (memory.grow
+                (i32.wrap_i64
+                  (i64.div_u
+                    (i64.sub
+                      (i64.add
+                        (local.get 2)
+                        (i64.const 65536))
+                      (i64.const 1))
+                    (i64.const 65536))))
+              (i32.const 0)))
+          (else
+            (i32.const 0)))
         (then
           (unreachable)))
     )
-    (func $realloc (;1;) (type 1) (param i32 i32 i32 i32) (result i32)
-      (local i32 i32)
+    (func $bump (;1;) (type 1) (param i32 i32) (result i32)
+      (local i64 i64 i64)
+      (local.set 2
+        (i64.sub
+          (i64.extend_i32_u
+            (local.get 0))
+          (i64.const 1)))
+      (local.set 4
+        (i64.add
+          (local.tee 3
+            (i64.and
+              (i64.add
+                (i64.extend_i32_u
+                  (global.get 0))
+                (local.get 2))
+              (i64.xor
+                (local.get 2)
+                (i64.const -1))))
+          (i64.extend_i32_u
+            (local.get 1))))
+      (@metadata.code.branch_hint "\00")
+      (if ;; label = @1
+        (i64.gt_u
+          (local.get 4)
+          (i64.const 4294967295))
+        (then
+          (unreachable)))
+      (@metadata.code.branch_hint "\00")
+      (if ;; label = @1
+        (i64.gt_u
+          (local.get 4)
+          (i64.mul
+            (i64.extend_i32_s
+              (memory.size))
+            (i64.const 65536)))
+        (then
+          (call $grow_memory
+            (local.get 4))))
+      (global.set 0
+        (i32.wrap_i64
+          (local.get 4)))
+      (return
+        (i32.wrap_i64
+          (local.get 3)))
+      (unreachable)
+    )
+    (func $realloc (;2;) (type 2) (param i32 i32 i32 i32) (result i32)
       (if ;; label = @1
         (i32.eqz
           (local.get 3))
@@ -72,33 +135,10 @@
                 (local.get 0))))
           (return
             (i32.const 0))))
-      (local.set 5
-        (i32.add
-          (local.tee 4
-            (i32.and
-              (i32.sub
-                (i32.add
-                  (global.get 0)
-                  (local.get 2))
-                (i32.const 1))
-              (i32.sub
-                (i32.const 0)
-                (local.get 2))))
-          (local.get 3)))
-      (@metadata.code.branch_hint "\00")
-      (if ;; label = @1
-        (i32.gt_s
-          (local.get 5)
-          (i32.mul
-            (memory.size)
-            (i32.const 65536)))
-        (then
-          (call $grow_memory
-            (local.get 5))))
-      (global.set 0
-        (local.get 5))
       (return
-        (local.get 4))
+        (call $bump
+          (local.get 2)
+          (local.get 3)))
       (unreachable)
     )
   )

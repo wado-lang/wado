@@ -2683,12 +2683,17 @@ impl CmInterfaceRegistry {
     }
 
     /// Register named type decls that reach the library's public surface from a
-    /// non-entry local module (a facade re-exports them, and an `export fn`
-    /// signature names them). Registered under the same lib-local interface FQ
-    /// as the entry module's own types, so lift/lower resolves them uniformly.
-    /// Each carries the module that defines it, so resolution can locate a
-    /// submodule type the entry-FQ mapping cannot.
-    pub fn register_lib_local_items(&mut self, items: &[(ModuleSource, Item)], iface_fq: &str) {
+    /// module other than the entry: a local submodule (a facade re-exports them,
+    /// and an `export fn` signature names them), or the stdlib for a newtype the
+    /// surface names. Registered under the same lib-local interface FQ as the
+    /// entry module's own types, so lift/lower resolves them uniformly. Each
+    /// carries the module that defines it, so resolution can locate a type the
+    /// entry-FQ mapping cannot.
+    pub fn register_lib_local_items<'a>(
+        &mut self,
+        items: impl IntoIterator<Item = &'a (ModuleSource, Item)>,
+        iface_fq: &str,
+    ) {
         for (source, item) in items {
             self.register_lib_local_item(item, iface_fq, source);
         }

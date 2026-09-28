@@ -654,6 +654,7 @@ impl FunctionTranslator<'_, '_> {
                     .expect("a v128 bit pattern must be an i128 / u128 literal"),
             )),
             "memory_size" => Some(WirInstr::MemorySize),
+            "heap_base" => Some(WirInstr::I32Const(self.ctx.package.heap_base())),
             "memory_fill" => {
                 let dst = self.translate_operand(args[0].expr);
                 let value = self.translate_operand(args[1].expr);

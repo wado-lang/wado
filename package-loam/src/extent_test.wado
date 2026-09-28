@@ -38,3 +38,16 @@ test "an extent renders as what a diagnostic should name it" {
     assert `${Extent::symbol(&"seq")}` == "seq";
     assert `${Extent::Unstated}` == "?";
 }
+
+test "agreement owes only what the extents' difference reads" {
+    let n = Poly::symbol(&"N");
+    let m = Poly::symbol(&"M");
+    let eight = Poly::constant(8);
+    let site = "Y = Slice";
+    let shared = Poly::min_of(&m, &eight, &site);
+    let a = Extent::Symbolic(Poly::min_of(&n, &eight, &site).try_add(&shared).unwrap());
+    let b = Extent::Symbolic(n.try_add(&shared).unwrap());
+    let owed = a.agreement(&b).unwrap();
+    assert owed.len() == 1;
+    assert owed[0].reason == "Y = Slice: N must be at most 8";
+}

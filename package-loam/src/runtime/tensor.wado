@@ -1,3 +1,4 @@
+/// A tensor of `E` over the axis list `Axes`, row-major.
 pub struct Tensor<E, Axes> {
     pub data: List<E>,
     pub extents: List<i32>,
@@ -84,6 +85,32 @@ pub fn unmet(slack: i64, condition: String) -> Option<String> {
     return Option::Some(`${condition}, and the inputs miss it by ${-slack}`);
 }
 
+/// `a / d` rounded up, for a positive `d`, as `Slice` and `Range` count steps.
+pub fn ceil_div(a: i64, d: i64) -> i64 {
+    assert d > 0;
+    let q = a / d;
+    return if a % d > 0 { q + 1 } else { q };
+}
+
+/// `a / d` rounded down, for a positive `d`.
+pub fn floor_div(a: i64, d: i64) -> i64 {
+    assert d > 0;
+    let q = a / d;
+    return if a % d < 0 { q - 1 } else { q };
+}
+
+/// An ONNX index into an axis of `extent` positions, which counts from the end
+/// where negative.
+pub fn from_end(i: i64, extent: i64) -> i64 {
+    return if i < 0 { i + extent } else { i };
+}
+
+/// A tensor of `extents` holding `value` at every position, as a
+/// `ConstantOfShape` whose shape only the run knows fills it.
+pub fn filled<E, Axes>(extents: List<i32>, value: E) -> Tensor<E, Axes> {
+    return Tensor { data: List::<E>::filled(element_count(&extents), value), extents };
+}
+
 /// A length `forward` computed from the inputs', as the kernels take one. It
 /// is computed in `i64` so that no product of lengths wraps on the way.
 pub fn to_extent(value: i64) -> i32 {
@@ -100,64 +127,66 @@ pub fn refuse(reason: Option<String>) {
     }
 }
 
+/// A batched matrix product whose operands share every batch axis.
 pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..Bs, K, N]>) -> Tensor<f32, [..Bs, M, N]> {
-    let ra = a.extents.len();
-    let rb = b.extents.len();
-    assert ra >= 2 && ra == rb;
-    let rows = a.extents[ra - 2];
-    let inner = a.extents[ra - 1];
-    let cols = b.extents[rb - 1];
-    assert inner == b.extents[rb - 2];
-
-    let mut extents: List<i32> = [];
-    for let mut i = 0; i < ra - 2; i += 1 {
-        assert a.extents[i] == b.extents[i];
-        extents.push(a.extents[i]);
-    }
-    let batch = element_count(&extents);
-    extents.push(rows);
-    extents.push(cols);
-    return Tensor { data: products(&a.data, &b.data, &extents, batch, inner, inner * cols), extents };
+    return matmul_broadcast(a, b);
 }
 
 /// `matmul` with one matrix on the right, shared by every batch element, as a
 /// language model's head multiplies each position by one weight.
 pub fn matmul_shared<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [K, N]>) -> Tensor<f32, [..Bs, M, N]> {
-    let ra = a.extents.len();
-    assert ra >= 2 && b.extents.len() == 2;
-    let rows = a.extents[ra - 2];
-    let inner = a.extents[ra - 1];
-    let cols = b.extents[1];
-    assert inner == b.extents[0];
-    let mut extents = a.extents[0..<ra - 2].to_list();
-    let batch = element_count(&extents);
-    extents.push(rows);
-    extents.push(cols);
-    return Tensor { data: products(&a.data, &b.data, &extents, batch, inner, 0), extents };
+    return matmul_broadcast(a, b);
 }
 
-/// `batch` matrix products of `rows x inner` by `inner x cols`, row-major, where
-/// `out_extents` ends in `rows, cols`. The right operand's matrix for batch
-/// element `s` starts at `s * b_step`.
-fn products(a: &List<f32>, b: &List<f32>, out_extents: &List<i32>, batch: i32, inner: i32, b_step: i32) -> List<f32> {
-    let rank = out_extents.len();
-    let rows = out_extents[rank - 2];
-    let cols = out_extents[rank - 1];
-    let mut out = List::<f32>::filled(element_count(out_extents), 0.0);
-    for let mut s = 0; s < batch; s += 1 {
-        let a_base = s * rows * inner;
-        let b_base = s * b_step;
+/// ONNX's `MatMul` in full, which is numpy's: a rank-1 operand is a row on the
+/// left or a column on the right, whose axis the result drops, and the batch
+/// axes broadcast. The caller spells `Out`.
+pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Tensor<f32, Out> {
+    let a_matrix = if a.extents.len() == 1 { [1, a.extents[0]] as List<i32> } else { a.extents };
+    let b_matrix = if b.extents.len() == 1 { [b.extents[0], 1] as List<i32> } else { b.extents };
+    let ra = a_matrix.len();
+    let rb = b_matrix.len();
+    let rows = a_matrix[ra - 2];
+    let inner = a_matrix[ra - 1];
+    let cols = b_matrix[rb - 1];
+    assert inner == b_matrix[rb - 2];
+    let a_batch = a_matrix[0..<ra - 2].to_list();
+    let b_batch = b_matrix[0..<rb - 2].to_list();
+    let batch = broadcast_extents(&a_batch, &b_batch).unwrap();
+    let mut extents = batch;
+    if a.extents.len() > 1 {
+        extents.push(rows);
+    }
+    if b.extents.len() > 1 {
+        extents.push(cols);
+    }
+    let mut out = List::<f32>::filled(element_count(&extents), 0.0);
+    // Each batch element's matrices, where a batch axis of 1 stretches.
+    let a_carries = stretched_carries(&a_batch, &batch);
+    let b_carries = stretched_carries(&b_batch, &batch);
+    let mut index = List::<i32>::filled(batch.len(), 0);
+    let [mut at_a, mut at_b] = [0, 0];
+    let lhs_data = &a.data;
+    let rhs_data = &b.data;
+    for let s of 0..<element_count(&batch) {
+        let a_base = at_a * rows * inner;
+        let b_base = at_b * inner * cols;
         let out_base = s * rows * cols;
         for let mut r = 0; r < rows; r += 1 {
             for let mut k = 0; k < inner; k += 1 {
-                let lhs = a[a_base + r * inner + k];
+                let lhs = lhs_data[a_base + r * inner + k];
                 for let mut c = 0; c < cols; c += 1 {
-                    out[out_base + r * cols + c] += lhs * b[b_base + k * cols + c];
+                    out[out_base + r * cols + c] += lhs * rhs_data[b_base + k * cols + c];
                 }
             }
         }
+        let axis = advance(&mut index, &batch);
+        if axis >= 0 {
+            at_a += a_carries[axis];
+            at_b += b_carries[axis];
+        }
     }
-    return out;
+    return Tensor { data: out, extents };
 }
 
 /// `Gather` along axis 0: the row of `data` each index names, as an embedding
@@ -166,25 +195,46 @@ pub fn gather_rows<E, Row, ..Rest, ..Ix>(
     data: &Tensor<E, [Row, ..Rest]>,
     indices: &Tensor<i64, [..Ix]>,
 ) -> Tensor<E, [..Ix, ..Rest]> {
-    let rows = data.extents[0] as i64;
-    let mut extents = indices.extents;
-    let mut width = 1;
-    for let i of 1..<data.extents.len() {
-        extents.push(data.extents[i]);
-        width *= data.extents[i];
-    }
+    return gathered(data, indices, 0);
+}
+
+/// `Gather` along `axis`: the index axes take its place, and each index names
+/// one of its positions. The caller spells the axes, since the index axes land
+/// between two packs.
+pub fn gather<E, ..Pre, Along, ..Post, ..Ix>(
+    data: &Tensor<E, [..Pre, Along, ..Post]>,
+    indices: &Tensor<i64, [..Ix]>,
+    axis: i32,
+) -> Tensor<E, [..Pre, ..Ix, ..Post]> {
+    return gathered(data, indices, axis);
+}
+
+/// `Gather` along `axis`, the kernel `gather_rows` and `gather` share.
+fn gathered<E, D, Ix, Out>(data: &Tensor<E, D>, indices: &Tensor<i64, Ix>, axis: i32) -> Tensor<E, Out> {
+    let rank = data.extents.len();
+    let along = data.extents[axis];
+    let before = data.extents[0..<axis].to_list();
+    let after = data.extents[axis + 1..<rank].to_list();
+    let outer = element_count(&before);
+    let inner = element_count(&after);
+    let mut extents = before;
+    extents.extend(&indices.extents);
+    extents.extend(&after);
     let mut out = List::<E>::with_capacity(element_count(&extents));
-    for let index of indices.data {
-        let row = if index < 0 { index + rows } else { index };
-        assert 0 <= row < rows;
-        let base = row as i32 * width;
-        for let k of 0..<width {
-            out.push(data.data[base + k]);
+    for let o of 0..<outer {
+        for let index of indices.data {
+            let at = from_end(index, along as i64);
+            assert 0 <= at < along as i64;
+            let base = (o * along + at as i32) * inner;
+            for let k of 0..<inner {
+                out.push(data.data[base + k]);
+            }
         }
     }
     return Tensor { data: out, extents };
 }
 
+/// Two operands of one axis list combined elementwise through `op`.
 pub fn zip<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: fn(f32, f32) -> f32) -> Tensor<f32, Axes> {
     if a.extents != b.extents {
         return stretched_zip(a.data, a.extents, b.data, b.extents, op);
@@ -196,6 +246,7 @@ pub fn zip<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: fn(f32, f32) 
     return Tensor { data: out, extents: a.extents };
 }
 
+/// `zip` with `b` holding `a`'s trailing axes, repeated across the leading ones.
 pub fn zip_suffix<..Pre, ..Suf>(
     a: &Tensor<f32, [..Pre, ..Suf]>,
     b: &Tensor<f32, [..Suf]>,
@@ -228,6 +279,28 @@ pub fn zip_suffix_lhs<..Pre, ..Suf>(
         out.push(op(a.data[i % period], v));
     }
     return Tensor { data: out, extents: b.extents };
+}
+
+/// Arithmetic before opset 7 aligned at an axis: `b` meets `a`'s axes from
+/// there, and repeats across the `trailing` axes after them as well as those
+/// before.
+pub fn zip_at<..Pre, ..Mid, ..Post>(
+    a: &Tensor<f32, [..Pre, ..Mid, ..Post]>,
+    b: &Tensor<f32, [..Mid]>,
+    trailing: i32,
+    op: fn(f32, f32) -> f32,
+) -> Tensor<f32, [..Pre, ..Mid, ..Post]> {
+    return stretched_zip(a.data, a.extents, b.data, followed_by_units(&b.extents, trailing), op);
+}
+
+/// `extents` followed by `count` extents of 1, which broadcasting from the end
+/// stretches across the axes they stand for.
+pub fn followed_by_units(extents: &List<i32>, count: i32) -> List<i32> {
+    let mut out = *extents;
+    for let _ of 0..<count {
+        out.push(1);
+    }
+    return out;
 }
 
 fn ends_with(whole: &List<i32>, suffix: &List<i32>) -> bool {
@@ -308,23 +381,30 @@ pub fn range_i64<A>(start: i64, count: i32, delta: i64) -> Tensor<i64, [A]> {
     };
 }
 
-/// The `length` positions from `start` along `axis`, which `Split` and `Slice`
-/// cut. The caller spells both packs.
+/// The `length` positions along `axis` from `start`, `step` apart, which
+/// `Split` and `Slice` cut. The caller spells both packs.
 pub fn slice_axis<E, ..Pre, In, Out, ..Post>(
     t: &Tensor<E, [..Pre, In, ..Post]>,
     axis: i32,
-    start: i32,
+    start: i64,
     length: i32,
+    step: i64,
 ) -> Tensor<E, [..Pre, Out, ..Post]> {
     let extent = t.extents[axis];
-    assert 0 <= start <= extent && 0 <= length <= extent - start;
+    assert length >= 0;
+    if length > 0 {
+        let last = start + (length - 1) as i64 * step;
+        assert 0 <= start < extent as i64 && 0 <= last < extent as i64;
+    }
     let outer = element_count(&t.extents[0..<axis].to_list());
     let inner = element_count(&t.extents[axis + 1..<t.extents.len()].to_list());
     let mut out = List::<E>::with_capacity(outer * length * inner);
     for let o of 0..<outer {
-        let base = (o * extent + start) * inner;
-        for let k of 0..<length * inner {
-            out.push(t.data[base + k]);
+        for let k of 0..<length {
+            let base = (o * extent + (start + k as i64 * step) as i32) * inner;
+            for let n of 0..<inner {
+                out.push(t.data[base + n]);
+            }
         }
     }
     let mut extents = t.extents;
@@ -429,6 +509,8 @@ pub struct Window {
     pub output: List<i32>,
 }
 
+/// ONNX's `MaxPool` over `window`: each position's greatest value under the
+/// kernel, a padded position counting as none.
 pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Window) -> Tensor<f32, [N, C, ..Out]> {
     let input = spatial_extents(&x.extents);
     let planes = x.extents[0] * x.extents[1];
@@ -450,29 +532,63 @@ pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Windo
     return Tensor { data: out, extents };
 }
 
+/// ONNX's `Conv` over `window`: each output channel sums every input channel
+/// under its kernel.
 pub fn conv<N, Ci, Co, ..In, ..K, ..Out>(
     x: &Tensor<f32, [N, Ci, ..In]>,
     w: &Tensor<f32, [Co, Ci, ..K]>,
     window: &Window,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), window);
+    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), 1, window);
 }
 
+/// `conv` plus each output channel's bias.
 pub fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
     x: &Tensor<f32, [N, Ci, ..In]>,
     w: &Tensor<f32, [Co, Ci, ..K]>,
     b: &Tensor<f32, [Co]>,
     window: &Window,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, b.data, window);
+    return convolve(x, w, b.data, 1, window);
 }
 
-/// A convolution of one group.
-fn convolve<X, W, Y>(x: &Tensor<f32, X>, w: &Tensor<f32, W>, bias: List<f32>, window: &Window) -> Tensor<f32, Y> {
+/// `conv` in `group` groups: each reads its own run of `Cg` input channels
+/// and writes its own run of the output channels.
+pub fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+    x: &Tensor<f32, [N, Ci, ..In]>,
+    w: &Tensor<f32, [Co, Cg, ..K]>,
+    group: i32,
+    window: &Window,
+) -> Tensor<f32, [N, Co, ..Out]> {
+    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), group, window);
+}
+
+/// `conv_grouped` plus each output channel's bias.
+pub fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+    x: &Tensor<f32, [N, Ci, ..In]>,
+    w: &Tensor<f32, [Co, Cg, ..K]>,
+    b: &Tensor<f32, [Co]>,
+    group: i32,
+    window: &Window,
+) -> Tensor<f32, [N, Co, ..Out]> {
+    return convolve(x, w, b.data, group, window);
+}
+
+/// A convolution in `group` groups, each output channel reading the input
+/// channels of its own group.
+fn convolve<X, W, Y>(
+    x: &Tensor<f32, X>,
+    w: &Tensor<f32, W>,
+    bias: List<f32>,
+    group: i32,
+    window: &Window,
+) -> Tensor<f32, Y> {
     let batch = x.extents[0];
-    let inputs = x.extents[1];
+    let channels = x.extents[1];
     let outputs = w.extents[0];
-    assert w.extents[1] == inputs && bias.len() == outputs;
+    let inputs = w.extents[1];
+    assert inputs * group == channels && outputs % group == 0 && bias.len() == outputs;
+    let group_outputs = outputs / group;
     let input = spatial_extents(&x.extents);
     let in_size = element_count(&input);
     let out_size = element_count(&window.output);
@@ -495,9 +611,10 @@ fn convolve<X, W, Y>(x: &Tensor<f32, X>, w: &Tensor<f32, W>, bias: List<f32>, wi
             }
             for let n of 0..<batch {
                 for let oc of 0..<outputs {
+                    let first = n * channels + oc / group_outputs * inputs;
                     let mut sum: f32 = 0.0;
                     for let ic of 0..<inputs {
-                        sum += x.data[(n * inputs + ic) * in_size + offset] * w.data[(oc * inputs + ic) * taps + tap];
+                        sum += x.data[(first + ic) * in_size + offset] * w.data[(oc * inputs + ic) * taps + tap];
                     }
                     out[(n * outputs + oc) * out_size + at] += sum;
                 }
@@ -541,6 +658,7 @@ fn tap_offset(input: &List<i32>, window: &Window, at: i32, tap: i32) -> i32 {
     return offset;
 }
 
+/// A matrix transposed.
 pub fn transpose2<E, A, B>(t: &Tensor<E, [A, B]>) -> Tensor<E, [B, A]> {
     return permute(t, [1, 0]);
 }
@@ -571,11 +689,23 @@ pub fn permute<E, In, Out>(t: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out>
     return Tensor { data: out, extents };
 }
 
-/// ONNX's `Softmax` along `axis`: each lane's exponentials over their sum. The
-/// lane's maximum is subtracted first, so no exponential overflows.
+/// ONNX's `Softmax` along `axis`: each lane's exponentials over their sum.
 pub fn softmax<Axes>(t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {
-    let extent = t.extents[axis];
-    let inner = element_count(&t.extents[axis + 1..<t.extents.len()].to_list());
+    return softmax_lanes(t, axis, axis + 1);
+}
+
+/// ONNX's `Softmax` before opset 13, which normalized the axes from `axis` on
+/// as one lane.
+pub fn softmax_flattened<Axes>(t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {
+    return softmax_lanes(t, axis, t.extents.len());
+}
+
+/// The softmax of each lane running across axes `from..<to`, which are adjacent
+/// and so step through the data as one axis would. The lane's maximum is
+/// subtracted first, so no exponential overflows.
+fn softmax_lanes<Axes>(t: &Tensor<f32, Axes>, from: i32, to: i32) -> Tensor<f32, Axes> {
+    let extent = element_count(&t.extents[from..<to].to_list());
+    let inner = element_count(&t.extents[to..<t.extents.len()].to_list());
     let mut out = t.data;
     let lanes = if extent == 0 { 0 } else { t.data.len() / extent };
     for let lane of 0..<lanes {
@@ -629,6 +759,7 @@ pub fn reduce_mean<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, 
     return map(&sum, |v| v / count);
 }
 
+/// Each element through `op`.
 pub fn map<A, B, Axes>(t: &Tensor<A, Axes>, op: fn(A) -> B) -> Tensor<B, Axes> {
     let mut out = List::<B>::with_capacity(t.data.len());
     for let v of t.data {
@@ -637,6 +768,7 @@ pub fn map<A, B, Axes>(t: &Tensor<A, Axes>, op: fn(A) -> B) -> Tensor<B, Axes> {
     return Tensor { data: out, extents: t.extents };
 }
 
+/// `1 / (1 + e^-v)`, computed from the side whose exponential cannot overflow.
 pub fn sigmoid_f32(v: f32) -> f32 {
     if v >= 0.0 {
         return 1.0 / (1.0 + f32::exp(-v));
@@ -672,10 +804,12 @@ impl Held for bf16 {
     }
 }
 
+/// A held tensor in f32, where the kernels compute.
 pub fn widen<E: Held, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
     return map(t, |v| v.to_wide());
 }
 
+/// An f32 tensor rounded to the type it is held in.
 pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
     return map(t, |v| E::from_wide(v));
 }

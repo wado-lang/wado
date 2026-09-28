@@ -265,9 +265,8 @@ global global:core:prelude/primitive.wado::$const_obj_159: ref null "core:prelud
 fn "serde_full_json_serialize.wado/run"() with Stdout {
     let user: ref "serde_full_json_serialize.wado//User";
     let user2: ref "serde_full_json_serialize.wado//User";
-    let message_5: ref "core:prelude/string.wado//String";
     let handle_8: i32;
-    let writer_11: ref "serde_full_json_serialize.wado//JsonWriter";
+    let writer_11: ref "core:prelude/string.wado//String";
     let packed_19: i64;
     let rx_20: i32;
     let tx_21: i32;
@@ -304,13 +303,12 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
         "core:rt/$initialize_module"();
         global:serde_full_json_serialize.wado::$modules_initialized = 1;
     };
-    writer_11 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonWriter::write"(writer_11, global:serde_full_json_serialize.wado::$const_obj_25);
-    message_5 = writer_11.buf;
+    writer_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonWriter::write$scalar"(writer_11, global:serde_full_json_serialize.wado::$const_obj_25);
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_8 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-    "core:rt/write_string_to_stream"(tx_21, message_5.repr, message_5.used);
+    "core:rt/write_string_to_stream"(tx_21, writer_11.repr, writer_11.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
     writer_32 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     ser_33 = struct.new "serde_full_json_serialize.wado//JsonSerializer" { w: writer_32 };

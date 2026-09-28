@@ -1,0 +1,532 @@
+//! Each operator Loam lowers, over static shapes, against onnxruntime. Each
+//! model under `operators/` is one case, and `operators.mjs`, which wrote it,
+//! wrote beside it the axes each tensor is named by, the inputs it fed, and
+//! what onnxruntime computed from them. Here the case builds as the generator
+//! would build it and runs under `eval` on the same inputs, so a refused build,
+//! a trap and a wrong answer each show as a difference from onnxruntime. A case
+//! Loam does not match yet is a `#[TODO]` test, so the run lists where the two
+//! part.
+
+use { read } from "../src/onnx_proto.wado";
+use { LayoutRule, Schema } from "../src/schema.wado";
+use { assert_close, generated, ran } from "./oracle.wado";
+
+/// One tensor a case's text spells, each part as written: `f32` or `i64`, the
+/// extents as a list literal, and the elements, a float by its bits.
+struct Spelled {
+    element: String,
+    extents: String,
+    values: List<String>,
+}
+
+impl Spelled {
+    /// The last three fields of a line: the element, the extents, the elements.
+    fn of(fields: &List<String>) -> Spelled {
+        let n = fields.len();
+        let listed = fields[n - 1].as_str_slice().slice(1, fields[n - 1].len() - 1);
+        let values: List<String> = if listed.is_empty() {
+            [];
+        } else {
+            listed.split(",").map(|v| v.to_string()).collect();
+        };
+        return Spelled { element: fields[n - 3], extents: fields[n - 2], values };
+    }
+
+    /// The elements as a Wado list literal.
+    fn literal(&self) -> String {
+        if self.element != "f32" {
+            return `[${self.values.join(", ")}]`;
+        }
+        let bits: List<String> = self.values.into_iter().map(|b| `f32::from_bits(${b})`).collect();
+        return `[${bits.join(", ")}]`;
+    }
+
+    fn floats(&self) -> List<f32> {
+        return self.values.into_iter().map(|b| f32::from_bits(u32::from_str(&b).unwrap())).collect();
+    }
+}
+
+/// A case as its text states it.
+struct Case {
+    layout: List<LayoutRule>,
+    inputs: List<Spelled>,
+    output: Spelled,
+}
+
+impl Case {
+    fn of(text: &String) -> Case {
+        let mut layout: List<LayoutRule> = [];
+        let mut inputs: List<Spelled> = [];
+        let mut output: Option<Spelled> = null;
+        for let line of text.lines() {
+            let fields: List<String> = line.split_whitespace().map(|f| f.to_string()).collect();
+            match fields[0].as_str_slice() {
+                "layout" => {
+                    let mut axes: List<String> = [];
+                    for let i of 2..<fields.len() {
+                        axes.push(fields[i]);
+                    }
+                    layout.push(LayoutRule { pattern: fields[1], axes });
+                },
+                "input" => inputs.push(Spelled::of(&fields)),
+                "output" => output = Option::Some(Spelled::of(&fields)),
+                _ => unreachable(),
+            }
+        }
+        return Case { layout, inputs, output: output.unwrap() };
+    }
+}
+
+/// What Loam computes from `model` on the case's inputs, as an `output` line
+/// spells it, or why it computes nothing: the build's refusal, or how the run
+/// stopped.
+fn computed(model: ByteList, case: &Case) -> String {
+    let graph = read(model).unwrap();
+    let source = match generated(&graph, &Schema { layout: case.layout }) {
+        Ok(source) => source,
+        Err(reason) => {
+            return `refused: ${reason}`;
+        },
+    };
+    let mut args = "";
+    for let input of case.inputs {
+        args.push_str(`&Tensor { data: ${input.literal()}, extents: ${input.extents} }, `);
+    }
+    let weights = if source.contains("fn embedded") { "Weights::embedded()" } else { "Weights {}" };
+    let shown = if case.output.element == "f32" { "v.to_bits()" } else { "v" };
+    let program = `${source}
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let got = forward(${args}&${weights});
+    let extents: List<String> = got.extents.into_iter().map(|e| \`\${e}\`).collect();
+    let data: List<String> = got.data.into_iter().map(|v| \`\${${shown}}\`).collect();
+    println(\`output ${case.output.element} [\${extents.join(",")}] [\${data.join(",")}]\`);
+}
+`;
+    return ran(program).trim_end().to_string();
+}
+
+/// Loam computes from `model` what onnxruntime did, which `oracle` states: the
+/// same elements, a float within `TOLERANCE` of onnxruntime's.
+fn assert_agrees(model: ByteList, oracle: String) {
+    let case = Case::of(&oracle);
+    let want = case.output;
+    let got = computed(model, &case);
+    let fields: List<String> = got.split_whitespace().map(|f| f.to_string()).collect();
+    // A refusal or a trap is no output line, and shows as it stands.
+    assert fields.len() == 4 && fields[0] == "output", got;
+    let found = Spelled::of(&fields);
+    assert found.element == want.element && found.extents == want.extents;
+    if want.element == "f32" {
+        assert_close(&found.floats(), &want.floats());
+    } else {
+        assert found.values == want.values;
+    }
+}
+
+test "Add of two operands of one shape" {
+    assert_agrees(#include_bytes("./operators/AddSame.onnx"), #include_str("./operators/AddSame.txt"));
+}
+
+test "Add broadcasts a trailing operand" {
+    assert_agrees(#include_bytes("./operators/AddSuffix.onnx"), #include_str("./operators/AddSuffix.txt"));
+}
+
+test "Add broadcasts a leading operand" {
+    assert_agrees(#include_bytes("./operators/AddPrefix.onnx"), #include_str("./operators/AddPrefix.txt"));
+}
+
+test "Mul stretches the right operand's extent of 1" {
+    assert_agrees(#include_bytes("./operators/MulStretchRight.onnx"), #include_str("./operators/MulStretchRight.txt"));
+}
+
+test "Sub stretches the left operand's extent of 1" {
+    assert_agrees(#include_bytes("./operators/SubStretchLeft.onnx"), #include_str("./operators/SubStretchLeft.txt"));
+}
+
+test "Add stretches an extent of 1 on each side" {
+    assert_agrees(#include_bytes("./operators/AddStretchBoth.onnx"), #include_str("./operators/AddStretchBoth.txt"));
+}
+
+test "Mul stretches an axis of 1 the layout names apart" {
+    assert_agrees(
+        #include_bytes("./operators/MulStretchRenamed.onnx"),
+        #include_str("./operators/MulStretchRenamed.txt"),
+    );
+}
+
+test "Sub stretches an axis of 1 named apart, the operands of two ranks" {
+    assert_agrees(
+        #include_bytes("./operators/SubStretchRenamedRanks.onnx"),
+        #include_str("./operators/SubStretchRenamedRanks.txt"),
+    );
+}
+
+test "Div by 0 is an infinity, and 0 by 0 is NaN" {
+    assert_agrees(#include_bytes("./operators/DivByZero.onnx"), #include_str("./operators/DivByZero.txt"));
+}
+
+test "Pow of a tensor by a tensor" {
+    assert_agrees(#include_bytes("./operators/PowTensor.onnx"), #include_str("./operators/PowTensor.txt"));
+}
+
+test "Pow by a folded 0.5 is NaN below 0" {
+    assert_agrees(#include_bytes("./operators/PowHalf.onnx"), #include_str("./operators/PowHalf.txt"));
+}
+
+test "Sub from a folded scalar" {
+    assert_agrees(#include_bytes("./operators/SubFromScalar.onnx"), #include_str("./operators/SubFromScalar.txt"));
+}
+
+test "Relu" {
+    assert_agrees(#include_bytes("./operators/Relu.onnx"), #include_str("./operators/Relu.txt"));
+}
+
+test "Sigmoid" {
+    assert_agrees(#include_bytes("./operators/Sigmoid.onnx"), #include_str("./operators/Sigmoid.txt"));
+}
+
+test "Tanh" {
+    assert_agrees(#include_bytes("./operators/Tanh.onnx"), #include_str("./operators/Tanh.txt"));
+}
+
+test "Erf" {
+    assert_agrees(#include_bytes("./operators/Erf.onnx"), #include_str("./operators/Erf.txt"));
+}
+
+test "Exp" {
+    assert_agrees(#include_bytes("./operators/Exp.onnx"), #include_str("./operators/Exp.txt"));
+}
+
+test "Log is -inf at 0 and NaN below" {
+    assert_agrees(#include_bytes("./operators/Log.onnx"), #include_str("./operators/Log.txt"));
+}
+
+test "Sqrt is NaN below 0" {
+    assert_agrees(#include_bytes("./operators/Sqrt.onnx"), #include_str("./operators/Sqrt.txt"));
+}
+
+test "Neg" {
+    assert_agrees(#include_bytes("./operators/Neg.onnx"), #include_str("./operators/Neg.txt"));
+}
+
+test "Abs" {
+    assert_agrees(#include_bytes("./operators/Abs.onnx"), #include_str("./operators/Abs.txt"));
+}
+
+test "Identity" {
+    assert_agrees(#include_bytes("./operators/Identity.onnx"), #include_str("./operators/Identity.txt"));
+}
+
+test "MatMul of two matrices" {
+    assert_agrees(#include_bytes("./operators/MatMul.onnx"), #include_str("./operators/MatMul.txt"));
+}
+
+test "MatMul batched over a shared batch axis" {
+    assert_agrees(#include_bytes("./operators/MatMulBatched.onnx"), #include_str("./operators/MatMulBatched.txt"));
+}
+
+test "MatMul of a batch against one matrix" {
+    assert_agrees(#include_bytes("./operators/MatMulShared.onnx"), #include_str("./operators/MatMulShared.txt"));
+}
+
+test "MatMul promotes a rank-1 left operand to a row" {
+    assert_agrees(#include_bytes("./operators/MatMulRowVector.onnx"), #include_str("./operators/MatMulRowVector.txt"));
+}
+
+test "MatMul promotes a rank-1 right operand to a column" {
+    assert_agrees(
+        #include_bytes("./operators/MatMulColumnVector.onnx"),
+        #include_str("./operators/MatMulColumnVector.txt"),
+    );
+}
+
+test "MatMul broadcasts a batch axis of 1" {
+    assert_agrees(
+        #include_bytes("./operators/MatMulBroadcastBatch.onnx"),
+        #include_str("./operators/MatMulBroadcastBatch.txt"),
+    );
+}
+
+test "MatMul sums over an axis each operand names apart" {
+    assert_agrees(
+        #include_bytes("./operators/MatMulRenamedInner.onnx"),
+        #include_str("./operators/MatMulRenamedInner.txt"),
+    );
+}
+
+test "MatMul with one shared matrix sums over an axis each operand names apart" {
+    assert_agrees(
+        #include_bytes("./operators/MatMulSharedRenamedInner.onnx"),
+        #include_str("./operators/MatMulSharedRenamedInner.txt"),
+    );
+}
+
+test "Gemm adds a bias along the columns" {
+    assert_agrees(#include_bytes("./operators/Gemm.onnx"), #include_str("./operators/Gemm.txt"));
+}
+
+test "Gemm transposes both operands and scales by alpha and beta" {
+    assert_agrees(
+        #include_bytes("./operators/GemmTransposedScaled.onnx"),
+        #include_str("./operators/GemmTransposedScaled.txt"),
+    );
+}
+
+test "Gemm adds a scalar bias" {
+    assert_agrees(#include_bytes("./operators/GemmScalarBias.onnx"), #include_str("./operators/GemmScalarBias.txt"));
+}
+
+test "Gemm sums over an axis each operand names apart" {
+    assert_agrees(#include_bytes("./operators/GemmRenamedInner.onnx"), #include_str("./operators/GemmRenamedInner.txt"));
+}
+
+test "Transpose without a perm reverses the axes" {
+    assert_agrees(
+        #include_bytes("./operators/TransposeReversed.onnx"),
+        #include_str("./operators/TransposeReversed.txt"),
+    );
+}
+
+test "Transpose swaps the leading two axes" {
+    assert_agrees(#include_bytes("./operators/TransposeSwap.onnx"), #include_str("./operators/TransposeSwap.txt"));
+}
+
+test "Transpose cycles three axes" {
+    assert_agrees(#include_bytes("./operators/TransposeCycle.onnx"), #include_str("./operators/TransposeCycle.txt"));
+}
+
+test "Reshape reads 0 as the input's extent and -1 as the rest" {
+    assert_agrees(#include_bytes("./operators/ReshapeKeepRest.onnx"), #include_str("./operators/ReshapeKeepRest.txt"));
+}
+
+test "Reshape splits an axis" {
+    assert_agrees(#include_bytes("./operators/ReshapeSplit.onnx"), #include_str("./operators/ReshapeSplit.txt"));
+}
+
+test "Flatten at axis 0 leaves one axis of 1 ahead" {
+    assert_agrees(#include_bytes("./operators/FlattenAll.onnx"), #include_str("./operators/FlattenAll.txt"));
+}
+
+test "Flatten at axis -1 keeps the last axis" {
+    assert_agrees(#include_bytes("./operators/FlattenLast.onnx"), #include_str("./operators/FlattenLast.txt"));
+}
+
+test "Unsqueeze at -1 and 0 counts the output's axes" {
+    assert_agrees(#include_bytes("./operators/UnsqueezeEnds.onnx"), #include_str("./operators/UnsqueezeEnds.txt"));
+}
+
+test "Squeeze without axes drops every axis of 1" {
+    assert_agrees(#include_bytes("./operators/SqueezeAll.onnx"), #include_str("./operators/SqueezeAll.txt"));
+}
+
+test "Squeeze at -1 drops the last axis" {
+    assert_agrees(#include_bytes("./operators/SqueezeLast.onnx"), #include_str("./operators/SqueezeLast.txt"));
+}
+
+test "Split without sizes cuts equal parts" {
+    assert_agrees(#include_bytes("./operators/SplitEqual.onnx"), #include_str("./operators/SplitEqual.txt"));
+}
+
+test "Split by sizes along axis -1" {
+    assert_agrees(#include_bytes("./operators/SplitSizes.onnx"), #include_str("./operators/SplitSizes.txt"));
+}
+
+test "MaxPool by its kernel's stride" {
+    assert_agrees(#include_bytes("./operators/MaxPool.onnx"), #include_str("./operators/MaxPool.txt"));
+}
+
+test "MaxPool over padding" {
+    assert_agrees(#include_bytes("./operators/MaxPoolPadded.onnx"), #include_str("./operators/MaxPoolPadded.txt"));
+}
+
+test "MaxPool with ceil_mode keeps a partial last window" {
+    assert_agrees(#include_bytes("./operators/MaxPoolCeil.onnx"), #include_str("./operators/MaxPoolCeil.txt"));
+}
+
+test "MaxPool with SAME_UPPER pads the end more" {
+    assert_agrees(#include_bytes("./operators/MaxPoolSameUpper.onnx"), #include_str("./operators/MaxPoolSameUpper.txt"));
+}
+
+test "MaxPool with SAME_LOWER pads the start more" {
+    assert_agrees(#include_bytes("./operators/MaxPoolSameLower.onnx"), #include_str("./operators/MaxPoolSameLower.txt"));
+}
+
+test "MaxPool with a dilated kernel" {
+    assert_agrees(#include_bytes("./operators/MaxPoolDilated.onnx"), #include_str("./operators/MaxPoolDilated.txt"));
+}
+
+test "MaxPool over one spatial axis" {
+    assert_agrees(#include_bytes("./operators/MaxPool1D.onnx"), #include_str("./operators/MaxPool1D.txt"));
+}
+
+test "Conv with padding and a bias" {
+    assert_agrees(#include_bytes("./operators/Conv.onnx"), #include_str("./operators/Conv.txt"));
+}
+
+test "Conv with strides and dilations" {
+    assert_agrees(
+        #include_bytes("./operators/ConvStridedDilated.onnx"),
+        #include_str("./operators/ConvStridedDilated.txt"),
+    );
+}
+
+test "Conv with SAME_LOWER" {
+    assert_agrees(#include_bytes("./operators/ConvSameLower.onnx"), #include_str("./operators/ConvSameLower.txt"));
+}
+
+test "Conv over one spatial axis" {
+    assert_agrees(#include_bytes("./operators/Conv1D.onnx"), #include_str("./operators/Conv1D.txt"));
+}
+
+test "Conv in two groups" {
+    assert_agrees(#include_bytes("./operators/ConvGrouped.onnx"), #include_str("./operators/ConvGrouped.txt"));
+}
+
+test "Conv depthwise, one group per channel, with a bias" {
+    assert_agrees(#include_bytes("./operators/ConvDepthwise.onnx"), #include_str("./operators/ConvDepthwise.txt"));
+}
+
+test "Conv whose weight and bias name their channel axes apart" {
+    assert_agrees(
+        #include_bytes("./operators/ConvRenamedChannels.onnx"),
+        #include_str("./operators/ConvRenamedChannels.txt"),
+    );
+}
+
+test "Softmax along the last axis" {
+    assert_agrees(#include_bytes("./operators/SoftmaxLast.onnx"), #include_str("./operators/SoftmaxLast.txt"));
+}
+
+test "Softmax along the first axis" {
+    assert_agrees(#include_bytes("./operators/SoftmaxFirst.onnx"), #include_str("./operators/SoftmaxFirst.txt"));
+}
+
+test "a float16 Constant widens to float exactly" {
+    assert_agrees(#include_bytes("./operators/ConstantFloat16.onnx"), #include_str("./operators/ConstantFloat16.txt"));
+}
+
+test "a bfloat16 Constant widens to float exactly" {
+    assert_agrees(#include_bytes("./operators/ConstantBFloat16.onnx"), #include_str("./operators/ConstantBFloat16.txt"));
+}
+
+test "Add before opset 7 aligns B at A's axis" {
+    assert_agrees(#include_bytes("./operators/AddAtAxis.onnx"), #include_str("./operators/AddAtAxis.txt"));
+}
+
+test "Sub before opset 7 aligns B at A's leading axes" {
+    assert_agrees(#include_bytes("./operators/SubAtLeadingAxes.onnx"), #include_str("./operators/SubAtLeadingAxes.txt"));
+}
+
+test "Softmax before opset 13 normalizes the axes from its default on as one" {
+    assert_agrees(
+        #include_bytes("./operators/SoftmaxFlattenedDefault.onnx"),
+        #include_str("./operators/SoftmaxFlattenedDefault.txt"),
+    );
+}
+
+test "Softmax before opset 13 from the first axis normalizes the whole tensor" {
+    assert_agrees(
+        #include_bytes("./operators/SoftmaxFlattenedFirst.onnx"),
+        #include_str("./operators/SoftmaxFlattenedFirst.txt"),
+    );
+}
+
+test "Softmax along a middle axis" {
+    assert_agrees(#include_bytes("./operators/SoftmaxMiddle.onnx"), #include_str("./operators/SoftmaxMiddle.txt"));
+}
+
+test "Softmax of values past what exp holds" {
+    assert_agrees(#include_bytes("./operators/SoftmaxLarge.onnx"), #include_str("./operators/SoftmaxLarge.txt"));
+}
+
+test "ReduceMean keeps the reduced axis" {
+    assert_agrees(#include_bytes("./operators/ReduceMeanKept.onnx"), #include_str("./operators/ReduceMeanKept.txt"));
+}
+
+test "ReduceMean with keepdims 0 drops the reduced axis" {
+    assert_agrees(
+        #include_bytes("./operators/ReduceMeanDropped.onnx"),
+        #include_str("./operators/ReduceMeanDropped.txt"),
+    );
+}
+
+test "ReduceMean without axes reduces every axis" {
+    assert_agrees(#include_bytes("./operators/ReduceMeanAll.onnx"), #include_str("./operators/ReduceMeanAll.txt"));
+}
+
+test "ReduceSum along axis -1" {
+    assert_agrees(#include_bytes("./operators/ReduceSumLast.onnx"), #include_str("./operators/ReduceSumLast.txt"));
+}
+
+test "ReduceSum with noop_with_empty_axes and no axes is the input" {
+    assert_agrees(#include_bytes("./operators/ReduceSumNoop.onnx"), #include_str("./operators/ReduceSumNoop.txt"));
+}
+
+test "Where broadcasts its branches" {
+    assert_agrees(#include_bytes("./operators/WhereBroadcast.onnx"), #include_str("./operators/WhereBroadcast.txt"));
+}
+
+test "Gather rows, one by a negative index" {
+    assert_agrees(#include_bytes("./operators/GatherRows.onnx"), #include_str("./operators/GatherRows.txt"));
+}
+
+test "Gather by a scalar index drops the axis" {
+    assert_agrees(
+        #include_bytes("./operators/GatherScalarIndex.onnx"),
+        #include_str("./operators/GatherScalarIndex.txt"),
+    );
+}
+
+test "Gather by a matrix of indices" {
+    assert_agrees(
+        #include_bytes("./operators/GatherMatrixIndices.onnx"),
+        #include_str("./operators/GatherMatrixIndices.txt"),
+    );
+}
+
+test "Gather along axis 1" {
+    assert_agrees(#include_bytes("./operators/GatherColumns.onnx"), #include_str("./operators/GatherColumns.txt"));
+}
+
+test "Slice by -2 along axis -1 from the end past the start" {
+    assert_agrees(#include_bytes("./operators/SliceBackByTwo.onnx"), #include_str("./operators/SliceBackByTwo.txt"));
+}
+
+test "Slice two axes, one by 2" {
+    assert_agrees(#include_bytes("./operators/SliceTwoAxes.onnx"), #include_str("./operators/SliceTwoAxes.txt"));
+}
+
+test "Cast to int64 truncates toward 0" {
+    assert_agrees(#include_bytes("./operators/CastToInt64.onnx"), #include_str("./operators/CastToInt64.txt"));
+}
+
+test "Cast to bool is true off 0" {
+    assert_agrees(#include_bytes("./operators/CastToBool.onnx"), #include_str("./operators/CastToBool.txt"));
+}
+
+test "Cast of bool to int64 is 1 or 0" {
+    assert_agrees(#include_bytes("./operators/CastBoolToInt64.onnx"), #include_str("./operators/CastBoolToInt64.txt"));
+}
+
+#[TODO]
+test "Cast to int32 truncates toward 0" {
+    assert_agrees(#include_bytes("./operators/CastToInt32.onnx"), #include_str("./operators/CastToInt32.txt"));
+}
+
+test "Cast of int64 to float rounds to the nearest" {
+    assert_agrees(#include_bytes("./operators/CastFromInt64.onnx"), #include_str("./operators/CastFromInt64.txt"));
+}
+
+test "ConstantOfShape fills the value a tensor attribute holds" {
+    assert_agrees(#include_bytes("./operators/ConstantOfShape.onnx"), #include_str("./operators/ConstantOfShape.txt"));
+}
+
+test "Shape between start and end" {
+    assert_agrees(#include_bytes("./operators/ShapeWindow.onnx"), #include_str("./operators/ShapeWindow.txt"));
+}
+
+test "Concat of two shapes" {
+    assert_agrees(#include_bytes("./operators/ConcatShapes.onnx"), #include_str("./operators/ConcatShapes.txt"));
+}
