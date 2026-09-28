@@ -1,6 +1,6 @@
 // A local whose borrows have all ended moves at its final read like any other.
-// One a borrow still reaches keeps its copy, whether a local, a struct field, or
-// a callee holds that borrow.
+// One a borrow still reaches keeps its copy, whether a local, a struct field, a
+// callee, or a sibling argument of the same call holds that borrow.
 
 use { println, Stdout } from "core:cli";
 
@@ -60,6 +60,31 @@ fn borrow_held_by_a_callee() with Stdout {
     println(`${u:?}`);
 }
 
+struct Bag {
+    items: List<i32>,
+}
+
+#[inline("never")]
+fn push_then_count(r: &mut List<i32>, b: Bag) -> i32 {
+    r.push(2);
+    return b.items.len();
+}
+
+#[inline("never")]
+fn push_whole_then_count(r: &mut Bag, b: Bag) -> i32 {
+    r.items.push(2);
+    return b.items.len();
+}
+
+#[inline("never")]
+fn borrow_held_by_a_sibling_argument() with Stdout {
+    let mut b = Bag { items: [1] };
+    let n = push_then_count(&mut b.items, b);
+    let mut w = Bag { items: [1] };
+    let m = push_whole_then_count(&mut w, w);
+    println(`${n} ${m}`);
+}
+
 export fn run() with Stdout {
     let mut m = Model {};
     refill(&mut m);
@@ -67,11 +92,12 @@ export fn run() with Stdout {
     borrow_held_in_a_local();
     borrow_held_in_a_struct();
     borrow_held_by_a_callee();
+    borrow_held_by_a_sibling_argument();
 }
 
 __DATA__
 {
-    "stdout": "Option::Some(Graph { data: [1] })\n[1]\n[1]\n[1]\n",
+    "stdout": "Option::Some(Graph { data: [1] })\n[1]\n[1]\n[1]\n1 1\n",
     "wir_expect:O0": ["m.graph = t.value;"],
     "wir_expect:O2": ["m.graph = t.value;"]
 }

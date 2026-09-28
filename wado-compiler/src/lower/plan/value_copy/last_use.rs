@@ -124,8 +124,9 @@ pub struct MoveEligible {
     /// Field and whole-value materializations that alias a dead aggregate out
     /// at a literal, keyed by the materialized expression's span.
     pub place_spans: IndexSet<Span>,
-    /// Whole-local reads the elaborator found final (`moved_local_spans`), of
-    /// locals no kept borrow pins, keyed by the read's span.
+    /// Whole-local value reads the elaborator found final (`moved_local_spans`),
+    /// of locals no kept borrow pins, and not reaching storage the same call
+    /// mutates, keyed by the read's span.
     pub read_spans: IndexSet<Span>,
 }
 
@@ -192,12 +193,14 @@ pub fn analyze_ownership(
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
         pending_mut_alias: Vec::new(),
+        mut_aliased_reads: IndexSet::default(),
         exits: Vec::new(),
         all_locals,
         place_cands: Vec::new(),
         declared_owned: IndexSet::default(),
         share_sources: IndexMap::default(),
         consumed: IndexMap::default(),
+        value_reads: IndexSet::default(),
         mutations: Vec::new(),
     };
     let mut live = IndexSet::default();
@@ -240,8 +243,10 @@ pub fn analyze_ownership(
     let read_spans = local_reads(body)
         .filter(|(local, span)| {
             final_reads.contains(span)
+                && a.value_reads.contains(span)
                 && !borrowed_params.contains(local)
                 && !a.place_escaped(*local, None)
+                && !a.mut_aliased_reads.contains(span)
         })
         .map(|(_, span)| span)
         .collect();
@@ -552,7 +557,7 @@ impl Analyzer<'_> {
             }
         }
         // The resolved root reaches where the syntax stops, and covers the
-        // `Taken` and place-`Aliased` bindings `let_sources` leaves out.
+        // `Taken` bindings `let_sources` leaves out.
         for (local, path) in &self.share_sources {
             edge(*local, path.clone());
         }
@@ -919,9 +924,11 @@ struct Analyzer<'a> {
     written_through_escape: IndexSet<u32>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
-    /// `(by-value arg root, storage the call mutates)` pairs, resolved once the
-    /// alias chains are complete.
-    pending_mut_alias: Vec<(u32, Vec<u32>)>,
+    /// `(by-value arg root, arg span, storage the call mutates)`, resolved once
+    /// the alias chains are complete.
+    pending_mut_alias: Vec<(u32, Span, Vec<u32>)>,
+    /// The by-value arguments found aliasing storage their own call mutates.
+    mut_aliased_reads: IndexSet<Span>,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
     /// Place-level move sites `(root, top-level field, span)` found at literals,
@@ -935,6 +942,9 @@ struct Analyzer<'a> {
     /// Locals read in a value position, each with the locals live where that
     /// happens. A projection base and a borrow referent consume nothing.
     consumed: IndexMap<u32, IndexSet<u32>>,
+    /// The spans of those reads. A final read elsewhere — a borrow's referent,
+    /// a projection base — takes no value, so it moves nothing.
+    value_reads: IndexSet<Span>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation>,
 }
@@ -962,10 +972,11 @@ enum FieldEscape {
 impl Analyzer<'_> {
     /// A read in a value position: the whole local is taken, so the value can
     /// leave this binding, and where that happens decides who still sees it.
-    fn read(&mut self, index: u32, live: &mut IndexSet<u32>, record: bool) {
+    fn read(&mut self, index: u32, span: Span, live: &mut IndexSet<u32>, record: bool) {
         if record {
             let at = self.consumed.entry(index).or_default();
             at.extend(live.iter().copied());
+            self.value_reads.insert(span);
         }
         self.read_base(index, live, record);
     }
@@ -1462,10 +1473,11 @@ impl Analyzer<'_> {
         paths: &IndexMap<u32, Vec<AccessPath>>,
         released: &IndexSet<(u32, u32)>,
     ) {
-        for (arg, mut_roots) in std::mem::take(&mut self.pending_mut_alias) {
+        for (arg, span, mut_roots) in std::mem::take(&mut self.pending_mut_alias) {
             let targets: IndexSet<u32> = mut_roots.into_iter().collect();
             if storage_shared(paths, released, arg, None, None, &targets) {
                 self.aliases_live.insert(arg);
+                self.mut_aliased_reads.insert(span);
             }
         }
     }
@@ -1498,7 +1510,8 @@ impl Analyzer<'_> {
                 continue;
             }
             if let Some(t) = alias_root(a) {
-                self.pending_mut_alias.push((t, mut_roots.clone()));
+                self.pending_mut_alias
+                    .push((t, strip_casts(a).span, mut_roots.clone()));
             }
         }
     }
@@ -1697,7 +1710,7 @@ impl Analyzer<'_> {
                 if record {
                     if *storage == LetStorage::Taken {
                         self.declared_owned.insert(*local_index);
-                    } else if !names_held_storage(*storage, value) {
+                    } else {
                         self.record_alias(*local_index, value, live);
                         self.let_sources
                             .entry(*local_index)
@@ -1935,7 +1948,7 @@ impl Analyzer<'_> {
 
     fn walk_expr(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
         match &expr.kind {
-            TirExprKind::Local { index, .. } => self.read(*index, live, record),
+            TirExprKind::Local { index, .. } => self.read(*index, expr.span, live, record),
             TirExprKind::Assign { target, value } => {
                 if let TirExprKind::Local { index, .. } = &target.kind {
                     if record {
@@ -2263,13 +2276,6 @@ fn capacity_observed_locals(body: &TirBlock, type_table: &TypeTable) -> IndexSet
     };
     scan.visit_block(body);
     scan.found
-}
-
-/// Whether a `let` holding `value` as `storage` names storage a place still
-/// holds. Such a binding never owns it, however fresh the place is. An aliased
-/// value no place holds is the binding's alone, as a planned one is.
-pub(crate) fn names_held_storage(storage: LetStorage, value: &TirExpr) -> bool {
-    storage == LetStorage::Aliased && alias_root(value).is_some()
 }
 
 pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {

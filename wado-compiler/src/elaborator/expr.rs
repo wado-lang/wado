@@ -749,9 +749,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What the path reaching the block's end yields, or `never` when no path
-    /// does. A trailing `loop` left only by `break label` reaches no tail.
+    /// does. A trailing `loop` left only by `break label` reaches no tail. A
+    /// trailing value no path reaches is still the block's value, as a dead
+    /// tail is an `if` arm's, so it answers to the block's type all the same.
     fn labeled_block_tail_type(&self, lb: &LabeledBlockExpr) -> TypeId {
-        if self.ast_labeled_block_falls_through(&lb.block, &lb.label) {
+        if self.ast_labeled_block_falls_through(&lb.block, &lb.label)
+            || matches!(lb.block.stmts.last(), Some(ast::Stmt::Expr(_)))
+        {
             self.ast_block_result_type(&lb.block)
         } else {
             TypeTable::NEVER

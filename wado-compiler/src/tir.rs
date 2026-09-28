@@ -5953,8 +5953,9 @@ pub enum LetStorage {
     /// Its own, taken over from the value without a copy. The producer vouches
     /// that nothing reads that storage as another value afterwards.
     Taken,
-    /// The value's, without a copy: something else still holds that storage,
-    /// so the binding never hands it on.
+    /// The value's, without a copy: the binding shares whatever storage the
+    /// value names, and the value-copy analysis follows that share as it
+    /// follows a planned binding's source.
     Aliased,
 }
 
@@ -5989,6 +5990,7 @@ pub enum TirStmtKind {
         is_reactive: bool,
         type_id: TypeId,
         value: TirExpr,
+        /// Whose storage the binding holds.
         storage: LetStorage,
     },
     Expr(TirExpr),

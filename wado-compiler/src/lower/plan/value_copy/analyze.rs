@@ -6,7 +6,7 @@ use super::ownership::OwnedCalls;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy;
-use crate::lower::plan::value_copy::last_use::{RefTargets, names_held_storage};
+use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
 use crate::tir::{
     BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind,
@@ -445,14 +445,9 @@ fn scan_stmt_for_breaks(
             storage,
             ..
         } => {
-            let owned = match storage {
-                LetStorage::Taken => true,
-                LetStorage::Planned | LetStorage::Aliased => {
-                    !names_held_storage(*storage, value)
-                        && is_owned_value(value, fresh_locals, oracle, type_table)
-                }
-            };
-            if owned {
+            if *storage == LetStorage::Taken
+                || is_owned_value(value, fresh_locals, oracle, type_table)
+            {
                 fresh_locals.insert(*local_index);
             }
             true
