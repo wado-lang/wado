@@ -741,10 +741,13 @@ fn synthesize_lib_world_info(
 
 /// Names each type a synthesized world's surface writes by its declaration, and
 /// answers the site with the world's interface or the `#[cm(…)]` one it binds.
+/// A stdlib newtype binds neither: the surface carries its base, so `ByteList`
+/// crosses as `list<u8>` rather than as an alias the package would own.
 struct LibTypeBinder<'a> {
     resolutions: &'a resolve::Resolutions,
     registry: &'a CmInterfaceRegistry,
     interfaces: hashmap::IndexMap<DefId, String>,
+    stdlib_newtype_bases: hashmap::IndexMap<DefId, ast::Type>,
 }
 
 impl<'a> LibTypeBinder<'a> {
@@ -763,14 +766,52 @@ impl<'a> LibTypeBinder<'a> {
         for (def, source) in cm_bound_defs(items, defs) {
             interfaces.entry(def).or_insert(source);
         }
+        let stdlib_newtype_bases = modules
+            .iter()
+            .filter(|(source, _)| source.is_core())
+            .flat_map(|(_, module)| &module.items)
+            .filter_map(|item| match item {
+                ast::Item::Newtype(newtype) => Some((defs.def_at(item.id()), newtype.ty.clone())),
+                _ => None,
+            })
+            .filter(|(def, _)| !interfaces.contains_key(def))
+            .collect();
         Self {
             resolutions,
             registry,
             interfaces,
+            stdlib_newtype_bases,
+        }
+    }
+
+    fn peel_stdlib_newtypes(&self, ty: &mut ast::Type) {
+        use crate::ast::Type;
+        while let Type::Named(named) = ty
+            && let Some(def) = self.resolutions.declared_if_walked(named.id)
+            && let Some(base) = self.stdlib_newtype_bases.get(&def)
+        {
+            *ty = base.clone();
+        }
+        match ty {
+            Type::Named(_) => {}
+            Type::Generic(g) => g
+                .args
+                .iter_mut()
+                .for_each(|arg| self.peel_stdlib_newtypes(arg)),
+            Type::Tuple(elems) => elems
+                .iter_mut()
+                .for_each(|elem| self.peel_stdlib_newtypes(elem)),
+            Type::Reference(inner) | Type::MutReference(inner) => self.peel_stdlib_newtypes(inner),
+            Type::NamespacedGeneric(_)
+            | Type::Function(_)
+            | Type::TypePackSpread(..)
+            | Type::Infer(_)
+            | Type::Error(_) => {}
         }
     }
 
     fn bind_type(&self, ty: &mut ast::Type) -> Result<(), Infallible> {
+        self.peel_stdlib_newtypes(ty);
         bind_type_names(ty, self.resolutions, &mut |named, def| {
             if let Some(source) = self.interfaces.get(&def) {
                 self.registry.set_source_interface(named.id, source.clone());

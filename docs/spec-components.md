@@ -24,6 +24,8 @@ The table below is the Wadoâ†”CM correspondence, read in both directions: Wadoâ†
 | `enum { ... }`            | `enum { ... }`            | Enumeration without payloads                                                               |
 | `variant { ... }`         | `variant { ... }`         | Variant/sum type with payloads                                                             |
 | `flags { ... }`           | `flags { ... }`           | Bit flags                                                                                  |
+| `type T = U`              | `type t = U`              | A newtype the package declares crosses as a named alias of its base                        |
+| `ByteList`                | `list<u8>`                | A stdlib newtype crosses as its base, with no alias                                        |
 | `resource`                | `resource`                | Resource handle; owned and borrowed handles both map here                                  |
 | `Stream<T>`               | `stream<T>`               | Component Model async stream                                                               |
 | `Future<T>`               | `future<T>`               | Component Model async future                                                               |

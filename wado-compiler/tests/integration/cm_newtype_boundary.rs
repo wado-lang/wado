@@ -2,12 +2,18 @@
 //! named CM type alias in the compiled component's *structural* type, matching
 //! what `wado wit` renders (issue #1456). `wit_component::decode` recovers WIT
 //! from the component's own types, so a decoded `id-newtype` that reads
-//! `func(v: f64) -> f64` (with no `meters` type) is the drift this guards.
+//! `func(v: f64) -> f64` (with no `meters` type) is the drift this guards. A
+//! stdlib newtype crosses as its base.
 
 use crate::cm_catalog::{FIXTURE, LIB_WORLD_FQ};
-use crate::common::compile_source_with_compiler_options;
+use crate::common::{
+    DEFAULT_TIMEOUT_MS, WasiState, compile_lib_world, compile_source_with_compiler_options, engine,
+    lib_func, limit_store, linker, runtime,
+};
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
+use wasmtime::Store;
+use wasmtime::component::{Component, Val};
 
 fn compile_lib() -> Vec<u8> {
     let source = std::fs::read_to_string(FIXTURE).unwrap();
@@ -188,4 +194,81 @@ test "shape compiles" {}
         Some("meters"),
         "list element erased the newtype to its base"
     );
+}
+
+/// A library signature naming a stdlib newtype crosses as its base: `ByteList`
+/// is `list<u8>` in and out, and inside an `option`.
+#[test]
+fn lib_stdlib_newtype_crosses_as_its_base() {
+    let source = r#"
+export fn reversed(b: ByteList) -> ByteList {
+    let mut out: ByteList = [];
+    for let i of 0..<b.len() {
+        out.push(b[b.len() - 1 - i]);
+    }
+    return out;
+}
+export fn head(b: Option<ByteList>) -> Option<u8> {
+    let Some(bytes) = b else {
+        return null;
+    };
+    return if bytes.is_empty() { null } else { Option::Some(bytes[0]) };
+}
+"#;
+    let wasm = compile_lib_world(source, LIB_WORLD_FQ, OptLevel::O2, None);
+    let decoded = wit_component::decode(&wasm).expect("decode structural type");
+    let resolve = decoded.resolve();
+    // Naming no type of the package's own, the exports stay bare world functions.
+    let reversed = resolve
+        .worlds
+        .iter()
+        .flat_map(|(_, w)| w.exports.values())
+        .find_map(|item| match item {
+            wit_parser::WorldItem::Function(f) if f.name == "reversed" => Some(f),
+            _ => None,
+        })
+        .expect("reversed is a world export");
+    let wit_parser::Type::Id(param) = reversed.params[0].ty else {
+        panic!("reversed param is not a defined type");
+    };
+    let param = &resolve.types[param];
+    assert!(
+        param.name.is_none()
+            && matches!(
+                param.kind,
+                wit_parser::TypeDefKind::List(wit_parser::Type::U8)
+            ),
+        "reversed param is not a bare list<u8>: {param:?}"
+    );
+
+    let component = Component::new(engine(), &wasm).expect("component failed to load");
+    let bytes = |values: &[u8]| Val::List(values.iter().copied().map(Val::U8).collect());
+    runtime().block_on(async {
+        let linker = linker(engine()).expect("build linker");
+        let mut store = Store::new(engine(), WasiState::new());
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .expect("instantiate library component");
+
+        let reversed = lib_func(&mut store, &instance, LIB_WORLD_FQ, "reversed");
+        let mut results = vec![Val::Bool(false)];
+        reversed
+            .call_async(&mut store, &[bytes(&[1, 2, 3])], &mut results)
+            .await
+            .expect("call `reversed`");
+        assert_eq!(results[0], bytes(&[3, 2, 1]));
+
+        let head = lib_func(&mut store, &instance, LIB_WORLD_FQ, "head");
+        let mut results = vec![Val::Bool(false)];
+        head.call_async(
+            &mut store,
+            &[Val::Option(Some(Box::new(bytes(&[7, 8]))))],
+            &mut results,
+        )
+        .await
+        .expect("call `head`");
+        assert_eq!(results[0], Val::Option(Some(Box::new(Val::U8(7)))));
+    });
 }

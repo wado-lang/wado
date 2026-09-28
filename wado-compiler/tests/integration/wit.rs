@@ -166,6 +166,16 @@ fn wide_int_export_emits_its_prelude_record() {
     );
 }
 
+/// A stdlib newtype crosses as its base, so naming no type of the package's
+/// own, the export stays a direct world function.
+#[test]
+fn stdlib_newtype_export_emits_its_base() {
+    check(
+        "export fn size(b: ByteList) -> i32 { return b.len(); }",
+        "package root:component;\n\nworld command {\n  export size: func(b: list<u8>) -> s32;\n}",
+    );
+}
+
 /// Emit WIT as `wado wit` does: from the subset one compile retains.
 fn emit_compiled(source: &str, scope: WitScope) -> String {
     let host = InMemoryHost::new();
