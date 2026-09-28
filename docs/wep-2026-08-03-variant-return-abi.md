@@ -268,10 +268,13 @@ write builds a case (`null` included) and every read is a tag test, a payload
 read or a one-level `match`. A local read whole, passed or returned, stays a
 variant. Each write becomes the case's tuple literal, the reads go through the
 Phase 3 call-site rewrite, and `sroa` splits the tuple into scalars: a
-whole-literal assign `t = [tag, v]` becomes one write per field, through temps
-where the literal reads `t` itself.
+whole-literal assign `t = [tag, v]` becomes one write per field. The writes
+come after every field is evaluated, each but a constant into a temp. Written
+as it went, the tag landed before a payload that reads `t` or leaves the
+statement: `s = Some(if c { break done; } else { 1 })` read as `Some(0)`
+after the break.
 
-Three shapes are declined, each for a reason of its own:
+Four shapes are declined, each for a reason of its own:
 
 - A local two `Let`s bind. `sroa` leaves it whole, so the tuple would allocate
   at every write, `null` included, where the variant's `None` did not.
@@ -279,6 +282,8 @@ Three shapes are declined, each for a reason of its own:
   payload slot again at each guard and arm body. That is one read only for a
   call's temp, which nothing reassigns. After such a guard, a later arm would
   read the pad.
+- A local a promoted operand reads. The rewrite rebuilds a read it has a node
+  for, and a promoted read has none, so it would go on naming the variant.
 - A layout whose slot is itself a variant with a layout. Once `sroa` splits the
   tuple, that slot is a variant local of its own, and for `Option<Option<i32>>`
   it is the very same type, so taking it never terminates.
