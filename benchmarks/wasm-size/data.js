@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790603863370,
+  "lastUpdate": 1790632799775,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61633,6 +61633,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288412,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e0a100fd57ef1f9ab3e4f3d5fa3768ade717a8e",
+          "message": "Merge pull request #2216 from wado-lang/json-catalog-de-allocs\n\nperf!: faster derived deserializers",
+          "timestamp": "2026-09-29T06:33:56+09:00",
+          "tree_id": "8eb26d813d03b94c8a5c6b0e88962cd88e2b6df3",
+          "url": "https://github.com/wado-lang/wado/commit/4e0a100fd57ef1f9ab3e4f3d5fa3768ade717a8e"
+        },
+        "date": 1790632799273,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1947,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6796,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20287,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288471,
             "unit": "bytes"
           }
         ]
