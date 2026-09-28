@@ -1319,7 +1319,7 @@ mod tests {
         let sym_id = *module_sem.bindings.local_symbols.keys().next().unwrap();
         assert!(sem.symbol_at(sym_id).is_some());
 
-        // The same holds for a module seeded from the stdlib snapshot, which
+        // The same holds for a module served from the stdlib snapshot, which
         // carries its facts per module rather than re-splitting flat ones.
         let stdlib_facts = sem
             .state
@@ -1335,11 +1335,14 @@ mod tests {
     }
 
     /// A stdlib module served from the snapshot reads the snapshot's facts in
-    /// place: a copy per compile was the largest allocation after the snapshot.
+    /// place rather than a copy made per compile.
     #[test]
     fn a_compile_shares_the_snapshot_facts() {
         let snap = get_or_init_snapshot().expect("not re-entering the builder");
-        let snap_state = snap.state.as_ref().expect("the stdlib snapshot is complete");
+        let snap_state = snap
+            .state
+            .as_ref()
+            .expect("the stdlib snapshot is complete");
         let host = InMemoryCompilerHost::new();
         let sem = block_on(semantics("fn main() {}", &host, Some("entry.wado")));
         let state = sem.state.as_ref().expect("annotate state");

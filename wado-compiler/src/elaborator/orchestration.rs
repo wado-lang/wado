@@ -1098,7 +1098,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             snapshot_state.is_none_or(|snap_state| snap_state
                 .module_semantics
                 .iter()
-                .filter(|(ms, _)| !(modules.contains_key(*ms) && is_stdlib_snapshot_hit(snapshot, ms)))
+                .filter(
+                    |(ms, _)| !(modules.contains_key(*ms) && is_stdlib_snapshot_hit(snapshot, ms))
+                )
                 .all(|(_, sem)| sem.routed_facts().next().is_none()
                     && sem.default_method_semantics.is_empty())),
             "a snapshot module carrying facts must be served to this compile"
