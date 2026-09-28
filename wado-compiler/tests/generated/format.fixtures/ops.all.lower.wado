@@ -50,6 +50,8 @@ global CM_EVENT_SUBTASK: i32 = 1;
 
 global CM_SUBTASK_STARTED: u32 = 1;
 
+global mut COVERAGE_SEEN: Array<u8> = deferred null;
+
 global mut CM_CALLBACKS: List<fn() -> ()> = deferred null;
 
 global HANDLE_LIMIT: f64 = 9007199254740992.0;
@@ -4818,6 +4820,25 @@ fn assert_failed(message: String) -> ! {
     core::rt::panic(message);
 }
 
+fn coverage_probe(id: i32) {
+    let len: i32 = "core::builtin::core/builtin/array_len<u8>"(&core::rt::COVERAGE_SEEN);
+    if ((id < len) && (core::builtin::array_get_value_u8(&core::rt::COVERAGE_SEEN, id) != 0)) {
+        return;
+    }
+    core::builtin::cold_path();
+    if (id >= len) {
+        let mut grown: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(if (id < (len * 2)) {
+            (len * 2);
+        } else {
+            (id + 1);
+        });
+        "core::builtin::core/builtin/array_copy<u8>"(&mut grown, 0, &core::rt::COVERAGE_SEEN, 0, len);
+        core::rt::COVERAGE_SEEN = grown;
+    }
+    core::builtin::array_set_u8(&mut core::rt::COVERAGE_SEEN, id, 1);
+    "ops.all_dirty.wado::$cm_binding__CoverageHost_hit"(id as u32 as i32);
+}
+
 fn cm_lower_string(s: String) -> i64 {
     let len: i32 = s."core:prelude/string.wado/String::len"();
     let bytes: &Array<u8> = s."core:prelude/string.wado/String::internal_raw_bytes"();
@@ -5024,6 +5045,10 @@ pub export fn run() {
     "ops.all_dirty.wado::$initialize_modules"();
 }
 
+fn "$cm_binding__CoverageHost_hit"(id: i32) with CoverageHost {
+    cm_raw_call core:coverage/CoverageHost::hit(id);
+}
+
 export fn "$cm_export__run"() {
     "ops.all_dirty.wado::$initialize_modules"();
     "ops.all_dirty.wado::run"();
@@ -5102,6 +5127,8 @@ fn "core:prelude/list.wado/List<u8>::internal_raw_data_ref"(self: &List<u8>) -> 
 pub fn "core:prelude/list.wado/List<u8>::len"(self: &List<u8>) -> i32 {
     return self.used;
 }
+
+pub fn "core/builtin/array_len<u8>"(arr: &Array<u8>) -> i32;
 
 fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>] {
     let rx: i32 = packed as i32;
@@ -5192,7 +5219,7 @@ fn "core/prelude/array.wado/seq_eq<u8>"(a: &Array<u8>, a_start: i32, a_end: i32,
 }
 
 pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
-    return core::builtin::array_len::<u8>(self);
+    return "core::builtin::core/builtin/array_len<u8>"(self);
 }
 
 #[retain(repr)]
@@ -10424,6 +10451,7 @@ pub fn "$initialize_module"() {
 }
 
 pub fn "$initialize_module"() {
+    core::rt::COVERAGE_SEEN = "core::builtin::core/builtin/array_new<u8>"(0);
     core::rt::CM_CALLBACKS = "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/From<Array<T>>::from"([]);
     core::rt::CM_COPY_MAX = 268435455;
 }

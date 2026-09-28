@@ -182,6 +182,7 @@
 - [The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)
 - [Eval — Compiling and Running Wado Source from a Test](./wep-2026-09-26-eval.md)
 - [Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md)
+- [Test Coverage](./wep-2026-09-28-test-coverage.md)
 
 ## Standard Library
 

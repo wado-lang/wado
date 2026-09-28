@@ -1,0 +1,26 @@
+// A `for-of` over an empty tuple unrolls to nothing, so its body and every
+// region inside it report as never run.
+fn count() -> i32 {
+    let mut n = 0;
+    for let v of [] {
+        if n > 1 {
+            n += 2;
+        }
+        n += 1;
+    }
+    return n;
+}
+
+test {
+    assert count() == 0;
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "uncovered_lines": [6, 7, 9],
+    "uncovered_branches": ["6:9 then", "6:9 else"],
+    "uncovered_functions": []
+  }
+}

@@ -11,6 +11,7 @@ mod common;
 
 mod cli;
 mod cli_parse;
+mod coverage;
 mod dependency_resolution;
 mod dump_kiln;
 // Installs `wado-<name>` shell scripts on a temporary `PATH`.

@@ -80,6 +80,8 @@ pub struct FlatPackage {
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
+    /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`.
+    pub coverage_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     pub codegen_flags: CodegenFlags,
     /// When true, skip Wasm validation after code generation.
