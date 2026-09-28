@@ -2575,16 +2575,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *type_id = self.apply_infer_holes(*type_id);
             }
         }
-        let read: Vec<TypeId> = walk
+        let read = walk
             .bindings
             .iter()
-            .filter_map(|binding| binding.settled.type_id())
-            .flat_map(|type_id| self.tysys.type_table.borrow().infer_vars_in(type_id))
-            .collect();
-        let Some(owner) = read
-            .into_iter()
-            .find_map(|var| self.pending_owner_index(var))
-        else {
+            .filter_map(|binding| binding.settled.type_id());
+        let Some(owner) = self.pending_owner_in(read) else {
             return Some(walk);
         };
         // The site checks the types answered meanwhile, so the walk checks

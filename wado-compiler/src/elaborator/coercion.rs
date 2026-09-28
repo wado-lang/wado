@@ -705,19 +705,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(ret) = ret else {
             return;
         };
-        let expected = self.apply_infer_holes(ret.expected);
-        let declared = self.apply_infer_holes(ret.declared);
-        let expects_open_var = self.tysys.type_table.borrow().is_infer_var(expected)
-            && self.awaits_pending_call(expected);
-        let names_own_var = {
-            let tt = self.tysys.type_table.borrow();
+        self.chain_open_expected(ret, |tt, declared| {
             !tt.is_infer_var(declared)
                 && tt
                     .infer_vars_in(declared)
                     .iter()
                     .any(|v| own_vars.contains(v))
-        };
-        if expects_open_var && names_own_var {
+        });
+    }
+
+    /// Where `ret` expects a pending call's bare open variable of a declared
+    /// type `names` accepts, chain the variable to that type.
+    fn chain_open_expected(
+        &mut self,
+        ret: ExpectedReturn,
+        names: impl FnOnce(&TypeTable, TypeId) -> bool,
+    ) {
+        let expected = self.apply_infer_holes(ret.expected);
+        let declared = self.apply_infer_holes(ret.declared);
+        if self.is_open_pending_var(expected) && names(&self.tysys.type_table.borrow(), declared) {
             self.chain_infer_var(expected, declared);
         }
     }
@@ -763,18 +769,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The other direction: in `same(any(wrap(1)), x)` the enclosing `T`
         // is expected of `any`'s result `Box<U>`, which unifying the declared
         // side against it cannot bind.
-        let expected = self.apply_infer_holes(ret.expected);
-        let declared = self.apply_infer_holes(ret.declared);
-        let names_waited = self
-            .tysys
-            .type_table
-            .borrow()
-            .infer_vars_in(declared)
-            .iter()
-            .any(|var| waited.contains(var));
-        if names_waited && self.is_open_pending_var(expected) {
-            self.chain_infer_var(expected, declared);
-        }
+        self.chain_open_expected(ret, |tt, declared| {
+            tt.infer_vars_in(declared)
+                .iter()
+                .any(|var| waited.contains(var))
+        });
     }
 
     /// Where `expected` is an open variable a pending call owns, answer it with
@@ -800,12 +799,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `ty` names a variable a pending call owns, still open.
     pub(super) fn names_pending_var(&self, ty: TypeId) -> bool {
+        self.pending_owner_in([ty]).is_some()
+    }
+
+    /// [`Self::pending_owner_index`] of the first open variable one of `types`
+    /// names, the solved ones substituted.
+    pub(super) fn pending_owner_in(
+        &self,
+        types: impl IntoIterator<Item = TypeId>,
+    ) -> Option<usize> {
         if self.annotate_ctx.pending_literals.is_empty() {
-            return false;
+            return None;
         }
-        let vars = self.tysys.type_table.borrow().infer_vars_in(ty);
-        vars.into_iter()
-            .any(|var| self.pending_owner_index(var).is_some())
+        types.into_iter().find_map(|ty| {
+            let ty = self.apply_infer_holes(ty);
+            let vars = self.tysys.type_table.borrow().infer_vars_in(ty);
+            vars.into_iter()
+                .find_map(|var| self.pending_owner_index(var))
+        })
     }
 
     /// Whether `ty` is itself a variable a pending call owns, still open.
@@ -945,10 +956,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .pending_literals
                 .last()
                 .is_some_and(|pending| pending.awaits_receiver),
-            Some(expected) => {
-                let expected = self.apply_infer_holes(expected);
-                self.pending_owner_index(expected).is_some()
-            }
+            Some(expected) => self.is_open_pending_var(expected),
         };
         if !waits {
             return None;
@@ -1100,22 +1108,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         operator: DeferredOperator,
     ) -> Option<DeferredOperator> {
-        let applied: Vec<TypeId> = operator
-            .operands()
-            .into_iter()
-            .map(|operand| self.apply_infer_holes(operand))
-            .collect();
-        let vars: Vec<TypeId> = {
-            let tt = self.tysys.type_table.borrow();
-            applied
-                .into_iter()
-                .flat_map(|t| tt.infer_vars_in(t))
-                .collect()
-        };
-        let owner = vars
-            .into_iter()
-            .find_map(|var| self.pending_owner_index(var));
-        let Some(owner) = owner else {
+        let Some(owner) = self.pending_owner_in(operator.operands()) else {
             return Some(operator);
         };
         self.annotate_ctx.pending_literals[owner]

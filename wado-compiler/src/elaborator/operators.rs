@@ -950,14 +950,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             UnaryOp::Ref | UnaryOp::MutRef => expected_type
                 .and_then(|expected| self.tysys.pointee_of(expected))
                 .or_else(|| {
-                    let mutable = unary.op == UnaryOp::MutRef;
+                    let make = if unary.op == UnaryOp::MutRef {
+                        TypeTable::make_mut_ref
+                    } else {
+                        TypeTable::make_ref
+                    };
                     let pointee =
                         self.open_shape_at_pending_var(expected_type, 1, |tt, vars| {
-                            if mutable {
-                                tt.make_mut_ref(vars[0])
-                            } else {
-                                tt.make_ref(vars[0])
-                            }
+                            make(tt, vars[0])
                         })?;
                     Some(pointee[0])
                 }),
@@ -1022,9 +1022,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if matches!(unary.op, UnaryOp::Neg | UnaryOp::BitNot) {
             // An operand that is still a bare variable a pending call answers
             // has no head to dispatch on until it is answered.
-            let bare = self.tysys.type_table.borrow().is_infer_var(expr_type)
-                && self.is_open_pending_var(expr_type);
-            let dispatched = if bare {
+            let dispatched = if self.is_open_pending_var(expr_type) {
                 None
             } else {
                 self.dispatch_unary_operator(unary.op, expr_type, unary.span, unary.id)

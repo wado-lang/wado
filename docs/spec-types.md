@@ -917,8 +917,11 @@ Arithmetic on literals answers as a literal does (`Box { value: 1 << 32 }`), and
 so does a literal behind a field, method or subscript of a generic call's or
 constructor's result: in `pick(Box { value: x }, wrap(1).value)` the `1` is a
 `u64`, as it is with `Box { value: 1 }.value`, `wrap(1).get()` or `one(1)[0]`
-there. A default that reads the
-parameter is walked once it is settled, so `pick(Box { value: x }, f(1))` for
+there. It waits the same way behind a reference, a tuple, a call that hands its
+argument back, or a constant tuple subscript. An operator on such a value is
+checked against the type the literal settles to, so with `big: i128`,
+`pick(Box { value: big }, -wrap(1).value)` negates an `i128`. A default that
+reads the parameter is walked once it is settled, so `pick(Box { value: x }, f(1))` for
 `fn f<T: Default>(a: T, b: T = T::default())` is `u64` throughout, and a field
 default of a struct literal waits the same way. A `..base` settles its struct's
 parameters as an annotation does. A struct literal waits only where the fields
