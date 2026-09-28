@@ -177,7 +177,7 @@ Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value
 ### Reference Identity
 
 `==` and `!=` on two references compare the values they point to, as in Rust
-(see [Eq](./spec-traits.md#eq---equality)). The prelude function
+(see [Eq](./spec-standard-traits.md#eq---equality)). The prelude function
 `ref_eq(a: &T, b: &T) -> bool` compares identity instead: whether the two
 references point to one place. A place is where a value is stored: a variable,
 a field, an element.

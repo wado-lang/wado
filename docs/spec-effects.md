@@ -119,7 +119,7 @@ test {
 }
 ```
 
-A function that calls an async operation is not itself async. `async` marks only the operation, and the `export async fn` of a world export (see [`task return`](./spec-components.md#task-return-statement)).
+A function that calls an async operation is not itself async. `async` marks only the operation, and the `export async fn` of a world export (see [`task return`](./spec-worlds.md#task-return-statement)).
 
 ## Effect Declaration in Functions
 
@@ -363,7 +363,7 @@ test {
 }
 ```
 
-A [type pattern](./spec-components.md#type-patterns) that narrows a handle to resource `R` holds `R` from then on, as an operation returning `R` would:
+A [type pattern](./spec-patterns.md#type-patterns) that narrows a handle to resource `R` holds `R` from then on, as an operation returning `R` would:
 
 <!-- {"fixture":"spec_effects_narrowing_holds.wado"} -->
 

@@ -8,8 +8,10 @@ const README = `${DOCS}/README.md`;
 const BEGIN = "<!-- BEGIN GENERATED: mise run update-docs-index -->";
 const END = "<!-- END GENERATED -->";
 
+const OVERVIEW = "spec-overview.md";
+
 const GROUPS = [
-  { heading: "Specification", prefix: "spec-", first: "spec-overview.md" },
+  { heading: "Specification", prefix: "spec-", order: chapters },
   { heading: "Wado Evolution Proposals", prefix: "wep-" },
   { heading: "Standard Library", prefix: "stdlib-" },
   { heading: "Research", prefix: "research-" },
@@ -26,15 +28,36 @@ function title(file) {
   throw new Error(`${DOCS}/${file}: no top-level heading`);
 }
 
+// The overview's `## Chapters` list is the specification's reading order. It
+// names every other spec file exactly once, and the index follows it.
+function chapters(files) {
+  const text = readFileSync(`${DOCS}/${OVERVIEW}`, "utf8");
+  const section = /^## Chapters\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(text);
+  if (!section) throw new Error(`${DOCS}/${OVERVIEW}: no "## Chapters" section`);
+  const listed = [...section[1].matchAll(/^\d+\. \[[^\]]*\]\(\.\/(spec-[^)#]+\.md)\)/gm)].map((m) => m[1]);
+  const expected = files.filter((f) => f !== OVERVIEW);
+  const missing = expected.filter((f) => !listed.includes(f));
+  const unknown = listed.filter((f) => !expected.includes(f));
+  const repeated = listed.filter((f, i) => listed.indexOf(f) !== i);
+  if (missing.length || unknown.length || repeated.length) {
+    throw new Error(
+      `${DOCS}/${OVERVIEW}: "## Chapters" must list every spec file once` +
+        ` (missing: ${missing.join(", ") || "none"}; unknown: ${unknown.join(", ") || "none"};` +
+        ` repeated: ${repeated.join(", ") || "none"})`,
+    );
+  }
+  return [OVERVIEW, ...listed];
+}
+
 function index() {
   let files = readdirSync(DOCS)
     .filter((f) => f.endsWith(".md") && !UNLISTED.has(f))
     .sort();
   const sections = [];
   for (const g of GROUPS) {
-    const mine = files.filter((f) => f.startsWith(g.prefix));
+    let mine = files.filter((f) => f.startsWith(g.prefix));
     files = files.filter((f) => !mine.includes(f));
-    if (g.first) mine.sort((a, b) => (b === g.first) - (a === g.first));
+    if (g.order) mine = g.order(mine);
     const items = mine.map((f) => `- [${title(f).replace(/^WEP: /, "")}](./${f})`);
     sections.push(`## ${g.heading}\n\n${items.join("\n")}`);
   }

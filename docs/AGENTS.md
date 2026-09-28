@@ -33,6 +33,10 @@ A change that settles a rule writes it into the specification in the same
 change. A file stays readable in one sitting; an area that outgrows that splits
 into two files.
 
+The `## Chapters` list in `spec-overview.md` is the reading order, and the
+index follows it. A new spec file takes its place in that list, or
+`mise run update-docs-index` fails.
+
 ## WEP: Wado Evolution Proposals
 
 A WEP is a proposal: the problem, the design decided for it, and the work to

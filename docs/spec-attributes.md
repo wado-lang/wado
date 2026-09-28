@@ -389,7 +389,7 @@ test {
 
 ### `#![generated]`
 
-Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). It does not change how the module compiles. Tools read it; Kiln's use is in [Authoring a generator](./spec-modules.md#authoring-a-generator).
+Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). It does not change how the module compiles. Tools read it; Kiln's use is in [Authoring a generator](./spec-kiln.md#authoring-a-generator).
 
 The attribute accepts optional metadata so that generators can attach provenance information directly to the attribute instead of as free-form comments. Two argument shapes are supported inside the parentheses:
 

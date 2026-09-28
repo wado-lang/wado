@@ -38,7 +38,7 @@ impl geo::Show for Local { ... }    // and on either side of an impl head
 
 ### Generated Imports
 
-Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported via a generator: `.g4`, `.proto`, a Wado dialect, and so on. Name the generator as a `[build-dependencies]` entry or as a relative path. See [the spec](./spec-modules.md#generated-imports-kiln) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
+Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported via a generator: `.g4`, `.proto`, a Wado dialect, and so on. Name the generator as a `[build-dependencies]` entry or as a relative path. See [the spec](./spec-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
 
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
@@ -50,7 +50,7 @@ use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
 
 Code a generator writes may call a runtime library. Grog's does, so a package
 lists `wado-lang:grog` under `[dependencies]` as well. See
-[the spec](./spec-modules.md#manifest).
+[the spec](./spec-kiln.md#manifest).
 
 ```wado
 use grog from "lib:grog";
@@ -176,7 +176,7 @@ match x { Some(x) => ... }                        // warns: x means two things h
 
 ## Global Variables
 
-See [the spec](./spec-lexical.md#global-variables).
+See [the spec](./spec-expressions.md#global-variables).
 
 ```wado
 global PI: f64 = 3.14159;           // immutable
@@ -357,7 +357,7 @@ A `StrSlice` views part of a string without copying it. Its ends are always on
 character boundaries, which is why it is a `struct` and not a newtype over
 `ByteSlice`. `AsStrSlice` lets one signature take an owned `String`, a
 reference to one, or a view of one — Wado's answer to Rust's `AsRef<str>`. See
-[the spec](./spec-traits.md#string-views).
+[the spec](./spec-standard-traits.md#string-views).
 
 ```wado
 let v = "banana".as_str_slice();
@@ -375,7 +375,7 @@ fn byte_len<S: AsStrSlice>(s: S) -> i32 {
 byte_len("banana");              // a String, a &String, or a StrSlice
 ```
 
-Tagged templates (see [the spec](./spec-functions.md#tagged-template-literals)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
+Tagged templates (see [the spec](./spec-literals.md#tagged-template-literals)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
 
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
@@ -602,7 +602,7 @@ Key differences from Rust:
 
 ## Operators
 
-See the spec on [precedence](./spec-lexical.md#precedence) and [overloading](./spec-traits.md#arithmetic-operator-traits).
+See the spec on [precedence](./spec-expressions.md#precedence) and [overloading](./spec-standard-traits.md#arithmetic-operator-traits).
 
 ```wado
 // Arithmetic
@@ -911,7 +911,7 @@ one. It goes on a module function, an `impl` method, or a trait method.
 ### Local Items
 
 `struct` and `type` (newtype) may be declared inside a function body, scoped to
-the declaring block. See [the spec](./spec-lexical.md#local-item-definitions).
+the declaring block. See [the spec](./spec-expressions.md#local-item-definitions).
 
 ```wado
 fn area(width: i32, height: i32) -> i32 {
@@ -1328,7 +1328,7 @@ let d = char::from_u32_unchecked(65); // if you have already validated the u32 v
 
 ## Iterators
 
-See [the spec](./spec-traits.md#iterator-traits).
+See [the spec](./spec-standard-traits.md#iterator-traits).
 
 `Iterator` provides `next()`. `IntoIterator` converts a collection into an iterator. Every `Iterator` automatically implements `IntoIterator` via a blanket impl, so all iterators work with `for-of`.
 
@@ -1365,7 +1365,7 @@ Implement `IntoIterator` to make custom types work with `for-of`. See [`core:pre
 
 ## Ranges
 
-See [the spec](./spec-lexical.md#ranges).
+See [the spec](./spec-expressions.md#ranges).
 
 Two range types: `RangeExclusive<T>` and `RangeInclusive<T>`. Both are generic structs in `core:prelude`.
 
@@ -1616,7 +1616,7 @@ let icon = #include_bytes("./icon.png");   // include file as ByteList
 ```
 
 A literal read as numbers becomes a constant, with no decode loop at startup.
-See [the spec](./spec-control-flow.md#embedded-data).
+See [the spec](./spec-literals.md#embedded-data).
 
 ```wado
 let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s

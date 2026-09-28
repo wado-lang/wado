@@ -62,13 +62,13 @@ arithmetic:
 
 - No arithmetic or bitwise operator applies to either, unary `-` included.
 - `as` does not convert them in either direction (see
-  [Type Cast](./spec-lexical.md#type-cast-as)). The error names the method to
+  [Type Cast](./spec-expressions.md#type-cast-as)). The error names the method to
   write instead.
 - A numeric literal coerces to either type and is rounded once (see
   [Floating-Point Literals](./spec-literals.md#floating-point-literals)).
 - A comparison widens both operands to `f32` and compares those, so `<` is
   IEEE and `Ord` is the total order (see
-  [Ord](./spec-traits.md#ord---ordering)).
+  [Ord](./spec-standard-traits.md#ord---ordering)).
 - Neither type crosses a component boundary (see
   [Type Mapping](./spec-components.md#type-mapping-at-component-boundaries)).
 
@@ -373,6 +373,169 @@ assert s == "hello world!";
 ```
 
 Rationale: [WEP: String Type Design](./wep-2026-01-15-string-type-design.md).
+
+## Tuples
+
+Tuple types use bracket syntax `[T1, T2, ...]`. The literal that builds one is
+in [Tuple Literals](./spec-literals.md#tuple-literals).
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+let point: [i32, i32] = [10, 20];
+let record: [String, i32, bool] = ["Alice", 30, true];
+assert point.1 == 20 && record.0 == "Alice";
+```
+
+### Tuple Element Access
+
+Tuple elements are accessed by constant index using dot notation or bracket notation:
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+let t = [10, "hello", true];
+let x = t.0;      // dot notation
+let y = t[1];     // bracket notation
+let z = t.2;
+assert x == 10 && y == "hello" && z;
+```
+
+A variable index is not allowed:
+
+<!-- {"fixture":"spec_literals_tuple_index.wado"} -->
+
+```wado
+let i = 1;
+let w = t[i];     // Error: tuple index must be a constant integer
+```
+
+### Unit vs Empty Tuple
+
+The unit type `()` and empty tuple `[]` are distinct:
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+let unit: () = ();    // Unit type/value
+let empty: [] = [];   // Empty tuple (rarely used)
+assert `${unit:?}` == "()" && `${empty:?}` == "[]";
+```
+
+They take separate `impl`s, so a method defined on one is not found on the other.
+
+`[]` cannot cross a component boundary. It has no Component Model representation:
+a `tuple` carries at least one type, and `()` is the type that carries none. An
+export naming one is rejected at compile time.
+
+## Lists
+
+`List<T>` is a growable sequence of `T`. A bracket literal builds one where a
+`List` is expected ([List Literals](./spec-literals.md#list-literals)), and its
+constructors build one from a size.
+
+### List Constructors
+
+<!-- {"fixture":"spec_literals_lists.wado"} -->
+
+```wado
+let arr = List::<i32>::with_capacity(10);     // empty list with room for 10 elements
+let bools = List::<bool>::filled(100, true);  // list of 100 elements, all true
+assert arr.len() == 0 && bools.len() == 100 && bools[99];
+```
+
+### List Operations
+
+<!-- {"fixture":"spec_literals_lists.wado"} -->
+
+```wado
+let mut arr: List<i32> = [1, 2, 3];
+
+// Index access (read)
+let first = arr[0];
+assert first == 1;
+
+// Index assignment (write)
+arr[0] = 100;        // Requires a `let mut` binding
+arr[1] = 200;
+
+// List methods
+arr.push(4);         // Add element to end
+let len = arr.len(); // Get length
+assert arr == [100, 200, 3, 4] && len == 4;
+```
+
+### Index Assignment Rules
+
+- Requires the list binding to be declared with `let mut`
+- Index must be within bounds (runtime check, traps if out of bounds)
+- Works with lists of any element type
+
+### Sorting
+
+Every sort is stable and O(n log n) in the worst case:
+
+| Method        | Mutates? | Comparator                          |
+| ------------- | -------- | ----------------------------------- |
+| `sort()`      | Yes      | `Ord::cmp` (requires `T: Ord`)      |
+| `sort_by()`   | Yes      | Custom `fn mut(&T, &T) -> Ordering` |
+| `sorted()`    | No       | `Ord::cmp` (requires `T: Ord`)      |
+| `sorted_by()` | No       | Custom `fn mut(&T, &T) -> Ordering` |
+
+On a float, `Ord` is the IEEE 754 total order rather than the order `<` gives,
+so a NaN still has a place in a sorted list. See
+[Ord - Ordering](./spec-standard-traits.md#ord---ordering).
+
+<!-- {"fixture":"spec_literals_lists.wado"} -->
+
+```wado
+let mut nums: List<i32> = [5, 3, 8, 1];
+nums.sort();                             // in-place ascending
+assert nums == [1, 3, 5, 8];
+
+let orig: List<i32> = [5, 3, 8, 1];
+let asc = orig.sorted();                // returns a new sorted list
+assert asc == [1, 3, 5, 8] && orig == [5, 3, 8, 1];
+```
+
+## The Never Type `!`
+
+The never type `!` is the bottom type: it is a subtype of every type. An expression of type `!` never returns, because it always diverges (traps). `panic()` and `unreachable()` both return `!`.
+
+Because `!` is assignable to any type, an expression of type `!` may appear in any value position without a type mismatch:
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+// In a match arm: the None branch panics, so the match has type i32
+let opt: Option<i32> = Option::<i32>::Some(5);
+let x = match opt {
+    Some(v) => v,
+    None => panic("unexpected none"),
+};
+assert x == 5;
+
+// In a let binding with explicit type annotation
+let y: i32 = panic("unreachable");
+
+// In a binary expression: execution diverges before the addition
+let z: i32 = panic("boom") + 1;
+```
+
+The `!` type can be written explicitly as a return type:
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+fn fail(msg: String) -> ! {
+    panic(msg);
+}
+
+test {
+    let n: i32 = if true { 1 } else { fail("unreachable") };
+    assert n == 1;
+}
+```
 
 ## Newtype
 
@@ -875,7 +1038,7 @@ A field with a default is optional in deserialization too (see
 [Missing, Repeated, and Unknown Fields](./spec-serialization.md#missing-repeated-and-unknown-fields)).
 
 Whether a struct derives `Default` from its field defaults is stated in
-[Auto-Derivation](./spec-traits.md#auto-derivation).
+[Auto-Derivation](./spec-standard-traits.md#auto-derivation).
 
 Rationale: [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
 

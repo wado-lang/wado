@@ -7,7 +7,7 @@ Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 The specification is the `spec-*.md` files, one per area of the language. It is
 normative: it says what the language is meant to be, and you read a program's
 meaning from here. It is not a record of what the compiler happens to
-do today. The [index](./README.md) lists the files.
+do today. [Chapters](#chapters) lists the files in reading order.
 
 The specification states what a program can observe. How the compiler produces
 it, such as which copies it makes or what it inlines or folds, is not part of
@@ -33,6 +33,31 @@ specification itself records no bugs.
 | Target    | Wasm/WASI                 |
 
 See also: [Cheatsheet](./cheatsheet.md) for quick syntax reference.
+
+## Chapters
+
+Each chapter builds on the ones before it.
+
+1. [Lexical Structure](./spec-lexical.md): whitespace, comments, identifiers and keywords.
+2. [Literals](./spec-literals.md): numbers, strings, templates, tuples, lists and compile-time literals.
+3. [Statements and Expressions](./spec-expressions.md): statements, variables, globals, operators and ranges.
+4. [Types](./spec-types.md): primitives, strings, tuples, lists, newtypes, structs, enums and variants.
+5. [Patterns](./spec-patterns.md): taking a value apart in `match`, `let` and `for`.
+6. [Control Flow](./spec-control-flow.md): branches, loops, labeled blocks and error handling.
+7. [Functions](./spec-functions.md): declarations, methods, generics, closures and default arguments.
+8. [Memory Model](./spec-memory.md): value semantics and references.
+9. [Traits](./spec-traits.md): declaring, implementing and bounding traits.
+10. [Standard Traits](./spec-standard-traits.md): the traits behind `for-of`, comparison, operators and indexing.
+11. [Static Reflection](./spec-reflection.md): the compile-time view of a type's members.
+12. [Effect System](./spec-effects.md): declaring, propagating and handling effects.
+13. [Module System](./spec-modules.md): visibility, imports and re-exports.
+14. [Packages](./spec-packages.md): the manifest, dependencies and package specifiers.
+15. [Kiln Generators](./spec-kiln.md): imports that a build-time generator writes.
+16. [Worlds and Entry Points](./spec-worlds.md): what a program imports from its host and exports to it.
+17. [Components](./spec-components.md): the Component Model boundary, concurrency and resources.
+18. [Serialization](./spec-serialization.md): `Serialize`, `Deserialize` and wire formats.
+19. [Compiler Attributes](./spec-attributes.md): the `#[...]` attributes.
+20. [Assertions and Testing](./spec-testing.md): `assert` and `test` blocks.
 
 ## Design Philosophy
 
