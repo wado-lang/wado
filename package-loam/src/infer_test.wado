@@ -1089,14 +1089,14 @@ test "an attribute an operator reads as numbers, holding a tensor, stops the bui
 }
 
 test "a string attribute of no value, or a number where a string is read, stops the build" {
-    let pooled = |auto_pad: String| y_axes(
+    let padded = |auto_pad: String| y_axes(
         `g (float[1, 1, 4, 4] X) => (float[1, 1, 2, 2] Y) {
             Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2], auto_pad = ${auto_pad}> (X)
         }`,
         [rule("*", ["N", "C", "H", "W"])],
     );
-    assert pooled("[]").unwrap_err() == "Y = MaxPool: attribute auto_pad is a list and the operator reads one value";
-    assert pooled("3").unwrap_err() == "Y = MaxPool: attribute auto_pad holds numbers, and the operator reads a string";
+    assert padded("[]").unwrap_err() == "Y = MaxPool: attribute auto_pad is a list and the operator reads one value";
+    assert padded("3").unwrap_err() == "Y = MaxPool: attribute auto_pad holds numbers, and the operator reads a string";
 }
 
 test "a ConstantOfShape whose shape a kernel computes stops the build" {
@@ -1238,6 +1238,14 @@ test "Conv groups sharing out other than all the input channels stop the build" 
         Y = Conv <group = 2> (X, W)
     }`;
     assert y_axes(source, grouped()).unwrap_err() == "Y = Conv: axis Chan is 4 on the left and 2 on the right";
+}
+
+test "a grouped Conv over a scalar weight stops the build on the weight's rank" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float W = {1}> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    let e = y_axes(source, grouped()).unwrap_err();
+    assert e == "Y = Conv: operand 1 has rank 0 and the operator reads rank 4";
 }
 
 test "a Conv group count that does not divide the output channels stops the build" {

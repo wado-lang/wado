@@ -27,15 +27,18 @@ pub fn fold(
 
 /// `k` as its ONNX element holds it: an int32 keeps the low 32 bits of each
 /// value, which the run derives where only it knows the value, as `node`
-/// computes it.
+/// computes it, and a half rounds each value to one it holds.
 fn in_width(k: Known, node: &Node) -> Known {
-    if k.stored != Stored::Int32 {
-        return k;
-    }
-    let site = node.site();
-    let elements = match k.elements {
-        Ints(v) => Elements::Ints(v.into_iter().map(|c| c as i32 as i64).collect()),
-        Symbolic(v) => Elements::integers(v.into_iter().map(|p| Poly::wrapped32(&p, &site)).collect()),
+    let elements = match [k.stored, k.elements] {
+        [Computed, _] => {
+            return k;
+        },
+        [Int32, Ints(v)] => Elements::Ints(v.into_iter().map(|c| c as i32 as i64).collect()),
+        [Int32, Symbolic(v)] => {
+            let site = node.site();
+            Elements::integers(v.into_iter().map(|p| Poly::wrapped32(&p, &site)).collect());
+        },
+        [half, Floats(v)] => Elements::Floats(v.into_iter().map(|x| half.widened(half.narrowed(x))).collect()),
         _ => unreachable(),
     };
     return Known { ..k, elements };
@@ -704,23 +707,39 @@ fn aligned_extents(node: &Node, a: &List<i32>, b: &List<i32>) -> Result<List<i32
 }
 
 /// Integer arithmetic, where a symbol may stand for an operand, as the node
-/// `site` names computes it. A quotient is one where every rounding agrees,
-/// since ONNX leaves the rounding of a negative one unstated: a dividend not
-/// negative for any input, over a positive number, since a symbol may be 0.
+/// `site` names computes it. ONNX's quotient truncates toward zero, which a
+/// symbolic one takes as rounding down: a dividend not negative for any input,
+/// over a positive number, since a symbol may be 0.
 fn poly_op(op: &String, l: &Poly, r: &Poly, site: &String) -> Result<Poly, String> {
     let overflow = `${*l} ${*op} ${*r} leaves i64`;
     return match op.as_str_slice() {
         "Add" => in_int64(l.try_add(r), overflow),
         "Sub" => in_int64(l.try_sub(r), overflow),
         "Mul" => in_int64(l.try_mul(r), overflow),
-        "Div" => {
-            if !l.is_nonnegative() || !r.as_constant() matches { Some(d) && d > 0 } {
-                return Result::Err(`${*l} / ${*r} has no rounding every implementation shares`);
-            }
-            Result::Ok(Poly::floor_div(l, r, site));
-        },
+        "Div" => quotient(l, r, site, overflow),
         _ => Result::Err(`${*op} of integers is not evaluated`),
     };
+}
+
+fn quotient(l: &Poly, r: &Poly, site: &String, overflow: String) -> Result<Poly, String> {
+    if r.as_constant() == Option::Some(0) {
+        return Result::Err(`${*l} / 0 divides by zero`);
+    }
+    if let [Some(n), Some(d)] = [
+        l.as_constant(),
+        r.as_constant(),
+    ] {
+        if n == i64::MIN && d == -1 {
+            return Result::Err(overflow);
+        }
+        return Result::Ok(Poly::constant(n / d));
+    }
+    if !l.is_nonnegative() || !r.as_constant() matches { Some(d) && d > 0 } {
+        return Result::Err(
+            `${*l} / ${*r} truncates, which the build computes only for a dividend never negative over a positive number`,
+        );
+    }
+    return Result::Ok(Poly::floor_div(l, r, site));
 }
 
 /// An int64 the graph computed, or `overflow` where no polynomial holds it or

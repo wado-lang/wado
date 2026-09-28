@@ -661,8 +661,9 @@ fn infer_node(
     if op == "Conv" {
         let x = operand_at(node, shapes, 0);
         let w = operand_at(node, shapes, 1);
-        let group = conv_group(node, &w)?;
+        // `window_of` checks the weight's rank, which `conv_group` relies on.
         let window = window_of(node, &x, shapes, owed)?;
+        let group = conv_group(node, &w)?;
         agree_at(node, &x.axes[1], &grouped_inputs(node, &w.axes[1], group)?, owed)?;
         if has_bias(node) {
             let b = operand_at(node, shapes, 2);

@@ -104,7 +104,7 @@ test "arithmetic aligned at an axis, as before opset 7, stretches B along the ax
     assert aligned == ints([2, 3], [11, 12, 13, 24, 25, 26]);
 }
 
-test "a quotient of a length by a positive number rounds down, and one any rounding might differ on stops the build" {
+test "an integer quotient truncates toward zero, and one over a symbol only where that rounds down" {
     let k = knowns([
         [
             "S",
@@ -115,12 +115,35 @@ test "a quotient of a length by a positive number rounds down, and one any round
         ],
         ["T", ints([1], [2])],
         ["M", ints([1], [-7])],
+        ["U", ints([1], [-2])],
+        ["Z", ints([1], [0])],
     ]);
     let half = folded(node("Div", ["S", "T"], []), k);
     assert half.elements == Elements::integers([Poly::floor_div(&Poly::symbol(&"N"), &Poly::constant(2), &"Y = Div")]);
+    assert folded(node("Div", ["M", "T"], []), k) == ints([1], [-3]);
+    assert folded(node("Div", ["T", "U"], []), k) == ints([1], [-1]);
+    assert folded(node("Div", ["M", "U"], []), k) == ints([1], [3]);
+    assert fold(&node("Div", ["M", "Z"], []), &k, &runtime([])).unwrap_err() == "-7 / 0 divides by zero";
     // N may be 0, where ONNX divides by zero.
-    assert fold(&node("Div", ["S", "S"], []), &k, &runtime([])).unwrap_err() == "N / N has no rounding every implementation shares";
-    assert fold(&node("Div", ["M", "T"], []), &k, &runtime([])).unwrap_err() == "-7 / 2 has no rounding every implementation shares";
+    assert fold(&node("Div", ["S", "S"], []), &k, &runtime([])).unwrap_err() == "N / N truncates, which the build computes only for a dividend never negative over a positive number";
+    assert fold(&node("Div", ["S", "U"], []), &k, &runtime([])).unwrap_err() == "N / -2 truncates, which the build computes only for a dividend never negative over a positive number";
+}
+
+test "half arithmetic rounds each result to the half it is stored as" {
+    let half = |v: f32, stored: Stored| Known {
+        extents: [1],
+        elements: Elements::Floats([v]),
+        stored,
+    };
+    let tiny: f32 = 0.00048828125;
+    let k = knowns([
+        ["A", half(1.0, Stored::Float16)],
+        ["B", half(tiny, Stored::Float16)],
+        ["C", half(1.0, Stored::BFloat16)],
+        ["D", half(tiny, Stored::BFloat16)],
+    ]);
+    assert folded(node("Add", ["A", "B"], []), k) == half(1.0, Stored::Float16);
+    assert folded(node("Add", ["C", "D"], []), k) == half(1.0, Stored::BFloat16);
 }
 
 test "an axis list naming one axis twice, once from the end, stops the build" {
