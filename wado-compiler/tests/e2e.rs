@@ -367,10 +367,13 @@ fn one_or_many<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<String>, D
         One(String),
         Many(Vec<String>),
     }
-    Ok(match OneOrMany::deserialize(de)? {
-        OneOrMany::One(one) => vec![one],
-        OneOrMany::Many(many) => many,
-    })
+    match OneOrMany::deserialize(de)? {
+        OneOrMany::One(one) => Ok(vec![one]),
+        OneOrMany::Many(many) if many.is_empty() => {
+            Err(serde::de::Error::custom("an empty list names no allocator"))
+        }
+        OneOrMany::Many(many) => Ok(many),
+    }
 }
 
 /// Whether `wir` contains `pattern`, where `{}` stands for a run of digits.
@@ -812,7 +815,8 @@ fn run_normal_test(
     }
 }
 
-/// Run a normal (non-TODO) test, dispatching to the appropriate world runner
+/// Run a normal (non-TODO) test under `allocator`, dispatching to the
+/// appropriate world runner.
 fn run_with_allocator(
     fixture_path: &Path,
     source: &str,

@@ -343,9 +343,10 @@ pub struct WasmAsset {
 
 impl WasmAsset {
     /// The minimum, in pages, of the memory the asset asks for — defined or
-    /// imported; 1 when it has neither. Read by `wir_build` to size the memory
-    /// the component shares, so an asset written against `env.memory` counts
-    /// just as much as one defining its own.
+    /// imported; 1 when it has neither. Read by
+    /// [`crate::nir_package::NirPackage::reserve_asset_memory`] to reserve the
+    /// asset's pages of the memory the component shares, so an asset written
+    /// against `env.memory` counts just as much as one defining its own.
     pub fn min_memory_pages(&self) -> u64 {
         for payload in wasmparser::Parser::new(0).parse_all(&self.bytes) {
             match payload {
@@ -643,8 +644,9 @@ pub(crate) const DEFAULT_PAGE_SIZE_LOG2: u32 = 16;
 
 /// An embedded asset is wired to the component's memory, so its own memory
 /// must have that memory's shape: 32-bit, unshared, default page size, and a
-/// minimum that leaves the heap room past it. Its maximum needs no check — the rewrite to an import drops it, since the
-/// component's memory is the one that sets the ceiling.
+/// minimum that leaves the heap room past it. Its maximum needs no check — the
+/// rewrite to an import drops it, since the component's memory is the one that
+/// sets the ceiling.
 fn check_shared_memory_shape(
     source: &ModuleSource,
     mem: wasmparser::MemoryType,
@@ -686,8 +688,8 @@ fn check_shared_memory_shape(
     Ok(())
 }
 
-/// The first page count an asset's memory may not start at: the heap's start,
-/// past the asset's pages, has to be a positive `i32` address.
+/// The smallest memory minimum, in pages, that rejects an asset. The heap
+/// starts past the asset's pages, and that address must fit a positive `i32`.
 const MAX_ASSET_MEMORY_PAGES: u64 = 1 << (31 - DEFAULT_PAGE_SIZE_LOG2);
 
 /// Walk a core wasm module: validate what an embedded asset must be (no `start`,

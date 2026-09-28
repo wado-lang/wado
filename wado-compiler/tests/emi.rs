@@ -306,7 +306,11 @@ impl Spec {
             Some(serde_json::Value::Array(many)) => many
                 .first()
                 .and_then(serde_json::Value::as_str)
-                .ok_or_else(|| Excluded::MalformedData("empty `allocator` list".to_string()))?,
+                .ok_or_else(|| {
+                    Excluded::MalformedData(
+                        "`allocator` list does not start with a name".to_string(),
+                    )
+                })?,
             Some(other) => {
                 return Err(Excluded::MalformedData(format!(
                     "`allocator` is {other}, not a name or a list of names"
