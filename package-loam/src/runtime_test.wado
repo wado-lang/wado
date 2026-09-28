@@ -7,6 +7,7 @@ use {
     checked_element_count,
     conv,
     conv_bias,
+    conv_grouped,
     from_end,
     gather,
     gather_rows,
@@ -349,6 +350,19 @@ test "conv_bias adds each output channel's bias" {
         0, 0, 0, 0,
     ], [1, 2]));
     assert y.data == [1.5, 2.5, 9.5, 19.5] as List<f32>;
+}
+
+test "conv_grouped reads each output channel's own group of input channels" {
+    let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 1, 2], [1.0, 2.0, 10.0, 20.0]);
+    let w: Tensor<f32, [Col, Row, Row, Col]> = tensor([2, 1, 1, 1], [2.0, 3.0]);
+
+    let y = conv_grouped::<Batch, Inner, Row, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, 2, &window(
+        [1, 1],
+        [1, 1],
+        [0, 0, 0, 0],
+        [1, 2],
+    ));
+    assert y.data == [2.0, 4.0, 30.0, 60.0] as List<f32>;
 }
 
 test "transpose2 swaps the two axes and their extents" {

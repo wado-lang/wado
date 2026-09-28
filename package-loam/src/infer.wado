@@ -659,12 +659,9 @@ fn infer_node(
     if op == "Conv" {
         let x = operand_at(node, shapes, 0);
         let w = operand_at(node, shapes, 1);
-        let group = int_attr(node, "group", 1)?;
-        if group != 1 {
-            return Result::Err(attribute_error(node, "group", `is ${group}, and only a single group is read`));
-        }
+        let group = conv_group(node, &w)?;
         let window = window_of(node, &x, shapes, owed)?;
-        agree_at(node, &x.axes[1], &w.axes[1], owed)?;
+        agree_at(node, &x.axes[1], &grouped_inputs(node, &w.axes[1], group)?, owed)?;
         if has_bias(node) {
             let b = operand_at(node, shapes, 2);
             if b.rank() != 1 {
@@ -1124,6 +1121,46 @@ fn agree_at(node: &Node, left: &Axis, right: &Axis, owed: &mut List<Condition>) 
 
 fn refusal(node: &Node, reason: String) -> InferError {
     return InferError::Refused(Refusal::of(node, reason));
+}
+
+/// `Conv`'s `group`, which must divide the output channels, `w`'s first axis.
+pub fn conv_group(node: &Node, w: &Shape) -> Result<i32, InferError> {
+    let group = int_attr(node, "group", 1)?;
+    if group == 1 {
+        return Result::Ok(1);
+    }
+    let Static(outputs) = w.axes[0].extent else {
+        return Result::Err(attribute_error(
+            node,
+            "group",
+            `is ${group}, and a symbolic count of output channels proves no divisor`,
+        ));
+    };
+    if !(1 <= group <= outputs as i64) || outputs as i64 % group != 0 {
+        return Result::Err(attribute_error(
+            node,
+            "group",
+            `is ${group}, which does not divide the ${outputs} output channels`,
+        ));
+    }
+    return Result::Ok(group as i32);
+}
+
+/// The input channels a `Conv` of `group` groups reads, each group reading
+/// `per_group` of them, as an axis to hold the input's to.
+fn grouped_inputs(node: &Node, per_group: &Axis, group: i32) -> Result<Axis, InferError> {
+    let read = match per_group.extent.poly().try_mul(&Poly::constant(group as i64)) {
+        Some(p) => Extent::of(p),
+        None => null,
+    };
+    let Some(extent) = read else {
+        return Result::Err(attribute_error(
+            node,
+            "group",
+            `is ${group}, and so many groups of ${per_group.extent} channels pass what an axis holds`,
+        ));
+    };
+    return Result::Ok(Axis { name: per_group.name, extent });
 }
 
 /// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX

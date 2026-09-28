@@ -528,7 +528,7 @@ pub fn conv<N, Ci, Co, ..In, ..K, ..Out>(
     w: &Tensor<f32, [Co, Ci, ..K]>,
     window: &Window,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), window);
+    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), 1, window);
 }
 
 pub fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
@@ -537,15 +537,45 @@ pub fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
     b: &Tensor<f32, [Co]>,
     window: &Window,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, b.data, window);
+    return convolve(x, w, b.data, 1, window);
 }
 
-/// A convolution of one group.
-fn convolve<X, W, Y>(x: &Tensor<f32, X>, w: &Tensor<f32, W>, bias: List<f32>, window: &Window) -> Tensor<f32, Y> {
+/// `conv` in `group` groups: each reads its own run of `Cg` input channels
+/// and writes its own run of the output channels.
+pub fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+    x: &Tensor<f32, [N, Ci, ..In]>,
+    w: &Tensor<f32, [Co, Cg, ..K]>,
+    group: i32,
+    window: &Window,
+) -> Tensor<f32, [N, Co, ..Out]> {
+    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), group, window);
+}
+
+pub fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
+    x: &Tensor<f32, [N, Ci, ..In]>,
+    w: &Tensor<f32, [Co, Cg, ..K]>,
+    b: &Tensor<f32, [Co]>,
+    group: i32,
+    window: &Window,
+) -> Tensor<f32, [N, Co, ..Out]> {
+    return convolve(x, w, b.data, group, window);
+}
+
+/// A convolution in `group` groups, each output channel reading the input
+/// channels of its own group.
+fn convolve<X, W, Y>(
+    x: &Tensor<f32, X>,
+    w: &Tensor<f32, W>,
+    bias: List<f32>,
+    group: i32,
+    window: &Window,
+) -> Tensor<f32, Y> {
     let batch = x.extents[0];
-    let inputs = x.extents[1];
+    let channels = x.extents[1];
     let outputs = w.extents[0];
-    assert w.extents[1] == inputs && bias.len() == outputs;
+    let inputs = w.extents[1];
+    assert inputs * group == channels && outputs % group == 0 && bias.len() == outputs;
+    let group_outputs = outputs / group;
     let input = spatial_extents(&x.extents);
     let in_size = element_count(&input);
     let out_size = element_count(&window.output);
@@ -568,9 +598,10 @@ fn convolve<X, W, Y>(x: &Tensor<f32, X>, w: &Tensor<f32, W>, bias: List<f32>, wi
             }
             for let n of 0..<batch {
                 for let oc of 0..<outputs {
+                    let first = n * channels + oc / group_outputs * inputs;
                     let mut sum: f32 = 0.0;
                     for let ic of 0..<inputs {
-                        sum += x.data[(n * inputs + ic) * in_size + offset] * w.data[(oc * inputs + ic) * taps + tap];
+                        sum += x.data[(first + ic) * in_size + offset] * w.data[(oc * inputs + ic) * taps + tap];
                     }
                     out[(n * outputs + oc) * out_size + at] += sum;
                 }

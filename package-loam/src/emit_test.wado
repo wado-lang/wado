@@ -397,6 +397,26 @@ g (float[1, 16, 4, 4] X, float[1, 256] Z) => (float[1, 256] Y)
     assert !emitted(&out).contains("let S =");
 }
 
+test "a grouped Conv lowers to conv_grouped, naming the weight's channel axis" {
+    let source = `
+g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
+<float[2, 2, 2, 2] W>
+{
+    Y = Conv <group = 2> (X, W)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Share", "KRow", "KCol"]),
+        rule("Y", ["Batch", "Out", "ORow", "OCol"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains(
+        "let Y = conv_grouped::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, 2, &Window {",
+    );
+}
+
 test "Conv and MaxPool lower to their kernels under the window stage 0 read" {
     let source = `
 g (float[1, 1, 28, 28] X) => (float[1, 8, 14, 14] Y)

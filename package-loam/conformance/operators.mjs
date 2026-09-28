@@ -180,6 +180,11 @@ add('ConvGrouped', {
   nodes: [node('Conv', ['A', 'W'], 'Y', { group: 2 })],
   layout: { A: ['Batch', 'Chan', 'H', 'W'], W: ['Out', 'Group', 'KH', 'KW'], Y: ['Batch', 'Out', 'OutH', 'OutW'] },
 });
+add('ConvDepthwise', {
+  inputs: { A: float([1, 3, 4, 4]), W: float([3, 1, 3, 3]), B: float([3]) },
+  nodes: [node('Conv', ['A', 'W', 'B'], 'Y', { group: 3, pads: [1, 1, 1, 1] })],
+  layout: { ...convolved, W: ['Out', 'One', 'KH', 'KW'] },
+});
 
 add('SoftmaxLast', { inputs: { A: float([2, 3]) }, nodes: [node('Softmax', ['A'], 'Y')], layout: { A: ['Row', 'Col'] } });
 add('SoftmaxFirst', { inputs: { A: float([2, 3]) }, nodes: [node('Softmax', ['A'], 'Y', { axis: 0 })], layout: { A: ['Row', 'Col'] } });

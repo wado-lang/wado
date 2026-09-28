@@ -1146,12 +1146,34 @@ test "Conv whose weight reads another channel count stops the build" {
     assert e == "Y = Conv: axis Chan is 1 on the left and 2 on the right";
 }
 
-test "Conv over several groups stops the build" {
-    let source = `g (float[1, 2, 8, 8] X) => (float[1, 2, 6, 6] Y) <float[2, 1, 3, 3] W> {
+fn grouped() -> List<LayoutRule> {
+    return [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Share", "KRow", "KCol"]),
+        rule("Y", ["Batch", "Out", "Row", "Col"]),
+    ];
+}
+
+test "Conv over several groups reads a group's share of the input channels" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 2, 3, 3] W> {
         Y = Conv <group = 2> (X, W)
     }`;
-    let e = y_axes(source, convolved()).unwrap_err();
-    assert e == "Y = Conv: attribute group is 2, and only a single group is read";
+    assert y_axes(source, grouped()).unwrap() == "Batch=1,Out=6,Row=6,Col=6";
+}
+
+test "Conv groups sharing out other than all the input channels stop the build" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 1, 3, 3] W> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    assert y_axes(source, grouped()).unwrap_err() == "Y = Conv: axis Chan is 4 on the left and 2 on the right";
+}
+
+test "a Conv group count that does not divide the output channels stops the build" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 1, 3, 3] W> {
+        Y = Conv <group = 4> (X, W)
+    }`;
+    let e = y_axes(source, grouped()).unwrap_err();
+    assert e == "Y = Conv: attribute group is 4, which does not divide the 6 output channels";
 }
 
 test "a node reading an undefined tensor stops the build" {

@@ -25,6 +25,7 @@ use {
     Refusal,
     gather_axis,
     gemm_options,
+    conv_group,
     has_bias,
     is_reduction,
     range_bounds,
@@ -1212,16 +1213,21 @@ fn window_call(
         );
     }
     let w = shapes.get(node.inputs[1]).unwrap();
-    let turbofish = `::<${x.axes[0].name}, ${x.axes[1].name}, ${w.axes[0].name}, [${spatial_axes(&x)}], [${spatial_axes(
-        &w,
-    )}], [${spatial_axes(&y)}]>`;
+    let group = settled(conv_group(node, &w));
+    // A grouped weight's channel axis is its own, a group's share of the input's.
+    let [kernel, channels, grouping] = if group == 1 {
+        ["conv", x.axes[1].name, ""];
+    } else {
+        ["conv_grouped", `${x.axes[1].name}, ${w.axes[1].name}`, `${group}, `];
+    };
+    let spatial = `[${spatial_axes(&x)}], [${spatial_axes(&w)}], [${spatial_axes(&y)}]`;
+    let turbofish = `::<${x.axes[0].name}, ${channels}, ${w.axes[0].name}, ${spatial}>`;
     let weight = exprs.reference(&node.inputs[1]);
     if has_bias(node) {
-        return Result::Ok(
-            `conv_bias${turbofish}(${input}, ${weight}, ${exprs.reference(&node.inputs[2])}, ${geometry})`,
-        );
+        let bias = exprs.reference(&node.inputs[2]);
+        return Result::Ok(`${kernel}_bias${turbofish}(${input}, ${weight}, ${bias}, ${grouping}${geometry})`);
     }
-    return Result::Ok(`conv${turbofish}(${input}, ${weight}, ${geometry})`);
+    return Result::Ok(`${kernel}${turbofish}(${input}, ${weight}, ${grouping}${geometry})`);
 }
 
 /// The axes past a shape's first two, which a window slides over.
