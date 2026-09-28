@@ -1267,8 +1267,9 @@ fn block_tail_scalarizable(
 /// A `let t = VariantConstruct(…)` whose only mention is the `return t` asking
 /// about it — the shape `field_scalarize` leaves when a construction has to
 /// happen before a later side effect. The rewrite retypes the binding in place,
-/// so nothing moves and no trap or ordering analysis is needed.
-fn single_def_variant_construct(body: &Body, local: u32, cand: &Candidate) -> Option<StmtId> {
+/// so nothing moves and no trap or ordering analysis is needed. Returns the
+/// construction.
+fn single_def_variant_construct(body: &Body, local: u32, cand: &Candidate) -> Option<ExprId> {
     let mut defs: Vec<StmtId> = Vec::new();
     let mut reads = 0usize;
     count_local_def_use(
@@ -1291,7 +1292,7 @@ fn single_def_variant_construct(body: &Body, local: u32, cand: &Candidate) -> Op
     let init = value.as_expr()?;
     match &body.exprs[init].kind {
         ExprKind::VariantConstruct { variant_type, .. } if *variant_type == cand.variant_type => {
-            Some(def)
+            Some(init)
         }
         _ => None,
     }
@@ -1762,13 +1763,7 @@ fn rewrite_return_value(
     retyped: &mut Vec<u32>,
 ) -> Option<Operand> {
     let Some(expr) = op.as_expr() else {
-        let case = null_return_case(body, op, cand)?;
-        let tuple = build_result_tuple(body, cand, case, None, span);
-        return Some(Operand::Expr(body.exprs.push(ExprNode {
-            kind: tuple,
-            type_id: cand.layout.tuple_type,
-            span,
-        })));
+        return null_tuple(body, op, cand, span);
     };
     if body.exprs[expr].type_id == TypeTable::NEVER {
         return None;
@@ -1779,22 +1774,14 @@ fn rewrite_return_value(
         return None;
     }
     match body.exprs[expr].kind.clone() {
-        ExprKind::VariantConstruct {
-            case_index,
-            payload,
-            ..
-        } => {
-            let tuple = build_result_tuple(body, cand, case_index, payload, span);
-            body.exprs[expr].kind = tuple;
-            body.exprs[expr].type_id = cand.layout.tuple_type;
-        }
+        ExprKind::VariantConstruct { .. } => rewrite_construct(body, expr, cand, span),
         // A tail call to a co-candidate already returns this tuple.
         ExprKind::Call { .. } => {
             body.exprs[expr].type_id = cand.layout.tuple_type;
         }
         ExprKind::Local { index, .. } => {
-            if let Some(def) = single_def_variant_construct(body, index, cand) {
-                rewrite_let_construct(body, def, cand, span);
+            if let Some(init) = single_def_variant_construct(body, index, cand) {
+                rewrite_construct(body, init, cand, span);
                 body.exprs[expr].type_id = cand.layout.tuple_type;
                 retyped.push(index);
             }
@@ -1853,23 +1840,31 @@ fn rewrite_block_tail(
     }
 }
 
-/// Turn `let t = Ok(v)` into `let t = [0, v, None]`.
-fn rewrite_let_construct(body: &mut Body, def: StmtId, cand: &Candidate, span: Span) {
-    let StmtKind::Let { value, .. } = body.stmts[def].kind else {
-        return;
-    };
-    let Some(init) = value.as_expr() else { return };
+/// Turn the case construction `Ok(v)` into `[0, v, None]` in place.
+fn rewrite_construct(body: &mut Body, construct: ExprId, cand: &Candidate, span: Span) {
     let ExprKind::VariantConstruct {
         case_index,
         payload,
         ..
-    } = body.exprs[init].kind.clone()
+    } = body.exprs[construct].kind.clone()
     else {
-        return;
+        unreachable!("not a case construction")
     };
     let tuple = build_result_tuple(body, cand, case_index, payload, span);
-    body.exprs[init].kind = tuple;
-    body.exprs[init].type_id = cand.layout.tuple_type;
+    body.exprs[construct].kind = tuple;
+    body.exprs[construct].type_id = cand.layout.tuple_type;
+}
+
+/// The tuple of the case a promoted `null` denotes, as a node of its own: a
+/// value has no `ExprId` to overwrite. `None` where `op` is no `null`.
+fn null_tuple(body: &mut Body, op: Operand, cand: &Candidate, span: Span) -> Option<Operand> {
+    let case = null_return_case(body, op, cand)?;
+    let tuple = build_result_tuple(body, cand, case, None, span);
+    Some(Operand::Expr(body.exprs.push(ExprNode {
+        kind: tuple,
+        type_id: cand.layout.tuple_type,
+        span,
+    })))
 }
 
 /// `[tag, slot_0, …]` for one case: the live payload in its slot, pads
@@ -2207,30 +2202,15 @@ fn rewrite_variant_local_defs(body: &mut Body, local: u32, cand: &Candidate, spa
     }
 }
 
-/// The tuple a case construction (or `null`) stands for, rewritten in place
-/// where the construction is a node of its own.
+/// The tuple a value [`builds_case`] accepted stands for.
 fn case_tuple(body: &mut Body, value: Operand, cand: &Candidate, span: Span) -> Operand {
-    let Some(e) = value.as_expr() else {
-        let case = null_return_case(body, value, cand).expect("validated as a case");
-        let tuple = build_result_tuple(body, cand, case, None, span);
-        return Operand::Expr(body.exprs.push(ExprNode {
-            kind: tuple,
-            type_id: cand.layout.tuple_type,
-            span,
-        }));
-    };
-    let ExprKind::VariantConstruct {
-        case_index,
-        payload,
-        ..
-    } = body.exprs[e].kind.clone()
-    else {
-        unreachable!("validated as a case construction")
-    };
-    let tuple = build_result_tuple(body, cand, case_index, payload, span);
-    body.exprs[e].kind = tuple;
-    body.exprs[e].type_id = cand.layout.tuple_type;
-    value
+    match value.as_expr() {
+        Some(construct) => {
+            rewrite_construct(body, construct, cand, span);
+            value
+        }
+        None => null_tuple(body, value, cand, span).expect("validated as a case"),
+    }
 }
 
 /// Retype every reachable call to a rewritten callee: the node's own `type_id` is

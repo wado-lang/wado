@@ -259,6 +259,32 @@ binding prepended to each arm body. `match f(x) { … }` is first normalized int
 A candidate reached from a global initializer is dropped: an initializer body
 has no locals list to mint the binding in.
 
+#### Phase 4 — variant locals
+
+A local holds the same tuple a return does. `let mut s: Option<i64> = null; …
+s = Some(v); … match s { … }` is the derived deserializer's slot per scalar
+field, and each `Some(v)` was a heap object. The local qualifies when every
+write builds a case (`null` included) and every read is a tag test, a payload
+read or a one-level `match`. A local read whole, passed or returned, stays a
+variant. Each write becomes the case's tuple literal, the reads go through the
+Phase 3 call-site rewrite, and `sroa` splits the tuple into scalars: a
+whole-literal assign `t = [tag, v]` becomes one write per field.
+
+A layout whose slot is itself a variant with a layout is declined. Once `sroa`
+splits the tuple, that slot is a variant local of its own, and for
+`Option<Option<i32>>` it is the very same type, so taking it never terminates.
+
+On json-catalog this removes all 18 `Option<i64>` constructions. Against the
+commit before it, best of three alternating rounds on 2026-09-28:
+
+| row              | change |
+| ---------------- | -----: |
+| cbor-catalog de  |  +6.5% |
+| cbor-twitter ser |  +3.6% |
+| json-twitter de  |  +2.8% |
+| cbor-twitter de  |  +2.1% |
+| json-catalog de  |   flat |
+
 #### Every copy of a type has to move together
 
 A rewrite that changes what a function returns has to retype four things that
@@ -622,7 +648,7 @@ live across the call. That reads like the rule SROA width answers to: past the
 register file, a value live across a call is a spill slot reloaded at every call
 boundary.
 
-It first measured that way. A cap declined the callee when any call site sat in
+The first measurements agreed. A cap declined the callee when any call site sat in
 a function declaring more than 128 locals, and cbor-twitter, whose `User` and
 `Status` decoders declared 307 and 186, lost 6.3% without it.
 

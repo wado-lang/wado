@@ -96,8 +96,8 @@ Allocation and aggregates:
   into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn a `List` of structs or tuples into one list per field.
 - `sroa_param` — pass the one field a callee reads instead of the struct.
-- `sroa_variant_return` — return a variant as a `[tag, slots…]` tuple
-  ([WEP: Variant Return Scalarization](./wep-2026-08-03-variant-return-abi.md)).
+- `sroa_variant_return` — return a variant, or hold a variant local, as a
+  `[tag, slots…]` tuple ([WEP: Variant Return Scalarization](./wep-2026-08-03-variant-return-abi.md)).
 - `elide_box_local` — collapse a box bound once and read once into its value.
 - `drop_value` — keep only the effects of a labeled block whose value is
   discarded.
