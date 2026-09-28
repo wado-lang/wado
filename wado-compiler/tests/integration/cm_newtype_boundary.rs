@@ -196,6 +196,29 @@ test "shape compiles" {}
     );
 }
 
+/// A stdlib newtype the library's types name is published beside them, yet it
+/// is no API of the library's own: one whose only type is private still exports
+/// nothing.
+#[test]
+fn lib_naming_only_a_stdlib_newtype_exports_nothing() {
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        lib_world: Some(LIB_WORLD_FQ.to_string()),
+        ..Default::default()
+    };
+    let Err(err) = compile_source_with_compiler_options(
+        Path::new("lib.wado"),
+        "struct Blob {\n    bytes: ByteList,\n}\n",
+        options,
+    ) else {
+        panic!("a library with no public API compiled");
+    };
+    assert!(
+        format!("{err:?}").contains("exports nothing"),
+        "rejected for another reason: {err:?}"
+    );
+}
+
 /// A library signature naming a stdlib newtype carries it as an alias, as it
 /// does a local one: `ByteList` is `byte-list`, in and out, and inside an
 /// `option`.

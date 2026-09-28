@@ -597,10 +597,28 @@ const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 /// The FQ prefix of every `core:eval` interface.
 const EVAL_PACKAGE_PREFIX: &str = "core:eval/";
 
+#[derive(Default)]
 struct LibSurface {
     submodule_exports: Vec<world_registry::WorldExportInfo>,
     submodule_type_decls: Vec<(ModuleSource, ast::Item)>,
     submodule_interfaces: Vec<ast::InterfaceDecl>,
+    /// Published beside the package's types, but no API the package declares.
+    stdlib_newtypes: Vec<(ModuleSource, ast::Item)>,
+}
+
+impl LibSurface {
+    /// Every type the component publishes beyond the entry module's own.
+    fn published_type_decls(&self) -> impl Iterator<Item = &(ModuleSource, ast::Item)> {
+        self.submodule_type_decls
+            .iter()
+            .chain(&self.stdlib_newtypes)
+    }
+
+    fn published_type_decls_mut(&mut self) -> impl Iterator<Item = &mut (ModuleSource, ast::Item)> {
+        self.submodule_type_decls
+            .iter_mut()
+            .chain(&mut self.stdlib_newtypes)
+    }
 }
 
 fn collect_lib_surface(
@@ -657,6 +675,7 @@ fn collect_lib_surface(
         submodule_exports,
         submodule_type_decls,
         submodule_interfaces,
+        stdlib_newtypes: Vec::new(),
     }
 }
 
@@ -1315,26 +1334,20 @@ fn compile_after_load<H: CompilerHost>(
         (false, true) => LibSurface {
             submodule_type_decls: collect_lib_surface(&sem.entry_module_source, &sem.modules)
                 .submodule_type_decls,
-            submodule_exports: Vec::new(),
-            submodule_interfaces: Vec::new(),
+            ..LibSurface::default()
         },
-        (false, false) => LibSurface {
-            submodule_exports: Vec::new(),
-            submodule_type_decls: Vec::new(),
-            submodule_interfaces: Vec::new(),
-        },
+        (false, false) => LibSurface::default(),
     };
     if synth_world_fq.is_some() {
         let resolutions = sem
             .resolutions()
             .expect("a complete analysis has resolutions");
-        let stdlib_newtypes = stdlib_newtypes_in_lib_surface(
+        lib_surface.stdlib_newtypes = stdlib_newtypes_in_lib_surface(
             resolutions,
             &sem.modules,
             sem.modules.get(&sem.entry_module_source),
             &lib_surface,
         );
-        lib_surface.submodule_type_decls.extend(stdlib_newtypes);
     }
 
     let entry_type_names: Vec<String> = sem
@@ -1370,8 +1383,7 @@ fn compile_after_load<H: CompilerHost>(
         let all_named: Vec<(String, String)> = entry_named
             .chain(
                 lib_surface
-                    .submodule_type_decls
-                    .iter()
+                    .published_type_decls()
                     .filter_map(|(source, item)| {
                         Some((lib_type_decl_name(item)?, source.to_string()))
                     }),
@@ -1414,18 +1426,13 @@ fn compile_after_load<H: CompilerHost>(
             .into_iter()
             .flat_map(|module| &module.items)
             .filter(|item| lib_type_decl_name(item).is_some())
-            .chain(
-                lib_surface
-                    .submodule_type_decls
-                    .iter()
-                    .map(|(_, item)| item),
-            );
+            .chain(lib_surface.published_type_decls().map(|(_, item)| item));
         let binder = LibTypeBinder::new(resolutions, registry, fq, &sem.modules, published);
         let mut entry = entry.cloned();
         for item in entry.iter_mut().flat_map(|module| &mut module.items) {
             binder.bind_item(item);
         }
-        for (_, item) in &mut lib_surface.submodule_type_decls {
+        for (_, item) in lib_surface.published_type_decls_mut() {
             binder.bind_item(item);
         }
         for export in &mut lib_surface.submodule_exports {
@@ -1578,7 +1585,7 @@ fn compile_after_load<H: CompilerHost>(
         let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
-        registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
+        registry.register_lib_local_items(lib_surface.published_type_decls(), fq);
         // Guest effect interfaces left unhandled at the boundary become CM
         // imports the consumer satisfies — from the entry module and every
         // submodule, since a library spreads its effects (like its types).
