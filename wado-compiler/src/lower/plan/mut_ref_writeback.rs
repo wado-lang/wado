@@ -413,7 +413,7 @@ impl WriteBack<'_> {
         *expr = self.bind(prefix, "place_", value, false, skip_copy).read();
     }
 
-    /// `{ let t = place; let b = t; let r = f(&mut t); if t !== b { place = t }; r }`
+    /// `{ let t = place; let b = t; let r = f(&mut t); if t !== b { let m = t; place = m }; r }`
     /// — the call keeps its position, so a `?` on it still sees the write-back
     /// run first.
     fn wrap(&mut self, call: &mut TirExpr) {
@@ -582,9 +582,8 @@ impl WriteBack<'_> {
             // An identity witness, never a copy: a copy would make every call
             // look like a whole-value write.
             let before = self.bind(&mut prefix, "before_", temp.read(), false, true);
-            // The store is the temp's last read, so it hands the storage over:
-            // a copy would duplicate the whole payload, which a decoder filling
-            // a message field in place grows to the whole message.
+            // The store is the temp's last read, so it hands the storage over
+            // rather than copying the whole payload.
             let mut store_back: Vec<TirStmt> = Vec::new();
             let moved = self.bind(&mut store_back, "moved_", temp.read(), false, true);
             store_back.push(TirStmt::new(
