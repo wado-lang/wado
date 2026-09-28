@@ -1057,6 +1057,14 @@ test "a symbolic integer cast to int32 wraps as the run does, where an extent ca
     assert checked.known["W"].elements == Elements::integers([Poly::symbol(&"N")]);
 }
 
+test "a string attribute an operator reads as a number stops the build" {
+    let source = `g (float[2, 3] X) => (float[2, 3] Y) {
+        Y = Softmax <axis = "1"> (X)
+    }`;
+    assert y_axes(source, [rule("*", ["A", "B"])]).unwrap_err()
+        == "Y = Softmax: attribute axis holds strings, and the operator reads numbers";
+}
+
 test "a ConstantOfShape whose shape a kernel computes stops the build" {
     let source = `g (float[1] X) => (float[?] Y) {
         S = Cast <to = 7> (X)

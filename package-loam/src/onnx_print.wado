@@ -168,7 +168,8 @@ fn attr_value(node: &Node, a: &Attr) -> Result<String, PrintError> {
     }
     let mut values: List<String> = [];
     for let v of a.values {
-        if is_number(&v) || is_float_word(&v) {
+        if !a.is_string {
+            assert is_number(&v) || is_float_word(&v);
             values.push(v);
         } else if v.contains("\"") {
             return Result::Err(refused(`attribute ${a.name} holds a quote, which the grammar cannot spell`));

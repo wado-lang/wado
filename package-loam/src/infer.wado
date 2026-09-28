@@ -1284,17 +1284,13 @@ pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
     }
     let mut perm: List<i32> = [];
     let mut taken: List<bool> = List::filled(rank, false);
-    for let text of attr.values {
-        let Ok(axis) = i32::from_str(&text) else {
-            builtin::cold_path();
-            return Result::Err(attribute_error(node, "perm", `holds '${text}', which is not an axis`));
-        };
-        if !(0 <= axis < rank) || taken[axis] {
+    for let axis of attr_read(node, attr.ints())? {
+        if !(0 <= axis < rank as i64) || taken[axis as i32] {
             builtin::cold_path();
             return Result::Err(attribute_error(node, "perm", `is not a permutation of ${rank} axes`));
         }
-        taken[axis] = true;
-        perm.push(axis);
+        taken[axis as i32] = true;
+        perm.push(axis as i32);
     }
     return Result::Ok(perm);
 }

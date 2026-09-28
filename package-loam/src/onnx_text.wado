@@ -445,10 +445,16 @@ fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<
     };
     if let Some(list) = first_child_of_kind(s, value, onnx::RK_ATTR_VALUE_LIST) {
         let mut values: List<String> = [];
+        let mut strings = 0;
         for let c of children_of_kind(s, list, onnx::RK_SINGLE_ATTR_VALUE) {
-            values.push(single_attr_text(s, toks, c, &name)?);
+            let [text, is_string] = single_attr_text(s, toks, c, &name)?;
+            values.push(text);
+            strings += is_string as i32;
         }
-        return Result::Ok(Attr { name, values, is_list: true });
+        if strings != 0 && strings != values.len() {
+            return Result::Err(`${name}: a list mixing strings and numbers`);
+        }
+        return Result::Ok(Attr { name, values, is_list: true, is_string: strings > 0 });
     }
     let Some(single) = first_child_of_kind(s, value, onnx::RK_SINGLE_ATTR_VALUE) else {
         return Result::Err(`${name}: an attribute without a value`);
@@ -456,23 +462,26 @@ fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<
     if let Some(tensor) = first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) {
         return read_tensor_attr(s, toks, tensor, name);
     }
-    let text = single_attr_text(s, toks, single, &name)?;
+    let [text, is_string] = single_attr_text(s, toks, single, &name)?;
     return Result::Ok(Attr {
         name,
         values: [text],
         is_list: false,
+        is_string,
     });
 }
 
+/// A single attribute value's text, and whether it is a string.
 fn single_attr_text(
     s: &onnx::CstStore,
     toks: &onnx::TokenStream,
     single: i32,
     attr_name: &String,
-) -> Result<String, String> {
+) -> Result<[String, bool], String> {
     for let c of children(s, single) {
         if s.is_token(c) {
-            return literal_text(toks, s.token_index(c), attr_name);
+            let token = s.token_index(c);
+            return Result::Ok([literal_text(toks, token, attr_name)?, toks.kind_at(token) == onnx::TK_STRING]);
         }
         if s.is_node(c) {
             if first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) matches { Some(_) } {

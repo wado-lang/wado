@@ -257,7 +257,8 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
         _ => {
         },
     }
-    return Result::Ok(Attr { name, values, is_list });
+    let is_string = a.type matches { Some(onnx::AttributeProtoAttributeType::String | onnx::AttributeProtoAttributeType::Strings) };
+    return Result::Ok(Attr { name, values, is_list, is_string });
 }
 
 fn read_node(n: &onnx::NodeProto) -> Result<Node, String> {

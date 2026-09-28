@@ -230,12 +230,15 @@ impl Known {
     }
 }
 
-/// An attribute's values as written, since ONNX types one by the operator
-/// rather than the syntax. A tensor has no text form and travels in `tensor`.
+/// An attribute's values as written, each number or string as its text. A
+/// tensor has no text form and travels in `tensor`.
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
     pub is_list: bool,
+    /// Whether the values are strings rather than numbers, which their text
+    /// alone does not tell where a string reads as `3` or `inf`.
+    pub is_string: bool = false,
     pub tensor: Option<Known> = null,
 }
 
@@ -258,7 +261,7 @@ impl Attr {
     /// Every value read as an integer.
     pub fn ints(&self) -> Result<List<i64>, AttrError> {
         let mut values: List<i64> = [];
-        for let text of self.values {
+        for let text of self.numbers()? {
             values.push(int_of(&text).map_err(|reason| self.error(reason))?);
         }
         return Result::Ok(values);
@@ -267,7 +270,7 @@ impl Attr {
     /// `ints` for a float attribute.
     pub fn floats(&self) -> Result<List<f32>, AttrError> {
         let mut values: List<f32> = [];
-        for let text of self.values {
+        for let text of self.numbers()? {
             values.push(float_of(&text).map_err(|reason| self.error(reason))?);
         }
         return Result::Ok(values);
@@ -284,10 +287,19 @@ impl Attr {
     }
 
     fn one_value(&self) -> Result<String, AttrError> {
-        if self.values.len() != 1 {
+        let values = self.numbers()?;
+        if values.len() != 1 {
             return Result::Err(self.error("is a list and the operator reads one value"));
         }
-        return Result::Ok(self.values[0]);
+        return Result::Ok(values[0]);
+    }
+
+    /// The values, which an operator reads as numbers.
+    fn numbers(&self) -> Result<List<String>, AttrError> {
+        if self.is_string {
+            return Result::Err(self.error("holds strings, and the operator reads numbers"));
+        }
+        return Result::Ok(self.values);
     }
 
     fn error(&self, reason: String) -> AttrError {

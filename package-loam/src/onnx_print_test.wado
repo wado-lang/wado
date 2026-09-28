@@ -27,6 +27,17 @@ test "a graph carrying every form the reader takes prints as itself" {
     assert round_trip(&g) == g;
 }
 
+test "a string attribute that reads as a number prints quoted" {
+    let g = read(
+        `g (float[1] X) => (float[1] Y) {
+            Y = com.example.Op <mode = "inf", tag = "3", names = ["1", "nan"], alpha = inf, n = 3> (X)
+        }`,
+    ).unwrap();
+    let text = print(&g).unwrap();
+    assert text.contains(`<mode = "inf", tag = "3", names = ["1", "nan"], alpha = inf, n = 3>`), text;
+    assert round_trip(&g) == g;
+}
+
 test "a half initializer prints as its bit patterns" {
     let g = read(`g (float16[2] X) => (float16[2] Y) <float16[2] W = {15360, 2049}> { Y = Add(X, W) }`).unwrap();
     assert round_trip(&g) == g;

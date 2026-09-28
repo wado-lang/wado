@@ -115,14 +115,14 @@ pub fn ints(node: &Node, name: String, count: i32, least: i32) -> Result<List<i3
         });
     }
     let mut values: List<i32> = [];
-    for let text of attr.values {
-        let Ok(v) = i32::from_str(&text) else {
-            return Result::Err(AttrError { attr: name, reason: `holds '${text}', which is not an integer` });
-        };
-        if v < least {
+    for let v of attr.ints()? {
+        if v < least as i64 {
             return Result::Err(AttrError { attr: name, reason: `holds ${v}, below ${least}` });
         }
-        values.push(v);
+        if v > i32::MAX as i64 {
+            return Result::Err(AttrError { attr: name, reason: `holds ${v}, past i32::MAX` });
+        }
+        values.push(v as i32);
     }
     return Result::Ok(values);
 }
