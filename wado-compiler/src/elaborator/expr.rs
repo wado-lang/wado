@@ -4117,7 +4117,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // are all that module's.
                 let walk = DefaultWalk {
                     site: Some(struct_lit.id),
-                    home: Some(struct_module_source.clone()),
+                    home: Some(struct_module_source),
                     bindings,
                     written: Vec::new(),
                     defaults,

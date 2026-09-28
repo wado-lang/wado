@@ -6560,13 +6560,11 @@ impl TypeTable {
         binding: &mut TargetBinding,
     ) -> bool {
         if let Some(slot) = self.param_slot(written) {
-            return match binding.slots.get(&slot) {
-                Some(&prior) => self.agree(prior, concrete, open, binding),
-                None => {
-                    binding.slots.insert(slot, concrete);
-                    true
-                }
-            };
+            if let Some(&prior) = binding.slots.get(&slot) {
+                return self.agree(prior, concrete, open, binding);
+            }
+            binding.slots.insert(slot, concrete);
+            return true;
         }
         if open(concrete) {
             return !self.contains_type_param(written)
