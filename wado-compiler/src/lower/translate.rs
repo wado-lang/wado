@@ -398,13 +398,15 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
-        // functions (scalar/reference-only) hit this path.
+        // functions (scalar/reference-only) hit this path. A borrowed local is
+        // already retyped to its box, and the value it holds is what counts.
         let needs_copy_analysis = {
             let tt = base.type_table.borrow();
             func.params
                 .iter()
                 .map(|p| p.type_id)
                 .chain(func.locals.iter().map(|l| l.type_id))
+                .map(|tid| base.box_plan.get_box_inner_type(tid).unwrap_or(tid))
                 .any(|tid| value_copy::needs_value_copy(tid, &tt))
         };
         // One resolver for the body, shared by every question about what an

@@ -1,0 +1,77 @@
+// A local whose borrows have all ended moves at its final read like any other.
+// One a borrow still reaches keeps its copy, whether a local, a struct field, or
+// a callee holds that borrow.
+
+use { println, Stdout } from "core:cli";
+
+struct Graph {
+    data: List<i32> = [],
+}
+
+struct Model {
+    graph: Option<Graph> = null,
+}
+
+#[inline("never")]
+fn fill(slot: &mut Option<Graph>) {
+    *slot = Option::Some(Graph { data: [1] });
+}
+
+#[inline("never")]
+fn refill(m: &mut Model) {
+    let mut t = m.graph;
+    fill(&mut t);
+    m.graph = t;
+}
+
+struct View {
+    items: &mut List<i32>,
+}
+
+#[inline("never")]
+fn borrow_held_in_a_local() with Stdout {
+    let mut t: List<i32> = [1];
+    let r = &mut t;
+    let u = t;
+    r.push(2);
+    println(`${u:?}`);
+}
+
+#[inline("never")]
+fn borrow_held_in_a_struct() with Stdout {
+    let mut t: List<i32> = [1];
+    let v = View { items: &mut t };
+    let u = t;
+    v.items.push(2);
+    println(`${u:?}`);
+}
+
+#[inline("never")]
+fn keep(items: &mut List<i32>) -> View {
+    return View { items };
+}
+
+#[inline("never")]
+fn borrow_held_by_a_callee() with Stdout {
+    let mut t: List<i32> = [1];
+    let v = keep(&mut t);
+    let u = t;
+    v.items.push(2);
+    println(`${u:?}`);
+}
+
+export fn run() with Stdout {
+    let mut m = Model {};
+    refill(&mut m);
+    println(`${m.graph:?}`);
+    borrow_held_in_a_local();
+    borrow_held_in_a_struct();
+    borrow_held_by_a_callee();
+}
+
+__DATA__
+{
+    "stdout": "Option::Some(Graph { data: [1] })\n[1]\n[1]\n[1]\n",
+    "wir_expect:O0": ["m.graph = t.value;"],
+    "wir_expect:O2": ["m.graph = t.value;"]
+}
