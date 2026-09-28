@@ -50,8 +50,9 @@ a list of PRs is deciding whether to care.
 
 `<type>(<scope>): <the value>`
 
-If the value is a number, put the number in. Name two things if two are worth
-it, on the same line. If there are more, name the largest and leave the rest to
+Leave numbers out of the title: they belong in the description, beside what
+they were measured against. Name two things if two are worth it, on the same
+line. If there are more, name the largest and leave the rest to
 the description.
 
 `type` is `feat`, `fix`, `docs`, `perf`, `refactor` or `chore`, with `!` for a
