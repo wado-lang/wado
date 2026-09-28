@@ -290,11 +290,17 @@ pub fn zip_at<..Pre, ..Mid, ..Post>(
     trailing: i32,
     op: fn(f32, f32) -> f32,
 ) -> Tensor<f32, [..Pre, ..Mid, ..Post]> {
-    let mut b_extents = b.extents;
-    for let _ of 0..<trailing {
-        b_extents.push(1);
+    return stretched_zip(a.data, a.extents, b.data, followed_by_units(&b.extents, trailing), op);
+}
+
+/// `extents` followed by `count` extents of 1, which broadcasting from the end
+/// stretches across the axes they stand for.
+pub fn followed_by_units(extents: &List<i32>, count: i32) -> List<i32> {
+    let mut out = *extents;
+    for let _ of 0..<count {
+        out.push(1);
     }
-    return stretched_zip(a.data, a.extents, b.data, b_extents, op);
+    return out;
 }
 
 fn ends_with(whole: &List<i32>, suffix: &List<i32>) -> bool {

@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
-import { FLOAT, INT32, INT64, modelProto, node, nodeProto, tensorProto, text, valueInfo } from '../tests/onnx_proto.mjs';
+import { FLOAT, INT32, INT64, graphProto, modelProto, node, tensorProto, valueInfo } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
 
@@ -127,19 +127,20 @@ const inputs = {
 };
 const iota = (count) => Float32Array.from({ length: count }, (_, i) => i);
 
-// GraphProto: node = 1, name = 2, initializer = 5, input = 11, output = 12.
 function model(name, nodes) {
   const read = new Set(nodes.flatMap((n) => n.inputs));
   const all = read.has('S') ? [node('Shape', ['X'], 'S'), ...nodes] : nodes;
   const elemType = ['Range', 'Cast'].includes(nodes.at(-1).op) ? INT64 : FLOAT;
-  const graph = [
-    ...all.map((n) => [1, nodeProto(n)]),
-    [2, text(name)],
-    ...Object.entries(constants).filter(([c]) => read.has(c)).map(([c, v]) => [5, int64Initializer(c, v, [1])]),
-    ...Object.entries(scalars).filter(([c]) => read.has(c)).map(([c, v]) => [5, int64Initializer(c, v, [])]),
-    ...Object.entries(inputs).filter(([i]) => all.some((n) => n.inputs.includes(i))).map(([i, { dims }]) => [11, valueInfo(i, FLOAT, dims)]),
-    [12, valueInfo(name, elemType, null)],
-  ];
+  const graph = graphProto({
+    name,
+    nodes: all,
+    initializers: [
+      ...Object.entries(constants).filter(([c]) => read.has(c)).map(([c, v]) => int64Initializer(c, v, [1])),
+      ...Object.entries(scalars).filter(([c]) => read.has(c)).map(([c, v]) => int64Initializer(c, v, [])),
+    ],
+    inputs: Object.entries(inputs).filter(([i]) => all.some((n) => n.inputs.includes(i))).map(([i, { dims }]) => valueInfo(i, FLOAT, dims)),
+    outputs: [valueInfo(name, elemType, null)],
+  });
   return modelProto(graph, 13);
 }
 

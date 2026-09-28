@@ -57,8 +57,8 @@ struct Derivation {
 /// A factor a term multiplies: a length an input carries, or a value `forward`
 /// derives from others by an operation no polynomial expresses.
 struct Symbol {
-    /// The symbol as a message writes it. A derived one is written from its
-    /// operation and its operands, each in canonical form, so the name
+    /// An input symbol's `dim_param`, or a derived one as a message writes it:
+    /// from its operation and its operands, each in canonical form, so the name
     /// identifies it wherever it was derived.
     name: String,
     derivation: Option<Derivation>,
@@ -197,10 +197,7 @@ impl Derivation {
                 }
                 // A dividend without a bound on one side leaves the quotient none.
                 let [q_low, q_high] = span(corners);
-                [
-                    if low == -REACH_LIMIT { low } else { q_low },
-                    if high == REACH_LIMIT { high } else { q_high },
-                ];
+                [if low == -REACH_LIMIT { low } else { q_low }, if high == REACH_LIMIT { high } else { q_high }];
             },
             // The index where it is not negative, and past it the extent's reach.
             FromEnd => {
@@ -267,12 +264,13 @@ fn floor_at_most(a: &Poly, d: &Poly, x: &Poly, budget: &mut i32) -> Option<bool>
 }
 
 /// An input symbol's name as a message writes it: quoted unless it is an
-/// identifier, since a `dim_param` is any text. A derived symbol's name is its
-/// identity, which needs the one text each name writes to be its own.
+/// identifier, since a `dim_param` is any text, so that a derived symbol's
+/// name, which is its identity, reads as no other's.
 fn quoted(name: &String) -> String {
     let mut chars = name.chars();
     let identifier = match chars.next() {
-        Some(first) => (first.is_ascii_alphabetic() || first == '_') && chars.all(|c| c.is_ascii_alphanumeric() || c == '_'),
+        Some(first) => (first.is_ascii_alphabetic() || first == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_'),
         None => false,
     };
     return if identifier { *name } else { `${*name:?}` };
@@ -571,7 +569,7 @@ impl Poly {
                 match Poly::constant(0).try_sub(&rest) {
                     Some(floor) => d.at_least(&floor, budget),
                     None => false,
-                };
+                }
             } else {
                 d.at_most(&rest, budget);
             };
@@ -762,8 +760,8 @@ fn without(whole: &List<Symbol>, part: &List<Symbol>) -> Option<List<Symbol>> {
 
 impl Poly {
     /// The polynomial as an arithmetic expression, each input symbol spelled as
-    /// `names` maps it, or as itself where it maps none, and each derived one
-    /// as the runtime computes it.
+    /// `names` maps it, which it must, and each derived one as the runtime
+    /// computes it.
     pub fn spelled(&self, names: &TreeMap<String, String>) -> String {
         return self.written(names, true);
     }
@@ -791,7 +789,7 @@ impl Poly {
             for let s of t.symbols {
                 factors.push(match s.derivation {
                     Some(d) => d.written(names, code),
-                    None => names.get(s.name).unwrap_or(quoted(&s.name)),
+                    None => if code { names.get(s.name).unwrap() } else { quoted(&s.name) },
                 });
             }
             out.push_str(&factors.join(" * "));

@@ -90,6 +90,19 @@ export function nodeProto({ op, inputs, outputs, attrs }) {
 }
 
 // ModelProto: ir_version = 1, graph = 7, opset_import = 8 (version = 2).
+// GraphProto: node = 1, name = 2, initializer = 5, input = 11, output = 12.
+// Each list holds messages already encoded as fields: `nodeProto`s,
+// `tensorProto`s and `valueInfo`s.
+export function graphProto({ name, nodes, initializers, inputs, outputs }) {
+  return [
+    ...nodes.map((n) => [1, nodeProto(n)]),
+    [2, text(name)],
+    ...initializers.map((t) => [5, t]),
+    ...inputs.map((v) => [11, v]),
+    ...outputs.map((v) => [12, v]),
+  ];
+}
+
 export function modelProto(graph, opset) {
   return message([[1, 8], [7, graph], [8, [[2, opset]]]]);
 }

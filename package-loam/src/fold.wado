@@ -9,6 +9,7 @@ use {
     broadcast_extents,
     checked_element_count,
     element_count,
+    followed_by_units,
     from_end,
     stretched_strides,
 } from "./runtime/tensor.wado";
@@ -689,11 +690,7 @@ fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
 /// B's extents, followed by an extent of 1 for each of A's axes after it where
 /// the node aligns B at an axis, so that broadcasting from the end stretches it.
 fn aligned_extents(node: &Node, a: &List<i32>, b: &List<i32>) -> Result<List<i32>, String> {
-    let mut extents = *b;
-    for let _ of 0..<trailing_axes(node, a.len(), b.len())? {
-        extents.push(1);
-    }
-    return Result::Ok(extents);
+    return Result::Ok(followed_by_units(b, trailing_axes(node, a.len(), b.len())?));
 }
 
 /// Integer arithmetic, where a symbol may stand for an operand, as the node
@@ -838,6 +835,12 @@ pub fn axes_of(
     return a.ints().map(|v| Option::Some(v)).map_err(|e| `${e}`);
 }
 
+/// The integers operand `index` holds, which the operator requires and the
+/// build must know, symbolic or not.
+pub fn operand_polys(node: &Node, known: &TreeMap<String, Known>, index: i32) -> Result<List<Poly>, String> {
+    return polys_of(&operand_known(node, known, index)?);
+}
+
 /// `axes_of` for an operand that may hold a symbol: a `Reshape` target, or a
 /// `Slice` bound.
 pub fn polys_at(
@@ -847,7 +850,7 @@ pub fn polys_at(
     attr: String,
 ) -> Result<Option<List<Poly>>, String> {
     if index < node.inputs.len() && node.inputs[index] != "" {
-        return polys_of(&operand_known(node, known, index)?).map(|v| Option::Some(v));
+        return operand_polys(node, known, index).map(|v| Option::Some(v));
     }
     return axes_of(node, known, index, attr).map(
         |read| read.map(|v| v.into_iter().map(|c| Poly::constant(c)).collect()),

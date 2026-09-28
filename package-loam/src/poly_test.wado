@@ -90,11 +90,21 @@ test "a polynomial renders highest degree first, the constant last" {
     assert `${c(i64::MIN)}` == "-9223372036854775808";
 }
 
-test "a polynomial spells each symbol as the generated module binds it" {
+/// Each symbol `p` reads, bound under its own name.
+fn as_named(p: &Poly) -> TreeMap<String, String> {
     let mut names = TreeMap::<String, String>::new();
-    names["past + 1"] = "past_1";
+    for let symbol of p.symbols() {
+        names[symbol] = symbol;
+    }
+    return names;
+}
+
+test "a polynomial spells each symbol as the generated module binds it" {
     let p = plus(times(s("past + 1"), c(2)), s("seq"));
+    let mut names = as_named(&p);
+    names["past + 1"] = "past_1";
     assert p.spelled(&names) == "2 * past_1 + seq";
+    assert `${p}` == "2 * \"past + 1\" + seq";
 }
 
 test "the symbols a polynomial reads are listed once each" {
@@ -230,7 +240,7 @@ test "a rounded quotient is exact where the build can show it" {
     assert minus(n, half).is_nonnegative();
     let low = Poly::floor_div(&n, &c(2), &ORIGIN);
     assert `${low}` == "floor(N / 2)";
-    assert low.spelled(&TreeMap::<String, String>::new()) == "floor_div(N, 2)";
+    assert low.spelled(&as_named(&low)) == "floor_div(N, 2)";
     assert minus(n, low).is_nonnegative();
 }
 
@@ -241,7 +251,7 @@ test "a quotient by a symbol the inputs make positive is bounded by the divisor'
     ];
     let q = Poly::ceil_div(&plus(n, c(1)), &plus(m, c(1)), &ORIGIN);
     assert `${q}` == "ceil((N + 1) / (M + 1))";
-    assert q.spelled(&TreeMap::<String, String>::new()) == "ceil_div(N + 1, M + 1)";
+    assert q.spelled(&as_named(&q)) == "ceil_div(N + 1, M + 1)";
     assert q.is_nonnegative();
     assert minus(plus(n, c(1)), q).is_nonnegative();
     let mut conditions: List<Condition> = [];
@@ -262,7 +272,7 @@ test "an int32 keeps a value it holds for every input, and wraps one it may not"
     assert Poly::wrapped32(&c(3_000_000_000), &ORIGIN) == c(-1_294_967_296);
     let wrapped = Poly::wrapped32(&times(n, c(3_000_000_000)), &ORIGIN);
     assert `${wrapped}` == "wrap32(3000000000 * N)";
-    assert wrapped.spelled(&TreeMap::<String, String>::new()) == "((3000000000 * N) as i32 as i64)";
+    assert wrapped.spelled(&as_named(&wrapped)) == "((3000000000 * N) as i32 as i64)";
     assert !wrapped.is_nonnegative();
 }
 

@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
 import {
-  BFLOAT16, BOOL, FLOAT, FLOAT16, INT32, INT64, f32, modelProto, node, nodeProto, tensorProto, text, valueInfo,
+  BFLOAT16, BOOL, FLOAT, FLOAT16, INT32, INT64, f32, graphProto, modelProto, node, tensorProto, valueInfo,
 } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
@@ -376,15 +376,14 @@ const feed = (type, dims, values) => type === FLOAT
   ? new ort.Tensor('float32', Float32Array.from(values), dims)
   : new ort.Tensor('int64', BigInt64Array.from(values), dims);
 
-// GraphProto: node = 1, name = 2, initializer = 5, input = 11, output = 12.
 function model({ name, inputs, inits, nodes, out, opset }) {
-  const graph = [
-    ...nodes.map((n) => [1, nodeProto(n)]),
-    [2, text(name)],
-    ...Object.entries(inits).map(([i, t]) => [5, tensorProto(i, t.type, t.dims, raw(t.type, t.values))]),
-    ...Object.entries(inputs).map(([i, t]) => [11, valueInfo(i, t.type, t.dims)]),
-    [12, valueInfo('Y', out, null)],
-  ];
+  const graph = graphProto({
+    name,
+    nodes,
+    initializers: Object.entries(inits).map(([i, t]) => tensorProto(i, t.type, t.dims, raw(t.type, t.values))),
+    inputs: Object.entries(inputs).map(([i, t]) => valueInfo(i, t.type, t.dims)),
+    outputs: [valueInfo('Y', out, null)],
+  });
   return modelProto(graph, opset);
 }
 

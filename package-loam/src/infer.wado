@@ -12,6 +12,7 @@ use {
     fill_of,
     fits,
     fold,
+    operand_polys,
     polys_at,
     regrouped_extents,
     slice_bounds,
@@ -959,9 +960,7 @@ fn filled(
     schema: &Schema,
     owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
-    let Some(written) = polys_at(node, known, 0, "shape").map_err(|reason| refusal(node, reason))? else {
-        return Result::Err(refusal(node, "the shape is absent"));
-    };
+    let written = operand_polys(node, known, 0).map_err(|reason| refusal(node, reason))?;
     let mut extents: List<Extent> = [];
     for let e of written {
         owe(node, owed, e, `the shape's ${e} must not be negative`)?;
@@ -1011,9 +1010,7 @@ pub fn range_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<[Poly
     let mut bounds: List<Poly> = [];
     let operands: List<String> = ["start", "limit", "delta"];
     for let [i, operand] of operands.into_iter().enumerate() {
-        let Some(values) = polys_at(node, known, i, operand).map_err(|reason| refusal(node, reason))? else {
-            return Result::Err(refusal(node, `${operand} is absent`));
-        };
+        let values = operand_polys(node, known, i).map_err(|reason| refusal(node, reason))?;
         if values.len() != 1 {
             return Result::Err(refusal(node, `${operand} is not one integer`));
         }

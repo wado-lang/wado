@@ -84,7 +84,9 @@ impl Display for EmitError {
             Dtype(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
-            Unbound(symbol) => f.write_str(`${symbol}: the run needs this length, and no input's axis gives it`),
+            Unbound(symbol) => {
+                f.write_str(`${Poly::symbol(symbol)}: the run needs this length, and no input's axis gives it`);
+            },
             Wide(p) => f.write_str(`${p}: the run computes this in i64, and some input carries it past`),
         }
     }
@@ -1169,7 +1171,9 @@ fn window_call(
     let turbofish = `::<${x.axes[0].name}, ${channels}, ${w.axes[0].name}, ${spatial}>`;
     let weight = exprs.reference(&node.inputs[1]);
     if has_bias(node) {
-        let outputs = Shape { axes: [w.axes[0]] };
+        let outputs = Shape {
+            axes: [w.axes[0]],
+        };
         let bias = under_axes_of(
             &exprs.reference(&node.inputs[2]),
             &shapes.get(node.inputs[2]).unwrap(),
@@ -1286,7 +1290,12 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
 /// A `Gemm` operand of axes `shape`, and those axes, transposed where `flag` says.
 fn transposed(operand: &String, shape: &Shape, flag: bool) -> [String, Shape] {
     if flag {
-        return [`&transpose2(${operand})`, Shape { axes: [shape.axes[1], shape.axes[0]] }];
+        return [
+            `&transpose2(${operand})`,
+            Shape {
+                axes: [shape.axes[1], shape.axes[0]],
+            },
+        ];
     }
     return [*operand, *shape];
 }
@@ -1317,8 +1326,9 @@ fn is_identity(perm: &List<i32>) -> bool {
 }
 
 /// Whether one axis of a kernel's signature can stand for both of these. Stage
-/// 0 stretches an extent of 1 and `matmul` does not, so the name is not enough;
-/// a condition stage 0 owed for the two to meet is one `forward` checks.
+/// 0 stretches an extent of 1 and a kernel taking one type for both does not,
+/// so the name is not enough; a condition stage 0 owed for the two to meet is
+/// one `forward` checks.
 fn same_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name && left.extent.agreement(&right.extent) matches { Some(_) };
 }

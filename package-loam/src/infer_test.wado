@@ -1066,8 +1066,7 @@ test "a ConstantOfShape whose shape a kernel computes stops the build" {
         rule("X", ["Len"]),
         rule("Y", ["Pos"]),
     ];
-    assert y_axes(source, layout).unwrap_err()
-        == "Y = ConstantOfShape: operand S is computed at run time, and the build reads it";
+    assert y_axes(source, layout).unwrap_err() == "Y = ConstantOfShape: operand S is computed at run time, and the build reads it";
 }
 
 test "a Range the run computes, longer than any list, stops the build" {
