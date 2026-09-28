@@ -80,7 +80,7 @@ impl CalleeSignature {
     fn of(decl: &DeclSig) -> Self {
         Self {
             param_types: decl.param_types.clone(),
-            slots: decl.type_params.iter().map(|(_, id)| *id).collect(),
+            slots: decl.type_param_ids(),
             return_type: decl.return_type,
         }
     }
@@ -3598,7 +3598,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (vec![], vec![]);
         }
 
-        let all_param_ids: Vec<TypeId> = sig.decl.type_params.iter().map(|(_, id)| *id).collect();
+        let all_param_ids = sig.decl.type_param_ids();
         let decl_return_type = sig.decl.return_type;
 
         // `args` are the arguments as written, so they begin with the receiver
