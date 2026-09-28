@@ -121,6 +121,21 @@ has three consequences:
 `id` is local to a module. After link, each module's ids are offset by the
 count before it, so a probe carries one global index.
 
+### A region its children account for takes no probe
+
+A region needs no probe of its own when every run of it enters one of its
+probed child regions. The common case is a body that reaches an `if` or a
+`match` before anything that can leave it early: every run takes one branch,
+and every branch is a region, including an `else` the source omits. The body
+ran exactly when one of its branches ran.
+
+The plan marks such a region as derived and names the children it derives
+from. Reify inserts no probe for it, and the runner reports it as run when any
+of those children ran. A child may itself be derived.
+
+A trap between the start of the region and the choice is the one case the
+derivation gets wrong: the region ran, but reports as not run.
+
 ### The stdlib snapshot is built once per instrumentation
 
 Each worker thread elaborates the standard library once and seeds every compile
@@ -302,6 +317,9 @@ host call on every run is too slow for loops.
 6. [ ] The standard library: the snapshot keyed by instrumentation,
        `--coverage-baseline`, and the CI job with its first baseline.
 7. [ ] 100% for the standard library: the baseline emptied.
+8. [ ] Derived regions: the plan marks them, reify leaves them without a probe,
+       and the runner derives them. The `-O0`/`-O3` check and the fixtures pass
+       unchanged, and the probes saved on the standard library are measured.
 
 ## Known gaps
 
@@ -309,6 +327,8 @@ host call on every run is too slow for loops.
       statement that can leave its block starts a new region, and any call can
       trap. A 100% report can therefore include a statement no test ran to its
       end.
+- [ ] A trap before a derived region reaches its choice marks the region as not
+      run, though it ran.
 - [ ] Hit or not only, no execution counts. `FNDA` and `DA` report `1` or `0`.
 - [ ] `core:allocator` is not measured. Its tests are e2e fixtures, which
       `wado test` does not run.
