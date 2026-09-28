@@ -578,7 +578,8 @@ fn array_read_of_candidate(
         | CtfeBuiltin::ArrayClonePrefix
         | CtfeBuiltin::ColdPath
         | CtfeBuiltin::Select
-        | CtfeBuiltin::I32AsChar => None,
+        | CtfeBuiltin::I32AsChar
+        | CtfeBuiltin::HeapBase(_) => None,
     }
 }
 

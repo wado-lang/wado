@@ -29,14 +29,16 @@ pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) 
         }
         return 0;
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
-    let new_offset: i32 = (aligned + newsize);
-    if (new_offset > (core::builtin::memory_size() * 65536)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
-    return aligned;
+    return $unbroken_6: {
+        let start: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+        let end: i32 = (start + newsize);
+        if (end > (core::builtin::memory_size() * 65536)) {
+            core::builtin::cold_path();
+            core::allocator::grow_memory(end);
+        }
+        core::allocator::heap_offset = end;
+        start;
+    };
 }
 
 pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
@@ -46,14 +48,16 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
         }
         return 0;
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
-    let new_offset: i32 = (aligned + newsize);
-    if (new_offset > (core::builtin::memory_size() * 65536)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
-    return aligned;
+    return $unbroken_4: {
+        let start: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
+        let end: i32 = (start + newsize);
+        if (end > (core::builtin::memory_size() * 65536)) {
+            core::builtin::cold_path();
+            core::allocator::grow_memory(end);
+        }
+        core::allocator::heap_offset = end;
+        start;
+    };
 }
 
 fn fl_unlink(block: i32) {
@@ -121,7 +125,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
     let size: i32 = (core::builtin::i32_and((newsize + 15), -16) + 16);
     let k: i32 = ((size - 32) >> 4);
     let mut j: i32 = core::builtin::select::<i32>((k < 32), k, 32);
-    let $licm_arith_101: i32 = (size + 1);
+    let $licm_arith_105: i32 = (size + 1);
     loop {
         if !(j < 32) {
             break;
@@ -145,8 +149,8 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
             }
             let remainder: i32 = (block_size - size);
             if (remainder >= 32) {
-                core::builtin::i32_store(b, $licm_arith_101);
-                core::builtin::i32_store(((b + size) - 8), $licm_arith_101);
+                core::builtin::i32_store(b, $licm_arith_105);
+                core::builtin::i32_store(((b + size) - 8), $licm_arith_105);
                 let rest: i32 = (b + size);
                 core::builtin::i32_store(rest, remainder);
                 core::builtin::i32_store(((rest + remainder) - 8), remainder);
@@ -169,7 +173,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         j = (j + 1);
     }
     let mut curr: i32 = core::builtin::i32_load(136);
-    let $licm_arith_102: i32 = (size + 1);
+    let $licm_arith_106: i32 = (size + 1);
     loop {
         if !(curr != 0) {
             break;
@@ -192,8 +196,8 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
             }
             let remainder: i32 = (block_size - size);
             if (remainder >= 32) {
-                core::builtin::i32_store(curr, $licm_arith_102);
-                core::builtin::i32_store(((curr + size) - 8), $licm_arith_102);
+                core::builtin::i32_store(curr, $licm_arith_106);
+                core::builtin::i32_store(((curr + size) - 8), $licm_arith_106);
                 let rest: i32 = (curr + size);
                 core::builtin::i32_store(rest, remainder);
                 core::builtin::i32_store(((rest + remainder) - 8), remainder);
@@ -215,13 +219,16 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         }
         curr = core::builtin::i32_load((curr + 8));
     }
-    let block: i32 = core::allocator::heap_offset;
-    let new_offset: i32 = (block + size);
-    if (new_offset > (core::builtin::memory_size() * 65536)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
+    let block: i32 = $unbroken_64: {
+        let start: i32 = core::builtin::i32_and(((core::allocator::heap_offset + 1) - 1), -1);
+        let end: i32 = (start + size);
+        if (end > (core::builtin::memory_size() * 65536)) {
+            core::builtin::cold_path();
+            core::allocator::grow_memory(end);
+        }
+        core::allocator::heap_offset = end;
+        start;
+    };
     let tag: i32 = (size + 1);
     core::builtin::i32_store(block, tag);
     core::builtin::i32_store(((block + size) - 8), tag);

@@ -609,7 +609,10 @@ intrinsic or like another asset's export is still its own asset's function. An
 export spelled like a Wado keyword is imported under an alias
 (`use { resume as seven } from ...`).
 
-An asset is embedded in the output and shares the component's memory. It is
+An asset is embedded in the output and shares the component's memory. The
+memory's first pages, as many as the asset's own memory declares at minimum,
+are the asset's: they hold its data and, for a module a toolchain such as
+Rust's built, its stack. The allocator's heap starts past them. An asset is
 rejected at the import when it:
 
 - is not a valid module;

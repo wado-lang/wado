@@ -15,10 +15,19 @@
 /// The compiler selects one based on `--allocator` flag or target world,
 /// and DCE removes the unused implementations.
 
-/// Bump allocator heap pointer. Starts at 8 to avoid returning address 0 (null
-/// sentinel). The embedded wasm modules share this memory from address 0, so
-/// the compiler adds the size of the memory they reserve to this initial value.
+/// The heap frontier, as an offset from `builtin::heap_base()`. Starts at 8 to
+/// avoid returning address 0 (null sentinel).
 global mut heap_offset: i32 = 8;
+
+/// The address of the heap frontier.
+fn frontier() -> i32 {
+    return builtin::heap_base() + heap_offset;
+}
+
+/// Move the heap frontier to address `addr`.
+fn set_frontier(addr: i32) {
+    heap_offset = addr - builtin::heap_base();
+}
 
 /// The Wasm linear memory page size, the unit `memory.size` and `memory.grow` count in.
 global PAGE_SIZE: i32 = 65536;
@@ -40,6 +49,19 @@ fn grow_memory(new_offset: i32) {
     }
 }
 
+/// Take `size` bytes at the heap frontier, aligned to `align`, growing memory to
+/// fit them.
+fn bump(align: i32, size: i32) -> i32 {
+    let start = builtin::i32_and(frontier() + align - 1, 0 - align);
+    let end = start + size;
+    if end > builtin::memory_size() * PAGE_SIZE {
+        builtin::cold_path();
+        grow_memory(end);
+    }
+    set_frontier(end);
+    return start;
+}
+
 /// Bump allocator — advances a pointer with alignment.
 /// When newsize is 0 and the allocation was the most recent one, rewinds the heap pointer.
 /// Selected by `--allocator bump` (default for CLI/HTTP worlds).
@@ -47,23 +69,12 @@ fn grow_memory(new_offset: i32) {
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     // Free: rewind if this was the most recent allocation
     if newsize == 0 {
-        if oldptr + oldsize == heap_offset {
-            heap_offset = oldptr;
+        if oldptr + oldsize == frontier() {
+            set_frontier(oldptr);
         }
         return 0;
     }
-
-    let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
-    let new_offset = aligned + newsize;
-
-    if new_offset > builtin::memory_size() * PAGE_SIZE {
-        builtin::cold_path();
-        grow_memory(new_offset);
-    }
-
-    heap_offset = new_offset;
-
-    return aligned;
+    return bump(align, newsize);
 }
 
 /// Debug allocator — advances a pointer with alignment, never reuses freed memory.
@@ -78,18 +89,7 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
         }
         return 0;
     }
-
-    let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
-    let new_offset = aligned + newsize;
-
-    if new_offset > builtin::memory_size() * PAGE_SIZE {
-        builtin::cold_path();
-        grow_memory(new_offset);
-    }
-
-    heap_offset = new_offset;
-
-    return aligned;
+    return bump(align, newsize);
 }
 
 /// Free-list allocator — reclaims freed memory with a *coalescing*,
@@ -116,11 +116,10 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
 /// `realloc` is ever called with: Component Model alignments are all
 /// <= 8, and the widest Wasm alignment, `v128`, is 16.
 ///
-/// The 33 bin heads live in the first `4*33` bytes of the heap, reserved on
-/// first use. The heap starts at an address congruent to 8 (mod 16), so the
-/// first block starts `FL_TABLE_SPAN` bytes past it: the lowest address past
-/// the table with that congruence. Wasm memory is zero-initialised, so every
-/// bin head starts empty.
+/// The 33 bin heads live at heap offsets `[8, 8 + 4*33)`; the first block
+/// starts at heap offset 152 (the lowest offset past the bin-head table that
+/// is congruent to 8 mod 16, and `builtin::heap_base()` is a multiple of 16).
+/// Wasm memory is zero-initialised, so every bin head starts empty.
 ///
 /// Selected by `--allocator freelist` (default for HTTP service world).
 
@@ -144,21 +143,14 @@ fn fl_bin(size: i32) -> i32 {
     return if k < 32 { k } else { 32 };
 }
 
-/// Where the bin-head table starts, or 0 before the first call reserves it.
-global mut fl_table: i32 = 0;
-
-/// The bytes the bin-head table takes from the heap, padded so the first block
-/// keeps the heap start's congruence to 8 (mod 16).
-global FL_TABLE_SPAN: i32 = 144;
-
 /// Head of size-class bin `k` (0 when empty).
 fn fl_bin_head(k: i32) -> i32 {
-    return builtin::i32_load(fl_table + k * 4);
+    return builtin::i32_load(builtin::heap_base() + 8 + k * 4);
 }
 
 /// Set the head of size-class bin `k`.
 fn fl_set_bin_head(k: i32, head: i32) {
-    builtin::i32_store(fl_table + k * 4, head);
+    builtin::i32_store(builtin::heap_base() + 8 + k * 4, head);
 }
 
 /// Write the header and footer boundary tags of the block at `block`.
@@ -225,13 +217,13 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
 // Model alignments are all <= 8; the widest Wasm alignment, `v128`, is 16).
 #[allocator("freelist")]
 export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
-    if fl_table == 0 {
-        builtin::cold_path();
-        fl_table = heap_offset;
-        heap_offset += FL_TABLE_SPAN;
-        if heap_offset > builtin::memory_size() * PAGE_SIZE {
-            grow_memory(heap_offset);
-        }
+    // The shared `heap_offset` global starts at 8; on first use, reserve
+    // [8, 8 + 4*33) for the bin-head table and move the heap frontier to
+    // 152 — past the table and congruent to 8 mod 16, so payloads land
+    // 16-byte aligned. Wasm memory is zero-initialised, so the bins start
+    // empty.
+    if heap_offset < 152 {
+        heap_offset = 152;
     }
 
     if newsize == 0 {
@@ -249,7 +241,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
 
         // Coalesce with the physically-following block when it is free.
         let next = block + size;
-        if next < heap_offset {
+        if next < frontier() {
             let next_header = builtin::i32_load(next);
             if fl_used(next_header) == 0 {
                 fl_unlink(next);
@@ -257,9 +249,9 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
             }
         }
         // Coalesce with the physically-preceding block when it is free.
-        // A block past the first has a predecessor, whose footer is at
-        // `block - 8`.
-        if block > fl_table + FL_TABLE_SPAN {
+        // The first block sits at heap offset 152, so a block past it has a
+        // predecessor, and `block - 8` holds its footer.
+        if block > builtin::heap_base() + 152 {
             let prev_footer = builtin::i32_load(block - 8);
             if fl_used(prev_footer) == 0 {
                 let prev_size = fl_size(prev_footer);
@@ -306,14 +298,9 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
         curr = builtin::i32_load(curr + 8);
     }
 
-    // No fit: bump-allocate a fresh block at the heap frontier.
-    let block = heap_offset;
-    let new_offset = block + size;
-    if new_offset > builtin::memory_size() * PAGE_SIZE {
-        builtin::cold_path();
-        grow_memory(new_offset);
-    }
-    heap_offset = new_offset;
+    // No fit: bump-allocate a fresh block at the heap frontier, which keeps
+    // its congruence to 8 (mod 16) because every block size is a multiple of 16.
+    let block = bump(1, size);
     fl_set_tags(block, size, 1);
     return block + 8;
 }

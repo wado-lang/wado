@@ -2358,6 +2358,14 @@ pub enum ErrorCode {
     Pipe,
 }
 
+fn frontier() -> i32 {
+    return (core::builtin::heap_base() + core::allocator::heap_offset);
+}
+
+fn set_frontier(addr: i32) {
+    core::allocator::heap_offset = (addr - core::builtin::heap_base());
+}
+
 fn grow_memory(new_offset: i32) {
     let current_bytes: i32 = (core::builtin::memory_size() * core::allocator::PAGE_SIZE);
     let deficit: i32 = (new_offset - current_bytes);
@@ -2379,21 +2387,25 @@ fn grow_memory(new_offset: i32) {
     }
 }
 
+fn bump(align: i32, size: i32) -> i32 {
+    let start: i32 = core::builtin::i32_and(((core::allocator::frontier() + align) - 1), (0 - align));
+    let end: i32 = (start + size);
+    if (end > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
+        core::builtin::cold_path();
+        core::allocator::grow_memory(end);
+    }
+    core::allocator::set_frontier(end);
+    return start;
+}
+
 pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
-        if ((oldptr + oldsize) == core::allocator::heap_offset) {
-            core::allocator::heap_offset = oldptr;
+        if ((oldptr + oldsize) == core::allocator::frontier()) {
+            core::allocator::set_frontier(oldptr);
         }
         return 0;
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
-    let new_offset: i32 = (aligned + newsize);
-    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
-    return aligned;
+    return core::allocator::bump(align, newsize);
 }
 
 pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
@@ -2403,14 +2415,7 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
         }
         return 0;
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
-    let new_offset: i32 = (aligned + newsize);
-    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
-    return aligned;
+    return core::allocator::bump(align, newsize);
 }
 
 fn fl_size(tag: i32) -> i32 {
@@ -2431,11 +2436,11 @@ fn fl_bin(size: i32) -> i32 {
 }
 
 fn fl_bin_head(k: i32) -> i32 {
-    return core::builtin::i32_load((8 + (k * 4)));
+    return core::builtin::i32_load(((core::builtin::heap_base() + 8) + (k * 4)));
 }
 
 fn fl_set_bin_head(k: i32, head: i32) {
-    core::builtin::i32_store((8 + (k * 4)), head);
+    core::builtin::i32_store(((core::builtin::heap_base() + 8) + (k * 4)), head);
 }
 
 fn fl_set_tags(block: i32, size: i32, used: i32) {
@@ -2497,14 +2502,14 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         }
         let mut size: i32 = core::allocator::fl_size(header);
         let next: i32 = (block + size);
-        if (next < core::allocator::heap_offset) {
+        if (next < core::allocator::frontier()) {
             let next_header: i32 = core::builtin::i32_load(next);
             if (core::allocator::fl_used(next_header) == 0) {
                 core::allocator::fl_unlink(next);
                 size = (size + core::allocator::fl_size(next_header));
             }
         }
-        if (block > 152) {
+        if (block > (core::builtin::heap_base() + 152)) {
             let prev_footer: i32 = core::builtin::i32_load((block - 8));
             if (core::allocator::fl_used(prev_footer) == 0) {
                 let prev_size: i32 = core::allocator::fl_size(prev_footer);
@@ -2546,13 +2551,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         }
         curr = core::builtin::i32_load((curr + 8));
     }
-    let block: i32 = core::allocator::heap_offset;
-    let new_offset: i32 = (block + size);
-    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
+    let block: i32 = core::allocator::bump(1, size);
     core::allocator::fl_set_tags(block, size, 1);
     return (block + 8);
 }
@@ -2578,6 +2577,8 @@ pub fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 pub fn memory_grow(delta: i32) -> i32;
 
 pub fn memory_size() -> i32;
+
+pub fn heap_base() -> i32;
 
 pub fn memory_fill(dst: i32, value: u8, len: i32);
 

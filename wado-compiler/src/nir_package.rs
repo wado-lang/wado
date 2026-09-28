@@ -16,7 +16,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::loader::WasmAsset;
+use crate::loader::{DEFAULT_PAGE_SIZE_LOG2, WasmAsset};
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
 use crate::name::{FunctionId, LocalMethodName};
@@ -149,6 +149,37 @@ impl NirPackage {
     /// paths that skip `optimize` (e.g. `wado dump --nir-lowered`). `optimize`
     /// overrides it per opt level.
     pub const DEFAULT_STRING_INLINE_MAX_BYTES: usize = 4;
+
+    /// The pages, from address 0, of the linear memory the embedded wasm assets
+    /// reserve. 0 when no asset is referenced.
+    ///
+    /// The component has one linear memory, and codegen rewrites each embedded
+    /// wasm asset to import it rather than define its own. An asset's own
+    /// minimum covers its data segments and, for one built by a toolchain like
+    /// Rust's, the stack below them: libm wants 17 pages. The memory must be at
+    /// least that large, and the allocator must hand out nothing inside it.
+    pub fn wasm_asset_reserved_pages(&self) -> u32 {
+        let referenced: IndexSet<&str> = self
+            .imports
+            .iter()
+            .map(|import| import.namespace.as_str())
+            .filter(|namespace| self.wasm_assets.contains_key(*namespace))
+            .collect();
+        referenced
+            .iter()
+            .map(|namespace| {
+                u32::try_from(self.wasm_assets[*namespace].min_memory_pages())
+                    .expect("a 32-bit memory has fewer than 2^32 pages")
+            })
+            .fold(0, u32::max)
+    }
+
+    /// The address the allocator's heap starts at, past the pages the embedded
+    /// wasm assets reserve. `builtin::heap_base()` returns it.
+    pub fn heap_base(&self) -> i32 {
+        i32::try_from(u64::from(self.wasm_asset_reserved_pages()) << DEFAULT_PAGE_SIZE_LOG2)
+            .expect("the wasm assets reserve less than 2 GiB")
+    }
 
     /// The [`FuncId`] of a `builtin::<name>` callee, or `None` if no such call is
     /// interned in this package. Resolved once (e.g. at a pass's top) so an

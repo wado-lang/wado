@@ -495,7 +495,8 @@ impl Interpreter<'_> {
             | CtfeBuiltin::ArrayNew
             | CtfeBuiltin::ArrayClonePrefix
             | CtfeBuiltin::Select
-            | CtfeBuiltin::I32AsChar => None,
+            | CtfeBuiltin::I32AsChar
+            | CtfeBuiltin::HeapBase(_) => None,
         }
     }
 
