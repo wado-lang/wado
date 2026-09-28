@@ -310,8 +310,8 @@ re-measure before committing. Candidates read off the profile above:
   calls). ASCII resolves early (single-char branches are sorted and come first), so
   this is a worst case rather than a benchmark-visible cost.
 - **A non-left-recursive rule's scan has no memo.** SQLite's four select
-  alternatives each scan a plain `SELECT` to its end. The memo below covers
-  only left-recursive rules, so this is still paid once per alternative.
+  alternatives each scan a plain `SELECT` to its end. The scan memo
+  ("Nesting no longer doubles the scan", above) covers only left-recursive rules, so this is still paid once per alternative.
 
 Found by reading generated code (2026-09), not yet measured on a benchmark:
 

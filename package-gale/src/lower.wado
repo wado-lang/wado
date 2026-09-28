@@ -903,11 +903,9 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
 
     let atom_gated = !atn_class && stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx);
     let suffix_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
-    if atom_gated && !suffix_gated {
-        forward_lr_cont_to_trailing_operands(&mut lr_alts, &rule.name, &rule.snake_name);
-    }
     let mid_operand_gated = atom_gated || suffix_gated;
     if mid_operand_gated {
+        forward_lr_cont_to_trailing_operands(&mut atom, &mut lr_alts, &rule.name, &rule.snake_name);
         ctx.mark_caller_follow_gate();
         ctx.mark_rule_reads_follow();
     }
@@ -1095,9 +1093,6 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
             );
         }
     }
-    if mid_operand_gated {
-        forward_lr_cont_to_trailing_operands(lr_alts, rule_name, rule_snake);
-    }
     return mid_operand_gated;
 }
 
@@ -1149,24 +1144,36 @@ fn stamp_lr_atom_mid_operands(
 
 /// A trailing operand ends the invocation it sits in, so the continuation that
 /// invocation must leave behind is its own: `a or b` as a mid operand stops `b`
-/// before `and`.
+/// before `and`, and `-a` as one stops `a` before the arguments a `new` owes.
 fn forward_lr_cont_to_trailing_operands<S: AsStrSlice, S1: AsStrSlice>(
+    atom: &mut MultiAltRule,
     lr_alts: &mut List<LrAlt>,
     rule_name: S,
     rule_snake: S1,
 ) {
-    for let mut i = 0; i < lr_alts.len(); i += 1 {
-        let last = lr_alts[i].suffix.ops.len() - 1;
-        if last < 0 || find_self_ref_rule_call(&lr_alts[i].suffix.ops[last], rule_name) matches { None } {
-            continue;
-        }
-        lr_alts[i].suffix.ops[last] = rebind_self_ref_lr_cont(lr_alts[i].suffix.ops[last], LR_CONT_FORWARD);
-        lr_alts[i].scan_suffix.elements[last] = rebind_scan_self_ref_lr_cont(
-            lr_alts[i].scan_suffix.elements[last],
-            rule_snake,
-            LR_CONT_FORWARD,
-        );
+    let name = rule_name.to_string();
+    let snake = rule_snake.to_string();
+    for let mut a = 0; a < atom.alts.len(); a += 1 {
+        forward_lr_cont_to_trailing_operand(&mut atom.alts[a].ops, &mut atom.scan_alts[a].elements, &name, &snake);
     }
+    for let mut i = 0; i < lr_alts.len(); i += 1 {
+        forward_lr_cont_to_trailing_operand(&mut lr_alts[i].suffix.ops, &mut lr_alts[i].scan_suffix.elements, &name, &snake);
+    }
+}
+
+/// `forward_lr_cont_to_trailing_operands` for one walk, parse and scan side.
+fn forward_lr_cont_to_trailing_operand<S: AsStrSlice, S1: AsStrSlice>(
+    ops: &mut List<Op>,
+    scan: &mut List<ScanElement>,
+    rule_name: S,
+    rule_snake: S1,
+) {
+    let last = ops.len() - 1;
+    if last < 0 || find_self_ref_rule_call(&ops[last], rule_name) matches { None } {
+        return;
+    }
+    ops[last] = rebind_self_ref_lr_cont(ops[last], LR_CONT_FORWARD);
+    scan[last] = rebind_scan_self_ref_lr_cont(scan[last], rule_snake, LR_CONT_FORWARD);
 }
 
 /// Per-depth first sets of the LR suffix ops from `start` — the caller-side

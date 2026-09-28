@@ -1344,6 +1344,21 @@ test "an operand inside an atom climbs only while its own continuation stays via
     assert got == "new a(); => (s (e new (e a) (args ( ))) ;)\nnew a; => (s (e new (e a)) ;)\nnew a.b(); => (s (e new (e (e a) . b) (args ( ))) ;)\nnew a()(); => (s (e new (e (e a) (args ( ))) (args ( ))) ;)\n", got;
 }
 
+// The prefix atom's trailing operand is the atom's own, not a suffix's, and it
+// owes `new` its arguments just the same. `'-' e '!'` puts the prefix atom in an
+// overlap group, so the operand sits in a per-alternative helper.
+test "a prefix atom's operand inside an atom leaves the arguments its enclosing atom owes" {
+    let grammar = "grammar T;
+s : e ';' ;
+e : e args | 'new' e args | '-' e | '-' e '!' | ID ;
+args : '(' ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+    let got = parses(grammar, "s", ["new -a();", "-a();"]);
+    assert got == "new -a(); => (s (e new (e - (e a)) (args ( ))) ;)\n-a(); => (s (e - (e (e a) (args ( )))) ;)\n", got;
+}
+
 global OPEN_READING_BEHIND_PREFIX_G4: String = "
 grammar T;
 s : d ';' ;

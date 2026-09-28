@@ -179,6 +179,8 @@ pub struct GenContext {
     needs_scan_atn_seen: bool,
     /// Set where a left-recursive rule's scan answers from the parser's memo.
     scan_memo: bool,
+    /// Set while the atom of a rule whose mid operands are gated emits.
+    lr_cont_in_atom: bool,
     /// Set by lowering for an ATN-class LR rule. Gates the LR tables.
     needs_lr_atn_seen: bool,
     /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
@@ -370,6 +372,7 @@ impl GenContext {
             needs_atn_seen: false,
             needs_scan_atn_seen: false,
             scan_memo: false,
+            lr_cont_in_atom: false,
             needs_lr_atn_seen: false,
             atn_call_site_returns: [],
             atn_decision_sites: [],
@@ -681,8 +684,25 @@ impl GenContext {
         self.scan_memo = on;
     }
 
+    /// Whether the parser carries the scan memo (`set_scan_memo`).
     pub fn scan_memo(&self) -> bool {
         return self.scan_memo;
+    }
+
+    /// Enter the atom of a left-recursive rule, or leave it, answering whether
+    /// the atom was already being emitted. Where the rule gates a mid operand,
+    /// the atom's trailing operand ends the invocation as a suffix's does and
+    /// owes the same continuation, so the atom and the helpers it calls take
+    /// and pass on `lr_cont`.
+    pub fn set_lr_cont_in_atom(&mut self, on: bool) -> bool {
+        let was = self.lr_cont_in_atom;
+        self.lr_cont_in_atom = on;
+        return was;
+    }
+
+    /// Whether the functions now emitting take `lr_cont` (`set_lr_cont_in_atom`).
+    pub fn lr_cont_in_atom(&self) -> bool {
+        return self.lr_cont_in_atom;
     }
 
     /// The memo's type: keyed on the gate where the scan simulates one.

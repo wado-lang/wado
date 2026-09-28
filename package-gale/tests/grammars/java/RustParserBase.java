@@ -1,5 +1,5 @@
 // The Java twin of `impl RustParserBase for RustPBase` in
-// package-gale/tests/driver_cst_rust_test.wado, so `antlr4-oracle.sh --super`
+// package-gale/tools/rust_corpus.wado, so `antlr4-oracle.sh --super`
 // runs ANTLR4 against the base class Gale runs against. Edit both or neither.
 import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.TokenStream;

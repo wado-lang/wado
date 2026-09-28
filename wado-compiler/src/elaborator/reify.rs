@@ -2717,18 +2717,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_expr(&unary.expr, ctx, expected_type);
                 }
                 let op = ast_unary_op_to_tir(unary.op);
-                // A `-<numeric literal>` operand shares the unary's type:
-                // propagate the expected/recorded type so the inner literal
-                // takes the right width (e.g. `-1.0` in an `f32` const body
-                // must be `f32`, not the default `f64`). Other unary operands
-                // are typed on their own.
-                let inner_expected = if unary.op == ast::UnaryOp::Neg
-                    && is_numeric_literal_expr(&unary.expr)
-                    && recorded_type != TypeTable::UNKNOWN
-                {
-                    Some(recorded_type)
-                } else {
-                    None
+                // The elaborator's rule (`resolve_unary`): a primitive `-x` /
+                // `~x` has its operand's type, so the operand is expected to be
+                // what the unary is. `-1.0` in an `f32` const body is `f32`, not
+                // the default `f64`.
+                let inner_expected = match unary.op {
+                    ast::UnaryOp::Neg | ast::UnaryOp::BitNot
+                        if recorded_type != TypeTable::UNKNOWN
+                            && is_primitive_literal_target(
+                                &self.tysys.type_table.borrow(),
+                                recorded_type,
+                            ) =>
+                    {
+                        Some(recorded_type)
+                    }
+                    _ => None,
                 };
                 let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
                 if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {

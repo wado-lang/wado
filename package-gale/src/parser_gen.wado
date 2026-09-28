@@ -47,6 +47,7 @@ use {
     follow_exit_viable_call,
     follow_resumes_call,
     follow_forward_args,
+    lr_cont_forward,
     follow_yields_call,
     follow_yields_call_if,
     follow_yields_call_of,
@@ -369,11 +370,6 @@ fn called_scan_chunks(chunks: &List<String>, parse_text: &String) -> List<String
     return out;
 }
 
-/// The caller's own `lr_cont`, handed on where the callee's trailing operand reads it.
-fn lr_cont_forward(mid_operand_gated: bool) -> String {
-    return if mid_operand_gated { ", lr_cont" } else { "" };
-}
-
 /// The `lr_cont` argument a self-reference passes, with its leading comma.
 fn lr_cont_arg(mask: i32, ctx: &GenContext) -> String {
     if mask == LR_CONT_FORWARD {
@@ -491,9 +487,10 @@ fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
 }
 
 /// What a scan call passes after the position: the parser state it borrows,
-/// and the caller's follow where the rule reads one.
+/// the caller's follow where the rule reads one, and `lr_cont` inside an atom
+/// that owes it.
 fn scan_trailing_args(ctx: &GenContext) -> String {
-    return `${ctx.scan_state_args()}${follow_sep(ctx.current_rule_reads_follow())}`;
+    return `${ctx.scan_state_args()}${follow_sep(ctx.current_rule_reads_follow())}${lr_cont_forward(ctx.lr_cont_in_atom())}`;
 }
 
 /// A scan function's parameters up to `min_prec`: the token kinds, the
@@ -512,6 +509,9 @@ fn add_scan_params(f: &mut FnSpec, ctx: &GenContext) {
     }
     if ctx.current_rule_reads_follow() {
         add_follow_param(f);
+    }
+    if ctx.lr_cont_in_atom() {
+        add_lr_cont_param(f);
     }
 }
 
@@ -532,12 +532,27 @@ fn gen_scan_functions(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut Gen
     let mut chunks: List<String> = [];
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         ctx.set_current_rule_index(i);
+        ctx.set_lr_continuation(lr_continuation_of(&lowered.parser_rules[i]));
         let mut w = CodeWriter::with_capacity(1024);
         gen_scan_function(&mut w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
         chunks.push(w.to_string());
     }
+    ctx.set_lr_continuation([]);
     ctx.set_in_scan_fn(was_scan);
     return chunks;
+}
+
+/// What continues every alternative's tail besides `follow`: in a
+/// left-recursive rule, atom or suffix, the suffix loop. Both sides read it, so
+/// the scan enters an optional exactly where the parse does.
+fn lr_continuation_of(lowered_rule: &Rule) -> List<String> {
+    let mut continuation: List<String> = [];
+    if let LeftRecursive(l) = lowered_rule {
+        for let first of &lr_suffix_first_sets(&l.lr_alts, &l.lr_dispatch) {
+            continuation = union_kind_arrays(&continuation, first);
+        }
+    }
+    return continuation;
 }
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
@@ -782,6 +797,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     mid_operand_gated: bool = false,
 ) {
     let atom_name = `${fn_name}_atom`;
+    let was_in_atom = ctx.set_lr_cont_in_atom(mid_operand_gated);
 
     let atom_og = if non_lr_indices.len() > 1 {
         let og = rule_overlap_groups(rule, lowered_rule, ctx);
@@ -820,6 +836,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     }
     w.end();
     w.blank();
+    ctx.set_lr_cont_in_atom(was_in_atom);
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
     gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name, mid_operand_gated);
@@ -843,7 +860,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     }
     f2.emit_begin(w);
     w.line(
-        `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)});`,
+        `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`,
     );
     w.line("if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
@@ -2837,14 +2854,8 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     match *lowered_rule {
         Simple(_) => gen_parse_fn_simple_named(&mut iw, rule, lowered_rule, ctx, &inner),
         MultiAlt(_) => gen_parse_fn_named(&mut iw, rule, lowered_rule, ctx, &inner),
-        LeftRecursive(l) => {
-            // Every alternative's tail, atom or suffix, is continued by the
-            // suffix loop as well as by `follow`.
-            let mut continuation: List<String> = [];
-            for let first of &lr_suffix_first_sets(&l.lr_alts, &l.lr_dispatch) {
-                continuation = union_kind_arrays(&continuation, first);
-            }
-            ctx.set_lr_continuation(continuation);
+        LeftRecursive(_) => {
+            ctx.set_lr_continuation(lr_continuation_of(lowered_rule));
             gen_parse_fn_named(&mut iw, rule, lowered_rule, ctx, &inner);
             ctx.set_lr_continuation([]);
         },
@@ -3196,6 +3207,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     let has_overlaps = has_multi_alt_groups(&og.groups);
 
     mark_gated_predicates(rule, has_overlaps, &og.groups, &og.first_sets, &og.non_lr_indices, &og.end_follow, ctx);
+    let was_in_atom = ctx.set_lr_cont_in_atom(lr_mid_operand_gated(lowered_rule));
 
     if has_overlaps {
         // Pre-compute which alts' scan helpers the dispatch will call so the
@@ -3233,6 +3245,9 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     // continuity; the helper mutates its own copy and returns it.
                     if rule_emits_vals(ctx, rule) {
                         add_seeded_vals_param(&mut f, rule);
+                    }
+                    if ctx.lr_cont_in_atom() {
+                        add_lr_cont_param(&mut f);
                     }
                     f.set_return_type(&rule_result_type_for(rule, ctx));
                     let mut hw = CodeWriter::with_capacity(256);
@@ -3299,6 +3314,9 @@ fn gen_parse_fn_named<S: AsStrSlice>(
             type_str: "i32",
             default_value: Option::Some("0"),
         });
+        if ctx.lr_cont_in_atom() {
+            add_lr_cont_param(&mut f);
+        }
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if rule_emits_vals(ctx, rule) {
@@ -3309,6 +3327,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, &type_name, ctx, &og, fn_name);
         w.end();
         w.blank();
+        ctx.set_lr_cont_in_atom(was_in_atom);
 
         let lr_data = if let LeftRecursive(l) = lowered_rule {
             [&l.lr_alts, &l.lr_dispatch];
@@ -4276,10 +4295,11 @@ fn gen_lr_fn<S: AsStrSlice>(
     }
     // The atom seeds the accumulator (the left operand's value); each LR
     // continuation folds a right operand into it (`emit_lr_branch_body`).
+    let contfwd = lr_cont_forward(mid_operand_gated);
     if emits_vals {
-        w.line(`let mut _lr_acc = ${fn_name}_atom(p${fsep}, vals, min_prec);`);
+        w.line(`let mut _lr_acc = ${fn_name}_atom(p${fsep}, vals, min_prec${contfwd});`);
     } else {
-        w.line(`${fn_name}_atom(p${fsep}, min_prec);`);
+        w.line(`${fn_name}_atom(p${fsep}, min_prec${contfwd});`);
     }
     w.line("p.b.finish_node(p.last_end());");
     // ATN-class LR: the suffix loop-entry can't be resolved by static

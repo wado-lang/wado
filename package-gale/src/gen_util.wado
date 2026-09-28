@@ -735,6 +735,11 @@ pub fn follow_yields_call_of<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(toke
     return follow_query("follow_yields", tokens, pos, head);
 }
 
+/// The caller's own `lr_cont`, handed on where the callee's trailing operand reads it.
+pub fn lr_cont_forward(mid_operand_gated: bool) -> String {
+    return if mid_operand_gated { ", lr_cont" } else { "" };
+}
+
 /// `", <forwarded continuation>"` when the callee declares the parameter, else
 /// `""`. Appended after a call's fixed arguments.
 pub fn follow_sep(emit_follow: bool) -> String {
