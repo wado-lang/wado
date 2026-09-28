@@ -77,7 +77,13 @@ fn parent_dir(dir: &Path) -> Option<PathBuf> {
                 .components()
                 .all(|c| matches!(c, Component::CurDir | Component::ParentDir));
             let above = dir.join("..");
-            (!above_root).then(|| if only_dots { normalize_path(&above) } else { above })
+            (!above_root).then(|| {
+                if only_dots {
+                    normalize_path(&above)
+                } else {
+                    above
+                }
+            })
         }
     }
 }

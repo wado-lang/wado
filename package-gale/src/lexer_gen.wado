@@ -1247,8 +1247,7 @@ fn spliceable_token_body<S: AsStrSlice>(name: S, scope: &SpliceScope) -> Option<
         || r.is_virtual
         || commanded
         || resolve_ci(&scope.grammar_options, &r.options) != scope.ci
-        || lexer_rule_reaches_self(r, rules)
-    {
+        || lexer_rule_reaches_self(r, rules) {
         return null;
     }
     let body = without_actions(&r.body);
@@ -1278,7 +1277,9 @@ fn without_actions(arms: &List<LexerAlternative>) -> List<LexerAlternative> {
 fn element_without_actions(elem: &LexerElement) -> LexerElement {
     return match *elem {
         Group(arms) => LexerElement::Group(without_actions(&arms)),
-        Repeat(rep) => LexerElement::Repeat(LexerRepeatElement { ..rep, element: element_without_actions(&rep.element) }),
+        Repeat(rep) => LexerElement::Repeat(
+            LexerRepeatElement { ..rep, element: element_without_actions(&rep.element) },
+        ),
         _ => *elem,
     };
 }
