@@ -30,7 +30,7 @@ pub fn window_over(
     let strides = ints(node, "strides", spatial, 1)?;
     let dilations = ints(node, "dilations", spatial, 1)?;
     let mode = match node.attr("auto_pad") {
-        Some(a) => a.values[0],
+        Some(a) => a.string()?,
         None => "NOTSET",
     };
     let written = ints(node, "pads", 2 * spatial, 0)?;
@@ -108,14 +108,15 @@ pub fn ints(node: &Node, name: String, count: i32, least: i32) -> Result<List<i3
     let Some(attr) = node.attr(name) else {
         return Result::Ok(List::<i32>::filled(count, least));
     };
-    if attr.values.len() != count {
+    let written = attr.ints()?;
+    if written.len() != count {
         return Result::Err(AttrError {
             attr: name,
-            reason: `holds ${attr.values.len()} values and the operator reads ${count}`,
+            reason: `holds ${written.len()} values and the operator reads ${count}`,
         });
     }
     let mut values: List<i32> = [];
-    for let v of attr.ints()? {
+    for let v of written {
         if v < least as i64 {
             return Result::Err(AttrError { attr: name, reason: `holds ${v}, below ${least}` });
         }

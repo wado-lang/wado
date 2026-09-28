@@ -3,7 +3,7 @@
 
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
-use { Elements, Known, Node, Stored, data_type, trailing_axes } from "./graph.wado";
+use { AttrError, Elements, Known, Node, Stored, data_type, trailing_axes } from "./graph.wado";
 use { Condition, Poly, ceiling, owe } from "./poly.wado";
 use {
     broadcast_extents,
@@ -633,7 +633,7 @@ fn constant_of_shape(node: &Node, shape: &Known) -> Result<Option<Known>, String
         }
         extents.push(e as i32);
     }
-    let fill = fill_of(node);
+    let fill = fill_of(node).map_err(|e| `${e}`)?;
     let count = element_count(&extents);
     return Result::Ok(Option::Some(Known { ..fill, extents, elements: picked(&fill.elements, &List::<i32>::filled(
         count,
@@ -642,14 +642,24 @@ fn constant_of_shape(node: &Node, shape: &Known) -> Result<Option<Known>, String
 }
 
 /// The one element a `ConstantOfShape` fills with: its `value`, or a float 0.
-pub fn fill_of(node: &Node) -> Known {
-    if let Some(a) = node.attr("value") && let Some(t) = a.tensor {
-        return t;
-    }
-    return Known {
-        extents: [1],
-        elements: Elements::Floats([0.0]),
+pub fn fill_of(node: &Node) -> Result<Known, AttrError> {
+    let Some(a) = node.attr("value") else {
+        return Result::Ok(Known {
+            extents: [1],
+            elements: Elements::Floats([0.0]),
+        });
     };
+    let Some(t) = a.tensor else {
+        return Result::Err(AttrError { attr: a.name, reason: "holds no tensor the build reads" });
+    };
+    let count = element_count(&t.extents);
+    if count != 1 {
+        return Result::Err(AttrError {
+            attr: a.name,
+            reason: `holds ${count} elements, and the operator fills with one`,
+        });
+    }
+    return Result::Ok(t);
 }
 
 fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {

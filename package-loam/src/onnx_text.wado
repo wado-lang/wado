@@ -212,7 +212,11 @@ fn element_texts(
     check_element_count(name, elements.len(), &extents)?;
     let mut texts: List<String> = [];
     for let e of elements {
-        texts.push(literal_text(toks, first_token(s, e), name)?);
+        let token = first_token(s, e);
+        if toks.kind_at(token) == onnx::TK_STRING {
+            return Result::Err(`${name}: ${toks.token_text(token)} is a string, and the tensor holds numbers`);
+        }
+        texts.push(literal_text(toks, token, name)?);
     }
     return Result::Ok(texts);
 }
@@ -481,7 +485,10 @@ fn single_attr_text(
     for let c of children(s, single) {
         if s.is_token(c) {
             let token = s.token_index(c);
-            return Result::Ok([literal_text(toks, token, attr_name)?, toks.kind_at(token) == onnx::TK_STRING]);
+            return Result::Ok([
+                literal_text(toks, token, attr_name)?,
+                toks.kind_at(token) == onnx::TK_STRING,
+            ]);
         }
         if s.is_node(c) {
             if first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) matches { Some(_) } {

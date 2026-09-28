@@ -1061,8 +1061,42 @@ test "a string attribute an operator reads as a number stops the build" {
     let source = `g (float[2, 3] X) => (float[2, 3] Y) {
         Y = Softmax <axis = "1"> (X)
     }`;
-    assert y_axes(source, [rule("*", ["A", "B"])]).unwrap_err()
-        == "Y = Softmax: attribute axis holds strings, and the operator reads numbers";
+    assert y_axes(source, [rule("*", ["A", "B"])]).unwrap_err() == "Y = Softmax: attribute axis holds strings, and the operator reads numbers";
+}
+
+test "a ConstantOfShape value the build cannot read, or not of one element, stops the build" {
+    let layout: List<LayoutRule> = [
+        rule("X", ["Len"]),
+        rule("Y", ["Pos"]),
+    ];
+    let filled = |value: String| y_axes(
+        `g (float[1] X) => (float[?] Y) <int64[1] S = {3}> {
+            Y = ConstantOfShape <value = ${value}> (S)
+        }`,
+        layout,
+    );
+    assert filled("double[1] {5}").unwrap_err() == "Y = ConstantOfShape: attribute value holds no tensor the build reads";
+    assert filled("3").unwrap_err() == "Y = ConstantOfShape: attribute value holds no tensor the build reads";
+    assert filled("float[0] {}").unwrap_err() == "Y = ConstantOfShape: attribute value holds 0 elements, and the operator fills with one";
+    assert filled("float[2] {1, 2}").unwrap_err() == "Y = ConstantOfShape: attribute value holds 2 elements, and the operator fills with one";
+}
+
+test "an attribute an operator reads as numbers, holding a tensor, stops the build" {
+    let source = `g (float[1, 3] X) => (float[3] Y) {
+        Y = Squeeze <axes = int64[1] {0}> (X)
+    }`;
+    assert y_axes(source, [rule("X", ["One", "C"])]).unwrap_err() == "Y = Squeeze: attribute axes holds a tensor, and the operator reads numbers";
+}
+
+test "a string attribute of no value, or a number where a string is read, stops the build" {
+    let pooled = |auto_pad: String| y_axes(
+        `g (float[1, 1, 4, 4] X) => (float[1, 1, 2, 2] Y) {
+            Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2], auto_pad = ${auto_pad}> (X)
+        }`,
+        [rule("*", ["N", "C", "H", "W"])],
+    );
+    assert pooled("[]").unwrap_err() == "Y = MaxPool: attribute auto_pad is a list and the operator reads one value";
+    assert pooled("3").unwrap_err() == "Y = MaxPool: attribute auto_pad holds numbers, and the operator reads a string";
 }
 
 test "a ConstantOfShape whose shape a kernel computes stops the build" {

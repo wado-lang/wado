@@ -898,7 +898,7 @@ fn node_call(
     if op == "ConstantOfShape" {
         let out = shapes.get(node.outputs[0]).unwrap();
         let element = checked.primitives.get(node.outputs[0]).unwrap();
-        let value = element_literal(&fill_of(node).elements);
+        let value = element_literal(&fill_of(node).unwrap().elements);
         return Result::Ok(
             `filled::<${element}, [${axis_list(&out)}]>(${symbols.spell_shape(&out)?}, ${value})`,
         );

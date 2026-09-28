@@ -278,26 +278,42 @@ impl Attr {
 
     /// The one value an operator reads as an integer.
     pub fn int(&self) -> Result<i64, AttrError> {
-        return int_of(&self.one_value()?).map_err(|reason| self.error(reason));
+        return int_of(&self.one_of(self.numbers()?)?).map_err(|reason| self.error(reason));
     }
 
     /// `int` for a float attribute.
     pub fn float(&self) -> Result<f32, AttrError> {
-        return float_of(&self.one_value()?).map_err(|reason| self.error(reason));
+        return float_of(&self.one_of(self.numbers()?)?).map_err(|reason| self.error(reason));
     }
 
-    fn one_value(&self) -> Result<String, AttrError> {
-        let values = self.numbers()?;
+    /// The one value an operator reads as a string.
+    pub fn string(&self) -> Result<String, AttrError> {
+        return self.one_of(self.texts(true, "a string")?);
+    }
+
+    fn one_of(&self, values: List<String>) -> Result<String, AttrError> {
         if values.len() != 1 {
             return Result::Err(self.error("is a list and the operator reads one value"));
         }
         return Result::Ok(values[0]);
     }
 
-    /// The values, which an operator reads as numbers.
     fn numbers(&self) -> Result<List<String>, AttrError> {
-        if self.is_string {
-            return Result::Err(self.error("holds strings, and the operator reads numbers"));
+        return self.texts(false, "numbers");
+    }
+
+    /// The values, which the operator `reads` as strings or as numbers. An
+    /// empty list is either.
+    fn texts(&self, strings: bool, reads: String) -> Result<List<String>, AttrError> {
+        if self.tensor matches { Some(_) } {
+            return Result::Err(self.error(`holds a tensor, and the operator reads ${reads}`));
+        }
+        if !self.is_list && self.values.is_empty() {
+            return Result::Err(self.error("holds no value the build reads"));
+        }
+        if !self.values.is_empty() && self.is_string != strings {
+            let holds = if self.is_string { "strings" } else { "numbers" };
+            return Result::Err(self.error(`holds ${holds}, and the operator reads ${reads}`));
         }
         return Result::Ok(self.values);
     }

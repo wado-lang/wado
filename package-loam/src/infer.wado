@@ -440,7 +440,7 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
         return Result::Ok(Option::Some("i64"));
     }
     if op == "ConstantOfShape" {
-        return Result::Ok(Option::Some(known_primitive(&fill_of(node))));
+        return Result::Ok(Option::Some(known_primitive(&attr_read(node, fill_of(node))?)));
     }
     if op == "Gather" {
         let indices = node.inputs[1];
@@ -1274,17 +1274,14 @@ pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
         }
         return Result::Ok(reversed);
     };
-    if attr.values.len() != rank {
+    let written = attr_read(node, attr.ints())?;
+    if written.len() != rank {
         builtin::cold_path();
-        return Result::Err(attribute_error(
-            node,
-            "perm",
-            `names ${attr.values.len()} axes and the operand has ${rank}`,
-        ));
+        return Result::Err(attribute_error(node, "perm", `names ${written.len()} axes and the operand has ${rank}`));
     }
     let mut perm: List<i32> = [];
     let mut taken: List<bool> = List::filled(rank, false);
-    for let axis of attr_read(node, attr.ints())? {
+    for let axis of written {
         if !(0 <= axis < rank as i64) || taken[axis as i32] {
             builtin::cold_path();
             return Result::Err(attribute_error(node, "perm", `is not a permutation of ${rank} axes`));
