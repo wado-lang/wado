@@ -1120,7 +1120,8 @@ fn stamp_lr_atom_mid_operands(
     for let mut a = 0; a < atom.alts.len(); a += 1 {
         let elements = &rule.alternatives[non_lr_indices[a]].elements;
         let ops_len = atom.alts[a].ops.len();
-        assert atom.scan_alts[a].elements.len() == ops_len, `LR atom walk length mismatch: parse-side ${ops_len}, scan-side ${atom.scan_alts[a].elements.len()}`;
+        assert atom.scan_alts[a].elements.len() == ops_len, `LR atom walk length mismatch: parse-side ${ops_len}, scan-side ${atom.scan_alts[a].elements.len(
+        )}`;
         for let mut k = 0; k + 1 < ops_len; k += 1 {
             if find_self_ref_rule_call(&atom.alts[a].ops[k], &rule.name) matches { None } {
                 continue;
@@ -4459,7 +4460,16 @@ fn lower_iteration_duties<S: AsStrSlice>(
     // every caller of every rule carrying such a loop — 6000 lines of SQLite's
     // parser, for no answer.
     let rule_follow = ctx.rule_follow_for_probe(rule_name);
-    if let Some(hit) = lower_decline_scan(non_greedy, kind, loop_first, alt_elements, index, ctx, reaches_rule_tail, &rule_follow) {
+    if let Some(hit) = lower_decline_scan(
+        non_greedy,
+        kind,
+        loop_first,
+        alt_elements,
+        index,
+        ctx,
+        reaches_rule_tail,
+        &rule_follow,
+    ) {
         duties.decline_stranded = true;
         duties.decline_scan = hit.0;
         duties.decline_cont_first = hit.1;

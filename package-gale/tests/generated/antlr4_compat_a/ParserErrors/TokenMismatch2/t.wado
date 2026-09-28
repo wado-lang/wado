@@ -1514,31 +1514,12 @@ impl Parser {
     }
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_STR { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_stat__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     if p.peek_kind() == TK_LIT_LPAREN {
         p.take();
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
-        let mut opt_scan_pos: i32 = -1;
-        opt_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_expr(tokens, pos);
-            if pos < 0 { break opt_scan; }
-            opt_scan_pos = pos;
-        }
-        if p.peek_kind() == TK_ID && opt_scan_pos >= 0 {
+        if p.peek_kind() == TK_ID {
             p.site = 0;
             _parse_expr(p);
         }

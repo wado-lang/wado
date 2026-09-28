@@ -702,6 +702,20 @@ pub fn follow_admits_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> 
     return `follow_admits(${tokens}, ${pos}, ${FOLLOW_PARAM}, &FOLLOW_SETS, TK_EOF)`;
 }
 
+/// A `follow_resumes` call on the forwarded continuation: whether it is known
+/// to start at `pos`. An unknown continuation never is, so it cannot overturn a
+/// continuation that yields.
+pub fn follow_resumes_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
+    return `follow_resumes(${tokens}, ${pos}, ${FOLLOW_PARAM}, &FOLLOW_SETS, TK_EOF)`;
+}
+
+/// A `follow_exit_viable` call on the forwarded continuation: whether leaving
+/// the rule at `pos` can go on. A known continuation must match as far as it is
+/// known; one the caller did not pass on is taken at its first token.
+pub fn follow_exit_viable_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
+    return `follow_exit_viable(${tokens}, ${pos}, ${FOLLOW_PARAM}, &FOLLOW_SETS, TK_EOF)`;
+}
+
 /// `follow_yields_call` where the site is `gated` on the caller's FOLLOW, else "".
 pub fn follow_yields_call_if<S: AsStrSlice, S1: AsStrSlice>(gated: bool, tokens: S, pos: S1) -> String {
     return if gated { follow_yields_call(tokens, pos) } else { String::new() };

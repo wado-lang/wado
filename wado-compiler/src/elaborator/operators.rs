@@ -930,8 +930,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A primitive `-x` / `~x` has its operand's type, so the operand is
             // expected to be what the result is: `~0x00FF_FFFF_FFFF_FFFF` is an
             // `i64` where one is expected, as `0x00FF_FFFF_FFFF_FFFF ^ 1` is.
-            UnaryOp::Neg | UnaryOp::BitNot => expected_type
-                .filter(|&expected| is_primitive_literal_target(&self.tysys.type_table.borrow(), expected)),
+            UnaryOp::Neg | UnaryOp::BitNot => expected_type.filter(|&expected| {
+                is_primitive_literal_target(&self.tysys.type_table.borrow(), expected)
+            }),
             UnaryOp::Not | UnaryOp::Deref => None,
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the

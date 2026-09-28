@@ -1144,7 +1144,9 @@ WS : ' ' -> skip ;
 
 test "an optional token that can also start what follows it is taken on the second token" {
     // TypeScript's `ReadOnly? propertyName`, where `readonly` is a name too.
-    let got = parses(OPTIONAL_TOKEN_ALSO_NAME_G4, "s", ["{readonly id: x}", "{readonly: x}", "{readonly}", "{readonly id}", "{readonly readonly}", "{a; readonly b: x}"]);
+    let got = parses(OPTIONAL_TOKEN_ALSO_NAME_G4, "s", [
+        "{readonly id: x}", "{readonly: x}", "{readonly}", "{readonly id}", "{readonly readonly}", "{a; readonly b: x}",
+    ]);
     assert got == "{readonly id: x} => (s { (m readonly (name id) : x) })\n{readonly: x} => (s { (m (name readonly) : x) })\n{readonly} => (s { (m (name readonly)) })\n{readonly id} => (s { (m readonly (name id)) })\n{readonly readonly} => (s { (m readonly (name readonly)) })\n{a; readonly b: x} => (s { (m (name a)) ; (m readonly (name b) : x) })\n", got;
 }
 
@@ -1163,7 +1165,9 @@ WS : ' ' -> skip ;
 test "a probe accepts a token an optional suffix of its caller can take" {
     // TypeScript's `typeBody : typeMemberList (SemiColon | ',')?`: the `;`
     // after the last member is the suffix's, which the gate does not spell.
-    let got = parses(OPTIONAL_SEPARATOR_AFTER_LIST_G4, "s", ["{readonly id: x;}", "{readonly id: x}", "{a; readonly b;}", "{readonly;}"]);
+    let got = parses(OPTIONAL_SEPARATOR_AFTER_LIST_G4, "s", [
+        "{readonly id: x;}", "{readonly id: x}", "{a; readonly b;}", "{readonly;}",
+    ]);
     assert got == "{readonly id: x;} => (s { (body (list (m readonly (name id) : x)) ;) })\n{readonly id: x} => (s { (body (list (m readonly (name id) : x))) })\n{a; readonly b;} => (s { (body (list (m (name a)) ; (m readonly (name b))) ;) })\n{readonly;} => (s { (body (list (m (name readonly))) ;) })\n", got;
 }
 
@@ -1193,7 +1197,9 @@ WS : ' ' -> skip ;
 test "a tail optional in a contested atom alternative sees the suffix loop" {
     // TypeScript's `l: X = f();` in a class body: the caller's `;` cannot
     // start at `(`, but the call suffix can, so `(` is no arrow function.
-    let got = parses(TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4, "s", ["x = f();", "x = f () => y;", "x = a.b();", "x = f g();"]);
+    let got = parses(TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4, "s", [
+        "x = f();", "x = f () => y;", "x = a.b();", "x = f g();",
+    ]);
     assert got == "x = f(); => (s x = (e (e f) ( )) ;)\nx = f () => y; => (s x = (e f (e ( ) => y)) ;)\nx = a.b(); => (s x = (e (e a . b) ( )) ;)\nx = f g(); => (s x = (e f (e (e g) ( ))) ;)\n", got;
 }
 
@@ -1225,7 +1231,9 @@ WS : ' ' -> skip ;
 test "a rule that is a loop's whole body hears the loop's next iteration" {
     // TypeScript's `caseClauses : caseClause+`: a clause's statements stop at
     // the next `case b :`, which only the loop around the clause knows about.
-    let got = parses(LOOP_BODY_CALL_G4, "s", ["{ case a: x; case b: y; }", "{ case a: case b: y; default: case c: z; }", "{ case a: case b x; }"]);
+    let got = parses(LOOP_BODY_CALL_G4, "s", [
+        "{ case a: x; case b: y; }", "{ case a: case b: y; default: case c: z; }", "{ case a: case b x; }",
+    ]);
     assert got == "{ case a: x; case b: y; } => (s { (cs (c case a : (st x ;)) (c case b : (st y ;))) })\n{ case a: case b: y; default: case c: z; } => (s { (cs (c case a :) (c case b : (st y ;))) default : (cs (c case c : (st z ;))) })\n{ case a: case b x; } => (s { (cs (c case a : (st case b) (st x ;))) })\n", got;
 }
 
@@ -1244,7 +1252,9 @@ WS : ' ' -> skip ;
 test "a loop ending its rule declines an iteration its caller's token would strand" {
     // TypeScript's `statementList : statement+` inside a case clause: `default`
     // is a one-token statement, and taking it leaves `:` to nobody.
-    let got = parses(LOOP_ENDING_RULE_G4, "s", ["{ case a: x; default: y; }", "{ case a: default; }", "{ case a: x default: y }", "{ case a: default }"]);
+    let got = parses(LOOP_ENDING_RULE_G4, "s", [
+        "{ case a: x; default: y; }", "{ case a: default; }", "{ case a: x default: y }", "{ case a: default }",
+    ]);
     assert got == "{ case a: x; default: y; } => (s { (cs (c case a : (sl (st (e x) ;)))) default : (st (e y) ;) })\n{ case a: default; } => (s { (cs (c case a : (sl (st (e default) ;)))) })\n{ case a: x default: y } => (s { (cs (c case a : (sl (st (e x))))) default : (st (e y)) })\n{ case a: default } => (s { (cs (c case a : (sl (st (e default))))) })\n", got;
 }
 
@@ -1260,8 +1270,38 @@ WS : ' ' -> skip ;
 test "a tail token optional enters while entering stays viable" {
     // TypeScript's `propertyMemberBase : ... ReadOnly?` ahead of a
     // `propertyName` that `readonly` also spells.
-    let got = parses(TAIL_TOKEN_OPTIONAL_G4, "m", ["readonly x;", "readonly;", "static readonly;", "static readonly x;"]);
+    let got = parses(
+        TAIL_TOKEN_OPTIONAL_G4,
+        "m",
+        ["readonly x;", "readonly;", "static readonly;", "static readonly x;"],
+    );
     assert got == "readonly x; => (m (base readonly) (name x) ;)\nreadonly; => (m base (name readonly) ;)\nstatic readonly; => (m (base static) (name readonly) ;)\nstatic readonly x; => (m (base static readonly) (name x) ;)\n", got;
+}
+
+global TAIL_TOKEN_UNKNOWN_CALLER_G4: String = "
+grammar T;
+s : f+ EOF ;
+f : 'fn' ID ret? w? (blk | ';') ;
+ret : '->' ty ;
+w : 'where' ID ':' ty ;
+ty : tnb | tp '+' tp ;
+tnb : tp | '&' tnb | '(' ty ')' ;
+tp : '::'? seg ('::' seg)* ;
+seg : ID '::'? ('<' ty '>' | '(' ')')? ;
+blk : '{' '}' ;
+ID : [a-zA-Z]+ ;
+WS : ' ' -> skip ;
+";
+
+// The rejection case for the test above. Rust's `typePathSegment : ...
+// PATHSEP? (genericArgs | typePathFn)?`, reached through rules that pass on no
+// continuation: what the caller resumes with is unknown, so it cannot overturn
+// the path's own `:: segment`.
+test "a tail token optional yields to a definite continuation its unknown caller cannot overturn" {
+    let got = parses(TAIL_TOKEN_UNKNOWN_CALLER_G4, "s", [
+        "fn f -> a::T {}", "fn f -> a::T;", "fn f -> ::a::T<X> {}", "fn f -> a:: T where T: a::b {}",
+    ]);
+    assert got == "fn f -> a::T {} => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) (blk { })))\nfn f -> a::T; => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) ;))\nfn f -> ::a::T<X> {} => (s (f fn f (ret -> (ty (tnb (tp :: (seg a) :: (seg T < (ty (tnb (tp (seg X)))) >))))) (blk { })))\nfn f -> a:: T where T: a::b {} => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) (w where T : (ty (tnb (tp (seg a) :: (seg b))))) (blk { })))\n", got;
 }
 
 global LR_ATOM_OPERAND_G4: String = "

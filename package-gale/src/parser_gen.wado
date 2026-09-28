@@ -44,6 +44,8 @@ use {
     follow_alternative,
     follow_opened,
     follow_admits_call,
+    follow_exit_viable_call,
+    follow_resumes_call,
     follow_forward_args,
     follow_yields_call,
     follow_yields_call_if,
@@ -1844,7 +1846,12 @@ fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: 
 
 /// Scan mirror of `gen_optional_probe_entry`. With `cont_done` named, a probe
 /// that holds has scanned the rest of the sequence, so it sets the flag and stays.
-fn gen_scan_optional_probe(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, cont_done: &String = &NO_CONT_DONE) {
+fn gen_scan_optional_probe(
+    w: &mut CodeWriter,
+    re: &ScanRepeatElement,
+    ctx: &mut GenContext,
+    cont_done: &String = &NO_CONT_DONE,
+) {
     w.begin(`if ${scan_repeat_guard(&re.inner_admits, "", ctx)}`);
     gen_scan_mark(w, ctx, "sp");
     gen_scan_op_element_assign(w, &re.body, ctx, &known_at_start(&admits_kinds(&re.inner_admits)));
@@ -2089,7 +2096,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         assert !repeat_body_implied_by_guard(&re.body, &effective), "a rule-call body is scanned, which marks `sp`";
         w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, "", ctx)}`);
         gen_scan_iteration(w, re, &effective, ctx, false);
-        let resumes = continuation_admits_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
+        let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
         w.begin(`if ${follow_yields_call("tokens", "sp")} && !${resumes}`);
         gen_scan_rewind(w, ctx, "sp");
         w.end();
@@ -2183,7 +2190,14 @@ fn gen_scan_decline_stranded(
     for let se of &duties.decline_scan {
         gen_scan_op_element(w, se, ctx, `break dcl_${gc};`);
     }
-    emit_probe_verdict(w, DECLINE_ASKS_CALLER, &duties.decline_viable, `dc_${gc}_exit`, ctx);
+    emit_probe_verdict(
+        w,
+        DECLINE_ASKS_CALLER,
+        &duties.decline_viable,
+        `dc_${gc}_exit`,
+        ctx,
+        duties.decline_scan.is_empty(),
+    );
     w.end();
     // Both exits leave a walk that did not happen, so both put the gate back:
     // declining rewinds to the iteration's start, and continuing resumes at the
@@ -4549,6 +4563,7 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     prefix_scan: Option<ScanElement>,
     asks_caller: bool,
     probe_viable: &List<String>,
+    definite: bool = false,
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(`${label}:`);
@@ -4560,25 +4575,38 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     for let se of continuation {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx);
+    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx, definite);
     w.end();
 }
 
 /// The probe's verdict once its scan has matched: the match itself short of the
 /// rule's tail; at the tail, the threaded mask and any stamped FOLLOW admitting the position.
+///
+/// `definite` asks the mask for the caller's whole known continuation rather
+/// than its first token. A loop ending its rule has nothing of its own left to
+/// scan, so one token of the caller is all that would stand behind a decline:
+/// `paraContent NL NL` would give up the `\n` of `\n EOF` to a `para` that
+/// cannot finish either way.
 fn emit_probe_verdict<S: AsStrSlice>(
     w: &mut CodeWriter,
     asks_caller: bool,
     probe_viable: &List<String>,
     verdict: S,
     ctx: &mut GenContext,
+    definite: bool = false,
 ) {
     if !asks_caller {
         assert probe_viable.is_empty(), "a FOLLOW is stamped only on a probe reaching the rule's tail";
         w.line(`${verdict} = true;`);
         return;
     }
-    let mask = if ctx.current_rule_reads_follow() { follow_admits_call("tokens", "pos") } else { "true" };
+    let mask = if !ctx.current_rule_reads_follow() {
+        "true";
+    } else if definite {
+        follow_exit_viable_call("tokens", "pos");
+    } else {
+        follow_admits_call("tokens", "pos");
+    };
     if probe_viable.is_empty() {
         if mask == "true" {
             w.line(`${verdict} = true;`);
@@ -6352,8 +6380,16 @@ fn gen_op_repeat_optional_rulecall(
             `(${follow_admits_call("&p.kinds", "p.pos")} || ${ctx.kind_check_str(&lr_suffix, "p.peek_kind()")})`;
         };
         w.begin(`if ${verdict} && ${contested}`);
-        let scan_pos = gen_scan_guard_with_prefix(w, &rep_op.scan_body, ctx, name_counts, "opt_scan_pos", "opt_scan", false);
-        let resumes = continuation_admits_at(ctx, &rep_op.caller_follow_first, "&p.kinds", "p.kinds", &scan_pos);
+        let scan_pos = gen_scan_guard_with_prefix(
+            w,
+            &rep_op.scan_body,
+            ctx,
+            name_counts,
+            "opt_scan_pos",
+            "opt_scan",
+            false,
+        );
+        let resumes = continuation_resumes_at(ctx, &rep_op.caller_follow_first, "&p.kinds", "p.kinds", &scan_pos);
         w.line(`${verdict} = ${scan_pos} >= 0 && (!${follow_yields_call("&p.kinds", "p.pos")} || ${resumes});`);
         w.end();
         gen_optional_present(w, &rep_op.body, "", &verdict, ctx, &proven);
@@ -6372,18 +6408,21 @@ fn enters_while_viable(r: &RepeatOp) -> bool {
     return r.gate_caller_follow && r.body_scannable;
 }
 
-/// Whether what follows a tail-reaching repeat can start at `at`: the rest of
-/// its own alternative, which is nullable there, the LR suffix loop around an
-/// atom, or the caller. `tokens` is the token array as the runtime takes it and
-/// `stream` the same array indexed directly.
-fn continuation_admits_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+/// Whether what follows a tail-reaching repeat is known to start at `at`: the
+/// rest of its own alternative, which is nullable there, the LR suffix loop
+/// around an atom, or the caller. A caller that passed on no continuation
+/// counts as none: what it resumes with is unknown, so it cannot overturn the
+/// continuation that yields (Rust's `a::T {`, whose `::` the path keeps).
+/// `tokens` is the token array as the runtime takes it and `stream` the same
+/// array indexed directly.
+fn continuation_resumes_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &mut GenContext,
     local_first: &List<String>,
     tokens: S,
     stream: S1,
     at: S2,
 ) -> String {
-    let admits = follow_admits_call(tokens, at);
+    let admits = follow_resumes_call(tokens, at);
     let mut kinds = *local_first;
     dedup_append_arr(&mut kinds, ctx.lr_continuation());
     if kinds.is_empty() {
@@ -6491,7 +6530,7 @@ fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     pos: S2,
 ) -> String {
     let end = `${pos} + 1`;
-    let resumes = continuation_admits_at(ctx, local_first, &tokens, stream, &end);
+    let resumes = continuation_resumes_at(ctx, local_first, &tokens, stream, &end);
     return `(!${follow_yields_call(tokens, pos)} || ${resumes})`;
 }
 
@@ -6554,7 +6593,7 @@ fn follow_arg_expr(ctx: &mut GenContext, arg: &FollowArg) -> String {
                     &follow_open_set_expr(ctx, first),
                 ),
                 _ => follow_alternative(loop_ref, positions, follow_arg_expr(ctx, &le.exit)),
-            };
+            }
         },
     };
 }
@@ -6958,6 +6997,7 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
         null,
         DECLINE_ASKS_CALLER,
         &duties.decline_viable,
+        duties.decline_scan.is_empty(),
     );
     w.line(`if ${dead_end} { break; }`);
     w.end();

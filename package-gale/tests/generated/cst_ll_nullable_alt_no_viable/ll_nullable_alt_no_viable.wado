@@ -948,12 +948,60 @@ pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
 pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
 
+pub global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
+
+pub global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
+
 pub fn follow_open_mark(cont: i64) -> i64 {
-    return if cont == 0 || cont >= FOLLOW_OPEN_READING { FOLLOW_OPEN_READING } else { 0 };
+    return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
+}
+
+pub fn follow_open_set(mask: i64) -> i64 {
+    return FOLLOW_OPEN_READING | (mask & FOLLOW_ID_MASK) << FOLLOW_OPEN_SET_SHIFT;
+}
+
+pub fn follow_open_join(a: i64, b: i64) -> i64 {
+    if a == 0 || a == b {
+        return b;
+    }
+    if b == 0 {
+        return a;
+    }
+    return FOLLOW_OPEN_READING;
+}
+
+pub fn follow_open_with(cont: i64, open: i64) -> i64 {
+    return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
 }
 
 pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    return cont == 0 || cont >= FOLLOW_OPEN_READING || follow_yields(tokens, pos, cont, sets, eof_kind);
+    if cont == 0 {
+        return true;
+    }
+    let kind = if pos < tokens.len() { tokens[pos] } else { eof_kind };
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open != 0 {
+        let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+        if set_id == 0 || kind_set_has(&sets[(set_id - 1) as i32], kind) {
+            return true;
+        }
+    }
+    let mut c = cont & FOLLOW_CONT_MASK;
+    let mut head = true;
+    while c & FOLLOW_ID_MASK != 0 {
+        if c & FOLLOW_OPENS_BIT != 0 {
+            head = true;
+        }
+        if head {
+            let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
+            if set.is_empty() || kind_set_has(set, kind) {
+                return true;
+            }
+            head = false;
+        }
+        c = c >> FOLLOW_SLOT_BITS;
+    }
+    return false;
 }
 
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
@@ -1541,82 +1589,6 @@ impl Parser {
     }
 }
 
-fn scan_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-        let sp = pos;
-        sg_1_done: {
-            sg_1: {
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1; }
-                pos += 1;
-                break sg_1_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-        let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(dk_2 == TK_COMMA) {
-            let dc_2 = pos;
-            let mut dc_2_exit = false;
-            pos = sp;
-            dcl_2: {
-                let gp_3 = pos;
-                let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                let mut sg_3_best = -1;
-                if sgk_3 == TK_COMMA {
-                    pos = gp_3;
-                    sg_3_0: {
-                        pos += 1;
-                        pos = scan_base(tokens, pos);
-                        if pos < 0 { break sg_3_0; }
-                        if pos > sg_3_best { sg_3_best = pos; }
-                    }
-                    pos = gp_3;
-                    if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                        pos += 1;
-                    }
-                    if pos > sg_3_best { sg_3_best = pos; }
-                }
-                if sg_3_best >= 0 {
-                    pos = sg_3_best;
-                } else {
-                    pos = gp_3;
-                }
-                if follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { dc_2_exit = true; }
-            }
-            if dc_2_exit { pos = sp; break; }
-            pos = dc_2;
-        }
-    }
-    let gp_4 = pos;
-    let sgk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    let mut sg_4_best = -1;
-    if sgk_4 == TK_COMMA {
-        pos = gp_4;
-        sg_4_0: {
-            pos += 1;
-            pos = scan_base(tokens, pos);
-            if pos < 0 { break sg_4_0; }
-            if pos > sg_4_best { sg_4_best = pos; }
-        }
-        pos = gp_4;
-        if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-            pos += 1;
-        }
-        if pos > sg_4_best { sg_4_best = pos; }
-    }
-    if sg_4_best >= 0 {
-        pos = sg_4_best;
-    } else {
-        pos = gp_4;
-    }
-    return pos;
-}
-
 fn scan_base(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
@@ -1657,17 +1629,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_2, false);
     p.expect(TK_LBRACE, &SYNC_3, false);
     if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
-    let mut opt_scan_pos: i32 = -1;
-    opt_scan: {
-        let tokens = &p.kinds;
-        let mut pos: i32 = p.pos;
-        pos = scan_fields(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | follow & FOLLOW_OPEN_READING);
-        if pos < 0 { break opt_scan; }
-        opt_scan_pos = pos;
-    }
-    if p.peek_kind() == TK_ID && opt_scan_pos >= 0 {
+    if p.peek_kind() == TK_ID {
         p.site = 2;
-        _parse_fields(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | follow & FOLLOW_OPEN_READING);
+        _parse_fields(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
     p.expect(TK_RBRACE, &EMPTY_SYNC, true);
     return;
@@ -1768,7 +1732,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
         gd_scan_2: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            if pos < tokens.len() && tokens[pos] == TK_COMMA && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos += 1;
             }
             gd_end_2 = pos;
@@ -1782,12 +1746,12 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 5;
             _parse_base(p);
         } else {
-            if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+            if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
                 p.take();
             }
         }
     } else {
-        if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
             p.take();
         }
     }
