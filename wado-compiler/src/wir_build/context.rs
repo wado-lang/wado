@@ -1077,19 +1077,17 @@ impl<'a> WirContext<'a> {
                     }
                 }
 
-                // Get result types from the function's type definition
-                let results = if let Some(WirTypeDef::Func(ft)) =
+                let Some(WirTypeDef::Func(signature)) =
                     self.types.get(func.type_id.index() as usize)
-                {
-                    ft.results.clone()
-                } else {
-                    vec![WirType::I32]
+                else {
+                    unreachable!("a function's type is a func type");
                 };
 
                 mod_functions.push(WasmModuleFunc {
                     export_name,
                     param_names: func.param_names.clone(),
-                    results,
+                    params: signature.params.clone(),
+                    results: signature.results.clone(),
                     body,
                     original_func_index: DEFINED_FUNC_BASE + func_idx,
                     is_exported: func.export_name.is_some(),
