@@ -3,7 +3,9 @@
 // its callees' constant argument, so each takes one call per round. A run that
 // stopped after one round left the next call to the next iteration, and a chain
 // deeper than the `-O2` iteration count never converged. A `${x:?}` over deeply
-// nested types threads its `Formatter` through a chain like `f01`'s.
+// nested types threads its `Formatter` through a chain like `f01`'s. The last
+// link of each chain is specialized, which a run stopping short would miss
+// where no iteration cap is asserted.
 
 use { println, Stdout } from "core:cli";
 
@@ -142,5 +144,9 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "40\n120\n"
+    "stdout": "40\n120\n",
+    "wir_expect:O2": [
+        "f20$scalar$spec",
+        "g40$spec"
+    ]
 }
