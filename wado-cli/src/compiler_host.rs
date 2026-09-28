@@ -16,6 +16,7 @@ use wado_compiler::{
 use crate::args::DEFAULT_LOG_LEVEL;
 use crate::kiln_driver::KilnSpan;
 use crate::kiln_runtime::{self, KilnRunPolicy};
+use crate::rss::RssSample;
 use crate::run_cache::RunCache;
 use crate::runtime::create_fuel_engine;
 use crate::sync::lock;
@@ -113,6 +114,9 @@ pub struct FilesystemCompilerHost {
     /// returns it instead of having the inner host re-read the manifest —
     /// the caller already parsed it for the Kiln pipeline.
     dep_index: Option<wado_compiler::DependencyIndex>,
+    /// The resident set at each open span's start, innermost last, so a span's
+    /// end line says how far it moved.
+    span_rss: Mutex<Vec<Option<RssSample>>>,
 }
 
 impl FilesystemCompilerHost {
@@ -126,6 +130,7 @@ impl FilesystemCompilerHost {
             start_time: Instant::now(),
             run: Arc::new(RunCache::new()),
             dep_index: None,
+            span_rss: Mutex::default(),
         }
     }
 
@@ -205,6 +210,7 @@ impl FilesystemCompilerHost {
             start_time: self.start_time,
             run: Arc::clone(&self.run),
             dep_index: self.dep_index.clone(),
+            span_rss: Mutex::default(),
         }
     }
 
@@ -249,10 +255,21 @@ impl FilesystemCompilerHost {
 
         match diagnostic.code {
             Code::SpanStart => {
-                format!("{timestamp} >> {}", diagnostic.message)
+                let rss = RssSample::read();
+                lock(&self.span_rss).push(rss);
+                format!(
+                    "{timestamp} >> {}{}",
+                    diagnostic.message,
+                    span_rss_suffix(rss, None)
+                )
             }
             Code::SpanEnd => {
-                format!("{timestamp} << {}", diagnostic.message)
+                let start = lock(&self.span_rss).pop().flatten();
+                format!(
+                    "{timestamp} << {}{}",
+                    diagnostic.message,
+                    span_rss_suffix(RssSample::read(), start)
+                )
             }
             _ => {
                 if let Some(span) = &diagnostic.span {
@@ -353,4 +370,10 @@ impl CompilerHost for FilesystemCompilerHost {
         }
         outcome
     }
+}
+
+/// ` · rss …` for a span trace line, or nothing where no reading exists.
+fn span_rss_suffix(rss: Option<RssSample>, start: Option<RssSample>) -> String {
+    rss.map(|rss| format!(" · {}", rss.span_suffix(start.as_ref())))
+        .unwrap_or_default()
 }

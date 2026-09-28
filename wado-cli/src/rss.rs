@@ -1,10 +1,15 @@
-struct RssSample {
+//! The process's resident set size as the kernel reports it, in bytes. Only
+//! Linux's procfs is read; elsewhere every reading is `None`.
+
+/// One reading of the current and peak resident set size.
+#[derive(Clone, Copy)]
+pub(crate) struct RssSample {
     current: u64,
     peak: u64,
 }
 
 impl RssSample {
-    fn read() -> Option<Self> {
+    pub(crate) fn read() -> Option<Self> {
         let status = std::fs::read_to_string("/proc/self/status").ok()?;
         Self::parse(&status)
     }
@@ -17,6 +22,19 @@ impl RssSample {
 
     fn current_peak_mib(&self) -> String {
         format!("{}/{} MiB", to_mib(self.current), to_mib(self.peak))
+    }
+
+    /// What a span trace line carries: the reading, and how far the resident
+    /// set moved since `start` when the line closes a span.
+    pub(crate) fn span_suffix(&self, start: Option<&Self>) -> String {
+        let reading = self.current_peak_mib();
+        match start {
+            Some(start) if self.current >= start.current => {
+                format!("rss {reading} (+{})", to_mib(self.current - start.current))
+            }
+            Some(start) => format!("rss {reading} (-{})", to_mib(start.current - self.current)),
+            None => format!("rss {reading}"),
+        }
     }
 }
 
@@ -82,6 +100,17 @@ Threads:\t8
         let status = "VmRSSFoo:\t 999 kB\nVmRSS:\t 42 kB\nVmHWM:\t 84 kB\n";
         let sample = RssSample::parse(status).expect("exact field present");
         assert_eq!(sample.current, 42 * 1024);
+    }
+
+    #[test]
+    fn span_suffix_signs_the_move_since_the_start() {
+        let at = |mib: u64| RssSample {
+            current: mib * 1024 * 1024,
+            peak: 700 * 1024 * 1024,
+        };
+        assert_eq!(at(512).span_suffix(None), "rss 512/700 MiB");
+        assert_eq!(at(512).span_suffix(Some(&at(500))), "rss 512/700 MiB (+12)");
+        assert_eq!(at(500).span_suffix(Some(&at(512))), "rss 500/700 MiB (-12)");
     }
 
     #[test]

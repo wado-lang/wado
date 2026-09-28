@@ -13,6 +13,12 @@ path = "src/lib.rs"
 name = "wado"
 path = "src/main.rs"
 
+[features]
+default = ["mimalloc"]
+# The global allocator. A heap profiler (valgrind DHAT, heaptrack) sees only
+# the system allocator, so profiling builds with `--no-default-features`.
+mimalloc = ["dep:mimalloc"]
+
 [dependencies]
 wado-compiler = { path = "../wado-compiler" }
 wado-lsp = { path = "../wado-lsp" }
@@ -51,7 +57,7 @@ wasmtime-wasi-http = { workspace = true }
 wasmtime-wasi-tls = { workspace = true }
 iana-time-zone = { workspace = true }
 libc = { workspace = true }
-mimalloc = { workspace = true }
+mimalloc = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
