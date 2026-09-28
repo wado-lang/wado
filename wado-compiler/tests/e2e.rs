@@ -1104,7 +1104,7 @@ fn assert_coverage(
         .branches()
         .iter()
         .filter(|b| !b.taken)
-        .map(|b| b.describe())
+        .map(wado_compiler::coverage::Branch::describe)
         .collect();
     let functions: Vec<String> = file
         .functions()

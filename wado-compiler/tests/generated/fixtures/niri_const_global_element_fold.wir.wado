@@ -63,18 +63,12 @@ fn "niri_const_global_element_fold.wado/run"() with Stdout {
     let packed: i64;
     let rx_62: i32;
     let tx_63: i32;
-    let $sroa_v_repr_72: ref Array<u8>;
-    $sroa_v_repr_72 = array.new_data<u8>("grace");
-    let $array_clone_dst_2: ref Array<u8>;
-    $array_clone_dst_2 = builtin::array_new<u8>(5);
-    builtin::array_copy<u8>($array_clone_dst_2, 0, $sroa_v_repr_72, 0, 5);
-    drop($array_clone_dst_2);
     rx_62 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_63 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "niri_const_global_element_fold.wado/$cm_binding__Stdout_write_via_stream"(rx_62);
-    let $mv_arg_5: ref "core:prelude/string.wado//String";
-    $mv_arg_5 = global:niri_const_global_element_fold.wado::$const_obj_2;
-    "core:rt/write_string_to_stream"(tx_63, $mv_arg_5.repr, $mv_arg_5.used);
+    let $mv_arg_2: ref "core:prelude/string.wado//String";
+    $mv_arg_2 = global:niri_const_global_element_fold.wado::$const_obj_2;
+    "core:rt/write_string_to_stream"(tx_63, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 

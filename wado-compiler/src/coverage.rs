@@ -582,17 +582,16 @@ impl Planner {
         let then_region = self.plan.regions.len() as u32;
         self.branch_block(RegionKind::Then, then_block, (at, 0));
         let else_region = self.plan.regions.len() as u32;
-        match else_block {
-            Some(block) => self.branch_block(RegionKind::Else, block, (at, 1)),
-            None => {
-                self.new_region(
-                    RegionKind::Else,
-                    Pos::end(span),
-                    Pos::end(span),
-                    Some((at, 1)),
-                );
-                self.sites.push((ProbeSite::ImplicitElse, id, else_region));
-            }
+        if let Some(block) = else_block {
+            self.branch_block(RegionKind::Else, block, (at, 1))
+        } else {
+            self.new_region(
+                RegionKind::Else,
+                Pos::end(span),
+                Pos::end(span),
+                Some((at, 1)),
+            );
+            self.sites.push((ProbeSite::ImplicitElse, id, else_region));
         }
         self.last_choice = vec![then_region, else_region];
     }
