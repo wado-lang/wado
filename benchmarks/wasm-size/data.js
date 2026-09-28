@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790632799775,
+  "lastUpdate": 1790639817423,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61657,6 +61657,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4e0a100fd57ef1f9ab3e4f3d5fa3768ade717a8e"
         },
         "date": 1790632799273,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1947,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6796,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20287,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288471,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c9f1acac3290f3ce7cac1a00a5e25d6d5e891e0a",
+          "message": "Merge pull request #2217 from wado-lang/claude/wado-test-coverage-design-w3p7ah\n\nfeat(test): `wado test --coverage` reports lines, branches and functions; stdlib gated at 80.4% lines",
+          "timestamp": "2026-09-29T08:26:38+09:00",
+          "tree_id": "3c18a4ee801a03becd67336120169896ae4ff982",
+          "url": "https://github.com/wado-lang/wado/commit/c9f1acac3290f3ce7cac1a00a5e25d6d5e891e0a"
+        },
+        "date": 1790639816624,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
