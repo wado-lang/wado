@@ -5400,7 +5400,7 @@ fn scan_object_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         pos = scan_type_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -6142,7 +6142,7 @@ fn scan_constructor_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
                             pos += 1;
                             pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                             if pos < 0 { break sg_21; }
-                            if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break sg_21; }
+                            if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_21; }
                             pos += 1;
                             break sg_21_done;
                         }
@@ -6237,7 +6237,7 @@ fn scan_enum_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         pos = scan_enum_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -6309,7 +6309,7 @@ fn scan_namespace_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
         pos = scan_statement_list(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -6828,7 +6828,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         pos = scan_statement_list(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -7025,7 +7025,7 @@ fn scan_import_module_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
                         pos = sol_34_save;
                     }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break rsv_31; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break rsv_31; }
                 pos += 1;
                 rs_31_ok = true;
             }
@@ -7055,7 +7055,7 @@ fn scan_import_module_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             pos = sol_37_save;
         }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -7379,7 +7379,7 @@ fn scan_export_module_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
                         pos = sol_48_save;
                     }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break rsv_45; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break rsv_45; }
                 pos += 1;
                 rs_45_ok = true;
             }
@@ -7409,7 +7409,7 @@ fn scan_export_module_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             pos = sol_51_save;
         }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -8014,7 +8014,7 @@ fn scan_case_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = sol_63_save;
         }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -8186,7 +8186,7 @@ fn scan_function_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
                         pos += 1;
                         pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                         if pos < 0 { break sg_69; }
-                        if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break sg_69; }
+                        if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_69; }
                         pos += 1;
                         break sg_69_done;
                     }
@@ -8264,7 +8264,7 @@ fn scan_class_tail(tokens: &Array<i32>, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -8381,7 +8381,7 @@ fn scan_property_member_declaration_alt_1(tokens: &Array<i32>, pos: i32, follow:
                         pos += 1;
                         pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                         if pos < 0 { break sg_74; }
-                        if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break sg_74; }
+                        if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_74; }
                         pos += 1;
                         break sg_74_done;
                     }
@@ -8517,7 +8517,7 @@ fn scan_generator_method(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
                 pos += 1;
                 pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break opt_probe; }
-                if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break opt_probe; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break opt_probe; }
                 pos += 1;
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if _kind_set_72(probe_kind) && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_ok = true; }
@@ -8543,7 +8543,7 @@ fn scan_generator_method(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     pos += 1;
     pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -8575,7 +8575,7 @@ fn scan_generator_function_declaration(tokens: &Array<i32>, pos: i32, follow: i6
     pos += 1;
     pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -8607,7 +8607,7 @@ fn scan_generator_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < tokens.len() && tokens[pos] == TK_Comma {
                     pos += 1;
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break rsv_77; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break rsv_77; }
                 pos += 1;
                 rs_77_ok = true;
             }
@@ -8618,7 +8618,7 @@ fn scan_generator_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < tokens.len() && tokens[pos] == TK_Comma {
         pos += 1;
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -8659,7 +8659,7 @@ fn scan_iterator_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < tokens.len() && tokens[pos] == TK_Comma {
                     pos += 1;
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break rsv_79; }
+                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break rsv_79; }
                 pos += 1;
                 rs_79_ok = true;
             }
@@ -8670,7 +8670,7 @@ fn scan_iterator_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < tokens.len() && tokens[pos] == TK_Comma {
         pos += 1;
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -8696,7 +8696,7 @@ fn scan_iterator_definition(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     pos += 1;
     pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -9138,7 +9138,7 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -9275,7 +9275,7 @@ fn scan_get_accessor(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -9297,7 +9297,7 @@ fn scan_set_accessor(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -10510,7 +10510,7 @@ fn scan_anonymous_function_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
     pos += 1;
     pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -10620,7 +10620,7 @@ fn scan_arrow_function_body_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     pos += 1;
     pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
     return pos;
 }
@@ -10691,7 +10691,7 @@ fn scan_template_string_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     } else if kind == TK_TemplateStringStartExpression {
         pos = start + 1;
         try_1: {
-            pos = scan_single_expression(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+            pos = scan_single_expression(tokens, pos, (FOLLOW_MASK_54 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
             if pos < 0 { break try_1; }
             if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break try_1; }
             pos += 1;
@@ -11564,7 +11564,7 @@ fn _parse_object_type__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
         p.site = 42;
         _parse_type_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -12678,7 +12678,7 @@ fn _parse_constructor_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () 
                         pos += 1;
                         pos = scan_function_body(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                         if pos < 0 { break sg_110; }
-                        if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break sg_110; }
+                        if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_110; }
                         pos += 1;
                         break sg_110_done;
                     }
@@ -12702,7 +12702,7 @@ fn _parse_constructor_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () 
             p.expect(TK_OpenBrace, &SYNC_11, false);
             p.site = 108;
             _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-            p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+            p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
         } else {
             p.expect(TK_SemiColon, &EMPTY_SYNC, true);
         }
@@ -12817,7 +12817,7 @@ fn _parse_enum_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
         p.site = 117;
         _parse_enum_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -12930,7 +12930,7 @@ fn _parse_namespace_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         p.site = 124;
         _parse_statement_list(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -14251,7 +14251,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPar
         p.site = 168;
         _parse_statement_list(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -14528,7 +14528,7 @@ fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
                             pos = sol_116_save;
                         }
                     }
-                    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break rep_body_end_scan; }
                     pos += 1;
                     rep_body_end_ok = true;
                 }
@@ -14573,7 +14573,7 @@ fn _parse_import_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         p.site = 182;
         _parse_import_alias_name(p, 0);
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -15000,7 +15000,7 @@ fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
                             pos = sol_121_save;
                         }
                     }
-                    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break rep_body_end_scan; }
                     pos += 1;
                     rep_body_end_ok = true;
                 }
@@ -15045,7 +15045,7 @@ fn _parse_export_module_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
         p.site = 203;
         _parse_export_alias_name(p, 0);
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -15882,7 +15882,7 @@ fn _parse_case_block__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
         p.site = 275;
         _parse_default_clause(p, 0);
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -16131,7 +16131,7 @@ fn _parse_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wit
         p.take();
         p.site = 296;
         _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+        p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     } else if grp_kind == TK_SemiColon {
         p.take();
     } else {
@@ -16226,7 +16226,7 @@ fn _parse_class_tail__inner(p: &mut Parser) -> () with TypeScriptParserBase {
         _parse_class_element(p, 0);
         if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_11, &EXPECTED_11); }
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -16432,7 +16432,7 @@ fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: i64 =
         p.take();
         p.site = 319;
         _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+        p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     } else if grp_kind == TK_SemiColon {
         p.take();
     } else {
@@ -16658,7 +16658,7 @@ fn _parse_generator_method__inner(p: &mut Parser, follow: i64 = 0) -> () with Ty
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 328;
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -16695,7 +16695,7 @@ fn _parse_generator_function_declaration__inner(p: &mut Parser, follow: i64 = 0)
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 331;
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -16740,7 +16740,7 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
                     if pos < tokens.len() && tokens[pos] == TK_Comma {
                         pos += 1;
                     }
-                    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break rep_body_end_scan; }
                     pos += 1;
                     rep_body_end_ok = true;
                 }
@@ -16759,7 +16759,7 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Typ
     if p.peek_kind() == TK_Comma {
         p.take();
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -16822,7 +16822,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
                     if pos < tokens.len() && tokens[pos] == TK_Comma {
                         pos += 1;
                     }
-                    if pos >= tokens.len() || tokens[pos] != TK_TemplateCloseBrace { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break rep_body_end_scan; }
                     pos += 1;
                     rep_body_end_ok = true;
                 }
@@ -16841,7 +16841,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
     if p.peek_kind() == TK_Comma {
         p.take();
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -16871,7 +16871,7 @@ fn _parse_iterator_definition__inner(p: &mut Parser, follow: i64 = 0) -> () with
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 339;
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -17508,7 +17508,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
             p.take();
         }
     }
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -17801,7 +17801,7 @@ fn _parse_get_accessor__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 378;
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -17829,7 +17829,7 @@ fn _parse_set_accessor__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeSc
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 381;
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -19554,7 +19554,7 @@ fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 488;
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -19706,7 +19706,7 @@ fn _parse_arrow_function_body__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
     p.expect(TK_OpenBrace, &SYNC_11, false);
     p.site = 496;
     _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
+    p.expect(TK_CloseBrace, &EMPTY_SYNC, true);
     return;
 }
 
@@ -19857,7 +19857,7 @@ fn _parse_template_string_atom__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     } else if kind == TK_TemplateStringStartExpression {
         p.take();
         p.site = 501;
-        _parse_single_expression(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        _parse_single_expression(p, (FOLLOW_MASK_54 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_TemplateStringEscapeAtom {
@@ -20885,11 +20885,11 @@ pub fn parse_eos<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseRe
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_eos(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[], [0, 1], [2048], [-1577214804, -33557888, -1, -1, 3018623], [4096], [0, 640], [64], [8], [16], [0, 0, 0, 0, 128], [-1577214804, -33557887, -1, -1, 3018623], [256], [3072], [0, 33554432], [32], [131072], [-1577206612, -3456, -1, -1, 3018623], [-1577206612, -33557888, -1, -1, 3018623], [32768], [0, 0, 0, 0, 2], [1024], [128], [0, 0, 0, 0, 2097152], [2304], [0, 0, i32::MIN], [0, 0, 1024], [0, 0, 1048576], [0, 0, 536870912], [64, 0, i32::MIN], [-1577214548, -33557888, -1, -1, 3018623], [-1577214740, -33557888, -1, -1, 3018623], [1152], [0, 0, 0, 2112, 64], [0, 0, 0, 1048582], [36864], [2112], [-852, -33554433, -1, -1, 3018623], [-1577214804, -3456, -1, -1, 3018623]];
-global CALL_FOLLOW: List<i32> = [0, 0, 0, 1, 2, 2, 3, 0, 4, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, 0, 5, 0, 5, 5, 6, 7, 7, 7, 0, 8, 8, 7, 9, 7, 7, 3, 0, 10, 1, 0, 0, 11, 12, 12, 12, 0, 0, 0, 0, 13, 0, 7, 8, 2, 2, 14, 6, 0, 14, 6, 0, 0, 0, 15, 0, 16, 13, 0, 0, 14, 6, 0, 0, 2, 2, 2, 2, 2, 0, 0, 3, 3, 17, 0, 3, 0, 3, 0, 3, 3, 3, 0, 0, 0, 14, 6, 0, 18, 0, 17, 0, 3, 4, 3, 0, 19, 6, 11, 3, 3, 3, 20, 0, 2, 2, 21, 11, 2, 2, 2, 4, 0, 21, 11, 15, 15, 4, 20, 3, 0, 0, 15, 0, 15, 6, 3, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 3, 3, 3, 3, 0, 0, 3, 3, 3, 3, 0, 0, 2, 23, 24, 0, 0, 2, 24, 0, 24, 0, 3, 3, 0, 3, 0, 3, 3, 0, 3, 3, 0, 2, 23, 24, 0, 0, 0, 0, 3, 3, 20, 3, 3, 20, 3, 20, 2, 2, 3, 3, 3, 3, 4, 3, 0, 20, 6, 25, 0, 26, 6, 0, 6, 0, 20, 20, 6, 0, 3, 20, 20, 6, 0, 27, 6, 0, 3, 27, 6, 0, 3, 3, 28, 6, 0, 3, 3, 3, 28, 6, 0, 3, 0, 3, 0, 3, 0, 3, 0, 6, 0, 6, 0, 29, 29, 11, 3, 18, 0, 0, 18, 0, 3, 0, 3, 3, 0, 0, 30, 6, 0, 0, 0, 3, 31, 11, 32, 3, 3, 3, 0, 3, 0, 29, 0, 0, 0, 3, 0, 0, 0, 3, 17, 3, 20, 3, 3, 31, 11, 3, 0, 0, 0, 33, 20, 14, 6, 11, 14, 6, 11, 23, 23, 0, 23, 23, 8, 6, 11, 0, 0, 0, 2, 2, 2, 0, 0, 18, 0, 3, 3, 17, 4, 0, 3, 0, 0, 3, 8, 2, 2, 2, 2, 23, 23, 34, 0, 8, 0, 0, 0, 0, 0, 0, 0, 14, 21, 11, 14, 6, 11, 0, 0, 8, 35, 2, 2, 0, 0, 2, 2, 36, 3, 3, 3, 36, 0, 8, 0, 36, 0, 36, 36, 0, 36, 36, 3, 3, 36, 36, 36, 0, 36, 0, 0, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 18, 36, 0, 36, 0, 3, 36, 0, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 6, 36, 36, 0, 36, 0, 7, 0, 0, 0, 0, 0, 0, 6, 21, 11, 0, 37, 13, 0, 0, 6, 0, 11, 0, 0, 0, 3, 11, 3, 0, 3, 0, 0, 0, 0, 0];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[], [0, 1], [2048], [-1577214804, -33557888, -1, -1, 3018623], [4096], [0, 640], [64], [8], [16], [0, 0, 0, 0, 128], [-1577214804, -33557887, -1, -1, 3018623], [512], [3072], [0, 33554432], [32], [131072], [-1577206612, -3456, -1, -1, 3018623], [-1577206612, -33557888, -1, -1, 3018623], [32768], [0, 0, 0, 0, 2], [1024], [128], [0, 0, 0, 0, 2097152], [2560], [0, 0, i32::MIN], [0, 0, 1024], [0, 0, 1048576], [0, 0, 536870912], [64, 0, i32::MIN], [-1577214292, -33557888, -1, -1, 3018623], [-1577214740, -33557888, -1, -1, 3018623], [1152], [0, 0, 0, 2112, 64], [0, 0, 0, 1048582], [36864], [2112], [-852, -33554433, -1, -1, 3018623], [-1577214804, -3456, -1, -1, 3018623], [256]];
+global CALL_FOLLOW: List<i32> = [0, 0, 0, 1, 2, 2, 3, 0, 4, 0, 0, 0, 1, 2, 2, 0, 0, 0, 0, 0, 0, 5, 0, 5, 5, 6, 7, 7, 7, 0, 8, 8, 7, 9, 7, 7, 3, 0, 10, 1, 0, 0, 11, 12, 12, 12, 0, 0, 0, 0, 13, 0, 7, 8, 2, 2, 14, 6, 0, 14, 6, 0, 0, 0, 15, 0, 16, 13, 0, 0, 14, 6, 0, 0, 2, 2, 2, 2, 2, 0, 0, 3, 3, 17, 0, 3, 0, 3, 0, 3, 3, 3, 0, 0, 0, 14, 6, 0, 18, 0, 17, 0, 3, 4, 3, 0, 19, 6, 11, 3, 3, 3, 20, 0, 2, 2, 21, 11, 2, 2, 2, 4, 0, 21, 11, 15, 15, 4, 20, 3, 0, 0, 15, 0, 15, 6, 3, 0, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 3, 3, 3, 3, 0, 0, 3, 3, 3, 3, 0, 0, 2, 23, 24, 0, 0, 2, 24, 0, 24, 0, 3, 3, 0, 3, 0, 3, 3, 0, 3, 3, 0, 2, 23, 24, 0, 0, 0, 0, 3, 3, 20, 3, 3, 20, 3, 20, 2, 2, 3, 3, 3, 3, 4, 3, 0, 20, 6, 25, 0, 26, 6, 0, 6, 0, 20, 20, 6, 0, 3, 20, 20, 6, 0, 27, 6, 0, 3, 27, 6, 0, 3, 3, 28, 6, 0, 3, 3, 3, 28, 6, 0, 3, 0, 3, 0, 3, 0, 3, 0, 6, 0, 6, 0, 29, 29, 11, 3, 18, 0, 0, 18, 0, 3, 0, 3, 3, 0, 0, 30, 6, 0, 0, 0, 3, 31, 11, 32, 3, 3, 3, 0, 3, 0, 29, 0, 0, 0, 3, 0, 0, 0, 3, 17, 3, 20, 3, 3, 31, 11, 3, 0, 0, 0, 33, 20, 14, 6, 11, 14, 6, 11, 23, 23, 0, 23, 23, 8, 6, 11, 0, 0, 0, 2, 2, 2, 0, 0, 18, 0, 3, 3, 17, 4, 0, 3, 0, 0, 3, 8, 2, 2, 2, 2, 23, 23, 34, 0, 8, 0, 0, 0, 0, 0, 0, 0, 14, 21, 11, 14, 6, 11, 0, 0, 8, 35, 2, 2, 0, 0, 2, 2, 36, 3, 3, 3, 36, 0, 8, 0, 36, 0, 36, 36, 0, 36, 36, 3, 3, 36, 36, 36, 0, 36, 0, 0, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 36, 0, 18, 36, 0, 36, 0, 3, 36, 0, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 6, 36, 36, 0, 36, 0, 7, 0, 0, 0, 0, 0, 0, 6, 21, 11, 0, 37, 13, 0, 0, 6, 0, 11, 0, 0, 0, 3, 38, 3, 0, 3, 0, 0, 0, 0, 0];
 global CALL_FOLLOW_ENDS: List<bool> = [true, true, true, false, true, true, true, true, false, true, true, true, false, true, true, true, true, true, true, true, false, true, false, true, true, false, true, true, true, false, false, false, true, false, true, true, true, true, false, false, true, true, false, true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, false, true, true, true, true, true, false, false, true, true, true, true, true, true, true, true, true, false, false, false, true, false, true, true, true, false, false, true, true, true, true, false, false, true, false, true, false, true, false, false, true, true, false, false, false, false, false, false, true, true, true, true, false, false, true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, false, true, false, false, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, false, false, true, true, true, false, false, true, true, true, false, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, false, false, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, true, true, true, false, true, true, false, true, true, false, false, true, false, true, false, false, false, true, false, false, false, false, true, false, false, true, false, false, false, true, false, false, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, true, true, false, true, false, true, false, false, false, true, false, true, true, false, true, true, true, false, true, true, true, false, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, false, false, true, true, true, true, true, true, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, false, false, false, false, false, false, true, true, false, false, true, true, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, true, false, true, true, false, false, true, true, true, false, true, false, false, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, false, true, false, true, true, true, true, true, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true, true, true, true, false, false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, false, true, false, true, true, true, true, true];
 
-global TOKEN_NAMES: List<String> = ["MultiLineComment", "SingleLineComment", "RegularExpressionLiteral", "'['", "']'", "'('", "')'", "'{'", "'}'", "'}'", "';'", "','", "'='", "'?'", "'?.'", "':'", "'...'", "'.'", "'++'", "'--'", "'+'", "'-'", "'~'", "'!'", "'*'", "'/'", "'%'", "'**'", "'??'", "'#'", "'<<'", "'<'", "'>'", "'<='", "'>='", "'=='", "'!='", "'==='", "'!=='", "'&'", "'^'", "'|'", "'&&'", "'||'", "'*='", "'/='", "'%='", "'+='", "'-='", "'<<='", "'>>='", "'>>>='", "'&='", "'^='", "'|='", "'**='", "'??='", "'=>'", "'null'", "BooleanLiteral", "DecimalLiteral", "HexIntegerLiteral", "OctalIntegerLiteral", "OctalIntegerLiteral2", "BinaryIntegerLiteral", "BigHexIntegerLiteral", "BigOctalIntegerLiteral", "BigBinaryIntegerLiteral", "BigDecimalIntegerLiteral", "'break'", "'do'", "'instanceof'", "'typeof'", "'case'", "'else'", "'new'", "'var'", "'catch'", "'finally'", "'return'", "'void'", "'continue'", "'for'", "'switch'", "'while'", "'debugger'", "'function'", "'this'", "'with'", "'default'", "'if'", "'throw'", "'delete'", "'in'", "'try'", "'as'", "'from'", "'readonly'", "'async'", "'await'", "'yield'", "'yield*'", "'class'", "'enum'", "'extends'", "'super'", "'const'", "'export'", "'import'", "'implements'", "'let'", "'private'", "'public'", "'interface'", "'package'", "'protected'", "'static'", "'any'", "'number'", "'never'", "'boolean'", "'string'", "'unique'", "'symbol'", "'undefined'", "'object'", "'of'", "'keyof'", "'type'", "'constructor'", "'namespace'", "'require'", "'module'", "'declare'", "'abstract'", "'is'", "'@'", "Identifier", "StringLiteral", "'`'", "WhiteSpaces", "LineTerminator", "HtmlComment", "CDataComment", "UnexpectedCharacter", "TemplateStringEscapeAtom", "TemplateStringStartExpression", "TemplateStringAtom", "BackTickInside", "Eof", "Error"];
+global TOKEN_NAMES: List<String> = ["MultiLineComment", "SingleLineComment", "RegularExpressionLiteral", "'['", "']'", "'('", "')'", "'{'", "TemplateCloseBrace", "'}'", "';'", "','", "'='", "'?'", "'?.'", "':'", "'...'", "'.'", "'++'", "'--'", "'+'", "'-'", "'~'", "'!'", "'*'", "'/'", "'%'", "'**'", "'??'", "'#'", "'<<'", "'<'", "'>'", "'<='", "'>='", "'=='", "'!='", "'==='", "'!=='", "'&'", "'^'", "'|'", "'&&'", "'||'", "'*='", "'/='", "'%='", "'+='", "'-='", "'<<='", "'>>='", "'>>>='", "'&='", "'^='", "'|='", "'**='", "'??='", "'=>'", "'null'", "BooleanLiteral", "DecimalLiteral", "HexIntegerLiteral", "OctalIntegerLiteral", "OctalIntegerLiteral2", "BinaryIntegerLiteral", "BigHexIntegerLiteral", "BigOctalIntegerLiteral", "BigBinaryIntegerLiteral", "BigDecimalIntegerLiteral", "'break'", "'do'", "'instanceof'", "'typeof'", "'case'", "'else'", "'new'", "'var'", "'catch'", "'finally'", "'return'", "'void'", "'continue'", "'for'", "'switch'", "'while'", "'debugger'", "'function'", "'this'", "'with'", "'default'", "'if'", "'throw'", "'delete'", "'in'", "'try'", "'as'", "'from'", "'readonly'", "'async'", "'await'", "'yield'", "'yield*'", "'class'", "'enum'", "'extends'", "'super'", "'const'", "'export'", "'import'", "'implements'", "'let'", "'private'", "'public'", "'interface'", "'package'", "'protected'", "'static'", "'any'", "'number'", "'never'", "'boolean'", "'string'", "'unique'", "'symbol'", "'undefined'", "'object'", "'of'", "'keyof'", "'type'", "'constructor'", "'namespace'", "'require'", "'module'", "'declare'", "'abstract'", "'is'", "'@'", "Identifier", "StringLiteral", "'`'", "WhiteSpaces", "LineTerminator", "HtmlComment", "CDataComment", "UnexpectedCharacter", "TemplateStringEscapeAtom", "TemplateStringStartExpression", "TemplateStringAtom", "BackTickInside", "Eof", "Error"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
@@ -21104,7 +21104,7 @@ fn _kind_set_48(k: i32) -> bool {
 }
 
 fn _kind_set_49(k: i32) -> bool {
-    return k matches { TK_ARROW | TK_Abstract | TK_Any | TK_As | TK_Assign | TK_Async | TK_At | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitAnd | TK_BitNot | TK_BitOr | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_CloseBracket | TK_CloseParen | TK_Comma | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Declare | TK_Default | TK_Delete | TK_Do | TK_EOF | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LessThan | TK_Let | TK_Minus | TK_MinusMinus | TK_Module | TK_MoreThan | TK_Namespace | TK_Never | TK_New | TK_Not | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Plus | TK_PlusPlus | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_SemiColon | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_TemplateCloseBrace | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
+    return k matches { TK_ARROW | TK_Abstract | TK_Any | TK_As | TK_Assign | TK_Async | TK_At | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitAnd | TK_BitNot | TK_BitOr | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_CloseBrace | TK_CloseBracket | TK_CloseParen | TK_Comma | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Declare | TK_Default | TK_Delete | TK_Do | TK_EOF | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LessThan | TK_Let | TK_Minus | TK_MinusMinus | TK_Module | TK_MoreThan | TK_Namespace | TK_Never | TK_New | TK_Not | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Plus | TK_PlusPlus | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_SemiColon | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
 }
 
 fn _kind_set_50(k: i32) -> bool {
@@ -21112,7 +21112,7 @@ fn _kind_set_50(k: i32) -> bool {
 }
 
 fn _kind_set_51(k: i32) -> bool {
-    return k matches { TK_Comma | TK_SemiColon | TK_TemplateCloseBrace };
+    return k matches { TK_CloseBrace | TK_Comma | TK_SemiColon };
 }
 
 fn _kind_set_52(k: i32) -> bool {
@@ -21124,7 +21124,7 @@ fn _kind_set_53(k: i32) -> bool {
 }
 
 fn _kind_set_54(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_At | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitNot | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Declare | TK_Default | TK_Delete | TK_Do | TK_EOF | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LessThan | TK_Let | TK_Minus | TK_MinusMinus | TK_Module | TK_Namespace | TK_Never | TK_New | TK_Not | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Plus | TK_PlusPlus | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_SemiColon | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_TemplateCloseBrace | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
+    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_At | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitNot | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_CloseBrace | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Declare | TK_Default | TK_Delete | TK_Do | TK_EOF | TK_Else | TK_Enum | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_HexIntegerLiteral | TK_Identifier | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LessThan | TK_Let | TK_Minus | TK_MinusMinus | TK_Module | TK_Namespace | TK_Never | TK_New | TK_Not | TK_NullLiteral | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Package | TK_Plus | TK_PlusPlus | TK_Private | TK_Protected | TK_Public | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_SemiColon | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
 }
 
 fn _kind_set_55(k: i32) -> bool {
@@ -21196,7 +21196,7 @@ fn _kind_set_71(k: i32) -> bool {
 }
 
 fn _kind_set_72(k: i32) -> bool {
-    return k matches { TK_Comma | TK_TemplateCloseBrace };
+    return k matches { TK_CloseBrace | TK_Comma };
 }
 
 fn _kind_set_73(k: i32) -> bool {
@@ -21312,7 +21312,7 @@ fn _kind_set_100(k: i32) -> bool {
 }
 
 fn _kind_set_101(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_And | TK_Any | TK_As | TK_Assign | TK_Async | TK_At | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitAnd | TK_BitAndAssign | TK_BitNot | TK_BitOr | TK_BitOrAssign | TK_BitXOr | TK_BitXorAssign | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_CloseBracket | TK_CloseParen | TK_Colon | TK_Comma | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Declare | TK_Default | TK_Delete | TK_Divide | TK_DivideAssign | TK_Do | TK_Dot | TK_EOF | TK_Else | TK_Enum | TK_Equals_ | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_GreaterThanEquals | TK_HexIntegerLiteral | TK_Identifier | TK_IdentityEquals | TK_IdentityNotEquals | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LeftShiftArithmetic | TK_LeftShiftArithmeticAssign | TK_LessThan | TK_LessThanEquals | TK_Let | TK_Minus | TK_MinusAssign | TK_MinusMinus | TK_Module | TK_Modulus | TK_ModulusAssign | TK_MoreThan | TK_Multiply | TK_MultiplyAssign | TK_Namespace | TK_Never | TK_New | TK_Not | TK_NotEquals | TK_NullCoalesce | TK_NullLiteral | TK_NullishCoalescingAssign | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Package | TK_Plus | TK_PlusAssign | TK_PlusPlus | TK_Power | TK_PowerAssign | TK_Private | TK_Protected | TK_Public | TK_QuestionMark | TK_QuestionMarkDot | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign | TK_SemiColon | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_TemplateCloseBrace | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
+    return k matches { TK_Abstract | TK_And | TK_Any | TK_As | TK_Assign | TK_Async | TK_At | TK_Await | TK_BackTick | TK_BigBinaryIntegerLiteral | TK_BigDecimalIntegerLiteral | TK_BigHexIntegerLiteral | TK_BigOctalIntegerLiteral | TK_BinaryIntegerLiteral | TK_BitAnd | TK_BitAndAssign | TK_BitNot | TK_BitOr | TK_BitOrAssign | TK_BitXOr | TK_BitXorAssign | TK_Boolean | TK_BooleanLiteral | TK_Break | TK_Case | TK_Catch | TK_Class | TK_CloseBrace | TK_CloseBracket | TK_CloseParen | TK_Colon | TK_Comma | TK_Const | TK_Constructor | TK_Continue | TK_Debugger | TK_DecimalLiteral | TK_Declare | TK_Default | TK_Delete | TK_Divide | TK_DivideAssign | TK_Do | TK_Dot | TK_EOF | TK_Else | TK_Enum | TK_Equals_ | TK_Export | TK_Extends | TK_Finally | TK_For | TK_From | TK_Function_ | TK_GreaterThanEquals | TK_HexIntegerLiteral | TK_Identifier | TK_IdentityEquals | TK_IdentityNotEquals | TK_If | TK_Implements | TK_Import | TK_In | TK_Instanceof | TK_Interface | TK_KeyOf | TK_LeftShiftArithmetic | TK_LeftShiftArithmeticAssign | TK_LessThan | TK_LessThanEquals | TK_Let | TK_Minus | TK_MinusAssign | TK_MinusMinus | TK_Module | TK_Modulus | TK_ModulusAssign | TK_MoreThan | TK_Multiply | TK_MultiplyAssign | TK_Namespace | TK_Never | TK_New | TK_Not | TK_NotEquals | TK_NullCoalesce | TK_NullLiteral | TK_NullishCoalescingAssign | TK_Number | TK_Object | TK_OctalIntegerLiteral | TK_OctalIntegerLiteral2 | TK_Of | TK_OpenBrace | TK_OpenBracket | TK_OpenParen | TK_Or | TK_Package | TK_Plus | TK_PlusAssign | TK_PlusPlus | TK_Power | TK_PowerAssign | TK_Private | TK_Protected | TK_Public | TK_QuestionMark | TK_QuestionMarkDot | TK_ReadOnly | TK_RegularExpressionLiteral | TK_Require | TK_Return | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign | TK_SemiColon | TK_Static | TK_String | TK_StringLiteral | TK_Super | TK_Switch | TK_Symbol | TK_TemplateCloseBrace | TK_This | TK_Throw | TK_Try | TK_TypeAlias | TK_Typeof | TK_Undefined | TK_Unique | TK_Var | TK_Void | TK_While | TK_With | TK_Yield | TK_YieldStar };
 }
 
 fn _kind_set_102(k: i32) -> bool {
@@ -21353,8 +21353,8 @@ global SYNC_9: List<i32> = [0, 0, 0, 201326592];
 global EXPECTED_9: List<i32> = [TK_Symbol, TK_Unique];
 global SYNC_10: List<i32> = [0, 0, i32::MIN, -2097131, 583];
 global EXPECTED_10: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield];
-global SYNC_11: List<i32> = [-1577214548, -33557888, -1, -1, 3018623];
-global EXPECTED_11: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Assign, TK_Async, TK_At, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitAnd, TK_BitAndAssign, TK_BitNot, TK_BitOr, TK_BitOrAssign, TK_BitXorAssign, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Colon, TK_Comma, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Declare, TK_Default, TK_Delete, TK_DivideAssign, TK_Do, TK_EOF, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LeftShiftArithmeticAssign, TK_LessThan, TK_Let, TK_Minus, TK_MinusAssign, TK_MinusMinus, TK_Module, TK_ModulusAssign, TK_Multiply, TK_MultiplyAssign, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_NullishCoalescingAssign, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusAssign, TK_PlusPlus, TK_PowerAssign, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_RightShiftArithmeticAssign, TK_RightShiftLogicalAssign, TK_SemiColon, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_TemplateCloseBrace, TK_TemplateStringAtom, TK_TemplateStringEscapeAtom, TK_TemplateStringStartExpression, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
+global SYNC_11: List<i32> = [-1577214292, -33557888, -1, -1, 3018623];
+global EXPECTED_11: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Assign, TK_Async, TK_At, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitAnd, TK_BitAndAssign, TK_BitNot, TK_BitOr, TK_BitOrAssign, TK_BitXorAssign, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_CloseBrace, TK_Colon, TK_Comma, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Declare, TK_Default, TK_Delete, TK_DivideAssign, TK_Do, TK_EOF, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LeftShiftArithmeticAssign, TK_LessThan, TK_Let, TK_Minus, TK_MinusAssign, TK_MinusMinus, TK_Module, TK_ModulusAssign, TK_Multiply, TK_MultiplyAssign, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_NullishCoalescingAssign, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusAssign, TK_PlusPlus, TK_PowerAssign, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_RightShiftArithmeticAssign, TK_RightShiftLogicalAssign, TK_SemiColon, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_TemplateStringAtom, TK_TemplateStringEscapeAtom, TK_TemplateStringStartExpression, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar];
 global SYNC_12: List<i32> = [3072];
 global EXPECTED_12: List<i32> = [TK_Comma, TK_SemiColon];
 global EXPECTED_13: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
@@ -21395,8 +21395,8 @@ global EXPECTED_35: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK
 global EXPECTED_36: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Const, TK_Constructor, TK_Declare, TK_From, TK_Identifier, TK_KeyOf, TK_Let, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Var, TK_Yield];
 global EXPECTED_37: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 global EXPECTED_38: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_OpenBrace, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
-global SYNC_39: List<i32> = [2304];
-global EXPECTED_39: List<i32> = [TK_Comma, TK_TemplateCloseBrace];
+global SYNC_39: List<i32> = [2560];
+global EXPECTED_39: List<i32> = [TK_CloseBrace, TK_Comma];
 global EXPECTED_40: List<i32> = [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_Of, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 global SYNC_41: List<i32> = [0, 0, 0, 24, 512];
 global EXPECTED_41: List<i32> = [TK_Await, TK_Identifier, TK_Yield];
@@ -21471,7 +21471,7 @@ global SYNC_87: List<i32> = [0, 0, -32, 56623071, 25];
 global EXPECTED_87: List<i32> = [TK_As, TK_Async, TK_Await, TK_Boolean, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Continue, TK_Debugger, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_Let, TK_Module, TK_New, TK_Number, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_Super, TK_Switch, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Var, TK_Void, TK_While, TK_With, TK_Yield];
 global EXPECTED_88: List<i32> = [TK_EOF, TK_SemiColon];
 
-global FOLLOW_SETS: List<List<i32>> = [[0, 1], [2048], [i32::MIN, 0, i32::MIN, -2097131, 583], [4096], [-2147483480, 469762688, -2139027200, -2097131, 1607], [64], [16], [0, 0, 0, 0, 128], [168, 469762048, -2139029248, -2097131, 1607], [256], [8], [32], [0, 33554432], [136, 201326592, -32, -33, 863], [136, 201326592, -32, -33, 607], [-2130968404, -67108864, -1, -1, 3679], [128], [0, 0, i32::MIN, -2097131, 583], [8, -67108864, -31, -33, 1631], [1024], [0, 0, 0, 0, 2097152], [-2147483616], [16777344, 201326592, -32, -33, 607], [0, 0, 0, 1], [0, 0, 0, 0, 1024], [136, 0, i32::MIN, -2097131, 591], [-2130967380, -67108864, -1, -1, 3967], [0, 0, 1048576], [0, 0, 536870912], [32768], [0, 0, 24576], [1152], [16777216], [-2114125652, -67108864, -1, -1, 3679], [36864]];
+global FOLLOW_SETS: List<List<i32>> = [[0, 1], [2048], [i32::MIN, 0, i32::MIN, -2097131, 583], [4096], [-2147483480, 469762688, -2139027200, -2097131, 1607], [64], [16], [0, 0, 0, 0, 128], [168, 469762048, -2139029248, -2097131, 1607], [512], [8], [32], [0, 33554432], [136, 201326592, -32, -33, 863], [136, 201326592, -32, -33, 607], [-2130968404, -67108864, -1, -1, 3679], [128], [0, 0, i32::MIN, -2097131, 583], [8, -67108864, -31, -33, 1631], [1024], [0, 0, 0, 0, 2097152], [-2147483616], [16777344, 201326592, -32, -33, 607], [0, 0, 0, 1], [0, 0, 0, 0, 1024], [136, 0, i32::MIN, -2097131, 591], [-2130967380, -67108864, -1, -1, 3967], [0, 0, 1048576], [0, 0, 536870912], [32768], [0, 0, 24576], [1152], [16777216], [-2114125652, -67108864, -1, -1, 3679], [36864], [256]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 770;
 global FOLLOW_MASK_2: i64 = 1284;
@@ -21516,4 +21516,5 @@ global FOLLOW_MASK_50: i64 = 1548;
 global FOLLOW_MASK_51: i64 = 4098;
 global FOLLOW_MASK_52: i64 = 4126;
 global FOLLOW_MASK_53: i64 = 4109;
+global FOLLOW_MASK_54: i64 = 36;
 
