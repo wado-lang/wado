@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.30](https://github.com/wado-lang/wado/compare/v0.0.29...v0.0.30) - 2026-09-27
+
+- fix(retain): one reading of a body-less callee; WIR goldens 2.1% smaller by @gfx in https://github.com/wado-lang/wado/pull/2192
+- fix(gale): parse open-ended and nested LR suffixes as the ANTLR4 jar does; test codegen by running the parser by @gfx in https://github.com/wado-lang/wado/pull/2194
+- feat(elaborator): a numeric literal takes its type from the whole generic call; add a toy RSA example by @gfx in https://github.com/wado-lang/wado/pull/2193
+- perf(inline): the stdlib carries no inline hints; gale_gen 6.5% faster by @gfx in https://github.com/wado-lang/wado/pull/2195
+- feat(loam): one generated module runs GPT-2 at any sequence length, checked against onnxruntime by @gfx in https://github.com/wado-lang/wado/pull/2197
+- fix(gale): make rule recovery always progress, keyed on where the rule failed by @gfx in https://github.com/wado-lang/wado/pull/2198
+
 ## [v0.0.29](https://github.com/wado-lang/wado/compare/v0.0.28...v0.0.29) - 2026-09-27
 
 - fix(lower): value-copy hand-over decided by place, and a variant pattern carrying its case index by @gfx in https://github.com/wado-lang/wado/pull/2054

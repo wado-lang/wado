@@ -1203,13 +1203,7 @@ fn rewrite_call_expr(
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
 ) -> bool {
-    let ExprKind::Call {
-        func_id,
-        args,
-        has_receiver,
-        ..
-    } = &body.exprs[id].kind
-    else {
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind else {
         return false;
     };
     let Some((clone, positions)) = sroa_positions.get(func_id).cloned() else {
@@ -1229,9 +1223,6 @@ fn rewrite_call_expr(
         );
         return false;
     }
-    // Scalarizing position 0 replaces a method's receiver with a plain scalar,
-    // so the call stops being one.
-    let receiver_scalarized = *has_receiver && positions.contains_key(&0);
     let mut rewritten: Vec<(usize, Operand)> = Vec::with_capacity(positions.len());
     for (pi, info) in &positions {
         let op = scalarized_arg(&arg_ops, *pi);
@@ -1240,20 +1231,16 @@ fn rewrite_call_expr(
             rewrite_arg_operand(body, op, info, scalar_param_struct, type_table, span),
         ));
     }
-    let ExprKind::Call {
-        func_id,
-        args,
-        has_receiver,
-        ..
-    } = &mut body.exprs[id].kind
-    else {
+    let ExprKind::Call { func_id, args, .. } = &mut body.exprs[id].kind else {
         unreachable!("matched a Call above")
     };
     for (pi, op) in rewritten {
         args[pi].expr = op;
     }
-    if receiver_scalarized {
-        *has_receiver = false;
+    // Scalarizing position 0 replaces a method's receiver with a plain scalar,
+    // so the call stops being one.
+    if positions.contains_key(&0) {
+        args.demote_receiver();
     }
     // The original keeps its shape for whatever this pass cannot see.
     *func_id = clone;

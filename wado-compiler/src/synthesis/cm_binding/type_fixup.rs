@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
+use crate::call_args::CallArgs;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, CmTypeKind};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -447,9 +448,8 @@ impl CallRewriteWalker<'_> {
         }
         expr.kind = TirExprKind::Call {
             func,
-            args,
+            args: CallArgs::free(args),
             type_args: vec![],
-            has_receiver: false,
         };
     }
 }
@@ -458,7 +458,7 @@ fn take_call_args(expr: &mut TirExpr) -> Vec<CallArg> {
     let TirExprKind::Call { args, .. } = &mut expr.kind else {
         unreachable!("only a call is retargeted to an adapter");
     };
-    std::mem::take(args)
+    std::mem::take(args).into_vec()
 }
 
 /// Whether a CM import call passes its receiver apart from the args it

@@ -648,12 +648,11 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
             func,
             type_args,
             args,
-            has_receiver: true,
         } = &mut expr.kind
         else {
             return;
         };
-        let Some((receiver, args)) = args.split_first() else {
+        let (Some(receiver), args) = args.split() else {
             return;
         };
         let receiver = &receiver.expr;
@@ -1308,8 +1307,7 @@ impl Monomorphizer {
                 func: call_func,
                 type_args,
                 args,
-                has_receiver: false,
-            } => {
+            } if args.receiver().is_none() => {
                 for type_arg in type_args.iter_mut() {
                     *type_arg = self.substitute_type(*type_arg, substitution, type_table);
                 }
@@ -1630,12 +1628,9 @@ impl Monomorphizer {
                 func: method_func,
                 type_args,
                 args,
-                has_receiver: true,
             } => {
-                let Some((receiver, args)) = args.split_first_mut() else {
-                    return;
-                };
-                let receiver = &mut receiver.expr;
+                let (receiver, args) = args.split_mut();
+                let receiver = &mut receiver.expect("the arm above takes a free call").expr;
                 self.substitute_types_in_expr(
                     receiver,
                     substitution,

@@ -5155,11 +5155,11 @@ impl<'a> TirUnparser<'a> {
                 func,
                 type_args,
                 args,
-                has_receiver,
             } => {
                 // A method still renders `recv.method(rest)` — this text is read
                 // back by `Inspect` on a closure, so it stays source-shaped.
-                let rest = if *has_receiver && let Some((receiver, rest)) = args.split_first() {
+                let (receiver, rest) = args.split();
+                if let Some(receiver) = receiver {
                     self.unparse_expr(receiver_value(&receiver.expr));
                     self.output.push('.');
                     // Name the resolved method (e.g. `Type::method`) so the
@@ -5171,7 +5171,6 @@ impl<'a> TirUnparser<'a> {
                         .as_ref()
                         .map_or_else(|| func.name.clone(), LocalMethodName::to_display_name);
                     self.output.push_str(&Self::quote_if_needed(&displayed));
-                    rest
                 } else {
                     let func_name = func.name.clone();
                     let full_name = if self.source_form {
@@ -5180,8 +5179,7 @@ impl<'a> TirUnparser<'a> {
                         format!("{}::{func_name}", func.module_path().join("::"))
                     };
                     self.output.push_str(&Self::quote_if_needed(&full_name));
-                    args.as_slice()
-                };
+                }
                 self.unparse_type_args(type_args);
                 self.delimited("(", ")", rest, |s, arg| s.unparse_expr(&arg.expr));
             }

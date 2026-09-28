@@ -65,7 +65,7 @@ module both calls the child and receives calls from it). The instance graph
 stays acyclic — the callback edge is core-level, inside one component
 instance.
 
-Reentrance is legal, recursive reentrance included. component-model#705
+Reentrance is legal, recursive reentrance included. WebAssembly/component-model#705
 removed the `may_enter` trap from the Canonical ABI, and Concurrency.md,
 "Reentrance", leaves its hazards to the component's documented API.
 

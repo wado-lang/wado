@@ -10,6 +10,7 @@
 
 use std::ops::ControlFlow;
 
+use crate::call_args::CallArgs;
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
@@ -852,7 +853,7 @@ fn try_fill_idiom(
         ExprKind::Call {
             func_id: fill_id,
             type_args: Vec::new(),
-            args: vec![
+            args: CallArgs::free(vec![
                 ArenaCallArg {
                     expr: arr_op,
                     is_mut: arr_is_mut,
@@ -869,8 +870,7 @@ fn try_fill_idiom(
                     expr: count,
                     is_mut: false,
                 },
-            ],
-            has_receiver: false,
+            ]),
         },
         TypeTable::UNIT,
         span,

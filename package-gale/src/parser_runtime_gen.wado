@@ -252,8 +252,17 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     w.line("let node = if row < 0 { self.b.innermost_open() } else { row };");
     w.line("self.b.resume_node(node, self.last_end());");
     w.line("assert self.b.node_kind(node) == rule, \"recover_rule: the resumed node is the failed rule's\";");
+    w.line("if !self.b.in_error_mode() { self.recovered_failures.clear(); }");
     w.line("self.commit_pending();");
     w.line("self.recovering = false;");
+    w.line("let failure = [rule, self.failed_expected];");
+    w.begin(
+        "if self.pos == self.recovery_pos && self.recovered_failures.contains(&failure) && self.kinds[self.pos] != TK_EOF",
+    );
+    w.line("self.skip_one();");
+    w.end();
+    w.line("self.recovery_pos = self.pos;");
+    w.line("self.recovered_failures.push(failure);");
     w.line("self.skip_until(&self.resync_set(&[]));");
     w.line("return true;");
     w.end();
@@ -464,6 +473,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // rule resynchronises on: a call stamps `site`, its entry pushes it.
     s.add_field("site", "i32");
     s.add_field("sites", "List<i32>");
+    // What the latest failure expected, where recovery last left off, and the
+    // failures recovered from since a token matched: the progress guard of
+    // "Building: TreeBuilder + recovery" in `resilient-parser.md`.
+    s.add_field("failed_expected", "List<i32>");
+    s.add_field("recovery_pos", "i32");
+    s.add_field("recovered_failures", "List<[NodeKind, List<i32>]>");
     // Current recursive-descent depth, used only to indent trace output.
     if trace {
         s.add_field("trace_depth", "i32");
@@ -520,7 +535,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f.emit_begin(w);
     w.line("let kinds = tokens.kinds.to_array();");
     let mut init = String::from(
-        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: []",
+        "tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: []",
     );
     if trace {
         init.push_str(", trace_depth: 0");
@@ -763,7 +778,18 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         "self.pending = Option::Some(Diagnostic::error(code, with_expected(message, &kind_names(expected)), span, *expected, self.kinds[self.pos], RecoveryAction::None));",
     );
     w.end();
+    w.line("self.enter_recovery(expected);");
+    w.end();
+    w.blank();
+
+    // `recover_rule` never runs under `speculating`, so a probe's failure is
+    // not recorded.
+    let mut er = FnSpec::new("enter_recovery");
+    er.set_receiver("&mut self");
+    er.add_param("expected", "&List<i32>");
+    er.emit_begin(w);
     w.line("self.recovering = true;");
+    w.line("if !self.speculating { self.failed_expected = *expected; }");
     w.end();
     w.blank();
 
@@ -778,8 +804,9 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line(
         "self.fail(`${what} \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), expected, code);",
     );
+    w.line("return;");
     w.end();
-    w.line("self.recovering = true;");
+    w.line("self.enter_recovery(expected);");
     w.end();
     w.blank();
 
@@ -787,10 +814,11 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     fok.set_receiver("&mut self");
     fok.add_param("kind", "i32");
     fok.emit_begin(w);
-    w.begin("if self.supersedes_pending(self.tokens.starts[self.pos])");
-    w.line("self.fail_expecting(&([kind] as List<i32>));");
-    w.end();
+    w.begin("if self.speculating && !self.supersedes_pending(self.tokens.starts[self.pos])");
     w.line("self.recovering = true;");
+    w.line("return;");
+    w.end();
+    w.line("self.fail_expecting(&([kind] as List<i32>));");
     w.end();
     w.blank();
 
