@@ -571,6 +571,12 @@ impl<T: Display> Display for Stack<T> {
 }
 ```
 
+## Known gaps
+
+- `Self` in a field type names the struct being declared, but code generation
+  panics on it. `struct Node { next: Option<Self> }` reaches WIR as
+  `Option<unknown>`, which is not registered.
+
 ## References
 
 - [Rust Traits](https://doc.rust-lang.org/book/ch10-02-traits.html)

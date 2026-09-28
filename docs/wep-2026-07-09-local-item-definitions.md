@@ -111,3 +111,10 @@ target as foreign, because `type_decl_index` holds module-level declarations
 only. And a `TraitEnv` that reaches a local block while `Signatures` does not is
 worse than the gap: the header resolves where no signature exists, so the
 diagnostic becomes a panic.
+
+## Known gap: `Self` in a local struct
+
+A local struct's `Self` is that struct. Inside an `impl` or `trait` method, the
+compiler resolves `Self` in the struct's field types to the type the `impl` is
+for instead. In a trait default method this also makes the struct differ per
+inheriting impl, while it is emitted once for all of them.
