@@ -137,6 +137,8 @@ pub enum Code {
     /// Import of a symbol that is not visible at the import site
     /// (file-private, or `internal` reached from another package).
     PrivateSymbol,
+    /// A `use ... with { ... }` key nothing reads, or a value of the wrong kind.
+    ImportAttrInvalid,
 
     // I/O errors
     /// File read error
@@ -293,6 +295,7 @@ impl std::fmt::Display for Code {
             Code::CircularDependency => "CIRCULAR_DEPENDENCY",
             Code::StdlibAttr => "STDLIB_ATTR",
             Code::PrivateSymbol => "PRIVATE_SYMBOL",
+            Code::ImportAttrInvalid => "IMPORT_ATTR_INVALID",
             Code::FileReadError => "FILE_READ_ERROR",
             Code::OrphanRule => "ORPHAN_RULE",
             Code::CodegenError => "CODEGEN_ERROR",

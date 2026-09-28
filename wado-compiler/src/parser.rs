@@ -1720,11 +1720,10 @@ impl Parser {
         Ok(items)
     }
 
-    /// Parse import attributes: `{ version: "1.0", integrity: "sha384-..." }`
+    /// Parse import attributes: `{ type: "wasm", provider: "./impl.wado" }`
     ///
-    /// Attribute values are a generic scalar/array/object tree. Unknown
-    /// top-level keys are accepted here and validated downstream (e.g. the
-    /// Kiln inline-generator collector rejects non-`generator` siblings).
+    /// Attribute values are a generic scalar/array/object tree. Any key parses
+    /// here: the loader checks a clause's keys, and Kiln a generated one's.
     fn parse_import_attributes(&mut self) -> ParseResult<ImportAttributes> {
         let open = self.pos;
         let entries = self.parse_attr_object()?;

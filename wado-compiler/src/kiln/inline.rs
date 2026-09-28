@@ -6,7 +6,9 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::ast::{AttrObject, AttrValue, Item, Module, UseDecl, attr_value};
+use crate::ast::{
+    AttrEntry, AttrObject, AttrValue, ImportAttributes, Item, Module, UseDecl, attr_value,
+};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 use crate::name::resolve_module_path;
@@ -20,6 +22,16 @@ use super::options_check::{CanonicalOptions, OptionsAnchor, validate};
 /// Default output-directory prefix for inline invocations: each clause lands
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
 pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
+
+/// The fields a `generator` object may carry.
+const GENERATOR_FIELDS: [&str; 6] = [
+    "module",
+    "version",
+    "registry",
+    "options",
+    "inputs",
+    "output_dir",
+];
 
 /// Elaborator-side lookup table redirecting a `use ... from "<from>"` that
 /// matches an inline Kiln invocation's primary source to the generated entry
@@ -124,11 +136,11 @@ where
             let Some(attrs) = use_decl.attributes.as_ref() else {
                 continue;
             };
-            let Some(gen_cfg) = attrs.generator() else {
+            if !attrs.entries.contains_key(ImportAttributes::GENERATOR) {
                 continue;
-            };
+            }
 
-            match lower_inline(module_path, use_decl, gen_cfg, descriptors, manifest_root) {
+            match lower_inline(module_path, use_decl, attrs, descriptors, manifest_root) {
                 Ok(invocation) => {
                     let tuple_key = identity_key(&invocation);
                     if let Some(existing) = by_tuple.get_mut(&tuple_key) {
@@ -177,11 +189,55 @@ fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
 fn lower_inline(
     module_path: &str,
     use_decl: &UseDecl,
-    cfg: &AttrObject,
+    attrs: &ImportAttributes,
     descriptors: &IndexMap<String, OptionsDescriptor>,
     manifest_root: &str,
 ) -> Result<Invocation, Vec<Diagnostic>> {
     let mut errors: Vec<Diagnostic> = Vec::new();
+    let key_error = |entry: &AttrEntry, message: String| Diagnostic {
+        severity: Severity::Error,
+        code: Code::GeneratorOptionsInvalid,
+        message,
+        span: Some(DiagnosticSpan::from_span(&entry.key_span, Some(module_path))),
+    };
+
+    for (key, entry) in &attrs.entries {
+        if key != ImportAttributes::GENERATOR {
+            errors.push(key_error(
+                entry,
+                format!(
+                    "kiln: unknown key `{key}` beside `generator`; a generated import's \
+                     `with` holds `generator` alone"
+                ),
+            ));
+        }
+    }
+    let generator = &attrs.entries[ImportAttributes::GENERATOR];
+    let Some(cfg) = generator.value.as_object() else {
+        errors.push(key_error(
+            generator,
+            format!(
+                "kiln: `generator` must be an object, got {}",
+                generator.value.kind()
+            ),
+        ));
+        return Err(errors);
+    };
+    let (last_field, other_fields) = GENERATOR_FIELDS
+        .split_last()
+        .expect("the generator has fields");
+    for (key, entry) in cfg {
+        if !GENERATOR_FIELDS.contains(&key.as_str()) {
+            errors.push(key_error(
+                entry,
+                format!(
+                    "kiln: unknown `generator` field `{key}`; the fields are `{}`, and \
+                     `{last_field}`",
+                    other_fields.join("`, `"),
+                ),
+            ));
+        }
+    }
 
     // `module` accepts the same module-specifier shape as a `use ...
     // from "<source>"` clause:
@@ -203,7 +259,7 @@ fn lower_inline(
                 message: format!(
                     "kiln: `generator.module` must be a module specifier string \
                      (\"./path/to/generator.wado\" or \"ns:name@ver\"), got {}",
-                    attr_kind(other),
+                    other.kind(),
                 ),
                 span: Some(span_of(module_path, use_decl)),
             });
@@ -279,7 +335,7 @@ fn lower_inline(
                         code: Code::GeneratorOptionsInvalid,
                         message: format!(
                             "kiln: `generator.inputs[{i}]` must be a string, got {}",
-                            attr_kind(other),
+                            other.kind(),
                         ),
                         span: Some(span_of(module_path, use_decl)),
                     });
@@ -293,7 +349,7 @@ fn lower_inline(
                 code: Code::GeneratorOptionsInvalid,
                 message: format!(
                     "kiln: `generator.inputs` must be an array of strings, got {}",
-                    attr_kind(other),
+                    other.kind(),
                 ),
                 span: Some(span_of(module_path, use_decl)),
             });
@@ -334,7 +390,7 @@ fn lower_inline(
                 code: Code::GeneratorOptionsInvalid,
                 message: format!(
                     "kiln: `generator.output_dir` must be a string, got {}",
-                    attr_kind(other),
+                    other.kind(),
                 ),
                 span: Some(span_of(module_path, use_decl)),
             });
@@ -432,7 +488,7 @@ fn optional_source_string(
                 code: Code::GeneratorOptionsInvalid,
                 message: format!(
                     "kiln: `generator.{field}` must be a string, got {}",
-                    attr_kind(other),
+                    other.kind(),
                 ),
                 span: Some(span_of(module_path, use_decl)),
             });
@@ -583,17 +639,6 @@ fn clause_digest(
 
 fn span_of(module_path: &str, use_decl: &UseDecl) -> DiagnosticSpan {
     DiagnosticSpan::from_span(&use_decl.span, Some(module_path))
-}
-
-fn attr_kind(v: &AttrValue) -> &'static str {
-    match v {
-        AttrValue::String(_) => "string",
-        AttrValue::Int(_) => "integer",
-        AttrValue::Float(_) => "float",
-        AttrValue::Bool(_) => "bool",
-        AttrValue::Array(_) => "array",
-        AttrValue::Object(_) => "object",
-    }
 }
 
 #[cfg(test)]

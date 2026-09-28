@@ -2111,15 +2111,26 @@ impl AttrValue {
             _ => None,
         }
     }
+
+    /// The name a diagnostic gives this value's kind.
+    #[must_use]
+    pub fn kind(&self) -> &'static str {
+        match self {
+            AttrValue::String(_) => "string",
+            AttrValue::Int(_) => "integer",
+            AttrValue::Float(_) => "float",
+            AttrValue::Bool(_) => "bool",
+            AttrValue::Array(_) => "array",
+            AttrValue::Object(_) => "object",
+        }
+    }
 }
 
 /// Import attributes for `with { ... }` clause.
 ///
-/// Stores every key/value pair as a generic [`AttrValue`] tree. The three
-/// historical keys (`version`, `integrity`, `type_hint`) are still accessed
-/// via thin accessor methods so older call sites compile unchanged. New
-/// consumers (e.g. Kiln inline generators) read raw entries via
-/// [`ImportAttributes::get`] and [`ImportAttributes::generator`].
+/// Stores every key/value pair as a generic [`AttrValue`] tree, read through
+/// the accessors below. A clause naming a [`Self::GENERATOR`] is Kiln's to
+/// check; any other may carry only [`Self::STRING_KEYS`].
 #[derive(Debug, Clone, Default)]
 pub struct ImportAttributes {
     /// Top-level key/value entries, in parse order.
@@ -2129,7 +2140,23 @@ pub struct ImportAttributes {
 }
 
 impl ImportAttributes {
+    /// The key making the import a generated one.
+    pub const GENERATOR: &str = "generator";
+
+    /// Every other key a clause may carry, each taking a string.
+    pub const STRING_KEYS: [&str; 8] = [
+        "type",
+        "provider",
+        "git",
+        "ref",
+        "directory",
+        "registry",
+        "package",
+        "version",
+    ];
+
     fn get_str(&self, key: &str) -> Option<String> {
+        assert!(Self::STRING_KEYS.contains(&key), "`{key}` is not a string key");
         self.get(key)
             .and_then(AttrValue::as_str)
             .map(str::to_string)
@@ -2138,11 +2165,6 @@ impl ImportAttributes {
     #[must_use]
     pub fn version(&self) -> Option<String> {
         self.get_str("version")
-    }
-
-    #[must_use]
-    pub fn integrity(&self) -> Option<String> {
-        self.get_str("integrity")
     }
 
     /// Inline registry override for a single-file dependency source
@@ -2188,7 +2210,7 @@ impl ImportAttributes {
     /// Inline Kiln generator configuration (`with { generator: { ... } }`).
     #[must_use]
     pub fn generator(&self) -> Option<&AttrObject> {
-        self.get("generator").and_then(AttrValue::as_object)
+        self.get(Self::GENERATOR).and_then(AttrValue::as_object)
     }
 
     /// Inline provider source (`with { provider: "./ext.wado" }`): a Wado file

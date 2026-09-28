@@ -962,9 +962,12 @@ where
 
     let resolved = resolve_modules(&planned.plan.order, provider, host).await;
 
-    {
+    let invalid_options = {
         let _s = KilnSpan::new(host, "kiln/typed_encode_options");
-        typed_encode_options(manifest, &mut planned.plan.order, &resolved, host);
+        typed_encode_options(manifest, &mut planned.plan.order, &resolved, host)
+    };
+    if invalid_options > 0 {
+        return Err(PipelineError::InlineClause(invalid_options));
     }
 
     let mut outcome = PipelineOutcome::default();
@@ -1244,10 +1247,8 @@ fn lookup_resolved(
 /// stale-cache warning or pipeline error).
 ///
 /// Validation failures (unknown / missing / type-mismatched fields)
-/// surface as error diagnostics on `host`; the provisional bytes stay
-/// in place so downstream phases still see a consistent invocation
-/// and the generator-side trap surfaces in the same run as the
-/// compiler-side complaint.
+/// surface as error diagnostics on `host`, and their count is returned: the
+/// generator must not run on options its use site did not write.
 fn typed_encode_options<H: CompilerHost>(
     manifest: &Manifest,
     invocations: &mut [Invocation],
@@ -1256,8 +1257,9 @@ fn typed_encode_options<H: CompilerHost>(
         Result<Arc<ResolvedGenerator>, ProviderError>,
     )],
     host: &H,
-) {
+) -> usize {
     let _ = manifest;
+    let mut invalid = 0;
     for inv in invocations.iter_mut() {
         let descriptor = match lookup_resolved(resolved, &inv.module) {
             Ok(arc) => match &arc.descriptor {
@@ -1280,12 +1282,14 @@ fn typed_encode_options<H: CompilerHost>(
                 inv.options = canonical;
             }
             Err(diagnostics) => {
+                invalid += diagnostics.len();
                 for d in diagnostics {
                     host.emit_diagnostic(d);
                 }
             }
         }
     }
+    invalid
 }
 
 async fn run_and_build_metadata<H>(

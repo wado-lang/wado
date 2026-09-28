@@ -94,7 +94,7 @@ pub fn validate(
         Some(other) => {
             diagnostics.push(root.error(format!(
                 "kiln: expected options table, got {}",
-                attr_value_kind(other)
+                other.kind()
             )));
             return Err(diagnostics);
         }
@@ -328,19 +328,8 @@ fn push_mismatch(
         "kiln: `{}` expected {}, got {}",
         site.path,
         ty.describe(),
-        attr_value_kind(supplied)
+        supplied.kind()
     )));
-}
-
-fn attr_value_kind(v: &AttrValue) -> &'static str {
-    match v {
-        AttrValue::String(_) => "string",
-        AttrValue::Int(_) => "integer",
-        AttrValue::Float(_) => "float",
-        AttrValue::Bool(_) => "bool",
-        AttrValue::Array(_) => "array",
-        AttrValue::Object(_) => "object",
-    }
 }
 
 #[cfg(test)]
