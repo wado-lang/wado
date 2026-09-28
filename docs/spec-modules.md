@@ -165,13 +165,13 @@ Rationale: [WEP: Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-
 
 ## Module Source Types
 
-| Source Type   | Syntax                        | Example                              |
-| ------------- | ----------------------------- | ------------------------------------ |
-| WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
-| Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
+| Source Type                                            | Syntax                        | Example                              |
+| ------------------------------------------------------ | ----------------------------- | ------------------------------------ |
+| WASI standard                                          | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
+| Core library                                           | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
 | [CM coordinate](./spec-packages.md#package-specifiers) | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
 | [Library alias](./spec-packages.md#package-specifiers) | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
-| Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
+| Local file                                             | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
 A specifier names a package or a local file. It never carries an interface segment: interfaces and their members
 are selected in the `use { ... }` list (`Iface`, `Iface::{op}`). `core:` and
