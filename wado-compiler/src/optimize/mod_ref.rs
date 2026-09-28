@@ -789,11 +789,22 @@ pub(super) fn builtins(project: &NirPackage) -> Vec<Option<Builtin<'_>>> {
 /// pure, which is what makes ordinary recursive helpers usable, but it may
 /// diverge.
 pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
+    compute_fn_effects_and_bounds(project).0
+}
+
+/// [`compute_fn_effects`], with each body's builtin calls whose `#[trap(...)]`
+/// checks [`bounds::analyze`] proves pass, also indexed by `func_id.index()`.
+/// An `ExprId` names one expression for the body's lifetime, so a proof stays
+/// true while the body only changes in ways that preserve its meaning.
+pub(super) fn compute_fn_effects_and_bounds(
+    project: &NirPackage,
+) -> (Vec<FnEffect>, Vec<IndexSet<ExprId>>) {
     use cranelift_entity::EntityRef;
 
     let funcs = &project.functions;
     let types = project.type_table.borrow();
     let (mut effects, builtins) = leaf_effects(project);
+    let mut in_bounds = vec![IndexSet::default(); funcs.len()];
     // Callee edges as one flat run per function rather than an `IndexSet` each:
     // this walks every function in the package three times per fixed-point round.
     let mut callee_edges: Vec<usize> = Vec::new();
@@ -860,6 +871,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
         }
         effects[i] = own;
         edge_ranges[i] = (edge_start, callee_edges.len());
+        in_bounds[i] = bounds.in_bounds;
     }
 
     let call_graph: Vec<Vec<usize>> = edge_ranges
@@ -890,7 +902,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
             break;
         }
     }
-    effects
+    (effects, in_bounds)
 }
 
 #[cfg(test)]

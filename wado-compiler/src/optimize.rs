@@ -81,7 +81,7 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
-use mod_ref::compute_fn_effects;
+use mod_ref::compute_fn_effects_and_bounds;
 use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
@@ -338,17 +338,17 @@ fn run_dce(
         profiler.span_start(&span);
         let functions_before = live_bodies(project);
         let globals_before = project.globals.len();
-        let mut effects = compute_fn_effects(project);
-        if unhoist_unobserved_globals(project, descriptors, &effects) {
+        let (mut effects, mut in_bounds) = compute_fn_effects_and_bounds(project);
+        if unhoist_unobserved_globals(project, descriptors, &effects, &in_bounds) {
             // A rewritten body only lost work, so its real summary shrank, and
             // the stale table refuses deletions nothing has a reason to refuse.
-            effects = compute_fn_effects(project);
+            (effects, in_bounds) = compute_fn_effects_and_bounds(project);
         }
         let analysis = analyze_dce(project, descriptors);
         // Clearing an unreachable function's body leaves its entry describing
         // the body it had, which no surviving body calls.
         remove_unreachable_functions(project, &analysis.functions);
-        remove_unreachable_globals(project, &analysis.globals, &effects);
+        remove_unreachable_globals(project, &analysis.globals, &effects, &in_bounds);
         let functions_after = live_bodies(project);
         profiler.span_end(&span);
         round += 1;

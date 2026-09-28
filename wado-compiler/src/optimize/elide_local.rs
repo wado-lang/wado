@@ -28,6 +28,9 @@ pub(super) struct ElideRule<'a> {
     /// can still go: the structural purity predicate refuses every call on
     /// sight, while a summary can prove one has no effect and cannot trap.
     effects: &'a [FnEffect],
+    /// The builtin calls in this body whose `#[trap(...)]` checks
+    /// [`super::bounds::analyze`] proves pass, so a dead one goes too.
+    in_bounds: &'a IndexSet<ExprId>,
 }
 
 impl<'a> ElideRule<'a> {
@@ -37,10 +40,15 @@ impl<'a> ElideRule<'a> {
     /// before the engine borrows its body. Every other live read comes from
     /// `Engine::is_local_read`, so `address_taken_locals` — stale after `inline`
     /// / `ref_elim` — is deliberately not consulted.
-    pub(super) fn new(stores_aliased: &'a IndexSet<u32>, effects: &'a [FnEffect]) -> Self {
+    pub(super) fn new(
+        stores_aliased: &'a IndexSet<u32>,
+        effects: &'a [FnEffect],
+        in_bounds: &'a IndexSet<ExprId>,
+    ) -> Self {
         Self {
             stores_aliased,
             effects,
+            in_bounds,
         }
     }
 }
@@ -54,7 +62,7 @@ impl Rule for ElideRule<'_> {
         let len = stmts.len();
         for (i, stmt) in stmts.into_iter().enumerate() {
             let is_tail = i + 1 == len;
-            match classify(engine, stmt, is_tail, self.stores_aliased, self.effects) {
+            match classify(engine, stmt, is_tail, self) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => {
                     elided.extend(bound_local(engine, stmt));
@@ -100,21 +108,15 @@ fn bound_local(engine: &Engine, stmt: StmtId) -> Option<u32> {
 /// tree `Elider`: an unread `let x = value` or a bare `x = value` (assign at
 /// statement position) where `x` is unread is dropped when `value` is pure,
 /// otherwise demoted to `Expr(value)`.
-fn classify(
-    engine: &Engine,
-    stmt: StmtId,
-    is_tail: bool,
-    stores_aliased: &IndexSet<u32>,
-    effects: &[FnEffect],
-) -> Action {
+fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> Action {
     match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
         } => {
             let (idx, value) = (*local_index, *value);
-            if is_kept(engine, idx, stores_aliased) {
+            if is_kept(engine, idx, rule.stores_aliased) {
                 Action::Keep
-            } else if deletable(engine, value, effects) {
+            } else if deletable(engine, value, rule) {
                 Action::Drop
             } else {
                 // Effectful or trap-capable. A skeleton expr demotes to a bare
@@ -129,7 +131,7 @@ fn classify(
         // folds away the only read site. The matching `let x;` declaration
         // falls out once every write to `x` is gone.
         StmtKind::Expr(operand @ Operand::Value(_)) => {
-            if !is_tail && deletable(engine, *operand, effects) {
+            if !is_tail && deletable(engine, *operand, rule) {
                 return Action::Drop;
             }
             Action::Keep
@@ -140,15 +142,15 @@ fn classify(
                 _ => None,
             };
             // Not in tail position — a block's tail `Expr` is its value.
-            if assign.is_none() && !is_tail && deletable(engine, Operand::Expr(*e), effects) {
+            if assign.is_none() && !is_tail && deletable(engine, Operand::Expr(*e), rule) {
                 return Action::Drop;
             }
             if let Some((target, value)) = assign
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
                 let index = *index;
-                if !is_kept(engine, index, stores_aliased) {
-                    return if deletable(engine, value, effects) {
+                if !is_kept(engine, index, rule.stores_aliased) {
+                    return if deletable(engine, value, rule) {
                         Action::Drop
                     } else {
                         // Effectful or trap-capable; see the `Let` arm above for
@@ -168,7 +170,7 @@ fn classify(
 /// first; a call it refuses on sight is answered by its whole-function summary
 /// ([`super::dce::deletable_value`]), which is what lets a dead call to a pure
 /// helper leave rather than linger as a `drop(f(x))`.
-fn deletable(engine: &Engine, value: Operand, effects: &[FnEffect]) -> bool {
+fn deletable(engine: &Engine, value: Operand, rule: &ElideRule) -> bool {
     if arena_query::is_pure_nontrapping_operand_typed(
         engine.body,
         value,
@@ -177,7 +179,7 @@ fn deletable(engine: &Engine, value: Operand, effects: &[FnEffect]) -> bool {
         return true;
     }
     engine.value_graph_type_table().is_some_and(|types| {
-        deletable_value(engine.body, value, types, effects, &IndexSet::default())
+        deletable_value(engine.body, value, types, rule.effects, rule.in_bounds)
     })
 }
 
@@ -240,8 +242,9 @@ mod tests {
 
     fn run_elide(body: &mut Body, locals: &mut Vec<NirLocal>) {
         let stores_aliased = IndexSet::default();
+        let in_bounds = IndexSet::default();
         // No callees in these bodies, so the summaries are unused.
-        let rule = ElideRule::new(&stores_aliased, &[]);
+        let rule = ElideRule::new(&stores_aliased, &[], &in_bounds);
         let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule]);

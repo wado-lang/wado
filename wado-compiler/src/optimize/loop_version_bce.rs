@@ -10,6 +10,8 @@
 
 use std::ops::ControlFlow;
 
+use cranelift_entity::EntityRef;
+
 use crate::call_args::CallArgs;
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
@@ -21,6 +23,7 @@ use crate::token::Span;
 
 use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{block_contains_loop, has_break_to};
+use super::bounds;
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, InductionStep, build_copy_bindings, capture_block_binding,
     check_conjuncts, eliminate_condition, induction_entry, induction_step, negated_operand,
@@ -37,7 +40,7 @@ use crate::optimize::arena_query::{
     binary_parts, expr_node_may_trap_typed, is_pure_operand, local_written_by,
     mentions_local_except, operand_local,
 };
-use crate::optimize::mod_ref::compute_fn_effects;
+use crate::optimize::mod_ref::{builtins, compute_fn_effects};
 
 /// A versionable loop: guard `var CMP bound` with in-body panic checks
 /// `var < check_bound`, all three distinct same-typed locals (or
@@ -93,14 +96,14 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Only a body with a loop is versioned, so a program with none pays nothing.
-    let effects = if project
+    let (effects, builtins) = if project
         .functions
         .iter()
         .any(|f| f.borrow().body.as_ref().is_some_and(body_contains_loop))
     {
-        compute_fn_effects(project)
+        (compute_fn_effects(project), builtins(project))
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
@@ -165,8 +168,11 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
         }
 
         // Sweep the deleted checks' residue: the `if false { panic }` shells
-        // and any now-write-only condition temps.
-        let elide_rule = ElideRule::new(&stores_aliased, &effects);
+        // and any now-write-only condition temps. The proofs are taken after
+        // the splice, so the fast arm's cloned calls carry theirs.
+        let in_bounds =
+            bounds::analyze(engine.body, &type_table, |fid| builtins[fid.index()]).in_bounds;
+        let elide_rule = ElideRule::new(&stores_aliased, &effects, &in_bounds);
         let prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
         let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
         engine.run(&rules);
