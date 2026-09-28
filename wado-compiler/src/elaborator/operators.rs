@@ -120,6 +120,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, TypeId) {
+        // A comparison is a `bool` whatever its operands are.
+        let expected_type = expected_type.filter(|_| !op.is_comparison());
         let left_is_numeric_literal = is_numeric_literal_expr(left_ast);
         let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
 
