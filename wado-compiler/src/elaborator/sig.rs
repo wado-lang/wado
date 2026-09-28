@@ -360,6 +360,18 @@ impl MethodSig {
         declaring_args: &[TypeId],
         method_args: &[TypeId],
     ) -> InstantiatedSig {
+        let substitution = self.call_slots(type_table, declaring, declaring_args, method_args);
+        self.decl.instantiate_slots(type_table, &substitution)
+    }
+
+    /// The slots [`Self::instantiate_call_with`] fills.
+    pub(crate) fn call_slots(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        declaring: Option<&ImplSig>,
+        declaring_args: &[TypeId],
+        method_args: &[TypeId],
+    ) -> IndexMap<u32, TypeId> {
         let aligned = declaring.and_then(|sig| sig.spelled_slots(type_table, declaring_args));
         let positional = aligned.is_none();
         let mut substitution = aligned.unwrap_or_default();
@@ -380,7 +392,7 @@ impl MethodSig {
                 }
             }
         }
-        self.decl.instantiate_slots(type_table, &substitution)
+        substitution
     }
 }
 
@@ -468,7 +480,8 @@ impl ImplSig {
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> InstantiatedImplSig {
-        self.instantiate_slots(type_table, &self.slots(type_table, receiver_args))
+        let slots = type_table.borrow().impl_slots(self.def, receiver_args);
+        self.instantiate_slots(type_table, &slots)
     }
 
     /// [`Self::instantiate`] from a slot map the caller already holds.
@@ -498,37 +511,19 @@ impl ImplSig {
         }
     }
 
-    /// The slots each target position's argument holds, at any depth, filled
-    /// from the receiver's: `T` in `Pair<List<T>, i32>` from `Pair<List<String>, i32>`.
-    pub(crate) fn slots(
-        &self,
-        type_table: &RefCell<TypeTable>,
-        receiver_args: &[TypeId],
-    ) -> IndexMap<u32, TypeId> {
-        let table = type_table.borrow();
-        let mut slots = IndexMap::default();
-        for (&declared, &concrete) in table.impl_target_args(self.def).iter().zip(receiver_args) {
-            if let Some(bound) = table.bind_type_params(&[declared], &[concrete]) {
-                for (slot, ty) in bound {
-                    slots.entry(slot).or_insert(ty);
-                }
-            }
-        }
-        slots
-    }
-
-    /// [`Self::slots`] for a spelled list: the receiver's positions, then the
+    /// [`TypeTable::impl_slots`] for a spelled list: the receiver's positions, then the
     /// slots past them by index. `None` where the list cannot fill the positions.
     pub(crate) fn spelled_slots(
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
-        let positions = type_table.borrow().impl_target_args(self.def).len();
+        let table = type_table.borrow();
+        let positions = table.impl_target_args(self.def).len();
         if positions == 0 || receiver_args.len() < positions {
             return None;
         }
-        let mut slots = self.slots(type_table, &receiver_args[..positions]);
+        let mut slots = table.impl_slots(self.def, &receiver_args[..positions]);
         for (slot, &arg) in (positions as u32..).zip(&receiver_args[positions..]) {
             slots.entry(slot).or_insert(arg);
         }
@@ -717,7 +712,9 @@ mod tests {
         let table = RefCell::new(TypeTable::new());
         let sig = partially_concrete_impl(&table);
 
-        let slots = sig.slots(&table, &[TypeTable::U8, TypeTable::BOOL]);
+        let slots = table
+            .borrow()
+            .impl_slots(sig.def, &[TypeTable::U8, TypeTable::BOOL]);
 
         assert_eq!(slots.len(), 1);
         assert_eq!(slots.get(&1), Some(&TypeTable::BOOL));

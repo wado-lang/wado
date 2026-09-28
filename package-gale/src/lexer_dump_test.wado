@@ -69,11 +69,12 @@ AB : 'a' | 'b' ;");
 
 test "lexer dump reports a called rule's alternation as not-tail" {
     // `B` is entered from `A` with `'z'` still to consume, so its body
-    // alternation cannot take maximal munch however long an arm reaches.
+    // alternation cannot take maximal munch however long an arm reaches. It
+    // reaches itself, so it stays a call rather than splicing into `A`.
     let report = lexer_dump("grammar T;
 r : A ;
 A : B 'z' ;
-B : 'a' | 'ab' ;");
+B : 'a' | 'ab' | 'c' B ;");
 
     assert report.contains("first-match: not in tail position"), report;
 }

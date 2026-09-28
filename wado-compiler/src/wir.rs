@@ -190,6 +190,8 @@ pub struct WasmModuleFunc {
     pub export_name: String,
     /// Parameter names.
     pub param_names: Vec<String>,
+    /// Parameter types from the original function type.
+    pub params: Vec<WirType>,
     /// Result types from the original function type.
     pub results: Vec<WirType>,
     /// The WIR body instructions.
@@ -221,7 +223,7 @@ impl WasmModuleInfo {
             let fq: Rc<str> = Rc::from(format!("$wasm_mod_type_{i}"));
             wir.types.push(WirTypeDef::Func(WirFuncType {
                 name: WirName { fq: fq.to_string() },
-                params: vec![WirType::I32; func.param_names.len()],
+                params: func.params.clone(),
                 results: func.results.clone(),
             }));
         }

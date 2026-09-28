@@ -1,0 +1,13 @@
+#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/coverage/coverage.wit"])]
+#![stdlib("core:coverage/coverage_host.wado")]
+
+/// Host interface behind test coverage. A probe calls it the first time its
+/// region runs in an instance. Only `wado test --coverage` supplies it. See
+/// WEP 2026-09-28 (Test Coverage).
+#[cm("core:coverage/coverage-host@0.1.0")]
+pub interface CoverageHost {
+    /// Region `id` ran for the first time in this instance.
+    #[cm("core:coverage/coverage-host@0.1.0#hit")]
+    #[cm_params("id")]
+    fn hit(id: u32);
+}

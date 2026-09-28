@@ -582,6 +582,10 @@ impl Interpreter<'_> {
                 [value] => self.i32_as_char_lattice(body, value.expr),
                 _ => Lattice::Unevaluated,
             },
+            CtfeBuiltin::HeapBase(address) => Lattice::Const(Value::Int {
+                value: u64::from(address.cast_unsigned()),
+                prim: PrimitiveType::I32,
+            }),
             CtfeBuiltin::ArraySet | CtfeBuiltin::ArrayCopy | CtfeBuiltin::ColdPath => {
                 Lattice::Unevaluated
             }

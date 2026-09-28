@@ -1655,14 +1655,22 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .iter()
                     .flat_map(|binding| self.binding_granted_effects(binding))
                     .collect();
-                let added: Vec<EffectRef> = granted
+                self.walk_granted(granted, |walker| {
+                    ast::walk_block(walker, &with_handler.body);
+                });
+                return;
+            }
+            Expr::Closure(closure) => {
+                // A closure's body performs what its type carries, not what the
+                // function it is written in holds: it runs wherever it is called.
+                let declared: IndexSet<EffectRef> = self
+                    .annotations
                     .into_iter()
-                    .filter(|effect| self.current.insert(effect.clone()))
+                    .flat_map(|ann| ann.all(|facts| &facts.closure_captures, closure.id))
+                    .flat_map(|info| info.declared_effects.iter().cloned())
                     .collect();
-                ast::walk_block(self, &with_handler.body);
-                for effect in added {
-                    self.current.shift_remove(&effect);
-                }
+                let carried = expand_through_closure(&declared, self.index.closure);
+                self.walk_granted(carried, |walker| ast::walk_expr(walker, expr));
                 return;
             }
             _ => {}
@@ -1672,6 +1680,22 @@ impl AstVisitor for SemEffectWalker<'_> {
 }
 
 impl SemEffectWalker<'_> {
+    /// Run `walk` holding `granted` besides what is held already.
+    fn walk_granted(
+        &mut self,
+        granted: impl IntoIterator<Item = EffectRef>,
+        walk: impl FnOnce(&mut Self),
+    ) {
+        let added: Vec<EffectRef> = granted
+            .into_iter()
+            .filter(|effect| self.current.insert(effect.clone()))
+            .collect();
+        walk(self);
+        for effect in added {
+            self.current.shift_remove(&effect);
+        }
+    }
+
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
         self.index.method_param_types(func_ref)
     }

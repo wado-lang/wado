@@ -157,7 +157,9 @@ fn "cli_args.wado/run"() with Stdout, Environment {
     $local_0.used = new_used;
     builtin::array_copy<u8>($local_0.repr, start_20, global:cli_args.wado::$const_obj_0, 0, 1);
     $local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_0 };
-    self_23 = "core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::collect<core:prelude/list.wado/List<core:prelude/string.wado/String>>"(self_39 = "cli_args.wado/$cm_binding__Environment_get_arguments"(); end_42 = self_39.used; struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: ref.as_non_null($sroa_v_repr_48 = self_39.repr; struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: $sroa_v_repr_48, index: 0, end: end_42 }), remaining: 1 });
+    self_39 = "cli_args.wado/$cm_binding__Environment_get_arguments"();
+    end_42 = self_39.used;
+    self_23 = "core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>^core:prelude/traits.wado/Iterator::collect<core:prelude/list.wado/List<core:prelude/string.wado/String>>"(struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: ref.as_non_null($sroa_v_repr_48 = self_39.repr; struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: $sroa_v_repr_48, index: 0, end: end_42 }), remaining: 1 });
     f = $local_1;
     "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<core:prelude/string.wado/String>$spec0"(self_23.repr, self_23.used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_13: block -> i32 {
         self_25 = f.precision;
@@ -959,9 +961,11 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.
         start_56 = f.used;
         f.used = new_used_55;
         builtin::array_copy<u8>(f.repr, start_56, global:core:prelude/traits.wado::$const_obj_66, 0, 4);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>$spec0$scalar"(v_60 = self.value; if @unlikely(ref.is_null(v_60) != 0) {
+        v_60 = self.value;
+        if @unlikely(ref.is_null(v_60) != 0) {
             unreachable;
-        }; ref.as_non_null(v_60), f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>$spec0$scalar"(ref.as_non_null(v_60), f);
     }
     v_62 = self.value;
     if ref.is_null(v_62) {

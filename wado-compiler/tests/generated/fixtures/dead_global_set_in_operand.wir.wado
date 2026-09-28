@@ -11,47 +11,37 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(3)
-    Some(i32),
-    None,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(4)
-    discriminant: i32,
-    payload_0: i32,
-}
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//dead_global_set_in_operand.wado/run" = fn();  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//dead_global_set_in_operand.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//dead_global_set_in_operand.wado/run" = fn();  // TypeId(12)
+type "functype//dead_global_set_in_operand.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//dead_global_set_in_operand.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(13)
 
-type "functype//dead_global_set_in_operand.wado/$cm_export__run" = fn();  // TypeId(14)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(14)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -71,7 +61,6 @@ global global:dead_global_set_in_operand.wado::$const_obj_2: ref null "core:prel
 global global:dead_global_set_in_operand.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 117, 109, 112), used: 4 };
 
 fn "dead_global_set_in_operand.wado/run"() with Stdout {
-    let o: ref "core:prelude/types.wado//Option<i32>";
     let handle_5: i32;
     let packed_7: i64;
     let rx_8: i32;
@@ -84,8 +73,6 @@ fn "dead_global_set_in_operand.wado/run"() with Stdout {
     let packed_31: i64;
     let rx_32: i32;
     let tx_33: i32;
-    o = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: black_box(2) };
-    drop(ref.cast "core:prelude/types.wado//Option<i32>::Some"(o).payload_0);
     rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
     handle_5 = "dead_global_set_in_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_8);

@@ -110,7 +110,11 @@ fn "serde_ndjson_wrapper.wado/$cm_export__run"() {
     let tx_11: i32;
     let s: ref "core:prelude/string.wado//String";
     value_7 = struct.new "serde_ndjson_wrapper.wado//Message" { ok: 1 };
-    body = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(let $mv$$vr_2$0: i32; let $mv$$vr_2$1: ref null "core:prelude/string.wado//String"; let $mv$$vr_2$2: ref null "core:serde//SerializeError"; multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>"(value_7, struct.new "core:prelude/types.wado//Option<char>" { 1 }); (if $mv$$vr_2$0 == 0 -> ref "core:prelude/string.wado//String" {
+    let $mv$$vr_2$0: i32;
+    let $mv$$vr_2$1: ref null "core:prelude/string.wado//String";
+    let $mv$$vr_2$2: ref null "core:serde//SerializeError";
+    multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>"(value_7, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    body = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"((if $mv$$vr_2$0 == 0 -> ref "core:prelude/string.wado//String" {
         s = ref.as_non_null($mv$$vr_2$1);
         s;
     } else if @likely($mv$$vr_2$0 == 1) -> ref "core:prelude/string.wado//String" {
@@ -445,10 +449,15 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
         cold_path;
         return $qm_e_10;
     }
-    return new_used_50 = s.used + 1, if @unlikely(new_used_50 > builtin::array_len(s.repr)) {
+    new_used_50 = s.used + 1;
+    if @unlikely(new_used_50 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_50);
-    }, start_51 = s.used, s.used = new_used_50, builtin::array_copy<u8>(s.repr, start_51, global:core:serde::$const_obj_34, 0, 1), ref.null none;
+    }
+    start_51 = s.used;
+    s.used = new_used_50;
+    builtin::array_copy<u8>(s.repr, start_51, global:core:serde::$const_obj_34, 0, 1);
+    return ref.null none;
 }
 
 export fn "serde_ndjson_wrapper.wado/$cm_export__run" as "run"

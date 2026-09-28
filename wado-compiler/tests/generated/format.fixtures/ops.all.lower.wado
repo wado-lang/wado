@@ -1,6 +1,8 @@
-global mut heap_offset: i32 = 8;
+global mut heap_offset: u32 = 8;
 
-global PAGE_SIZE: i32 = 65536;
+global PAGE_SIZE: u64 = 65536;
+
+global MAX_ADDRESS: u64 = 4294967295;
 
 global NEG_ZERO_BITS: u64 = 9223372036854775808;
 
@@ -47,6 +49,8 @@ global STREAM_CHUNK_ELEMENTS: i32 = 4096;
 global CM_EVENT_SUBTASK: i32 = 1;
 
 global CM_SUBTASK_STARTED: u32 = 1;
+
+global mut COVERAGE_SEEN: Array<u8> = deferred null;
 
 global mut CM_CALLBACKS: List<fn() -> ()> = deferred null;
 
@@ -2358,71 +2362,96 @@ pub enum ErrorCode {
     Pipe,
 }
 
-fn grow_memory(new_offset: i32) {
-    let current_bytes: i32 = (core::builtin::memory_size() * core::allocator::PAGE_SIZE);
-    let deficit: i32 = (new_offset - current_bytes);
-    let sixteen_mb: i32 = 16777216;
-    let normal_grow: i32 = if (current_bytes < sixteen_mb) {
+fn frontier() -> u32 {
+    return (core::builtin::heap_base() as u32 + core::allocator::heap_offset);
+}
+
+fn set_frontier(addr: u32) {
+    core::allocator::heap_offset = (addr - core::builtin::heap_base() as u32);
+}
+
+fn load(addr: u32) -> u32 {
+    return core::builtin::i32_load(addr as i32) as u32;
+}
+
+fn store(addr: u32, value: u32) {
+    core::builtin::i32_store(addr as i32, value as i32);
+}
+
+fn memory_bytes() -> u64 {
+    return (core::builtin::memory_size() as u64 * core::allocator::PAGE_SIZE);
+}
+
+fn pages(bytes: u64) -> i32 {
+    return (((bytes + core::allocator::PAGE_SIZE) - 1) / core::allocator::PAGE_SIZE) as i32;
+}
+
+fn grow_memory(end: u64) {
+    let current_bytes: u64 = core::allocator::memory_bytes();
+    let deficit: u64 = (end - current_bytes);
+    let sixteen_mb: u64 = 16777216;
+    let normal_grow: u64 = if (current_bytes < sixteen_mb) {
         current_bytes;
     } else {
         sixteen_mb;
     };
-    let grow_bytes: i32 = if (deficit > normal_grow) {
-        (1 << (32 - core::builtin::i32_clz((deficit - 1))));
+    let grow_bytes: u64 = if (deficit > normal_grow) {
+        (1 << (64 - core::builtin::i64_clz((deficit - 1) as i64)) as u64);
     } else {
         normal_grow;
     };
-    let grow_pages: i32 = (((grow_bytes + core::allocator::PAGE_SIZE) - 1) / core::allocator::PAGE_SIZE);
-    if (core::builtin::memory_grow(grow_pages) < 0) {
+    if ((core::builtin::memory_grow(core::allocator::pages(grow_bytes)) < 0) && (core::builtin::memory_grow(core::allocator::pages(deficit)) < 0)) {
         core::builtin::cold_path();
         core::builtin::unreachable();
     }
 }
 
+fn bump(align: u32, size: u32) -> u32 {
+    let mask: u64 = (align as u64 - 1);
+    let start: u64 = ((core::allocator::frontier() as u64 + mask) & ~mask);
+    let end: u64 = (start + size as u64);
+    if (end > core::allocator::MAX_ADDRESS) {
+        core::builtin::cold_path();
+        core::builtin::unreachable();
+    }
+    if (end > core::allocator::memory_bytes()) {
+        core::builtin::cold_path();
+        core::allocator::grow_memory(end);
+    }
+    core::allocator::set_frontier(end as u32);
+    return start as u32;
+}
+
 pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
-        if ((oldptr + oldsize) == core::allocator::heap_offset) {
-            core::allocator::heap_offset = oldptr;
+        if ((oldptr + oldsize) as u32 == core::allocator::frontier()) {
+            core::allocator::set_frontier(oldptr as u32);
         }
         return 0;
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
-    let new_offset: i32 = (aligned + newsize);
-    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
-    return aligned;
+    return core::allocator::bump(align as u32, newsize as u32) as i32;
 }
 
 pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
-        if (oldsize > 0) {
+        if (oldsize != 0) {
             core::builtin::memory_fill(oldptr, 255, oldsize);
         }
         return 0;
     }
-    let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
-    let new_offset: i32 = (aligned + newsize);
-    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
-    return aligned;
+    return core::allocator::bump(align as u32, newsize as u32) as i32;
 }
 
-fn fl_size(tag: i32) -> i32 {
-    return core::builtin::i32_and(tag, -8);
+fn fl_size(tag: u32) -> u32 {
+    return (tag & 4294967288);
 }
 
-fn fl_used(tag: i32) -> i32 {
-    return core::builtin::i32_and(tag, 1);
+fn fl_used(tag: u32) -> u32 {
+    return (tag & 1);
 }
 
-fn fl_bin(size: i32) -> i32 {
-    let k: i32 = ((size - 32) >> 4);
+fn fl_bin(size: u32) -> u32 {
+    let k: u32 = ((size - 32) >> 4);
     return if (k < 32) {
         k;
     } else {
@@ -2430,50 +2459,54 @@ fn fl_bin(size: i32) -> i32 {
     };
 }
 
-fn fl_bin_head(k: i32) -> i32 {
-    return core::builtin::i32_load((8 + (k * 4)));
+fn fl_bin_slot(k: u32) -> u32 {
+    return ((core::builtin::heap_base() as u32 + 8) + (k * 4));
 }
 
-fn fl_set_bin_head(k: i32, head: i32) {
-    core::builtin::i32_store((8 + (k * 4)), head);
+fn fl_bin_head(k: u32) -> u32 {
+    return core::allocator::load(core::allocator::fl_bin_slot(k));
 }
 
-fn fl_set_tags(block: i32, size: i32, used: i32) {
-    let tag: i32 = (size + used);
-    core::builtin::i32_store(block, tag);
-    core::builtin::i32_store(((block + size) - 8), tag);
+fn fl_set_bin_head(k: u32, head: u32) {
+    core::allocator::store(core::allocator::fl_bin_slot(k), head);
 }
 
-fn fl_push(block: i32, size: i32) {
-    let k: i32 = core::allocator::fl_bin(size);
-    let head: i32 = core::allocator::fl_bin_head(k);
-    core::builtin::i32_store((block + 8), head);
-    core::builtin::i32_store((block + 12), 0);
+fn fl_set_tags(block: u32, size: u32, used: u32) {
+    let tag: u32 = (size + used);
+    core::allocator::store(block, tag);
+    core::allocator::store(((block + size) - 8), tag);
+}
+
+fn fl_push(block: u32, size: u32) {
+    let k: u32 = core::allocator::fl_bin(size);
+    let head: u32 = core::allocator::fl_bin_head(k);
+    core::allocator::store((block + 8), head);
+    core::allocator::store((block + 12), 0);
     if (head != 0) {
-        core::builtin::i32_store((head + 12), block);
+        core::allocator::store((head + 12), block);
     }
     core::allocator::fl_set_bin_head(k, block);
 }
 
-fn fl_unlink(block: i32) {
-    let next: i32 = core::builtin::i32_load((block + 8));
-    let prev: i32 = core::builtin::i32_load((block + 12));
+fn fl_unlink(block: u32) {
+    let next: u32 = core::allocator::load((block + 8));
+    let prev: u32 = core::allocator::load((block + 12));
     if (prev == 0) {
-        let k: i32 = core::allocator::fl_bin(core::allocator::fl_size(core::builtin::i32_load(block)));
+        let k: u32 = core::allocator::fl_bin(core::allocator::fl_size(core::allocator::load(block)));
         core::allocator::fl_set_bin_head(k, next);
     } else {
-        core::builtin::i32_store((prev + 8), next);
+        core::allocator::store((prev + 8), next);
     }
     if (next != 0) {
-        core::builtin::i32_store((next + 12), prev);
+        core::allocator::store((next + 12), prev);
     }
 }
 
-fn fl_carve(block: i32, block_size: i32, size: i32) {
-    let remainder: i32 = (block_size - size);
+fn fl_carve(block: u32, block_size: u32, size: u32) {
+    let remainder: u32 = (block_size - size);
     if (remainder >= 32) {
         core::allocator::fl_set_tags(block, size, 1);
-        let rest: i32 = (block + size);
+        let rest: u32 = (block + size);
         core::allocator::fl_set_tags(rest, remainder, 0);
         core::allocator::fl_push(rest, remainder);
     } else {
@@ -2483,32 +2516,36 @@ fn fl_carve(block: i32, block_size: i32, size: i32) {
 
 pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     if (core::allocator::heap_offset < 152) {
+        if ((core::builtin::heap_base() & 15) != 0) {
+            core::builtin::cold_path();
+            core::builtin::unreachable();
+        }
         core::allocator::heap_offset = 152;
     }
     if (newsize == 0) {
         if (oldptr == 0) {
             return 0;
         }
-        let mut block: i32 = (oldptr - 8);
-        let header: i32 = core::builtin::i32_load(block);
+        let mut block: u32 = (oldptr as u32 - 8);
+        let header: u32 = core::allocator::load(block);
         if (core::allocator::fl_used(header) == 0) {
             core::builtin::cold_path();
             core::builtin::unreachable();
         }
-        let mut size: i32 = core::allocator::fl_size(header);
-        let next: i32 = (block + size);
-        if (next < core::allocator::heap_offset) {
-            let next_header: i32 = core::builtin::i32_load(next);
+        let mut size: u32 = core::allocator::fl_size(header);
+        let next: u32 = (block + size);
+        if (next < core::allocator::frontier()) {
+            let next_header: u32 = core::allocator::load(next);
             if (core::allocator::fl_used(next_header) == 0) {
                 core::allocator::fl_unlink(next);
                 size = (size + core::allocator::fl_size(next_header));
             }
         }
-        if (block > 152) {
-            let prev_footer: i32 = core::builtin::i32_load((block - 8));
+        if (block > (core::builtin::heap_base() as u32 + 152)) {
+            let prev_footer: u32 = core::allocator::load((block - 8));
             if (core::allocator::fl_used(prev_footer) == 0) {
-                let prev_size: i32 = core::allocator::fl_size(prev_footer);
-                let prev: i32 = (block - prev_size);
+                let prev_size: u32 = core::allocator::fl_size(prev_footer);
+                let prev: u32 = (block - prev_size);
                 core::allocator::fl_unlink(prev);
                 block = prev;
                 size = (size + prev_size);
@@ -2518,48 +2555,45 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         core::allocator::fl_push(block, size);
         return 0;
     }
-    let size: i32 = (core::builtin::i32_and((newsize + 15), -16) + 16);
-    let mut j: i32 = core::allocator::fl_bin(size);
+    let wide_size: u64 = (((newsize as u32 as u64 + 15) & 18446744073709551600) + 16);
+    if (wide_size > core::allocator::MAX_ADDRESS) {
+        core::builtin::cold_path();
+        core::builtin::unreachable();
+    }
+    let size: u32 = wide_size as u32;
+    let mut j: u32 = core::allocator::fl_bin(size);
     loop {
         if !(j < 32) {
             break;
         }
-        let b: i32 = core::allocator::fl_bin_head(j);
+        let b: u32 = core::allocator::fl_bin_head(j);
         if (b != 0) {
-            let block_size: i32 = core::allocator::fl_size(core::builtin::i32_load(b));
+            let block_size: u32 = core::allocator::fl_size(core::allocator::load(b));
             core::allocator::fl_unlink(b);
             core::allocator::fl_carve(b, block_size, size);
-            return (b + 8);
+            return (b + 8) as i32;
         }
         j = (j + 1);
     }
-    let mut curr: i32 = core::allocator::fl_bin_head(32);
+    let mut curr: u32 = core::allocator::fl_bin_head(32);
     loop {
         if !(curr != 0) {
             break;
         }
-        let block_size: i32 = core::allocator::fl_size(core::builtin::i32_load(curr));
+        let block_size: u32 = core::allocator::fl_size(core::allocator::load(curr));
         if (block_size >= size) {
             core::allocator::fl_unlink(curr);
             core::allocator::fl_carve(curr, block_size, size);
-            return (curr + 8);
+            return (curr + 8) as i32;
         }
-        curr = core::builtin::i32_load((curr + 8));
+        curr = core::allocator::load((curr + 8));
     }
-    let block: i32 = core::allocator::heap_offset;
-    let new_offset: i32 = (block + size);
-    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(new_offset);
-    }
-    core::allocator::heap_offset = new_offset;
+    let block: u32 = core::allocator::bump(1, size);
     core::allocator::fl_set_tags(block, size, 1);
-    return (block + 8);
+    return (block + 8) as i32;
 }
 
 pub fn i32_as_char(value: i32) -> char;
-
-pub fn i32_and(a: i32, b: i32) -> i32;
 
 pub fn array_get_value_u8(arr: &Array<u8>, idx: i32) -> u8;
 
@@ -2579,13 +2613,13 @@ pub fn memory_grow(delta: i32) -> i32;
 
 pub fn memory_size() -> i32;
 
+pub fn heap_base() -> i32;
+
 pub fn memory_fill(dst: i32, value: u8, len: i32);
 
 pub fn i64_sub128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64];
 
 pub fn i64_mul_wide_u(a: i64, b: i64) -> [i64, i64];
-
-pub fn i32_clz(x: i32) -> i32;
 
 pub fn i64_clz(x: i64) -> i64;
 
@@ -4786,6 +4820,25 @@ fn assert_failed(message: String) -> ! {
     core::rt::panic(message);
 }
 
+fn coverage_probe(id: i32) {
+    let len: i32 = "core::builtin::core/builtin/array_len<u8>"(&core::rt::COVERAGE_SEEN);
+    if ((id < len) && (core::builtin::array_get_value_u8(&core::rt::COVERAGE_SEEN, id) != 0)) {
+        return;
+    }
+    core::builtin::cold_path();
+    if (id >= len) {
+        let mut grown: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(if (id < (len * 2)) {
+            (len * 2);
+        } else {
+            (id + 1);
+        });
+        "core::builtin::core/builtin/array_copy<u8>"(&mut grown, 0, &core::rt::COVERAGE_SEEN, 0, len);
+        core::rt::COVERAGE_SEEN = grown;
+    }
+    core::builtin::array_set_u8(&mut core::rt::COVERAGE_SEEN, id, 1);
+    "ops.all_dirty.wado::$cm_binding__CoverageHost_hit"(id as u32 as i32);
+}
+
 fn cm_lower_string(s: String) -> i64 {
     let len: i32 = s."core:prelude/string.wado/String::len"();
     let bytes: &Array<u8> = s."core:prelude/string.wado/String::internal_raw_bytes"();
@@ -4992,6 +5045,10 @@ pub export fn run() {
     "ops.all_dirty.wado::$initialize_modules"();
 }
 
+fn "$cm_binding__CoverageHost_hit"(id: i32) with CoverageHost {
+    cm_raw_call core:coverage/CoverageHost::hit(id);
+}
+
 export fn "$cm_export__run"() {
     "ops.all_dirty.wado::$initialize_modules"();
     "ops.all_dirty.wado::run"();
@@ -5070,6 +5127,8 @@ fn "core:prelude/list.wado/List<u8>::internal_raw_data_ref"(self: &List<u8>) -> 
 pub fn "core:prelude/list.wado/List<u8>::len"(self: &List<u8>) -> i32 {
     return self.used;
 }
+
+pub fn "core/builtin/array_len<u8>"(arr: &Array<u8>) -> i32;
 
 fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>] {
     let rx: i32 = packed as i32;
@@ -5160,7 +5219,7 @@ fn "core/prelude/array.wado/seq_eq<u8>"(a: &Array<u8>, a_start: i32, a_end: i32,
 }
 
 pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
-    return core::builtin::array_len::<u8>(self);
+    return "core::builtin::core/builtin/array_len<u8>"(self);
 }
 
 #[retain(repr)]
@@ -10392,6 +10451,7 @@ pub fn "$initialize_module"() {
 }
 
 pub fn "$initialize_module"() {
+    core::rt::COVERAGE_SEEN = "core::builtin::core/builtin/array_new<u8>"(0);
     core::rt::CM_CALLBACKS = "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/From<Array<T>>::from"([]);
     core::rt::CM_COPY_MAX = 268435455;
 }

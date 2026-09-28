@@ -162,6 +162,32 @@ internal fn assert_failed(message: String) -> ! {
     panic(message);
 }
 
+use { CoverageHost } from "core:coverage/coverage_host.wado";
+
+/// Whether this instance has reported each coverage region, one byte per id.
+global mut COVERAGE_SEEN: Array<u8> = builtin::array_new::<u8>(0);
+
+/// The probe `wado test --coverage` puts at the start of every region: tells
+/// the host the first time region `id` runs in this instance. The host hears a
+/// hit as it happens, since a test that traps cannot be entered again.
+#[compiler_item("coverage_probe")]
+#[coverage(off)]
+#[benign(CoverageHost)]
+internal fn coverage_probe(id: i32) {
+    let len = builtin::array_len(&COVERAGE_SEEN);
+    if id < len && builtin::array_get_value_u8(&COVERAGE_SEEN, id) != 0 {
+        return;
+    }
+    builtin::cold_path();
+    if id >= len {
+        let mut grown = builtin::array_new::<u8>(if id < len * 2 { len * 2 } else { id + 1 });
+        builtin::array_copy(&mut grown, 0, &COVERAGE_SEEN, 0, len);
+        COVERAGE_SEEN = grown;
+    }
+    builtin::array_set_u8(&mut COVERAGE_SEEN, id, 1);
+    CoverageHost::hit(id as u32);
+}
+
 /// Traps unconditionally, marking unreachable code.
 pub fn unreachable() -> ! {
     builtin::unreachable();

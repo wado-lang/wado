@@ -1,0 +1,124 @@
+// A numeric literal behind a nested generic call or constructor answers last
+// too: it takes the type the outer call's other arguments settle, and its
+// literals' default where nothing does.
+use { println, Stdout } from "core:cli";
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+struct Box<T> {
+    v: T,
+}
+
+impl<T> Box<T> {
+    fn new(v: T) -> Box<T> {
+        return Box { v };
+    }
+}
+
+fn wrap<U>(u: U) -> Box<U> {
+    return Box { v: u };
+}
+
+struct Util {}
+
+impl Util {
+    fn static_wrap<U>(u: U) -> Box<U> {
+        return Box { v: u };
+    }
+
+    fn method_wrap<U>(&self, u: U) -> Box<U> {
+        return Box { v: u };
+    }
+
+    fn static_unbox<T>(b: Box<T>, fallback: T) -> T {
+        return b.v;
+    }
+
+    fn method_unbox<T>(&self, b: Box<T>, fallback: T) -> T {
+        return b.v;
+    }
+}
+
+fn shown<T: Display>(t: T) -> T {
+    return t;
+}
+
+fn ok<T>(r: Result<T, String>, fallback: T) -> T {
+    return if let Ok(v) = r { v } else { fallback };
+}
+
+fn made<T>(f: fn() -> T, fallback: T) -> T {
+    let v = f();
+    return if v == fallback { fallback } else { v };
+}
+
+fn id<T>(t: T) -> T {
+    return t;
+}
+
+fn opt<T>(o: Option<T>, fallback: T) -> T {
+    return if let Some(v) = o { v } else { fallback };
+}
+
+fn opt_pair<T>(o: Option<Pair<T>>, fallback: T) -> T {
+    return if let Some(p) = o { p.b } else { fallback };
+}
+
+fn unbox<T>(b: Box<T>, fallback: T) -> T {
+    return if b.v == fallback { fallback } else { b.v };
+}
+
+fn unbox_twice<T>(b: Box<Box<T>>, fallback: T) -> T {
+    return unbox(b.v, fallback);
+}
+
+fn only<T>(b: Box<T>) -> T {
+    return b.v;
+}
+
+fn either<T>(a: T, b: T) -> T {
+    return a;
+}
+
+export fn run() with Stdout {
+    let wide: u64 = 7;
+    let narrow: i32 = 3;
+    println(`${opt(Some(0x1_0000_0000), wide)}`);
+    println(`${opt_pair(Some(Pair { a: 1, b: 0x1_0000_0001 }), wide)}`);
+    println(`${unbox(wrap(0x1_0000_0002), wide)}`);
+    println(`${unbox(Box { v: id(0x1_0000_0003) }, wide)}`);
+    println(`${unbox_twice(wrap(wrap(0x1_0000_0004)), wide)}`);
+    println(`${unbox(Box::new(0x1_0000_0005), wide)}`);
+    println(`${unbox(wrap(shown(0x1_0000_0006)), wide)}`);
+    println(`${ok(Ok(0x1_0000_0007), wide)}`);
+    println(`${made(|| id(0x1_0000_0008), wide)}`);
+    println(`${unbox(wrap(-1), -2 as i8)}`);
+    println(`${unbox(wrap(wide), id(5))}`);
+    println(`${unbox(wrap(5), narrow)}`);
+    println(`${only(wrap(6))}`);
+    println(`${only(wrap(2.5))}`);
+    println(`${opt(Some(1), 2)}`);
+
+    // A method, static or not, waits and is waited for as a function does.
+    let util = Util {};
+    println(`${unbox(Util::static_wrap(0x1_0000_000B), wide)}`);
+    println(`${unbox(util.method_wrap(0x1_0000_000C), wide)}`);
+    let from_static: u64 = Util::static_unbox(Box { v: 0x1_0000_000D }, 2);
+    println(`${from_static}`);
+    let from_method: u64 = util.method_unbox(Box { v: 0x1_0000_000E }, 2);
+    println(`${from_method}`);
+
+    // A branch beside `null` holds the nested call whose literal is pending.
+    let flag = builtin::black_box(true);
+    let some_wide: Option<u64> = Some(7);
+    println(`${either(if flag { Option::Some(0x1_0000_0009) } else { null }, some_wide):?}`);
+    println(`${either(match flag { false => null, true => Option::Some(0x1_0000_000A) }, some_wide):?}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296\n4294967297\n4294967298\n4294967299\n4294967300\n4294967301\n4294967302\n4294967303\n4294967304\n-1\n7\n5\n6\n2.5\n1\n4294967307\n4294967308\n4294967309\n4294967310\nOption::Some(4294967305)\nOption::Some(4294967306)\n"
+}

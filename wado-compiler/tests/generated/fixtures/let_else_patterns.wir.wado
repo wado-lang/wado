@@ -79,9 +79,10 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:let_else_patterns.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(57), used: 1 };
+
 fn "let_else_patterns.wado/run"() with Stdout {
     let $local_0: ref "core:prelude/string.wado//String";
-    let $local_2: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/string.wado//String";
     let handle_9: i32;
     let m: ref null "let_else_patterns.wado//Point";
@@ -90,7 +91,6 @@ fn "let_else_patterns.wado/run"() with Stdout {
     let rx_22: i32;
     let tx_23: i32;
     let handle_31: i32;
-    let opt_37: ref "core:prelude/types.wado//Option<i32>";
     let packed_41: i64;
     let rx_42: i32;
     let tx_43: i32;
@@ -110,14 +110,12 @@ fn "let_else_patterns.wado/run"() with Stdout {
     handle_9 = "let_else_patterns.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
     "core:rt/write_string_to_stream"(tx_23, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
-    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    opt_37 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 9 };
-    cold_path;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_37).payload_0, $local_2);
     rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
     tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
     handle_31 = "let_else_patterns.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
-    "core:rt/write_string_to_stream"(tx_43, $local_2.repr, $local_2.used);
+    let $mv_arg_4: ref "core:prelude/string.wado//String";
+    $mv_arg_4 = global:let_else_patterns.wado::$const_obj_1;
+    "core:rt/write_string_to_stream"(tx_43, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_31);
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_59($inline_first_of_23: block -> i32 {
@@ -321,10 +319,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+    new_used_66 = self.used + digit_count;
+    if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
+    }
+    start_67 = self.used;
+    self.used = new_used_66;
+    return start_67;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {

@@ -72,13 +72,14 @@ fn "cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(ds) with Gfx {
     let $ds_elem: i32;
     let $licm_repr_18: ref "Array<cm_list_of_own_param.wado/Device>";
     $ds_len = ds.used;
-    $ds_base = "mem/realloc"(0, 0, 4, if @unlikely(($ds_len < 0) | ($ds_len > 536870911)) {
+    if @unlikely(($ds_len < 0) | ($ds_len > 536870911)) {
         cold_path;
         let $mv_field_1: ref Array<u8>;
         $mv_field_1 = array.new_data<u8>("a buffer's length is negative or past what linear memory can address");
         "core:rt/panic"($mv_field_1, 68);
         unreachable;
-    }; $ds_len * 4);
+    }
+    $ds_base = "mem/realloc"(0, 0, 4, $ds_len * 4);
     $ds_i = 0;
     $licm_repr_18 = ds.repr;
     b1: block {
@@ -100,7 +101,8 @@ fn "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
 
 fn "cm_list_of_own_param.wado/$cm_export__run"() {
     let elements: ref "Array<cm_list_of_own_param.wado/Device>";
-    drop("cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(elements = array.new_fixed<i32>("cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"(), "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"()); struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: elements, used: builtin::array_len(elements) }));
+    elements = array.new_fixed<i32>("cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"(), "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"());
+    drop("cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: elements, used: builtin::array_len(elements) }));
     "wasi/task-return"(0);
 }
 

@@ -298,6 +298,8 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
 // Step 3b: mark &local field values as stores-aliased
 // -----------------------------------------------------------------------
 
+/// Every literal a decomposed candidate takes: the one its `Let` binds and each
+/// a whole-literal assign writes.
 fn mark_ref_field_locals_as_aliased(
     body: &Body,
     candidates: &[SroaCandidate],
@@ -309,6 +311,13 @@ fn mark_ref_field_locals_as_aliased(
             collect_ref_locals_in_fields(body, c.literal, stores_aliased);
         }
     }
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Expr(e) = node
+            && let Some((_, literal)) = whole_literal_assign(body, e, decomposed)
+        {
+            collect_ref_locals_in_fields(body, literal, stores_aliased);
+        }
+    });
 }
 
 fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u32>) {
@@ -493,6 +502,42 @@ fn field_access_of_candidate(
     None
 }
 
+/// If `expr` is `candidate = <literal>`, return the candidate and the literal:
+/// a write of the whole aggregate, which is one write per field.
+fn whole_literal_assign(
+    body: &Body,
+    expr: ExprId,
+    candidates: &IndexSet<u32>,
+) -> Option<(u32, ExprId)> {
+    let ExprKind::Assign { target, value } = &body.exprs[expr].kind else {
+        return None;
+    };
+    let local = is_candidate_local(body, *target, candidates)?;
+    let literal = value.as_expr()?;
+    matches!(
+        body.exprs[literal].kind,
+        ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+    )
+    .then_some((local, literal))
+}
+
+/// A literal's `(field_index, value)` pairs, in field order.
+fn literal_fields(body: &Body, literal: ExprId) -> Vec<(u32, Operand)> {
+    let mut pairs: Vec<(u32, Operand)> = match &body.exprs[literal].kind {
+        ExprKind::StructLiteral { fields, .. } => {
+            fields.iter().map(|f| (f.field_index, f.value)).collect()
+        }
+        ExprKind::TupleLiteral { elements, .. } | ExprKind::ArrayLiteral { elements } => elements
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (i as u32, *e))
+            .collect(),
+        _ => unreachable!("candidate must be struct, tuple or array literal"),
+    };
+    pairs.sort_by_key(|(fi, _)| *fi);
+    pairs
+}
+
 /// If `expr` is `&candidate` / `&mut candidate`, return `(local index, is the
 /// reference mutable)`. Either escapes the candidate; only the soft walk cares
 /// which.
@@ -578,7 +623,8 @@ fn array_read_of_candidate(
         | CtfeBuiltin::ArrayClonePrefix
         | CtfeBuiltin::ColdPath
         | CtfeBuiltin::Select
-        | CtfeBuiltin::I32AsChar => None,
+        | CtfeBuiltin::I32AsChar
+        | CtfeBuiltin::HeapBase(_) => None,
     }
 }
 
@@ -689,6 +735,11 @@ impl UseWalk<'_> {
             }
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
+                if let Some((idx, literal)) = whole_literal_assign(body, id, self.candidates) {
+                    out.field_accessed.insert(idx);
+                    body.for_each_child(NodeRef::Expr(literal), |c| self.node(body, c, out));
+                    return;
+                }
                 if let Some((idx, _)) = field_access_of_candidate(body, target, self.candidates) {
                     out.field_accessed.insert(idx);
                 } else {
@@ -803,6 +854,12 @@ impl SoftCtx<'_> {
             }
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
+                if let Some((_, literal)) = whole_literal_assign(body, id, self.candidates) {
+                    body.for_each_child(NodeRef::Expr(literal), |c| {
+                        self.walk(body, c, hard_escaped);
+                    });
+                    return;
+                }
                 if field_access_of_candidate(body, target, self.candidates).is_some() {
                     if let Some(ve) = value.as_expr() {
                         self.expr(body, ve, false, hard_escaped);
@@ -980,6 +1037,59 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
         return;
     }
 
+    // Whole write: candidate = literal -> one scalar write per field. The
+    // aggregate write happened once every field was evaluated, so a field that
+    // reads the candidate, or leaves the statement (`continue`, `break L`),
+    // still sees none of it written: each field but a constant is evaluated
+    // into a temp, and the writes come last.
+    if let Some((local, literal)) = whole_literal_assign(engine.body, id, ctx.decomposed) {
+        let span = engine.body.exprs[id].span;
+        let pairs = literal_fields(engine.body, literal);
+        engine.body.take_expr(literal);
+        let mut stmts = Vec::with_capacity(2 * pairs.len());
+        let mut writes = Vec::with_capacity(pairs.len());
+        for (field_index, mut value) in pairs {
+            if let Some(e) = value.as_expr() {
+                rewrite_expr(engine, e, ctx);
+            }
+            let slot = &ctx.field_map[&(local, field_index)];
+            let constant = value
+                .as_value()
+                .is_some_and(|v| engine.body.values.kind(v).is_constant());
+            if !constant {
+                let temp =
+                    engine.alloc_minted_local(&minted_what(SROA, "next"), slot.type_id, false);
+                let name = engine.local_name(temp);
+                stmts.push(engine.alloc_stmt(
+                    StmtKind::Let {
+                        name: name.clone(),
+                        local_index: temp,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: slot.type_id,
+                        value,
+                        skip_value_copy: true,
+                    },
+                    span,
+                ));
+                value = Operand::Expr(engine.alloc_expr(
+                    ExprKind::Local { index: temp, name },
+                    slot.type_id,
+                    span,
+                ));
+            }
+            let target =
+                engine.alloc_expr(ctx.field_local((local, field_index)), slot.type_id, span);
+            let write =
+                engine.alloc_expr(ExprKind::Assign { target, value }, TypeTable::UNIT, span);
+            writes.push(engine.alloc_stmt(StmtKind::Expr(Operand::Expr(write)), span));
+        }
+        stmts.extend(writes);
+        let block = engine.alloc_block(stmts, span);
+        engine.replace_expr_kind(id, ExprKind::plain_block(block, TypeTable::UNIT, SROA));
+        return;
+    }
+
     // Field write: candidate.field = value -> scalar_local = value.
     if let ExprKind::Assign { target, value } = &engine.body.exprs[id].kind {
         let (target, value) = (*target, *value);
@@ -1023,19 +1133,7 @@ fn expand_struct_let(
     ctx: &Rewrite,
     new_stmts: &mut Vec<StmtId>,
 ) {
-    // (field_index, operand) pairs in field-index order.
-    let mut pairs: Vec<(u32, Operand)> = match &engine.body.exprs[value].kind {
-        ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().map(|f| (f.field_index, f.value)).collect()
-        }
-        ExprKind::TupleLiteral { elements, .. } | ExprKind::ArrayLiteral { elements } => elements
-            .iter()
-            .enumerate()
-            .map(|(i, e)| (i as u32, *e))
-            .collect(),
-        _ => unreachable!("candidate must be struct, tuple or array literal"),
-    };
-    pairs.sort_by_key(|(fi, _)| *fi);
+    let pairs = literal_fields(engine.body, value);
     if let Some(slot) = ctx.len_map.get(&local_idx) {
         let len = pairs.len() as u64;
         let value = engine.const_operand(ValueKind::Int(len, slot.type_id), slot.type_id);

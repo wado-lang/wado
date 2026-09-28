@@ -7,6 +7,14 @@ load from a safetensors checkpoint at run time:
     cd package-loam/example/gpt2-124m
     wado run gpt2.wado -- "Hello, my name is"
 
+`gpt2.wado` is the command line around `model.wado`, which holds the tokenizer
+and the model as a library. A browser page can build the same library into a
+component.
+
+`hf2loam.mjs` writes the checkpoint from Hugging Face's `model.safetensors`
+without running Wado. Its `convert` function takes and returns byte arrays, so a
+browser page can run it too.
+
 ## What the build reads
 
 The model is

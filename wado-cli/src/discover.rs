@@ -11,7 +11,7 @@ use wado_manifest::Manifest;
 use glob::{Pattern, PatternError};
 
 use crate::args::CliExit;
-use crate::manifest as project_manifest;
+use crate::manifest::{self as project_manifest, absolute};
 
 /// The walker's glob match options. Defined once in `wado-manifest` so
 /// workspace-member matching and file discovery interpret patterns identically.
@@ -453,26 +453,22 @@ pub fn display_path(p: &Path) -> String {
     trimmed.to_string()
 }
 
-/// Keep only the files under `dir`, dropping the packages left with none.
-/// Both sides go through [`display_path`], so the prefix test compares paths
-/// of the same shape.
+/// Keep only the files under `dir`, dropping the packages left with none, and
+/// spell each kept file from `dir`. The package may have been found through
+/// `..`, a spelling the user never wrote, so the two are compared absolute.
 fn retain_under(packages: Vec<PackageFiles>, dir: &Path) -> Vec<PackageFiles> {
-    let prefix = display_path(dir);
+    let dir_abs = absolute(dir);
     packages
         .into_iter()
         .filter_map(|mut pkg| {
-            pkg.files.retain(|p| path_under(&display_path(p), &prefix));
+            pkg.files = pkg
+                .files
+                .iter()
+                .filter_map(|p| Some(dir.join(absolute(p).strip_prefix(&dir_abs).ok()?)))
+                .collect();
             (!pkg.files.is_empty()).then_some(pkg)
         })
         .collect()
-}
-
-// A plain `starts_with(dir)` would wrongly match `core2/foo` against `core`;
-// requiring a `/` right after the prefix pins the match to a path-segment
-// boundary.
-fn path_under(path: &str, dir: &str) -> bool {
-    path.strip_prefix(dir)
-        .is_some_and(|rest| rest.starts_with('/'))
 }
 
 /// Laying out a package tree on disk, for the tests here and in the
@@ -1190,25 +1186,32 @@ pathology = should-not-match\n\
         assert!(excludes.matches_str("skip.wado"));
     }
 
-    // Shell completion writes `wado test some/dir/`, and `retain_under`
-    // compares that prefix against the walker's paths.
     #[test]
-    fn a_trailing_separator_leaves_the_same_prefix() {
+    fn a_trailing_separator_leaves_the_same_display_path() {
         assert_eq!(display_path(Path::new("pkg/tests/")), "pkg/tests");
         assert_eq!(display_path(Path::new("./pkg/tests/")), "pkg/tests");
         assert_eq!(display_path(Path::new("pkg/tests//")), "pkg/tests");
         assert_eq!(display_path(Path::new("/")), "/");
-        assert!(path_under(
-            "pkg/tests/a.wado",
-            &display_path(Path::new("pkg/tests/"))
-        ));
+    }
+
+    fn retained(files: &[&str], dir: &str) -> Vec<String> {
+        let pkg = PackageFiles {
+            root: PathBuf::from("pkg"),
+            files: files.iter().map(PathBuf::from).collect(),
+        };
+        retain_under(vec![pkg], Path::new(dir))
+            .into_iter()
+            .flat_map(|pkg| pkg.files)
+            .map(|p| display_path(&p))
+            .collect()
     }
 
     #[test]
-    fn path_under_respects_segment_boundary() {
-        assert!(path_under("pkg/lib/core/a.wado", "pkg/lib/core"));
-        assert!(!path_under("pkg/lib/core2/a.wado", "pkg/lib/core"));
-        assert!(!path_under("pkg/lib/core", "pkg/lib/core"));
+    fn retain_under_matches_whole_segments() {
+        let files = ["pkg/lib/core/a.wado", "pkg/lib/core2/a.wado"];
+        assert_eq!(retained(&files, "pkg/lib/core"), ["pkg/lib/core/a.wado"]);
+        // Shell completion writes `wado test some/dir/`.
+        assert_eq!(retained(&files, "pkg/lib/core/"), ["pkg/lib/core/a.wado"]);
     }
 
     #[test]

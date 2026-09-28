@@ -11,6 +11,7 @@ use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibilit
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
+use crate::coverage::{CoverageMap, CoverageScope};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
@@ -94,6 +95,9 @@ pub struct Semantics {
     /// the CLI before WIT emission so `wado wit` and the `wado compile` embed
     /// path derive them identically. `None` until set.
     pub(crate) wit_contract: Option<WitContract>,
+    /// The coverage plan reify instrumented this compile with, under
+    /// `wado test --coverage`.
+    pub(crate) coverage: Option<CoverageMap>,
 }
 
 /// A definition location, assembled from a symbol.
@@ -243,6 +247,7 @@ impl Semantics {
             liveness: Liveness::default(),
             is_complete: false,
             wit_contract: None,
+            coverage: None,
         }
     }
 
@@ -1045,7 +1050,7 @@ pub fn semantics_of<H: CompilerHost>(
     build_tir: bool,
 ) -> Semantics {
     let logger = Logger::new(host, log_level);
-    semantics_with_logger(loaded, &logger, build_tir)
+    semantics_with_logger(loaded, &logger, build_tir, None)
 }
 
 /// Logger-sharing variant. Internal: lets callers that already maintain a
@@ -1055,6 +1060,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
     build_tir: bool,
+    coverage: Option<CoverageScope>,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1093,7 +1099,9 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // itself (re-entry guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
+        // A measured stdlib takes probes the plain snapshot lacks.
         get_or_init_snapshot()
+            .filter(|_| !coverage.is_some_and(|scope| scope.stdlib))
             .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
     };
 
@@ -1156,6 +1164,14 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // recorded, with no second lexical scan to drift out of sync. On Bail the
     // partial facts are still routed so cursor queries work against whatever
     // bodies were reached. `build_tir == false` stops after `annotate_bodies`.
+    let coverage = coverage.map(|scope| {
+        CoverageMap::build(
+            load_result
+                .modules
+                .iter()
+                .filter(|(source, _)| scope.measures(source)),
+        )
+    });
     let (tir_modules, lower_ok) = {
         let _span = logger.span("elaborate/build_tir");
         match Elaborator::build_tir_from_state(
@@ -1166,6 +1182,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             logger,
             snapshot.as_deref(),
             build_tir,
+            coverage.as_ref(),
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),
@@ -1219,6 +1236,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         liveness,
         is_complete: cm_bound && no_syntax_errors,
         wit_contract: None,
+        coverage,
     }
 }
 
@@ -1319,7 +1337,7 @@ mod tests {
         let sym_id = *module_sem.bindings.local_symbols.keys().next().unwrap();
         assert!(sem.symbol_at(sym_id).is_some());
 
-        // The same holds for a module seeded from the stdlib snapshot, which
+        // The same holds for a module served from the stdlib snapshot, which
         // carries its facts per module rather than re-splitting flat ones.
         let stdlib_facts = sem
             .state
@@ -1332,6 +1350,30 @@ mod tests {
                 !sem.types.expression_types.is_empty() && !sem.bindings.references.is_empty()
             });
         assert!(stdlib_facts);
+    }
+
+    /// A stdlib module served from the snapshot reads the snapshot's facts in
+    /// place rather than a copy made per compile.
+    #[test]
+    fn a_compile_shares_the_snapshot_facts() {
+        let snap = get_or_init_snapshot().expect("not re-entering the builder");
+        let snap_state = snap
+            .state
+            .as_ref()
+            .expect("the stdlib snapshot is complete");
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics("fn main() {}", &host, Some("entry.wado")));
+        let state = sem.state.as_ref().expect("annotate state");
+
+        let prelude = state
+            .module_semantics
+            .keys()
+            .find(|source| source.to_string() == "core:prelude")
+            .expect("every compile loads the prelude");
+        assert!(std::rc::Rc::ptr_eq(
+            &state.module_semantics[prelude],
+            &snap_state.module_semantics[prelude],
+        ));
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

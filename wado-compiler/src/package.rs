@@ -53,6 +53,8 @@ pub struct Package {
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
+    /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`.
+    pub coverage_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Threaded unchanged through to the WIR emitter, which consults them to
     /// pick alternative lowerings (e.g. native `array.copy`).
@@ -172,6 +174,7 @@ impl Package {
             used_wasi_functions: IndexSet::default(),
             // Codegen options
             strip_names: false,
+            coverage_section: None,
             codegen_flags: CodegenFlags::default(),
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),

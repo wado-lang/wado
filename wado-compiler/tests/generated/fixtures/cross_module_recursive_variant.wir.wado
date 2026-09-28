@@ -682,7 +682,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<.
     start_203 = self_190.used;
     self_190.used = new_used_202;
     builtin::array_copy<u8>(self_190.repr, start_203, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
-    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/cross_module_recursive_variant_a.wado/Child>^core:prelude/traits.wado/Inspect::inspect"(v_206 = v.children; v_206, f);
+    v_206 = v.children;
+    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/cross_module_recursive_variant_a.wado/Child>^core:prelude/traits.wado/Inspect::inspect"(v_206, f);
     self_207 = f.buf;
     new_used_219 = self_207.used + 1;
     if @unlikely(new_used_219 > builtin::array_len(self_207.repr)) {
@@ -904,7 +905,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<.
     start_203 = self_190.used;
     self_190.used = new_used_202;
     builtin::array_copy<u8>(self_190.repr, start_203, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
-    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/cross_module_recursive_variant_b.wado/Child>^core:prelude/traits.wado/Inspect::inspect"(v_206 = v.children; v_206, f);
+    v_206 = v.children;
+    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/cross_module_recursive_variant_b.wado/Child>^core:prelude/traits.wado/Inspect::inspect"(v_206, f);
     self_207 = f.buf;
     new_used_219 = self_207.used + 1;
     if @unlikely(new_used_219 > builtin::array_len(self_207.repr)) {
@@ -2205,7 +2207,8 @@ fn "core:prelude/traits.wado/./sub/cross_module_recursive_variant_b.wado/Node^co
     start_157 = self_144.used;
     self_144.used = new_used_156;
     builtin::array_copy<u8>(self_144.repr, start_157, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
-    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/cross_module_recursive_variant_b.wado/Child>^core:prelude/traits.wado/Inspect::inspect"(v_160 = self.children; v_160, f);
+    v_160 = self.children;
+    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/cross_module_recursive_variant_b.wado/Child>^core:prelude/traits.wado/Inspect::inspect"(v_160, f);
     self_176 = f.buf;
     new_used_188 = self_176.used + 2;
     if @unlikely(new_used_188 > builtin::array_len(self_176.repr)) {
@@ -2311,7 +2314,8 @@ fn "core:prelude/traits.wado/./sub/cross_module_recursive_variant_a.wado/Node^co
     start_157 = self_144.used;
     self_144.used = new_used_156;
     builtin::array_copy<u8>(self_144.repr, start_157, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
-    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/cross_module_recursive_variant_a.wado/Child>^core:prelude/traits.wado/Inspect::inspect"(v_160 = self.children; v_160, f);
+    v_160 = self.children;
+    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/cross_module_recursive_variant_a.wado/Child>^core:prelude/traits.wado/Inspect::inspect"(v_160, f);
     self_176 = f.buf;
     new_used_188 = self_176.used + 2;
     if @unlikely(new_used_188 > builtin::array_len(self_176.repr)) {
@@ -2460,10 +2464,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_49.repr, start_63, prefix.repr, 0, n_57);
             };
         }
-        return self_65 = self.buf, new_used_67 = self_65.used + digit_count, if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
+        self_65 = self.buf;
+        new_used_67 = self_65.used + digit_count;
+        if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
-        }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
+        }
+        start_68 = self_65.used;
+        self_65.used = new_used_67;
+        return start_68;
     }
     padding = $load_2 - content_len;
     if self.zero_pad {
@@ -2520,10 +2529,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 continue l237;
             };
         };
-        return self_120 = self.buf, new_used_122 = self_120.used + digit_count, if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
+        self_120 = self.buf;
+        new_used_122 = self_120.used + digit_count;
+        if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_120, new_used_122);
-        }, start_123 = self_120.used, self_120.used = new_used_122, start_123;
+        }
+        start_123 = self_120.used;
+        self_120.used = new_used_122;
+        return start_123;
     }
     align = self.align;
     if align == 0 {
@@ -2701,10 +2715,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_273.repr, start_287, prefix.repr, 0, n_281);
             };
         }
-        return self_289 = self.buf, new_used_291 = self_289.used + digit_count, if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
+        self_289 = self.buf;
+        new_used_291 = self_289.used + digit_count;
+        if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_289, new_used_291);
-        }, start_292 = self_289.used, self_289.used = new_used_291, start_292;
+        }
+        start_292 = self_289.used;
+        self_289.used = new_used_291;
+        return start_292;
     }
 }
 
@@ -2795,9 +2814,11 @@ fn "core:prelude/traits.wado/./sub/cross_module_recursive_variant_a.wado/Child^c
         start_56 = self_43.used;
         self_43.used = new_used_55;
         builtin::array_copy<u8>(self_43.repr, start_56, global:core:prelude/traits.wado::$const_obj_57, 0, 4);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(v_60 = self.value; if @unlikely(v_60.discriminant != 0) {
+        v_60 = self.value;
+        if @unlikely(v_60.discriminant != 0) {
             unreachable;
-        }; ref.cast "./sub/cross_module_recursive_variant_a.wado//Child::Leaf"(v_60).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(ref.cast "./sub/cross_module_recursive_variant_a.wado//Child::Leaf"(v_60).payload_0, f);
     }
     if self.value.discriminant == 1 {
         self_65 = f.buf;
@@ -2827,9 +2848,11 @@ fn "core:prelude/traits.wado/./sub/cross_module_recursive_variant_a.wado/Child^c
         start_111 = self_98.used;
         self_98.used = new_used_110;
         builtin::array_copy<u8>(self_98.repr, start_111, global:core:prelude/traits.wado::$const_obj_12, 0, 4);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<./sub/cross_module_recursive_variant_a.wado/Node>"(v_115 = self.value; if @unlikely(v_115.discriminant != 1) {
+        v_115 = self.value;
+        if @unlikely(v_115.discriminant != 1) {
             unreachable;
-        }; ref.cast "./sub/cross_module_recursive_variant_a.wado//Child::Node"(v_115).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<./sub/cross_module_recursive_variant_a.wado/Node>"(ref.cast "./sub/cross_module_recursive_variant_a.wado//Child::Node"(v_115).payload_0, f);
     }
 }
 
@@ -2882,9 +2905,11 @@ fn "core:prelude/traits.wado/./sub/cross_module_recursive_variant_b.wado/Child^c
         start_56 = self_43.used;
         self_43.used = new_used_55;
         builtin::array_copy<u8>(self_43.repr, start_56, global:core:prelude/traits.wado::$const_obj_57, 0, 4);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(v_60 = self.value; if @unlikely(v_60.discriminant != 0) {
+        v_60 = self.value;
+        if @unlikely(v_60.discriminant != 0) {
             unreachable;
-        }; ref.cast "./sub/cross_module_recursive_variant_b.wado//Child::Leaf"(v_60).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(ref.cast "./sub/cross_module_recursive_variant_b.wado//Child::Leaf"(v_60).payload_0, f);
     }
     if self.value.discriminant == 1 {
         self_65 = f.buf;
@@ -2914,9 +2939,11 @@ fn "core:prelude/traits.wado/./sub/cross_module_recursive_variant_b.wado/Child^c
         start_111 = self_98.used;
         self_98.used = new_used_110;
         builtin::array_copy<u8>(self_98.repr, start_111, global:core:prelude/traits.wado::$const_obj_12, 0, 4);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<./sub/cross_module_recursive_variant_b.wado/Node>"(v_115 = self.value; if @unlikely(v_115.discriminant != 1) {
+        v_115 = self.value;
+        if @unlikely(v_115.discriminant != 1) {
             unreachable;
-        }; ref.cast "./sub/cross_module_recursive_variant_b.wado//Child::Node"(v_115).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<./sub/cross_module_recursive_variant_b.wado/Node>"(ref.cast "./sub/cross_module_recursive_variant_b.wado//Child::Node"(v_115).payload_0, f);
     }
 }
 

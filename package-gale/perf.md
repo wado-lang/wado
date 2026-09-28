@@ -143,6 +143,33 @@ ids, and the visited set is a stamp per state. An ATN-routed JSON string rule
 went from 402 KB/s to 3.6 MB/s. What is left is the closure walk itself, which a
 DFA cache would remove (see "What's next").
 
+### Nesting no longer doubles the scan (landed, 2026-09)
+
+Scan time used to double with each level of nesting. In Rust's `f(f(…))`, the
+atom tournament scans the argument once for `enumerationVariantExpression`'s
+`Path(args)`, and the LR loop scans it again for the call suffix. `A { x: … }`
+and `((…))` do the same through two candidates that share a prefix. The
+parse-side tournaments repeat all of it.
+
+A scan decides nothing and reads only its arguments, so the parser now keeps
+each left-recursive rule's answer for the whole parse (`ScanMemo`, in
+`src/runtime/scan_memo.wado`). The key is the position, `min_prec`, `follow`,
+`lr_cont` and the gate. The answer is the end and the gate the scan leaves. A
+grammar whose scans read the ATN caller stack gets no memo, because the key does
+not hold the stack.
+
+Release host, `-O2`, one parse of Rust nested 14 deep:
+
+| Rust input   |  before |  after |
+| ------------ | ------: | -----: |
+| `f(f(…))`    | 24.6 ms | 0.1 ms |
+| `A { x: … }` | 46.6 ms | 0.1 ms |
+| `((…))`      |  3.7 ms | 0.2 ms |
+
+The per-parse cost did not show on SQLite, which went from 8.10 to 8.72 MB/s
+on `package-gale/benchmark/sqlite`. TypeScript went from 1.15 to 3.31 MB/s, and
+Rust from 0.68 to 3.17 MB/s.
+
 ### Standing rules (measured)
 
 The four rules these benchmarks established — live set over allocation count,
@@ -282,26 +309,10 @@ re-measure before committing. Candidates read off the profile above:
   falling through still tests every arm before it (Rust: 56 branches, 161 `try_`
   calls). ASCII resolves early (single-char branches are sorted and come first), so
   this is a worst case rather than a benchmark-visible cost.
-- **Scan time grows exponentially with nesting (measured, deferred 2026-09).**
-  On the dev profile, one parse takes these times:
-
-  | Rust input   | depth → ms           |
-  | ------------ | -------------------- |
-  | `f(f(…))`    | 12 → 101, 20 → 35875 |
-  | `A { x: … }` | 10 → 77, 14 → 2056   |
-  | `((…))`      | 16 → 379, 20 → 6155  |
-
-  An identifier-led atom scans the whole argument twice. The first scan is
-  `enumerationVariantExpression`'s `Path(args)` in the tournament, and the
-  second is the winning path's call suffix in the LR loop. Each level doubles
-  the work, and the parse-side `_sd_p_*` tournaments multiply it again. SQLite
-  shows the same effect on nested parens and `CASE`, where it is n². Four
-  select alternatives also each scan a plain `SELECT` to its end.
-
-  A packrat memo would make both linear, because a scan decides nothing and is
-  a pure function of its inputs. It would be keyed per scan function on
-  (pos, min_prec, follow, gate), with a dense array per rule. It is deferred
-  because it adds a per-parse cost to every grammar the tournament reaches.
+- **A non-left-recursive rule's scan has no memo.** SQLite's four select
+  alternatives each scan a plain `SELECT` to its end. The scan memo
+  ("Nesting no longer doubles the scan", above) covers only left-recursive
+  rules, so this is still paid once per alternative.
 
 Found by reading generated code (2026-09), not yet measured on a benchmark:
 

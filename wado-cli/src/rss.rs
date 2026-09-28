@@ -1,10 +1,16 @@
-struct RssSample {
+//! The process's resident set size as the kernel reports it, in bytes. Only
+//! Linux's procfs is read; elsewhere every reading is `None`.
+
+/// One reading of the current and peak resident set size.
+#[derive(Clone, Copy)]
+pub(crate) struct RssSample {
     current: u64,
     peak: u64,
 }
 
 impl RssSample {
-    fn read() -> Option<Self> {
+    /// This process's reading now, or `None` where procfs cannot be read.
+    pub(crate) fn read() -> Option<Self> {
         let status = std::fs::read_to_string("/proc/self/status").ok()?;
         Self::parse(&status)
     }
@@ -17,6 +23,22 @@ impl RssSample {
 
     fn current_peak_mib(&self) -> String {
         format!("{}/{} MiB", to_mib(self.current), to_mib(self.peak))
+    }
+
+    /// The reading as a line's suffix and, when the line closes a span, the
+    /// net change in current RSS since `start`: a span that grows and frees
+    /// again shows in the peak, not here. The change is taken between the
+    /// MiB both lines print, so the two always agree.
+    pub(crate) fn suffix(&self, start: Option<&Self>) -> String {
+        let reading = self.current_peak_mib();
+        match start {
+            Some(start) => {
+                let change =
+                    to_mib(self.current).cast_signed() - to_mib(start.current).cast_signed();
+                format!(" · rss {reading} ({change:+})")
+            }
+            None => format!(" · rss {reading}"),
+        }
     }
 }
 
@@ -35,10 +57,12 @@ fn to_mib(bytes: u64) -> u64 {
     (bytes + 512 * 1024) / (1024 * 1024)
 }
 
+/// The current reading as a progress line's suffix.
 pub(crate) fn live_suffix() -> Option<String> {
-    RssSample::read().map(|s| format!(" · rss {}", s.current_peak_mib()))
+    RssSample::read().map(|s| s.suffix(None))
 }
 
+/// The run's peak, as a summary line.
 pub(crate) fn summary_line() -> Option<String> {
     RssSample::read().map(|s| format!("rss:     peak {} MiB", to_mib(s.peak)))
 }
@@ -82,6 +106,35 @@ Threads:\t8
         let status = "VmRSSFoo:\t 999 kB\nVmRSS:\t 42 kB\nVmHWM:\t 84 kB\n";
         let sample = RssSample::parse(status).expect("exact field present");
         assert_eq!(sample.current, 42 * 1024);
+    }
+
+    #[test]
+    fn suffix_signs_the_move_since_the_start() {
+        let at = |mib: u64| RssSample {
+            current: mib * 1024 * 1024,
+            peak: 700 * 1024 * 1024,
+        };
+        assert_eq!(at(512).suffix(None), " · rss 512/700 MiB");
+        assert_eq!(at(512).suffix(Some(&at(500))), " · rss 512/700 MiB (+12)");
+        assert_eq!(at(500).suffix(Some(&at(512))), " · rss 500/700 MiB (-12)");
+    }
+
+    #[test]
+    fn suffix_move_is_the_difference_of_the_readings_shown() {
+        let at_kib = |kib: u64| RssSample {
+            current: kib * 1024,
+            peak: 700 * 1024 * 1024,
+        };
+        let below_512 = at_kib(511 * 1024 + 700);
+        let above_512 = at_kib(512 * 1024 + 300);
+        assert_eq!(
+            above_512.suffix(Some(&below_512)),
+            " · rss 512/700 MiB (+0)"
+        );
+        assert_eq!(
+            below_512.suffix(Some(&at_kib(511 * 1024 + 400))),
+            " · rss 512/700 MiB (+1)"
+        );
     }
 
     #[test]

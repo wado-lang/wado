@@ -1,0 +1,24 @@
+// A test composed with a component dependency still carries its plan: the
+// program component nests in the composition with its custom section.
+use { CmCatalog } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+
+fn round_trips(v: u32) -> bool {
+    if v > 0 {
+        return CmCatalog::id_result_ok(Result::Ok(v)) == Result::Ok(v);
+    }
+    return false;
+}
+
+test {
+    assert round_trips(7);
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "uncovered_lines": [9],
+    "uncovered_branches": ["6:5 else"],
+    "uncovered_functions": []
+  }
+}

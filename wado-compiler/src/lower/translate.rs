@@ -101,6 +101,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         world_registry,
         used_wasi_functions,
         strip_names,
+        coverage_section,
         codegen_flags,
         skip_validation,
         target_world,
@@ -199,6 +200,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         world_registry,
         used_wasi_functions,
         strip_names,
+        coverage_section,
         codegen_flags,
         // Conservative default; `optimize` overrides per opt level.
         string_inline_max_bytes: NirPackage::DEFAULT_STRING_INLINE_MAX_BYTES,
@@ -208,6 +210,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         component_plan,
         builtin_registry,
         wasm_assets,
+        reserved_memory_pages: None,
         trait_env,
         // Before the interner is drained: a helper only `array_clone::<T>`
         // reaches is never resolved by a wrap, and DCE still has to root it.

@@ -1,0 +1,17 @@
+// A comparison is a `bool` whatever its operands are, so the `bool` its site
+// expects answers neither operand: `mk`'s `C` stays unanswered here, as in
+// Rust, rather than becoming `bool`.
+
+fn mk<C: Default>(v: i64) -> C {
+    return C::default();
+}
+
+export fn run() {
+    let b: bool = mk(1 as i64) < mk(2 as i64);
+}
+
+__DATA__
+{
+    "compile_error": "cannot infer type parameter `C` of function `mk`",
+    "compile_error_count": 2
+}

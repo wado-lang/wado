@@ -1,0 +1,8 @@
+// A module's decl pass can check a bound against an impl in a module declared
+// after it: the helper's `Item: Eq` reaches the prelude's
+// `impl<T: Eq> Eq for Array<T>` through the `ByteArray` inside `String`.
+use { Holder, Text } from "./sub/impl_bound_check_before_impl_declared_holder.wado";
+
+test {
+    assert Text::item() == "text";
+}
