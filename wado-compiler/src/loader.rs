@@ -642,8 +642,8 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
 pub(crate) const DEFAULT_PAGE_SIZE_LOG2: u32 = 16;
 
 /// An embedded asset is wired to the component's memory, so its own memory
-/// must have that memory's shape: 32-bit, unshared, default page size. Its
-/// maximum needs no check — the rewrite to an import drops it, since the
+/// must have that memory's shape: 32-bit, unshared, default page size, and a
+/// minimum that leaves the heap room past it. Its maximum needs no check — the rewrite to an import drops it, since the
 /// component's memory is the one that sets the ceiling.
 fn check_shared_memory_shape(
     source: &ModuleSource,
@@ -675,8 +675,20 @@ fn check_shared_memory_shape(
                 .to_string(),
         });
     }
+    if mem.initial >= MAX_ASSET_MEMORY_PAGES {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: "a memory of 2 GiB or more is not supported: the component's heap starts \
+                      past the asset's memory, within the 32-bit address space"
+                .to_string(),
+        });
+    }
     Ok(())
 }
+
+/// The first page count an asset's memory may not start at: the heap's start,
+/// past the asset's pages, has to be a positive `i32` address.
+const MAX_ASSET_MEMORY_PAGES: u64 = 1 << (31 - DEFAULT_PAGE_SIZE_LOG2);
 
 /// Walk a core wasm module: validate what an embedded asset must be (no `start`,
 /// ≤1 memory, only `env.memory` may be imported) and extract the

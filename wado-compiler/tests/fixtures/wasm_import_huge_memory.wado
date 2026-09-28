@@ -1,0 +1,12 @@
+// An embedded wasm asset keeps the memory its own minimum declares, and the
+// heap starts past it. An asset asking for 2 GiB or more leaves the heap no
+// room in a 32-bit memory, so the loader rejects it with a diagnostic.
+
+use _ from "./sub/wasm_import_huge_memory.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "a memory of 2 GiB or more is not supported"
+}

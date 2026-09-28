@@ -1,0 +1,18 @@
+/// Test that the heap starts where the memory has room for it when the one call
+/// into libm is dead only once the optimizer has inlined its caller.
+use { println, Stdout } from "core:cli";
+
+fn maybe_sin(x: f64, flag: bool) -> f64 {
+    if flag {
+        return f64::sin(x);
+    }
+    return x;
+}
+
+export fn run() with Stdout {
+    let words: List<String> = ["heap", "base"];
+    println(`${words[0]} ${maybe_sin(builtin::black_box(1.5), false)}`);
+}
+
+__DATA__
+{"allocator": ["bump", "freelist"], "stdout": "heap 1.5\n"}

@@ -207,6 +207,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         component_plan,
         builtin_registry,
         wasm_assets,
+        reserved_memory_pages: None,
         trait_env,
         // Before the interner is drained: a helper only `array_clone::<T>`
         // reaches is never resolved by a wrap, and DCE still has to root it.

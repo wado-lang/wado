@@ -118,8 +118,8 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
 ///
 /// The 33 bin heads live at heap offsets `[8, 8 + 4*33)`; the first block
 /// starts at heap offset 152 (the lowest offset past the bin-head table that
-/// is congruent to 8 mod 16, and `builtin::heap_base()` is a multiple of 16).
-/// Wasm memory is zero-initialised, so every bin head starts empty.
+/// is congruent to 8 mod 16, which `freelist_realloc` requires the heap base
+/// to keep). Wasm memory is zero-initialised, so every bin head starts empty.
 ///
 /// Selected by `--allocator freelist` (default for HTTP service world).
 
@@ -223,6 +223,9 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
     // 16-byte aligned. Wasm memory is zero-initialised, so the bins start
     // empty.
     if heap_offset < 152 {
+        if builtin::i32_and(builtin::heap_base(), 15) != 0 {
+            builtin::unreachable();
+        }
         heap_offset = 152;
     }
 

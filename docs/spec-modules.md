@@ -618,7 +618,7 @@ rejected at the import when it:
 - is not a valid module;
 - imports anything but `env.memory`;
 - has more than one memory, counting the imported one, or a memory that is
-  64-bit, shared, or has a custom page size;
+  64-bit, shared, has a custom page size, or starts at 2 GiB or more;
 - has a `start` section;
 - exports a function that re-exports an imported one;
 - exports a function whose parameters are not `i32`, `i64`, `f32`, `f64`, or

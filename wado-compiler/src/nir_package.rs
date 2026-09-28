@@ -137,6 +137,12 @@ pub struct NirPackage {
     /// `codegen::component::embed_imported_wasm_modules`.
     pub wasm_assets: IndexMap<String, WasmAsset>,
 
+    /// The pages [`Self::wasm_asset_reserved_pages`] answers, fixed by the
+    /// first DCE: an optimizer pass folds `builtin::heap_base()` into code from
+    /// it, and a later DCE that drops an asset must not move the heap under that
+    /// code. `None` until then.
+    pub reserved_memory_pages: Option<u32>,
+
     /// Project-wide trait knowledge inherited from `Package` and grown
     /// here by [`crate::monomorphize::monomorphize`], which adds the
     /// instantiation layer once it has materialised the concrete
@@ -159,26 +165,40 @@ impl NirPackage {
     /// Rust's, the stack below them: libm wants 17 pages. The memory must be at
     /// least that large, and the allocator must hand out nothing inside it.
     pub fn wasm_asset_reserved_pages(&self) -> u32 {
+        self.reserved_memory_pages
+            .expect("DCE resolves the imports before anything reads the reservation")
+    }
+
+    /// Fix [`Self::reserved_memory_pages`] from the assets `imports` now
+    /// references. `resolve_imports` calls it each time it rebuilds them, and
+    /// only the first call sets it: a later one sees a subset of the imports.
+    pub fn reserve_asset_memory(&mut self) {
         let referenced: IndexSet<&str> = self
             .imports
             .iter()
             .map(|import| import.namespace.as_str())
             .filter(|namespace| self.wasm_assets.contains_key(*namespace))
             .collect();
-        referenced
+        let pages = referenced
             .iter()
-            .map(|namespace| {
-                u32::try_from(self.wasm_assets[*namespace].min_memory_pages())
-                    .expect("a 32-bit memory has fewer than 2^32 pages")
-            })
-            .fold(0, u32::max)
+            .map(|namespace| self.wasm_assets[*namespace].min_memory_pages())
+            .max()
+            .unwrap_or(0);
+        let pages = u32::try_from(pages).expect("the loader bounds an asset's memory");
+        match self.reserved_memory_pages {
+            None => self.reserved_memory_pages = Some(pages),
+            Some(fixed) => assert!(
+                pages <= fixed,
+                "[DCE] the imports grew to reserve {pages} pages past the {fixed} already fixed"
+            ),
+        }
     }
 
     /// The address the allocator's heap starts at, past the pages the embedded
     /// wasm assets reserve. `builtin::heap_base()` returns it.
     pub fn heap_base(&self) -> i32 {
         i32::try_from(u64::from(self.wasm_asset_reserved_pages()) << DEFAULT_PAGE_SIZE_LOG2)
-            .expect("the wasm assets reserve less than 2 GiB")
+            .expect("the loader bounds an asset's memory below 2 GiB")
     }
 
     /// The [`FuncId`] of a `builtin::<name>` callee, or `None` if no such call is
