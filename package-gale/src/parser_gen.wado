@@ -60,6 +60,7 @@ use {
     ATN_STATE_TYPE,
     Forwarded,
     GenContext,
+    SCAN_MEMO_HANDLE,
     is_nullable,
     sets_overlap,
     union_kind_arrays,
@@ -274,6 +275,7 @@ pub fn gen_parser(
         ctx.emit_actions(),
         !ctx.fragment_entries().is_empty(),
         ctx.emit_scan_gate(),
+        &if ctx.scan_memo() { Option::Some(ctx.scan_memo_type()) } else { null },
         members,
         ctx.parser_superclass_name(),
     );
@@ -504,6 +506,9 @@ fn add_scan_params(f: &mut FnSpec, ctx: &GenContext) {
     }
     if ctx.needs_scan_atn() {
         f.add_param(&ATN_STATE_HANDLE, `&mut ${ATN_STATE_TYPE}`);
+    }
+    if ctx.scan_memo() {
+        f.add_param(&SCAN_MEMO_HANDLE, `&mut ${ctx.scan_memo_type()}`);
     }
     if ctx.current_rule_reads_follow() {
         add_follow_param(f);
@@ -820,7 +825,8 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name, mid_operand_gated);
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
-    let mut f2 = FnSpec::new(fn_name);
+    let walk_name = if ctx.scan_memo() { `${fn_name}__walk` } else { fn_name.to_string() };
+    let mut f2 = FnSpec::new(&walk_name);
     add_scan_params(&mut f2, ctx);
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
@@ -831,6 +837,9 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         add_lr_cont_param(&mut f2);
     }
     f2.set_return_type("i32");
+    if ctx.scan_memo() {
+        gen_scan_memo_wrapper(w, ctx, &f2, fn_name, &walk_name, mid_operand_gated);
+    }
     f2.emit_begin(w);
     w.line(
         `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)});`,
@@ -842,6 +851,42 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     }
     w.line("return pos;");
+    w.end();
+    w.blank();
+}
+
+/// `scan_X` as the memo in front of its walk, which `walk` declares: the key is
+/// every argument the walk reads, and the answer is the end and the gate the
+/// walk leaves.
+fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    ctx: &GenContext,
+    walk: &FnSpec,
+    name: S,
+    walk_name: S1,
+    mid_operand_gated: bool,
+) {
+    let mut f = *walk;
+    f.name = name.to_string();
+    f.emit_begin(w);
+    let gated = ctx.emit_scan_gate();
+    let gate = if gated { `*${SCAN_GATE_HANDLE}` } else { "()" };
+    let follow = if ctx.current_rule_reads_follow() { follow_forward_args() } else { "0" };
+    let cont = if mid_operand_gated { "lr_cont" } else { "0" };
+    let key = `${ctx.current_rule_index()}, pos, min_prec, ${follow}, ${cont}`;
+    w.line(`let memo_at = ${SCAN_MEMO_HANDLE}.find(${key}, &${gate});`);
+    w.begin("if memo_at >= 0");
+    if gated {
+        w.line(`${gate} = ${SCAN_MEMO_HANDLE}.gate_of(memo_at);`);
+    }
+    w.line(`return ${SCAN_MEMO_HANDLE}.end_of(memo_at);`);
+    w.end();
+    w.line(`let memo_gate = ${gate};`);
+    w.line(`let memo_end = ${walk_name}(tokens, pos${scan_trailing_args(ctx)}, min_prec${lr_cont_forward(
+        mid_operand_gated,
+    )});`);
+    w.line(`${SCAN_MEMO_HANDLE}.put(${key}, memo_gate, memo_end, ${gate});`);
+    w.line("return memo_end;");
     w.end();
     w.blank();
 }

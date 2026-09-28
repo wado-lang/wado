@@ -249,6 +249,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if grammar_scans_through_atn(grammar, &lowered, &mut ctx) {
         ctx.mark_needs_scan_atn();
     }
+    ctx.set_scan_memo(!ctx.needs_scan_atn() && lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) }));
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered);
@@ -354,6 +355,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             latn: needs_latn,
             highlight: emit_highlight,
             superclass: ctx.has_superclass(),
+            scan_memo: ctx.scan_memo(),
         },
     );
     let mut head = CodeWriter::new();
@@ -693,6 +695,7 @@ struct RuntimeFeatures {
     latn: bool,
     highlight: bool,
     superclass: bool,
+    scan_memo: bool,
 }
 
 /// The inlined runtime: its standard-library imports, hoisted to the top of
@@ -715,6 +718,9 @@ fn gen_runtime(f: &RuntimeFeatures) -> InlinedRuntime {
     }
     if f.emit_follow {
         gen_runtime_fragment(&mut rt, &#include_str("./runtime/follow.wado"));
+    }
+    if f.scan_memo {
+        gen_runtime_fragment(&mut rt, &#include_str("./runtime/scan_memo.wado"));
     }
     if f.atn_decode {
         gen_runtime_fragment(&mut rt, &#include_str("./runtime/atn.wado"));

@@ -937,6 +937,52 @@ fn emit_lexer_token(
     }
     out.push_str(`${lc.0}:${lc.1}]\n`);
 }
+pub struct ScanMemo<G> {
+    heads: Array<i32>,
+    entries: List<ScanMemoEntry<G>>,
+}
+
+struct ScanMemoEntry<G> {
+    next: i32,
+    rule: i32,
+    min_prec: i32,
+    follow: i64,
+    cont: i64,
+    gate_in: G,
+    end: i32,
+    gate_out: G,
+}
+
+impl<G: Eq> ScanMemo<G> {
+    pub fn new(positions: i32) -> ScanMemo<G> {
+        return ScanMemo { heads: Array::<i32>::filled(positions + 1, -1), entries: [] };
+    }
+
+    pub fn find(&self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate: &G) -> i32 {
+        let mut at = self.heads[pos];
+        while at >= 0 {
+            let e = &self.entries[at];
+            if e.rule == rule && e.min_prec == min_prec && e.follow == follow && e.cont == cont && e.gate_in == *gate {
+                return at;
+            }
+            at = e.next;
+        }
+        return -1;
+    }
+
+    pub fn end_of(&self, entry: i32) -> i32 {
+        return self.entries[entry].end;
+    }
+
+    pub fn gate_of(&self, entry: i32) -> G {
+        return self.entries[entry].gate_out;
+    }
+
+    pub fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+        self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
+        self.heads[pos] = self.entries.len() - 1;
+    }
+}
 pub global TK_OP: i32 = 0;
 pub global TK_ID: i32 = 1;
 pub global TK_LB: i32 = 2;
@@ -1127,6 +1173,7 @@ struct Parser {
     line_starts: List<i32>,
     no_struct: i32 = 0,
     scan_gate: ScanGate = ScanGate {},
+    memo: ScanMemo<ScanGate>,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -1140,7 +1187,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars), memo: ScanMemo::new(kinds.len()) };
     }
 
     fn emit(&mut self, s: String) {
@@ -1543,23 +1590,23 @@ impl Parser {
     }
 }
 
-fn scan_stmt_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_stmt_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
-    pos = scan_e(tokens, pos, gate, 0);
+    pos = scan_e(tokens, pos, gate, memo, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_stmt_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_stmt_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
-    pos = scan_e(tokens, pos, gate, 0);
+    pos = scan_e(tokens, pos, gate, memo, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let start = pos;
     let start_gate = *gate;
     let mut pos = pos;
@@ -1567,10 +1614,10 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     if _kind_set_0(kind) {
         let mut best: i32 = -1;
         let mut best_gate = *gate;
-        let try_0_end = scan_stmt_alt_0(tokens, start, gate);
+        let try_0_end = scan_stmt_alt_0(tokens, start, gate, memo);
         if try_0_end > best { best = try_0_end; best_gate = *gate; }
         *gate = start_gate;
-        let try_1_end = scan_stmt_alt_1(tokens, start, gate);
+        let try_1_end = scan_stmt_alt_1(tokens, start, gate, memo);
         if try_1_end > best { best = try_1_end; best_gate = *gate; }
         if best >= 0 {
             pos = best;
@@ -1582,7 +1629,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     return -1;
 }
 
-fn scan_e_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_e_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let start = pos;
     let start_gate = *gate;
     let mut pos = pos;
@@ -1597,7 +1644,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     } else if kind == TK_LB {
         pos = start + 1;
         try_2: {
-            pos = scan_e(tokens, pos, gate, 0);
+            pos = scan_e(tokens, pos, gate, memo, 0);
             if pos < 0 { break try_2; }
             if pos >= tokens.len() || tokens[pos] != TK_RB { break try_2; }
             pos += 1;
@@ -1608,17 +1655,29 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     return -1;
 }
 
-fn scan_e_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_e_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OP { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, gate, 2);
+    pos = scan_e(tokens, pos, gate, memo, 2);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos, gate);
+fn scan_e(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
+    let memo_at = memo.find(2, pos, min_prec, 0, 0, &*gate);
+    if memo_at >= 0 {
+        *gate = memo.gate_of(memo_at);
+        return memo.end_of(memo_at);
+    }
+    let memo_gate = *gate;
+    let memo_end = scan_e__walk(tokens, pos, gate, memo, min_prec);
+    memo.put(2, pos, min_prec, 0, 0, memo_gate, memo_end, *gate);
+    return memo_end;
+}
+
+fn scan_e__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_e_atom(tokens, pos, gate, memo);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1626,7 +1685,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, min_prec: i32 = 0)
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 let lr_saved_pos_gate = *gate;
-                pos = scan_e_lr_0(tokens, pos, gate);
+                pos = scan_e_lr_0(tokens, pos, gate, memo);
                 if pos < 0 {
                     pos = lr_saved_pos;
                     *gate = lr_saved_pos_gate;
@@ -1674,9 +1733,9 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_1 = scan_stmt_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        let _sd_p_1 = scan_stmt_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_0 = scan_stmt_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        let _sd_p_0 = scan_stmt_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -1745,7 +1804,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         if _sk == TK_OP {
             if 1 >= min_prec {
                 p.scan_gate.no_struct = p.no_struct;
-                if scan_e_lr_0(&p.kinds, p.pos, &mut p.scan_gate) < 0 {
+                if scan_e_lr_0(&p.kinds, p.pos, &mut p.scan_gate, &mut p.memo) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);

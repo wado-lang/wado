@@ -21,7 +21,7 @@ use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
 use { RecoverySets, empty_recovery_sets } from "./recovery_sets.wado";
-use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
+use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { TreeMap } from "core:collections";
@@ -65,6 +65,10 @@ pub global FOLLOW_MASK_MAX_K: i32 = FOLLOW_MAX_DEPTH;
 /// function's `&mut` parameter borrows it under.
 pub global ATN_STATE_HANDLE: String = "atn";
 pub global ATN_STATE_TYPE: String = "AtnState";
+
+/// The parser's scan memo (`ScanMemo`): its field, and the name a scan
+/// function's `&mut` parameter borrows it under.
+pub global SCAN_MEMO_HANDLE: String = "memo";
 
 /// The labeled rule calls of one rule whose capture an action reads: `spans`
 /// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
@@ -173,6 +177,8 @@ pub struct GenContext {
     /// Set where a scan decides through the simulator too. Gates the scans'
     /// `atn` parameter, so a `??`-only grammar's scans borrow nothing.
     needs_scan_atn_seen: bool,
+    /// Set where a left-recursive rule's scan answers from the parser's memo.
+    scan_memo: bool,
     /// Set by lowering for an ATN-class LR rule. Gates the LR tables.
     needs_lr_atn_seen: bool,
     /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
@@ -363,6 +369,7 @@ impl GenContext {
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
             needs_scan_atn_seen: false,
+            scan_memo: false,
             needs_lr_atn_seen: false,
             atn_call_site_returns: [],
             atn_decision_sites: [],
@@ -647,13 +654,42 @@ impl GenContext {
     }
 
     /// The trailing arguments of a scan call for the parser state it borrows:
-    /// the gate, then the ATN state. Empty where the scan borrows neither.
+    /// the gate, the ATN state, then the memo. Empty where the scan borrows
+    /// none of them.
     pub fn scan_state_args(&self) -> String {
         let mut args = self.scan_gate_arg();
         if self.needs_scan_atn() {
             args.push_str(`, ${self.atn_state_arg()}`);
         }
+        if self.scan_memo {
+            args.push_str(if self.in_scan_fn {
+                `, ${SCAN_MEMO_HANDLE}`;
+            } else {
+                `, &mut ${PARSER_HANDLE}.${SCAN_MEMO_HANDLE}`;
+            });
+        }
         return args;
+    }
+
+    /// Answer each left-recursive rule's scan once per reading of a position.
+    ///
+    /// Candidates of a scan tournament that share a prefix each scan the
+    /// operand under it, so nesting one inside another doubles the work at every
+    /// level. A scan decides nothing and reads only its arguments, so its answer
+    /// can be kept for the parse. A scan that borrows the ATN state reads the
+    /// caller stack too, which no key here holds.
+    pub fn set_scan_memo(&mut self, on: bool) {
+        assert !(on && self.needs_scan_atn()), "set_scan_memo: a scan that reads the ATN caller stack has no memo key";
+        self.scan_memo = on;
+    }
+
+    pub fn scan_memo(&self) -> bool {
+        return self.scan_memo;
+    }
+
+    /// The memo's type: keyed on the gate where the scan simulates one.
+    pub fn scan_memo_type(&self) -> String {
+        return `ScanMemo<${if self.emit_scan_gate() { SCAN_GATE_TYPE } else { "()" }}>`;
     }
 
     /// Install what each rule's actions read off its labeled rule calls

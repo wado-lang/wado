@@ -1304,6 +1304,25 @@ test "a tail token optional yields to a definite continuation its unknown caller
     assert got == "fn f -> a::T {} => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) (blk { })))\nfn f -> a::T; => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) ;))\nfn f -> ::a::T<X> {} => (s (f fn f (ret -> (ty (tnb (tp :: (seg a) :: (seg T < (ty (tnb (tp (seg X)))) >))))) (blk { })))\nfn f -> a:: T where T: a::b {} => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) (w where T : (ty (tnb (tp (seg a) :: (seg b))))) (blk { })))\n", got;
 }
 
+// The two parenthesised atoms share `'(' e`, so the tournament scans the inner
+// `e` once per candidate. Unless a scan of `e` is answered once per reading,
+// every level doubles the work, and forty levels never finish.
+test "a nested operand is scanned once per reading, not once per enclosing candidate" {
+    let grammar = "grammar T;
+s : e EOF ;
+e : e '+' e | '(' e ')' | '(' e ',' e ')' | ID ;
+ID : [a-z]+ ;
+";
+    let mut input = "a";
+    let mut tree = "(e a)";
+    for let _ of 0..<40 {
+        input = `(${input})`;
+        tree = `(e ( ${tree} ))`;
+    }
+    let got = parses(grammar, "s", [input]);
+    assert got == `${input} => (s ${tree})\n`, got;
+}
+
 global LR_ATOM_OPERAND_G4: String = "
 grammar T;
 s : e ';' ;
