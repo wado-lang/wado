@@ -1,7 +1,7 @@
 // A literal in a method's receiver waits whatever declares the method, as
-// Rust's does: a bound is checked on the type the literal settles to, one impl
-// that alone could answer settles it, and only where several could does it
-// take its default before one is chosen.
+// Rust's does: a bound is checked on the type the literal settles to, and one
+// impl that alone could answer settles it. `spec_types_receiver_literal.wado`
+// holds the case where several could.
 use { println, Stdout } from "core:cli";
 
 struct Bx<T> {
@@ -38,22 +38,6 @@ trait Tag with () {
 
 impl Tag for Bx<u64> {
     fn tag(&self) -> String {
-        return "u64";
-    }
-}
-
-trait Name with () {
-    fn name(&self) -> String;
-}
-
-impl Name for Bx<i32> {
-    fn name(&self) -> String {
-        return "i32";
-    }
-}
-
-impl Name for Bx<u64> {
-    fn name(&self) -> String {
         return "u64";
     }
 }
@@ -106,10 +90,8 @@ export fn run() with Stdout {
     println(`${same(wrap(0x1_0000_0000).get(), wide)}`);
     // A bounded blanket trait impl.
     println(`${same(wrap(0x1_0000_0001).pick(), wide)}`);
-    // The one impl that could answer settles the literal.
-    println(`${wrap(5).tag()} ${Bx { v: 0x1_0000_0002 }.tag()}`);
-    // Two could, so the literal takes its default first.
-    println(wrap(5).name());
+    // The one impl that could answer settles a struct literal's field too.
+    println(Bx { v: 0x1_0000_0002 }.tag());
     // `Pair<T, T>` meets `Pair<{integer}, u64>` at `T = u64`.
     println(mk(1, wide).twin());
     // A trait's default body reads `Self::Elem` off the impl that answers.
@@ -121,5 +103,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "4294967296\n4294967297\nu64 u64\ni32\ntwin\n4294967299\n4294967300\n4294967301\n"
+    "stdout": "4294967296\n4294967297\nu64\ntwin\n4294967299\n4294967300\n4294967301\n"
 }
