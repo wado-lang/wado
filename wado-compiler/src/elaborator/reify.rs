@@ -4502,12 +4502,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Vec<TirStmt> {
         match &if_stmt.condition {
             ast::Condition::LetChain { elements, .. } => {
-                let else_block = match &if_stmt.else_block {
-                    Some(b) => {
-                        Some(self.reify_block_with_position(b, ctx, expected_type, tail_value))
-                    }
-                    None => self.implicit_else(if_stmt.id, if_stmt.span),
-                };
+                let else_block = self.else_branch(
+                    if_stmt.else_block.as_ref(),
+                    if_stmt.id,
+                    if_stmt.span,
+                    |r, b| r.reify_block_with_position(b, ctx, expected_type, tail_value),
+                );
                 self.reify_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
@@ -4526,12 +4526,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     expected_type,
                     tail_value,
                 );
-                let else_branch = match &if_stmt.else_block {
-                    Some(b) => {
-                        Some(self.reify_block_with_position(b, ctx, expected_type, tail_value))
-                    }
-                    None => self.implicit_else(if_stmt.id, if_stmt.span),
-                };
+                let else_branch = self.else_branch(
+                    if_stmt.else_block.as_ref(),
+                    if_stmt.id,
+                    if_stmt.span,
+                    |r, b| r.reify_block_with_position(b, ctx, expected_type, tail_value),
+                );
                 let tt = self.tysys.type_table.borrow();
                 let then_type = tir::block_result_type(&tt, &then_branch);
                 let else_type = else_branch
@@ -4565,10 +4565,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Condition::Expr(cond_expr) => {
                 let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
-                let else_block = match &if_stmt.else_block {
-                    Some(b) => Some(self.reify_block(b, ctx, None)),
-                    None => self.implicit_else(if_stmt.id, if_stmt.span),
-                };
+                let else_block = self.else_branch(
+                    if_stmt.else_block.as_ref(),
+                    if_stmt.id,
+                    if_stmt.span,
+                    |r, b| r.reify_block(b, ctx, None),
+                );
                 vec![TirStmt::new(
                     TirStmtKind::If {
                         condition,
@@ -4586,10 +4588,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Else-branch resolves in the outer scope (chain
                 // bindings aren't visible there); the chain body
                 // gets its own scope.
-                let else_block = match &if_stmt.else_block {
-                    Some(b) => Some(self.reify_block(b, ctx, None)),
-                    None => self.implicit_else(if_stmt.id, if_stmt.span),
-                };
+                let else_block = self.else_branch(
+                    if_stmt.else_block.as_ref(),
+                    if_stmt.id,
+                    if_stmt.span,
+                    |r, b| r.reify_block(b, ctx, None),
+                );
                 self.reify_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
@@ -4629,10 +4633,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // overall block's result type is the recorded
                 // `expected_type` (or `recorded_type` as a
                 // fallback when no expectation propagated).
-                let else_block = match &if_expr.else_block {
-                    Some(b) => Some(self.reify_block_value(b, ctx, branch_expected)),
-                    None => self.implicit_else(if_expr.id, if_expr.span),
-                };
+                let else_block = self.else_branch(
+                    if_expr.else_block.as_ref(),
+                    if_expr.id,
+                    if_expr.span,
+                    |r, b| r.reify_block_value(b, ctx, branch_expected),
+                );
                 let stmts = self.reify_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
@@ -4648,10 +4654,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let condition = self.reify_condition_expr(cond_expr, ctx);
         let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
-        let else_branch = match &if_expr.else_block {
-            Some(b) => Some(self.reify_block_value(b, ctx, branch_expected)),
-            None => self.implicit_else(if_expr.id, if_expr.span),
-        };
+        let else_branch = self.else_branch(
+            if_expr.else_block.as_ref(),
+            if_expr.id,
+            if_expr.span,
+            |r, b| r.reify_block_value(b, ctx, branch_expected),
+        );
         TirExpr::new(
             TirExprKind::If {
                 condition: Box::new(condition),

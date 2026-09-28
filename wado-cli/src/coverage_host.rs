@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use wado_compiler::coverage::{
-    self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch,
+    self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Region,
 };
 use wasmtime::component::{HasSelf, Linker};
 
@@ -229,30 +229,35 @@ type Uncovered = BTreeMap<String, BTreeMap<String, Vec<String>>>;
 fn uncovered_regions(coverage: &Coverage) -> Uncovered {
     let mut out = Uncovered::new();
     for (path, file) in &coverage.files {
+        let mut by_function: Vec<Vec<(u32, &Region)>> = vec![Vec::new(); file.plan.functions.len()];
+        for (id, region) in file.plan.regions.iter().enumerate() {
+            by_function[region.function as usize].push((id as u32, region));
+        }
         let mut seen: BTreeMap<&str, u32> = BTreeMap::new();
-        for (index, function) in file.plan.functions.iter().enumerate() {
+        for (function, regions) in file.plan.functions.iter().zip(&by_function) {
             let count = seen.entry(&function.name).or_default();
             *count += 1;
             let name = match *count {
                 1 => function.name.clone(),
                 n => format!("{}#{n}", function.name),
             };
-            let regions: Vec<(usize, &wado_compiler::coverage::Region)> = file
-                .plan
-                .regions
-                .iter()
-                .enumerate()
-                .filter(|(_, region)| region.function as usize == index)
-                .collect();
-            let missed: Vec<String> = if file.hit.contains(&function.region) {
-                regions
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, (id, _))| !file.hit.contains(&(*id as u32)))
-                    .map(|(n, (_, region))| format!("{} {n}", region.kind.label()))
+            let (body, _) = regions[0];
+            assert_eq!(
+                body, function.region,
+                "a function's body is its first region"
+            );
+            let ran = regions.iter().enumerate().map(|(n, (id, region))| {
+                (
+                    format!("{} {n}", region.kind.label()),
+                    file.hit.contains(id),
+                )
+            });
+            let missed: Vec<String> = if file.hit.contains(&body) {
+                ran.filter(|(_, hit)| !hit)
+                    .map(|(label, _)| label)
                     .collect()
             } else {
-                vec![format!("{} 0", regions[0].1.kind.label())]
+                ran.take(1).map(|(label, _)| label).collect()
             };
             if !missed.is_empty() {
                 out.entry(path.clone()).or_default().insert(name, missed);
@@ -411,17 +416,12 @@ pub fn to_json(coverage: &Coverage) -> String {
                     })
                 })
                 .collect();
-            let uncovered_lines: Vec<u32> = file
-                .lines()
-                .into_iter()
-                .filter_map(|(line, ran)| (!ran).then_some(line))
-                .collect();
             json!({
                 "path": path,
                 "lines": { "covered": t.lines.0, "total": t.lines.1 },
                 "branches": { "covered": t.branches.0, "total": t.branches.1 },
                 "functions": { "covered": t.functions.0, "total": t.functions.1 },
-                "uncovered_lines": uncovered_lines,
+                "uncovered_lines": file.uncovered_lines(),
                 "regions": regions,
             })
         })

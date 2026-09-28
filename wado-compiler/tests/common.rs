@@ -10,6 +10,7 @@
 // Each test file includes this module but only uses a subset of functions.
 #![allow(dead_code)]
 
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -916,7 +917,7 @@ pub struct WasiState {
     pub http_hooks: TestHttpCtx,
     pub tls_ctx: WasiTlsCtx,
     /// The coverage regions the guest reported, under `CompilerOptions::coverage`.
-    pub coverage_hits: std::collections::BTreeSet<u32>,
+    pub coverage_hits: BTreeSet<u32>,
 }
 
 impl WasiView for WasiState {
@@ -960,7 +961,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
-            coverage_hits: std::collections::BTreeSet::new(),
+            coverage_hits: BTreeSet::new(),
         }
     }
 
@@ -973,7 +974,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
-            coverage_hits: std::collections::BTreeSet::new(),
+            coverage_hits: BTreeSet::new(),
         }
     }
 }
@@ -1421,7 +1422,7 @@ pub struct WasmRunResult {
     /// otherwise.
     pub exit_code: Option<i32>,
     /// The coverage regions any test reported, under `CompilerOptions::coverage`.
-    pub coverage_hits: std::collections::BTreeSet<u32>,
+    pub coverage_hits: BTreeSet<u32>,
 }
 
 /// Run a compiled Wasm component and capture its output
@@ -1505,7 +1506,7 @@ pub fn run_wasm_with_full_options(
                 mocks: outgoing_mocks,
             },
             tls_ctx: build_tls_ctx(tls_mocks),
-            coverage_hits: std::collections::BTreeSet::new(),
+            coverage_hits: BTreeSet::new(),
         };
         let mut store = Store::new(engine, state);
         limit_store(&mut store, DEFAULT_TIMEOUT_MS);
@@ -1539,7 +1540,7 @@ pub fn run_wasm_with_full_options(
             stderr,
             trapped,
             exit_code,
-            coverage_hits: std::collections::BTreeSet::new(),
+            coverage_hits: BTreeSet::new(),
         })
     })
 }
@@ -1610,7 +1611,7 @@ pub fn run_test_world(
 
         let mut all_stdout = String::new();
         let mut all_stderr = String::new();
-        let mut coverage_hits = std::collections::BTreeSet::new();
+        let mut coverage_hits = BTreeSet::new();
 
         for test_name in &test_names {
             let expect_trap = test_name.starts_with("test-trap-");

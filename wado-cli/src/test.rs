@@ -221,7 +221,7 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Report the lines, branches and functions the tests ran; \
-                       `--coverage=lcov,json`\n\
+                       `--coverage=lcov,json,baseline`\n\
                        picks the files written to build/coverage/ (default: lcov)",
             },
             Self::CoverageInclude => args::OptSpec {

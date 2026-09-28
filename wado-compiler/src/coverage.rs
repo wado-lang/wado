@@ -153,8 +153,6 @@ pub struct Region {
     pub end: Pos,
     /// The index of the function in [`ModulePlan::functions`] holding it.
     pub function: u32,
-    /// The innermost region holding this one, `None` for a body.
-    pub parent: Option<u32>,
     /// For a branch, where its choice is written and which side it is.
     pub choice: Option<(Pos, u32)>,
     /// The regions whose runs this one's runs are, when it takes no probe of
@@ -276,7 +274,6 @@ impl CoverageMap {
                 w.pos(r.start);
                 w.pos(r.end);
                 w.u32(r.function);
-                w.u32(r.parent.map_or(0, |p| p + 1));
                 match r.choice {
                     Some((at, side)) => {
                         w.0.push(1);
@@ -328,7 +325,6 @@ pub fn decode(data: &[u8]) -> Option<DecodedPlans> {
             let start = r.pos()?;
             let end = r.pos()?;
             let function = r.u32()?;
-            let parent = r.u32()?.checked_sub(1);
             let choice = match r.u8()? {
                 0 => None,
                 _ => Some((r.pos()?, r.u32()?)),
@@ -342,7 +338,6 @@ pub fn decode(data: &[u8]) -> Option<DecodedPlans> {
                 start,
                 end,
                 function,
-                parent,
                 choice,
                 derived,
             });
@@ -516,29 +511,18 @@ impl Planner {
         let saved = (self.function, self.region);
         let region = self.new_function(name, f.name_span, RegionKind::Function, body.span);
         self.sites.push((ProbeSite::BlockStart, body.id, region));
-        self.region = Some(region);
         self.block_of(region, body);
         (self.function, self.region) = saved;
     }
 
     fn new_function(&mut self, name: String, at: Span, kind: RegionKind, body: Span) -> u32 {
         self.function = self.plan.functions.len() as u32;
-        let region = self.plan.regions.len() as u32;
         self.plan.functions.push(PlannedFunction {
             name,
             line: at.line as u32,
-            region,
+            region: self.plan.regions.len() as u32,
         });
-        self.plan.regions.push(Region {
-            kind,
-            start: Pos::start(body),
-            end: Pos::end(body),
-            function: self.function,
-            parent: None,
-            choice: None,
-            derived: Vec::new(),
-        });
-        region
+        self.new_region(kind, Pos::start(body), Pos::end(body), None)
     }
 
     fn new_region(
@@ -554,7 +538,6 @@ impl Planner {
             start,
             end,
             function: self.function,
-            parent: self.region,
             choice,
             derived: Vec::new(),
         });
@@ -569,9 +552,10 @@ impl Planner {
     }
 
     fn line(&mut self, span: Span) {
-        if let Some(region) = self.region {
-            self.plan.lines.push((span.line as u32, region));
-        }
+        let region = self
+            .region
+            .expect("a statement is planned inside a function");
+        self.plan.lines.push((span.line as u32, region));
     }
 
     fn branch_block(&mut self, kind: RegionKind, block: &Block, choice: (Pos, u32)) {
@@ -582,7 +566,7 @@ impl Planner {
             Some(choice),
         );
         self.sites.push((ProbeSite::BlockStart, block.id, region));
-        self.in_region(region, |p| p.block_of(region, block));
+        self.block_of(region, block);
     }
 
     /// An `if`, statement or expression. Both branches are regions, and an
@@ -629,7 +613,7 @@ impl Planner {
                 Some((at, side as u32)),
             );
             self.sites.push((ProbeSite::Around, arm.body.id(), region));
-            self.in_region(region, |p| p.expr_body(region, &arm.body));
+            self.expr_body(region, &arm.body);
             sides.push(region);
         }
         self.last_choice = sides;
@@ -640,10 +624,10 @@ impl Planner {
     fn expr_body(&mut self, region: u32, body: &Expr) {
         match body {
             Expr::Block(block) => self.block_of(region, block),
-            _ => {
-                self.line(body.span());
-                self.visit_expr(body);
-            }
+            _ => self.in_region(region, |p| {
+                p.line(body.span());
+                p.visit_expr(body);
+            }),
         }
     }
 
@@ -655,14 +639,10 @@ impl Planner {
             None,
         );
         self.sites.push((ProbeSite::BlockStart, body.id, region));
-        self.in_region(region, |p| p.block_of(region, body));
+        self.block_of(region, body);
     }
 
-    fn block(&mut self, block: &Block) {
-        self.statements(block, None);
-    }
-
-    /// `block`, which `region` starts with.
+    /// `block`, walked inside `region`, which it starts.
     fn block_of(&mut self, region: u32, block: &Block) {
         self.statements(block, Some(region));
     }
@@ -672,6 +652,9 @@ impl Planner {
     /// reaches, when nothing before the choice can leave the block.
     fn statements(&mut self, block: &Block, mut open: Option<u32>) {
         let saved = self.region;
+        if open.is_some() {
+            self.region = open;
+        }
         let mut leaves = false;
         for stmt in &block.stmts {
             if leaves {
@@ -714,7 +697,7 @@ impl AstVisitor for Planner {
     }
 
     fn visit_block(&mut self, block: &Block) {
-        self.block(block);
+        self.statements(block, None);
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt) {
@@ -731,7 +714,7 @@ impl AstVisitor for Planner {
                         Some((Pos::start(s.span), 0)),
                     );
                     self.sites.push((ProbeSite::BlockStart, block.id, region));
-                    self.in_region(region, |p| p.block_of(region, block));
+                    self.block_of(region, block);
                 }
             }
             Stmt::If(s) => {
@@ -787,17 +770,11 @@ impl AstVisitor for Planner {
             }
             Expr::Match(m) => self.match_arms(m),
             Expr::Closure(c) => {
-                let Some(outer) = self.region else { return };
-                let outer_name = self.plan.functions
-                    [self.plan.regions[outer as usize].function as usize]
-                    .name
-                    .clone();
-                let saved = (self.function, self.region);
+                let outer_name = &self.plan.functions[self.function as usize].name;
                 let name = format!("{outer_name}::{{closure:{}}}", c.span.line);
+                let saved = (self.function, self.region);
                 let region = self.new_function(name, c.span, RegionKind::Closure, c.body.span());
-                self.plan.regions[region as usize].parent = Some(outer);
                 self.sites.push((ProbeSite::Around, c.body.id(), region));
-                self.region = Some(region);
                 self.expr_body(region, &c.body);
                 (self.function, self.region) = saved;
             }
@@ -820,16 +797,12 @@ impl AstVisitor for Planner {
 /// `break`, `continue`, `resume` or `?` outside a closure. A `break` of a
 /// loop nested in `stmt` counts too, which costs a probe and loses nothing.
 fn leaves_early(stmt: &Stmt) -> bool {
-    let mut leaves = Leaves(false);
-    leaves.visit_stmt(stmt);
-    leaves.0
+    Leaves::find(|l| l.visit_stmt(stmt))
 }
 
 /// Whether evaluating `expr` can leave its block, as [`leaves_early`] asks.
 fn may_leave(expr: &Expr) -> bool {
-    let mut leaves = Leaves(false);
-    leaves.visit_expr(expr);
-    leaves.0
+    Leaves::find(|l| l.visit_expr(expr))
 }
 
 /// Whether every run of `stmt` enters one side of the choice it is: an `if`
@@ -837,7 +810,7 @@ fn may_leave(expr: &Expr) -> bool {
 /// whose condition, scrutinee and guards cannot leave first.
 fn enters_choice(stmt: &Stmt) -> bool {
     let choice = match stmt {
-        Stmt::If(s) => return !condition_may_leave(&s.condition),
+        Stmt::If(s) => return !Leaves::find(|l| l.visit_condition(&s.condition)),
         Stmt::Match(m) => return !match_head_may_leave(m),
         Stmt::Expr(s) => &s.expr,
         Stmt::Let(s) if s.else_block.is_none() => match &s.value {
@@ -851,16 +824,10 @@ fn enters_choice(stmt: &Stmt) -> bool {
         _ => return false,
     };
     match choice {
-        Expr::If(e) => !condition_may_leave(&e.condition),
+        Expr::If(e) => !Leaves::find(|l| l.visit_condition(&e.condition)),
         Expr::Match(m) => !match_head_may_leave(m),
         _ => false,
     }
-}
-
-fn condition_may_leave(condition: &ast::Condition) -> bool {
-    let mut leaves = Leaves(false);
-    leaves.visit_condition(condition);
-    leaves.0
 }
 
 fn match_head_may_leave(m: &MatchExpr) -> bool {
@@ -872,6 +839,14 @@ fn match_head_may_leave(m: &MatchExpr) -> bool {
 
 /// Finds what can leave the enclosing block: see [`leaves_early`].
 struct Leaves(bool);
+
+impl Leaves {
+    fn find(visit: impl FnOnce(&mut Self)) -> bool {
+        let mut leaves = Self(false);
+        visit(&mut leaves);
+        leaves.0
+    }
+}
 
 impl AstVisitor for Leaves {
     fn visit_stmt(&mut self, stmt: &Stmt) {
@@ -982,6 +957,15 @@ impl FileCoverage {
         out
     }
 
+    /// The countable lines no statement ran on, in order.
+    #[must_use]
+    pub fn uncovered_lines(&self) -> Vec<u32> {
+        self.lines()
+            .into_iter()
+            .filter_map(|(line, ran)| (!ran).then_some(line))
+            .collect()
+    }
+
     /// Each branch region, in source order: where its choice is written, its
     /// side, its kind, and whether it ran.
     #[must_use]
@@ -1063,7 +1047,10 @@ pub fn to_lcov(coverage: &Coverage) -> String {
         let mut blocks: Vec<Pos> = branches.iter().map(|b| b.at).collect();
         blocks.dedup();
         for b in &branches {
-            let block = blocks.iter().position(|at| *at == b.at).unwrap_or(0);
+            let block = blocks
+                .iter()
+                .position(|at| *at == b.at)
+                .expect("`blocks` lists every branch's choice");
             let taken = if b.taken { "1" } else { "0" };
             let _ = writeln!(out, "BRDA:{},{block},{},{taken}", b.at.line, b.side);
         }
@@ -1089,7 +1076,6 @@ pub fn render_plan(plan: &ModulePlan) -> String {
     let _ = writeln!(out, "coverage plan: {}", plan.path);
     for (index, region) in plan.regions.iter().enumerate() {
         let function = &plan.functions[region.function as usize];
-        let parent = region.parent.map_or(String::new(), |p| format!(" in r{p}"));
         let choice = region.choice.map_or(String::new(), |(at, side)| {
             format!(" choice {}:{} side {side}", at.line, at.column)
         });
@@ -1101,7 +1087,7 @@ pub fn render_plan(plan: &ModulePlan) -> String {
         };
         let _ = writeln!(
             out,
-            "  r{index} {} {}:{}-{}:{} ({}){parent}{choice}{derived}",
+            "  r{index} {} {}:{}-{}:{} ({}){choice}{derived}",
             region.kind.label(),
             region.start.line,
             region.start.column,
@@ -1141,7 +1127,6 @@ mod tests {
                     },
                     end: Pos { line: 5, column: 2 },
                     function: 0,
-                    parent: None,
                     choice: None,
                     derived: vec![1, 2],
                 },
@@ -1153,7 +1138,6 @@ mod tests {
                     },
                     end: Pos { line: 4, column: 6 },
                     function: 0,
-                    parent: Some(0),
                     choice: Some((Pos { line: 2, column: 5 }, 0)),
                     derived: Vec::new(),
                 },
@@ -1162,7 +1146,6 @@ mod tests {
                     start: Pos { line: 4, column: 6 },
                     end: Pos { line: 4, column: 6 },
                     function: 0,
-                    parent: Some(0),
                     choice: Some((Pos { line: 2, column: 5 }, 1)),
                     derived: Vec::new(),
                 },

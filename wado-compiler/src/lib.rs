@@ -1150,10 +1150,11 @@ fn compile_after_load<H: CompilerHost>(
     // compilation refuses to continue on an incomplete one — the downstream
     // phases assume populated `state` / `tir_modules` — and its diagnostics have
     // already reached the host.
-    let coverage = options
-        .coverage
-        .filter(|_| options.target_world.as_deref() == Some("test"));
-    let sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
+    assert!(
+        options.coverage.is_none() || options.target_world.as_deref() == Some("test"),
+        "coverage instruments the test world only"
+    );
+    let sem = semantics::semantics_with_logger(load_result, logger, true, options.coverage);
     if !sem.is_complete() {
         return Err(Bail);
     }

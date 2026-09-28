@@ -2,7 +2,7 @@
 //! call to `core:rt::coverage_probe(id)` at the start of each region the plan
 //! numbers. See [WEP: Test Coverage](../../../docs/wep-2026-09-28-test-coverage.md).
 
-use crate::ast::AstId;
+use crate::ast::{AstId, Block};
 use crate::call_args::CallArgs;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -66,9 +66,19 @@ impl<H: CompilerHost> Reify<'_, H> {
         block
     }
 
-    /// The `else` an `if` without one gets when its skipped path is a region:
-    /// the probe alone.
-    pub(super) fn implicit_else(&mut self, id: AstId, span: Span) -> Option<TirBlock> {
+    /// The `else` branch of the `if` `id`: `else_block` through `reify`, or,
+    /// where the source omits it and its skipped path is a region, the probe
+    /// alone.
+    pub(super) fn else_branch(
+        &mut self,
+        else_block: Option<&Block>,
+        id: AstId,
+        span: Span,
+        reify: impl FnOnce(&mut Self, &Block) -> TirBlock,
+    ) -> Option<TirBlock> {
+        if let Some(block) = else_block {
+            return Some(reify(self, block));
+        }
         let probe = self.probe(ProbeSite::ImplicitElse, id, span)?;
         Some(TirBlock::new(vec![probe], span))
     }

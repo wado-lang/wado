@@ -227,8 +227,8 @@ beside `org.wado-lang.test-names`. For each instrumented module it holds:
   loader reads it, and a `core:` module by its import path;
 - its first global id;
 - every function: its name, line and body region;
-- every region: its kind, span, function, parent region, and for a branch the
-  position of its choice and its side;
+- every region: its kind, span and function, for a branch the position of its
+  choice and its side, and for a derived region the children it derives from;
 - every countable line, with the region that holds it.
 
 The runner resolves each path to a file and reports it relative to the

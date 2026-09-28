@@ -1058,11 +1058,7 @@ fn assert_coverage(
         .get(name.as_ref())
         .unwrap_or_else(|| panic!("[{test_id}] no plan for {name}"));
 
-    let lines: Vec<u32> = file
-        .lines()
-        .into_iter()
-        .filter_map(|(line, ran)| (!ran).then_some(line))
-        .collect();
+    let lines = file.uncovered_lines();
     let branches: Vec<String> = file
         .branches()
         .iter()
