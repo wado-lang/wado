@@ -7,7 +7,7 @@ use std::cell::{Cell, RefCell};
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{rebound_locals, strip_one_value_copy};
+use super::arena_query::{node_mentions_local, rebound_locals, strip_one_value_copy};
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -519,14 +519,6 @@ fn whole_literal_assign(
         ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
     )
     .then_some((local, literal))
-}
-
-/// Whether anything under `node` reads `local`.
-fn reads_local(body: &Body, node: NodeRef, local: u32) -> bool {
-    body.find_in_live_node_under(node, |n| {
-        matches!(n, NodeRef::Expr(e) if bare_local(body, e) == Some(local)).then_some(())
-    })
-    .is_some()
 }
 
 /// A literal's `(field_index, value)` pairs, in field order.
@@ -1049,7 +1041,7 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
     // aggregate write did.
     if let Some((local, literal)) = whole_literal_assign(engine.body, id, ctx.decomposed) {
         let span = engine.body.exprs[id].span;
-        let reads_self = reads_local(engine.body, NodeRef::Expr(literal), local);
+        let reads_self = node_mentions_local(engine.body, NodeRef::Expr(literal), local);
         let pairs = literal_fields(engine.body, literal);
         engine.body.take_expr(literal);
         let mut stmts = Vec::with_capacity(2 * pairs.len());

@@ -1755,18 +1755,17 @@ fn rewrite_callees(
             continue;
         };
         let root = body.root;
-        let mut retyped: Vec<u32> = Vec::new();
         let mut rw = ReturnRewrite {
             cand,
             span,
             type_table: &project.type_table.borrow(),
-            retyped: &mut retyped,
+            retyped: Vec::new(),
         };
         rw.returns(&mut body, NodeRef::Block(root));
         // A `let t = Ok(v); … return t` had its initializer rewritten in place,
         // so the binding now holds the tuple: its declared type has to follow,
         // or WIR declares the local by the variant it no longer carries.
-        for local in retyped {
+        for local in rw.retyped {
             func.locals[local as usize].type_id = cand.layout.tuple_type;
             retype_let(&mut body, local, cand.layout.tuple_type);
         }
@@ -1781,7 +1780,7 @@ struct ReturnRewrite<'a> {
     span: Span,
     type_table: &'a TypeTable,
     /// The `let`-bound temps a `return t` rewrote the initializer of.
-    retyped: &'a mut Vec<u32>,
+    retyped: Vec<u32>,
 }
 
 impl ReturnRewrite<'_> {

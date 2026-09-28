@@ -84,7 +84,7 @@ impl Rule for LetBlockFlattenRule {
 /// statements and a tail-value `Expr` statement, return the block wrapper
 /// expression and the block.
 fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)> {
-    let bound = strip_refs(body, evaluated_first(&body.stmts[sid].kind)?.as_expr()?);
+    let bound = strip_refs(body, leading_operand(&body.stmts[sid].kind)?.as_expr()?);
     let value_e = first_evaluated(body, bound);
     // Flattening a block a `break` names would strip the target the jump needs.
     let inner = body.unbroken_block(value_e)?;
@@ -139,7 +139,7 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
 
 /// The operand a statement evaluates before it does anything else. A loop's
 /// body runs again, so nothing in it is first.
-fn evaluated_first(kind: &StmtKind) -> Option<Operand> {
+fn leading_operand(kind: &StmtKind) -> Option<Operand> {
     match kind {
         StmtKind::Let { value, .. }
         | StmtKind::LetDestructure { value, .. }

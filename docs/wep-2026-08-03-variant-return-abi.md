@@ -268,11 +268,20 @@ write builds a case (`null` included) and every read is a tag test, a payload
 read or a one-level `match`. A local read whole, passed or returned, stays a
 variant. Each write becomes the case's tuple literal, the reads go through the
 Phase 3 call-site rewrite, and `sroa` splits the tuple into scalars: a
-whole-literal assign `t = [tag, v]` becomes one write per field.
+whole-literal assign `t = [tag, v]` becomes one write per field, through temps
+where the literal reads `t` itself.
 
-A layout whose slot is itself a variant with a layout is declined. Once `sroa`
-splits the tuple, that slot is a variant local of its own, and for
-`Option<Option<i32>>` it is the very same type, so taking it never terminates.
+Three shapes are declined, each for a reason of its own:
+
+- A local two `Let`s bind. `sroa` leaves it whole, so the tuple would allocate
+  at every write, `null` included, where the variant's `None` did not.
+- A local a guard of a `match` over it writes. The Phase 3 rewrite reads the
+  payload slot again at each guard and arm body. That is one read only for a
+  call's temp, which nothing reassigns. After such a guard, a later arm would
+  read the pad.
+- A layout whose slot is itself a variant with a layout. Once `sroa` splits the
+  tuple, that slot is a variant local of its own, and for `Option<Option<i32>>`
+  it is the very same type, so taking it never terminates.
 
 On json-catalog this removes all 18 `Option<i64>` constructions. Against the
 commit before it, best of three alternating rounds on 2026-09-28:
