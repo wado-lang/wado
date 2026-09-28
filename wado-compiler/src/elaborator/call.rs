@@ -1277,28 +1277,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve arguments with coercion awareness
+        let ret = match (&arg_inst, declared_ret, expected_type) {
+            (Some(inst), Some(declared), Some(expected)) => Some(ExpectedReturn {
+                declared: self.instantiate_type(declared, inst),
+                expected,
+            }),
+            _ => None,
+        };
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
-            None => {
-                let ret = match (&arg_inst, declared_ret, expected_type) {
-                    (Some(inst), Some(declared), Some(expected)) => Some(ExpectedReturn {
-                        declared: self.instantiate_type(declared, inst),
-                        expected,
-                    }),
-                    _ => None,
-                };
-                self.resolve_args_against_params(
-                    &call.args,
-                    ctx,
-                    &param_types,
-                    arg_inst.as_ref(),
-                    ret,
-                )
-            }
+            None => self.resolve_args_against_params(
+                &call.args,
+                ctx,
+                &param_types,
+                arg_inst.as_ref(),
+                ret,
+            ),
         };
 
         if let Some(inst) = &arg_inst {
-            self.settle_onto_slots(inst, &callee_slots, &mut args);
+            self.settle_onto_slots(inst, &callee_slots, &mut args, ret);
         }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
@@ -3212,7 +3210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // param (`U = T`) sees `T`'s slot already resolved.
         for i in 0..n {
             let slot = type_args[i];
-            if self.slot_unanswered(slot, &scope_params)
+            if self.slot_takes_default(slot, &scope_params)
                 && let Some(default_ty) = defaults[i]
             {
                 let snapshot = type_args.clone();
@@ -4024,19 +4022,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             Vec::new()
         };
+        let ret = expected_type.map(|expected| {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let def = tt.defs().def_at(case.variant.defined_at);
+            let declared = tt.make_generic_instance(def, inst.vars.clone());
+            ExpectedReturn { declared, expected }
+        });
         let mut args = match given_args {
             Some(args) => args,
-            None => {
-                let ret = expected_type.map(|expected| {
-                    let mut tt = self.tysys.type_table.borrow_mut();
-                    let def = tt.defs().def_at(case.variant.defined_at);
-                    let declared = tt.make_generic_instance(def, inst.vars.clone());
-                    ExpectedReturn { declared, expected }
-                });
-                self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret)
-            }
+            None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst), ret),
         };
-        self.settle_onto_slots(&inst, slots, &mut args);
+        self.settle_onto_slots(&inst, slots, &mut args, ret);
         // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
         for (arg, &expected) in args.iter_mut().zip(&payload) {
             let expected = self.apply_infer_holes(expected);

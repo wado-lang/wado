@@ -215,20 +215,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         let mut args =
             self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst), ret);
-        self.settle_onto_slots(&inst, slots, &mut args);
+        self.settle_onto_slots(&inst, slots, &mut args, ret);
         args
     }
 
     /// Settle the walk's variables back onto their slots, substituting through
-    /// `args`. [`Self::solve_infer_var`] keeps the first answer, so a slot the
-    /// arguments pinned stays pinned and one they left open goes back rigid,
+    /// `args`. A slot no argument answered is answered by `ret`, the type the
+    /// call's site expects. [`Self::solve_infer_var`] keeps the first answer,
+    /// so a slot pinned so far stays pinned and one left open goes back rigid,
     /// unless an enclosing collection took it over to answer later.
     pub(super) fn settle_onto_slots(
         &mut self,
         inst: &Instantiated,
         slots: &[TypeId],
         args: &mut [TypeId],
+        ret: Option<ExpectedReturn>,
     ) {
+        if let Some(ret) = ret {
+            let declared = self.apply_infer_holes(ret.declared);
+            let expected = self.apply_infer_holes(ret.expected);
+            self.solve_own_infer_holes_against(declared, expected, &inst.vars);
+        }
         for (&var, &slot) in inst.vars.iter().zip(slots.iter()) {
             if !self.awaits_pending_call(var) {
                 self.solve_infer_var(var, slot);

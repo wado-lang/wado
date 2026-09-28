@@ -1,0 +1,15 @@
+// The type a method call's site expects answers the slot no argument settles,
+// before a call inside the closure argument reads it: `map`'s `U` is
+// `List<i64>`, and `make`'s `C` with it.
+
+fn make<C: Default>(n: i64) -> C {
+    return C::default();
+}
+
+fn made() -> Option<List<i64>> {
+    return Option::Some(3 as i64).map(|n| make(n));
+}
+
+test {
+    assert made().unwrap().len() == 0;
+}

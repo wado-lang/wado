@@ -623,14 +623,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .rposition(|pending| pending.own_vars.contains(&var))
     }
 
-    /// Chain each of `own_vars` that `ret` answers with a type naming only an
-    /// enclosing call's open variables. In `unbox(wrap(1), x)` the literal is
-    /// then pending at `unbox`'s `T`, which `x` answers, rather than taking
-    /// its default before `x` is reached.
-    ///
-    /// Where `ret` expects the enclosing call's bare open variable, that one is
-    /// chained to the declared return instead: in `same(wrap(1), x)` it names
-    /// `wrap`'s `U`, so the enclosing call takes the literal over.
+    /// Where `ret` expects the enclosing call's bare open variable, chain that
+    /// one to the declared return: in `same(wrap(1), x)` it names `wrap`'s
+    /// `U`, so the enclosing call takes the literal over.
     pub(super) fn chain_expected_return(
         &mut self,
         own_vars: &[TypeId],
@@ -639,11 +634,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(ret) = ret else {
             return;
         };
-        for (var, answer) in self.unify_expected_return(ret) {
-            if own_vars.contains(&var) && self.awaits_pending_call(answer) {
-                self.chain_infer_var(var, answer);
-            }
-        }
         let expected = self.apply_infer_holes(ret.expected);
         let declared = self.apply_infer_holes(ret.declared);
         let expects_open_var = self.tysys.type_table.borrow().is_infer_var(expected)
@@ -658,6 +648,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if expects_open_var && names_own_var {
             self.chain_infer_var(expected, declared);
+        }
+    }
+
+    /// Chain each variable a literal or a default walk of `pending` waits on
+    /// that `ret` answers with a type naming only an enclosing call's open
+    /// variables. In `unbox(wrap(1), x)` the literal is then pending at
+    /// `unbox`'s `T`, which `x` answers, rather than taking its default before
+    /// `x` is reached. A variable nothing waits on keeps its own answers: a
+    /// declared default answers `collect`'s `C` in `ident(it.collect())`.
+    fn chain_waiting_to_enclosing(
+        &mut self,
+        pending: &PendingLiterals,
+        ret: Option<ExpectedReturn>,
+    ) {
+        let Some(ret) = ret else {
+            return;
+        };
+        let waited: Vec<TypeId> = {
+            let tt = self.tysys.type_table.borrow();
+            let walked = pending
+                .walks
+                .iter()
+                .flat_map(|walk| &walk.bindings)
+                .filter_map(|binding| binding.settled.type_id());
+            pending
+                .literals
+                .iter()
+                .map(|(_, var)| *var)
+                .chain(walked)
+                .flat_map(|ty| tt.infer_vars_in(self.apply_infer_holes(ty)))
+                .collect()
+        };
+        for (var, answer) in self.unify_expected_return(ret) {
+            if waited.contains(&var) && self.awaits_pending_call(answer) {
+                self.chain_infer_var(var, answer);
+            }
         }
     }
 
@@ -863,6 +889,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ret: Option<ExpectedReturn>,
         ctx: &mut FunctionContext,
     ) -> IndexMap<AstId, TypeId> {
+        self.chain_waiting_to_enclosing(&pending, ret);
         let mut by_var: IndexMap<TypeId, Vec<Expr>> = IndexMap::default();
         for (expr, var) in pending.literals {
             let var = self.apply_infer_holes(var);

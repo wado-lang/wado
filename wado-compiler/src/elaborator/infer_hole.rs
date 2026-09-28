@@ -285,6 +285,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .awaits_pending_call(&self.tysys.type_table.borrow(), answered)
     }
 
+    /// Whether a declared default fills the type argument `t`: a slot nothing
+    /// answers, or one that is an enclosing call's open variable, which the
+    /// default then answers in turn (`ident(it.collect())`). Only a variable
+    /// chained to an enclosing call for its literals keeps waiting.
+    pub(super) fn slot_takes_default(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
+        if !self.tysys.is_unbound_type_param(t) || scope_params.contains(&t) {
+            return false;
+        }
+        let answered = self.apply_infer_holes(t);
+        answered == t
+            || !self
+                .annotate_ctx
+                .awaits_pending_call(&self.tysys.type_table.borrow(), answered)
+    }
+
     pub(super) fn type_has_infer_hole(&self, ty: TypeId) -> bool {
         if self.infer_holes.is_empty() {
             return false;
