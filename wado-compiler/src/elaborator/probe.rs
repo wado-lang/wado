@@ -107,8 +107,18 @@ impl<H: CompilerHost> Reify<'_, H> {
         }
     }
 
+    /// Account for the probes of the `for-of` `id`, whose body reify unrolls
+    /// no instance of: its regions never run, and report so.
+    pub(super) fn unroll_away_probes(&mut self, id: AstId) {
+        if let Some(coverage) = self.coverage {
+            self.probes_unrolled_away
+                .extend(coverage.for_of_probes(id).iter().copied());
+        }
+    }
+
     /// Check that every probed region of each function reify emitted took its
-    /// probe: a region reify reached without one would report as never run.
+    /// probe, or has no instance to take it in: a region reify reached without
+    /// one would report as never run.
     pub(super) fn assert_probes_complete(&self) {
         let Some(coverage) = self.coverage else {
             return;
@@ -120,7 +130,10 @@ impl<H: CompilerHost> Reify<'_, H> {
             let missing: Vec<u32> = regions
                 .iter()
                 .copied()
-                .filter(|region| !self.probes_emitted.contains(region))
+                .filter(|region| {
+                    !self.probes_emitted.contains(region)
+                        && !self.probes_unrolled_away.contains(region)
+                })
                 .collect();
             assert!(
                 missing.is_empty(),

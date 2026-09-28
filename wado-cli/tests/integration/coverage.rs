@@ -74,6 +74,31 @@ fn plans_merge_across_test_files() {
 }
 
 #[test]
+fn tap_carries_the_summary_as_comments() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_package(tmp.path());
+
+    let out = wado_in(tmp.path())
+        .args(["test", "--coverage", "--format", "tap"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let out = String::from_utf8(out).unwrap();
+    assert!(out.contains("] coverage: lines 3/4"), "{out}");
+    let not_tap: Vec<&str> = out
+        .lines()
+        .filter(|line| {
+            !["TAP version", "1..", "ok ", "not ok ", "#", "    "]
+                .iter()
+                .any(|start| line.starts_with(start))
+        })
+        .collect();
+    assert!(not_tap.is_empty(), "{not_tap:?}");
+}
+
+#[test]
 fn a_baseline_holds_the_regions_left_unrun_exactly() {
     let tmp = tempfile::tempdir().unwrap();
     write_package(tmp.path());

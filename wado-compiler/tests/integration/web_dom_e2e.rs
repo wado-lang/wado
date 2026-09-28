@@ -1,6 +1,7 @@
 //! A two-level `extends` program run against a host implementing the `wado-lang:web`
 //! imports. See `docs/wep-2026-04-28-resource-inheritance.md`.
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use wado_compiler::ast::HandleClasses;
@@ -322,7 +323,7 @@ fn run_against_stub(program: &str) -> DomObjects {
                     mocks: indexmap::IndexMap::default(),
                 },
                 tls_ctx: build_tls_ctx(indexmap::IndexMap::default()),
-                coverage_hits: Default::default(),
+                coverage_hits: BTreeSet::default(),
             };
             let mut store = Store::new(engine, state);
             limit_store(&mut store, DEFAULT_TIMEOUT_MS);

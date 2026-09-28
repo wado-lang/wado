@@ -108,6 +108,8 @@ pub(crate) trait TestReporter: Send + Sync {
     fn on_test_result(&self, result: &TestResult);
     fn on_package_done(&self, args: PackageDoneArgs);
     fn on_run_done(&self, grand: &PackageTotals, multi_pkg: bool, wall: Duration);
+    /// The `--coverage` summary, after the run is done.
+    fn on_coverage(&self, summary: &str);
 }
 
 /// Reproduces `wado test`'s original output: per-file compile/load lines
@@ -227,6 +229,10 @@ impl TestReporter for VerboseReporter {
                 println!("{line}");
             }
         }
+    }
+
+    fn on_coverage(&self, summary: &str) {
+        print!("{summary}");
     }
 }
 
@@ -473,6 +479,10 @@ impl TestReporter for HeartbeatReporter {
         for line in self.failures.lines() {
             println!("{line}");
         }
+    }
+
+    fn on_coverage(&self, summary: &str) {
+        print!("{summary}");
     }
 }
 
@@ -797,6 +807,12 @@ impl TestReporter for TapReporter {
             if !line.is_empty() {
                 self.comment(&line);
             }
+        }
+    }
+
+    fn on_coverage(&self, summary: &str) {
+        for line in summary.lines() {
+            self.comment(line);
         }
     }
 }

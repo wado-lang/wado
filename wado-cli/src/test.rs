@@ -2481,7 +2481,11 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     write_profile(&profile, profiler_slot.as_ref())?;
     if let (Some(options), Some(run)) = (&coverage_options, coverage_run) {
         let run = Arc::into_inner(run).expect("every stage holding the coverage run has finished");
-        run.finish(options, &build_dir(&invocation_root).join("coverage"))?;
+        run.finish(
+            options,
+            &build_dir(&invocation_root).join("coverage"),
+            reporter.as_ref(),
+        )?;
     }
 
     if report_changed_inputs(&run_cache) {

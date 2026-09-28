@@ -9,6 +9,7 @@
 //! the host hears each region's first hit and the runner joins hits to plans.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Range;
 
 use crate::ast::{
     self, AstId, AstVisitor, BinaryOp, Block, Expr, Function, Item, MatchExpr, Stmt, walk_expr,
@@ -208,6 +209,8 @@ pub struct CoverageMap {
     probe_function: IndexMap<u32, usize>,
     /// The probed regions of each function, in the order planned.
     function_probes: Vec<Vec<u32>>,
+    /// The probed regions of each `for-of` body, by the loop's node.
+    for_of_probes: IndexMap<AstId, Vec<u32>>,
 }
 
 impl CoverageMap {
@@ -217,7 +220,7 @@ impl CoverageMap {
     ) -> Self {
         let mut map = Self::default();
         for (source, module) in modules {
-            let (plan, sites) = plan_module(source, module);
+            let (plan, sites, for_of_bodies) = plan_module(source, module);
             let base = map.modules.iter().map(|m| m.regions.len() as u32).sum();
             let first_function = map.function_probes.len();
             map.function_probes
@@ -228,6 +231,13 @@ impl CoverageMap {
                 map.probes.insert((site, id), global);
                 map.probe_function.insert(global, function);
                 map.function_probes[function].push(global);
+            }
+            for (id, regions) in for_of_bodies {
+                let probed = regions
+                    .filter(|&region| plan.regions[region as usize].derived.is_empty())
+                    .map(|region| base + region)
+                    .collect();
+                map.for_of_probes.insert(id, probed);
             }
             map.modules.push(plan);
             map.bases.push(base);
@@ -246,6 +256,12 @@ impl CoverageMap {
     pub fn function_probes(&self, probe: u32) -> Option<&[u32]> {
         let function = *self.probe_function.get(&probe)?;
         Some(&self.function_probes[function])
+    }
+
+    /// The probed regions of the body of the `for-of` `id`.
+    #[must_use]
+    pub fn for_of_probes(&self, id: AstId) -> &[u32] {
+        self.for_of_probes.get(&id).map_or(&[], Vec::as_slice)
     }
 
     /// Whether no module is measured.
@@ -431,9 +447,16 @@ fn plan_path(source: &ModuleSource) -> String {
     }
 }
 
-/// Plan one module: its regions, and the site each region's probe goes at.
+/// The regions each `for-of` body holds, by the loop's node.
+type ForOfBodies = Vec<(AstId, Range<u32>)>;
+
+/// Plan one module: its regions, the site each region's probe goes at, and the
+/// regions of each `for-of` body.
 #[must_use]
-pub fn plan_module(source: &ModuleSource, module: &ast::Module) -> (ModulePlan, Sites) {
+pub fn plan_module(
+    source: &ModuleSource,
+    module: &ast::Module,
+) -> (ModulePlan, Sites, ForOfBodies) {
     let mut planner = Planner {
         plan: ModulePlan {
             path: plan_path(source),
@@ -444,6 +467,7 @@ pub fn plan_module(source: &ModuleSource, module: &ast::Module) -> (ModulePlan, 
         region: None,
         owner: None,
         last_choice: Vec::new(),
+        for_of_bodies: Vec::new(),
     };
     let off = module
         .inner_attributes
@@ -457,10 +481,13 @@ pub fn plan_module(source: &ModuleSource, module: &ast::Module) -> (ModulePlan, 
     planner.plan.lines.sort_unstable();
     planner.plan.lines.dedup();
     let Planner {
-        plan, mut sites, ..
+        plan,
+        mut sites,
+        for_of_bodies,
+        ..
     } = planner;
     sites.retain(|&(_, _, region)| plan.regions[region as usize].derived.is_empty());
-    (plan, sites)
+    (plan, sites, for_of_bodies)
 }
 
 struct Planner {
@@ -473,6 +500,7 @@ struct Planner {
     owner: Option<String>,
     /// The sides of the choice the walk finished last.
     last_choice: Vec<u32>,
+    for_of_bodies: ForOfBodies,
 }
 
 impl Planner {
@@ -583,7 +611,7 @@ impl Planner {
         self.branch_block(RegionKind::Then, then_block, (at, 0));
         let else_region = self.plan.regions.len() as u32;
         if let Some(block) = else_block {
-            self.branch_block(RegionKind::Else, block, (at, 1))
+            self.branch_block(RegionKind::Else, block, (at, 1));
         } else {
             self.new_region(
                 RegionKind::Else,
@@ -738,7 +766,10 @@ impl AstVisitor for Planner {
             }
             Stmt::ForOf(s) => {
                 self.visit_expr(&s.iterable);
+                let first = self.plan.regions.len() as u32;
                 self.loop_body(&s.body);
+                self.for_of_bodies
+                    .push((s.id, first..self.plan.regions.len() as u32));
             }
             Stmt::Loop(s) => self.loop_body(&s.body),
             Stmt::Match(m) => self.match_arms(m),

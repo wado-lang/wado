@@ -597,7 +597,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     }
     if opts.show_coverage_plan {
         println!("=== Coverage Plan ===");
-        let (plan, _) =
+        let (plan, ..) =
             wado_compiler::coverage::plan_module(&result.entry_module_source, &result.ast);
         print!("{}", wado_compiler::coverage::render_plan(&plan));
         println!();

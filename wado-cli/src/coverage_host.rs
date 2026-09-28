@@ -14,6 +14,7 @@ use wasmtime::component::{HasSelf, Linker};
 
 use crate::args::CliExit;
 use crate::sync::lock;
+use crate::test_report::TestReporter;
 
 wasmtime::component::bindgen!({
     inline: "package wado:coverage-runner; world runner { import core:coverage/coverage-host@0.1.0; }",
@@ -167,13 +168,18 @@ impl CoverageRun {
             .to_string()
     }
 
-    /// Print the summary and write the report files.
+    /// Report the summary through `reporter` and write the report files.
     ///
     /// # Errors
     ///
     /// Returns an error when plans for one path disagree, or a report cannot
     /// be written.
-    pub fn finish(self, options: &CoverageOptions, out_dir: &Path) -> Result<(), CliExit> {
+    pub(crate) fn finish(
+        self,
+        options: &CoverageOptions,
+        out_dir: &Path,
+        reporter: &dyn TestReporter,
+    ) -> Result<(), CliExit> {
         let coverage = self
             .coverage
             .into_inner()
@@ -184,7 +190,7 @@ impl CoverageRun {
                     mismatch.path
                 ))
             })?;
-        print!("{}", summary(&coverage));
+        reporter.on_coverage(&summary(&coverage));
         let write = |name: &str, text: String| -> Result<(), CliExit> {
             std::fs::create_dir_all(out_dir)
                 .and_then(|()| std::fs::write(out_dir.join(name), text))
