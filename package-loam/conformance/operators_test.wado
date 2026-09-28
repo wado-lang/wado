@@ -7,12 +7,9 @@
 //! Loam does not match yet is a `#[TODO]` test, so the run lists where the two
 //! part.
 
-use { eval } from "core:eval";
-use { emit } from "../src/emit.wado";
-use { infer } from "../src/infer.wado";
 use { read } from "../src/onnx_proto.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
-use { assert_close } from "./oracle.wado";
+use { assert_close, generated, ran } from "./oracle.wado";
 
 /// One tensor a case's text spells, each part as written: `f32` or `i64`, the
 /// extents as a list literal, and the elements, a float by its bits.
@@ -85,15 +82,10 @@ impl Case {
 /// stopped.
 fn computed(model: ByteList, case: &Case) -> String {
     let graph = read(model).unwrap();
-    let source = match infer(&graph, &Schema { layout: case.layout }) {
-        Ok(checked) => match emit(&graph, &checked) {
-            Ok(source) => source,
-            Err(e) => {
-                return `refused: ${e}`;
-            },
-        },
-        Err(e) => {
-            return `refused: ${e}`;
+    let source = match generated(&graph, &Schema { layout: case.layout }) {
+        Ok(source) => source,
+        Err(reason) => {
+            return `refused: ${reason}`;
         },
     };
     let mut args = "";
@@ -112,16 +104,7 @@ export fn run() with Stdout {
     println(\`output ${case.output.element} [\${extents.join(",")}] [\${data.join(",")}]\`);
 }
 `;
-    return match eval(program) {
-        Ok(out) => {
-            if out.status matches { Exited(0) } {
-                out.stdout.trim_end().to_string();
-            } else {
-                `${out.stdout}${out.status:?}: ${out.stderr}`;
-            }
-        },
-        Err(e) => `${e:?}`,
-    };
+    return ran(program).trim_end().to_string();
 }
 
 /// Loam computes from `model` what onnxruntime did, which `oracle` states: the

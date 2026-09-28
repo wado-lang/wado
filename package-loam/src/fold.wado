@@ -21,20 +21,20 @@ pub fn fold(
     known: &TreeMap<String, Known>,
     shapes: &TreeMap<String, Shape>,
 ) -> Result<Option<Known>, String> {
-    let site = node.site();
-    return evaluated(node, known, shapes).map(|found| found.map(|k| in_width(k, &site)));
+    return evaluated(node, known, shapes).map(|found| found.map(|k| in_width(k, node)));
 }
 
 /// `k` as its ONNX element holds it: an int32 keeps the low 32 bits of each
-/// value, which the run derives where only it knows the value, as the node
-/// `site` names computes it.
-fn in_width(k: Known, site: &String) -> Known {
+/// value, which the run derives where only it knows the value, as `node`
+/// computes it.
+fn in_width(k: Known, node: &Node) -> Known {
     if k.stored != Stored::Int32 {
         return k;
     }
+    let site = node.site();
     let elements = match k.elements {
         Ints(v) => Elements::Ints(v.into_iter().map(|c| c as i32 as i64).collect()),
-        Symbolic(v) => Elements::integers(v.into_iter().map(|p| Poly::wrapped32(&p, site)).collect()),
+        Symbolic(v) => Elements::integers(v.into_iter().map(|p| Poly::wrapped32(&p, &site)).collect()),
         _ => unreachable(),
     };
     return Known { ..k, elements };
@@ -172,26 +172,17 @@ fn reshape_extents(
     }
     let stated = count_of(&extents).unwrap();
     if inferred >= 0 {
-        if stated == Poly::constant(0) {
-            return Result::Err(`the target shape ${spelled(written)} leaves -1 no extent, since the rest multiply to 0`);
-        }
         // ONNX finds no extent for a `-1` beside extents multiplying to 0.
         let rest = `the target's extents besides -1 multiply to ${stated}`;
         let above_zero = stated.try_sub(&Poly::constant(1)).ok_or(`${stated} - 1 leaves i64`)?;
         owe(owed, site, &above_zero, `${rest}, which must not be 0`)?;
-        if let Some(q) = total.divided_by(&stated) {
-            if let Some(e) = Extent::of(q) {
-                extents[inferred] = e;
-            }
-        } else {
-            let q = Poly::floor_div(&total, &stated, site);
-            extents[inferred] = Extent::of(q).ok_or(`${total} / ${stated} is more than a list holds`)?;
-            // The quotient rounds down, so it holds at most `total`, and the
-            // count check below is this one.
-            let shortfall = count_of(&extents).unwrap().try_sub(&total).ok_or(`${stated} * ${q} leaves i64`)?;
-            owe(owed, site, &shortfall, `${rest}, which must divide ${total}`)?;
-            return Result::Ok(extents);
-        }
+        let q = Poly::floor_div(&total, &stated, site);
+        extents[inferred] = Extent::of(q).ok_or(`${total} / ${stated} is more than a list holds`)?;
+        // The quotient rounds down, so the shortfall is at most 0; the inputs
+        // owe that it is 0.
+        let shortfall = count_of(&extents).unwrap().try_sub(&total).ok_or(`${stated} * ${q} leaves i64`)?;
+        owe(owed, site, &shortfall, `${rest}, which must divide ${total}`)?;
+        return Result::Ok(extents);
     }
     if excess(&extents, &total, owed) != Option::Some(Poly::constant(0)) {
         return Result::Err(`${total} elements cannot take the shape ${spelled(written)}`);
@@ -699,10 +690,8 @@ fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
 /// the node aligns B at an axis, so that broadcasting from the end stretches it.
 fn aligned_extents(node: &Node, a: &List<i32>, b: &List<i32>) -> Result<List<i32>, String> {
     let mut extents = *b;
-    if let Some(trailing) = trailing_axes(node, a.len(), b.len())? {
-        for let _ of 0..<trailing {
-            extents.push(1);
-        }
+    for let _ of 0..<trailing_axes(node, a.len(), b.len())? {
+        extents.push(1);
     }
     return Result::Ok(extents);
 }

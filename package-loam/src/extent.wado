@@ -52,8 +52,8 @@ impl Extent {
     }
 
     /// What the inputs owe for stage 0 to count these as one length: nothing
-    /// where they agree, and where they agree only once a clamp or a wrap is
-    /// read as the operand it takes unchanged, what that reading owes. Only the
+    /// where they agree, and where they agree only once each derived symbol is
+    /// read as `Poly::presumed` reads it, what that reading owes. Only the
     /// difference is read, so a derived term both share owes nothing. `None`
     /// where no reading makes them one length.
     pub fn agreement(&self, other: &Extent) -> Option<List<Condition>> {

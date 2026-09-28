@@ -165,6 +165,18 @@ test "a derived term is compared through the operation that derives it" {
     assert !minus(raised, n).is_nonnegative();
 }
 
+test "a bound past any i64 on one side is not cancelled by another term's" {
+    let [a, b, c3, d] = [
+        s("a"),
+        s("b"),
+        s("c"),
+        s("d"),
+    ];
+    let raised = Poly::max_of(&times(times(a, b), c3), &c(1 << 40), &ORIGIN);
+    let square = times(raised, raised);
+    assert !minus(square, times(times(a, b), times(c3, d))).is_nonnegative();
+}
+
 test "a rounded quotient is exact where the build can show it" {
     let n = s("N");
     assert Poly::ceil_div(&times(n, c(2)), &c(2), &ORIGIN) == n;

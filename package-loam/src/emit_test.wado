@@ -435,6 +435,27 @@ g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
     );
 }
 
+test "a grouped Conv with a bias lowers to conv_grouped_bias" {
+    let source = `
+g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
+<float[2, 2, 2, 2] W, float[2] B>
+{
+    Y = Conv <group = 2> (X, W, B)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Share", "KRow", "KCol"]),
+        rule("B", ["Out"]),
+        rule("Y", ["Batch", "Out", "ORow", "OCol"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains(
+        "let Y = conv_grouped_bias::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, &weights.B, 2, &Window {",
+    );
+}
+
 test "Conv and MaxPool lower to their kernels under the window stage 0 read" {
     let source = `
 g (float[1, 1, 28, 28] X) => (float[1, 8, 14, 14] Y)
@@ -989,8 +1010,8 @@ test "a clamp the run computes, read as its operand, is checked before any kerne
     ];
     let out = emitted(&generate(source, layout).unwrap());
     let check = out.find("refuse(unmet(-dim_N + 8, \"A = Slice: N must be at most 8\"));").unwrap();
-    let slice = out.find("let A = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(i64::min(dim_N, 8)), 1);").unwrap(
-    );
+    let call = "let A = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(i64::min(dim_N, 8)), 1);";
+    let slice = out.find(call).unwrap();
     assert check < slice;
 }
 
@@ -1004,8 +1025,8 @@ test "a Reshape -1 the build rounds is checked to divide before the kernel runs"
     ];
     let out = emitted(&generate(source, layout).unwrap());
     let check = out.find("refuse(unmet(-dim_N + 2 * floor_div(dim_N, 2), ").unwrap();
-    let reshape = out.find("let Y = reshape::<f32, [Seq], [Pair, Two]>(X, [to_extent(floor_div(dim_N, 2)), 2]);").unwrap(
-    );
+    let call = "let Y = reshape::<f32, [Seq], [Pair, Two]>(X, [to_extent(floor_div(dim_N, 2)), 2]);";
+    let reshape = out.find(call).unwrap();
     assert check < reshape;
 }
 

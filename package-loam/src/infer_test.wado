@@ -1,7 +1,7 @@
 //! What stage 0 proves of a graph, and what it stops the build for.
 
 use { Extent } from "./extent.wado";
-use { Elements } from "./graph.wado";
+use { Attr, Elements, Node } from "./graph.wado";
 use {
     AttributeConflict,
     AxisCountConflict,
@@ -17,6 +17,7 @@ use {
     Refusal,
     UnnamedTensor,
     infer,
+    softmax_lane,
 } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { Poly } from "./poly.wado";
@@ -570,12 +571,29 @@ test "Softmax before opset 13 normalizing past one axis keeps its operand's shap
     assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
 }
 
-test "Softmax before opset 13 along the last axis is the one-axis Softmax" {
-    let source = `<ir_version: 7, opset_import: ["" : 11]>
-    g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
-        Y = Softmax <axis = 2> (X)
-    }`;
-    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
+test "Softmax before opset 13 normalizes from axis 1 on, and along the last axis is the one-axis Softmax" {
+    let softmax = |axis: Option<String>| Node {
+        op: "Softmax",
+        outputs: ["Y"],
+        inputs: ["X"],
+        attrs: match axis {
+            Some(v) => [
+                Attr {
+                    name: "axis",
+                    values: [v],
+                    is_list: false,
+                },
+            ],
+            None => [],
+        },
+    };
+    let old = Option::Some(11 as i64);
+    let fallback = softmax_lane(&softmax(null), 3, old).unwrap();
+    assert fallback.axis == 1 && fallback.flattened;
+    let last = softmax_lane(&softmax(Option::Some("2")), 3, old).unwrap();
+    assert last.axis == 2 && !last.flattened;
+    let current = softmax_lane(&softmax(null), 3, Option::Some(13 as i64)).unwrap();
+    assert current.axis == 2 && !current.flattened;
 }
 
 test "arithmetic before opset 7 aligns B at A's axis and stretches it over the axes after" {

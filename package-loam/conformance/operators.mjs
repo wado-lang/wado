@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
 import {
-  BFLOAT16, BOOL, FLOAT, FLOAT16, INT32, INT64, f32, modelProto, nodeProto, tensorProto, text, valueInfo,
+  BFLOAT16, BOOL, FLOAT, FLOAT16, INT32, INT64, f32, modelProto, node, nodeProto, tensorProto, text, valueInfo,
 } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
@@ -25,8 +25,6 @@ const int64 = (dims, values) => tensor(INT64, dims, values.map(BigInt));
 // Multiples of 0.5 from -3 to 3, in an order no axis repeats: every float a
 // case feeds is exact, 0 and the negatives among them.
 const halves = (count) => Array.from({ length: count }, (_, i) => (((i * 7) % 13) - 6) / 2);
-
-const node = (op, inputs, outputs, attrs = {}) => ({ op, inputs, outputs: [outputs].flat(), attrs });
 
 // Each case computes `Y`. `inputs` are fed, `inits` are initializers, and
 // `layout` names the axes of each tensor that needs them, by tensor name. A case
@@ -224,7 +222,7 @@ add('SoftmaxFlattenedFirst', {
   layout: cube,
   opset: 11,
 });
-add('SoftmaxMiddle',{ inputs: { A: float([2, 3, 4]) }, nodes: [node('Softmax', ['A'], 'Y', { axis: 1 })], layout: cube });
+add('SoftmaxMiddle', { inputs: { A: float([2, 3, 4]) }, nodes: [node('Softmax', ['A'], 'Y', { axis: 1 })], layout: cube });
 add('SoftmaxLarge', {
   inputs: { A: float([2, 3], [1000, 1001, 1002, -1000, 0, 1000]) },
   nodes: [node('Softmax', ['A'], 'Y')],

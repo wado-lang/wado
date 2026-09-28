@@ -44,8 +44,8 @@ pub fn window_over(
         let reach = dilations[i] as i64 * (kernel[i] as i64 - 1) + 1;
         if mode == "SAME_UPPER" || mode == "SAME_LOWER" {
             let out = Poly::ceil_div(x, &stride, &site);
-            let last_start = scaled(&diff(&out, &Poly::constant(1)), strides[i] as i64);
-            let covered = diff(&sum([last_start, Poly::constant(reach)]), x);
+            let last_start = times(&diff(&out, &Poly::constant(1)), &stride);
+            let covered = diff(&add(&last_start, &Poly::constant(reach)), x);
             let total = Poly::max_of(&covered, &Poly::constant(0), &site);
             let half = Poly::floor_div(&total, &Poly::constant(2), &site);
             let before = if mode == "SAME_UPPER" { half } else { diff(&total, &half) };
@@ -61,23 +61,20 @@ pub fn window_over(
         } else {
             return Result::Err(AttrError { attr: "auto_pad", reason: `is ${mode}, which ONNX does not define` });
         };
-        let padded = sum([*x, Poly::constant(before + after)]);
+        let padded = add(x, &Poly::constant(before + after));
         let span = diff(&padded, &Poly::constant(reach));
-        let holds = owe(
+        owe(
             owed,
             &site,
             &span,
             `the padded input's ${padded} must hold the kernel's reach of ${reach} along spatial axis ${i}`,
-        );
-        if let Err(reason) = holds {
-            return Result::Err(AttrError { attr: "kernel_shape", reason });
-        }
+        ).map_err(|reason| AttrError { attr: "kernel_shape", reason })?;
         let steps = if ceil { Poly::ceil_div(&span, &stride, &site) } else { Poly::floor_div(&span, &stride, &site) };
-        let mut out = sum([steps, Poly::constant(1)]);
+        let mut out = add(&steps, &Poly::constant(1));
         if ceil {
             // A last window that would start in the trailing pad covers no
             // input, and ONNX drops it: once, where it starts there.
-            let starts = Poly::ceil_div(&sum([*x, Poly::constant(before)]), &stride, &site);
+            let starts = Poly::ceil_div(&add(x, &Poly::constant(before)), &stride, &site);
             let dropped = Poly::clamped(&diff(&out, &starts), &Poly::constant(0), &Poly::constant(1), &site);
             out = diff(&out, &dropped);
         }
@@ -90,23 +87,19 @@ pub fn window_over(
     return Result::Ok(Geometry { kernel, strides, dilations, pads, output });
 }
 
-// A window's arithmetic stays within `i64`, which each helper asserts: an
-// extent is at most `i32::MAX`, and an attribute is an `i32`.
+// A window's arithmetic stays within `i64`, which each helper's `unwrap`
+// asserts: an extent is at most `i32::MAX`, and an attribute is an `i32`.
 
-fn sum(terms: List<Poly>) -> Poly {
-    let mut total = Poly::constant(0);
-    for let t of terms {
-        total = total.try_add(&t).unwrap();
-    }
-    return total;
+fn add(a: &Poly, b: &Poly) -> Poly {
+    return a.try_add(b).unwrap();
 }
 
 fn diff(a: &Poly, b: &Poly) -> Poly {
     return a.try_sub(b).unwrap();
 }
 
-fn scaled(a: &Poly, k: i64) -> Poly {
-    return a.try_mul(&Poly::constant(k)).unwrap();
+fn times(a: &Poly, b: &Poly) -> Poly {
+    return a.try_mul(b).unwrap();
 }
 
 /// An integer list attribute of `count` entries no smaller than `least`, each

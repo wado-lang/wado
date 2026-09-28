@@ -35,9 +35,7 @@ enum Op {
     Min,
     /// The greater of two operands.
     Max,
-    /// The first operand divided by the second, rounded up. The divisor is
-    /// positive for every input the build accepts: a positive number, or a
-    /// polynomial the inputs owe positive before `forward` divides by it.
+    /// The first operand divided by the second, rounded up.
     CeilDiv,
     /// `CeilDiv` rounded down.
     FloorDiv,
@@ -64,7 +62,7 @@ struct Symbol {
     /// identifies it wherever it was derived.
     name: String,
     derivation: Option<Derivation>,
-    /// The least and the greatest value the symbol takes over every input.
+    /// A lower and an upper bound on the value, over every input.
     range: [i128, i128],
 }
 
@@ -145,8 +143,14 @@ impl Derivation {
     fn written(&self, names: &TreeMap<String, String>, code: bool) -> String {
         let args: List<String> = self.operands.into_iter().map(|o| o.written(names, code)).collect();
         return match self.op {
-            Min => if code { `i64::min(${args[0]}, ${args[1]})` } else { `min(${args[0]}, ${args[1]})` },
-            Max => if code { `i64::max(${args[0]}, ${args[1]})` } else { `max(${args[0]}, ${args[1]})` },
+            Min | Max => {
+                let name = if self.op matches { Min } { "min" } else { "max" };
+                if code {
+                    `i64::${name}(${args[0]}, ${args[1]})`;
+                } else {
+                    `${name}(${args[0]}, ${args[1]})`;
+                }
+            },
             CeilDiv | FloorDiv => {
                 let rounding = if self.op matches { CeilDiv } { "ceil" } else { "floor" };
                 if code {
@@ -191,10 +195,7 @@ impl Derivation {
                         corners.push(rounded(self.op, a, d));
                     }
                 }
-                [
-                    corners.into_iter().min().unwrap(),
-                    corners.into_iter().max().unwrap(),
-                ];
+                span(corners);
             },
             // The index where it is not negative, and past it the extent's reach.
             FromEnd => {
@@ -325,10 +326,6 @@ impl Poly {
 
     /// `x` raised to `lo`, then lowered to `hi`, as ONNX clamps a `Slice` bound.
     pub fn clamped(x: &Poly, lo: &Poly, hi: &Poly, origin: &String) -> Poly {
-        // `x` raised to anything is never below `x`, so lowered to `x` it is `x`.
-        if *x == *hi {
-            return *x;
-        }
         return Poly::min_of(&Poly::max_of(x, lo, origin), hi, origin);
     }
 
@@ -502,7 +499,7 @@ impl Poly {
     }
 
     /// Whether every input makes this at most `other`.
-    pub fn at_most(&self, other: &Poly) -> bool {
+    fn at_most(&self, other: &Poly) -> bool {
         return match other.try_sub(self) {
             Some(d) => d.is_nonnegative(),
             None => false,
@@ -555,12 +552,23 @@ impl Poly {
     /// A lower and an upper bound on the value, over every value of the
     /// symbols, each term bounded apart. An input symbol is an extent, within
     /// `[0, i32::MAX]`, and a derived one lies within what its operation leaves.
+    /// A term held at `REACH_LIMIT` reaches past it by an unknown amount, which
+    /// no other term's bound may cancel.
     fn bounds(&self) -> [i128, i128] {
         let [mut low, mut high] = [0 as i128, 0 as i128];
+        let [mut held_below, mut held_above] = [false, false];
         for let t of &self.terms {
             let [l, h] = t.range();
             low += l;
             high += h;
+            held_below = held_below || l == -REACH_LIMIT;
+            held_above = held_above || h == REACH_LIMIT;
+        }
+        if held_below {
+            low = i128::min(low, -REACH_LIMIT);
+        }
+        if held_above {
+            high = i128::max(high, REACH_LIMIT);
         }
         return [low, high];
     }
@@ -614,26 +622,29 @@ impl Poly {
 
 impl Term {
     /// A lower and an upper bound on the term, its symbols' ranges multiplied.
-    /// Held within 2^65 either way.
+    /// Held within `REACH_LIMIT` either way.
     fn range(&self) -> [i128, i128] {
-        let [mut low, mut high] = [self.coefficient as i128, self.coefficient as i128];
+        let mut range = [self.coefficient as i128, self.coefficient as i128];
         for let s of &self.symbols {
+            let [low, high] = range;
             let [a, b] = s.range;
-            let corners: List<i128> = [
+            range = span([
                 product(low, a),
                 product(low, b),
                 product(high, a),
                 product(high, b),
-            ];
-            low = corners[0];
-            high = corners[0];
-            for let c of corners {
-                low = i128::min(low, c);
-                high = i128::max(high, c);
-            }
+            ]);
         }
-        return [low, high];
+        return range;
     }
+}
+
+/// The least and the greatest of `corners`.
+fn span(corners: List<i128>) -> [i128, i128] {
+    return [
+        corners.into_iter().min().unwrap(),
+        corners.into_iter().max().unwrap(),
+    ];
 }
 
 /// `value`, where an `i64` holds it.
@@ -644,7 +655,7 @@ fn narrowed(value: i128) -> Option<i64> {
     };
 }
 
-/// How far a term's bound reaches before it is held: 2^65, past any `i64`
+/// How far a term's bound reaches before it is held: 2^64, past any `i64`
 /// constant a sum adds it to, so the sum keeps the sign and the side of `i32`
 /// it would have.
 global REACH_LIMIT: i128 = (i64::MAX as i128 + 1) * 2;

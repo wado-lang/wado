@@ -1,8 +1,33 @@
-//! Reading the tensors the ONNX backend test data ships beside each model.
-//! One `.pb` file is one bare `TensorProto`.
+//! What the conformance tests share: building a case as the generator would
+//! and running it, and reading the tensors the ONNX backend test data ships
+//! beside each model, one bare `TensorProto` to a `.pb` file.
 
-use { Known, Stored } from "../src/graph.wado";
+use { eval } from "core:eval";
+use { emit } from "../src/emit.wado";
+use { Graph, Known, Stored } from "../src/graph.wado";
+use { infer } from "../src/infer.wado";
 use { known_tensor, read_tensor } from "../src/onnx_proto.wado";
+use { Schema } from "../src/schema.wado";
+
+/// The module the generator writes for `graph` under `schema`, or why the
+/// build refuses it.
+pub fn generated(graph: &Graph, schema: &Schema) -> Result<String, String> {
+    let checked = infer(graph, schema).map_err(|e| `${e}`)?;
+    return emit(graph, &checked).map_err(|e| `${e}`);
+}
+
+/// What `program` prints under `eval`, followed, where it does not exit
+/// cleanly, by how it stopped.
+pub fn ran(program: String) -> String {
+    return match eval(program) {
+        Ok(out) => if out.status matches { Exited(0) } {
+            out.stdout;
+        } else {
+            `${out.stdout}${out.status:?}: ${out.stderr}`;
+        },
+        Err(e) => `${e:?}`,
+    };
+}
 
 /// A `.pb` file's elements and extents.
 pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {

@@ -7,12 +7,10 @@
 //! `#[TODO]` test, so the run lists where the two part.
 
 use { TreeMap } from "core:collections";
-use { eval } from "core:eval";
-use { emit } from "../src/emit.wado";
 use { Graph } from "../src/graph.wado";
-use { infer } from "../src/infer.wado";
 use { read } from "../src/onnx_proto.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
+use { generated, ran } from "./oracle.wado";
 
 /// The lengths of `X` the oracle ran each case at.
 global LENGTHS: List<i32> = [3, 10];
@@ -73,8 +71,7 @@ fn built(graph: &Graph, output_axes: List<String>) -> Result<String, String> {
             LayoutRule { pattern: output, axes: output_axes },
         ],
     };
-    let checked = infer(graph, &schema).map_err(|e| `${e}`)?;
-    return emit(graph, &checked).map_err(|e| `${e}`);
+    return generated(graph, &schema);
 }
 
 /// `source` with a `run` that calls its `forward` at each of `LENGTHS` and
@@ -107,16 +104,7 @@ export fn run() with Stdout {
     }
 }
 `;
-    return match eval(program) {
-        Ok(out) => {
-            if out.status matches { Exited(0) } {
-                out.stdout;
-            } else {
-                `${out.stdout}${out.status:?}: ${out.stderr}`;
-            }
-        },
-        Err(e) => `${e:?}`,
-    };
+    return ran(program);
 }
 
 /// Loam computes from `model` what onnxruntime does, which `onnx` states.

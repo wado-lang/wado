@@ -1,3 +1,4 @@
+/// A tensor of `E` over the axis list `Axes`, row-major.
 pub struct Tensor<E, Axes> {
     pub data: List<E>,
     pub extents: List<i32>,
@@ -126,6 +127,7 @@ pub fn refuse(reason: Option<String>) {
     }
 }
 
+/// A batched matrix product whose operands share every batch axis.
 pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..Bs, K, N]>) -> Tensor<f32, [..Bs, M, N]> {
     return matmul_broadcast(a, b);
 }
@@ -142,10 +144,8 @@ pub fn matmul_shared<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f3
 pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Tensor<f32, Out> {
     let a_matrix = if a.extents.len() == 1 { [1, a.extents[0]] as List<i32> } else { a.extents };
     let b_matrix = if b.extents.len() == 1 { [b.extents[0], 1] as List<i32> } else { b.extents };
-    let [ra, rb] = [
-        a_matrix.len(),
-        b_matrix.len(),
-    ];
+    let ra = a_matrix.len();
+    let rb = b_matrix.len();
     let rows = a_matrix[ra - 2];
     let inner = a_matrix[ra - 1];
     let cols = b_matrix[rb - 1];
@@ -166,7 +166,8 @@ pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Te
     let b_carries = stretched_carries(&b_batch, &batch);
     let mut index = List::<i32>::filled(batch.len(), 0);
     let [mut at_a, mut at_b] = [0, 0];
-    let [lhs_data, rhs_data] = [&a.data, &b.data];
+    let lhs_data = &a.data;
+    let rhs_data = &b.data;
     for let s of 0..<element_count(&batch) {
         let a_base = at_a * rows * inner;
         let b_base = at_b * inner * cols;
@@ -194,7 +195,7 @@ pub fn gather_rows<E, Row, ..Rest, ..Ix>(
     data: &Tensor<E, [Row, ..Rest]>,
     indices: &Tensor<i64, [..Ix]>,
 ) -> Tensor<E, [..Ix, ..Rest]> {
-    return gathered(&data.data, &data.extents, indices, 0);
+    return gathered(data, indices, 0);
 }
 
 /// `Gather` along `axis`: the index axes take its place, and each index names
@@ -205,36 +206,35 @@ pub fn gather<E, ..Pre, Along, ..Post, ..Ix>(
     indices: &Tensor<i64, [..Ix]>,
     axis: i32,
 ) -> Tensor<E, [..Pre, ..Ix, ..Post]> {
-    return gathered(&data.data, &data.extents, indices, axis);
+    return gathered(data, indices, axis);
 }
 
-/// A negative index counts from the end.
-fn gathered<E, Ix, Out>(
-    data: &List<E>,
-    data_extents: &List<i32>,
-    indices: &Tensor<i64, Ix>,
-    axis: i32,
-) -> Tensor<E, Out> {
-    let along = data_extents[axis];
-    let outer = element_count(&data_extents[0..<axis].to_list());
-    let inner = element_count(&data_extents[axis + 1..<data_extents.len()].to_list());
-    let mut extents = data_extents[0..<axis].to_list();
+/// `Gather` along `axis`, the kernel `gather_rows` and `gather` share.
+fn gathered<E, D, Ix, Out>(data: &Tensor<E, D>, indices: &Tensor<i64, Ix>, axis: i32) -> Tensor<E, Out> {
+    let rank = data.extents.len();
+    let along = data.extents[axis];
+    let before = data.extents[0..<axis].to_list();
+    let after = data.extents[axis + 1..<rank].to_list();
+    let outer = element_count(&before);
+    let inner = element_count(&after);
+    let mut extents = before;
     extents.extend(&indices.extents);
-    extents.extend(&data_extents[axis + 1..<data_extents.len()].to_list());
+    extents.extend(&after);
     let mut out = List::<E>::with_capacity(element_count(&extents));
     for let o of 0..<outer {
         for let index of indices.data {
-            let at = if index < 0 { index + along as i64 } else { index };
+            let at = from_end(index, along as i64);
             assert 0 <= at < along as i64;
             let base = (o * along + at as i32) * inner;
             for let k of 0..<inner {
-                out.push(data[base + k]);
+                out.push(data.data[base + k]);
             }
         }
     }
     return Tensor { data: out, extents };
 }
 
+/// Two operands of one axis list combined elementwise through `op`.
 pub fn zip<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: fn(f32, f32) -> f32) -> Tensor<f32, Axes> {
     if a.extents != b.extents {
         return stretched_zip(a.data, a.extents, b.data, b.extents, op);
@@ -246,6 +246,7 @@ pub fn zip<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: fn(f32, f32) 
     return Tensor { data: out, extents: a.extents };
 }
 
+/// `zip` with `b` holding `a`'s trailing axes, repeated across the leading ones.
 pub fn zip_suffix<..Pre, ..Suf>(
     a: &Tensor<f32, [..Pre, ..Suf]>,
     b: &Tensor<f32, [..Suf]>,
@@ -502,6 +503,8 @@ pub struct Window {
     pub output: List<i32>,
 }
 
+/// ONNX's `MaxPool` over `window`: each position's greatest value under the
+/// kernel, a padded position counting as none.
 pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Window) -> Tensor<f32, [N, C, ..Out]> {
     let input = spatial_extents(&x.extents);
     let planes = x.extents[0] * x.extents[1];
@@ -523,6 +526,8 @@ pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Windo
     return Tensor { data: out, extents };
 }
 
+/// ONNX's `Conv` over `window`: each output channel sums every input channel
+/// under its kernel.
 pub fn conv<N, Ci, Co, ..In, ..K, ..Out>(
     x: &Tensor<f32, [N, Ci, ..In]>,
     w: &Tensor<f32, [Co, Ci, ..K]>,
@@ -531,6 +536,7 @@ pub fn conv<N, Ci, Co, ..In, ..K, ..Out>(
     return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), 1, window);
 }
 
+/// `conv` plus each output channel's bias.
 pub fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
     x: &Tensor<f32, [N, Ci, ..In]>,
     w: &Tensor<f32, [Co, Ci, ..K]>,
@@ -551,6 +557,7 @@ pub fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
     return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), group, window);
 }
 
+/// `conv_grouped` plus each output channel's bias.
 pub fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
     x: &Tensor<f32, [N, Ci, ..In]>,
     w: &Tensor<f32, [Co, Cg, ..K]>,
@@ -645,6 +652,7 @@ fn tap_offset(input: &List<i32>, window: &Window, at: i32, tap: i32) -> i32 {
     return offset;
 }
 
+/// A matrix transposed.
 pub fn transpose2<E, A, B>(t: &Tensor<E, [A, B]>) -> Tensor<E, [B, A]> {
     return permute(t, [1, 0]);
 }
@@ -745,6 +753,7 @@ pub fn reduce_mean<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, 
     return map(&sum, |v| v / count);
 }
 
+/// Each element through `op`.
 pub fn map<A, B, Axes>(t: &Tensor<A, Axes>, op: fn(A) -> B) -> Tensor<B, Axes> {
     let mut out = List::<B>::with_capacity(t.data.len());
     for let v of t.data {
@@ -753,6 +762,7 @@ pub fn map<A, B, Axes>(t: &Tensor<A, Axes>, op: fn(A) -> B) -> Tensor<B, Axes> {
     return Tensor { data: out, extents: t.extents };
 }
 
+/// `1 / (1 + e^-v)`, computed from the side whose exponential cannot overflow.
 pub fn sigmoid_f32(v: f32) -> f32 {
     if v >= 0.0 {
         return 1.0 / (1.0 + f32::exp(-v));
@@ -788,10 +798,12 @@ impl Held for bf16 {
     }
 }
 
+/// A held tensor in f32, where the kernels compute.
 pub fn widen<E: Held, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
     return map(t, |v| v.to_wide());
 }
 
+/// An f32 tensor rounded to the type it is held in.
 pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
     return map(t, |v| E::from_wide(v));
 }

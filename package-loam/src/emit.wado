@@ -4,7 +4,7 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
 use { Extent } from "./extent.wado";
-use { Condition, Poly } from "./poly.wado";
+use { Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 use {
     Elements,
@@ -512,8 +512,9 @@ impl Symbols {
         return Result::Ok(`to_extent(${self.spell(p)?})`);
     }
 
-    fn spell_all(&mut self, extents: &List<Extent>) -> Result<String, EmitError> {
-        return self.spell_polys(&extents.into_iter().map(|e| e.poly()).collect());
+    /// A shape's extents as the list literal of `i32` a kernel takes.
+    fn spell_shape(&mut self, shape: &Shape) -> Result<String, EmitError> {
+        return self.spell_polys(&shape.axes.into_iter().map(|axis| axis.extent.poly()).collect());
     }
 
     /// Lengths or positions as the list literal of `i32` a kernel takes.
@@ -789,7 +790,7 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
     };
     let element = checked.primitives.get(*tensor).unwrap();
     return Result::Ok(
-        `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${symbols.spell_all(&extents_of(&shape))?} }`,
+        `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${symbols.spell_shape(&shape)?} }`,
     );
 }
 
@@ -824,10 +825,6 @@ fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String,
     for let line of agreements {
         w.line(&line);
     }
-}
-
-fn extents_of(shape: &Shape) -> List<Extent> {
-    return shape.axes.into_iter().map(|axis| axis.extent).collect();
 }
 
 /// Whether a boundary tensor is held in something other than what the kernels
@@ -891,8 +888,7 @@ fn node_call(
     let shapes = &checked.shapes;
     let op = node.op;
     if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
-        let element = checked.primitives.get(node.inputs[0]).unwrap();
-        return reshaped(node, checked, &element, &exprs.reference(&node.inputs[0]), symbols);
+        return reshaped(node, checked, &exprs.reference(&node.inputs[0]), symbols);
     }
     if op == "Slice" {
         return slice_call(node, checked, exprs, symbols);
@@ -902,7 +898,7 @@ fn node_call(
         let element = checked.primitives.get(node.outputs[0]).unwrap();
         let value = element_literal(&fill_of(node).elements);
         return Result::Ok(
-            `filled::<${element}, [${axis_list(&out)}]>(${symbols.spell_all(&extents_of(&out))?}, ${value})`,
+            `filled::<${element}, [${axis_list(&out)}]>(${symbols.spell_shape(&out)?}, ${value})`,
         );
     }
     if op == "Range" {
@@ -922,18 +918,14 @@ fn node_call(
     if op == "Gather" {
         let data = shapes.get(node.inputs[0]).unwrap();
         let axis = settled(gather_axis(node, data.rank()));
-        let [operand, indices] = [
-            exprs.reference(&node.inputs[0]),
-            exprs.reference(&node.inputs[1]),
-        ];
+        let operand = exprs.reference(&node.inputs[0]);
+        let indices = exprs.reference(&node.inputs[1]);
         if axis == 0 {
             return Result::Ok(`gather_rows(${operand}, ${indices})`);
         }
         let element = checked.primitives.get(node.inputs[0]).unwrap();
-        let [pre, post] = [
-            axis_run(&data, 0, axis),
-            axis_run(&data, axis + 1, data.rank()),
-        ];
+        let pre = axis_run(&data, 0, axis);
+        let post = axis_run(&data, axis + 1, data.rank());
         let index_axes = axis_list(&shapes.get(node.inputs[1]).unwrap());
         let turbofish = `::<${element}, [${pre}], ${data.axes[axis].name}, [${post}], [${index_axes}]>`;
         return Result::Ok(`gather${turbofish}(${operand}, ${indices}, ${axis})`);
@@ -1006,21 +998,19 @@ fn split_calls(
     let shapes = &checked.shapes;
     let x = shapes.get(node.inputs[0]).unwrap();
     // Stage 0 owed these already.
-    let mut restated: List<Condition> = [];
-    let parts = settled(split_parts(node, &checked.known, &x, &mut restated));
+    let parts = settled(split_parts(node, &checked.known, &x, &mut []));
     let axis = settled(split_axis(node, x.rank()));
     let element = checked.primitives.get(node.inputs[0]).unwrap();
-    let pre = axis_run(&x, 0, axis);
-    let post = axis_run(&x, axis + 1, x.rank());
     let operand = exprs.reference(&node.inputs[0]);
     let mut calls: List<String> = [];
     let mut start = Poly::constant(0);
     for let [i, part] of parts.into_iter().enumerate() {
         let part_axis = shapes.get(node.outputs[i]).unwrap().axes[axis].name;
-        let turbofish = `::<${element}, [${pre}], ${x.axes[axis].name}, ${part_axis}, [${post}]>`;
-        calls.push(
-            `slice_axis${turbofish}(${operand}, ${axis}, ${symbols.spell(&start)?}, ${symbols.spell_extent(&part)?}, 1)`,
-        );
+        let range = [
+            symbols.spell(&start)?,
+            symbols.spell_extent(&part)?,
+        ];
+        calls.push(slice_axis_call(&element, &x, axis, &part_axis, &operand, range, 1));
         // The parts sum to the axis, so every running sum is within it.
         start = start.try_add(&part).unwrap();
     }
@@ -1040,31 +1030,43 @@ fn slice_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     let mut current = x;
     for let cut of cuts {
         let a = cut.axis;
-        let turbofish = `::<${element}, [${axis_run(&current, 0, a)}], ${current.axes[a].name}, ${out.axes[a].name}, [${axis_run(
-            &current,
-            a + 1,
-            current.rank(),
-        )}]>`;
-        call = `slice_axis${turbofish}(${operand}, ${a}, ${symbols.spell(&cut.start)?}, ${symbols.spell_extent(
-            &cut.extent.poly(),
-        )?}, ${cut.step})`;
+        let range = [
+            symbols.spell(&cut.start)?,
+            symbols.spell_extent(&cut.extent.poly())?,
+        ];
+        call = slice_axis_call(&element, &current, a, &out.axes[a].name, &operand, range, cut.step);
         operand = `&${call}`;
         current.axes[a] = out.axes[a];
     }
     return Result::Ok(call);
 }
 
-/// `operand`, whose axes are `node`'s first input's, laid out as `node`'s output.
-fn reshaped(
-    node: &Node,
-    checked: &Checked,
+/// `slice_axis` over `operand`, of axes `shape`, taking `range` (a start and a
+/// length, each spelled) of `axis` by `step` as the axis named `cut`.
+fn slice_axis_call(
     element: &String,
+    shape: &Shape,
+    axis: i32,
+    cut: &String,
     operand: &String,
-    symbols: &mut Symbols,
-) -> Result<String, EmitError> {
+    range: [String, String],
+    step: i64,
+) -> String {
+    let [start, length] = range;
+    let turbofish = `::<${*element}, [${axis_run(shape, 0, axis)}], ${shape.axes[axis].name}, ${*cut}, [${axis_run(
+        shape,
+        axis + 1,
+        shape.rank(),
+    )}]>`;
+    return `slice_axis${turbofish}(${*operand}, ${axis}, ${start}, ${length}, ${step})`;
+}
+
+/// `operand`, whose axes are `node`'s first input's, laid out as `node`'s output.
+fn reshaped(node: &Node, checked: &Checked, operand: &String, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let element = checked.primitives.get(node.inputs[0]).unwrap();
     let from = checked.shapes.get(node.inputs[0]).unwrap();
     let to = checked.shapes.get(node.outputs[0]).unwrap();
-    let extents = symbols.spell_all(&extents_of(&to))?;
+    let extents = symbols.spell_shape(&to)?;
     return Result::Ok(`reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${extents})`);
 }
 
@@ -1082,7 +1084,7 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
     if checked.shapes.get(node.outputs[0]).unwrap().rank() == x.rank() {
         return Result::Ok(kept);
     }
-    return reshaped(node, checked, &KERNEL_ELEMENT, &`&${kept}`, symbols);
+    return reshaped(node, checked, &`&${kept}`, symbols);
 }
 
 /// The literal operand `index` folds into a closure as: a `Gemm` bias, or an
@@ -1133,7 +1135,7 @@ fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operan
     }
     let [a, b, left, right] = binary_call(node, shapes, exprs);
     let body = binary_body(&op, &"x", &"y");
-    let trailing = settled(trailing_axes(node, left.rank(), right.rank())).unwrap_or(0);
+    let trailing = settled(trailing_axes(node, left.rank(), right.rank()));
     if trailing > 0 {
         return Result::Ok(aligned_call(&a, &b, &left, &right, trailing, &body));
     }
@@ -1152,8 +1154,7 @@ fn window_call(
     let x = shapes.get(node.inputs[0]).unwrap();
     let y = shapes.get(node.outputs[0]).unwrap();
     // Stage 0 owed these already.
-    let mut restated: List<Condition> = [];
-    let window = settled(window_of(node, &x, shapes, &mut restated));
+    let window = settled(window_of(node, &x, shapes, &mut []));
     let pads = symbols.spell_polys(&window.pads)?;
     let output = symbols.spell_polys(&window.output)?;
     let geometry = `&Window { kernel: ${window.kernel}, strides: ${window.strides}, dilations: ${window.dilations}, pads: ${pads}, output: ${output} }`;
@@ -1166,17 +1167,17 @@ fn window_call(
     let w = shapes.get(node.inputs[1]).unwrap();
     let group = settled(conv_group(node, &w));
     // A grouped weight's channel axis is its own, a group's share of the input's.
-    let [kernel, channels, grouping] = if group == 1 {
-        ["conv", x.axes[1].name, ""];
+    let [kernel, biased, channels, grouping] = if group == 1 {
+        ["conv", "conv_bias", x.axes[1].name, ""];
     } else {
-        ["conv_grouped", `${x.axes[1].name}, ${w.axes[1].name}`, `${group}, `];
+        ["conv_grouped", "conv_grouped_bias", `${x.axes[1].name}, ${w.axes[1].name}`, `${group}, `];
     };
     let spatial = `[${spatial_axes(&x)}], [${spatial_axes(&w)}], [${spatial_axes(&y)}]`;
     let turbofish = `::<${x.axes[0].name}, ${channels}, ${w.axes[0].name}, ${spatial}>`;
     let weight = exprs.reference(&node.inputs[1]);
     if has_bias(node) {
         let bias = exprs.reference(&node.inputs[2]);
-        return Result::Ok(`${kernel}_bias${turbofish}(${input}, ${weight}, ${bias}, ${grouping}${geometry})`);
+        return Result::Ok(`${biased}${turbofish}(${input}, ${weight}, ${bias}, ${grouping}${geometry})`);
     }
     return Result::Ok(`${kernel}${turbofish}(${input}, ${weight}, ${grouping}${geometry})`);
 }
@@ -1218,10 +1219,8 @@ fn float_literal(value: f32) -> String {
 /// which is the shorter where their shared axes are one list.
 fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, out: &Shape, body: &String) -> String {
     if !shared_axes_agree(left, right) {
-        let [x, y] = [
-            under_axes_of(a, left, out, &KERNEL_ELEMENT),
-            under_axes_of(b, right, out, &KERNEL_ELEMENT),
-        ];
+        let x = under_axes_of(a, left, out, &KERNEL_ELEMENT);
+        let y = under_axes_of(b, right, out, &KERNEL_ELEMENT);
         return `zip(${x}, ${y}, |x, y| ${body})`;
     }
     if left.rank() == right.rank() {
@@ -1251,10 +1250,8 @@ fn aligned_call(a: &String, b: &String, left: &Shape, right: &Shape, trailing: i
 /// extents broadcast and every elementwise kernel stretches an extent of 1, so
 /// an axis of 1 named apart from the one it meets differs in its type alone.
 fn under_axes_of(operand: &String, shape: &Shape, out: &Shape, element: &String) -> String {
-    let [own, theirs] = [
-        axis_list(shape),
-        axis_list(out),
-    ];
+    let own = axis_list(shape);
+    let theirs = axis_list(out);
     if own == theirs {
         return *operand;
     }
@@ -1304,8 +1301,8 @@ fn is_identity(perm: &List<i32>) -> bool {
 }
 
 /// Whether one axis of a kernel's signature can stand for both of these. Stage
-/// 0 stretches an extent of 1 and `matmul` does not, so the name is not enough.
-/// What stage 0 owed for the two to meet, `forward` checks.
+/// 0 stretches an extent of 1 and `matmul` does not, so the name is not enough;
+/// a condition stage 0 owed for the two to meet is one `forward` checks.
 fn same_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name && left.extent.agreement(&right.extent) matches { Some(_) };
 }
@@ -1313,7 +1310,7 @@ fn same_axis(left: &Axis, right: &Axis) -> bool {
 /// `same_axis` for an elementwise kernel, which stretches an extent of 1.
 fn stretchable_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name
-        && (same_axis(left, right)
+        && (left.extent.agreement(&right.extent) matches { Some(_) }
             || left.extent.oneness() matches { Some(_) }
             || right.extent.oneness() matches { Some(_) });
 }

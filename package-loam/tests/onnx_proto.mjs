@@ -75,6 +75,9 @@ function attribute(name, value) {
   return [named, [3, value], [20, 2]];
 }
 
+// A node as `nodeProto` takes it, `outputs` one name or a list of them.
+export const node = (op, inputs, outputs, attrs = {}) => ({ op, inputs, outputs: [outputs].flat(), attrs });
+
 // NodeProto: input = 1, output = 2, op_type = 4, attribute = 5. `attrs` maps
 // each attribute's name to its value, in the order they are written.
 export function nodeProto({ op, inputs, outputs, attrs }) {

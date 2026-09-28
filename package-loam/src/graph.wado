@@ -58,6 +58,7 @@ pub fn static_extents(rank: &Rank) -> Option<List<i32>> {
     return Option::Some(extents);
 }
 
+/// A named tensor the graph declares: an input, an output, or an initializer.
 pub struct ValueInfo {
     pub name: String,
     pub dtype: String,
@@ -147,19 +148,19 @@ pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) 
 pub struct Known {
     pub extents: List<i32>,
     pub elements: Elements,
+    /// The ONNX element type the elements are stored as.
     pub stored: Stored = Stored::Computed,
 }
 
 /// The ONNX element type a known tensor is stored as, where it is narrower
-/// than the type stage 0 computes its elements in.
+/// than the type stage 0 computes its elements in. A half is computed in f32,
+/// which holds each of its values exactly.
 pub enum Stored {
     /// int64, float or bool, each computed as it is stored.
     Computed,
     /// Held in `i64`, but wrapping at 32 bits where int64 does not.
     Int32,
-    /// Computed in f32, which holds each of its values exactly.
     Float16,
-    /// Computed in f32, which holds each of its values exactly.
     BFloat16,
 }
 
@@ -218,6 +219,7 @@ impl Elements {
 }
 
 impl Known {
+    /// How many elements the tensor holds.
     pub fn len(&self) -> i32 {
         return match &self.elements {
             Ints(v) => v.len(),
@@ -307,6 +309,7 @@ fn float_of(text: &String) -> Result<f32, String> {
     return Result::Ok(v);
 }
 
+/// One operator application: what it reads, what it writes, and its attributes.
 pub struct Node {
     pub op: String,
     pub outputs: List<String>,
@@ -329,6 +332,7 @@ impl Node {
         return `${self.name()} = ${self.op}`;
     }
 
+    /// The attribute `name`, where the node carries it.
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
             if a.name.as_str_slice() == name.as_str_slice() {
@@ -422,17 +426,17 @@ pub fn is_binary_elementwise(op: &String) -> bool {
 }
 
 /// How many of A's axes follow B's where arithmetic aligns B at A's `axis`, or
-/// `None` where it aligns B at A's end, as numpy does.
-pub fn trailing_axes(node: &Node, a_rank: i32, b_rank: i32) -> Result<Option<i32>, String> {
+/// 0 where it aligns B at A's end, as numpy does.
+pub fn trailing_axes(node: &Node, a_rank: i32, b_rank: i32) -> Result<i32, String> {
     assert is_binary_elementwise(&node.op);
     if node.attr("axis") matches { None } {
-        return Result::Ok(null);
+        return Result::Ok(0);
     }
     let axis = node.int_attr("axis", 0).map_err(|e| `${e}`)?;
     if !(0 <= axis <= (a_rank - b_rank) as i64) {
         return Result::Err(`attribute axis is ${axis}, and B's ${b_rank} axes from there pass A's ${a_rank}`);
     }
-    return Result::Ok(Option::Some(a_rank - b_rank - axis as i32));
+    return Result::Ok(a_rank - b_rank - axis as i32);
 }
 
 /// A model neither reader can take, and why.

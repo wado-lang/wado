@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
-import { FLOAT, INT32, INT64, modelProto, nodeProto, tensorProto, text, valueInfo } from '../tests/onnx_proto.mjs';
+import { FLOAT, INT32, INT64, modelProto, node, nodeProto, tensorProto, text, valueInfo } from '../tests/onnx_proto.mjs';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
 
@@ -38,10 +38,9 @@ const scalars = {
   ScalarMinusTwo: -2n,
 };
 
-// Every case reads `S = Shape(X)`, and the nodes it lists after that.
-const node = (op, inputs, outputs, attrs = {}) => ({ op, inputs, outputs: [outputs].flat(), attrs });
 // `N` as a scalar: a scalar index gathers one element out of `S`, dropping the axis.
 const length = node('Gather', ['S', 'ScalarZero'], 'N');
+// Every case reads `S = Shape(X)`, and the nodes it lists after that.
 const cases = [
   ['SliceToLength', [node('Slice', ['M', 'Zero', 'S'], 'SliceToLength')]],
   ['SliceFromMinusLength', [
