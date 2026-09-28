@@ -29,9 +29,18 @@ export fn run() with Stdout {
     let mut a = builtin::black_box(5);
     let read_first = P { y: a, x: bump(&mut a) };
     println(`${read_first.x} ${read_first.y}`);
+    // `base` is read before the field that overwrites it.
+    let mut b = P { x: 1, y: builtin::black_box(2) };
+    let from_base = P { ..b, x: reset(&mut b) };
+    println(`${from_base.x} ${from_base.y}`);
+}
+
+fn reset(p: &mut P) -> i32 {
+    *p = P { x: 9, y: 9 };
+    return 1;
 }
 
 __DATA__
 {
-    "stdout": "2\n1\n3\nbase\n4\n3\n7\n15 5\n"
+    "stdout": "2\n1\n3\nbase\n4\n3\n7\n15 5\n1 2\n"
 }
