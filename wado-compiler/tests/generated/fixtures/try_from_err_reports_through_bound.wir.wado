@@ -110,7 +110,10 @@ fn "try_from_err_reports_through_bound.wado/try_from_err_reports_through_bound.w
     let new_used_42: i32;
     let start_43: i32;
     let $sroa_slot_47: ref null "try_from_err_reports_through_bound.wado//TooBig";
-    return $sroa_slot_47 = ref.null none, $sroa_slot_47 = struct.new "try_from_err_reports_through_bound.wado//TooBig" { limit: 10 }, e = ref.as_non_null($sroa_slot_47), $local_2_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }, $local_2_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, new_used_24 = 0 + 5, if @unlikely(new_used_24 > builtin::array_len($local_2_9.repr)) {
+    $sroa_slot_47 = ref.null none;
+    $sroa_slot_47 = struct.new "try_from_err_reports_through_bound.wado//TooBig" { limit: 10 };
+    e = ref.as_non_null($sroa_slot_47);
+    return $local_2_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }, $local_2_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, new_used_24 = 0 + 5, if @unlikely(new_used_24 > builtin::array_len($local_2_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_9, new_used_24);
     }, start_25 = $local_2_9.used, $local_2_9.used = new_used_24, builtin::array_copy<u8>($local_2_9.repr, start_25, global:try_from_err_reports_through_bound.wado::$const_obj_4, 0, 5), "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(e.limit, $local_2_9), $inline_core_prelude_string_wado_String__internal_push_string_16: block {
@@ -300,10 +303,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+    new_used_66 = self.used + digit_count;
+    if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
+    }
+    start_67 = self.used;
+    self.used = new_used_66;
+    return start_67;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {

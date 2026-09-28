@@ -595,7 +595,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<t
     start_94 = self_81.used;
     self_81.used = new_used_93;
     builtin::array_copy<u8>(self_81.repr, start_94, global:core:prelude/traits.wado::$const_obj_20, 0, 2);
-    "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/A^core:prelude/traits.wado/Inspect::inspect"(v_97 = v.a; v_97, f);
+    v_97 = v.a;
+    "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/A^core:prelude/traits.wado/Inspect::inspect"(v_97, f);
     self_98 = f.buf;
     new_used_110 = self_98.used + 1;
     if @unlikely(new_used_110 > builtin::array_len(self_98.repr)) {
@@ -650,7 +651,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<t
     start_199 = self_186.used;
     self_186.used = new_used_198;
     builtin::array_copy<u8>(self_186.repr, start_199, global:core:prelude/traits.wado::$const_obj_20, 0, 2);
-    "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/B^core:prelude/traits.wado/Inspect::inspect"(v_202 = v.b; v_202, f);
+    v_202 = v.b;
+    "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/B^core:prelude/traits.wado/Inspect::inspect"(v_202, f);
     self_203 = f.buf;
     new_used_215 = self_203.used + 1;
     if @unlikely(new_used_215 > builtin::array_len(self_203.repr)) {
@@ -1172,7 +1174,8 @@ fn "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/Holder^core:
     start_87 = self_74.used;
     self_74.used = new_used_86;
     builtin::array_copy<u8>(self_74.repr, start_87, global:core:prelude/traits.wado::$const_obj_20, 0, 2);
-    "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/A^core:prelude/traits.wado/Inspect::inspect"(v_90 = self.a; v_90, f);
+    v_90 = self.a;
+    "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/A^core:prelude/traits.wado/Inspect::inspect"(v_90, f);
     self_92 = f.buf;
     new_used_104 = self_92.used + 2;
     if @unlikely(new_used_104 > builtin::array_len(self_92.repr)) {
@@ -1200,7 +1203,8 @@ fn "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/Holder^core:
     start_153 = self_140.used;
     self_140.used = new_used_152;
     builtin::array_copy<u8>(self_140.repr, start_153, global:core:prelude/traits.wado::$const_obj_20, 0, 2);
-    "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/B^core:prelude/traits.wado/Inspect::inspect"(v_156 = self.b; v_156, f);
+    v_156 = self.b;
+    "core:prelude/traits.wado/trait_argument_synthesized_shapes.wado/B^core:prelude/traits.wado/Inspect::inspect"(v_156, f);
     self_172 = f.buf;
     new_used_184 = self_172.used + 2;
     if @unlikely(new_used_184 > builtin::array_len(self_172.repr)) {
@@ -1779,10 +1783,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_49.repr, start_63, prefix.repr, 0, n_57);
             };
         }
-        return self_65 = self.buf, new_used_67 = self_65.used + digit_count, if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
+        self_65 = self.buf;
+        new_used_67 = self_65.used + digit_count;
+        if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
-        }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
+        }
+        start_68 = self_65.used;
+        self_65.used = new_used_67;
+        return start_68;
     }
     padding = $load_2 - content_len;
     if self.zero_pad {
@@ -1839,10 +1848,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 continue l159;
             };
         };
-        return self_120 = self.buf, new_used_122 = self_120.used + digit_count, if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
+        self_120 = self.buf;
+        new_used_122 = self_120.used + digit_count;
+        if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_120, new_used_122);
-        }, start_123 = self_120.used, self_120.used = new_used_122, start_123;
+        }
+        start_123 = self_120.used;
+        self_120.used = new_used_122;
+        return start_123;
     }
     align = self.align;
     if align == 0 {
@@ -2020,10 +2034,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_273.repr, start_287, prefix.repr, 0, n_281);
             };
         }
-        return self_289 = self.buf, new_used_291 = self_289.used + digit_count, if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
+        self_289 = self.buf;
+        new_used_291 = self_289.used + digit_count;
+        if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_289, new_used_291);
-        }, start_292 = self_289.used, self_289.used = new_used_291, start_292;
+        }
+        start_292 = self_289.used;
+        self_289.used = new_used_291;
+        return start_292;
     }
 }
 

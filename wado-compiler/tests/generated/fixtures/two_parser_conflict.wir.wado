@@ -301,7 +301,8 @@ fn "two_parser_conflict.wado/$cm_export__$test_0_two_parsers_with_same_named_typ
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
     let elements: ref "Array<./sub/two_parser_b.wado/CstChild>";
-    $v2 = "two_parser_conflict.wado/count_b"($v0 = struct.new "./sub/two_parser_b.wado//CstNode" { kind: 0, span: struct.new "./sub/two_parser_b.wado//Span" { start: 0, end: 0 }, children: ref.as_non_null(elements = array.new_fixed<ref "./sub/two_parser_b.wado//CstChild">(); struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: elements, used: 0 }), flags: 0, alt: -1 }; $v0);
+    $v0 = struct.new "./sub/two_parser_b.wado//CstNode" { kind: 0, span: struct.new "./sub/two_parser_b.wado//Span" { start: 0, end: 0 }, children: ref.as_non_null(elements = array.new_fixed<ref "./sub/two_parser_b.wado//CstChild">(); struct.new "core:prelude//List<./sub/two_parser_b.wado/CstChild>" { repr: elements, used: 0 }), flags: 0, alt: -1 };
+    $v2 = "two_parser_conflict.wado/count_b"($v0);
     if @unlikely(($v2 == 0) == 0) {
         cold_path;
         $local_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(205);
@@ -752,7 +753,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<.
     start_241 = self_228.used;
     self_228.used = new_used_240;
     builtin::array_copy<u8>(self_228.repr, start_241, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
-    "core:prelude/traits.wado/./sub/two_parser_b.wado/Span^core:prelude/traits.wado/Inspect::inspect"(v_244 = v.span; v_244, f);
+    v_244 = v.span;
+    "core:prelude/traits.wado/./sub/two_parser_b.wado/Span^core:prelude/traits.wado/Inspect::inspect"(v_244, f);
     self_245 = f.buf;
     new_used_257 = self_245.used + 1;
     if @unlikely(new_used_257 > builtin::array_len(self_245.repr)) {
@@ -808,7 +810,8 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<.
     start_346 = self_333.used;
     self_333.used = new_used_345;
     builtin::array_copy<u8>(self_333.repr, start_346, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
-    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/two_parser_b.wado/CstChild>^core:prelude/traits.wado/Inspect::inspect"(v_349 = v.children; v_349, f);
+    v_349 = v.children;
+    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/two_parser_b.wado/CstChild>^core:prelude/traits.wado/Inspect::inspect"(v_349, f);
     self_350 = f.buf;
     new_used_362 = self_350.used + 1;
     if @unlikely(new_used_362 > builtin::array_len(self_350.repr)) {
@@ -2045,7 +2048,8 @@ fn "core:prelude/traits.wado/./sub/two_parser_b.wado/CstNode^core:prelude/traits
     start_195 = self_182.used;
     self_182.used = new_used_194;
     builtin::array_copy<u8>(self_182.repr, start_195, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
-    "core:prelude/traits.wado/./sub/two_parser_b.wado/Span^core:prelude/traits.wado/Inspect::inspect"(v_198 = self.span; v_198, f);
+    v_198 = self.span;
+    "core:prelude/traits.wado/./sub/two_parser_b.wado/Span^core:prelude/traits.wado/Inspect::inspect"(v_198, f);
     field_8 = global:core:prelude/traits.wado::$const_obj_18.2;
     self_200 = f.buf;
     new_used_212 = self_200.used + 2;
@@ -2074,7 +2078,8 @@ fn "core:prelude/traits.wado/./sub/two_parser_b.wado/CstNode^core:prelude/traits
     start_261 = self_248.used;
     self_248.used = new_used_260;
     builtin::array_copy<u8>(self_248.repr, start_261, global:core:prelude/traits.wado::$const_obj_6, 0, 2);
-    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/two_parser_b.wado/CstChild>^core:prelude/traits.wado/Inspect::inspect"(v_264 = self.children; v_264, f);
+    v_264 = self.children;
+    "core:prelude/list.wado/core:prelude/list.wado/List<./sub/two_parser_b.wado/CstChild>^core:prelude/traits.wado/Inspect::inspect"(v_264, f);
     field_9 = global:core:prelude/traits.wado::$const_obj_18.3;
     self_266 = f.buf;
     new_used_278 = self_266.used + 2;
@@ -2281,10 +2286,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_49.repr, start_63, prefix.repr, 0, n_57);
             };
         }
-        return self_65 = self.buf, new_used_67 = self_65.used + digit_count, if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
+        self_65 = self.buf;
+        new_used_67 = self_65.used + digit_count;
+        if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
-        }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
+        }
+        start_68 = self_65.used;
+        self_65.used = new_used_67;
+        return start_68;
     }
     padding = $load_2 - content_len;
     if self.zero_pad {
@@ -2341,10 +2351,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 continue l207;
             };
         };
-        return self_120 = self.buf, new_used_122 = self_120.used + digit_count, if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
+        self_120 = self.buf;
+        new_used_122 = self_120.used + digit_count;
+        if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_120, new_used_122);
-        }, start_123 = self_120.used, self_120.used = new_used_122, start_123;
+        }
+        start_123 = self_120.used;
+        self_120.used = new_used_122;
+        return start_123;
     }
     align = self.align;
     if align == 0 {
@@ -2522,10 +2537,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_273.repr, start_287, prefix.repr, 0, n_281);
             };
         }
-        return self_289 = self.buf, new_used_291 = self_289.used + digit_count, if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
+        self_289 = self.buf;
+        new_used_291 = self_289.used + digit_count;
+        if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_289, new_used_291);
-        }, start_292 = self_289.used, self_289.used = new_used_291, start_292;
+        }
+        start_292 = self_289.used;
+        self_289.used = new_used_291;
+        return start_292;
     }
 }
 
@@ -2743,9 +2763,11 @@ fn "core:prelude/traits.wado/./sub/two_parser_b.wado/CstChild^core:prelude/trait
         start_58 = self_45.used;
         self_45.used = new_used_57;
         builtin::array_copy<u8>(self_45.repr, start_58, case_4.case_name.repr, 0, 5);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(v_62 = self.value; if @unlikely(v_62.discriminant != 0) {
+        v_62 = self.value;
+        if @unlikely(v_62.discriminant != 0) {
             unreachable;
-        }; ref.cast "./sub/two_parser_b.wado//CstChild::Token"(v_62).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(ref.cast "./sub/two_parser_b.wado//CstChild::Token"(v_62).payload_0, f);
     }
     case_5 = global:core:prelude/traits.wado::$const_obj_76.1;
     if self.value.discriminant == 1 {
@@ -2776,9 +2798,11 @@ fn "core:prelude/traits.wado/./sub/two_parser_b.wado/CstChild^core:prelude/trait
         start_113 = self_100.used;
         self_100.used = new_used_112;
         builtin::array_copy<u8>(self_100.repr, start_113, case_5.case_name.repr, 0, 7);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(v_117 = self.value; if @unlikely(v_117.discriminant != 1) {
+        v_117 = self.value;
+        if @unlikely(v_117.discriminant != 1) {
             unreachable;
-        }; ref.cast "./sub/two_parser_b.wado//CstChild::Missing"(v_117).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(ref.cast "./sub/two_parser_b.wado//CstChild::Missing"(v_117).payload_0, f);
     }
     case_6 = global:core:prelude/traits.wado::$const_obj_76.2;
     if self.value.discriminant == 2 {
@@ -2809,9 +2833,11 @@ fn "core:prelude/traits.wado/./sub/two_parser_b.wado/CstChild^core:prelude/trait
         start_168 = self_155.used;
         self_155.used = new_used_167;
         builtin::array_copy<u8>(self_155.repr, start_168, case_6.case_name.repr, 0, 7);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(v_172 = self.value; if @unlikely(v_172.discriminant != 2) {
+        v_172 = self.value;
+        if @unlikely(v_172.discriminant != 2) {
             unreachable;
-        }; ref.cast "./sub/two_parser_b.wado//CstChild::Skipped"(v_172).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar"(ref.cast "./sub/two_parser_b.wado//CstChild::Skipped"(v_172).payload_0, f);
     }
     case_7 = global:core:prelude/traits.wado::$const_obj_76.3;
     if self.value.discriminant == 3 {
@@ -2842,9 +2868,11 @@ fn "core:prelude/traits.wado/./sub/two_parser_b.wado/CstChild^core:prelude/trait
         start_223 = self_210.used;
         self_210.used = new_used_222;
         builtin::array_copy<u8>(self_210.repr, start_223, case_7.case_name.repr, 0, 4);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<./sub/two_parser_b.wado/CstNode>"(v_227 = self.value; if @unlikely(v_227.discriminant != 3) {
+        v_227 = self.value;
+        if @unlikely(v_227.discriminant != 3) {
             unreachable;
-        }; ref.cast "./sub/two_parser_b.wado//CstChild::Node"(v_227).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<./sub/two_parser_b.wado/CstNode>"(ref.cast "./sub/two_parser_b.wado//CstChild::Node"(v_227).payload_0, f);
     }
 }
 
