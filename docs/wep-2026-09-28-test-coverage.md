@@ -6,6 +6,10 @@
 package author has no way to find the function no test calls, the `match` arm
 no input reaches, or the error path a `?` never took.
 
+The first user is the standard library. `mise run test-stdlib` runs its tests,
+and every Wado program runs its code, so the standard library should be fully
+covered: every region run by some test, or marked as one no test can reach.
+
 The compiler has what coverage needs, but in pieces:
 
 - Every AST, TIR and NIR node carries a `Span`: byte range, line and column.
@@ -111,13 +115,26 @@ has three consequences:
 - Every copy the pipeline makes of a region keeps its probe with the same `id`.
   An inlined body, a generic function's instances and an unrolled pack loop all
   report the one region they came from.
-- Only packages being measured are instrumented. The standard library is
-  elaborated once per worker and snapshotted; it is never measured, so the
-  snapshot stays as it is.
+- Only packages being measured are instrumented.
 - The optimizer sees probes and never needs to know what they mean.
 
 `id` is local to a module. After link, each module's ids are offset by the
 count before it, so a probe carries one global index.
+
+### The stdlib snapshot is built once per instrumentation
+
+Each worker thread elaborates the standard library once and seeds every compile
+from that snapshot, reified TIR included. Probes inserted at reify are therefore
+part of the snapshot, so the snapshot is keyed by whether the standard library
+is instrumented.
+
+One run can need both. Measuring the standard library instruments its
+snapshot, but a program `core:eval` compiles in the same process is never
+measured and has no import for its probes to call. It seeds from the plain one.
+
+A compile whose entry is itself a stdlib file (`lib/core/json.wado`) reparses
+that module and does not use the snapshot for it. Its plan is the same, since
+the plan depends on the source text alone.
 
 ### A probe is an effect, so the optimizer keeps what ran
 
@@ -135,7 +152,9 @@ then remove a probe that could run:
 
 Coverage is therefore counted from source, and it does not depend on `-O`. The
 test suite checks that invariant (see Testing). The price is speed: an
-instrumented build runs slower than the plain one. Timeouts stay as declared,
+instrumented build runs slower than the plain one, most of all when the
+standard library is measured and every prelude call holds a probe. Timeouts
+stay as declared,
 so a test near its limit may need a larger `#[timeout_ms]` under coverage.
 
 ### A probe tells the host once, the first time it runs
@@ -171,7 +190,9 @@ the module.
 The compiler writes the plan as a custom section, `org.wado-lang.coverage`,
 beside `org.wado-lang.test-names`. For each instrumented module it holds:
 
-- the module's path, relative to the package root;
+- the module's path, relative to the package root; a `core:` module is named
+  by its file in the stdlib package, so `core:json` imported by a test and
+  `lib/core/json.wado` compiled as an entry are one module;
 - a hash of its source text;
 - every region: its global id, kind, parent function, and span;
 - every countable line, with the region that holds it.
@@ -188,14 +209,45 @@ each of them contributes its plan.
 
 ### What is measured
 
-By default: every module of the package under test (`EntryPoint` and `Local`).
-`--coverage-include=deps` adds `Dependency` and `Remote` modules. Kiln output
-(`Redirected`) and the standard library are never measured.
+The package under test: its `EntryPoint` and `Local` modules, and its `core:`
+modules when that package is the standard library (`wado test --coverage
+wado-compiler`). `--coverage-include=deps` adds `Dependency` and `Remote`
+modules. Kiln output (`Redirected`) is never measured, and neither is the
+standard library under another package's tests.
+
+Within the standard library, two kinds of module have no plan:
+
+- a `#![wasm_module]` module such as `core:allocator`, compiled into a core
+  module of its own that has no import for a probe to call;
+- a Wasm asset such as `libm.wat`, which is not Wado source.
+
+A probe must also never run where the Canonical ABI forbids calling an import:
+inside `realloc` and `post-return`. Both reach only the allocator and
+synthesized glue, which carry no probes. The WIR lowering asserts that no
+function they reach holds one.
 
 `#[coverage(off)]` on a `fn`, an `impl` or a module (`#![coverage(off)]`)
 removes it from the plan, as Rust's attribute of the same name does. It is for
 code that cannot be reached from a test, such as a `run` entry point that only
-the CLI world calls.
+the CLI world calls. It is the only way to exempt code, so every exemption is
+visible where the code is.
+
+### The standard library gates on a baseline
+
+`--coverage-baseline <file>` fails the run on a difference between the regions
+left uncovered and the ones the file lists. A new uncovered region fails, and
+so does a listed region that is now covered, so the file only shrinks. It is the
+pattern `scripts/rust-inline-paths.json` already follows.
+
+An entry names its region by path, function and position within the function,
+not by line, so an edit elsewhere in the file leaves it valid.
+
+A CI job runs the stdlib tests with `--coverage` and the stdlib's baseline.
+Coverage does not depend on `-O`, so one optimization level answers for all.
+The baseline starts as whatever the first run leaves uncovered, and the work
+toward 100% is emptying it: a test for each region that can run, and
+`#[coverage(off)]` for each that cannot. Once it is empty, 100% is what the gate
+holds.
 
 ### Testing
 
@@ -245,17 +297,19 @@ host call on every run is too slow for loops.
 4. [ ] The runner: collecting hits, merging plans, the summary, LCOV and JSON.
 5. [ ] Fixtures with `uncovered_lines` and `uncovered_branches`, and the
        `-O0`/`-O3` corpus check.
-6. [ ] Adoption: run `--coverage` over one package in CI, such as
-       `package-gale`, and publish its LCOV.
+6. [ ] The standard library: the snapshot keyed by instrumentation,
+       `--coverage-baseline`, and the CI job with its first baseline.
+7. [ ] 100% for the standard library: the baseline emptied.
 
 ## Known gaps
 
 - [ ] A trap in the middle of a region marks the whole region as run. Only a
       statement that can leave its block starts a new region, and any call can
-      trap.
+      trap. A 100% report can therefore include a statement no test ran to its
+      end.
 - [ ] Hit or not only, no execution counts. `FNDA` and `DA` report `1` or `0`.
-- [ ] The standard library cannot be measured. Its snapshot is elaborated
-      without probes.
+- [ ] `core:allocator` and the other `#![wasm_module]` modules are not
+      measured.
 - [ ] Kiln generators run at compile time and are not measured, nor is a
       program `core:eval` compiles.
 - [ ] `wado run` and `wado serve` have no `--coverage`.
