@@ -95,7 +95,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: String,
         bounds: Vec<DeclaredBound>,
     ) -> TypeId {
-        let hole = self.mint_infer_var();
+        let hole = self.mint_infer_var_named(&param_name);
         self.attach_infer_var_diag(hole, span, message);
         if !bounds.is_empty() {
             self.infer_holes
