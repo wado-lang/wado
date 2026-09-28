@@ -109,6 +109,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, TypeId) {
+        // A comparison is `bool` whatever its operands are, so the type expected
+        // of it says nothing about them.
+        let expected_type = if op.is_comparison() {
+            None
+        } else {
+            expected_type
+        };
         let left_is_numeric_literal = is_numeric_literal_expr(left_ast);
         let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
 
@@ -916,10 +923,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
-            expected_type.and_then(|expected| self.tysys.pointee_of(expected))
-        } else {
-            None
+        let inner_expected = match unary.op {
+            UnaryOp::Ref | UnaryOp::MutRef => {
+                expected_type.and_then(|expected| self.tysys.pointee_of(expected))
+            }
+            // A primitive `-x` / `~x` has its operand's type, so the operand is
+            // expected to be what the result is: `~0x00FF_FFFF_FFFF_FFFF` is an
+            // `i64` where one is expected, as `0x00FF_FFFF_FFFF_FFFF ^ 1` is.
+            UnaryOp::Neg | UnaryOp::BitNot => expected_type
+                .filter(|&expected| is_primitive_literal_target(&self.tysys.type_table.borrow(), expected)),
+            UnaryOp::Not | UnaryOp::Deref => None,
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the
         // subscript resolves through `IndexRefMut` and carries the mutability in

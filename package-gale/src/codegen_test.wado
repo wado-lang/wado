@@ -534,6 +534,8 @@ X : 'x' ; Y : 'y' ; Z : 'z' ; W : 'w' ;
     assert output.contains("fn scan_c("), output;
 }
 
+// Generating SQLite alone takes about the default five seconds.
+#[timeout_ms(30000)]
 test "every emitted FOLLOW mask is named by a call" {
     let output = gen_source(#include_str("../tests/grammars/SQLite.g4"));
     let mut masks = 0;
@@ -1128,6 +1130,179 @@ test "a nullable callee yields a token to the caller loop that follows it" {
     // only another iteration of the caller's loop takes.
     let got = parses(LOOP_AFTER_NULLABLE_CALL_G4, "s", ["x y{", "x .y {", "x > y {", "x {"]);
     assert got == "x y{ => (s (a x) ws (c   ws) (a y) ws {)\nx .y { => (s (a x) ws (c   ws) (a . y) (ws  ) {)\nx > y { => (s (a x) (ws  ) (c > (ws  )) (a y) (ws  ) {)\nx { => (s (a x) (ws  ) {)\n", got;
+}
+
+global OPTIONAL_TOKEN_ALSO_NAME_G4: String = "
+grammar T;
+s : '{' m (';' m)* '}' ;
+m : RO? name '?'? (':' ID)? ;
+name : ID | RO ;
+RO : 'readonly' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "an optional token that can also start what follows it is taken on the second token" {
+    // TypeScript's `ReadOnly? propertyName`, where `readonly` is a name too.
+    let got = parses(OPTIONAL_TOKEN_ALSO_NAME_G4, "s", ["{readonly id: x}", "{readonly: x}", "{readonly}", "{readonly id}", "{readonly readonly}", "{a; readonly b: x}"]);
+    assert got == "{readonly id: x} => (s { (m readonly (name id) : x) })\n{readonly: x} => (s { (m (name readonly) : x) })\n{readonly} => (s { (m (name readonly)) })\n{readonly id} => (s { (m readonly (name id)) })\n{readonly readonly} => (s { (m readonly (name readonly)) })\n{a; readonly b: x} => (s { (m (name a)) ; (m readonly (name b) : x) })\n", got;
+}
+
+global OPTIONAL_SEPARATOR_AFTER_LIST_G4: String = "
+grammar T;
+s : '{' body? '}' ;
+body : list ';'? ;
+list : m (';' m)* ;
+m : RO? name (':' ID)? ;
+name : ID | RO ;
+RO : 'readonly' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a probe accepts a token an optional suffix of its caller can take" {
+    // TypeScript's `typeBody : typeMemberList (SemiColon | ',')?`: the `;`
+    // after the last member is the suffix's, which the gate does not spell.
+    let got = parses(OPTIONAL_SEPARATOR_AFTER_LIST_G4, "s", ["{readonly id: x;}", "{readonly id: x}", "{a; readonly b;}", "{readonly;}"]);
+    assert got == "{readonly id: x;} => (s { (body (list (m readonly (name id) : x)) ;) })\n{readonly id: x} => (s { (body (list (m readonly (name id) : x))) })\n{a; readonly b;} => (s { (body (list (m (name a)) ; (m readonly (name b))) ;) })\n{readonly;} => (s { (body (list (m (name readonly))) ;) })\n", got;
+}
+
+global TAIL_OPTIONAL_RECURSION_G4: String = "
+grammar T;
+s : e ';' ;
+e : e '(' ')' | ID e? | '(' ')' '=>' ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a tail optional enters only where its body can match" {
+    // TypeScript's `identifierName singleExpression?`: `(` may begin an arrow
+    // function, and in `f()` it begins the call's arguments instead.
+    let got = parses(TAIL_OPTIONAL_RECURSION_G4, "s", ["f();", "f () => x;", "f g;", "f g();"]);
+    assert got == "f(); => (s (e (e f) ( )) ;)\nf () => x; => (s (e f (e ( ) => x)) ;)\nf g; => (s (e f (e g)) ;)\nf g(); => (s (e f (e (e g) ( ))) ;)\n", got;
+}
+
+global TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4: String = "
+grammar T;
+s : 'x' '=' e ';' ;
+e : e '(' ')' | ID e? | ID '.' ID | '(' ')' '=>' ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a tail optional in a contested atom alternative sees the suffix loop" {
+    // TypeScript's `l: X = f();` in a class body: the caller's `;` cannot
+    // start at `(`, but the call suffix can, so `(` is no arrow function.
+    let got = parses(TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4, "s", ["x = f();", "x = f () => y;", "x = a.b();", "x = f g();"]);
+    assert got == "x = f(); => (s x = (e (e f) ( )) ;)\nx = f () => y; => (s x = (e f (e ( ) => y)) ;)\nx = a.b(); => (s x = (e (e a . b) ( )) ;)\nx = f g(); => (s x = (e f (e (e g) ( ))) ;)\n", got;
+}
+
+global TAIL_OPTIONAL_BEFORE_ITS_FOLLOW_G4: String = "
+grammar T;
+s : '(' e ID e ')' ;
+e : ID e? ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a tail optional whose follow also matches enters while entering stays viable" {
+    // TypeScript's `for (const x of list)`: `x of` starts the continuation
+    // `identifier expressionSequence`, and ANTLR4 still enters at `x`.
+    let got = parses(TAIL_OPTIONAL_BEFORE_ITS_FOLLOW_G4, "s", ["(a b c)", "(a b c d)", "(a b c d e)"]);
+    assert got == "(a b c) => (s ( (e a) b (e c) ))\n(a b c d) => (s ( (e a (e b)) c (e d) ))\n(a b c d e) => (s ( (e a (e b (e c))) d (e e) ))\n", got;
+}
+
+global LOOP_BODY_CALL_G4: String = "
+grammar T;
+s : '{' cs? ('default' ':' cs?)? '}' ;
+cs : c+ ;
+c : 'case' ID ':' st* ;
+st : ID ';' | 'case' ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a rule that is a loop's whole body hears the loop's next iteration" {
+    // TypeScript's `caseClauses : caseClause+`: a clause's statements stop at
+    // the next `case b :`, which only the loop around the clause knows about.
+    let got = parses(LOOP_BODY_CALL_G4, "s", ["{ case a: x; case b: y; }", "{ case a: case b: y; default: case c: z; }", "{ case a: case b x; }"]);
+    assert got == "{ case a: x; case b: y; } => (s { (cs (c case a : (st x ;)) (c case b : (st y ;))) })\n{ case a: case b: y; default: case c: z; } => (s { (cs (c case a :) (c case b : (st y ;))) default : (cs (c case c : (st z ;))) })\n{ case a: case b x; } => (s { (cs (c case a : (st case b) (st x ;))) })\n", got;
+}
+
+global LOOP_ENDING_RULE_G4: String = "
+grammar T;
+s : '{' cs? ('default' ':' st*)? '}' ;
+cs : c+ ;
+c : 'case' ID ':' sl? ;
+sl : st+ ;
+st : e ';'? ;
+e : ID | 'default' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a loop ending its rule declines an iteration its caller's token would strand" {
+    // TypeScript's `statementList : statement+` inside a case clause: `default`
+    // is a one-token statement, and taking it leaves `:` to nobody.
+    let got = parses(LOOP_ENDING_RULE_G4, "s", ["{ case a: x; default: y; }", "{ case a: default; }", "{ case a: x default: y }", "{ case a: default }"]);
+    assert got == "{ case a: x; default: y; } => (s { (cs (c case a : (sl (st (e x) ;)))) default : (st (e y) ;) })\n{ case a: default; } => (s { (cs (c case a : (sl (st (e default) ;)))) })\n{ case a: x default: y } => (s { (cs (c case a : (sl (st (e x))))) default : (st (e y)) })\n{ case a: default } => (s { (cs (c case a : (sl (st (e default))))) })\n", got;
+}
+
+global TAIL_TOKEN_OPTIONAL_G4: String = "
+grammar T;
+m : base name ';' ;
+base : 'static'? 'readonly'? ;
+name : ID | 'readonly' | 'static' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a tail token optional enters while entering stays viable" {
+    // TypeScript's `propertyMemberBase : ... ReadOnly?` ahead of a
+    // `propertyName` that `readonly` also spells.
+    let got = parses(TAIL_TOKEN_OPTIONAL_G4, "m", ["readonly x;", "readonly;", "static readonly;", "static readonly x;"]);
+    assert got == "readonly x; => (m (base readonly) (name x) ;)\nreadonly; => (m base (name readonly) ;)\nstatic readonly; => (m (base static) (name readonly) ;)\nstatic readonly x; => (m (base static readonly) (name x) ;)\n", got;
+}
+
+global LR_ATOM_OPERAND_G4: String = "
+grammar T;
+s : e ';' ;
+e : 'new' e '<'? args
+  | 'new' e
+  | e args
+  | e '.' ID
+  | ID
+  ;
+args : '(' ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "an operand inside an atom climbs only while its own continuation stays viable" {
+    // TypeScript's `New singleExpression typeArguments? arguments`: the
+    // operand's call suffix would take the arguments the `new` still owes.
+    let got = parses(LR_ATOM_OPERAND_G4, "s", ["new a();", "new a;", "new a.b();", "new a()();"]);
+    assert got == "new a(); => (s (e new (e a) (args ( ))) ;)\nnew a; => (s (e new (e a)) ;)\nnew a.b(); => (s (e new (e (e a) . b) (args ( ))) ;)\nnew a()(); => (s (e new (e (e a) (args ( ))) (args ( ))) ;)\n", got;
+}
+
+global OPEN_READING_BEHIND_PREFIX_G4: String = "
+grammar T;
+s : d ';' ;
+d : ID '=' e ('!' ID)? ;
+e : e '(' ')' | e '.' ID | a | ID ;
+a : '[' l ']' ;
+l : ','* el? (','+ el)* ','* ;
+el : e ','? ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "an open reading behind a prefix admits only what the prefix starts with" {
+    // TypeScript's `arrayElement : ... ','?` in an initializer an optional
+    // follows: the list's `]` comes first, so the `,` before `c` is the next
+    // element's, not a trailing one.
+    let got = parses(OPEN_READING_BEHIND_PREFIX_G4, "s", ["x = [b, c];", "x = [b,, c,];", "x = [b] ! y;"]);
+    assert got == "x = [b, c]; => (s (d x = (e (a [ (l (el (e b)) , (el (e c))) ]))) ;)\nx = [b,, c,]; => (s (d x = (e (a [ (l (el (e b) ,) , (el (e c) ,)) ]))) ;)\nx = [b] ! y; => (s (d x = (e (a [ (l (el (e b))) ])) ! y) ;)\n", got;
 }
 
 test "a rule entry claims its call site's return state before returning early" {

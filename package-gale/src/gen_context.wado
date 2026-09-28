@@ -287,6 +287,9 @@ pub struct GenContext {
     /// Whether the code being emitted is a scan function's, which reaches the
     /// gate through its parameter rather than through the parser.
     in_scan_fn: bool,
+    /// While a left-recursive rule is emitted, the kinds its suffixes start
+    /// with: what continues an alternative's tail besides the rule's `follow`.
+    lr_continuation: List<String>,
     /// By snake name, the kinds of each rule whose scan is one token test.
     one_token_rules: TreeMap<String, List<String>>,
     snake_index: TreeMap<String, i32>,
@@ -394,6 +397,7 @@ impl GenContext {
             alt_scan_fns: TreeMap::new(),
             binding_reads: [],
             in_scan_fn: false,
+            lr_continuation: [],
             one_token_rules,
             snake_index,
             alt_exit_label: null,
@@ -492,6 +496,16 @@ impl GenContext {
         let was = self.in_scan_fn;
         self.in_scan_fn = on;
         return was;
+    }
+
+    /// The kinds the current left-recursive rule's suffixes start with, or `[]`.
+    pub fn lr_continuation(&self) -> &List<String> {
+        return &self.lr_continuation;
+    }
+
+    /// Enter a left-recursive rule with its suffixes' first kinds, or leave it with `[]`.
+    pub fn set_lr_continuation(&mut self, kinds: List<String>) {
+        self.lr_continuation = kinds;
     }
 
     /// The scan gate as a place: the parameter's target inside a scan

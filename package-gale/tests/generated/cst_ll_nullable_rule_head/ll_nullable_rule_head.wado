@@ -946,8 +946,18 @@ pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
+pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+
+pub fn follow_open_mark(cont: i64) -> i64 {
+    return if cont == 0 || cont >= FOLLOW_OPEN_READING { FOLLOW_OPEN_READING } else { 0 };
+}
+
+pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return cont == 0 || cont >= FOLLOW_OPEN_READING || follow_yields(tokens, pos, cont, sets, eof_kind);
+}
+
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont;
+    let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
@@ -1536,7 +1546,7 @@ impl Parser {
     }
 }
 
-fn _parse_prog__inner(p: &mut Parser) -> () {
+fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while !p.recovering && (_kind_set_0(p.peek_kind())) {
         p.site = 0;
@@ -1547,12 +1557,12 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_prog(p: &mut Parser) -> () {
+fn _parse_prog(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_PROG, _start);
-    _parse_prog__inner(p);
+    _parse_prog__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_PROG, "prog", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -1592,7 +1602,7 @@ fn _parse_member(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_fn_decl__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 2;
-    _parse_mods(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 24) & FOLLOW_CONT_MASK);
+    _parse_mods(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 24) & FOLLOW_CONT_MASK | follow & FOLLOW_OPEN_READING);
     p.expect(TK_LIT_fn, &SYNC_3, false);
     p.expect(TK_ID, &SYNC_1, false);
     p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
@@ -1704,5 +1714,5 @@ global EXPECTED_2: List<i32> = [TK_LIT_fn, TK_LIT_pub, TK_LIT_type];
 global SYNC_3: List<i32> = [1];
 
 global FOLLOW_SETS: List<List<i32>> = [[64], [1], [32]];
-global FOLLOW_MASK_0: i64 = 197121;
+global FOLLOW_MASK_1: i64 = 197121;
 

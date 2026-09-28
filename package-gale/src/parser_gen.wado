@@ -42,6 +42,8 @@ use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use {
     follow_composed,
     follow_alternative,
+    follow_opened,
+    follow_admits_call,
     follow_forward_args,
     follow_yields_call,
     follow_yields_call_if,
@@ -1842,14 +1844,8 @@ fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: 
 
 /// Scan mirror of `gen_optional_probe_entry`. With `cont_done` named, a probe
 /// that holds has scanned the rest of the sequence, so it sets the flag and stays.
-fn gen_scan_optional_probe<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    re: &ScanRepeatElement,
-    ctx: &mut GenContext,
-    caller_follow_gate: S,
-    cont_done: &String = &NO_CONT_DONE,
-) {
-    w.begin(`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
+fn gen_scan_optional_probe(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, cont_done: &String = &NO_CONT_DONE) {
+    w.begin(`if ${scan_repeat_guard(&re.inner_admits, "", ctx)}`);
     gen_scan_mark(w, ctx, "sp");
     gen_scan_op_element_assign(w, &re.body, ctx, &known_at_start(&admits_kinds(&re.inner_admits)));
     w.begin("if pos < 0");
@@ -2049,7 +2045,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     }
 
     if scan_takes_optional_probe(re, ctx) {
-        gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);
+        gen_scan_optional_probe(w, re, ctx);
         return;
     }
     if let Optional = re.kind {
@@ -2077,8 +2073,26 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         } else {
             [] as List<String>;
         };
-        w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
+        if re.gate_caller_follow && re.body matches { Token(_) | Wildcard | Excluded(_) } {
+            let enters = leaf_enters_while_viable(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
+            w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, "", ctx)} && ${enters}`);
+            gen_scan_iteration(w, re, &effective, ctx, false);
+            w.end();
+            return;
+        }
+        if !scan_enters_while_viable(re) {
+            w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
+            gen_scan_iteration(w, re, &effective, ctx, false);
+            w.end();
+            return;
+        }
+        assert !repeat_body_implied_by_guard(&re.body, &effective), "a rule-call body is scanned, which marks `sp`";
+        w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, "", ctx)}`);
         gen_scan_iteration(w, re, &effective, ctx, false);
+        let resumes = continuation_admits_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
+        w.begin(`if ${follow_yields_call("tokens", "sp")} && !${resumes}`);
+        gen_scan_rewind(w, ctx, "sp");
+        w.end();
         w.end();
         return;
     }
@@ -2100,6 +2114,11 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     w.begin(`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
     gen_scan_iteration(w, re, &loop_admits, ctx, true);
     w.end();
+}
+
+/// The scan's twin of `enters_while_viable`.
+fn scan_enters_while_viable(re: &ScanRepeatElement) -> bool {
+    return re.kind matches { Optional } && re.body matches { RuleCall(_) } && re.gate_caller_follow && re.body_scannable;
 }
 
 /// One scanned iteration: take the token the guard already proved, or scan the
@@ -2527,13 +2546,7 @@ fn gen_scan_op_elements<S: AsStrSlice>(
                 };
                 let cont_done = `cont_done_${w.next_id()}`;
                 w.line(`let mut ${cont_done} = false;`);
-                gen_scan_optional_probe(
-                    w,
-                    re,
-                    ctx,
-                    &follow_yields_call_if(re.gate_caller_follow, "tokens", "pos"),
-                    &cont_done,
-                );
+                gen_scan_optional_probe(w, re, ctx, &cont_done);
                 w.begin(`if !${cont_done}`);
                 gen_scan_op_elements(w, scan_elems, i + 1, end, ctx, fail_stmt, gates, &NO_SCAN_GATE_COND, &k);
                 w.end();
@@ -2767,13 +2780,18 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     let mut iw = CodeWriter::new();
     match *lowered_rule {
         Simple(_) => gen_parse_fn_simple_named(&mut iw, rule, lowered_rule, ctx, &inner),
-        MultiAlt(_) | LeftRecursive(_) => gen_parse_fn_named(
-            &mut iw,
-            rule,
-            lowered_rule,
-            ctx,
-            &inner,
-        ),
+        MultiAlt(_) => gen_parse_fn_named(&mut iw, rule, lowered_rule, ctx, &inner),
+        LeftRecursive(l) => {
+            // Every alternative's tail, atom or suffix, is continued by the
+            // suffix loop as well as by `follow`.
+            let mut continuation: List<String> = [];
+            for let first of &lr_suffix_first_sets(&l.lr_alts, &l.lr_dispatch) {
+                continuation = union_kind_arrays(&continuation, first);
+            }
+            ctx.set_lr_continuation(continuation);
+            gen_parse_fn_named(&mut iw, rule, lowered_rule, ctx, &inner);
+            ctx.set_lr_continuation([]);
+        },
     }
     let inner_text = iw.to_string();
     let inlined = if rule_takes_min_prec(lowered_rule) { null } else { single_statement_fn_body(&inner_text) };
@@ -4560,11 +4578,7 @@ fn emit_probe_verdict<S: AsStrSlice>(
         w.line(`${verdict} = true;`);
         return;
     }
-    let mask = if ctx.current_rule_reads_follow() {
-        `${FOLLOW_PARAM} == 0 || ${follow_yields_call("tokens", "pos")}`;
-    } else {
-        "true";
-    };
+    let mask = if ctx.current_rule_reads_follow() { follow_admits_call("tokens", "pos") } else { "true" };
     if probe_viable.is_empty() {
         if mask == "true" {
             w.line(`${verdict} = true;`);
@@ -6318,12 +6332,65 @@ fn gen_op_repeat_optional_rulecall(
         },
     };
 
-    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
     let proven: List<String> = match &rep_op.body_admits {
         Kinds(kinds) => subtract_sets(kinds, follow),
         _ => [],
     };
+    if enters_while_viable(rep_op) {
+        // A token the caller's continuation cannot start at decides by itself,
+        // as ANTLR4's LL(1) does, so `a { b: }` still reports inside the body.
+        // Where the continuation can start (the caller's, or the LR suffix
+        // loop's, which `follow` does not carry), the scan side enters only
+        // where the body scans, and the parse must too or the tournament
+        // measures a length the parse does not take.
+        let verdict = dedup_name("opt_enter", name_counts);
+        w.line(`let mut ${verdict}: bool = ${entry};`);
+        let lr_suffix = *ctx.lr_continuation();
+        let contested = if lr_suffix.is_empty() {
+            follow_admits_call("&p.kinds", "p.pos");
+        } else {
+            `(${follow_admits_call("&p.kinds", "p.pos")} || ${ctx.kind_check_str(&lr_suffix, "p.peek_kind()")})`;
+        };
+        w.begin(`if ${verdict} && ${contested}`);
+        let scan_pos = gen_scan_guard_with_prefix(w, &rep_op.scan_body, ctx, name_counts, "opt_scan_pos", "opt_scan", false);
+        let resumes = continuation_admits_at(ctx, &rep_op.caller_follow_first, "&p.kinds", "p.kinds", &scan_pos);
+        w.line(`${verdict} = ${scan_pos} >= 0 && (!${follow_yields_call("&p.kinds", "p.pos")} || ${resumes});`);
+        w.end();
+        gen_optional_present(w, &rep_op.body, "", &verdict, ctx, &proven);
+        return;
+    }
+    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx, &proven);
+}
+
+/// Whether a tail `?` over a rule call yields to its caller only where entering
+/// would strand the caller's continuation. ANTLR4 resolves the ambiguity by
+/// entering, so a continuation that merely starts here does not yield: the
+/// body's end must fail to start it too. The scan side reads the same answer
+/// through `scan_enters_while_viable`.
+fn enters_while_viable(r: &RepeatOp) -> bool {
+    return r.gate_caller_follow && r.body_scannable;
+}
+
+/// Whether what follows a tail-reaching repeat can start at `at`: the rest of
+/// its own alternative, which is nullable there, the LR suffix loop around an
+/// atom, or the caller. `tokens` is the token array as the runtime takes it and
+/// `stream` the same array indexed directly.
+fn continuation_admits_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    ctx: &mut GenContext,
+    local_first: &List<String>,
+    tokens: S,
+    stream: S1,
+    at: S2,
+) -> String {
+    let admits = follow_admits_call(tokens, at);
+    let mut kinds = *local_first;
+    dedup_append_arr(&mut kinds, ctx.lr_continuation());
+    if kinds.is_empty() {
+        return admits;
+    }
+    let kind = `(if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF })`;
+    return `(${ctx.kind_check_str(&kinds, &kind)} || ${admits})`;
 }
 
 /// Whether the probe decides this greedy `?` over a leaf body. Any leaf: a
@@ -6343,17 +6410,13 @@ fn probe_decides(continuation: &List<ScanElement>, continuation_scannable: bool,
 
 /// Greedy Optional that enters when entering stays viable. The cheap
 /// first-set check stays in front so a token that cannot start the body
-/// never pays for a scan, and the caller-FOLLOW yield gate still wins —
-/// where the repair already decided to yield the probe does not rule.
+/// never pays for a scan. A caller's continuation starting here does not
+/// yield by itself: ANTLR4 enters wherever entering stays viable, and the
+/// probe asks exactly that.
 fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let verdict = dedup_name("opt_enter", nc);
-    let entry_gate = if ctx.current_rule_reads_follow() && r.gate_caller_follow {
-        ` && !${follow_yields_call("&p.kinds", "p.pos")}`;
-    } else {
-        "";
-    };
     w.line(`let mut ${verdict}: bool = false;`);
-    w.begin(`if ${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}${entry_gate}`);
+    w.begin(`if ${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}`);
     gen_viability_probe(
         w,
         &r.continuation_scan,
@@ -6408,15 +6471,28 @@ fn gen_op_repeat_optional_leaf(
         return;
     }
 
-    // Same K-prefix gate as the RuleCall arm — see
-    // `gen_op_repeat_optional_rulecall` for the rationale.
-    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
-    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &repeat_guard_cond(
-        &rep_op.body_admits,
-        &NO_EXCLUSION,
-        &PEEK_KIND,
-        ctx,
-    ), ctx, &admits_kinds(&rep_op.body_admits));
+    let entry = repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx);
+    let enters = if rep_op.gate_caller_follow {
+        `${entry} && ${leaf_enters_while_viable(ctx, &rep_op.caller_follow_first, "&p.kinds", "p.kinds", "p.pos")}`;
+    } else {
+        entry;
+    };
+    gen_optional_present(w, &rep_op.body, "", &enters, ctx, &admits_kinds(&rep_op.body_admits));
+}
+
+/// `enters_while_viable` for a body of one token, whose end is the next
+/// position: a caller's continuation starting at the token yields it only when
+/// none starts after it. The scan side emits the same condition.
+fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    ctx: &mut GenContext,
+    local_first: &List<String>,
+    tokens: S,
+    stream: S1,
+    pos: S2,
+) -> String {
+    let end = `${pos} + 1`;
+    let resumes = continuation_admits_at(ctx, local_first, &tokens, stream, &end);
+    return `(!${follow_yields_call(tokens, pos)} || ${resumes})`;
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy Repeat's
@@ -6457,6 +6533,10 @@ fn follow_arg_expr(ctx: &mut GenContext, arg: &FollowArg) -> String {
     return match arg {
         NoFollow => "0",
         Forward => follow_forward_args(),
+        ForwardOpen(first) => follow_opened(
+            &follow_forward_args(),
+            &follow_open_set_expr(ctx, *first),
+        ),
         Mask(id) => ctx.follow_mask_ref(*id),
         // The caller's continuation shifts along behind the new head, starting
         // where the head stops constraining. What that pushes past the last
@@ -6467,12 +6547,23 @@ fn follow_arg_expr(ctx: &mut GenContext, arg: &FollowArg) -> String {
         AltMask(le) => {
             let loop_ref = ctx.follow_mask_ref(le.loop_mask);
             let positions = ctx.follow_mask_positions(le.loop_mask);
-            if le.exit matches { Forward } {
-                follow_composed(loop_ref, positions, true);
-            } else {
-                follow_alternative(loop_ref, positions, follow_arg_expr(ctx, &le.exit));
-            }
+            match le.exit {
+                Forward => follow_composed(loop_ref, positions, true),
+                ForwardOpen(first) => follow_opened(
+                    &follow_composed(loop_ref, positions, true),
+                    &follow_open_set_expr(ctx, first),
+                ),
+                _ => follow_alternative(loop_ref, positions, follow_arg_expr(ctx, &le.exit)),
+            };
         },
+    };
+}
+
+/// The open reading a `ForwardOpen` adds: the kinds it starts with, or any.
+fn follow_open_set_expr(ctx: &GenContext, first: Option<i32>) -> String {
+    return match first {
+        Some(id) => `follow_open_set(${ctx.follow_mask_ref(id)})`,
+        None => "FOLLOW_OPEN_READING",
     };
 }
 
@@ -7107,7 +7198,7 @@ fn decline_continue_check<S: AsStrSlice>(
     let mut kinds = *loop_first;
     dedup_append_arr(&mut kinds, &duties.decline_cont_first);
     dedup_append_arr(&mut kinds, &duties.decline_viable);
-    assert !kinds.is_empty(), "a decline is stamped only where the loop's first set overlaps the suffix's";
+    assert !kinds.is_empty(), "a decline is stamped only where the loop's first set overlaps the suffix's or the rule's FOLLOW";
     return ctx.kind_check_str(&kinds, subject);
 }
 

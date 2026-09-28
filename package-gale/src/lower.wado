@@ -153,17 +153,16 @@ use {
 } from "./gir.wado";
 
 /// True when an element threads a `FollowArg` into a callee: a `RuleRef`,
-/// or a `Label` wrapping one. Other shapes discard it in `lower_op`, so
-/// computing a mask there interns a dead `FOLLOW_MASK` and perturbs mask
-/// ids.
+/// or a `Label` or greedy repeat wrapping one. Other shapes discard it in
+/// `lower_op`, so computing a mask there interns a dead `FOLLOW_MASK` and
+/// perturbs mask ids.
 fn element_consumes_follow_arg(elem: &Element) -> bool {
     return match elem {
         RuleRef(_) => true,
         Label(lab) => element_consumes_follow_arg(&lab.element),
-        // A greedy `?` runs its body once, so `lower_repeat_op` hands its own
-        // continuation straight down to it. Every other kind loops, and what
-        // follows one iteration is another one.
-        Repeat(rep) => !rep.non_greedy && rep.kind matches { Optional } && element_consumes_follow_arg(&rep.element),
+        // `greedy_optional_inner_follow` hands the continuation down: whole to
+        // a `?`, and to a loop as the other reading beside its next iteration.
+        Repeat(rep) => !rep.non_greedy && element_consumes_follow_arg(&rep.element),
         TokenRef(_) | Literal(_) | Group(_) | Wildcard(_) | Not(_) => false,
     };
 }
@@ -302,7 +301,8 @@ fn continuation_arg(ctx: &mut GenContext, elements: &List<Element>, from: i32) -
     // `htmlElement` is followed by `htmlChardata?` and nothing else, and `<p>`
     // would give its text to the loop that called it.
     if i + 1 < elements.len() && !covers_suffix {
-        return FollowArg::Forward;
+        let suffix_first = ctx.first_of_elements_from(elements, i + 1);
+        return FollowArg::ForwardOpen(ctx.intern_follow_mask(&[suffix_first]));
     }
     if let Some(id) = ctx.intern_follow_mask(&mask) {
         return sequenced_follow_arg(ctx, id, covers_suffix);
@@ -325,13 +325,23 @@ fn sequenced_follow_arg(ctx: &GenContext, mask_id: i32, covers_suffix: bool) -> 
 }
 
 /// What a repeat's body is told about its own continuation. A greedy `?` runs
-/// its body once, so it passes its own arg down; every other kind loops, and
-/// `retarget_loop_tail_follow` answers that instead.
-fn greedy_optional_inner_follow(rep: &RepeatElement, follow_arg: FollowArg) -> FollowArg {
-    if !rep.non_greedy && rep.kind matches { Optional } {
+/// its body once, so it passes its own arg down. A greedy loop's body continues
+/// with another iteration or with what follows the loop, which a bare rule-call
+/// body is told here and a group body's tail by `retarget_loop_tail_follow`.
+fn greedy_optional_inner_follow(ctx: &mut GenContext, rep: &RepeatElement, follow_arg: FollowArg) -> FollowArg {
+    if rep.non_greedy {
+        return FollowArg::NoFollow;
+    }
+    if rep.kind matches { Optional } {
         return follow_arg;
     }
-    return FollowArg::NoFollow;
+    if follow_arg matches { NoFollow } || rep.element matches { Group(_) } {
+        return FollowArg::NoFollow;
+    }
+    let Some(loop_mask) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) else {
+        return FollowArg::NoFollow;
+    };
+    return FollowArg::AltMask(CallerLoop { loop_mask, exit: follow_arg });
 }
 
 /// The suffix twin of `greedy_optional_inner_follow`: what continues past a
@@ -409,10 +419,6 @@ fn retarget_scan_loop_tail_follow(element: ScanElement, mask_id: i32) -> ScanEle
     };
 }
 
-/// The positions one iteration of `rep` consumes, or `[]` when the loop is not
-/// one this evidence covers: a non-greedy or `?` repeat decides elsewhere, a
-/// multi-alt body has no single prefix, and a one-position prefix is the
-/// over-approximation soundness invariant 1 rejects.
 /// The interned iteration prefix of the greedy loop at `elements[from]`, if one
 /// stands there and its prefix is deep enough to gate on.
 fn caller_loop_mask(ctx: &mut GenContext, elements: &List<Element>, from: i32) -> Option<i32> {
@@ -425,6 +431,12 @@ fn caller_loop_mask(ctx: &mut GenContext, elements: &List<Element>, from: i32) -
     return ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep));
 }
 
+/// The positions one iteration of `rep` consumes, or `[]` when the loop is not
+/// one this evidence covers: a non-greedy or `?` repeat decides elsewhere, a
+/// multi-alt body has no single prefix, and a one-position prefix is the
+/// over-approximation soundness invariant 1 rejects. A `?` heading a
+/// continuation is not a reading to yield to: the inner `if` keeps the `else`
+/// its caller could also take.
 fn greedy_loop_prefix(ctx: &mut GenContext, rep: &RepeatElement) -> List<List<String>> {
     let empty: List<List<String>> = [];
     if rep.non_greedy || rep.kind matches { Optional } {
@@ -855,7 +867,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     assert !lr_indices.is_empty(), `LR rule '${rule.name}' has no LR alt — should not have reached lower_lr_rule`;
 
     let total_lr: i32 = lr_indices.len();
-    let atom = lower_lr_atom(rule, &non_lr_indices, ctx);
+    let mut atom = lower_lr_atom(rule, &non_lr_indices, ctx);
 
     // Lower each LR alt's suffix and compute its precedence /
     // metadata. `own_prec` follows ANTLR4's convention: first LR
@@ -890,7 +902,12 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // pass `atn_class` through.
     let lr_dispatch = compute_lr_dispatch_data(&lr_alts, &suffix_classes, atn_class);
 
-    let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
+    let atom_gated = !atn_class && stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx);
+    let suffix_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
+    if atom_gated && !suffix_gated {
+        forward_lr_cont_to_trailing_operands(&mut lr_alts, &rule.name, &rule.snake_name);
+    }
+    let mid_operand_gated = atom_gated || suffix_gated;
     if mid_operand_gated {
         ctx.mark_caller_follow_gate();
         ctx.mark_rule_reads_follow();
@@ -1083,6 +1100,51 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
         forward_lr_cont_to_trailing_operands(lr_alts, rule_name, rule_snake);
     }
     return mid_operand_gated;
+}
+
+/// Stamps an atom's mid operand the way `stamp_lr_self_ref_min_prec` stamps a
+/// suffix's; returns whether any is gated. `'new' e '<'? args` owes `args` to
+/// the `new`, and the operand's own call suffix would take them, so the operand
+/// climbs only while what follows it can still start. Only where the suffix
+/// loop can take that continuation's first token: elsewhere, as in
+/// `'(' e ')'`, the loop stops by itself.
+fn stamp_lr_atom_mid_operands(
+    atom: &mut MultiAltRule,
+    rule: &ParserRule,
+    non_lr_indices: &List<i32>,
+    lr_alts: &List<LrAlt>,
+    ctx: &mut GenContext,
+) -> bool {
+    let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
+    let mut gated = false;
+    for let mut a = 0; a < atom.alts.len(); a += 1 {
+        let elements = &rule.alternatives[non_lr_indices[a]].elements;
+        let ops_len = atom.alts[a].ops.len();
+        assert atom.scan_alts[a].elements.len() == ops_len, `LR atom walk length mismatch: parse-side ${ops_len}, scan-side ${atom.scan_alts[a].elements.len()}`;
+        for let mut k = 0; k + 1 < ops_len; k += 1 {
+            if find_self_ref_rule_call(&atom.alts[a].ops[k], &rule.name) matches { None } {
+                continue;
+            }
+            if ctx.tail_is_nullable_deep(elements, k + 1) {
+                continue;
+            }
+            let cont_first = ctx.first_of_elements_from(elements, k + 1);
+            if !sets_overlap(&cont_first, &lr_suffix_first_tokens) {
+                continue;
+            }
+            let Some(id) = ctx.intern_follow_mask(&[cont_first]) else {
+                continue;
+            };
+            atom.alts[a].ops[k] = rebind_self_ref_lr_cont(rebind_self_ref_min_prec(atom.alts[a].ops[k], 0), id);
+            atom.scan_alts[a].elements[k] = rebind_scan_self_ref_lr_cont(
+                rebind_scan_self_ref_min_prec(atom.scan_alts[a].elements[k], &rule.snake_name, 0),
+                &rule.snake_name,
+                id,
+            );
+            gated = true;
+        }
+    }
+    return gated;
 }
 
 /// A trailing operand ends the invocation it sits in, so the continuation that
@@ -2310,7 +2372,7 @@ fn lower_scan_repeat(
     gate_caller_follow: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
-    let inner_follow_arg = greedy_optional_inner_follow(rep, follow_arg);
+    let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
     let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
     // Greedy Optional + Group inner with nested optional sub-elements
     // is the shape-based-lookahead case: lower produces
@@ -3720,7 +3782,7 @@ fn lower_repeat_op<S: AsStrSlice>(
     gate_caller_follow: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
-    let inner_follow_arg = greedy_optional_inner_follow(rep, follow_arg);
+    let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
     let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
     let outer_field = compute_repeat_outer_field(rep, name_counts, *group_counter);
     // Every shape decision below reads the body the op was lowered from, not
@@ -4396,11 +4458,12 @@ fn lower_iteration_duties<S: AsStrSlice>(
     // would decide nothing. Marking it would thread a `follow` parameter through
     // every caller of every rule carrying such a loop — 6000 lines of SQLite's
     // parser, for no answer.
-    if let Some(hit) = lower_decline_scan(non_greedy, kind, loop_first, alt_elements, index, ctx, reaches_rule_tail) {
+    let rule_follow = ctx.rule_follow_for_probe(rule_name);
+    if let Some(hit) = lower_decline_scan(non_greedy, kind, loop_first, alt_elements, index, ctx, reaches_rule_tail, &rule_follow) {
         duties.decline_stranded = true;
         duties.decline_scan = hit.0;
         duties.decline_cont_first = hit.1;
-        duties.decline_viable = ctx.rule_follow_for_probe(rule_name);
+        duties.decline_viable = rule_follow;
     }
     return duties;
 }
@@ -4445,12 +4508,16 @@ fn lower_reserve_scan(
 /// `{ y }.m()` is the shape — the `{ y }` scans as a statement and strands the
 /// `.m()`.
 ///
+/// The caller is the other continuation that can lose its head, and an empty
+/// suffix leaves it the only one: `statement+` ending a case clause takes
+/// `default` as a statement and strands the `:` of `default :`.
+///
 /// The conditions mirror `lower_reserve_scan`'s and answer the other half of
 /// the same question. A reservation protects a *mandatory* suffix from the
 /// loop; this protects an *optional* one, which nothing else does. Both need
-/// the two heads to overlap, or the loop could not have taken the suffix's
-/// input in the first place. Only this one needs the rule's tail, because it
-/// ends by asking the caller's FOLLOW.
+/// the loop's head to overlap what it could take, or the loop could not have
+/// taken that input in the first place. Only this one needs the rule's tail,
+/// because it ends by asking the caller's FOLLOW.
 ///
 /// Returns the continuation's scan and its FIRST set together: the guard needs
 /// both and the set is what decides whether to build the scan at all, so
@@ -4464,15 +4531,16 @@ fn lower_decline_scan(
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
+    rule_follow: &List<String>,
 ) -> Option<[List<ScanElement>, List<String>]> {
     if non_greedy || !kind matches { Star | Plus } || !reaches_rule_tail {
         return null;
     }
-    if index + 1 >= alt_elements.len() || !ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+    if !ctx.tail_is_nullable_deep(alt_elements, index + 1) {
         return null;
     }
     let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
-    if !sets_overlap(loop_first, &suffix_first) {
+    if !sets_overlap(loop_first, &suffix_first) && !sets_overlap(loop_first, rule_follow) {
         return null;
     }
     return match lower_scan_continuation_elements(alt_elements, index, ctx) {

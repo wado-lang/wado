@@ -736,6 +736,13 @@ pub struct LiteralOp {
 pub variant FollowArg {
     NoFollow,
     Forward,
+    /// `Forward` past a local suffix that can match nothing. Gating on the
+    /// suffix would yield a token the caller may take none of, so the gate reads
+    /// what the current rule was called with, marked `FOLLOW_OPEN_READING`: the
+    /// suffix's own readings are missing from it. The one-position
+    /// `FOLLOW_MASK_<id>` names the kinds those readings start with, so
+    /// `follow_admits` refuses the rest; `null` where that set is not known.
+    ForwardOpen(Option<i32>),
     /// The local suffix spans `FOLLOW_MAX_DEPTH` positions, which is as deep
     /// as `follow_yields` reads, so what the current rule was called with
     /// stands past every position the gate can consult. Emit passes the

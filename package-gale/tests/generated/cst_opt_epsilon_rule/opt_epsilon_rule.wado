@@ -1468,7 +1468,15 @@ fn _parse_s__inner(p: &mut Parser) -> () {
     if kind == TK_LIT_k {
         p.take();
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-        if true {
+        let mut opt_scan_pos: i32 = -1;
+        opt_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_x(tokens, pos);
+            if pos < 0 { break opt_scan; }
+            opt_scan_pos = pos;
+        }
+        if true && opt_scan_pos >= 0 {
             p.site = 0;
             _parse_x(p);
         }

@@ -946,8 +946,18 @@ pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
+pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+
+pub fn follow_open_mark(cont: i64) -> i64 {
+    return if cont == 0 || cont >= FOLLOW_OPEN_READING { FOLLOW_OPEN_READING } else { 0 };
+}
+
+pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return cont == 0 || cont >= FOLLOW_OPEN_READING || follow_yields(tokens, pos, cont, sets, eof_kind);
+}
+
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont;
+    let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
@@ -1593,7 +1603,7 @@ fn scan_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
-    _parse_tree(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    _parse_tree(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | follow & FOLLOW_OPEN_READING);
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -1611,7 +1621,15 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    if p.peek_kind() == TK_ID {
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.kinds;
+        let mut pos: i32 = p.pos;
+        pos = scan_path(tokens, pos, FOLLOW_MASK_1);
+        if pos < 0 { break opt_scan; }
+        opt_scan_pos = pos;
+    }
+    if p.peek_kind() == TK_ID && opt_scan_pos >= 0 {
         p.site = 1;
         _parse_path(p, FOLLOW_MASK_1);
     }

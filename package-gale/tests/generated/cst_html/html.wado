@@ -949,8 +949,18 @@ pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
+pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+
+pub fn follow_open_mark(cont: i64) -> i64 {
+    return if cont == 0 || cont >= FOLLOW_OPEN_READING { FOLLOW_OPEN_READING } else { 0 };
+}
+
+pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return cont == 0 || cont >= FOLLOW_OPEN_READING || follow_yields(tokens, pos, cont, sets, eof_kind);
+}
+
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont;
+    let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
@@ -1589,47 +1599,79 @@ fn try_ATTVALUE_VALUE(chars: &List<char>, start: i32) -> i32 {
         pos = rep_saved_23;
         break;
     }
-    pos = try_ATTRIBUTE(chars, pos);
-    if pos < 0 { return -1; }
+    let alts_saved_24 = pos;
+    let mut alts_best_24 = -1;
+    alts_24_0: {
+        pos = alts_saved_24;
+        pos = frag_DOUBLE_QUOTE_STRING(chars, pos);
+        if pos < 0 { break alts_24_0; }
+        if pos > alts_best_24 { alts_best_24 = pos; }
+    }
+    alts_24_1: {
+        pos = alts_saved_24;
+        pos = frag_SINGLE_QUOTE_STRING(chars, pos);
+        if pos < 0 { break alts_24_1; }
+        if pos > alts_best_24 { alts_best_24 = pos; }
+    }
+    alts_24_2: {
+        pos = alts_saved_24;
+        pos = frag_ATTCHARS(chars, pos);
+        if pos < 0 { break alts_24_2; }
+        if pos > alts_best_24 { alts_best_24 = pos; }
+    }
+    alts_24_3: {
+        pos = alts_saved_24;
+        pos = frag_HEXCHARS(chars, pos);
+        if pos < 0 { break alts_24_3; }
+        if pos > alts_best_24 { alts_best_24 = pos; }
+    }
+    alts_24_4: {
+        pos = alts_saved_24;
+        pos = frag_DECCHARS(chars, pos);
+        if pos < 0 { break alts_24_4; }
+        if pos > alts_best_24 { alts_best_24 = pos; }
+    }
+    if alts_best_24 < 0 { return -1; }
+    pos = alts_best_24;
     return pos;
 }
 
 fn try_ATTRIBUTE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_24 = pos;
-    alts_done_24: {
-        alts_24_0: {
-            pos = alts_saved_24;
-            pos = frag_DOUBLE_QUOTE_STRING(chars, pos);
-            if pos < 0 { break alts_24_0; }
-            break alts_done_24;
-        }
-        alts_24_1: {
-            pos = alts_saved_24;
-            pos = frag_SINGLE_QUOTE_STRING(chars, pos);
-            if pos < 0 { break alts_24_1; }
-            break alts_done_24;
-        }
-        alts_24_2: {
-            pos = alts_saved_24;
-            pos = frag_ATTCHARS(chars, pos);
-            if pos < 0 { break alts_24_2; }
-            break alts_done_24;
-        }
-        alts_24_3: {
-            pos = alts_saved_24;
-            pos = frag_HEXCHARS(chars, pos);
-            if pos < 0 { break alts_24_3; }
-            break alts_done_24;
-        }
-        alts_24_4: {
-            pos = alts_saved_24;
-            pos = frag_DECCHARS(chars, pos);
-            if pos < 0 { break alts_24_4; }
-            break alts_done_24;
-        }
-        return -1;
+    let alts_saved_25 = pos;
+    let mut alts_best_25 = -1;
+    alts_25_0: {
+        pos = alts_saved_25;
+        pos = frag_DOUBLE_QUOTE_STRING(chars, pos);
+        if pos < 0 { break alts_25_0; }
+        if pos > alts_best_25 { alts_best_25 = pos; }
     }
+    alts_25_1: {
+        pos = alts_saved_25;
+        pos = frag_SINGLE_QUOTE_STRING(chars, pos);
+        if pos < 0 { break alts_25_1; }
+        if pos > alts_best_25 { alts_best_25 = pos; }
+    }
+    alts_25_2: {
+        pos = alts_saved_25;
+        pos = frag_ATTCHARS(chars, pos);
+        if pos < 0 { break alts_25_2; }
+        if pos > alts_best_25 { alts_best_25 = pos; }
+    }
+    alts_25_3: {
+        pos = alts_saved_25;
+        pos = frag_HEXCHARS(chars, pos);
+        if pos < 0 { break alts_25_3; }
+        if pos > alts_best_25 { alts_best_25 = pos; }
+    }
+    alts_25_4: {
+        pos = alts_saved_25;
+        pos = frag_DECCHARS(chars, pos);
+        if pos < 0 { break alts_25_4; }
+        if pos > alts_best_25 { alts_best_25 = pos; }
+    }
+    if alts_best_25 < 0 { return -1; }
+    pos = alts_best_25;
     return pos;
 }
 
@@ -1638,14 +1680,14 @@ fn frag_DOUBLE_QUOTE_STRING(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_25 = pos;
-        rep_25: {
-            if pos >= chars.len() { break rep_25; }
-            if (chars[pos] matches { '<' | '"' }) { break rep_25; }
+        let rep_saved_26 = pos;
+        rep_26: {
+            if pos >= chars.len() { break rep_26; }
+            if (chars[pos] matches { '<' | '"' }) { break rep_26; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_25;
+        pos = rep_saved_26;
         break;
     }
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
@@ -1658,14 +1700,14 @@ fn frag_SINGLE_QUOTE_STRING(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_26 = pos;
-        rep_26: {
-            if pos >= chars.len() { break rep_26; }
-            if (chars[pos] matches { '<' | '\'' }) { break rep_26; }
+        let rep_saved_27 = pos;
+        rep_27: {
+            if pos >= chars.len() { break rep_27; }
+            if (chars[pos] matches { '<' | '\'' }) { break rep_27; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_26;
+        pos = rep_saved_27;
         break;
     }
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
@@ -1679,24 +1721,24 @@ fn frag_ATTCHARS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '#' | '+'..=';' | '=' | '?' | 'A'..='Z' | '_' | 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_27 = pos;
-        rep_27: {
-            if pos >= chars.len() { break rep_27; }
-            if !((chars[pos] matches { '#' | '+'..=';' | '=' | '?' | 'A'..='Z' | '_' | 'a'..='z' })) { break rep_27; }
+        let rep_saved_28 = pos;
+        rep_28: {
+            if pos >= chars.len() { break rep_28; }
+            if !((chars[pos] matches { '#' | '+'..=';' | '=' | '?' | 'A'..='Z' | '_' | 'a'..='z' })) { break rep_28; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_27;
+        pos = rep_saved_28;
         break;
     }
-    let opt_saved_29 = pos;
-    let mut opt_ok_29 = false;
-    opt_29: {
-        if pos >= chars.len() || chars[pos] != ' ' { break opt_29; }
+    let opt_saved_30 = pos;
+    let mut opt_ok_30 = false;
+    opt_30: {
+        if pos >= chars.len() || chars[pos] != ' ' { break opt_30; }
         pos += 1;
-        opt_ok_29 = true;
+        opt_ok_30 = true;
     }
-    if !opt_ok_29 { pos = opt_saved_29; }
+    if !opt_ok_30 { pos = opt_saved_30; }
     return pos;
 }
 
@@ -1708,14 +1750,14 @@ fn frag_HEXCHARS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_30 = pos;
-        rep_30: {
-            if pos >= chars.len() { break rep_30; }
-            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_30; }
+        let rep_saved_31 = pos;
+        rep_31: {
+            if pos >= chars.len() { break rep_31; }
+            if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break rep_31; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_30;
+        pos = rep_saved_31;
         break;
     }
     return pos;
@@ -1727,24 +1769,24 @@ fn frag_DECCHARS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0'..='9' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_32 = pos;
-        rep_32: {
-            if pos >= chars.len() { break rep_32; }
-            if !((chars[pos] matches { '0'..='9' })) { break rep_32; }
+        let rep_saved_33 = pos;
+        rep_33: {
+            if pos >= chars.len() { break rep_33; }
+            if !((chars[pos] matches { '0'..='9' })) { break rep_33; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_32;
+        pos = rep_saved_33;
         break;
     }
-    let opt_saved_34 = pos;
-    let mut opt_ok_34 = false;
-    opt_34: {
-        if pos >= chars.len() || chars[pos] != '%' { break opt_34; }
+    let opt_saved_35 = pos;
+    let mut opt_ok_35 = false;
+    opt_35: {
+        if pos >= chars.len() || chars[pos] != '%' { break opt_35; }
         pos += 1;
-        opt_ok_34 = true;
+        opt_ok_35 = true;
     }
-    if !opt_ok_34 { pos = opt_saved_34; }
+    if !opt_ok_35 { pos = opt_saved_35; }
     return pos;
 }
 
@@ -2322,7 +2364,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    pos = scan_html_element(tokens, pos, follow);
+    pos = scan_html_element(tokens, pos, (follow | FOLLOW_OPEN_READING));
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -2357,7 +2399,7 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         let sp = pos;
                         sg_4_done: {
                             sg_4: {
-                                pos = scan_html_content(tokens, pos, FOLLOW_MASK_0);
+                                pos = scan_html_content(tokens, pos, FOLLOW_MASK_2);
                                 if pos < 0 { break sg_4; }
                                 if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break sg_4; }
                                 pos += 1;
@@ -2406,10 +2448,13 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    if pos < tokens.len() && _kind_set_6(tokens[pos]) {
         let sp = pos;
         pos += 1;
         if pos < 0 { pos = sp; }
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+            pos = sp;
+        }
     }
     while pos < tokens.len() && _kind_set_7(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -2419,7 +2464,7 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_4(sgk_6) {
                         sg_6_0: {
-                            pos = scan_html_element(tokens, pos, follow);
+                            pos = scan_html_element(tokens, pos, (follow | FOLLOW_OPEN_READING));
                             if pos < 0 { break sg_6_0; }
                             break sg_6_done;
                         }
@@ -2429,10 +2474,13 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                     break sg_5;
                 }
-                if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                if pos < tokens.len() && _kind_set_6(tokens[pos]) {
                     let sp = pos;
                     pos += 1;
                     if pos < 0 { pos = sp; }
+                    if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+                        pos = sp;
+                    }
                 }
                 break sg_5_done;
             }
@@ -2538,7 +2586,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos == sp { break; }
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if probe_kind == TK_EOF && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if probe_kind == TK_EOF && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -2600,7 +2648,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos == sp { break; }
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if probe_kind == TK_EOF && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead_2 = true; }
+                    if probe_kind == TK_EOF && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead_2 = true; }
                 }
                 if decline_dead_2 { break; }
             }
@@ -2653,7 +2701,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos == sp { break; }
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if probe_kind == TK_EOF && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead_3 = true; }
+                    if probe_kind == TK_EOF && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead_3 = true; }
                 }
                 if decline_dead_3 { break; }
             }
@@ -2756,7 +2804,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
     p.site = 5;
-    _parse_html_element(p, follow);
+    _parse_html_element(p, (follow | FOLLOW_OPEN_READING));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -2822,7 +2870,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_html_content(tokens, pos, FOLLOW_MASK_0);
+                pos = scan_html_content(tokens, pos, FOLLOW_MASK_2);
                 if pos < 0 { break opt_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break opt_scan; }
                 pos += 1;
@@ -2836,7 +2884,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             if (opt_scan_pos >= 0) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
                 p.site = 8;
-                _parse_html_content(p, FOLLOW_MASK_0);
+                _parse_html_content(p, FOLLOW_MASK_2);
                 p.expect(TK_TAG_OPEN, &SYNC_4, false);
                 p.expect(TK_TAG_SLASH, &SYNC_5, false);
                 p.expect(TK_TAG_NAME, &SYNC_6, false);
@@ -2880,7 +2928,15 @@ fn _parse_html_element(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if _kind_set_6(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+    let mut opt_scan_pos: i32 = -1;
+    opt_scan: {
+        let tokens = &p.kinds;
+        let mut pos: i32 = p.pos;
+        if pos >= tokens.len() || !_kind_set_6(tokens[pos]) { break opt_scan; }
+        pos += 1;
+        opt_scan_pos = pos;
+    }
+    if _kind_set_6(p.peek_kind()) && opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)) {
         p.site = 11;
         _parse_html_chardata(p);
     }
@@ -2897,7 +2953,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         let sgk_9 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                         if _kind_set_4(sgk_9) {
                             sg_9_0: {
-                                pos = scan_html_element(tokens, pos, follow);
+                                pos = scan_html_element(tokens, pos, (follow | FOLLOW_OPEN_READING));
                                 if pos < 0 { break sg_9_0; }
                                 break sg_9_done;
                             }
@@ -2907,10 +2963,13 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         }
                         break sg_8;
                     }
-                    if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                    if pos < tokens.len() && _kind_set_6(tokens[pos]) {
                         let sp = pos;
                         pos += 1;
                         if pos < 0 { pos = sp; }
+                        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+                            pos = sp;
+                        }
                     }
                     break sg_8_done;
                 }
@@ -2924,7 +2983,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
         let grp_kind = p.peek_kind();
         if _kind_set_4(grp_kind) {
             p.site = 12;
-            _parse_html_element(p, follow);
+            _parse_html_element(p, (follow | FOLLOW_OPEN_READING));
         } else if grp_kind == TK_CDATA {
             p.take();
         } else if _kind_set_5(grp_kind) {
@@ -2933,7 +2992,15 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_8);
         }
-        if _kind_set_6(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        let mut opt_scan_pos: i32 = -1;
+        opt_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || !_kind_set_6(tokens[pos]) { break opt_scan; }
+            pos += 1;
+            opt_scan_pos = pos;
+        }
+        if _kind_set_6(p.peek_kind()) && opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)) {
             p.site = 14;
             _parse_html_chardata(p);
         }
@@ -3260,5 +3327,5 @@ global SYNC_14: List<i32> = [1572864];
 global EXPECTED_14: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
 
 global FOLLOW_SETS: List<List<i32>> = [[512], [8192], [32768], [2048]];
-global FOLLOW_MASK_0: i64 = 67305985;
+global FOLLOW_MASK_2: i64 = 67305985;
 

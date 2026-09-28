@@ -946,8 +946,18 @@ pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
+pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+
+pub fn follow_open_mark(cont: i64) -> i64 {
+    return if cont == 0 || cont >= FOLLOW_OPEN_READING { FOLLOW_OPEN_READING } else { 0 };
+}
+
+pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return cont == 0 || cont >= FOLLOW_OPEN_READING || follow_yields(tokens, pos, cont, sets, eof_kind);
+}
+
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont;
+    let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
@@ -1767,7 +1777,7 @@ fn _parse_equation__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 1;
     _parse_relop(p);
     p.site = 2;
-    _parse_expression(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    _parse_expression(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | follow & FOLLOW_OPEN_READING);
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
@@ -1785,12 +1795,12 @@ fn _parse_equation(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
-    _parse_multiplying_expression(p, follow);
+    _parse_multiplying_expression(p, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     while !p.recovering && (_kind_set_0(p.peek_kind())) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 4;
-        _parse_multiplying_expression(p, follow);
+        _parse_multiplying_expression(p, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     }
     return;
 }
@@ -1808,12 +1818,12 @@ fn _parse_expression(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_multiplying_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 5;
-    _parse_pow_expression(p, follow);
+    _parse_pow_expression(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     while !p.recovering && (_kind_set_1(p.peek_kind())) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 6;
-        _parse_pow_expression(p, follow);
+        _parse_pow_expression(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     }
     return;
 }
@@ -1831,12 +1841,12 @@ fn _parse_multiplying_expression(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_pow_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 7;
-    _parse_signed_atom(p, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+    _parse_signed_atom(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     while !p.recovering && (p.peek_kind() == TK_POW) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 8;
-        _parse_signed_atom(p, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+        _parse_signed_atom(p, (FOLLOW_MASK_5 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     }
     return;
 }
@@ -1911,7 +1921,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     } else if kind == TK_LPAREN {
         p.take();
         p.site = 16;
-        _parse_expression(p, (FOLLOW_MASK_4 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        _parse_expression(p, (FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | follow & FOLLOW_OPEN_READING);
         p.expect(TK_RPAREN, &EMPTY_SYNC, true);
         return;
     }
@@ -1987,12 +1997,12 @@ fn _parse_func___inner(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_funcname(p);
     p.expect(TK_LPAREN, &SYNC_0, false);
     p.site = 18;
-    _parse_expression(p, 0);
+    _parse_expression(p, (FOLLOW_MASK_8 | ((FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | follow & FOLLOW_OPEN_READING | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | follow & FOLLOW_OPEN_READING) & FOLLOW_OPEN_READING);
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     while !p.recovering && (p.peek_kind() == TK_COMMA) {
         p.take();
         p.site = 19;
-        _parse_expression(p, (FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+        _parse_expression(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
         if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
@@ -2192,10 +2202,12 @@ global EXPECTED_5: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_LN, TK_LOG
 global SYNC_6: List<i32> = [229376];
 global EXPECTED_6: List<i32> = [TK_EQ, TK_GT, TK_LT];
 
-global FOLLOW_SETS: List<List<i32>> = [[229376], [134217728], [1048576], [65018879], [1024], [262144]];
+global FOLLOW_SETS: List<List<i32>> = [[229376], [134217728], [6144], [65018879], [24576], [1048576], [1024], [262144]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_2: i64 = 2;
 global FOLLOW_MASK_3: i64 = 1027;
-global FOLLOW_MASK_4: i64 = 5;
-global FOLLOW_MASK_6: i64 = 1030;
+global FOLLOW_MASK_4: i64 = 1029;
+global FOLLOW_MASK_5: i64 = 1030;
+global FOLLOW_MASK_6: i64 = 7;
+global FOLLOW_MASK_8: i64 = 1032;
 

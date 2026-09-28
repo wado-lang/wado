@@ -946,8 +946,18 @@ pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
+pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+
+pub fn follow_open_mark(cont: i64) -> i64 {
+    return if cont == 0 || cont >= FOLLOW_OPEN_READING { FOLLOW_OPEN_READING } else { 0 };
+}
+
+pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return cont == 0 || cont >= FOLLOW_OPEN_READING || follow_yields(tokens, pos, cont, sets, eof_kind);
+}
+
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont;
+    let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
@@ -1548,10 +1558,13 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_ID && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_ID {
         let sp = pos;
         pos = scan_expr(tokens, pos, follow, 0);
         if pos < 0 { pos = sp; }
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+            pos = sp;
+        }
     }
     return pos;
 }
@@ -1609,7 +1622,15 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
     if kind == TK_ID {
         p.site = 1;
         _parse_primary(p);
-        if p.peek_kind() == TK_ID && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        let mut opt_scan_pos: i32 = -1;
+        opt_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_expr(tokens, pos, follow, 0);
+            if pos < 0 { break opt_scan; }
+            opt_scan_pos = pos;
+        }
+        if p.peek_kind() == TK_ID && opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_admits(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)) {
             p.site = 2;
             _parse_expr(p, follow);
         }

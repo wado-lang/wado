@@ -660,22 +660,46 @@ pub fn follow_forward_args() -> String {
 /// positions early — `{ x, y }` inside `[ … ]` handing its own comma to the
 /// list, whose next iteration also starts with one. Only the reading this
 /// composition opens is at a position the gate can still place.
+///
+/// An empty continuation is an unknown one. Behind `prefix` it only stops
+/// constraining, but as an alternative to it, it is a reading the slots cannot
+/// hold, so the result carries `FOLLOW_OPEN_READING` for `follow_admits`. An
+/// open reading behind `prefix` is dropped: `follow_admits` asks only where a
+/// reading can start, and every reading here starts with the prefix. Carried as
+/// a bare mark it would admit any kind, and `[b, c]` would give its `,` to the
+/// element before it.
 pub fn follow_composed<S: AsStrSlice>(prefix: S, positions: i32, opens: bool) -> String {
     let sequenced = `${FOLLOW_PARAM} & FOLLOW_SEQUENCED`;
-    let shifted = if opens { `(${sequenced} | FOLLOW_OPENS_BIT)` } else { `(${sequenced})` };
-    return `(${prefix} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+    if !opens {
+        return `(${prefix} | (${sequenced}) << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+    }
+    return `(${prefix} | (${sequenced} | FOLLOW_OPENS_BIT) << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK | follow_open_mark(${FOLLOW_PARAM})`;
 }
 
 /// `prefix` or `alternative`, each read from the gate's position. Unlike the
 /// forwarded half in `follow_composed`, `alternative` is spelled here, so every
 /// reading it opens already begins at the gate and keeps its mark.
 pub fn follow_alternative<S: AsStrSlice, S1: AsStrSlice>(prefix: S, positions: i32, alternative: S1) -> String {
-    return `(${prefix} | (${alternative} | FOLLOW_OPENS_BIT) << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+    return `(${prefix} | (${alternative} | FOLLOW_OPENS_BIT) << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK | (${alternative}) & FOLLOW_OPEN_FIELD`;
+}
+
+/// `cont` with one more reading the slots cannot hold, `open` being
+/// `follow_open_set` of the kinds it starts with or a bare
+/// `FOLLOW_OPEN_READING`. One field holds one set, so two different sets
+/// widen to any kind.
+pub fn follow_opened<S: AsStrSlice, S1: AsStrSlice>(cont: S, open: S1) -> String {
+    return `follow_open_with(${cont}, ${open})`;
 }
 
 /// A `follow_yields` call on the forwarded continuation.
 pub fn follow_yields_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
     return follow_yields_call_of(tokens, pos, &FOLLOW_PARAM);
+}
+
+/// A `follow_admits` call on the forwarded continuation: whether it can start
+/// at `pos`, which an unknown continuation always can.
+pub fn follow_admits_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
+    return `follow_admits(${tokens}, ${pos}, ${FOLLOW_PARAM}, &FOLLOW_SETS, TK_EOF)`;
 }
 
 /// `follow_yields_call` where the site is `gated` on the caller's FOLLOW, else "".

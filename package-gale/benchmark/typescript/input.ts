@@ -300,8 +300,9 @@ export function topologicalOrder(tasks: Task[]): string[] {
   const present = new Set(tasks.map((t) => t.id));
   const pending = (t: Task) => t.dependsOn.filter((d) => present.has(d));
   for (const task of tasks) {
-    indegree.set(task.id, pending(task).length);
-    for (const dep of pending(task)) {
+    const deps = pending(task);
+    indegree.set(task.id, deps.length);
+    for (const dep of deps) {
       const list = edges.get(dep) || [];
       list.push(task.id);
       edges.set(dep, list);

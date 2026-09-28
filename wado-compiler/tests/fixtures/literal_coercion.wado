@@ -229,6 +229,19 @@ test "literal coerces to the other operand of a bitwise op" {
     assert 0x8000000000000000 & mask == 0x8000000000000000 as u64;
 }
 
+global HIGH_BYTE: i64 = ~0x00FF_FFFF_FFFF_FFFF;
+
+test "literal coerces through a unary operator to the expected type" {
+    assert HIGH_BYTE == -72057594037927936;
+    let all: u64 = ~0;
+    assert all == u64::MAX;
+    let wide: i64 = ~(0x00FF_FFFF_FFFF_FFFF ^ 1);
+    assert wide == -72057594037927935;
+    let shifted: i64 = -(1 << 40);
+    assert shifted == -1099511627776;
+    assert take_u8(~0x0F) == 0xF0;
+}
+
 test "literal coerces to the other operand of a bitwise op for i128 and u128" {
     let u: u128 = 0xFF00;
     let i: i128 = 0xFF;
@@ -574,4 +587,15 @@ test "call result type flows into the literal operand" {
     assert [10, 20] == id_list([10, 20]);
     assert id_opt(Option::Some(3)) == Option::Some(3);
     assert Option::Some(3) == id_opt(Option::Some(3));
+}
+
+test "a comparison's expected bool does not reach its operands" {
+    let i = builtin::black_box(2);
+    let mut hit = false;
+    hit = (if i < 5 { i } else { 0 }) == 2;
+    assert hit;
+    hit = 3 != (if i < 5 { i } else { 0 });
+    assert hit;
+    hit = (if i < 5 { i } else { 0 }) < 3 && 1 <= 2;
+    assert hit;
 }

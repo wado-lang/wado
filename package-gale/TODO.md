@@ -24,6 +24,9 @@ Entries state the symptom, how to reproduce it, and anything already measured �
   - The `<error>` region path skips mid-input where ANTLR4 fails the rule. On `tests/grammars/error_recovery.g4`, `let x = } } ;` gives `(item let x = (<error> <skip }> <skip }>) <missing ID> ;)`, and the jar gives `(single (item let x = } } ;) <EOF>)`. `driver_cst_error_recovery_test` pins Gale's tree.
   - A scan-gated decision does not enter a body whose scan fails. On `e : e '+' e | INT | '(' e ')'`, the input `1 + z z` gives `(expr (e 1))`, and the jar gives `(expr (e (e 1) + (e z z)))`. On `r : 'o' ('y' 'v')? '!'`, the input `o y !` deletes `y`, and the jar gives `(r o y <missing 'v'> !)`. The same shape with `*` matches the jar.
   - A non-greedy loop has no loop-back sync, and a group the op walker emits has no entry sync.
+- [ ] **`benchmark/typescript/input.ts` parses clean, but its tree differs from the jar's in about 130 places.** Two shapes account for most of them:
+  - `new Map<string, T>()` gives `new (e Map (e (e <typeArguments>) (arguments ( ))))`. The jar gives `new (e Map (e <typeArguments>)) (arguments ( ))`, leaving `()` to the `new`.
+  - The jar parses `if (…) {…}`, `try {…}` and `for (…)` statements as `expressionStatement` wherever that also scans, and Gale parses them as `ifStatement`, `tryStatement` and `iterationStatement`.
 - [ ] **A lexer alternation whose arms stop at different lengths can pick an arm the rest of the token cannot follow.** `A : ('q' ('y' | 'yz') | 'w') 'h' ;` lexes `qyzh` as four tokens, and so does `B : 'k' ('y' | 'yz')? 'h' ;` on `kyzh`; the jar gives one token each. A fragment whose body is such an alternation, or a single-alternative group or fragment ending in one, lexes as the jar does (`lexer_alt_suffix_shapes.g4`).
 
 ### Pipeline and tooling correctness
