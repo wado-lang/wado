@@ -1131,6 +1131,10 @@ test {
 }
 ```
 
+In a case's payload type, `Self` names the variant being declared, as it names
+the struct in a struct's field types. `Cons([i32, Self])` in `variant List`
+says what `Cons([i32, List])` says.
+
 A pattern destructures a tuple payload:
 
 <!-- {"fixture":"spec_types_variant.wado"} -->
