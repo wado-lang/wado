@@ -1,0 +1,29 @@
+// Parse throughput of the Gale-generated TypeScript parser, over a module
+// that `tsc --strict` compiles without an error.
+
+use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
+use { parse_typescript } from "../../tools/typescript_recognizer.wado";
+
+global INPUT: String = #include_str("./input.ts");
+
+fn parse_input() {
+    let result = parse_typescript(&INPUT);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`typescript: ${d.line}:${d.col}: ${d.message}`);
+    }
+}
+
+// Gale reads `readonly` in `readonly id: string` as the property name, where
+// the ANTLR4 jar takes it as the modifier.
+#[TODO]
+test "input parses" {
+    parse_input();
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut b = Benchmark { name: "gale-parse (TypeScript)", input_size: Option::Some(INPUT.len()) };
+    b.run("", || parse_input());
+}

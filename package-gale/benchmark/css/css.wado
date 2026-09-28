@@ -1,0 +1,34 @@
+// Parse throughput of the Gale-generated css3 parser, over a documentation
+// site's stylesheet.
+
+use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
+use css3 from "../../tests/grammars/css3Lexer.g4"
+    with {
+        generator: {
+            module: "../../src/generator.wado",
+            inputs: ["../../tests/grammars/css3Parser.g4"],
+        },
+    };
+
+global INPUT: String = #include_str("./input.css");
+
+fn parse_input() {
+    let result = css3::parse(&INPUT);
+    if !result.ok() {
+        panic(`css3: ${result.diagnostics[0].message}`);
+    }
+}
+
+// Gale rejects a descendant combinator next to a class selector (`.a p`) and
+// `calc(a - b)`, both of which the ANTLR4 jar accepts.
+#[TODO]
+test "input parses" {
+    parse_input();
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut b = Benchmark { name: "gale-parse (CSS)", input_size: Option::Some(INPUT.len()) };
+    b.run("", || parse_input());
+}
