@@ -148,6 +148,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
         });
     }
     rewrite_call_sites(project, &all, &mut touched);
+    scalarize_variant_locals(project, &mut touched);
     // A round with no new candidates still does work: `nir/inline` plants call
     // sites on callees scalarized earlier, and rewriting one is a change the
     // fixed-point loop has to see. Reporting only the candidate set let the
@@ -2011,9 +2012,10 @@ fn rewrite_call_sites(
             }
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
             let root = body.root;
+            let bound: IndexMap<u32, &Candidate> =
+                bound.iter().map(|(&l, f)| (l, &candidates[f])).collect();
             let mut cx = SiteCx {
                 bound: &bound,
-                candidates,
                 names: &names,
                 rebind: &rebind,
                 span,
@@ -2025,6 +2027,210 @@ fn rewrite_call_sites(
             touched.insert(i);
         }
     }
+}
+
+// -----------------------------------------------------------------------
+// Phase 4: variant locals
+// -----------------------------------------------------------------------
+
+/// A local gets the same tuple a return does: `let mut s: Option<i64> = None;
+/// … s = Some(v); … match s { … }` holds `[tag, v]`, which `sroa` then splits
+/// into scalars, so no write allocates. It qualifies when every write builds a
+/// case and every read destructures, so nothing ever needs the variant whole.
+fn scalarize_variant_locals(project: &NirPackage, touched: &mut IndexSet<usize>) {
+    let mut layouts: IndexMap<TypeId, Option<Candidate>> = IndexMap::default();
+    for i in 0..project.functions.len() {
+        let mut func = project.functions[i].borrow_mut();
+        let Some(mut body) = func.body.take() else {
+            continue;
+        };
+        let mut candidates: IndexMap<u32, Candidate> = IndexMap::default();
+        for (local, l) in func.locals.iter().enumerate() {
+            let local = u32::try_from(local).expect("too many locals");
+            if func.address_taken_locals.contains(&local)
+                || func.stores_aliased_locals.contains(&local)
+                || func.params.iter().any(|p| p.local_index == local)
+            {
+                continue;
+            }
+            let cand = layouts.entry(l.type_id).or_insert_with(|| {
+                let layout = compute_layout(project, l.type_id)?;
+                // A slot that would qualify in turn is a variant local again
+                // once `sroa` splits the tuple, often of this very type
+                // (`Option<Option<i32>>`), so taking it never terminates.
+                if layout
+                    .slot_types
+                    .iter()
+                    .any(|&slot| compute_layout(project, slot).is_some())
+                {
+                    return None;
+                }
+                Some(Candidate {
+                    layout,
+                    variant_type: l.type_id,
+                })
+            });
+            if let Some(cand) = cand {
+                candidates.insert(local, cand.clone());
+            }
+        }
+        if !candidates.is_empty() {
+            let type_table = project.type_table.borrow();
+            let rebind = Rebind::new(&func, &type_table);
+            candidates.retain(|&local, cand| variant_local_rewritable(&body, local, cand, &rebind));
+            if !candidates.is_empty() {
+                let span = func.span;
+                for (&local, cand) in &candidates {
+                    compiler_trace!(
+                        "sroa_variant_return",
+                        "scalarizing local {} in {}",
+                        func.locals[local as usize].name,
+                        func.name
+                    );
+                    rewrite_variant_local_defs(&mut body, local, cand, span);
+                    func.locals[local as usize].type_id = cand.layout.tuple_type;
+                    retype_let(&mut body, local, cand.layout.tuple_type);
+                }
+                let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
+                let bound: IndexMap<u32, &Candidate> =
+                    candidates.iter().map(|(&l, c)| (l, c)).collect();
+                let mut cx = SiteCx {
+                    bound: &bound,
+                    names: &names,
+                    rebind: &rebind,
+                    span,
+                };
+                let root = body.root;
+                rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
+                touched.insert(i);
+            }
+        }
+        func.body = Some(body);
+    }
+}
+
+/// Whether every write to `local` builds a case of its variant and every read
+/// destructures it one level deep.
+fn variant_local_rewritable(body: &Body, local: u32, cand: &Candidate, rebind: &Rebind) -> bool {
+    let mut ok = true;
+    let mut defs = 0;
+    let mut sanctioned: IndexSet<ExprId> = IndexSet::default();
+    body.for_each_reachable_node(|node| match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let {
+                local_index, value, ..
+            } = &body.stmts[s].kind
+                && *local_index == local
+            {
+                defs += 1;
+                ok &= builds_case(body, *value, cand);
+            }
+        }
+        NodeRef::Pat(p) => {
+            if matches!(body.pats[p].kind, PatKind::Binding { local_index, .. } if local_index == local)
+            {
+                ok = false;
+            }
+        }
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Assign { target, value } if is_local(body, Operand::Expr(*target), local) => {
+                sanctioned.insert(*target);
+                ok &= builds_case(body, *value, cand);
+            }
+            ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. }
+                if is_local(body, *expr, local) =>
+            {
+                sanctioned.extend(expr.as_expr());
+            }
+            // A payload read of a unit case has no slot to read. It only
+            // survives where nothing reaches it, but it still has to lower.
+            ExprKind::VariantPayload {
+                expr, case_index, ..
+            } if is_local(body, *expr, local) => {
+                sanctioned.extend(expr.as_expr());
+                ok &= cand.layout.payload_read_type(*case_index).is_some();
+            }
+            ExprKind::Match { expr, arms } if is_local(body, *expr, local) => {
+                sanctioned.extend(expr.as_expr());
+                ok &= arms_are_one_level(body, arms, rebind, &cand.layout);
+            }
+            _ => {}
+        },
+        NodeRef::Block(_) => {}
+    });
+    ok && defs > 0
+        && reachable_exprs(body).into_iter().all(|e| {
+            sanctioned.contains(&e)
+                || !matches!(body.exprs[e].kind, ExprKind::Local { index, .. } if index == local)
+        })
+}
+
+/// A case construction of the candidate's variant, or the `null` that spells
+/// `Option::None`.
+fn builds_case(body: &Body, value: Operand, cand: &Candidate) -> bool {
+    match value {
+        Operand::Value(_) => null_return_case(body, value, cand).is_some(),
+        Operand::Expr(e) => matches!(body.exprs[e].kind, ExprKind::VariantConstruct { .. }),
+    }
+}
+
+/// Turn every write to `local` into the case's tuple.
+fn rewrite_variant_local_defs(body: &mut Body, local: u32, cand: &Candidate, span: Span) {
+    let mut lets: Vec<StmtId> = Vec::new();
+    let mut assigns: Vec<ExprId> = Vec::new();
+    body.for_each_reachable_node(|node| match node {
+        NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Let { local_index, .. } if local_index == local) => {
+            lets.push(s);
+        }
+        NodeRef::Expr(e) if matches!(&body.exprs[e].kind, ExprKind::Assign { target, .. } if is_local(body, Operand::Expr(*target), local)) => {
+            assigns.push(e);
+        }
+        _ => {}
+    });
+    for s in lets {
+        let StmtKind::Let { value, .. } = body.stmts[s].kind else {
+            unreachable!()
+        };
+        let tuple = case_tuple(body, value, cand, span);
+        if let StmtKind::Let { value, .. } = &mut body.stmts[s].kind {
+            *value = tuple;
+        }
+    }
+    for e in assigns {
+        let ExprKind::Assign { value, .. } = body.exprs[e].kind else {
+            unreachable!()
+        };
+        let tuple = case_tuple(body, value, cand, span);
+        if let ExprKind::Assign { value, .. } = &mut body.exprs[e].kind {
+            *value = tuple;
+        }
+    }
+}
+
+/// The tuple a case construction (or `null`) stands for, rewritten in place
+/// where the construction is a node of its own.
+fn case_tuple(body: &mut Body, value: Operand, cand: &Candidate, span: Span) -> Operand {
+    let Some(e) = value.as_expr() else {
+        let case = null_return_case(body, value, cand).expect("validated as a case");
+        let tuple = build_result_tuple(body, cand, case, None, span);
+        return Operand::Expr(body.exprs.push(ExprNode {
+            kind: tuple,
+            type_id: cand.layout.tuple_type,
+            span,
+        }));
+    };
+    let ExprKind::VariantConstruct {
+        case_index,
+        payload,
+        ..
+    } = body.exprs[e].kind.clone()
+    else {
+        unreachable!("validated as a case construction")
+    };
+    let tuple = build_result_tuple(body, cand, case_index, payload, span);
+    body.exprs[e].kind = tuple;
+    body.exprs[e].type_id = cand.layout.tuple_type;
+    value
 }
 
 /// Retype every reachable call to a rewritten callee: the node's own `type_id` is
@@ -2078,8 +2284,8 @@ fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) -> bool {
 
 /// Read-only context for the call-site rewrite over one body.
 struct SiteCx<'a> {
-    bound: &'a IndexMap<u32, FuncId>,
-    candidates: &'a IndexMap<FuncId, Candidate>,
+    /// Each tuple-bound local, with the candidate whose layout it holds.
+    bound: &'a IndexMap<u32, &'a Candidate>,
     /// Local names, so a rebuilt `Local` node keeps the binding's own name.
     names: &'a [String],
     /// How each payload binding is re-minted — directly or boxed.
@@ -2089,11 +2295,11 @@ struct SiteCx<'a> {
 
 impl SiteCx<'_> {
     fn variant_of(&self, local: u32) -> TypeId {
-        self.candidates[&self.bound[&local]].variant_type
+        self.bound[&local].variant_type
     }
 
     fn layout_of(&self, local: u32) -> &Layout {
-        &self.candidates[&self.bound[&local]].layout
+        &self.bound[&local].layout
     }
 }
 
@@ -2255,6 +2461,15 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) -> bool {
                     changed = true;
                 }
             }
+            // A variant local's write: the value is already the tuple, and the
+            // target is the tuple local rather than a read wanting the variant.
+            ExprKind::Assign { target, value }
+                if temp_local(body, Operand::Expr(target), cx.bound).is_some() =>
+            {
+                return value
+                    .as_expr()
+                    .is_some_and(|v| rewrite_temp_uses(body, NodeRef::Expr(v), cx));
+            }
             // The destructure itself: leaving it alone keeps a rebuild from
             // nesting under the field reads it planted, which it cannot tell apart.
             ExprKind::FieldAccess { expr, .. } if temp_local(body, expr, cx.bound).is_some() => {
@@ -2367,7 +2582,7 @@ fn is_local(body: &Body, op: Operand, local: u32) -> bool {
     )
 }
 
-fn temp_local(body: &Body, op: Operand, bound: &IndexMap<u32, FuncId>) -> Option<u32> {
+fn temp_local<V>(body: &Body, op: Operand, bound: &IndexMap<u32, V>) -> Option<u32> {
     let e = op.as_expr()?;
     let ExprKind::Local { index, .. } = &body.exprs[e].kind else {
         return None;
