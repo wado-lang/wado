@@ -770,17 +770,35 @@ g (float[1, 4, 8] X) => (float[1, 4, 16] Y)
     assert out.contains("let Y = matmul_shared(X, &weights.W);");
 }
 
-test "a MatMul batch axis that stretches names both operands" {
+test "a MatMul batch axis that stretches lowers to matmul_broadcast, the result spelled" {
     let source = `
 g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
-<>
 {
     Y = MatMul(X, Z)
 }
 `;
-    let e = generate(source, [rule("*", ["Batch", "M", "K"])]).unwrap_err();
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Row", "K"]),
+        rule("Z", ["Batch", "K", "Col"]),
+    ];
+    let out = generate(source, layout).unwrap();
 
-    assert `${e}` == "Y = MatMul: no kernel broadcasts [Batch, M, K] against [Batch, M, K]";
+    assert out.contains("let Y = matmul_broadcast::<[Batch, Row, K], [Batch, K, Col], [Batch, Row, Col]>(X, Z);");
+}
+
+test "a rank-1 MatMul operand lowers to matmul_broadcast, which drops its axis" {
+    let source = `
+g (float[3] X, float[3, 5] Z) => (float[5] Y)
+{
+    Y = MatMul(X, Z)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["K"]),
+        rule("Z", ["K", "Col"]),
+    ]).unwrap();
+
+    assert out.contains("let Y = matmul_broadcast::<[K], [K, Col], [Col]>(X, Z);");
 }
 
 fn refused_dtype(dtype: String) -> String {

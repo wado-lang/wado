@@ -127,63 +127,65 @@ pub fn refuse(reason: Option<String>) {
 }
 
 pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..Bs, K, N]>) -> Tensor<f32, [..Bs, M, N]> {
-    let ra = a.extents.len();
-    let rb = b.extents.len();
-    assert ra >= 2 && ra == rb;
-    let rows = a.extents[ra - 2];
-    let inner = a.extents[ra - 1];
-    let cols = b.extents[rb - 1];
-    assert inner == b.extents[rb - 2];
-
-    let mut extents: List<i32> = [];
-    for let mut i = 0; i < ra - 2; i += 1 {
-        assert a.extents[i] == b.extents[i];
-        extents.push(a.extents[i]);
-    }
-    let batch = element_count(&extents);
-    extents.push(rows);
-    extents.push(cols);
-    return Tensor { data: products(&a.data, &b.data, &extents, batch, inner, inner * cols), extents };
+    return matmul_broadcast(a, b);
 }
 
 /// `matmul` with one matrix on the right, shared by every batch element, as a
 /// language model's head multiplies each position by one weight.
 pub fn matmul_shared<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [K, N]>) -> Tensor<f32, [..Bs, M, N]> {
-    let ra = a.extents.len();
-    assert ra >= 2 && b.extents.len() == 2;
-    let rows = a.extents[ra - 2];
-    let inner = a.extents[ra - 1];
-    let cols = b.extents[1];
-    assert inner == b.extents[0];
-    let mut extents = a.extents[0..<ra - 2].to_list();
-    let batch = element_count(&extents);
-    extents.push(rows);
-    extents.push(cols);
-    return Tensor { data: products(&a.data, &b.data, &extents, batch, inner, 0), extents };
+    return matmul_broadcast(a, b);
 }
 
-/// `batch` matrix products of `rows x inner` by `inner x cols`, row-major, where
-/// `out_extents` ends in `rows, cols`. The right operand's matrix for batch
-/// element `s` starts at `s * b_step`.
-fn products(a: &List<f32>, b: &List<f32>, out_extents: &List<i32>, batch: i32, inner: i32, b_step: i32) -> List<f32> {
-    let rank = out_extents.len();
-    let rows = out_extents[rank - 2];
-    let cols = out_extents[rank - 1];
-    let mut out = List::<f32>::filled(element_count(out_extents), 0.0);
-    for let mut s = 0; s < batch; s += 1 {
-        let a_base = s * rows * inner;
-        let b_base = s * b_step;
+/// ONNX's `MatMul` in full, which is numpy's: a rank-1 operand is a row on the
+/// left or a column on the right, whose axis the result drops, and the batch
+/// axes broadcast. The caller spells `Out`.
+pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Tensor<f32, Out> {
+    let a_matrix = if a.extents.len() == 1 { [1, a.extents[0]] as List<i32> } else { a.extents };
+    let b_matrix = if b.extents.len() == 1 { [b.extents[0], 1] as List<i32> } else { b.extents };
+    let [ra, rb] = [
+        a_matrix.len(),
+        b_matrix.len(),
+    ];
+    let rows = a_matrix[ra - 2];
+    let inner = a_matrix[ra - 1];
+    let cols = b_matrix[rb - 1];
+    assert inner == b_matrix[rb - 2];
+    let a_batch = a_matrix[0..<ra - 2].to_list();
+    let b_batch = b_matrix[0..<rb - 2].to_list();
+    let batch = broadcast_extents(&a_batch, &b_batch).unwrap();
+    let mut extents = batch;
+    if a.extents.len() > 1 {
+        extents.push(rows);
+    }
+    if b.extents.len() > 1 {
+        extents.push(cols);
+    }
+    let mut out = List::<f32>::filled(element_count(&extents), 0.0);
+    // Each batch element's matrices, where a batch axis of 1 stretches.
+    let a_carries = stretched_carries(&a_batch, &batch);
+    let b_carries = stretched_carries(&b_batch, &batch);
+    let mut index = List::<i32>::filled(batch.len(), 0);
+    let [mut at_a, mut at_b] = [0, 0];
+    let [lhs_data, rhs_data] = [&a.data, &b.data];
+    for let s of 0..<element_count(&batch) {
+        let a_base = at_a * rows * inner;
+        let b_base = at_b * inner * cols;
         let out_base = s * rows * cols;
         for let mut r = 0; r < rows; r += 1 {
             for let mut k = 0; k < inner; k += 1 {
-                let lhs = a[a_base + r * inner + k];
+                let lhs = lhs_data[a_base + r * inner + k];
                 for let mut c = 0; c < cols; c += 1 {
-                    out[out_base + r * cols + c] += lhs * b[b_base + k * cols + c];
+                    out[out_base + r * cols + c] += lhs * rhs_data[b_base + k * cols + c];
                 }
             }
         }
+        let axis = advance(&mut index, &batch);
+        if axis >= 0 {
+            at_a += a_carries[axis];
+            at_b += b_carries[axis];
+        }
     }
-    return out;
+    return Tensor { data: out, extents };
 }
 
 /// `Gather` along axis 0: the row of `data` each index names, as an embedding
