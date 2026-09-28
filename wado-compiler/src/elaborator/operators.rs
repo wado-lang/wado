@@ -13,15 +13,8 @@ use crate::unparse::binary_op_str;
 
 use super::Elaborator;
 use super::coercion::{
-<<<<<<< HEAD
-    is_literal_arithmetic, is_primitive_literal_target, numeric_literal_pair_order,
-    unary_passes_expected_type,
-||||||| 2faa88b40
-    is_literal_arithmetic, is_primitive_literal_target, numeric_literal_pair_order,
-=======
     DeferredOperator, is_literal_arithmetic, is_primitive_literal_target,
-    numeric_literal_pair_order,
->>>>>>> origin/main
+    numeric_literal_pair_order, unary_passes_expected_type,
 };
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
@@ -138,19 +131,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, TypeId) {
-<<<<<<< HEAD
-        // A comparison is `bool` whatever its operands are, so the type expected
-        // of it says nothing about them.
-        let expected_type = if op.is_comparison() {
-            None
-        } else {
-            expected_type
-        };
-||||||| 2faa88b40
-=======
         // A comparison is a `bool` whatever its operands are.
         let expected_type = expected_type.filter(|_| !op.is_comparison());
->>>>>>> origin/main
         let left_is_literal = is_literal_arithmetic(left_ast);
         let right_is_literal = is_literal_arithmetic(right_ast);
 
@@ -965,19 +947,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let inner_expected = match unary.op {
-<<<<<<< HEAD
-            UnaryOp::Ref | UnaryOp::MutRef => {
-                expected_type.and_then(|expected| self.tysys.pointee_of(expected))
-            }
-            _ if unary_passes_expected_type(unary) => expected_type,
-            _ => None,
-||||||| 2faa88b40
-            UnaryOp::Ref | UnaryOp::MutRef => {
-                expected_type.and_then(|expected| self.tysys.pointee_of(expected))
-            }
-            UnaryOp::Neg | UnaryOp::BitNot if is_literal_arithmetic(&unary.expr) => expected_type,
-            UnaryOp::Neg | UnaryOp::BitNot | UnaryOp::Not | UnaryOp::Deref => None,
-=======
             UnaryOp::Ref | UnaryOp::MutRef => expected_type
                 .and_then(|expected| self.tysys.pointee_of(expected))
                 .or_else(|| {
@@ -992,7 +961,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })?;
                     Some(pointee[0])
                 }),
-            UnaryOp::Neg | UnaryOp::BitNot if is_literal_arithmetic(&unary.expr) => expected_type,
+            _ if unary_passes_expected_type(unary) => expected_type,
             // Either keeps the variable a pending call is still to answer,
             // dispatched again once it is.
             UnaryOp::Neg | UnaryOp::BitNot
@@ -1001,7 +970,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected_type
             }
             UnaryOp::Neg | UnaryOp::BitNot | UnaryOp::Not | UnaryOp::Deref => None,
->>>>>>> origin/main
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the
         // subscript resolves through `IndexRefMut` and carries the mutability in
