@@ -7,6 +7,7 @@ use crate::lower::plan::value_copy::place;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, minted_name};
 use crate::primitive::PrimitiveType;
+use crate::tir::LetStorage;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt,
@@ -912,7 +913,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     span,
                 );
@@ -944,7 +945,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     span,
                 );
@@ -1009,7 +1010,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     span,
                 );
@@ -1072,7 +1073,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     span,
                 );
@@ -1151,7 +1152,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     span,
                 );
@@ -1202,7 +1203,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     span,
                 );
@@ -1262,7 +1263,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     span,
                 );
@@ -1322,7 +1323,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: pattern_type,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     span,
                 );
@@ -1591,7 +1592,7 @@ impl<'a> PatternLowerer<'a> {
                 is_mut,
                 is_reactive,
                 type_id,
-                skip_value_copy,
+                storage,
             } => {
                 // Lower expressions inside the Let value
                 let mut value = value;
@@ -1604,7 +1605,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive,
                         type_id,
                         value,
-                        skip_value_copy,
+                        storage,
                     },
                     stmt.span,
                 ));
@@ -1711,7 +1712,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id: binding_type,
                 value,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         ));
@@ -1794,7 +1795,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id,
                 value: hoisted,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         )
@@ -1828,7 +1829,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id,
                 value,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         ));

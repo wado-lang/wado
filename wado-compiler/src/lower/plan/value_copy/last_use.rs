@@ -12,7 +12,7 @@ use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::tir;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
+    FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
     capture_source_locals,
 };
@@ -552,7 +552,7 @@ impl Analyzer<'_> {
             }
         }
         // The resolved root reaches where the syntax stops, and covers the
-        // `skip_value_copy` binding `let_sources` leaves out.
+        // `Taken` and place-`Aliased` bindings `let_sources` leaves out.
         for (local, path) in &self.share_sources {
             edge(*local, path.clone());
         }
@@ -927,7 +927,7 @@ struct Analyzer<'a> {
     /// Place-level move sites `(root, top-level field, span)` found at literals,
     /// filtered after the walk. A `None` field is a whole-value materialization.
     place_cands: Vec<PlaceMove>,
-    /// Locals bound by a `skip_value_copy` `let` — storage handed over by the
+    /// Locals bound by a `LetStorage::Taken` `let` — storage handed over by the
     /// binding's producer, so owned without a source to prove it.
     declared_owned: IndexSet<u32>,
     /// The place each `let` reads its value out of, for the share rule.
@@ -1691,15 +1691,13 @@ impl Analyzer<'_> {
             TirStmtKind::Let {
                 local_index,
                 value,
-                skip_value_copy,
+                storage,
                 ..
             } => {
                 if record {
-                    // A `skip_value_copy` binding takes the storage over, its
-                    // producer having proved the source dead.
-                    if *skip_value_copy {
+                    if *storage == LetStorage::Taken {
                         self.declared_owned.insert(*local_index);
-                    } else {
+                    } else if !names_held_storage(*storage, value) {
                         self.record_alias(*local_index, value, live);
                         self.let_sources
                             .entry(*local_index)
@@ -2265,6 +2263,13 @@ fn capacity_observed_locals(body: &TirBlock, type_table: &TypeTable) -> IndexSet
     };
     scan.visit_block(body);
     scan.found
+}
+
+/// Whether a `let` holding `value` as `storage` names storage a place still
+/// holds. Such a binding never owns it, however fresh the place is. An aliased
+/// value no place holds is the binding's alone, as a planned one is.
+pub(crate) fn names_held_storage(storage: LetStorage, value: &TirExpr) -> bool {
+    storage == LetStorage::Aliased && alias_root(value).is_some()
 }
 
 pub(crate) fn alias_root(expr: &TirExpr) -> Option<u32> {

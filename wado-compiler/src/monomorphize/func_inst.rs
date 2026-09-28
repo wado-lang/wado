@@ -27,7 +27,7 @@ use crate::synthesis::template::{
     ranked_value_blanket, ref_blanket_call, trait_call_template,
 };
 use crate::tir;
-use crate::tir::TemplateId;
+use crate::tir::{LetStorage, TemplateId};
 use crate::token::Span;
 
 /// Lower remaining comparison operators on non-primitive types in all module functions.
@@ -2990,7 +2990,7 @@ impl Monomorphizer {
         //
         // The temp is private to this unroll and each of its fields is read by
         // exactly one iteration, so every element binding below moves its field
-        // out (`skip_value_copy`) instead of deep-copying it.
+        // out (`LetStorage::Taken`) instead of deep-copying it.
         let temp_local_idx = *local_count;
         *local_count += 1;
         locals.push(TirLocal {
@@ -3022,7 +3022,7 @@ impl Monomorphizer {
                     is_reactive: false,
                     type_id: iterable_type,
                     value: iterable.clone(),
-                    skip_value_copy: false,
+                    storage: LetStorage::Planned,
                 },
                 span,
             ));
@@ -3097,7 +3097,7 @@ impl Monomorphizer {
                         is_reactive: false,
                         type_id: bind_type,
                         value: bind_value,
-                        skip_value_copy: true,
+                        storage: LetStorage::Taken,
                     },
                     span,
                 ));
@@ -3216,7 +3216,7 @@ impl Monomorphizer {
                                     is_reactive: *is_reactive,
                                     type_id: field_type,
                                     value: field_access,
-                                    skip_value_copy: true,
+                                    storage: LetStorage::Taken,
                                 },
                                 span,
                             ));
@@ -3503,7 +3503,7 @@ impl Monomorphizer {
         let pack_tuple = pack_index.and_then(|idx| self.pack_source_tuple(idx, substitution));
 
         // Private to this unroll, one reader per field — so each element binding
-        // moves its field out (`skip_value_copy`) rather than deep-copying it.
+        // moves its field out (`LetStorage::Taken`) rather than deep-copying it.
         let temp_name = format!("$comp_{uid}");
         let temp_local = *local_count;
         *local_count += 1;
@@ -3577,7 +3577,7 @@ impl Monomorphizer {
                         is_reactive: false,
                         type_id: bind_type,
                         value: bind_value,
-                        skip_value_copy: true,
+                        storage: LetStorage::Taken,
                     },
                     span,
                 ));
@@ -3657,7 +3657,7 @@ impl Monomorphizer {
                                 span,
                             )
                         },
-                        skip_value_copy: true,
+                        storage: LetStorage::Taken,
                     },
                     span,
                 ));
@@ -3749,7 +3749,7 @@ impl Monomorphizer {
                     is_reactive: false,
                     type_id: source_type,
                     value: source,
-                    skip_value_copy: false,
+                    storage: LetStorage::Planned,
                 },
                 span,
             ));

@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::lower::wide_int_literal::create_literal;
+use crate::tir::LetStorage;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm, TirPattern,
     TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -93,7 +94,7 @@ pub(super) fn build_if_chain(
                         is_reactive: false,
                         type_id: *type_id,
                         value: scrutinee.clone(),
-                        skip_value_copy: true,
+                        storage: LetStorage::Aliased,
                     },
                     span,
                 );

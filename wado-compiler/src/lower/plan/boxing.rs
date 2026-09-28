@@ -9,6 +9,7 @@ use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
+use crate::tir::LetStorage;
 use crate::tir::{
     MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField, TirFunction,
     TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
@@ -160,7 +161,7 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
                     is_reactive: false,
                     type_id: *box_type_id,
                     value: wrap,
-                    skip_value_copy: true,
+                    storage: LetStorage::Taken,
                 },
                 span,
             ));

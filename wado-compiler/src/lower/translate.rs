@@ -45,7 +45,8 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
-    CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
+    CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, LetStorage, MonomorphInfo,
+    ResolvedType,
     StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
     TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirMatchArm,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
@@ -1134,7 +1135,7 @@ impl FunctionTranslator<'_, '_> {
                 is_reactive,
                 type_id,
                 value,
-                skip_value_copy,
+                storage,
             } => {
                 // Copy first, then box: a boxed local changes only its
                 // storage cell, not its value semantics.
@@ -1145,7 +1146,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     (*type_id, None)
                 };
-                let needs_value_copy_wrap = !*skip_value_copy
+                let needs_value_copy_wrap = !storage.skips_copy()
                     && !self.share_eligible_locals.contains(local_index)
                     && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                     && self.should_wrap_value_copy(value);
@@ -1167,7 +1168,7 @@ impl FunctionTranslator<'_, '_> {
                     is_reactive: *is_reactive,
                     type_id: effective_type,
                     value: value_op,
-                    skip_value_copy: *skip_value_copy,
+                    skip_value_copy: storage.skips_copy(),
                 }
             }
             TirStmtKind::Expr(expr) => StmtKind::Expr(self.convert_operand(expr)),
@@ -1420,7 +1421,7 @@ impl FunctionTranslator<'_, '_> {
                     // `value_copy::analyze`'s seed walker, so any
                     // wrap would look up a helper that was never
                     // registered.
-                    skip_value_copy: true,
+                    storage: LetStorage::Aliased,
                 },
                 scrutinee.span,
             );

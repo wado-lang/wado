@@ -36,7 +36,7 @@ use crate::name::{
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
 use crate::synthesis::template::{blanket_dispatch_for, ref_blanket_call, trait_call_template};
-use crate::tir::{StructDef, TemplateId, TemplateShape, TraitRef};
+use crate::tir::{LetStorage, StructDef, TemplateId, TemplateShape, TraitRef};
 use crate::{hashmap, tir};
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
@@ -4692,7 +4692,7 @@ fn generate_enum_ord_fn(
                 is_reactive: false,
                 type_id: enum_type,
                 value,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         )
@@ -5120,7 +5120,7 @@ fn build_struct_ord_body(
                 is_reactive: false,
                 type_id: ordering_type,
                 value: cmp_result,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         ));

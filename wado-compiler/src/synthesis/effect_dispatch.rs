@@ -17,6 +17,7 @@ use crate::name::{
 };
 use crate::package::Package;
 use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
+use crate::tir::LetStorage;
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
     MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture, TirEffectOp, TirExpr,
@@ -595,7 +596,7 @@ fn build_dispatch_wrapper_function(
             is_reactive: false,
             type_id: nullable_ref_type_id,
             value: global_get_expr,
-            skip_value_copy: true,
+            storage: LetStorage::Aliased,
         },
         span,
     ));
@@ -671,7 +672,7 @@ fn build_dispatch_wrapper_function(
                 is_reactive: false,
                 type_id: return_type,
                 value: indirect_call,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         ));
@@ -1590,7 +1591,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                         is_reactive: false,
                         type_id: handler_type,
                         value: binding.handler.clone(),
-                        skip_value_copy: true,
+                        storage: LetStorage::Aliased,
                     },
                     span,
                 ));
@@ -1608,7 +1609,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     is_reactive: false,
                     type_id: handler_type,
                     value: binding.handler.clone(),
-                    skip_value_copy: true,
+                    storage: LetStorage::Aliased,
                 },
                 span,
             ));
@@ -1634,7 +1635,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 is_reactive: false,
                 type_id: plan.nullable_ref_type_id,
                 value: global_get,
-                skip_value_copy: true,
+                storage: LetStorage::Aliased,
             },
             span,
         ));
@@ -1708,7 +1709,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 is_reactive: false,
                 type_id: plan.struct_type_id,
                 value: struct_lit,
-                skip_value_copy: true,
+                storage: LetStorage::Taken,
             },
             span,
         ));
@@ -1801,7 +1802,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 is_reactive: false,
                 type_id: result_type,
                 value: body_expr,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             body_span,
         ));
@@ -1896,7 +1897,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                         is_reactive: false,
                         type_id: value_type,
                         value: value_expr,
-                        skip_value_copy: true,
+                        storage: LetStorage::Aliased,
                     },
                     stmt_span,
                 ));
