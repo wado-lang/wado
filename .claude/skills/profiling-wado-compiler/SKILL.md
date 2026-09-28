@@ -143,8 +143,9 @@ wado compile --log-level debug hello.wado 2>&1 | grep '<< '
 ```
 
 The pair is current/peak MiB. A span that allocates and frees again nets out
-near `+0`, so read a jump in the peak as well as the change. RSS is process-wide, so under `wado test` with
-more than one worker the moves mix every worker's compile. Use `-p 1` there.
+near `+0`, so read a jump in the peak as well as the change. RSS is
+process-wide, so under `wado test` with more than one worker the changes mix
+every worker's compile. Use `-p 1` there.
 
 ### Per allocation site: DHAT
 
