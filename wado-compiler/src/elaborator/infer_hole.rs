@@ -359,7 +359,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
-    /// only when hole-free — a hole must resolve to a concrete type, not another.
+    /// when hole-free, or chained where it names only open variables of calls
+    /// whose arguments are still being read, which answer them in turn.
     pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
         self.solve_holes_against(holey, expected, None);
     }
@@ -387,14 +388,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty() {
             return;
         }
-        let usable: Vec<(TypeId, TypeId)> = bindings
+        let taken = bindings
             .into_iter()
-            .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)))
-            .filter(|&(_, concrete)| self.tysys.is_usable_answer(concrete))
-            .collect();
-        for (hole, concrete) in usable {
-            if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
-                *slot = Some(concrete);
+            .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)));
+        for (hole, answer) in taken {
+            if self.tysys.is_usable_answer(answer) {
+                if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
+                    *slot = Some(answer);
+                }
+            } else if self.awaits_pending_call(answer) {
+                // The enclosing call answers its variable once its arguments
+                // are read, and the hole with it.
+                self.chain_infer_var(hole, answer);
             }
         }
     }
