@@ -23,7 +23,13 @@ function hfTensor(name) {
   const t = hfH[name];
   if (!t) throw new Error(`missing ${name}`);
   const [b, e] = t.data_offsets;
-  return { shape: t.shape, bytes: hf.subarray(8 + hfN + b, 8 + hfN + e) };
+  return { dtype: t.dtype, shape: t.shape, bytes: hf.subarray(8 + hfN + b, 8 + hfN + e) };
+}
+
+function expect(name, what, got, want) {
+  if (JSON.stringify(got) !== JSON.stringify(want)) {
+    throw new Error(`${name}: ${what} ${JSON.stringify(got)}, the graph wants ${JSON.stringify(want)}`);
+  }
 }
 
 const parts = [];
@@ -33,6 +39,8 @@ for (const [name, t] of Object.entries(want)) {
   let bytes;
   if (name === "onnx::MatMul_3718") {
     const src = hfTensor("wte.weight");
+    expect(name, "dtype", src.dtype, t.dtype);
+    expect(name, "transposed shape", [...src.shape].reverse(), t.shape);
     const [rows, cols] = src.shape;
     const f = new Float32Array(src.bytes.buffer.slice(src.bytes.byteOffset, src.bytes.byteOffset + src.bytes.length));
     const out = new Float32Array(rows * cols);
@@ -40,14 +48,19 @@ for (const [name, t] of Object.entries(want)) {
     bytes = Buffer.from(out.buffer);
   } else {
     const src = hfTensor(name.replace(/^transformer\./, ""));
-    if (JSON.stringify(src.shape) !== JSON.stringify(t.shape)) throw new Error(`shape ${name}`);
+    expect(name, "dtype", src.dtype, t.dtype);
+    expect(name, "shape", src.shape, t.shape);
     bytes = src.bytes;
   }
   header[name] = { dtype: t.dtype, shape: t.shape, data_offsets: [off, off + bytes.length] };
   off += bytes.length;
   parts.push(bytes);
 }
-const h = Buffer.from(JSON.stringify(header));
+// Padded with spaces to a multiple of 8, as `write_safetensors` pads it, so each
+// tensor starts 8-byte aligned and the header is gpt2-header.safetensors itself.
+let json = JSON.stringify(header);
+json += " ".repeat((8 - (json.length % 8)) % 8);
+const h = Buffer.from(json);
 const len = Buffer.alloc(8);
 len.writeBigUInt64LE(BigInt(h.length));
 writeFileSync(outPath, Buffer.concat([len, h, ...parts]));
