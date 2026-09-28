@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.31](https://github.com/wado-lang/wado/compare/v0.0.30...v0.0.31) - 2026-09-28
+
+- test(gale): pin four antlr/antlr4 parse-bug reports; ANTLR4's own bugs are not reproduced by @gfx in https://github.com/wado-lang/wado/pull/2200
+- refactor(compiler): a method call without its receiver cannot be built, in TIR or NIR by @gfx in https://github.com/wado-lang/wado/pull/2201
+- fix(compiler): closure-returned literals take the expected type, and -O2 converges on deep constant chains by @gfx in https://github.com/wado-lang/wado/pull/2199
+- docs(web): mark the web WEP implemented; track package-web in TODO.md by @gfx in https://github.com/wado-lang/wado/pull/2205
+- feat(loam): every lowered operator agrees with onnxruntime, and ONNX's clamps and rounded counts become symbols by @gfx in https://github.com/wado-lang/wado/pull/2203
+- fix: keep the heap out of libm's 17 pages, and let a library export `ByteList` as `byte-list` by @gfx in https://github.com/wado-lang/wado/pull/2204
+
 ## [v0.0.30](https://github.com/wado-lang/wado/compare/v0.0.29...v0.0.30) - 2026-09-27
 
 - fix(retain): one reading of a body-less callee; WIR goldens 2.1% smaller by @gfx in https://github.com/wado-lang/wado/pull/2192
