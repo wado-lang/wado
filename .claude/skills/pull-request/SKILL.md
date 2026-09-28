@@ -50,10 +50,8 @@ reader scanning a list of PRs is deciding whether to care.
 
 `<type>(<scope>): <the value>`
 
-Name the value, not the mechanism behind it or the measurement of it. Numbers
-belong in the description, beside what they were measured against. If the
-branch is worth more than one thing, name the largest and leave the rest to the
-description.
+If the branch is worth more than one thing, name the largest and leave the rest
+to the description.
 
 `type` is `feat`, `fix`, `docs`, `perf`, `refactor` or `chore`, with `!` for a
 breaking change. The scope is optional.
