@@ -33,12 +33,12 @@ pub(crate) struct ModuleSemantics {
     /// `(impl_block.id, trait_default_method.ast_id)`. The same trait body is
     /// synthesised once per impl, so one trait node legitimately carries a fact
     /// set per impl, which a flat map could not hold.
-    pub(crate) default_method_semantics: IndexMap<(AstId, AstId), DefaultMethodFacts>,
+    pub(crate) default_method_facts: IndexMap<(AstId, AstId), DefaultMethodFacts>,
 }
 
 /// What one walk of a trait default body records for one impl. Its
 /// declarations and imports are the impl module's, so it holds none.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub(crate) struct DefaultMethodFacts {
     pub(crate) bindings: ModuleBindings,
     pub(crate) types: TypeAnnotations,

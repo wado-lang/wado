@@ -713,7 +713,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // Reify is the sole producer of
                     // trait default-method `TirFunction`s, synthesised here
                     // from the per-impl facts the body walk recorded on
-                    // `sem.default_method_semantics`.
+                    // `sem.default_method_facts`.
                     for tir_func in self.reify_impl_default_methods(impl_block) {
                         tir_module.add_function(tir_func);
                     }
@@ -1354,7 +1354,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Synthesise a `Struct^Trait::method` `TirFunction` for each default method
     /// the impl does not override, reading the body-walk facts from
-    /// `sem.default_method_semantics[(impl_block.id, default_method.id)]`. The
+    /// `sem.default_method_facts[(impl_block.id, default_method.id)]`. The
     /// module perspective is swapped to the trait module for the walk, since the
     /// facts are keyed by `AstId`s that name it.
     fn reify_impl_default_methods(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
@@ -1408,7 +1408,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for default_method in &default_methods {
             let key = (impl_block.id, default_method.id);
             let sem = self.sem;
-            let Some(walk) = sem.default_method_semantics.get(&key) else {
+            let Some(walk) = sem.default_method_facts.get(&key) else {
                 // Combined walk did not record a synthesis for this default
                 // method (e.g. `resolve_method` returned `None` in
                 // error-recovery). Skip — reify produces no TIR for it.

@@ -1102,7 +1102,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     |(ms, _)| !(modules.contains_key(*ms) && is_stdlib_snapshot_hit(snapshot, ms))
                 )
                 .all(|(_, sem)| sem.routed_facts().next().is_none()
-                    && sem.default_method_semantics.is_empty())),
+                    && sem.default_method_facts.is_empty())),
             "a snapshot module carrying facts must be served to this compile"
         );
 
@@ -2224,7 +2224,7 @@ fn spelled_references(
     let inherit_sems = state
         .module_semantics
         .values()
-        .flat_map(|sem| sem.default_method_semantics.values());
+        .flat_map(|sem| sem.default_method_facts.values());
     for sem in inherit_sems {
         for (use_id, def_key) in &sem.bindings.references {
             inherited.entry(*use_id).or_default().insert(*def_key);
@@ -2239,11 +2239,8 @@ fn dispatched_callee_edges(state: &AnnotateState) -> IndexMap<ast::AstId, IndexS
     let defs = state.tysys.resolutions.defs();
     let mut edges: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
     let walks = state.module_semantics.values().flat_map(|sem| {
-        std::iter::once(&sem.types).chain(
-            sem.default_method_semantics
-                .values()
-                .map(|facts| &facts.types),
-        )
+        std::iter::once(&sem.types)
+            .chain(sem.default_method_facts.values().map(|facts| &facts.types))
     });
     for types in walks {
         for (use_id, def) in types.dispatched_callees() {

@@ -2089,7 +2089,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     imports: std::mem::take(&mut scope.sem.imports),
                     types: TypeAnnotations::default(),
                     decls: std::mem::take(&mut scope.sem.decls),
-                    default_method_semantics: hashmap::IndexMap::default(),
+                    default_method_facts: hashmap::IndexMap::default(),
                 };
                 let ((), populated) = util::replaced(
                     &mut *scope,
@@ -2115,15 +2115,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     imports,
                     types,
                     decls,
-                    default_method_semantics,
+                    default_method_facts,
                 } = populated;
                 assert!(
-                    default_method_semantics.is_empty(),
+                    default_method_facts.is_empty(),
                     "a default method's walk synthesises no default methods of its own"
                 );
                 scope.sem.imports = imports;
                 scope.sem.decls = decls;
-                scope.sem.default_method_semantics.insert(
+                scope.sem.default_method_facts.insert(
                     (impl_block.id, default_method.id),
                     DefaultMethodFacts { bindings, types },
                 );

@@ -469,7 +469,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Substitute holes through every recorded fact that can carry a `TypeId`.
     /// Trait default-method bodies record into their own facts in
-    /// `default_method_semantics`, not the main `types`; sweep those too, or a
+    /// `default_method_facts`, not the main `types`; sweep those too, or a
     /// hole minted in a default-method body leaks past reify.
     fn sweep_recorded_facts(&mut self, subst: &IndexMap<InferVarId, TypeId>) {
         if subst.is_empty() {
@@ -477,7 +477,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let mut tt = self.tysys.type_table.borrow_mut();
         Self::sweep_type_annotations(&mut tt, &mut self.sem.types, subst);
-        for facts in self.sem.default_method_semantics.values_mut() {
+        for facts in self.sem.default_method_facts.values_mut() {
             Self::sweep_type_annotations(&mut tt, &mut facts.types, subst);
         }
     }
