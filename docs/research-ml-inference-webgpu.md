@@ -272,12 +272,12 @@ and _whether a rotation is applied_.
 
 ## 10. WebGPU Feature Status
 
-| Feature                              | Status (2026-09)                                                                                                                      |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Subgroups                            | Shipped (Chrome 134, 2025-02) after a year of trials                                                                                  |
-| Subgroup matrix (cooperative matrix) | In standardization, [gpuweb#4195](https://github.com/gpuweb/gpuweb/issues/4195); Khronos 2026 material lists it as on the back burner |
-| Device-wide barrier                  | Absent, and not proposed                                                                                                              |
-| Dispatch amortization                | Identified as needed at the specification level (§5)                                                                                  |
+| Feature                              | Status (2026-09)                                                                                                                             |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Subgroups                            | Shipped (Chrome 134, 2025-02) after a year of trials                                                                                         |
+| Subgroup matrix (cooperative matrix) | In standardization, [gpuweb/gpuweb#4195](https://github.com/gpuweb/gpuweb/issues/4195); Khronos 2026 material lists it as on the back burner |
+| Device-wide barrier                  | Absent, and not proposed                                                                                                                     |
+| Dispatch amortization                | Identified as needed at the specification level (§5)                                                                                         |
 
 Open questions in the subgroup matrix issue include which address spaces to
 support (a uniform subset of `storage` and `workgroup`, or all) and whether
@@ -381,6 +381,6 @@ Recorded as constraints on anything built in this space.
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Megakernel compiler    | [Mirage Persistent Kernel](https://github.com/mirage-project/mirage)                                                                       |
 | Rust GPU kernel DSL    | [CubeCL](https://github.com/tracel-ai/cubecl)                                                                                              |
-| WebGPU subgroup matrix | [gpuweb#4195](https://github.com/gpuweb/gpuweb/issues/4195)                                                                                |
+| WebGPU subgroup matrix | [gpuweb/gpuweb#4195](https://github.com/gpuweb/gpuweb/issues/4195)                                                                         |
 | WebGPU roadmap         | [Khronos WebGL+WebGPU, SIGGRAPH 2026](https://www.khronos.org/assets/uploads/developers/presentations/WebGL%2BWebGPU_-_SIGGRAPH_Jul26.pdf) |
 | Wasm ML interface      | [WebAssembly/wasi-nn](https://github.com/WebAssembly/wasi-nn)                                                                              |

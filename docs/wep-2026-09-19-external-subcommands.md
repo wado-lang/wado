@@ -55,13 +55,13 @@ in `~/.docker/cli-plugins`), Helm (a `plugin.yaml` in `$HELM_PLUGINS`) and krew
 all left `PATH` to do it. Those that stayed answer neither: git says nothing,
 `kubectl plugin list` only warns of a file that is not executable, shadowed by
 an earlier entry, or colliding with a builtin, and
-[cargo#10662](https://github.com/rust-lang/cargo/issues/10662) is open,
+[rust-lang/cargo#10662](https://github.com/rust-lang/cargo/issues/10662) is open,
 proposing an ELF note read without running the binary.
 
 Neither is a safety gap. Whoever can write `wado-<name>` into a `PATH`
 directory has already won, since the user will run that file, and asking a
 candidate for its description is no more dangerous, since `wado <name>` runs
-that same file anyway. cargo#10662 calls that a security risk; the risk was
+that same file anyway. rust-lang/cargo#10662 calls that a security risk; the risk was
 taken at install. Its cost is time, one spawn per candidate on `--list`, hence
 the marker read out of the file instead. Provenance is settled at install too,
 by krew's sha256 and its index, and `wado` installs nothing. Safety here is the

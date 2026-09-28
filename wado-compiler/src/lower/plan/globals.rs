@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::Visibility;
@@ -551,8 +552,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
                     method_info: None,
                 }),
                 type_args: Vec::new(),
-                args: Vec::new(),
-                has_receiver: false,
+                args: CallArgs::free(Vec::new()),
             },
             TypeTable::UNIT,
             span,
@@ -601,8 +601,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
                 method_info: None,
             }),
             type_args: Vec::new(),
-            args: Vec::new(),
-            has_receiver: false,
+            args: CallArgs::free(Vec::new()),
         },
         TypeTable::UNIT,
         span,

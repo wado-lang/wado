@@ -544,7 +544,7 @@ impl Interpreter<'_> {
         let Some(builtin) = self.facts.ctfe_builtins.and_then(|m| m.get(func_id)) else {
             return Lattice::Unevaluated;
         };
-        let args = args.as_slice();
+        let args = &args[..];
         match builtin {
             CtfeBuiltin::ArrayLen => {
                 let [arr] = args else {

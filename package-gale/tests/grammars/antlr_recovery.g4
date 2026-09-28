@@ -1,7 +1,10 @@
 // ANTLR4's error recovery, one rule per edit it makes: a decision's sync
 // (single-token deletion on entry, a skipped run after a loop iteration) and a
 // failed rule resynchronising on what the rules under way can continue with.
-// `tail` and `single` pin where no sync runs.
+// `tail` and `single` pin where no sync runs. `stmts` pins that the same
+// failure again where recovery left off moves past the token its loop
+// re-enters on, and `nest` that recursive frames fail the same way only at the
+// same point in their rule.
 
 grammar AntlrRecovery;
 
@@ -25,6 +28,10 @@ mid    : pair ';' ;
 pair   : 'a' 'b' ;
 trail  : grpend 'end' ;
 grpend : 'x' ('y' 'v' | 'w') ;
+stmts  : stmt* 'end' ;
+stmt   : 'x' 'y' | 'x' 'w' ;
+nest   : ne ';' ;
+ne     : '(' ne ')' | 'x' ;
 
 INT : [0-9]+ ;
 Z   : 'z' ;

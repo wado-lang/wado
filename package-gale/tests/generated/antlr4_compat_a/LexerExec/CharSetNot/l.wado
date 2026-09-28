@@ -1153,6 +1153,9 @@ struct Parser {
     max_errors: i32,
     site: i32,
     sites: List<i32>,
+    failed_expected: List<i32>,
+    recovery_pos: i32,
+    recovered_failures: List<[NodeKind, List<i32>]>,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     line_starts: List<i32>,
@@ -1169,7 +1172,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
     }
 
     fn emit(&mut self, s: String) {
@@ -1268,21 +1271,28 @@ impl Parser {
         if self.supersedes_pending(span.start) {
             self.pending = Option::Some(Diagnostic::error(code, with_expected(message, &kind_names(expected)), span, *expected, self.kinds[self.pos], RecoveryAction::None));
         }
+        self.enter_recovery(expected);
+    }
+
+    fn enter_recovery(&mut self, expected: &List<i32>) {
         self.recovering = true;
+        if !self.speculating { self.failed_expected = *expected; }
     }
 
     fn fail_on_token(&mut self, what: String, expected: &List<i32>, code: DiagnosticCode) {
         if self.supersedes_pending(self.tokens.starts[self.pos]) {
             self.fail(`${what} "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), expected, code);
+            return;
         }
-        self.recovering = true;
+        self.enter_recovery(expected);
     }
 
     fn fail_on_kind(&mut self, kind: i32) {
-        if self.supersedes_pending(self.tokens.starts[self.pos]) {
-            self.fail_expecting(&([kind] as List<i32>));
+        if self.speculating && !self.supersedes_pending(self.tokens.starts[self.pos]) {
+            self.recovering = true;
+            return;
         }
-        self.recovering = true;
+        self.fail_expecting(&([kind] as List<i32>));
     }
 
     fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
@@ -1303,8 +1313,15 @@ impl Parser {
         let node = if row < 0 { self.b.innermost_open() } else { row };
         self.b.resume_node(node, self.last_end());
         assert self.b.node_kind(node) == rule, "recover_rule: the resumed node is the failed rule's";
+        if !self.b.in_error_mode() { self.recovered_failures.clear(); }
         self.commit_pending();
         self.recovering = false;
+        let failure = [rule, self.failed_expected];
+        if self.pos == self.recovery_pos && self.recovered_failures.contains(&failure) && self.kinds[self.pos] != TK_EOF {
+            self.skip_one();
+        }
+        self.recovery_pos = self.pos;
+        self.recovered_failures.push(failure);
         self.skip_until(&self.resync_set(&[]));
         return true;
     }

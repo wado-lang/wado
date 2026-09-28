@@ -25,6 +25,7 @@ Files headed `// Do not edit by hand` are generated. To change one, edit its sou
 
 Gale targets full compatibility with the ANTLR4 `.g4` syntax. The g4 parser must accept any well-formed grammar upstream `antlr4` accepts; a real-world `.g4` that ANTLR4 accepts but Gale rejects is a Gale bug. The one exception is `import Foo = Bar;`; claim (a) in [`antlr4-compatibility.md`](./antlr4-compatibility.md) carves it out.
 
+- A bug in ANTLR4 itself is not reproduced: a test pins the corrected answer and names the upstream report. See "Bugs in ANTLR4 itself" in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 - Compatibility is a capability contract, not byte-for-byte output. Parse trees, tokens, and semantics must match; incidental rendering differences that carry no structure may diverge (e.g. the `<EOF>` marker in `toStringTree()`).
 - Gale is a superset: it may accept grammars ANTLR4 rejects only when the meaning is uniquely determined by Gale's language model — never an invented behavior. When accepting would require guessing, reject loudly. Each such grammar is listed, with the meaning Gale gives it, under "Grammars Gale accepts and ANTLR4 rejects" in [`antlr4-compatibility.md`](./antlr4-compatibility.md); a new one goes there too, confirmed against the jar.
 - TDD every g4 change with a unit test in `src/g4/{lexer,parser}_test.wado`. If an existing test encodes a wrong expectation, fix the test — the spec wins; confirm against the published jar as a black-box oracle.

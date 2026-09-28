@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use wado_compiler::Span;
 use wado_compiler::ast::{AstId, Visibility};
+use wado_compiler::call_args::CallArgs;
 use wado_compiler::compiler_item::{CompilerItem, Resolved, SeqField};
 use wado_compiler::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use wado_compiler::defs::DefTable;
@@ -3590,8 +3591,7 @@ fn seq_write_call(func_id: wado_compiler::nir::FuncId, args: Vec<Build>, type_id
             ExprKind::Call {
                 func_id,
                 type_args: Vec::new(),
-                args,
-                has_receiver: false,
+                args: CallArgs::free(args),
             },
             type_id,
         ))
@@ -3617,8 +3617,7 @@ fn ctfe_builtin_call(
             ExprKind::Call {
                 func_id,
                 type_args: Vec::new(),
-                args,
-                has_receiver: false,
+                args: CallArgs::free(args),
             },
             type_id,
         ))
@@ -5295,8 +5294,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
             ExprKind::Call {
                 func_id,
                 type_args: Vec::new(),
-                args: call_args,
-                has_receiver: false,
+                args: CallArgs::free(call_args),
             },
             return_type,
         ))
@@ -5321,8 +5319,7 @@ fn call_expr_args(func: &NirFunction, args: Vec<(Build, bool)>) -> Build {
             ExprKind::Call {
                 func_id,
                 type_args: Vec::new(),
-                args: call_args,
-                has_receiver: false,
+                args: CallArgs::free(call_args),
             },
             return_type,
         ))
@@ -7257,11 +7254,10 @@ fn a_displaced_call_still_vouches_for_its_argument() {
         ExprKind::Call {
             func_id: reader.id.expect("test function must have an id"),
             type_args: Vec::new(),
-            args: vec![wado_compiler::nir_arena::ArenaCallArg {
+            args: CallArgs::free(vec![wado_compiler::nir_arena::ArenaCallArg {
                 expr: Operand::Expr(mention),
                 is_mut: false,
-            }],
-            has_receiver: false,
+            }]),
         },
         TypeTable::I32,
     );

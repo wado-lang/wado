@@ -249,6 +249,11 @@ fn validate_call(
     if rejected.contains(&key) {
         return;
     }
+    assert_eq!(
+        args.len(),
+        dead.len(),
+        "[NIR] dae: a call passes one argument per parameter of its callee"
+    );
     for (i, dead_at_i) in dead.iter().enumerate() {
         if !*dead_at_i {
             continue;
@@ -257,9 +262,8 @@ fn validate_call(
         // side-effect-free) argument must keep the param alive. A promoted
         // operand is not exempt: it is pure by construction but `100 / zero`
         // still traps, and the shared predicate answers for either form.
-        let pure = args.get(i).is_some_and(|a| {
-            arena_query::is_pure_nontrapping_operand_typed(body, a.expr, Some(type_table))
-        });
+        let pure =
+            arena_query::is_pure_nontrapping_operand_typed(body, args[i].expr, Some(type_table));
         if !pure {
             rejected.insert(key);
             break;
@@ -304,7 +308,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
 }
 
 /// Rewrite every call of a confirmed function in `body`: drop the dead-position
-/// arguments, clearing `has_receiver` when the receiver itself is dropped.
+/// arguments.
 fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let mut calls = Vec::new();
     body.for_each_reachable_node(|node| {
@@ -330,24 +334,12 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
     let Some(dead) = confirmed.get(func_id).cloned() else {
         return false;
     };
-    let ExprKind::Call {
-        args, has_receiver, ..
-    } = &mut body.exprs[id].kind
-    else {
+    let ExprKind::Call { args, .. } = &mut body.exprs[id].kind else {
         return false;
     };
-    // Dropping `args[0]` of a method call makes it a free call of the same
-    // callee. The receiver was verified pure, so discarding it is
+    // A dropped receiver was verified pure, so discarding it is
     // observation-free.
-    if dead.first() == Some(&true) {
-        *has_receiver = false;
-    }
-    let mut i = 0;
-    args.retain(|_| {
-        let alive = !dead.get(i).copied().unwrap_or(false);
-        i += 1;
-        alive
-    });
+    args.retain_positions(|i| !dead[i]);
     true
 }
 

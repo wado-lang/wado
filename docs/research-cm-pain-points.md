@@ -37,7 +37,7 @@ What the spec offers instead:
   no counterpart. Core Wasm puts weak references and finalizers after the GC
   MVP, with no design yet (`proposals/gc/Post-MVP.md`, "Weak References").
 - The GC ABI option
-  ([component-model#525](https://github.com/WebAssembly/component-model/issues/525))
+  ([WebAssembly/component-model#525](https://github.com/WebAssembly/component-model/issues/525))
   is still undefined; CanonicalABI.md cites it only as the future home of
   `thread.new_ref`. A resource's `rep` is fixed to `i32` / `i64` "but will be
   generalized in the future" (CanonicalABI.md, "Resource State").
@@ -125,8 +125,8 @@ web bindings add a concrete consumer and the cost of the workaround.
 `dispatch_event` runs its listeners during the import call, so the listener
 reenters the component ([Web § Callbacks](./wep-2026-04-01-web.md#callbacks)).
 
-The spec no longer forbids this. component-model#650 (2026-05-21) and #705
-(2026-08-28) removed the `may_enter` flag and its trap. Concurrency.md,
+The spec no longer forbids this. WebAssembly/component-model#650 (2026-05-21)
+and WebAssembly/component-model#705 (2026-08-28) removed the `may_enter` flag and its trap. Concurrency.md,
 "Reentrance", now describes a host reentering the caller's instance through a
 recursive export call as possible, and leaves its hazards to the component's
 documented API.

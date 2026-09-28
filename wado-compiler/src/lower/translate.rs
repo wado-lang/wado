@@ -14,6 +14,7 @@ mod wide_int;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::call_args::CallArgs;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place;
@@ -1073,11 +1074,10 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::Call {
                 func_id,
                 type_args: vec![],
-                args: vec![ArenaCallArg {
+                args: CallArgs::free(vec![ArenaCallArg {
                     expr: value.into(),
                     is_mut: false,
-                }],
-                has_receiver: false,
+                }]),
             },
             type_id,
             span,
@@ -1520,11 +1520,12 @@ impl FunctionTranslator<'_, '_> {
                 .collect();
             // The receiver is the functor; it heads `args` so the list lines up
             // with `call_method`'s full parameter list including `self`.
-            let mut nir_args: Vec<ArenaCallArg> = vec![ArenaCallArg {
+            let receiver = ArenaCallArg {
                 expr: nir_receiver.into(),
                 is_mut: params_is_mut.first().copied().unwrap_or(false),
-            }];
-            nir_args.extend(
+            };
+            let nir_args = CallArgs::method(
+                receiver,
                 args.iter()
                     .zip(
                         params_is_mut
@@ -1544,7 +1545,6 @@ impl FunctionTranslator<'_, '_> {
                     func_id,
                     type_args: Vec::new(),
                     args: nir_args,
-                    has_receiver: true,
                 },
                 expr.type_id,
                 expr.span,
@@ -1678,8 +1678,7 @@ impl FunctionTranslator<'_, '_> {
                 func,
                 type_args,
                 args,
-                has_receiver,
-            } => self.convert_call(func, type_args, args, *has_receiver),
+            } => self.convert_call(func, type_args, args),
             TirExprKind::CmRawCall { target, args } => ExprKind::CmRawCall {
                 target: target.clone(),
                 args: args.iter().map(|a| self.convert_operand(a)).collect(),
@@ -1847,8 +1846,7 @@ impl FunctionTranslator<'_, '_> {
         &self,
         func: &FunctionRef,
         type_args: &[tir::TypeId],
-        args: &[CallArg],
-        has_receiver: bool,
+        args: &CallArgs<CallArg>,
     ) -> ExprKind {
         if args.len() == 1
             && let Some(type_id) = value_copy::copy_value_type_arg(func)
@@ -1871,14 +1869,14 @@ impl FunctionTranslator<'_, '_> {
             return ExprKind::Call {
                 func_id,
                 type_args: vec![],
-                args: args
-                    .iter()
-                    .map(|a| ArenaCallArg {
-                        expr: self.convert_operand(&a.expr),
-                        is_mut: a.is_mut,
-                    })
-                    .collect(),
-                has_receiver: false,
+                args: CallArgs::free(
+                    args.iter()
+                        .map(|a| ArenaCallArg {
+                            expr: self.convert_operand(&a.expr),
+                            is_mut: a.is_mut,
+                        })
+                        .collect(),
+                ),
             };
         }
         if let Some(rewritten) = self.convert_case_bridge_call(func, type_args, args) {
@@ -1888,33 +1886,34 @@ impl FunctionTranslator<'_, '_> {
         let mut_roots = self.call_mut_roots(func, &ordered);
         let nir_func = convert_function_ref(func);
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
+        let has_receiver = args.receiver().is_some();
+        let list = ordered
+            .iter()
+            .enumerate()
+            .map(|(i, (e, is_mut))| {
+                // A receiver the call does not write through is an ordinary
+                // argument: a by-value `self` is the callee's to return or
+                // keep.
+                if has_receiver && i == 0 && *is_mut {
+                    self.convert_mut_receiver_arg(e)
+                } else if value_copy::analyze::passes_through(
+                    &self.base.value_copy.builtins,
+                    func,
+                    i,
+                ) {
+                    ArenaCallArg {
+                        expr: self.convert_operand(e),
+                        is_mut: *is_mut,
+                    }
+                } else {
+                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
+                }
+            })
+            .collect();
         ExprKind::Call {
             func_id,
             type_args: type_args.to_vec(),
-            args: ordered
-                .iter()
-                .enumerate()
-                .map(|(i, (e, is_mut))| {
-                    // A receiver the call does not write through is an ordinary
-                    // argument: a by-value `self` is the callee's to return or
-                    // keep.
-                    if has_receiver && i == 0 && *is_mut {
-                        self.convert_mut_receiver_arg(e)
-                    } else if value_copy::analyze::passes_through(
-                        &self.base.value_copy.builtins,
-                        func,
-                        i,
-                    ) {
-                        ArenaCallArg {
-                            expr: self.convert_operand(e),
-                            is_mut: *is_mut,
-                        }
-                    } else {
-                        self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
-                    }
-                })
-                .collect(),
-            has_receiver,
+            args: args.rebuild(list),
         }
     }
 
@@ -1966,14 +1965,14 @@ impl FunctionTranslator<'_, '_> {
         ExprKind::Call {
             func_id,
             type_args: vec![],
-            args: args
-                .iter()
-                .map(|a| ArenaCallArg {
-                    expr: self.convert_operand(&a.expr),
-                    is_mut: a.is_mut,
-                })
-                .collect(),
-            has_receiver: false,
+            args: CallArgs::free(
+                args.iter()
+                    .map(|a| ArenaCallArg {
+                        expr: self.convert_operand(&a.expr),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
+            ),
         }
     }
 

@@ -447,12 +447,7 @@ impl WriteBack<'_> {
         // call; an indirect one carries them on its function type.
         let (callee, escaping, replaced, has_receiver, args): (_, _, _, _, Vec<&mut TirExpr>) =
             match &mut call.kind {
-                TirExprKind::Call {
-                    func,
-                    args,
-                    has_receiver,
-                    ..
-                } => (
+                TirExprKind::Call { func, args, .. } => (
                     func.name.clone(),
                     self.calls
                         .of_call(func, args.len(), self.carrying.holds(call.type_id))
@@ -461,7 +456,7 @@ impl WriteBack<'_> {
                         .get(&func.module_source, &func.name)
                         .cloned()
                         .unwrap_or_default(),
-                    *has_receiver,
+                    args.receiver().is_some(),
                     args.iter_mut().map(|a| &mut a.expr).collect(),
                 ),
                 TirExprKind::IndirectCall { callee, args } => {

@@ -14,6 +14,7 @@ use crate::attribute::{
     self, ALLOC, AMBIENT, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT, RETAIN,
     SECRET, TRAP, WIRE,
 };
+use crate::call_args::CallArgs;
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
@@ -255,8 +256,7 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
         TirExprKind::Call {
             func: Box::new(literal_callee_ref(&call.callee)),
             type_args: vec![],
-            args: vec![CallArg::new(array, false)],
-            has_receiver: false,
+            args: CallArgs::free(vec![CallArg::new(array, false)]),
         },
         call.output_type,
         span,
@@ -3555,8 +3555,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     method_info: None,
                 }),
                 type_args: Vec::new(),
-                args: vec![CallArg::new(template_tir, false)],
-                has_receiver: false,
+                args: CallArgs::free(vec![CallArg::new(template_tir, false)]),
             },
             TypeTable::NEVER,
             span,
@@ -4991,8 +4990,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirExprKind::Call {
                 type_args: dispatch.type_args,
                 func: Box::new(dispatch.function_ref),
-                args,
-                has_receiver: false,
+                args: CallArgs::free(args),
             },
             recorded_type,
             span,
@@ -6589,8 +6587,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     method_info: Some(method_info),
                 }),
                 type_args: vec![],
-                args: vec![CallArg::new(value, false)],
-                has_receiver: false,
+                args: CallArgs::free(vec![CallArg::new(value, false)]),
             },
             target_type,
             span,
@@ -7018,8 +7015,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExprKind::Call {
                     type_args: dispatch.type_args,
                     func: Box::new(dispatch.function_ref),
-                    args,
-                    has_receiver: false,
+                    args: CallArgs::free(args),
                 },
                 recorded_type,
                 static_call.span,
@@ -7476,8 +7472,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExprKind::Call {
                     type_args: dispatch.type_args,
                     func: Box::new(dispatch.function_ref),
-                    args: arg_exprs,
-                    has_receiver: false,
+                    args: CallArgs::free(arg_exprs),
                 },
                 recorded_type,
                 span,
@@ -7605,8 +7600,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                     method_info: None,
                                 }),
                                 type_args,
-                                args: arg_calls,
-                                has_receiver: false,
+                                args: CallArgs::free(arg_calls),
                             },
                             recorded_type,
                             span,
@@ -7678,8 +7672,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         method_info: None,
                     }),
                     type_args,
-                    args,
-                    has_receiver: false,
+                    args: CallArgs::free(args),
                 },
                 recorded_type,
                 span,
@@ -8661,8 +8654,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     TirExprKind::Call {
                         func: Box::new(func),
                         type_args: vec![],
-                        args: vec![CallArg::new(inner, false)],
-                        has_receiver: false,
+                        args: CallArgs::free(vec![CallArg::new(inner, false)]),
                     },
                     target_base,
                     span,

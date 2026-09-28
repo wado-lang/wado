@@ -576,7 +576,7 @@ test {
 }
 ```
 
-Rust rejects a type parameter default on every function, method and `impl` (rust-lang#36887), allowing them only on type and trait declarations. Wado accepts them wherever a parameter list is written.
+Rust rejects a type parameter default on every function, method and `impl` (rust-lang/rust#36887), allowing them only on type and trait declarations. Wado accepts them wherever a parameter list is written.
 
 The same `= expr` syntax applies to struct fields; see [Struct Field Defaults](./spec-types.md#struct-field-defaults).
 
