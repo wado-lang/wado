@@ -1,0 +1,30 @@
+// The impls a receiver's literal waits on are those of the traits in scope at
+// the call: `Far`'s impl for `Bx<u64>` is loaded but not imported here, so
+// `Near`'s answers alone and the literal takes `wide`'s type.
+use { println, Stdout } from "core:cli";
+use { Bx, wrap } from "./sub/method_receiver_literal_unimported_trait_box.wado";
+use { far_tag } from "./sub/method_receiver_literal_unimported_trait_far.wado";
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+trait Near with () {
+    fn tag(&self) -> Self;
+}
+
+impl<T> Near for Bx<T> {
+    fn tag(&self) -> Self {
+        return *self;
+    }
+}
+
+export fn run() with Stdout {
+    let wide: Bx<u64> = wrap(7);
+    println(`${same(wrap(0x1_0000_0000).tag(), wide).v} ${far_tag(wide)}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296 2\n"
+}

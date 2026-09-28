@@ -1,0 +1,63 @@
+// An operator over a value whose type a pending call is still to answer is
+// dispatched again at the answer, so what the answer lacks is reported: an
+// impl's bound it does not meet, or the operator itself.
+
+struct Box<T> {
+    value: T,
+}
+
+trait Small with () {
+    fn small(&self) -> i32;
+}
+
+impl Small for i32 {
+    fn small(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Small> Add for Box<T> {
+    type Output = Box<T>;
+
+    fn add(&self, rhs: &Box<T>) -> Box<T> {
+        return Box { value: self.value };
+    }
+}
+
+fn wrap<U>(u: U) -> Box<U> {
+    return Box { value: u };
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+fn bound_unmet() {
+    let bx: Box<u64> = Box { value: 7 };
+    let a = same(wrap(1) + wrap(2), bx);
+}
+
+fn half_has_no_add() {
+    let h: f16 = 1.5;
+    let a = same(wrap(1.5).value + 1.0, h);
+}
+
+fn half_has_no_neg() {
+    let h: f16 = 1.5;
+    let a = same(-wrap(1.5).value, h);
+}
+
+export fn run() {
+    bound_unmet();
+    half_has_no_add();
+    half_has_no_neg();
+}
+
+__DATA__
+{
+    "compile_error": ":37:18: analysis error: operator `+` cannot be applied to type `Box<u64>`: type does not implement `Add`",
+    "compile_errors_contains": [
+        "operator `+` cannot be applied to type `f16`: type does not implement `Add`",
+        "operator `-` cannot be applied to type `f16`: type does not implement `Neg`"
+    ]
+}

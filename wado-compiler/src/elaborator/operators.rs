@@ -13,10 +13,12 @@ use crate::unparse::binary_op_str;
 
 use super::Elaborator;
 use super::coercion::{
-    is_literal_arithmetic, is_primitive_literal_target, numeric_literal_pair_order,
+    DeferredOperator, is_literal_arithmetic, is_primitive_literal_target,
+    numeric_literal_pair_order,
 };
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
+use super::scope::ScopedBound;
 use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
@@ -28,6 +30,15 @@ use crate::elaborator::types::RequiredTrait;
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::FqTraitName;
 use crate::resolve::Resolution;
+
+/// An operand whose operators come from its bounds.
+struct BoundedOperand {
+    /// What the dispatched method is named at; monomorphization substitutes it.
+    receiver: FqTypeName,
+    /// How the source writes the operand, for a diagnostic.
+    spelled: String,
+    bounds: Vec<ScopedBound>,
+}
 
 /// `-<integer literal>`, with the source text its range is judged against.
 fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &str)> {
@@ -86,14 +97,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Pass the binary's source AstId so the operator-trait
         // dispatch path can record the decision under it.
-        self.resolve_binary_op(
+        let resolved = self.resolve_binary_op(
             left,
             binary.op,
             right,
             binary.right.span(),
             binary.span,
             Some(binary.id),
-        )
+        );
+        if resolved != TypeTable::ERROR {
+            let _ = self.defer_operator(DeferredOperator::Binary {
+                left,
+                op: binary.op,
+                right,
+                right_span: binary.right.span(),
+                span: binary.span,
+                id: binary.id,
+            });
+        }
+        resolved
     }
 
     /// Resolve both operands of a binary op with the bidirectional
@@ -109,13 +131,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, TypeId) {
+        // A comparison is a `bool` whatever its operands are.
+        let expected_type = expected_type.filter(|_| !op.is_comparison());
         let left_is_literal = is_literal_arithmetic(left_ast);
         let right_is_literal = is_literal_arithmetic(right_ast);
 
         if left_is_literal && !right_is_literal {
             let right = self.resolve_expr(right_ast, ctx, expected_type);
-            let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), right)
-            {
+            let coerce_type = if self.literal_takes_operand_type(right) {
                 Some(right)
             } else {
                 self.find_operator_self_type(right, &op)
@@ -124,8 +147,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (left, right)
         } else if right_is_literal && !left_is_literal {
             let left = self.resolve_expr(left_ast, ctx, expected_type);
-            let coerce_type = if is_primitive_literal_target(&self.tysys.type_table.borrow(), left)
-            {
+            let coerce_type = if self.literal_takes_operand_type(left) {
                 Some(left)
             } else {
                 // Struct type: the literal has no type yet, so its class is
@@ -183,6 +205,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (left, right)
             }
         }
+    }
+
+    /// Whether a literal beside an operand of type `operand` takes that type:
+    /// a primitive's, or the variable a pending call is still to answer, which
+    /// the literal then waits at too.
+    fn literal_takes_operand_type(&self, operand: TypeId) -> bool {
+        is_primitive_literal_target(&self.tysys.type_table.borrow(), operand)
+            || self.is_open_pending_var(operand)
     }
 
     /// Whether an operand's own elaboration would consult the expected type, so a
@@ -505,14 +535,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // TypeParam/TypePack with trait bounds: emit trait method calls for comparison operators.
-            // Monomorphization substitutes T with the concrete type and either resolves
-            // the method call normally, or converts back to a binary op for primitives.
-            if let Some(param) = bound_param_name(&left_type) {
+            // A bounded operand compares through its bounds. Monomorphization
+            // substitutes it with the concrete type and either resolves the
+            // method call normally, or converts back to a binary op for primitives.
+            if let Some(operand) = self.bounded_operand(left, span) {
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
                     let eq_method = self.tysys.operator_method_name(CompilerItem::Eq);
                     if let Some((bound_trait_name, info)) = self.find_operator_in_bounds(
-                        param,
+                        &operand.bounds,
                         left,
                         CompilerItem::Eq,
                         &eq_method,
@@ -522,7 +552,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // The bound's own spelling, so an argument it writes
                         // (`S: Eq<String>`) names the impl that answers it.
                         let resolved = ResolvedTraitMethod::through_bound(
-                            param,
+                            operand.receiver,
                             bound_trait_name,
                             &eq_method,
                             info,
@@ -538,7 +568,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     let ord_method = self.tysys.operator_method_name(CompilerItem::Ord);
                     if let Some((_, info)) = self.find_operator_in_bounds(
-                        param,
+                        &operand.bounds,
                         left,
                         CompilerItem::Ord,
                         &ord_method,
@@ -551,7 +581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow()
                             .compiler_trait_fq(CompilerItem::Ord);
                         let resolved = ResolvedTraitMethod::through_bound(
-                            param,
+                            operand.receiver,
                             ord_trait_name,
                             &ord_method,
                             info,
@@ -917,10 +947,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let inner_expected = match unary.op {
-            UnaryOp::Ref | UnaryOp::MutRef => {
-                expected_type.and_then(|expected| self.tysys.pointee_of(expected))
-            }
+            UnaryOp::Ref | UnaryOp::MutRef => expected_type
+                .and_then(|expected| self.tysys.pointee_of(expected))
+                .or_else(|| {
+                    let make = if unary.op == UnaryOp::MutRef {
+                        TypeTable::make_mut_ref
+                    } else {
+                        TypeTable::make_ref
+                    };
+                    let pointee =
+                        self.open_shape_at_pending_var(expected_type, 1, |tt, vars| {
+                            make(tt, vars[0])
+                        })?;
+                    Some(pointee[0])
+                }),
             UnaryOp::Neg | UnaryOp::BitNot if is_literal_arithmetic(&unary.expr) => expected_type,
+            // Either keeps the variable a pending call is still to answer,
+            // dispatched again once it is.
+            UnaryOp::Neg | UnaryOp::BitNot
+                if expected_type.is_some_and(|t| self.is_open_pending_var(t)) =>
+            {
+                expected_type
+            }
             UnaryOp::Neg | UnaryOp::BitNot | UnaryOp::Not | UnaryOp::Deref => None,
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the
@@ -970,73 +1018,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        if let Some((method_name, item, op_symbol)) = match unary.op {
-            UnaryOp::Neg => Some(("neg", CompilerItem::Neg, "-")),
-            UnaryOp::BitNot => Some(("bitnot", CompilerItem::BitNot, "~")),
-            _ => None,
-        } {
-            let trait_name = self
-                .tysys
-                .type_table
-                .borrow()
-                .compiler_trait_name(item)
-                .to_string();
-            if let Some(call) = self.dispatch_operator_through_bounds(
-                expr_type,
-                item,
-                method_name,
-                None,
-                unary.span,
-                Some(unary.id),
-            ) {
-                return call;
-            }
-            if let Some(struct_name) = self.tysys.operator_receiver_name(expr_type) {
-                let Some(trait_) = self.tysys.compiler_trait_def(item) else {
-                    return TypeTable::ERROR;
-                };
-                let (lookup_name, lookup_type_id) =
-                    self.tysys
-                        .trait_impl_base_lookup(&struct_name, expr_type, trait_);
-                let resolved = self
-                    .resolve_trait_method_for_op(&struct_name, expr_type, trait_, method_name, None)
-                    .or_else(|| {
-                        self.resolve_trait_method_for_op(
-                            &lookup_name,
-                            lookup_type_id,
-                            trait_,
-                            method_name,
-                            None,
-                        )
-                    });
-                if let Some(resolved) = resolved {
-                    // Record the dispatch keyed by the unary expr's AstId
-                    // so reify can replay the `Neg::neg` / `BitNot::bitnot`
-                    // method call instead of emitting a bare `Unary` on a
-                    // struct (which codegen rejects: `expected i32, found
-                    // (ref $T)`). Mirrors the binary-operator path.
-                    return self.dispatch_trait_op_method(
-                        expr_type,
-                        vec![],
-                        &resolved,
-                        Some(unary.id),
-                    );
-                }
-            }
-
-            // No impl answered, and the WIR lowering has no opcode for this
-            // operand, so reject here: `scalar_kind` would panic instead.
-            if expr_type != TypeTable::ERROR
-                && self.tysys.unary_operand_requires_trait(unary.op, expr_type)
-            {
-                let operand = self.tysys.type_table.borrow().type_name(expr_type);
-                let _ = self.emit(TypeError::OperatorNotApplicable {
-                    op: op_symbol.to_string(),
-                    operands: vec![operand],
-                    note: Some(format!("type does not implement `{trait_name}`")),
+        if matches!(unary.op, UnaryOp::Neg | UnaryOp::BitNot) {
+            // An operand that is still a bare variable a pending call answers
+            // has no head to dispatch on until it is answered.
+            let dispatched = if self.is_open_pending_var(expr_type) {
+                None
+            } else {
+                self.dispatch_unary_operator(unary.op, expr_type, unary.span, unary.id)
+            };
+            if dispatched != Some(TypeTable::ERROR) {
+                let _ = self.defer_operator(DeferredOperator::Unary {
+                    op: unary.op,
+                    operand: expr_type,
                     span: unary.span,
+                    id: unary.id,
                 });
-                return TypeTable::ERROR;
+            }
+            if let Some(dispatched) = dispatched {
+                return dispatched;
             }
         }
 
@@ -1078,6 +1077,82 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reads the operand type from `expression_types` instead of this
         // resolved `kind`.
         type_id
+    }
+
+    /// Dispatch `-` or `~` on an operand of type `expr_type`: the answer
+    /// where an impl or a rejection decides it, `None` where the instruction
+    /// on the operand does.
+    pub(super) fn dispatch_unary_operator(
+        &mut self,
+        op: UnaryOp,
+        expr_type: TypeId,
+        span: Span,
+        id: ast::AstId,
+    ) -> Option<TypeId> {
+        let (method_name, item, op_symbol) = match op {
+            UnaryOp::Neg => ("neg", CompilerItem::Neg, "-"),
+            UnaryOp::BitNot => ("bitnot", CompilerItem::BitNot, "~"),
+            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref => {
+                panic!("only `-` and `~` dispatch through a trait")
+            }
+        };
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_trait_name(item)
+            .to_string();
+        if let Some(call) = self.dispatch_operator_through_bounds(
+            expr_type,
+            item,
+            method_name,
+            None,
+            span,
+            Some(id),
+        ) {
+            return Some(call);
+        }
+        if let Some(struct_name) = self.tysys.operator_receiver_name(expr_type) {
+            let Some(trait_) = self.tysys.compiler_trait_def(item) else {
+                return Some(TypeTable::ERROR);
+            };
+            let (lookup_name, lookup_type_id) =
+                self.tysys
+                    .trait_impl_base_lookup(&struct_name, expr_type, trait_);
+            let resolved = self
+                .resolve_trait_method_for_op(&struct_name, expr_type, trait_, method_name, None)
+                .or_else(|| {
+                    self.resolve_trait_method_for_op(
+                        &lookup_name,
+                        lookup_type_id,
+                        trait_,
+                        method_name,
+                        None,
+                    )
+                });
+            if let Some(resolved) = resolved {
+                // Record the dispatch keyed by the unary expr's AstId
+                // so reify can replay the `Neg::neg` / `BitNot::bitnot`
+                // method call instead of emitting a bare `Unary` on a
+                // struct (which codegen rejects: `expected i32, found
+                // (ref $T)`). Mirrors the binary-operator path.
+                return Some(self.dispatch_trait_op_method(expr_type, vec![], &resolved, Some(id)));
+            }
+        }
+
+        // No impl answered, and the WIR lowering has no opcode for this
+        // operand, so reject here: `scalar_kind` would panic instead.
+        if expr_type != TypeTable::ERROR && self.tysys.unary_operand_requires_trait(op, expr_type) {
+            let operand = self.tysys.type_table.borrow().type_name(expr_type);
+            let _ = self.emit(TypeError::OperatorNotApplicable {
+                op: op_symbol.to_string(),
+                operands: vec![operand],
+                note: Some(format!("type does not implement `{trait_name}`")),
+                span,
+            });
+            return Some(TypeTable::ERROR);
+        }
+        None
     }
 
     /// Resolve an assignment expression.
@@ -1716,8 +1791,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((resolved, receiver))
     }
 
-    /// An operator on a type parameter, dispatched through its bounds. `None`
-    /// where `receiver` is no parameter; a missing trait is reported as `ERROR`.
+    /// An operator on a bounded operand, dispatched through its bounds. `None`
+    /// where `receiver` is not one; a missing trait is reported as `ERROR`.
     fn dispatch_operator_through_bounds(
         &mut self,
         receiver: TypeId,
@@ -1727,10 +1802,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         origin: Option<AstId>,
     ) -> Option<TypeId> {
-        let receiver_type = self.tysys.type_table.borrow().get(receiver).clone();
-        let param = bound_param_name(&receiver_type)?;
+        let operand = self.bounded_operand(receiver, span)?;
         let Some((found_trait, info)) = self.find_operator_in_bounds(
-            param,
+            &operand.bounds,
             receiver,
             item,
             method_name,
@@ -1743,41 +1817,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .compiler_trait_name(item)
                 .to_string();
-            self.report_operator_bound_missing(param, &trait_name, span);
+            self.report_operator_bound_missing(&operand.spelled, &trait_name, span);
             return Some(TypeTable::ERROR);
         };
         let return_type = self.operator_output_type(receiver, &found_trait);
         let mut resolved =
-            ResolvedTraitMethod::through_bound(param, found_trait, method_name, info);
+            ResolvedTraitMethod::through_bound(operand.receiver, found_trait, method_name, info);
         resolved.return_type = return_type;
         Some(self.dispatch_trait_op_method(receiver, rhs.into_iter().collect(), &resolved, origin))
     }
 
-    /// The bound of the type parameter `param` that declares `item`'s method,
-    /// with the method as that bound types it for `receiver` and `rhs`.
+    /// `ty` as an operand its bounds give operators to: a type parameter, or a
+    /// projection its trait bounds (`type Item: Eq`). `None` for any other type.
+    fn bounded_operand(&self, ty: TypeId, span: Span) -> Option<BoundedOperand> {
+        let (receiver, spelled) = {
+            let tt = self.tysys.type_table.borrow();
+            let resolved = tt.get(ty);
+            if let Some(param) = bound_param_name(resolved) {
+                (FqTypeName::binder(param), param.clone())
+            } else if matches!(resolved, ResolvedType::AssocTypeProjection { .. }) {
+                (tt.fq_type_name(ty), tt.type_name(ty))
+            } else {
+                return None;
+            }
+        };
+        Some(BoundedOperand {
+            receiver,
+            spelled,
+            bounds: self.carried_bounds(ty, span),
+        })
+    }
+
+    /// The bound in `bounds` that declares `item`'s method, with the method as
+    /// that bound types it for `receiver` and `rhs`.
     fn find_operator_in_bounds(
         &mut self,
-        param: &str,
+        bounds: &[ScopedBound],
         receiver: TypeId,
         item: CompilerItem,
         method_name: &str,
         rhs: Option<TypeId>,
         span: Span,
     ) -> Option<(FqTraitName, MethodInfo)> {
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(param)
-            .cloned()
-            .unwrap_or_default();
         let required = self.tysys.required_operator_trait(item);
         let args = match rhs {
             Some(rhs) => ArgSource::Types(vec![self.tysys.type_table.borrow_mut().make_ref(rhs)]),
             None => ArgSource::NoArguments,
         };
         self.find_method_in_trait_bounds(
-            &bounds,
+            bounds,
             method_name,
             receiver,
             span,

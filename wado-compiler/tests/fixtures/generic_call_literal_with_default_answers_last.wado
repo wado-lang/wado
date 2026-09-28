@@ -1,0 +1,81 @@
+// A literal waits for the outer call past a default its type argument
+// reaches: the default is walked once the argument is answered. A `..base`
+// answers the struct's type arguments itself, as the annotation would.
+use { println, Stdout } from "core:cli";
+
+struct Defaulted<T: Default> {
+    a: T,
+    b: T = T::default(),
+}
+
+struct Box<T> {
+    v: T,
+    w: T,
+}
+
+impl<T> Box<T> {
+    fn first(&self, skip: i32 = 0) -> T {
+        return if skip == 0 { self.v } else { self.w };
+    }
+}
+
+fn defaulted<T: Default>(a: T, b: T = T::default()) -> T {
+    return a;
+}
+
+fn chained<T: Default>(a: T, b: T = a, c: T = T::default()) -> T {
+    return b;
+}
+
+trait Twice with () {
+    fn twice(&self) -> Self;
+}
+
+impl Twice for u64 {
+    fn twice(&self) -> u64 {
+        return *self * 2;
+    }
+}
+
+impl Twice for i32 {
+    fn twice(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+fn doubled<T: Twice>(a: T, b: T = a.twice()) -> T {
+    return b;
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+fn id<T>(a: T) -> T {
+    return a;
+}
+
+export fn run() with Stdout {
+    let wide: u64 = 7;
+    println(`${same(defaulted(0x1_0000_0000), wide)}`);
+    println(`${same(chained(0x1_0000_0001), wide)}`);
+    println(`${same(doubled(0x1_0000_0000), wide)}`);
+    println(`${same(Defaulted { a: 0x1_0000_0002 }.a, wide)}`);
+    println(`${same(Defaulted { a: 1 + 0x1_0000_0002 }.b, wide)}`);
+    let annotated: u64 = Defaulted { a: 0x1_0000_0004 }.a;
+    println(`${annotated}`);
+    println(`${same(Defaulted { a: 0x1_0000_0005 }, Defaulted { a: wide, b: 1 }).b}`);
+    println(`${same(Box { v: 0x1_0000_0006, w: 0 }.first(), wide)}`);
+
+    // A struct literal a call's bare variable meets waits as a call does.
+    println(`${same(Box { v: 0x1_0000_0007, w: 0 }, Box { v: wide, w: wide }).v}`);
+
+    let base = Box { v: wide, w: wide };
+    println(`${id(Box { ..base, v: 0x1_0000_0008 }).v}`);
+    println(`${same(Box { ..base, v: 0x1_0000_0009 }.v, wide)}`);
+}
+
+__DATA__
+{
+    "stdout": "4294967296\n4294967297\n8589934592\n4294967298\n0\n4294967300\n0\n4294967302\n4294967303\n4294967304\n4294967305\n"
+}
