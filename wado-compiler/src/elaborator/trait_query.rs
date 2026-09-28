@@ -2376,26 +2376,23 @@ impl TypeSystem {
                     .and_then(|name| bounds_map.get(name))
                     .is_none_or(|bounds| self.bounds_hold(ctx, scope, type_arg, bounds))
             });
-        } else if let ast::Type::Tuple(elements) = impl_ty {
-            // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
-            // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry
-            // in `type_args` instantiates the same variadic parameter, so
-            // each is checked against its bounds.
-            for elem in elements {
-                let ast::Type::TypePackSpread(name, _) = elem else {
-                    continue;
-                };
-                let Some(bounds) = bounds_map.get(name.as_str()) else {
-                    continue;
-                };
-                for &type_arg in type_args {
-                    if !self.bounds_hold(ctx, scope, type_arg, bounds) {
-                        return false;
-                    }
-                }
-            }
         }
-
+        // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
+        // `Eq`/`Ord` for tuples in core:prelude/tuple.wado): every entry in
+        // `type_args` instantiates the same variadic parameter, so each is
+        // checked against its bounds.
+        if let ast::Type::Tuple(elements) = impl_ty {
+            return elements.iter().all(|elem| {
+                let ast::Type::TypePackSpread(name, _) = elem else {
+                    return true;
+                };
+                bounds_map.get(name.as_str()).is_none_or(|bounds| {
+                    type_args
+                        .iter()
+                        .all(|&type_arg| self.bounds_hold(ctx, scope, type_arg, bounds))
+                })
+            });
+        }
         true
     }
 }

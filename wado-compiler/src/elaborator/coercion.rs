@@ -717,7 +717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Resolve the `receiver` of a field access or method call, then `project`
+    /// Resolve the `receiver` of a field access, method call or subscript, then `project`
     /// from its type. Where the receiver is a generic call or constructor, or
     /// a projection of one, the literals it leaves open wait for the
     /// projection's type to meet `expected`: in `same(wrap(1).v, x)` the
