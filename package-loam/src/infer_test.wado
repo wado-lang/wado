@@ -1,7 +1,7 @@
 //! What stage 0 proves of a graph, and what it stops the build for.
 
 use { Extent } from "./extent.wado";
-use { Elements } from "./graph.wado";
+use { Attr, Elements, Node } from "./graph.wado";
 use {
     AttributeConflict,
     AxisCountConflict,
@@ -17,8 +17,10 @@ use {
     Refusal,
     UnnamedTensor,
     infer,
+    softmax_lane,
 } from "./infer.wado";
 use { read } from "./onnx_text.wado";
+use { Poly } from "./poly.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 use { ExtentConflict } from "./shape.wado";
 
@@ -326,7 +328,7 @@ test "Split sizes that miss the axis's extent stop the build" {
         S = Constant<value_ints = [8, 8, 4]>()
         Q, Y, V = Split<axis = 2>(X, S)
     }`;
-    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: the parts sum to 20, and axis 2 is 24";
+    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: the parts sum to 20, which must be axis 2's 24, and it is not";
 }
 
 test "a Split size past the axis stops the build rather than wrapping into it" {
@@ -334,7 +336,7 @@ test "a Split size past the axis stops the build rather than wrapping into it" {
         S = Constant<value_ints = [4294967304, 8, 8]>()
         Q, Y, V = Split<axis = 2>(X, S)
     }`;
-    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: a part is 4294967304, and axis 2 is 24";
+    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: a part is 4294967304, which must lie within axis 2's 24, and it is not";
 }
 
 test "a scalar operand to MatMul stops the build rather than trapping" {
@@ -561,21 +563,62 @@ test "a Softmax axis outside the operand stops the build" {
     assert y_axes(source, rows()).unwrap_err() == "Y = Softmax: attribute axis is 3, outside rank 3";
 }
 
-test "Softmax before opset 13 normalizing past one axis stops the build" {
+test "Softmax before opset 13 normalizing past one axis keeps its operand's shape" {
     let source = `<ir_version: 7, opset_import: ["" : 11]>
     g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
         Y = Softmax(X)
     }`;
-    let e = y_axes(source, rows()).unwrap_err();
-    assert e == "Y = Softmax: opset 11 normalizes axes 1 to 2 as one, and Loam normalizes along one axis";
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
 }
 
-test "Softmax before opset 13 along the last axis is the one-axis Softmax" {
-    let source = `<ir_version: 7, opset_import: ["" : 11]>
-    g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
-        Y = Softmax <axis = 2> (X)
+test "Softmax before opset 13 normalizes from axis 1 on, and along the last axis is the one-axis Softmax" {
+    let softmax = |axis: Option<String>| Node {
+        op: "Softmax",
+        outputs: ["Y"],
+        inputs: ["X"],
+        attrs: match axis {
+            Some(v) => [
+                Attr {
+                    name: "axis",
+                    values: [v],
+                    is_list: false,
+                },
+            ],
+            None => [],
+        },
+    };
+    let old = Option::Some(11 as i64);
+    let fallback = softmax_lane(&softmax(null), 3, old).unwrap();
+    assert fallback.axis == 1 && fallback.flattened;
+    let last = softmax_lane(&softmax(Option::Some("2")), 3, old).unwrap();
+    assert last.axis == 2 && !last.flattened;
+    let current = softmax_lane(&softmax(null), 3, Option::Some(13 as i64)).unwrap();
+    assert current.axis == 2 && !current.flattened;
+}
+
+test "arithmetic before opset 7 aligns B at A's axis and stretches it over the axes after" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+    g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y) {
+        Y = Add <broadcast = 1, axis = 1> (X, B)
     }`;
-    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("B", ["Seq"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=2,Seq=4,Embed=8";
+}
+
+test "arithmetic before opset 7 aligning B past A's last axis stops the build" {
+    let source = `<ir_version: 3, opset_import: ["" : 6]>
+    g (float[2, 4, 8] X, float[4, 8] B) => (float[2, 4, 8] Y) {
+        Y = Add <broadcast = 1, axis = 2> (X, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("B", ["Seq", "Embed"]),
+    ];
+    let e = y_axes(source, layout).unwrap_err();
+    assert e == "Y = Add: attribute axis is 2, and B's 2 axes from there pass A's 3";
 }
 
 test "a reduction that keeps its axes leaves each at extent 1 under its name" {
@@ -830,32 +873,61 @@ test "a Reshape target that changes the element count stops the build" {
     assert e == "Y = Reshape: 24 elements cannot take the shape [5, 5]";
 }
 
-/// What the inputs owe a graph whose `Y` slices an axis of 8 from `start` to
-/// `end`, each an expression of `X`'s length `N`.
-fn owed_by_slice(start: String, end: String) -> Result<List<String>, String> {
-    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+/// The axis of `Y`, which slices an axis of 8 from `start` to `end` by `step`,
+/// each an expression of `X`'s length `N`. The inputs owe nothing for it.
+fn sliced(start: String, end: String, step: String = "One") -> String {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] One = {1}, int64[1] Three = {3}, int64[1] Back = {-1}> {
         S = Shape(X)
-        Y = Slice(M, ${start}, ${end})
+        Y = Slice(M, ${start}, ${end}, Z, ${step})
     }`;
     let layout: List<LayoutRule> = [
         rule("X", ["Seq"]),
         rule("M", ["Pos"]),
         rule("Y", ["Part"]),
     ];
-    let graph = read(&source).unwrap();
-    return match infer(&graph, &Schema { layout }) {
-        Ok(checked) => Result::Ok(checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect()),
-        Err(e) => Result::Err(`${e}`),
-    };
+    assert owed_by(source, layout).is_empty();
+    return y_axes(source, layout).unwrap();
 }
 
-test "a Slice bound the build cannot show within its axis is owed by the inputs" {
-    assert owed_by_slice("Z", "S").unwrap() == ["Y = Slice: the bound N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+test "a Slice bound the build cannot decide is clamped by a length the run derives" {
+    assert sliced("Z", "S") == "Part=min(N, 8)";
 }
 
-test "a Slice from a number to a symbol owes that it does not run backwards" {
-    let owed = owed_by_slice("Three", "S").unwrap();
-    assert owed.contains_str("Y = Slice: axis 0 must not run backwards from 3 to N (N - 3 >= 0)");
+test "a Slice from a number to a symbol clamps its count at none" {
+    assert sliced("Three", "S") == "Part=max(min(N, 8) - 3, 0)";
+}
+
+test "a Slice counted from a symbol's negation counts from the end only where it is negative" {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Eight = {8}> {
+        S = Shape(X)
+        B = Sub(Z, S)
+        Y = Slice(M, B, Eight)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("Y", ["Part"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Part=-max(from_end(-N, 8), 0) + 8";
+}
+
+test "a backward Slice starts at the last position a bound reaches" {
+    assert sliced("S", "Z", "Back") == "Part=min(N, 7)";
+}
+
+test "a clamp read as its operand where the graph meets that operand is owed by the inputs" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        Y = Add(A, X)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("A", ["Seq"]),
+    ];
+    assert owed_by(source, layout) == ["A = Slice: N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+    assert y_axes(source, layout).unwrap() == "Seq=N";
 }
 
 test "a Slice running backwards between numbers is empty, as ONNX counts it" {
@@ -966,7 +1038,7 @@ test "an output declared static that no symbol value produces stops the build" {
     assert y_axes(source, layout).unwrap_err() == "Y: axis Pos is declared 3 and produced N + 10";
 }
 
-test "a symbolic integer cast to int32 owes that it fits, where an extent cannot show it" {
+test "a symbolic integer cast to int32 wraps as the run does, where an extent cannot show it fits" {
     let source = `g (float[N] X) => (int64[?] Y) <int64[1] Z = {0}, int64[1] Big = {100000}, int64[1] One = {1}> {
         S = Shape(X)
         W = Cast<to = 6>(S)
@@ -974,15 +1046,69 @@ test "a symbolic integer cast to int32 owes that it fits, where an extent cannot
         Q = Cast<to = 6>(P)
         Y = Range(Z, Q, One)
     }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Pos"]),
+    ];
+    assert owed_by(source, layout).is_empty();
+    assert y_axes(source, layout).unwrap() == "Pos=max(wrap32(100000 * N), 0)";
     let graph = read(&source).unwrap();
-    let checked = infer(&graph, &Schema {
-        layout: [
-            rule("X", ["Seq"]),
-            rule("Y", ["Pos"]),
-        ],
-    }).unwrap();
-    let owed: List<String> = checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
-    assert owed == ["Q = Cast: 100000 * N must fit in int32 (-100000 * N + 2147483647 >= 0)"] as List<String>;
+    let checked = infer(&graph, &Schema { layout }).unwrap();
+    assert checked.known["W"].elements == Elements::integers([Poly::symbol(&"N")]);
+}
+
+test "a string attribute an operator reads as a number stops the build" {
+    let source = `g (float[2, 3] X) => (float[2, 3] Y) {
+        Y = Softmax <axis = "1"> (X)
+    }`;
+    assert y_axes(source, [rule("*", ["A", "B"])]).unwrap_err() == "Y = Softmax: attribute axis holds strings, and the operator reads numbers";
+}
+
+test "a ConstantOfShape value the build cannot read, or not of one element, stops the build" {
+    let layout: List<LayoutRule> = [
+        rule("X", ["Len"]),
+        rule("Y", ["Pos"]),
+    ];
+    let filled = |value: String| y_axes(
+        `g (float[1] X) => (float[?] Y) <int64[1] S = {3}> {
+            Y = ConstantOfShape <value = ${value}> (S)
+        }`,
+        layout,
+    );
+    assert filled("double[1] {5}").unwrap_err() == "Y = ConstantOfShape: attribute value holds no tensor the build reads";
+    assert filled("3").unwrap_err() == "Y = ConstantOfShape: attribute value holds no tensor the build reads";
+    assert filled("float[0] {}").unwrap_err() == "Y = ConstantOfShape: attribute value holds 0 elements, and the operator fills with one";
+    assert filled("float[2] {1, 2}").unwrap_err() == "Y = ConstantOfShape: attribute value holds 2 elements, and the operator fills with one";
+}
+
+test "an attribute an operator reads as numbers, holding a tensor, stops the build" {
+    let source = `g (float[1, 3] X) => (float[3] Y) {
+        Y = Squeeze <axes = int64[1] {0}> (X)
+    }`;
+    assert y_axes(source, [rule("X", ["One", "C"])]).unwrap_err() == "Y = Squeeze: attribute axes holds a tensor, and the operator reads numbers";
+}
+
+test "a string attribute of no value, or a number where a string is read, stops the build" {
+    let padded = |auto_pad: String| y_axes(
+        `g (float[1, 1, 4, 4] X) => (float[1, 1, 2, 2] Y) {
+            Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2], auto_pad = ${auto_pad}> (X)
+        }`,
+        [rule("*", ["N", "C", "H", "W"])],
+    );
+    assert padded("[]").unwrap_err() == "Y = MaxPool: attribute auto_pad is a list and the operator reads one value";
+    assert padded("3").unwrap_err() == "Y = MaxPool: attribute auto_pad holds numbers, and the operator reads a string";
+}
+
+test "a ConstantOfShape whose shape a kernel computes stops the build" {
+    let source = `g (float[1] X) => (float[?] Y) {
+        S = Cast <to = 7> (X)
+        Y = ConstantOfShape(S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Len"]),
+        rule("Y", ["Pos"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y = ConstantOfShape: operand S is computed at run time, and the build reads it";
 }
 
 test "a Range the run computes, longer than any list, stops the build" {
@@ -1000,7 +1126,8 @@ test "a condition every layer repeats is owed once" {
         S = Shape(X)
         A = Slice(M, Z, S)
         B = Slice(M, Z, S)
-        Y = Add(A, B)
+        C = Add(A, X)
+        Y = Add(B, C)
     }`;
     let layout: List<LayoutRule> = [
         rule("X", ["Seq"]),
@@ -1091,12 +1218,42 @@ test "Conv whose weight reads another channel count stops the build" {
     assert e == "Y = Conv: axis Chan is 1 on the left and 2 on the right";
 }
 
-test "Conv over several groups stops the build" {
-    let source = `g (float[1, 2, 8, 8] X) => (float[1, 2, 6, 6] Y) <float[2, 1, 3, 3] W> {
+fn grouped() -> List<LayoutRule> {
+    return [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Share", "KRow", "KCol"]),
+        rule("Y", ["Batch", "Out", "Row", "Col"]),
+    ];
+}
+
+test "Conv over several groups reads a group's share of the input channels" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 2, 3, 3] W> {
         Y = Conv <group = 2> (X, W)
     }`;
-    let e = y_axes(source, convolved()).unwrap_err();
-    assert e == "Y = Conv: attribute group is 2, and only a single group is read";
+    assert y_axes(source, grouped()).unwrap() == "Batch=1,Out=6,Row=6,Col=6";
+}
+
+test "Conv groups sharing out other than all the input channels stop the build" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 1, 3, 3] W> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    assert y_axes(source, grouped()).unwrap_err() == "Y = Conv: axis Chan is 4 on the left and 2 on the right";
+}
+
+test "a grouped Conv over a scalar weight stops the build on the weight's rank" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float W = {1}> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    let e = y_axes(source, grouped()).unwrap_err();
+    assert e == "Y = Conv: operand 1 has rank 0 and the operator reads rank 4";
+}
+
+test "a Conv group count that does not divide the output channels stops the build" {
+    let source = `g (float[1, 4, 8, 8] X) => (float[1, 6, 6, 6] Y) <float[6, 1, 3, 3] W> {
+        Y = Conv <group = 4> (X, W)
+    }`;
+    let e = y_axes(source, grouped()).unwrap_err();
+    assert e == "Y = Conv: attribute group is 4, which does not divide the 6 output channels";
 }
 
 test "a node reading an undefined tensor stops the build" {
@@ -1219,12 +1376,50 @@ test "int32 arithmetic the build folds keeps the low 32 bits, as the run's int32
     assert checked.known["Y"].elements == Elements::Ints([-1794967296]);
 }
 
-test "symbolic int32 arithmetic owes that it fits, as a Cast to int32 does" {
+test "symbolic int32 arithmetic wraps as the run does, as a Cast to int32 does" {
     let source = `g (float[N] X) => (int64[1] Y) {
         S = Shape(X)
         W = Cast<to = 6>(S)
         P = Mul(W, W)
         Y = Cast<to = 7>(P)
     }`;
-    assert owed_by(source, [rule("*", ["Seq"])]) == ["P = Mul: N * N must fit in int32 (-N * N + 2147483647 >= 0)"] as List<String>;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("*", ["Seq"])],
+    }).unwrap();
+    assert checked.owed.is_empty();
+    let Symbolic(values) = checked.known["Y"].elements else {
+        unreachable();
+    };
+    assert `${values[0]}` == "wrap32(N * N)";
+}
+
+test "a Reshape whose count agrees once a clamp is read as its operand owes that reading" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        Y = Reshape(A, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("A", ["Part"]),
+        rule("Y", ["Seq"]),
+    ];
+    assert owed_by(source, layout) == ["A = Slice: N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+    assert y_axes(source, layout).unwrap() == "Seq=N";
+}
+
+test "a Reshape -1 the build cannot divide out rounds down, and owes that the rest divide the count" {
+    let source = `g (float[N] X) => (float[?, 2] Y) <int64[2] T = {-1, 2}> {
+        Y = Reshape(X, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Pair", "Two"]),
+    ];
+    assert owed_by(source, layout) == [
+        "Y = Reshape: the target's extents besides -1 multiply to 2, which must divide N (-N + 2 * floor(N / 2) >= 0)",
+    ] as List<String>;
+    assert y_axes(source, layout).unwrap() == "Pair=floor(N / 2),Two=2";
 }

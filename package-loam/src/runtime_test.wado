@@ -3,14 +3,21 @@ use {
     Tensor,
     Window,
     axis_mismatch,
+    ceil_div,
     checked_element_count,
     conv,
     conv_bias,
+    conv_grouped,
+    conv_grouped_bias,
+    floor_div,
+    from_end,
+    gather,
     gather_rows,
     input_mismatch,
     lift,
     map,
     matmul,
+    matmul_broadcast,
     matmul_shared,
     max_pool,
     narrow,
@@ -23,11 +30,13 @@ use {
     sigmoid_f32,
     slice_axis,
     softmax,
+    softmax_flattened,
     to_extent,
     transpose2,
     unmet,
     widen,
     zip,
+    zip_at,
     zip_suffix,
     zip_suffix_lhs,
 } from "./runtime/tensor.wado";
@@ -103,9 +112,9 @@ test "two inputs that disagree on one symbol name both" {
 }
 
 test "a condition the build owed is met with slack to spare, and missed by how much" {
-    assert unmet(0, "Y = Slice: the bound N must be at most 8") matches { None };
-    assert unmet(-3, "Y = Slice: the bound N must be at most 8") == Option::Some(
-        "Y = Slice: the bound N must be at most 8, and the inputs miss it by 3",
+    assert unmet(0, "Y = Slice: N must be at most 8") matches { None };
+    assert unmet(-3, "Y = Slice: N must be at most 8") == Option::Some(
+        "Y = Slice: N must be at most 8, and the inputs miss it by 3",
     );
     // A product of two extents, which an `i32` would have wrapped positive.
     assert unmet(8 - 65536 as i64 * 65536, "Y: N * M must be at most 8") == Option::Some(
@@ -139,6 +148,20 @@ test "gather_rows looks up one row per index, counting a negative one from the e
     let picked: Tensor<f32, [Batch, Inner, Col]> = gather_rows(&table, &ids);
     assert picked.extents == [1, 3, 2] as List<i32>;
     assert picked.data == [20.0, 21.0, 0.0, 1.0, 20.0, 21.0] as List<f32>;
+}
+
+test "gather puts the index axes where the gathered axis was" {
+    let t: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 3], [
+        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0,
+    ]);
+    let ids: Tensor<i64, [Inner]> = Tensor {
+        data: [2, -3, 1, 0],
+        extents: [4],
+    };
+
+    let picked = gather::<f32, [Batch, Row], Col, [], [Inner]>(&t, &ids, 2);
+    assert picked.extents == [2, 2, 4] as List<i32>;
+    assert picked.data == [2.0, 0.0, 1.0, 0.0, 5.0, 3.0, 4.0, 3.0, 8.0, 6.0, 7.0, 6.0, 11.0, 9.0, 10.0, 9.0] as List<f32>;
 }
 
 #[expect_trap]
@@ -178,6 +201,31 @@ test "matmul_shared multiplies every batch element by one matrix" {
     assert c.data == [21.0, 43.0] as List<f32>;
 }
 
+test "matmul_broadcast stretches a batch axis of 1 on either side" {
+    let a: Tensor<f32, [Batch, Row, Inner]> = tensor([1, 1, 2], [1.0, 2.0]);
+    let b: Tensor<f32, [Batch, Inner, Col]> = tensor([2, 2, 1], [1.0, 10.0, 100.0, 1000.0]);
+
+    let c = matmul_broadcast::<[Batch, Row, Inner], [Batch, Inner, Col], [Batch, Row, Col]>(&a, &b);
+    assert c.extents == [2, 1, 1] as List<i32>;
+    assert c.data == [21.0, 2100.0] as List<f32>;
+}
+
+test "matmul_broadcast reads a rank-1 operand as a row on the left and a column on the right" {
+    let v: Tensor<f32, [Inner]> = tensor([2], [1.0, 2.0]);
+    let m: Tensor<f32, [Inner, Col]> = tensor([2, 2], [1.0, 10.0, 100.0, 1000.0]);
+
+    let row = matmul_broadcast::<[Inner], [Inner, Col], [Col]>(&v, &m);
+    assert row.extents == [2] as List<i32>;
+    assert row.data == [201.0, 2010.0] as List<f32>;
+    let w: Tensor<f32, [Row, Inner]> = tensor([2, 2], [1.0, 10.0, 100.0, 1000.0]);
+    let column = matmul_broadcast::<[Row, Inner], [Inner], [Row]>(&w, &v);
+    assert column.extents == [2] as List<i32>;
+    assert column.data == [21.0, 2100.0] as List<f32>;
+    let dot = matmul_broadcast::<[Inner], [Inner], []>(&v, &v);
+    assert dot.extents.is_empty();
+    assert dot.data == [5.0] as List<f32>;
+}
+
 test "zip pairs two tensors of one shape" {
     let a: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
     let b: Tensor<f32, [Row, Col]> = tensor([2, 2], [10.0, 20.0, 30.0, 40.0]);
@@ -202,6 +250,15 @@ test "zip_suffix broadcasts a trailing axis across a rank-3 operand" {
     let c = zip_suffix::<[Batch, Row], [Col]>(&a, &b, |x, y| x * y);
     assert c.extents == [2, 1, 2] as List<i32>;
     assert c.data == [10.0, 40.0, 30.0, 80.0] as List<f32>;
+}
+
+test "zip_at repeats the shorter operand along the axes after it and before it" {
+    let a: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 2], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+    let b: Tensor<f32, [Row]> = tensor([2], [10.0, 20.0]);
+
+    let c = zip_at::<[Batch], [Row], [Col]>(&a, &b, 1, |x, y| x + y);
+    assert c.extents == [2, 2, 2] as List<i32>;
+    assert c.data == [11.0, 12.0, 23.0, 24.0, 15.0, 16.0, 27.0, 28.0] as List<f32>;
 }
 
 test "zip stretches an extent-1 axis on either side" {
@@ -297,6 +354,33 @@ test "conv_bias adds each output channel's bias" {
     assert y.data == [1.5, 2.5, 9.5, 19.5] as List<f32>;
 }
 
+test "conv_grouped reads each output channel's own group of input channels" {
+    let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 1, 2], [1.0, 2.0, 10.0, 20.0]);
+    let w: Tensor<f32, [Col, Row, Row, Col]> = tensor([2, 1, 1, 1], [2.0, 3.0]);
+
+    let y = conv_grouped::<Batch, Inner, Row, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, 2, &window(
+        [1, 1],
+        [1, 1],
+        [0, 0, 0, 0],
+        [1, 2],
+    ));
+    assert y.data == [2.0, 4.0, 30.0, 60.0] as List<f32>;
+}
+
+test "conv_grouped_bias adds each output channel's bias to its group's sum" {
+    let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 1, 2], [1.0, 2.0, 10.0, 20.0]);
+    let w: Tensor<f32, [Col, Row, Row, Col]> = tensor([2, 1, 1, 1], [2.0, 3.0]);
+    let b: Tensor<f32, [Col]> = tensor([2], [0.5, -0.5]);
+
+    let y = conv_grouped_bias::<Batch, Inner, Row, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &b, 2, &window(
+        [1, 1],
+        [1, 1],
+        [0, 0, 0, 0],
+        [1, 2],
+    ));
+    assert y.data == [2.5, 4.5, 29.5, 59.5] as List<f32>;
+}
+
 test "transpose2 swaps the two axes and their extents" {
     let t: Tensor<f32, [Row, Col]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
 
@@ -337,9 +421,28 @@ test "slice_axis keeps one run of positions along the axis" {
         0.0, 1.0, 10.0, 11.0, 20.0, 21.0, 100.0, 101.0, 110.0, 111.0, 120.0, 121.0,
     ]);
 
-    let r = slice_axis::<f32, [Batch], Row, Inner, [Col]>(&t, 1, 1, 2);
+    let r = slice_axis::<f32, [Batch], Row, Inner, [Col]>(&t, 1, 1, 2, 1);
     assert r.extents == [2, 2, 2] as List<i32>;
     assert r.data == [10.0, 11.0, 20.0, 21.0, 110.0, 111.0, 120.0, 121.0] as List<f32>;
+}
+
+test "slice_axis steps over positions, backwards too" {
+    let t: Tensor<f32, [Row, Col]> = tensor([3, 2], [0.0, 1.0, 10.0, 11.0, 20.0, 21.0]);
+
+    let back = slice_axis::<f32, [], Row, Inner, [Col]>(&t, 0, 2, 3, -1);
+    assert back.data == [20.0, 21.0, 10.0, 11.0, 0.0, 1.0] as List<f32>;
+    let skip = slice_axis::<f32, [], Row, Inner, [Col]>(&t, 0, 0, 2, 2);
+    assert skip.data == [0.0, 1.0, 20.0, 21.0] as List<f32>;
+    // A backward cut of an empty axis starts before it and keeps nothing.
+    let empty: Tensor<f32, [Row, Col]> = tensor([0, 2], []);
+    assert slice_axis::<f32, [], Row, Inner, [Col]>(&empty, 0, -1, 0, -1).extents == [0, 2] as List<i32>;
+}
+
+test "ceil_div and floor_div round a quotient, and from_end counts a negative index from the end" {
+    assert ceil_div(7, 2) == 4 && ceil_div(6, 2) == 3 && ceil_div(-7, 2) == -3;
+    assert floor_div(7, 2) == 3 && floor_div(6, 2) == 3 && floor_div(-7, 2) == -4;
+    assert floor_div(i64::MIN, 2) == i64::MIN / 2 && floor_div(i64::MIN + 1, 2) == i64::MIN / 2;
+    assert from_end(-1, 8) == 7 && from_end(3, 8) == 3;
 }
 
 test "lift prepends extent-1 axes up to the rank" {
@@ -359,6 +462,13 @@ test "softmax normalizes each lane along the axis" {
     // Each lane's maximum is subtracted first, so column 0 is [e^-1, 1] scaled.
     let a = f32::exp(-1.0);
     assert along_rows.data == [a / (a + 1.0), 1.0, 1.0 / (a + 1.0), 0.0] as List<f32>;
+}
+
+test "softmax_flattened normalizes every axis from its own on as one lane" {
+    let t: Tensor<f32, [Row, Col]> = tensor([2, 2], [0.0, 0.0, 0.0, 0.0]);
+
+    assert softmax_flattened(&t, 0).data == [0.25, 0.25, 0.25, 0.25] as List<f32>;
+    assert softmax_flattened(&t, 1).data == [0.5, 0.5, 0.5, 0.5] as List<f32>;
 }
 
 test "reduce folds the named axes to extent 1" {

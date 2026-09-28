@@ -7,12 +7,10 @@
 //! `#[TODO]` test, so the run lists where the two part.
 
 use { TreeMap } from "core:collections";
-use { eval } from "core:eval";
-use { emit } from "../src/emit.wado";
 use { Graph } from "../src/graph.wado";
-use { infer } from "../src/infer.wado";
 use { read } from "../src/onnx_proto.wado";
 use { LayoutRule, Schema } from "../src/schema.wado";
+use { generated, ran } from "./oracle.wado";
 
 /// The lengths of `X` the oracle ran each case at.
 global LENGTHS: List<i32> = [3, 10];
@@ -23,15 +21,17 @@ global INPUTS: TreeMap<String, String> = {
     X: "Tensor { data: iota(10.0, n), extents: [n] }",
     M: "Tensor { data: iota(0.0, 8), extents: [8] }",
     P: "Tensor { data: iota(0.0, 4 * n), extents: [n, 4] }",
+    I: "Tensor { data: iota(0.0, 2 * n), extents: [1, 2, n] }",
+    W: "Tensor { data: iota(0.0, 12), extents: [3, 2, 2] }",
 } as TreeMap<String, String>;
 
-/// What Loam computes from `model` at each of `lengths`, in the oracle's
+/// What Loam computes from `model` at each of `LENGTHS`, in the oracle's
 /// lines, and past them why it computes nothing more: the build's refusal, or
 /// how the run stopped.
-fn loam(model: ByteList, output_axes: List<String>, lengths: List<i32>) -> String {
+fn loam(model: ByteList, output_axes: List<String>) -> String {
     let graph = read(model).unwrap();
     return match built(&graph, output_axes) {
-        Ok(source) => run(source, &graph, lengths),
+        Ok(source) => run(source, &graph),
         Err(reason) => `refused: ${reason}`,
     };
 }
@@ -55,16 +55,28 @@ fn built(graph: &Graph, output_axes: List<String>) -> Result<String, String> {
                 pattern: "P",
                 axes: ["Seq", "Wide"],
             },
+            LayoutRule {
+                pattern: "I",
+                axes: ["Batch", "Chan", "Seq"],
+            },
+            LayoutRule {
+                pattern: "W",
+                axes: ["Out", "Chan", "Tap"],
+            },
+            // The part of a `Split` a case does not return.
+            LayoutRule {
+                pattern: "Head",
+                axes: ["First"],
+            },
             LayoutRule { pattern: output, axes: output_axes },
         ],
     };
-    let checked = infer(graph, &schema).map_err(|e| `${e}`)?;
-    return emit(graph, &checked).map_err(|e| `${e}`);
+    return generated(graph, &schema);
 }
 
-/// `source` with a `run` that calls its `forward` at each of `lengths` and
+/// `source` with a `run` that calls its `forward` at each of `LENGTHS` and
 /// prints what it returns, run under `eval`.
-fn run(source: String, graph: &Graph, lengths: List<i32>) -> String {
+fn run(source: String, graph: &Graph) -> String {
     let mut args = "";
     for let vi of graph.inputs {
         args.push_str(`&${INPUTS[vi.name]}, `);
@@ -86,58 +98,24 @@ fn joined<T: Display>(values: List<T>) -> String {
 }
 
 export fn run() with Stdout {
-    for let n of ${lengths:?} as List<i32> {
+    for let n of ${LENGTHS:?} as List<i32> {
         let got = forward(${args}&Weights {});
         println(\`N = \${n}: extents [\${joined(got.extents)}], data [\${joined(got.data)}]\`);
     }
 }
 `;
-    return match eval(program) {
-        Ok(out) => {
-            if out.status matches { Exited(0) } {
-                out.stdout;
-            } else {
-                `${out.stdout}${out.status:?}: ${out.stderr}`;
-            }
-        },
-        Err(e) => `${e:?}`,
-    };
-}
-
-/// The lines of the oracle's `onnx` for `lengths`.
-fn at(onnx: String, lengths: List<i32>) -> String {
-    let mut kept = "";
-    for let line of onnx.lines() {
-        for let n of lengths {
-            if line.starts_with(`N = ${n}:`) {
-                kept.push_str(`${line}\n`);
-            }
-        }
-    }
-    return kept;
+    return ran(program);
 }
 
 /// Loam computes from `model` what onnxruntime does, which `onnx` states.
-fn assert_agrees(model: ByteList, onnx: String, output_axes: List<String> = ["Part"], lengths: List<i32> = LENGTHS) {
-    let got = loam(model, output_axes, lengths);
-    let want = at(onnx, lengths);
-    assert got == want;
+fn assert_agrees(model: ByteList, onnx: String, output_axes: List<String> = ["Part"]) {
+    assert loam(model, output_axes) == onnx;
 }
 
-test "Slice to N within the axis takes the first N" {
-    assert_agrees(#include_bytes("./semantics/SliceToLength.onnx"), #include_str("./semantics/SliceToLength.txt"), [
-        "Part",
-    ], [3]);
+test "Slice to N takes the first N, clamping to the axis's end" {
+    assert_agrees(#include_bytes("./semantics/SliceToLength.onnx"), #include_str("./semantics/SliceToLength.txt"));
 }
 
-#[TODO]
-test "Slice to N past the axis clamps to its end" {
-    assert_agrees(#include_bytes("./semantics/SliceToLength.onnx"), #include_str("./semantics/SliceToLength.txt"), [
-        "Part",
-    ], [10]);
-}
-
-#[TODO]
 test "Slice from -N counts from the end, clamping to the start" {
     assert_agrees(
         #include_bytes("./semantics/SliceFromMinusLength.onnx"),
@@ -157,7 +135,6 @@ test "Slice from -1 to N takes the last" {
     assert_agrees(#include_bytes("./semantics/SliceLast.onnx"), #include_str("./semantics/SliceLast.txt"));
 }
 
-#[TODO]
 test "Slice by -1 from N runs backwards" {
     assert_agrees(
         #include_bytes("./semantics/SliceBackFromLength.onnx"),
@@ -165,12 +142,10 @@ test "Slice by -1 from N runs backwards" {
     );
 }
 
-#[TODO]
 test "Slice by -1 from N to past the start reaches element 0" {
     assert_agrees(#include_bytes("./semantics/SliceBackToFront.onnx"), #include_str("./semantics/SliceBackToFront.txt"));
 }
 
-#[TODO]
 test "Slice by 2 to N takes every other" {
     assert_agrees(
         #include_bytes("./semantics/SliceByTwoToLength.onnx"),
@@ -178,7 +153,6 @@ test "Slice by 2 to N takes every other" {
     );
 }
 
-#[TODO]
 test "Slice by -1 from -1 over a symbolic axis reverses it" {
     assert_agrees(#include_bytes("./semantics/SliceReversed.onnx"), #include_str("./semantics/SliceReversed.txt"));
 }
@@ -187,7 +161,6 @@ test "Range from 0 to N by 1 counts N" {
     assert_agrees(#include_bytes("./semantics/RangeToLength.onnx"), #include_str("./semantics/RangeToLength.txt"));
 }
 
-#[TODO]
 test "Range from 0 to N by 2 counts N / 2 rounded up" {
     assert_agrees(
         #include_bytes("./semantics/RangeByTwoToLength.onnx"),
@@ -195,7 +168,6 @@ test "Range from 0 to N by 2 counts N / 2 rounded up" {
     );
 }
 
-#[TODO]
 test "Range from N to 0 by -1 counts down" {
     assert_agrees(
         #include_bytes("./semantics/RangeBackFromLength.onnx"),
@@ -203,16 +175,81 @@ test "Range from N to 0 by -1 counts down" {
     );
 }
 
-#[TODO]
 test "Range from N to 0 by -2 counts down by two" {
     assert_agrees(#include_bytes("./semantics/RangeBackByTwo.onnx"), #include_str("./semantics/RangeBackByTwo.txt"));
+}
+
+test "Range by N counts the steps of N that fit" {
+    assert_agrees(#include_bytes("./semantics/RangeByLength.onnx"), #include_str("./semantics/RangeByLength.txt"));
+}
+
+test "Range back by -N counts the steps of N that fit" {
+    assert_agrees(
+        #include_bytes("./semantics/RangeBackByLength.onnx"),
+        #include_str("./semantics/RangeBackByLength.txt"),
+    );
+}
+
+global POOLED: List<String> = ["Batch", "Chan", "Part"];
+
+test "MaxPool over N counts the windows that fit" {
+    assert_agrees(
+        #include_bytes("./semantics/MaxPoolOverLength.onnx"),
+        #include_str("./semantics/MaxPoolOverLength.txt"),
+        POOLED,
+    );
+}
+
+test "MaxPool with ceil_mode over N keeps a partial last window" {
+    assert_agrees(
+        #include_bytes("./semantics/MaxPoolCeilOverLength.onnx"),
+        #include_str("./semantics/MaxPoolCeilOverLength.txt"),
+        POOLED,
+    );
+}
+
+test "MaxPool with SAME_UPPER over N pads to cover every position" {
+    assert_agrees(
+        #include_bytes("./semantics/MaxPoolSameOverLength.onnx"),
+        #include_str("./semantics/MaxPoolSameOverLength.txt"),
+        POOLED,
+    );
+}
+
+test "Conv over N with padding and a stride" {
+    assert_agrees(
+        #include_bytes("./semantics/ConvOverLength.onnx"),
+        #include_str("./semantics/ConvOverLength.txt"),
+        ["Batch", "Out", "Part"],
+    );
+}
+
+test "Split of N by sizes the graph computes from N" {
+    assert_agrees(
+        #include_bytes("./semantics/SplitTailOfLength.onnx"),
+        #include_str("./semantics/SplitTailOfLength.txt"),
+    );
+}
+
+test "ConstantOfShape of a shape holding N fills N rows" {
+    assert_agrees(
+        #include_bytes("./semantics/ConstantOfShapeOfLength.onnx"),
+        #include_str("./semantics/ConstantOfShapeOfLength.txt"),
+        ["Part", "Pair"],
+    );
+}
+
+test "Div of N by 2 rounds down" {
+    assert_agrees(
+        #include_bytes("./semantics/RangeToHalfLength.onnx"),
+        #include_str("./semantics/RangeToHalfLength.txt"),
+    );
 }
 
 test "Cast of a known int64 to int32 wraps" {
     assert_agrees(#include_bytes("./semantics/CastWraps.onnx"), #include_str("./semantics/CastWraps.txt"));
 }
 
-#[TODO]
 test "Cast of 3000000000 * N to int32 wraps, as onnxruntime computes it" {
     assert_agrees(#include_bytes("./semantics/CastWrapsLength.onnx"), #include_str("./semantics/CastWrapsLength.txt"));
 }
