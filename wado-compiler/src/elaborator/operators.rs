@@ -18,6 +18,7 @@ use super::coercion::{
 };
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
+use super::scope::ScopedBound;
 use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
@@ -29,6 +30,15 @@ use crate::elaborator::types::RequiredTrait;
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::FqTraitName;
 use crate::resolve::Resolution;
+
+/// An operand whose operators come from its bounds.
+struct BoundedOperand {
+    /// What the dispatched method is named at; monomorphization substitutes it.
+    receiver: FqTypeName,
+    /// How the source writes the operand, for a diagnostic.
+    spelled: String,
+    bounds: Vec<ScopedBound>,
+}
 
 /// `-<integer literal>`, with the source text its range is judged against.
 fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &str)> {
@@ -506,14 +516,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // TypeParam/TypePack with trait bounds: emit trait method calls for comparison operators.
-            // Monomorphization substitutes T with the concrete type and either resolves
-            // the method call normally, or converts back to a binary op for primitives.
-            if let Some(param) = bound_param_name(&left_type) {
+            // A bounded operand compares through its bounds. Monomorphization
+            // substitutes it with the concrete type and either resolves the
+            // method call normally, or converts back to a binary op for primitives.
+            if let Some(operand) = self.bounded_operand(left, span) {
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
                     let eq_method = self.tysys.operator_method_name(CompilerItem::Eq);
                     if let Some((bound_trait_name, info)) = self.find_operator_in_bounds(
-                        param,
+                        &operand.bounds,
                         left,
                         CompilerItem::Eq,
                         &eq_method,
@@ -523,7 +533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // The bound's own spelling, so an argument it writes
                         // (`S: Eq<String>`) names the impl that answers it.
                         let resolved = ResolvedTraitMethod::through_bound(
-                            param,
+                            operand.receiver,
                             bound_trait_name,
                             &eq_method,
                             info,
@@ -539,7 +549,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     let ord_method = self.tysys.operator_method_name(CompilerItem::Ord);
                     if let Some((_, info)) = self.find_operator_in_bounds(
-                        param,
+                        &operand.bounds,
                         left,
                         CompilerItem::Ord,
                         &ord_method,
@@ -552,7 +562,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow()
                             .compiler_trait_fq(CompilerItem::Ord);
                         let resolved = ResolvedTraitMethod::through_bound(
-                            param,
+                            operand.receiver,
                             ord_trait_name,
                             &ord_method,
                             info,
@@ -1718,8 +1728,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((resolved, receiver))
     }
 
-    /// An operator on a type parameter, dispatched through its bounds. `None`
-    /// where `receiver` is no parameter; a missing trait is reported as `ERROR`.
+    /// An operator on a bounded operand, dispatched through its bounds. `None`
+    /// where `receiver` is not one; a missing trait is reported as `ERROR`.
     fn dispatch_operator_through_bounds(
         &mut self,
         receiver: TypeId,
@@ -1729,10 +1739,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         origin: Option<AstId>,
     ) -> Option<TypeId> {
-        let receiver_type = self.tysys.type_table.borrow().get(receiver).clone();
-        let param = bound_param_name(&receiver_type)?;
+        let operand = self.bounded_operand(receiver, span)?;
         let Some((found_trait, info)) = self.find_operator_in_bounds(
-            param,
+            &operand.bounds,
             receiver,
             item,
             method_name,
@@ -1745,41 +1754,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .compiler_trait_name(item)
                 .to_string();
-            self.report_operator_bound_missing(param, &trait_name, span);
+            self.report_operator_bound_missing(&operand.spelled, &trait_name, span);
             return Some(TypeTable::ERROR);
         };
         let return_type = self.operator_output_type(receiver, &found_trait);
         let mut resolved =
-            ResolvedTraitMethod::through_bound(param, found_trait, method_name, info);
+            ResolvedTraitMethod::through_bound(operand.receiver, found_trait, method_name, info);
         resolved.return_type = return_type;
         Some(self.dispatch_trait_op_method(receiver, rhs.into_iter().collect(), &resolved, origin))
     }
 
-    /// The bound of the type parameter `param` that declares `item`'s method,
-    /// with the method as that bound types it for `receiver` and `rhs`.
+    /// `ty` as an operand its bounds give operators to: a type parameter, or a
+    /// projection its trait bounds (`type Item: Eq`). `None` for any other type.
+    fn bounded_operand(&self, ty: TypeId, span: Span) -> Option<BoundedOperand> {
+        let tt = self.tysys.type_table.borrow();
+        let resolved = tt.get(ty);
+        if let Some(param) = bound_param_name(resolved) {
+            return Some(BoundedOperand {
+                receiver: FqTypeName::binder(param),
+                spelled: param.clone(),
+                bounds: self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(param)
+                    .cloned()
+                    .unwrap_or_default(),
+            });
+        }
+        if !matches!(resolved, ResolvedType::AssocTypeProjection { .. }) {
+            return None;
+        }
+        let receiver = tt.fq_type_name(ty);
+        let spelled = tt.type_name(ty);
+        drop(tt);
+        Some(BoundedOperand {
+            receiver,
+            spelled,
+            bounds: self.projection_bounds(ty, span),
+        })
+    }
+
+    /// The bound in `bounds` that declares `item`'s method, with the method as
+    /// that bound types it for `receiver` and `rhs`.
     fn find_operator_in_bounds(
         &mut self,
-        param: &str,
+        bounds: &[ScopedBound],
         receiver: TypeId,
         item: CompilerItem,
         method_name: &str,
         rhs: Option<TypeId>,
         span: Span,
     ) -> Option<(FqTraitName, MethodInfo)> {
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(param)
-            .cloned()
-            .unwrap_or_default();
         let required = self.tysys.required_operator_trait(item);
         let args = match rhs {
             Some(rhs) => ArgSource::Types(vec![self.tysys.type_table.borrow_mut().make_ref(rhs)]),
             None => ArgSource::NoArguments,
         };
         self.find_method_in_trait_bounds(
-            &bounds,
+            bounds,
             method_name,
             receiver,
             span,

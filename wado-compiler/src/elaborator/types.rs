@@ -4274,10 +4274,11 @@ pub(super) struct ResolvedTraitMethod {
 }
 
 impl ResolvedTraitMethod {
-    /// A method a type parameter's bound supplies; which impl answers is
-    /// monomorphization's to say.
+    /// A method a bound on `receiver` supplies, where `receiver` is a type
+    /// parameter or a projection; which impl answers is monomorphization's to
+    /// say.
     pub(super) fn through_bound(
-        param: &str,
+        receiver: FqTypeName,
         trait_name: FqTraitName,
         method_name: &str,
         info: MethodInfo,
@@ -4287,9 +4288,9 @@ impl ResolvedTraitMethod {
             trait_name,
             method_name: method_name.to_string(),
             impl_def: None,
-            impl_name: param.to_string(),
+            impl_name: receiver.to_string(),
             impl_type_id: None,
-            receiver: FqTypeName::binder(param),
+            receiver,
             self_kind: info.self_kind,
             return_type: info.return_type,
             param_types: info.param_types,

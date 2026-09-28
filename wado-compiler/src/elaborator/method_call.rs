@@ -203,6 +203,34 @@ impl MethodCallOutcome {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// The bounds the trait's `type A: Bound` puts on the projection `ty`,
+    /// as a method or an operator on it looks them up; empty for any other
+    /// type. A rebuilt bound has no walked site, so it carries its declaration;
+    /// one naming none was reported where written.
+    pub(super) fn projection_bounds(&self, ty: TypeId, span: Span) -> Vec<ScopedBound> {
+        let tt = self.tysys.type_table.borrow();
+        let ResolvedType::AssocTypeProjection { bounds, .. } = tt.get(ty) else {
+            return Vec::new();
+        };
+        bounds
+            .iter()
+            .filter_map(|b| {
+                Some(ScopedBound::new(
+                    ast::TraitBound {
+                        id: AstId::fresh(),
+                        name: b.base_name().to_string(),
+                        type_args: Vec::new(),
+                        assoc_types: Vec::new(),
+                        span,
+                        fn_signature: None,
+                        resolved: Some(b.canonical()?),
+                    },
+                    None,
+                ))
+            })
+            .collect()
+    }
+
     pub(super) fn resolve_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -527,48 +555,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If still not found and receiver is an AssocTypeProjection, try its bounds
         // e.g., S::SeqSerializer: SerializeSeq -> look up element() in SerializeSeq
         if method_info.is_none() {
-            let assoc_bounds = {
-                let resolved = self.tysys.type_table.borrow().get(base_type_id).clone();
-                if let ResolvedType::AssocTypeProjection { bounds, .. } = resolved {
-                    if bounds.is_empty() {
-                        None
-                    } else {
-                        Some(bounds)
-                    }
-                } else {
-                    None
-                }
-            };
-            if let Some(bounds) = assoc_bounds
-                && let Some((found_trait, info)) = {
-                    // A rebuilt bound has no walked site, so it carries its
-                    // declaration; one naming none was reported where written.
-                    let bounds: Vec<ScopedBound> = bounds
-                        .iter()
-                        .filter_map(|b| {
-                            Some(ScopedBound::new(
-                                ast::TraitBound {
-                                    id: AstId::fresh(),
-                                    name: b.base_name().to_string(),
-                                    type_args: Vec::new(),
-                                    assoc_types: Vec::new(),
-                                    span,
-                                    fn_signature: None,
-                                    resolved: Some(b.canonical()?),
-                                },
-                                None,
-                            ))
-                        })
-                        .collect();
-                    self.find_method_in_trait_bounds(
-                        &bounds,
-                        method_name,
-                        base_type_id,
-                        span,
-                        required_trait,
-                        ArgSource::Exprs(&mut probe),
-                    )
-                }
+            let bounds = self.projection_bounds(base_type_id, span);
+            if !bounds.is_empty()
+                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    &bounds,
+                    method_name,
+                    base_type_id,
+                    span,
+                    required_trait,
+                    ArgSource::Exprs(&mut probe),
+                )
             {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
