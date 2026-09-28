@@ -1632,10 +1632,7 @@ impl GenContext {
             if self.elements_reach_open_end(elements, start + 1) {
                 return null;
             }
-            out.add_pairs(&Pairs { firsts: head.singles, seconds: bits_of(&self.first_ids_of_elements_from(
-                elements,
-                start + 1,
-            )) });
+            out.add_pairs(&self.pairs_before(&head.singles, elements, start + 1));
             if self.tail_is_nullable_deep(elements, start + 1) {
                 bits_union_into(&mut out.singles, &head.singles);
             }
@@ -1652,9 +1649,8 @@ impl GenContext {
     fn first2_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> Option<Heads> {
         return match elem {
             TokenRef(_) | Literal(_) => {
-                let mut fv: List<String> = [];
                 let mut out = Heads::new();
-                out.singles = bits_of(&self.first_ids_of_element(elem, &mut fv));
+                out.singles = bits_of(&self.first_ids_of_element(elem, visiting));
                 Option::Some(out);
             },
             Label(lab) => self.first2_of_element(&lab.element, visiting),
@@ -1698,6 +1694,11 @@ impl GenContext {
         return Option::Some(out);
     }
 
+    /// Each of `firsts` followed by a token `elements[start..]` begins with.
+    fn pairs_before(&mut self, firsts: &List<u64>, elements: &List<Element>, start: i32) -> Pairs {
+        return Pairs { firsts: *firsts, seconds: bits_of(&self.first_ids_of_elements_from(elements, start)) };
+    }
+
     fn first2_of_repeat(&mut self, rep: &RepeatElement, visiting: &mut List<String>) -> Option<Heads> {
         let Some(body) = self.first2_of_element(&rep.element, visiting) else {
             return null;
@@ -1711,10 +1712,7 @@ impl GenContext {
         }
         out.add(&body);
         if loops && !bits_is_empty(&body.singles) {
-            out.add_pairs(&Pairs { firsts: body.singles, seconds: bits_of(&self.first_ids_of_elements_from(
-                &body_elements,
-                0,
-            )) });
+            out.add_pairs(&self.pairs_before(&body.singles, &body_elements, 0));
         }
         return Option::Some(out);
     }
