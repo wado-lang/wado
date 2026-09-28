@@ -1,0 +1,26 @@
+// A local item in a trait default method is declared once, however many impls
+// inherit the method and wherever they are.
+
+use { Tag } from "./sub/local_item_in_inherited_default_method_trait.wado";
+use { C } from "./sub/local_item_in_inherited_default_method_impl.wado";
+
+struct A {}
+struct B {}
+
+impl Tag for A {
+    fn base(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Tag for B {
+    fn base(&self) -> i32 {
+        return 2;
+    }
+}
+
+test "every inheriting impl runs the one local item" {
+    assert A {}.tag() == 2;
+    assert B {}.tag() == 4;
+    assert C {}.tag() == 6;
+}

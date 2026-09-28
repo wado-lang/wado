@@ -1,12 +1,14 @@
 use std::process;
 
 use lexopt::Arg::{Long, Short, Value};
+#[cfg(feature = "mimalloc")]
 use mimalloc::MiMalloc;
 use wado_cli::COMPILER_STACK_SIZE;
 use wado_cli::args::CliExit;
 
 // `wado serve` is allocation-heavy per request; mimalloc avoids the
 // system allocator's cross-thread contention.
+#[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 

@@ -602,6 +602,11 @@ test {
 }
 ```
 
+In a struct's field types, `Self` names the struct being declared, so
+`next: Option<Self>` says what `next: Option<Node>` says. This holds for a
+struct declared in a function body too. Inside an `impl` or `trait` method, a
+local struct's `Self` is that struct, not the type the `impl` is for.
+
 ### Field Visibility
 
 A struct field takes the visibility modifiers other declarations take, and
@@ -1125,6 +1130,10 @@ test {
     assert Maybe::wrap(1) matches { Just(1) };
 }
 ```
+
+In a case's payload type, `Self` names the variant being declared, as it names
+the struct in a struct's field types. `Cons([i32, Self])` in `variant List`
+says what `Cons([i32, List])` says.
 
 A pattern destructures a tuple payload:
 
