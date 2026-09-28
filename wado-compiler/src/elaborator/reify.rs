@@ -2725,39 +2725,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_expr(&unary.expr, ctx, expected_type);
                 }
                 let op = ast_unary_op_to_tir(unary.op);
-<<<<<<< HEAD
-                let inner_expected = Some(recorded_type).filter(|&expected| {
-                    unary_passes_expected_type(&self.tysys.type_table.borrow(), unary.op, expected)
-                });
-||||||| c013e91ab
-                // A `-<numeric literal>` operand shares the unary's type:
-                // propagate the expected/recorded type so the inner literal
-                // takes the right width (e.g. `-1.0` in an `f32` const body
-                // must be `f32`, not the default `f64`). Other unary operands
-                // are typed on their own.
-                let inner_expected = if unary.op == ast::UnaryOp::Neg
-                    && is_numeric_literal_expr(&unary.expr)
-                    && recorded_type != TypeTable::UNKNOWN
-                {
-                    Some(recorded_type)
-                } else {
-                    None
-                };
-=======
-                // A `-` or `~` operand built from literals shares the unary's
-                // type: propagate the recorded type so the inner literal takes
-                // the right width (e.g. `-1.0` in an `f32` const body must be
-                // `f32`, not the default `f64`). Other unary operands are typed
-                // on their own.
-                let inner_expected = if matches!(unary.op, ast::UnaryOp::Neg | ast::UnaryOp::BitNot)
-                    && is_literal_arithmetic(&unary.expr)
-                    && recorded_type != TypeTable::UNKNOWN
-                {
-                    Some(recorded_type)
-                } else {
-                    None
-                };
->>>>>>> origin/main
+                let inner_expected = Some(recorded_type)
+                    .filter(|&t| t != TypeTable::UNKNOWN && unary_passes_expected_type(unary));
                 let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
                 if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a
