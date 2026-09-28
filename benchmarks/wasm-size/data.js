@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790575892589,
+  "lastUpdate": 1790583397766,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61325,6 +61325,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288336,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e01012cdf190f828883273cd18c6bcd88c584646",
+          "message": "Merge pull request #2204 from wado-lang/claude/wado-lang-site-maintenance-8dxwx5\n\nfix: keep the heap out of libm's 17 pages, and let a library export `ByteList` as `byte-list`",
+          "timestamp": "2026-09-28T16:48:53+09:00",
+          "tree_id": "c9bd504252cf380b95ac4487111fd78314f7c012",
+          "url": "https://github.com/wado-lang/wado/commit/e01012cdf190f828883273cd18c6bcd88c584646"
+        },
+        "date": 1790583397265,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1947,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6804,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20295,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288412,
             "unit": "bytes"
           }
         ]
