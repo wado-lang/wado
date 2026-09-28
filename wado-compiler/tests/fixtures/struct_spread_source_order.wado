@@ -1,0 +1,26 @@
+// A spread literal's members evaluate once each, in source order, `base`
+// first. The literal holds its fields by declaration index, so `y` written
+// before `x` has to run first all the same.
+use { println, Stdout } from "core:cli";
+
+struct P { x: i32, y: i32 }
+
+fn log(n: i32) -> i32 with Stdout {
+    println(`${n}`);
+    return n;
+}
+
+fn base() -> P with Stdout {
+    println("base");
+    return P { x: 0, y: 0 };
+}
+
+export fn run() with Stdout {
+    let c = P { ..base(), y: log(2), x: log(1) };
+    println(`${c.x + c.y}`);
+}
+
+__DATA__
+{
+    "stdout": "base\n2\n1\n3\n"
+}

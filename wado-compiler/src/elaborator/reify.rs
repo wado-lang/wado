@@ -5233,6 +5233,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(spread) = struct_lit.spreads.first() {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
             let base_ref = Self::hoist_once(ctx, base_expr, "base", &mut base_binding);
+            // The members evaluate in source order, `base` first, but the
+            // literal holds its fields by declaration index: a field written
+            // out of that order is bound ahead of it.
+            if !fields.is_sorted_by_key(|f| f.field_index) {
+                fields = fields
+                    .into_iter()
+                    .map(|f| TirStructField {
+                        value: Self::hoist_once(ctx, f.value, "field", &mut base_binding),
+                        ..f
+                    })
+                    .collect();
+            }
             for (name, field_index, raw_ty, _default) in &decl_fields {
                 if provided.contains(name) {
                     continue;
