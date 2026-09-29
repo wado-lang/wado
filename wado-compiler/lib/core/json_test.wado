@@ -4,8 +4,11 @@ use {
     Serializer,
     Deserializer,
     SerializeStruct,
+    SerializeMap,
     DeserializeStruct,
+    DeserializeMap,
     DeserializeVariant,
+    IgnoredAny,
     SerializeError,
     SerializeErrorKind,
     DeserializeError,
@@ -976,6 +979,40 @@ test "a scalar map key reads back from its string" {
     assert chars['é'] == 1;
 }
 
+/// Asserts a one-entry map keyed by `key` spells it `spelling`, reads that
+/// back, and refuses a key that is not a string.
+fn assert_key_round_trips<K: Ord + Serialize + Deserialize + Inspect>(key: K, spelling: String) {
+    let mut m = TreeMap::<K, i32>::new();
+    m[key] = 1;
+    let text = `{"${spelling}":1}`;
+    assert to_string(&m) == Result::Ok(text);
+    assert from_string::<TreeMap<K, i32>>(text) matches { Ok(back) && back.get(key) == Option::Some(1) };
+    assert de_err::<TreeMap<K, i32>>("{1:1}").kind == DeserializeErrorKind::UnexpectedType;
+}
+
+test "every scalar key width round-trips through its spelling" {
+    assert_key_round_trips(i64::MIN, "-9223372036854775808");
+    assert_key_round_trips(u32::MAX, "4294967295");
+    assert_key_round_trips(u64::MAX, "18446744073709551615");
+    assert_key_round_trips(i128::MIN, "-170141183460469231731687303715884105728");
+    assert_key_round_trips(u128::MAX, "340282366920938463463374607431768211455");
+    let single: f32 = 1.5;
+    assert_key_round_trips(single, "1.5");
+    assert_key_round_trips(-0.25, "-0.25");
+    let half: f16 = 2.5;
+    assert_key_round_trips(half, "2.5");
+    let brain: bf16 = -3.0;
+    assert_key_round_trips(brain, "-3");
+    assert_key_round_trips(true, "true");
+    assert_key_round_trips('x', "x");
+}
+
+test "a NaN map key fails as a NaN value does" {
+    let mut m = TreeMap::<f64, i32>::new();
+    m[f64::NAN] = 1;
+    assert to_string(&m).unwrap_err() == SerializeError::unsupported_value("NaN is not allowed in JSON");
+}
+
 test "a map key that does not parse as its type names the key" {
     let e = de_err::<TreeMap<i32, i32>>(`{"x":1}`);
     assert e.kind == DeserializeErrorKind::InvalidValue && e.offset == 1;
@@ -995,13 +1032,63 @@ struct Pair {
     b: i32,
 }
 
+/// A one-entry map whose key need not be `Ord`, as a `TreeMap`'s must.
+struct OneEntry<K> {
+    key: K,
+}
+
+// Only a key the map refuses reaches these, so nothing after it runs.
+#[coverage(off)]
+impl<K: Serialize> Serialize for OneEntry<K> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(1)?;
+        m.key(&self.key)?;
+        m.value(&0)?;
+        return m.end();
+    }
+}
+
+#[coverage(off)]
+impl<K: Deserialize> Deserialize for OneEntry<K> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<OneEntry<K>, DeserializeError> {
+        let mut m = d.begin_map()?;
+        let key = m.next_key::<K>()?;
+        return Result::Ok(OneEntry { key: key.unwrap() });
+    }
+}
+
+/// What writing a one-entry map keyed by `key` fails with.
+fn key_write_error<K: Serialize>(key: K) -> SerializeErrorKind {
+    return to_string(&OneEntry { key }).unwrap_err().kind;
+}
+
+/// What reading `{"a":1}` with its key as `K` fails with.
+fn key_read_error<K: Deserialize>() -> DeserializeErrorKind {
+    return de_err::<OneEntry<K>>(`{"a":1}`).kind;
+}
+
 test "a compound map key is refused both ways" {
     let mut pairs = TreeMap::<Pair, i32>::new();
     pairs[Pair { a: 1, b: 2 }] = 3;
     assert to_string(&pairs) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
     assert to_bytes_canonical(&pairs) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
     assert to_string_pretty(&pairs) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
-    assert de_err::<TreeMap<List<i32>, i32>>(`{"1":1}`).kind == DeserializeErrorKind::UnexpectedType;
+    assert key_write_error([1] as List<i32>) == SerializeErrorKind::UnsupportedValue;
+    assert key_write_error([1] as TreeSet<i32>) == SerializeErrorKind::UnsupportedValue;
+    assert key_write_error(TreeMap::<String, i32>::new()) == SerializeErrorKind::UnsupportedValue;
+    assert key_write_error(PrettyShape::Point) == SerializeErrorKind::UnsupportedValue;
+    assert key_write_error(PrettyShape::Circle(1.0)) == SerializeErrorKind::UnsupportedValue;
+    assert key_write_error(()) == SerializeErrorKind::UnsupportedValue;
+    assert key_read_error::<List<i32>>() == DeserializeErrorKind::UnexpectedType;
+    assert key_read_error::<TreeMap<String, i32>>() == DeserializeErrorKind::UnexpectedType;
+    assert key_read_error::<Pair>() == DeserializeErrorKind::UnexpectedType;
+    assert key_read_error::<PrettyColor>() == DeserializeErrorKind::UnexpectedType;
+    assert key_read_error::<()>() == DeserializeErrorKind::UnexpectedType;
+}
+
+test "an ignored map reads each key as a string" {
+    assert from_string::<IgnoredAny>(`{"a":1}`) matches { Ok(_) };
+    assert de_err::<IgnoredAny>("{1:1}").kind == DeserializeErrorKind::UnexpectedType;
 }
 
 test "a canonical map sorts scalar keys by their spelling" {
@@ -1009,14 +1096,6 @@ test "a canonical map sorts scalar keys by their spelling" {
     ints[10] = 1;
     ints[9] = 2;
     assert_bytes_eq_string(&to_bytes_canonical(&ints).unwrap(), &"{\"10\":1,\"9\":2}");
-}
-
-test "a set is a sequence" {
-    let set = [3, 1, 2] as TreeSet<i32>;
-    assert to_string(&set) == Result::Ok("[3,1,2]");
-    let back: TreeSet<i32> = from_string("[3,1,2]").unwrap();
-    assert back.len() == 3 && back.contains(1);
-    assert de_err::<TreeSet<i32>>("[1,2,1]").kind == DeserializeErrorKind::DuplicateField;
 }
 
 test "a StrSlice parses without copying out" {

@@ -1,4 +1,6 @@
 use { TreeSet } from "core:collections";
+use { to_string, from_string } from "core:json";
+use { DeserializeErrorKind, SerializeErrorKind } from "core:serde";
 
 test "empty set" {
     let s: TreeSet<i32> = TreeSet::new();
@@ -370,4 +372,19 @@ test "compaction after many removals" {
     assert result.len() == 10;
     assert result[0] == 40;
     assert result[9] == 49;
+}
+
+test "a set is a sequence" {
+    let set = [3, 1, 2] as TreeSet<i32>;
+    assert to_string(&set) == Result::Ok("[3,1,2]");
+    let back: TreeSet<i32> = from_string("[3,1,2]").unwrap();
+    assert back.len() == 3 && back.contains(1);
+}
+
+test "a set passes on what its elements and its sequence fail with" {
+    assert from_string::<TreeSet<i32>>("{}") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert from_string::<TreeSet<i32>>(`["x"]`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_string::<TreeSet<i32>>("[1,2,1]") matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+    let nan = [f64::NAN] as TreeSet<f64>;
+    assert to_string(&nan) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
 }

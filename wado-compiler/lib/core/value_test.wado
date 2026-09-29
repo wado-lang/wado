@@ -8,10 +8,12 @@ use {
     SerializeErrorKind,
     Deserialize,
     Deserializer,
+    DeserializeMap,
     DeserializeVariant,
     DeserializeError,
     DeserializeErrorKind,
     DuplicateKeyPolicy,
+    IgnoredAny,
     Visitor,
 } from "core:serde";
 use { TreeMap } from "core:collections";
@@ -928,6 +930,47 @@ test "a scalar map key round-trips through its object spelling" {
     assert `${to_value(&floats).unwrap():?}` == "{\"0.5\": 1}";
 }
 
+/// Asserts a one-entry map keyed by `key` spells it `spelling` and reads that
+/// back.
+fn assert_key_round_trips<K: Ord + Serialize + Deserialize + Inspect>(key: K, spelling: String) {
+    let mut m = TreeMap::<K, i32>::new();
+    m[key] = 1;
+    let v = to_value(&m).unwrap();
+    assert `${v:?}` == `{"${spelling}": 1}`;
+    assert from_value::<TreeMap<K, i32>>(&v) matches { Ok(back) && back.get(key) == Option::Some(1) };
+}
+
+test "every scalar key width round-trips through its spelling" {
+    assert_key_round_trips(i64::MIN, "-9223372036854775808");
+    assert_key_round_trips(u32::MAX, "4294967295");
+    assert_key_round_trips(u64::MAX, "18446744073709551615");
+    assert_key_round_trips(u128::MAX, "340282366920938463463374607431768211455");
+    let single: f32 = 1.5;
+    assert_key_round_trips(single, "1.5");
+    assert_key_round_trips(-0.25, "-0.25");
+    let half: f16 = 2.5;
+    assert_key_round_trips(half, "2.5");
+    let brain: bf16 = -3.0;
+    assert_key_round_trips(brain, "-3");
+    assert_key_round_trips(true, "true");
+    assert_key_round_trips('x', "x");
+}
+
+/// The first key of a map, read as a `K` no `TreeMap` could order.
+struct FirstKey<K> {
+    key: K,
+}
+
+// Only a key the map refuses reaches this, so nothing after it runs.
+#[coverage(off)]
+impl<K: Deserialize> Deserialize for FirstKey<K> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<FirstKey<K>, DeserializeError> {
+        let mut m = d.begin_map()?;
+        let key = m.next_key::<K>()?;
+        return Result::Ok(FirstKey { key: key.unwrap() });
+    }
+}
+
 test "a compound map key is refused both ways" {
     let mut lists = TreeMap::<List<i32>, i32>::new();
     lists[[1]] = 1;
@@ -935,6 +978,15 @@ test "a compound map key is refused both ways" {
     let v: Value = { a: 1 };
     assert fails_with::<TreeMap<List<i32>, i32>>(&v, UnexpectedType);
     assert fails_with::<TreeMap<i32, i32>>(&v, InvalidValue);
+    assert fails_with::<FirstKey<TreeMap<String, i32>>>(&v, UnexpectedType);
+    assert fails_with::<FirstKey<ToValuePoint>>(&v, UnexpectedType);
+    assert fails_with::<FirstKey<ToValueShape>>(&v, UnexpectedType);
+    assert fails_with::<FirstKey<()>>(&v, UnexpectedType);
+}
+
+test "an ignored map reads each key as a string" {
+    let v: Value = { a: 1 };
+    assert from_value::<IgnoredAny>(&v) matches { Ok(_) };
 }
 
 // --- duplicate keys ---
@@ -949,8 +1001,8 @@ struct LastWins<D: Deserializer> {
     inner: &mut D,
 }
 
-// The trait asks for every method, but reading a `Value` reaches only
-// `on_duplicate_key` and `deserialize_any`.
+// The trait asks for every method, but reading a `Value` or a map reaches only
+// `on_duplicate_key` and `deserialize_any` or `begin_map`.
 #[coverage(off)]
 impl<D: Deserializer> Deserializer for LastWins<D> {
     type SeqAccess = D::SeqAccess;
@@ -1043,20 +1095,25 @@ impl<D: Deserializer> Deserializer for LastWins<D> {
     }
 }
 
-/// A `Value` read under a last-wins policy.
-struct LastWinsValue {
-    value: Value,
+/// A `T` read under a last-wins policy.
+struct ReadLastWins<T> {
+    value: T,
 }
 
-impl Deserialize for LastWinsValue {
-    fn deserialize<D: Deserializer>(d: &mut D) -> Result<LastWinsValue, DeserializeError> {
+impl<T: Deserialize> Deserialize for ReadLastWins<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<ReadLastWins<T>, DeserializeError> {
         let mut relaxed = LastWins { inner: d };
-        return Value::deserialize(&mut relaxed).map(|value| LastWinsValue { value });
+        return T::deserialize(&mut relaxed).map(|value| ReadLastWins { value });
     }
 }
 
+test "a TreeMap read under a last-wins policy keeps the last repeated key" {
+    let r: Result<ReadLastWins<TreeMap<String, i32>>, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
+    assert r matches { Ok(m) && m.value.len() == 2 && m.value["a"] == 3 };
+}
+
 test "a Value read under a last-wins policy keeps the last repeated key" {
-    let r: Result<LastWinsValue, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
+    let r: Result<ReadLastWins<Value>, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
     let expected: Value = { a: 3.0, b: 2.0 };
     assert r matches { Ok(v) && v.value == expected };
 }
