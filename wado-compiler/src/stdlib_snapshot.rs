@@ -129,7 +129,7 @@ fn build_snapshot() -> Semantics {
     .expect("stdlib snapshot loader should succeed");
 
     // The snapshot caches stdlib TIR for batch reuse, so build it.
-    let sem = semantics_with_logger(load_result, &logger, true);
+    let sem = semantics_with_logger(load_result, &logger, true, None);
     assert!(
         sem.is_complete(),
         "stdlib snapshot should compute semantics cleanly",

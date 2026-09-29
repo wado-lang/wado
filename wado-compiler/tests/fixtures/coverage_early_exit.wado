@@ -1,0 +1,41 @@
+// `?`, `let … else`, a loop body and the statements after an early return
+// are each a region of their own.
+fn parse(s: String) -> Result<i32, String> {
+    let n = i32::from_str(s).map_err(|e| `${e}`)?;
+    return Ok(n * 2);
+}
+
+fn first(xs: List<i32>) -> i32 {
+    let Some(x) = xs.first() else {
+        return -1;
+    };
+    return x;
+}
+
+fn sum(xs: List<i32>) -> i32 {
+    let mut total = 0;
+    for let x of xs {
+        if x < 0 {
+            return total;
+        }
+        total += x;
+    }
+    return total;
+}
+
+test "the paths taken" {
+    assert parse("21").unwrap() == 42;
+    assert first([4, 5]) == 4;
+    assert sum([1, 2]) == 3;
+    assert sum([]) == 0;
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "uncovered_lines": [10, 19],
+    "uncovered_branches": ["4:50 try", "9:5 let-else", "18:9 then"],
+    "uncovered_functions": ["parse::{closure:4}"]
+  }
+}

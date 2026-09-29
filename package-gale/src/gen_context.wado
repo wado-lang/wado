@@ -19,9 +19,18 @@ use {
 use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything } from "./gir.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
-use { TokenKinds, append_ids } from "./token_kinds.wado";
+use {
+    TokenKinds,
+    append_ids,
+    bits_of,
+    bits_is_empty,
+    bits_equal,
+    bits_ids,
+    bits_test,
+    bits_union_into,
+} from "./token_kinds.wado";
 use { RecoverySets, empty_recovery_sets } from "./recovery_sets.wado";
-use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD } from "./scan_gate.wado";
+use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { TreeMap } from "core:collections";
@@ -65,6 +74,10 @@ pub global FOLLOW_MASK_MAX_K: i32 = FOLLOW_MAX_DEPTH;
 /// function's `&mut` parameter borrows it under.
 pub global ATN_STATE_HANDLE: String = "atn";
 pub global ATN_STATE_TYPE: String = "AtnState";
+
+/// The parser's scan memo (`ScanMemo`): its field, and the name a scan
+/// function's `&mut` parameter borrows it under.
+pub global SCAN_MEMO_HANDLE: String = "memo";
 
 /// The labeled rule calls of one rule whose capture an action reads: `spans`
 /// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
@@ -173,6 +186,10 @@ pub struct GenContext {
     /// Set where a scan decides through the simulator too. Gates the scans'
     /// `atn` parameter, so a `??`-only grammar's scans borrow nothing.
     needs_scan_atn_seen: bool,
+    /// Set where a left-recursive rule's scan answers from the parser's memo.
+    scan_memo: bool,
+    /// Set while the atom of a rule whose mid operands are gated emits.
+    lr_cont_in_atom: bool,
     /// Set by lowering for an ATN-class LR rule. Gates the LR tables.
     needs_lr_atn_seen: bool,
     /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
@@ -287,6 +304,9 @@ pub struct GenContext {
     /// Whether the code being emitted is a scan function's, which reaches the
     /// gate through its parameter rather than through the parser.
     in_scan_fn: bool,
+    /// While a left-recursive rule is emitted, the kinds its suffixes start
+    /// with: what continues an alternative's tail besides the rule's `follow`.
+    lr_continuation: List<String>,
     /// By snake name, the kinds of each rule whose scan is one token test.
     one_token_rules: TreeMap<String, List<String>>,
     snake_index: TreeMap<String, i32>,
@@ -296,6 +316,9 @@ pub struct GenContext {
     /// By helper name, the one call a helper that only forwards would make,
     /// which its callers make instead.
     forwarded_calls: TreeMap<String, Forwarded>,
+    /// By rule name, the ways a rule begins that `first2_of_element` found
+    /// without meeting a cycle.
+    first2_cache: TreeMap<String, Heads>,
 }
 
 /// A forwarding helper's one call, and the call-site stamps it sets first.
@@ -360,6 +383,8 @@ impl GenContext {
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
             needs_scan_atn_seen: false,
+            scan_memo: false,
+            lr_cont_in_atom: false,
             needs_lr_atn_seen: false,
             atn_call_site_returns: [],
             atn_decision_sites: [],
@@ -394,10 +419,12 @@ impl GenContext {
             alt_scan_fns: TreeMap::new(),
             binding_reads: [],
             in_scan_fn: false,
+            lr_continuation: [],
             one_token_rules,
             snake_index,
             alt_exit_label: null,
             forwarded_calls: TreeMap::new(),
+            first2_cache: TreeMap::new(),
         };
     }
 
@@ -494,6 +521,16 @@ impl GenContext {
         return was;
     }
 
+    /// The kinds the current left-recursive rule's suffixes start with, or `[]`.
+    pub fn lr_continuation(&self) -> &List<String> {
+        return &self.lr_continuation;
+    }
+
+    /// Enter a left-recursive rule with its suffixes' first kinds, or leave it with `[]`.
+    pub fn set_lr_continuation(&mut self, kinds: List<String>) {
+        self.lr_continuation = kinds;
+    }
+
     /// The scan gate as a place: the parameter's target inside a scan
     /// function, the parser's field anywhere else.
     pub fn scan_gate_place(&self) -> String {
@@ -504,25 +541,12 @@ impl GenContext {
     }
 
     fn scan_gate_path(&self) -> String {
-        if self.in_scan_fn {
-            return SCAN_GATE_HANDLE;
-        }
-        return `${PARSER_HANDLE}.${SCAN_GATE_FIELD}`;
+        return self.state_path(SCAN_GATE_HANDLE, SCAN_GATE_FIELD);
     }
 
     /// `place.field` of the scan gate.
     pub fn scan_gate_member<S: AsStrSlice>(&self, field: S) -> String {
         return `${self.scan_gate_path()}.${field}`;
-    }
-
-    fn scan_gate_arg(&self) -> String {
-        if !self.emit_scan_gate() {
-            return String::new();
-        }
-        if self.in_scan_fn {
-            return `, ${SCAN_GATE_HANDLE}`;
-        }
-        return `, &mut ${self.scan_gate_path()}`;
     }
 
     /// A condition rendered against the parameter (`scan_gate_condition`),
@@ -620,26 +644,83 @@ impl GenContext {
     }
 
     fn atn_state_path(&self) -> String {
-        if self.in_scan_fn {
-            return ATN_STATE_HANDLE;
-        }
-        return `${PARSER_HANDLE}.${ATN_STATE_HANDLE}`;
+        return self.state_path(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
     }
 
-    /// The ATN state as an argument: the scan's borrow passed on, or a fresh
-    /// borrow of the parser's field.
+    /// The ATN state as an argument.
     pub fn atn_state_arg(&self) -> String {
-        return if self.in_scan_fn { ATN_STATE_HANDLE } else { `&mut ${self.atn_state_path()}` };
+        return self.state_arg(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
+    }
+
+    /// Parser state a scan borrows, as a place: the scan's parameter `handle`,
+    /// or the parser's `field` anywhere else.
+    fn state_path<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
+        if self.in_scan_fn {
+            return handle.to_string();
+        }
+        return `${PARSER_HANDLE}.${field}`;
+    }
+
+    /// Parser state a scan borrows, as an argument: the scan's borrow passed
+    /// on, or a fresh borrow of the parser's field.
+    fn state_arg<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
+        let path = self.state_path(handle, field);
+        return if self.in_scan_fn { path } else { `&mut ${path}` };
     }
 
     /// The trailing arguments of a scan call for the parser state it borrows:
-    /// the gate, then the ATN state. Empty where the scan borrows neither.
+    /// the gate, the ATN state, then the memo. Empty where the scan borrows
+    /// none of them.
     pub fn scan_state_args(&self) -> String {
-        let mut args = self.scan_gate_arg();
+        let mut args = String::new();
+        if self.emit_scan_gate() {
+            args.push_str(`, ${self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD)}`);
+        }
         if self.needs_scan_atn() {
             args.push_str(`, ${self.atn_state_arg()}`);
         }
+        if self.scan_memo {
+            args.push_str(`, ${self.state_arg(SCAN_MEMO_HANDLE, SCAN_MEMO_HANDLE)}`);
+        }
         return args;
+    }
+
+    /// Answer each left-recursive rule's scan once per reading of a position.
+    ///
+    /// Candidates of a scan tournament that share a prefix each scan the
+    /// operand under it, so nesting one inside another doubles the work at every
+    /// level. A scan decides nothing and reads only its arguments, so its answer
+    /// can be kept for the parse. A scan that borrows the ATN state reads the
+    /// caller stack too, which no key here holds.
+    pub fn set_scan_memo(&mut self, on: bool) {
+        assert !(on && self.needs_scan_atn()), "set_scan_memo: a scan that reads the ATN caller stack has no memo key";
+        self.scan_memo = on;
+    }
+
+    /// Whether the parser carries the scan memo (`set_scan_memo`).
+    pub fn scan_memo(&self) -> bool {
+        return self.scan_memo;
+    }
+
+    /// Enter the atom of a left-recursive rule, or leave it, answering whether
+    /// the atom was already being emitted. Where the rule gates a mid operand,
+    /// the atom's trailing operand ends the invocation as a suffix's does and
+    /// owes the same continuation, so the atom and the helpers it calls take
+    /// and pass on `lr_cont`.
+    pub fn set_lr_cont_in_atom(&mut self, on: bool) -> bool {
+        let was = self.lr_cont_in_atom;
+        self.lr_cont_in_atom = on;
+        return was;
+    }
+
+    /// Whether the functions now emitting take `lr_cont` (`set_lr_cont_in_atom`).
+    pub fn lr_cont_in_atom(&self) -> bool {
+        return self.lr_cont_in_atom;
+    }
+
+    /// The memo's type: keyed on the gate where the scan simulates one.
+    pub fn scan_memo_type(&self) -> String {
+        return `ScanMemo<${if self.emit_scan_gate() { SCAN_GATE_TYPE } else { "()" }}>`;
     }
 
     /// Install what each rule's actions read off its labeled rule calls
@@ -1493,6 +1574,147 @@ impl GenContext {
         let mut result: List<List<String>> = [];
         let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
         return [result, final_cursor - start];
+    }
+
+    /// The two positions every way `elements` begins, where they are exact: each
+    /// sequence is two tokens long and every pairing of a first token with a
+    /// second one begins some sequence. Unlike `deep_position_first_sets_from`,
+    /// this sees through alternatives and nullable tails, since exactness is
+    /// checked on the pairs rather than assumed of the walk. Empty otherwise.
+    pub fn exact_two_position_first_sets(&mut self, elements: &List<Element>) -> List<List<String>> {
+        let none: List<List<String>> = [];
+        let mut visiting: List<String> = [];
+        let Some(heads) = self.first2_of_elements(elements, 0, &mut visiting) else {
+            return none;
+        };
+        if heads.empty || !bits_is_empty(&heads.singles) || heads.pairs.is_empty() {
+            return none;
+        }
+        let mut firsts: List<u64> = [];
+        let mut seconds: List<u64> = [];
+        for let pair of &heads.pairs {
+            bits_union_into(&mut firsts, &pair.firsts);
+            bits_union_into(&mut seconds, &pair.seconds);
+        }
+        for let first of &bits_ids(&firsts) {
+            let mut followers: List<u64> = [];
+            for let pair of &heads.pairs {
+                if bits_test(&pair.firsts, *first) {
+                    bits_union_into(&mut followers, &pair.seconds);
+                }
+            }
+            if !bits_equal(&followers, &seconds) {
+                return none;
+            }
+        }
+        return [
+            self.token_kinds.names_of(&bits_ids(&firsts)),
+            self.token_kinds.names_of(&bits_ids(&seconds)),
+        ];
+    }
+
+    /// Every way `elements[start..]` begins, at most two tokens deep. `null`
+    /// where a head is a `.`, a `~X` or a left-recursive rule, which no list of
+    /// names spells.
+    fn first2_of_elements(&mut self, elements: &List<Element>, start: i32, visiting: &mut List<String>) -> Option<Heads> {
+        let mut out = Heads::new();
+        if start >= elements.len() {
+            out.empty = true;
+            return Option::Some(out);
+        }
+        let Some(head) = self.first2_of_element(&elements[start], visiting) else {
+            return null;
+        };
+        for let pair of &head.pairs {
+            out.add_pairs(pair);
+        }
+        if !bits_is_empty(&head.singles) {
+            if self.elements_reach_open_end(elements, start + 1) {
+                return null;
+            }
+            out.add_pairs(&self.pairs_before(&head.singles, elements, start + 1));
+            if self.tail_is_nullable_deep(elements, start + 1) {
+                bits_union_into(&mut out.singles, &head.singles);
+            }
+        }
+        if head.empty {
+            let Some(rest) = self.first2_of_elements(elements, start + 1, visiting) else {
+                return null;
+            };
+            out.add(&rest);
+        }
+        return Option::Some(out);
+    }
+
+    fn first2_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> Option<Heads> {
+        return match elem {
+            TokenRef(_) | Literal(_) => {
+                let mut out = Heads::new();
+                out.singles = bits_of(&self.first_ids_of_element(elem, visiting));
+                Option::Some(out);
+            },
+            Label(lab) => self.first2_of_element(&lab.element, visiting),
+            RuleRef(r) => self.first2_of_rule(&r.name, visiting),
+            Group(g) => self.first2_of_alternatives(&g.alternatives, visiting),
+            Repeat(rep) => self.first2_of_repeat(rep, visiting),
+            Wildcard(_) | Not(_) => null,
+        };
+    }
+
+    /// A rule's answer is cached only where it met no cycle: then no rule on
+    /// `visiting` was reached, so any other `visiting` gives the same answer.
+    fn first2_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> Option<Heads> {
+        if let Some(cached) = self.first2_cache.get(*name) {
+            return Option::Some(cached);
+        }
+        if visiting.contains(name) {
+            return null;
+        }
+        let Some(rule) = self.find_rule(name) else {
+            return null;
+        };
+        let alts = rule.alternatives;
+        visiting.push(*name);
+        let found = self.first2_of_alternatives(&alts, visiting);
+        remove_from_visiting(visiting, name);
+        if let Some(heads) = found {
+            self.first2_cache[*name] = heads;
+        }
+        return found;
+    }
+
+    fn first2_of_alternatives(&mut self, alts: &List<Alternative>, visiting: &mut List<String>) -> Option<Heads> {
+        let mut out = Heads::new();
+        for let alt of alts {
+            let Some(heads) = self.first2_of_elements(&alt.elements, 0, visiting) else {
+                return null;
+            };
+            out.add(&heads);
+        }
+        return Option::Some(out);
+    }
+
+    /// Each of `firsts` followed by a token `elements[start..]` begins with.
+    fn pairs_before(&mut self, firsts: &List<u64>, elements: &List<Element>, start: i32) -> Pairs {
+        return Pairs { firsts: *firsts, seconds: bits_of(&self.first_ids_of_elements_from(elements, start)) };
+    }
+
+    fn first2_of_repeat(&mut self, rep: &RepeatElement, visiting: &mut List<String>) -> Option<Heads> {
+        let Some(body) = self.first2_of_element(&rep.element, visiting) else {
+            return null;
+        };
+        let mut out = Heads::new();
+        out.empty = !rep.kind matches { Plus };
+        let loops = !rep.kind matches { Optional };
+        let body_elements: List<Element> = [rep.element];
+        if loops && self.elements_reach_open_end(&body_elements, 0) {
+            return null;
+        }
+        out.add(&body);
+        if loops && !bits_is_empty(&body.singles) {
+            out.add_pairs(&self.pairs_before(&body.singles, &body_elements, 0));
+        }
+        return Option::Some(out);
     }
 
     /// Internal walker. Returns the cursor index reached when the walk
@@ -2849,6 +3071,52 @@ fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
         },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
+    }
+}
+
+/// Every way a stretch of the grammar begins, at most two tokens deep: with
+/// nothing, with one token and then nothing, or with a pair. Tokens are kind-id
+/// sets.
+struct Heads {
+    empty: bool,
+    singles: List<u64>,
+    /// Pairs held as products, so a rule whose heads pair every first token
+    /// with every second one costs two sets rather than their product.
+    pairs: List<Pairs>,
+}
+
+/// Every pairing of a token in `firsts` with a token in `seconds`.
+struct Pairs {
+    firsts: List<u64>,
+    seconds: List<u64>,
+}
+
+impl Heads {
+    fn new() -> Heads {
+        return Heads { empty: false, singles: [], pairs: [] };
+    }
+
+    fn add(&mut self, other: &Heads) {
+        self.empty = self.empty || other.empty;
+        bits_union_into(&mut self.singles, &other.singles);
+        for let pair of &other.pairs {
+            self.add_pairs(pair);
+        }
+    }
+
+    /// Products sharing their second set merge, which bounds `pairs` by the
+    /// distinct second sets rather than by the paths reaching them.
+    fn add_pairs(&mut self, pairs: &Pairs) {
+        if bits_is_empty(&pairs.firsts) || bits_is_empty(&pairs.seconds) {
+            return;
+        }
+        for let held of &mut self.pairs {
+            if bits_equal(&held.seconds, &pairs.seconds) {
+                bits_union_into(&mut held.firsts, &pairs.firsts);
+                return;
+            }
+        }
+        self.pairs.push(*pairs);
     }
 }
 

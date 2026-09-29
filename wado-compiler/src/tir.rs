@@ -5967,6 +5967,32 @@ pub(crate) fn agree_branch_types(tt: &TypeTable, t: TypeId, e: TypeId) -> Option
     }
 }
 
+/// Whose storage a `let` binding holds, which decides whether it copies its
+/// value and whether the value-copy analysis may hand that storage on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LetStorage {
+    /// Its own: the value-copy analysis copies the value unless it proves the
+    /// value owned.
+    Planned,
+    /// Its own, taken over from the value without a copy. The producer vouches
+    /// that nothing reads that storage as another value afterwards.
+    Taken,
+    /// The value's, without a copy: the binding shares whatever storage the
+    /// value names, and the value-copy analysis follows that share as it
+    /// follows a planned binding's source.
+    Aliased,
+}
+
+impl LetStorage {
+    /// Whether the binding holds its value without copying it.
+    pub fn skips_copy(self) -> bool {
+        match self {
+            LetStorage::Planned => false,
+            LetStorage::Taken | LetStorage::Aliased => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TirStmt {
     pub kind: TirStmtKind,
@@ -5988,10 +6014,8 @@ pub enum TirStmtKind {
         is_reactive: bool,
         type_id: TypeId,
         value: TirExpr,
-        /// When true, the WIR builder skips deep value-copy for this binding.
-        /// Set by LICM for hoisted variables whose source field is verified
-        /// non-mutated in the loop, making aliasing safe.
-        skip_value_copy: bool,
+        /// Whose storage the binding holds.
+        storage: LetStorage,
     },
     Expr(TirExpr),
     Return {

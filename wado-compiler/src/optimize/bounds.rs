@@ -38,11 +38,30 @@ impl Builtin<'_> {
     }
 }
 
+/// The builtin calls in one body whose every `#[trap(...)]` check holds, each
+/// with the callee its checks were proven against.
+#[derive(Debug, Default)]
+pub(super) struct Proofs(IndexMap<ExprId, FuncId>);
+
+impl Proofs {
+    /// Whether the call `id`, to `func_id`, cannot trap. A call since pointed
+    /// at another callee is no longer the call that was proven.
+    pub fn holds(&self, id: ExprId, func_id: FuncId) -> bool {
+        self.0.get(&id) == Some(&func_id)
+    }
+}
+
+impl FromIterator<(ExprId, FuncId)> for Proofs {
+    fn from_iter<I: IntoIterator<Item = (ExprId, FuncId)>>(proofs: I) -> Self {
+        Self(proofs.into_iter().collect())
+    }
+}
+
 /// What [`analyze`] proves about one body.
 #[derive(Debug, Default)]
 pub(super) struct Bounds {
-    /// Builtin calls whose every `#[trap(...)]` check holds.
-    pub in_bounds: IndexSet<ExprId>,
+    /// Builtin calls that cannot trap.
+    pub proofs: Proofs,
     /// `Loop` statements that count a local up to a constant, so they end.
     pub counted: IndexSet<StmtId>,
     /// Some store reaches heap memory this body did not allocate itself.
@@ -343,7 +362,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
             TrapCheck::Unset(array) => self.elements_never_unset(arg(array)),
         };
         if spec.checks.iter().all(holds) {
-            self.out.in_bounds.insert(e);
+            self.out.proofs.0.insert(e, *func_id);
         }
     }
 

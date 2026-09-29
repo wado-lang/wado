@@ -1,0 +1,97 @@
+// The write-back after a call handed a detached `&mut` to a variant field
+// stores the temp into the place. Nothing reads the temp after that store, so
+// it moves: copying would duplicate everything the payload holds, which for a
+// decoder filling a message field in place is the whole message.
+
+use { println, Stdout } from "core:cli";
+
+trait Message with () {
+    fn merge(&mut self, r: &mut Reader) -> Result<bool, String>;
+}
+
+struct Reader {
+    depth: i32,
+}
+
+impl Reader {
+    fn optional<M: Message + Default>(&mut self, slot: &mut Option<M>) -> Result<bool, String> {
+        if *slot matches { None } {
+            *slot = Option::Some(M::default());
+        }
+        if let Some(m) = slot {
+            self.depth += 1;
+            m.merge(self)?;
+            self.depth -= 1;
+        }
+        return Result::Ok(true);
+    }
+}
+
+struct Graph {
+    data: List<i32> = [],
+    sub: Option<Graph> = null,
+}
+
+impl Message for Graph {
+    fn merge(&mut self, r: &mut Reader) -> Result<bool, String> {
+        self.data.push(r.depth);
+        if r.depth < 3 {
+            return r.optional(&mut self.sub);
+        }
+        return Result::Ok(false);
+    }
+}
+
+struct Model {
+    graph: Option<Graph> = null,
+}
+
+impl Message for Model {
+    fn merge(&mut self, r: &mut Reader) -> Result<bool, String> {
+        return r.optional(&mut self.graph);
+    }
+}
+
+struct Holder {
+    o: Option<List<i32>>,
+}
+
+// The result is the slot's storage, so it must not stay shared with the place,
+// whether the callee replaced the slot or not.
+fn hand_back(slot: &mut Option<List<i32>>, replace: bool) -> Option<List<i32>> {
+    if replace {
+        *slot = Option::Some([1]);
+    }
+    return *slot;
+}
+
+fn result_independent_of_place(replace: bool) with Stdout {
+    let mut h = Holder { o: Option::Some([7]) };
+    let mut x = hand_back(&mut h.o, replace);
+    if let Some(l) = &mut x {
+        l.push(2);
+    }
+    if let Some(l) = &mut h.o {
+        l.push(3);
+    }
+    println(`${h.o:?} ${x:?}`);
+}
+
+export fn run() with Stdout {
+    let mut m = Model {};
+    let mut r = Reader { depth: 0 };
+    m.merge(&mut r).unwrap();
+    m.merge(&mut r).unwrap();
+    if let Some(g) = &m.graph {
+        println(`${g.data.len()} ${g.sub.unwrap().data.len()}`);
+    }
+    result_independent_of_place(true);
+    result_independent_of_place(false);
+}
+
+__DATA__
+{
+    "stdout": "2 2\nOption::Some([1, 3]) Option::Some([1, 2])\nOption::Some([7, 3]) Option::Some([7, 2])\n",
+    "wir_expect:O0": ["self.graph = $local_", "self.sub = $local_"],
+    "wir_expect:O2": ["self.graph = $write_back_moved_", "self.sub = $write_back_moved_"]
+}

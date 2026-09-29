@@ -1,0 +1,28 @@
+// Parse throughput of the Gale-generated SQLite parser, over the input the
+// root `benchmark/sqlite_parse` compares against other SQL parsers.
+
+use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Benchmark } from "core:benchmark";
+use sqlite from "../../tests/grammars/SQLite.g4"
+    with {
+        generator: { module: "../../src/generator.wado" },
+    };
+
+global INPUT: String = #include_str("../../../benchmark/sqlite_parse/queries.sql");
+
+fn parse_input() {
+    let result = sqlite::parse(&INPUT);
+    if !result.ok() {
+        panic(`sqlite: ${result.diagnostics[0].message}`);
+    }
+}
+
+test "input parses" {
+    parse_input();
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut b = Benchmark { name: "gale-parse (SQLite)", input_size: Option::Some(INPUT.len()) };
+    b.run("", || parse_input());
+}

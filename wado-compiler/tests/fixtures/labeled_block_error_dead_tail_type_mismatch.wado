@@ -1,0 +1,13 @@
+// A trailing value no path reaches is still the labeled block's value, as a
+// dead tail is an `if` arm's. Unchecked, it reached codegen with its own type
+// and produced an invalid core Wasm module.
+export fn run() {
+    let v = blk: {
+        break blk: 1;
+        "unused"
+    };
+    assert v == 1;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'i32', found 'String'"}

@@ -957,30 +957,76 @@ impl Lexer {
 fn try_X(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
-    alts_done_0: {
-        alts_0_0: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != 'a' { break alts_0_0; }
-            pos += 1;
-            break alts_done_0;
-        }
-        alts_0_1: {
-            pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != 'a' { break alts_0_1; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != 'b' { break alts_0_1; }
-            pos += 1;
-            break alts_done_0;
-        }
-        return -1;
+    let mut alts_best_0 = -1;
+    alts_0_0: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != 'a' { break alts_0_0; }
+        pos += 1;
+        if pos > alts_best_0 { alts_best_0 = pos; }
     }
+    alts_0_1: {
+        pos = alts_saved_0;
+        if pos >= chars.len() || chars[pos] != 'a' { break alts_0_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'b' { break alts_0_1; }
+        pos += 1;
+        if pos > alts_best_0 { alts_best_0 = pos; }
+    }
+    if alts_best_0 < 0 { return -1; }
+    pos = alts_best_0;
     return pos;
 }
 
 fn try_Y(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    pos = try_X(chars, pos);
-    if pos < 0 { return -1; }
+    let la_saved_1 = pos;
+    let mut la_reach_1: i32 = -1;
+    let mut la_end_1: i32 = -1;
+    let mut la_win_1: i32 = -1;
+    let mut la_arm_1_0: i32 = -1;
+    la_alt_1_0: {
+        pos = la_saved_1;
+        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_1_0; }
+        pos += 1;
+        la_arm_1_0 = pos;
+    }
+    let mut la_arm_1_1: i32 = -1;
+    la_alt_1_1: {
+        pos = la_saved_1;
+        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_1_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'b' { break la_alt_1_1; }
+        pos += 1;
+        la_arm_1_1 = pos;
+    }
+    for let mut la_i_1 = 0; la_i_1 < 2; la_i_1 += 1 {
+        let la_at_1 = match la_i_1 { 0 => la_arm_1_0, _ => la_arm_1_1 };
+        if la_at_1 < 0 { continue; }
+        pos = la_at_1;
+        let mut la_tot_1: i32 = -1;
+        let peek_save_2 = pos;
+        let mut peek_ok_2 = false;
+        let mut peek_end_2: i32 = -1;
+        peek_2: {
+            if pos >= chars.len() || chars[pos] != 'b' { break peek_2; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
+            pos += 1;
+            peek_end_2 = pos;
+            peek_ok_2 = true;
+        }
+        pos = peek_save_2;
+        if peek_ok_2 {
+            la_tot_1 = peek_end_2;
+        }
+        if la_tot_1 > la_reach_1 {
+            la_reach_1 = la_tot_1;
+            la_end_1 = la_at_1;
+            la_win_1 = la_i_1;
+        }
+    }
+    if la_win_1 < 0 { return -1; }
+    pos = la_end_1;
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
     pos += 1;
     if pos >= chars.len() || chars[pos] != 'c' { return -1; }
@@ -1011,7 +1057,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_X; }
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
-                    'B' | 'b' => {
+                    'b' => {
                         end = try_Y(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Y; }
                     },

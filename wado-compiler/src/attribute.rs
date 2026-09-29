@@ -17,6 +17,7 @@ pub const CM: &str = "cm";
 pub const CM_HOST_IMPORTS: &str = "cm_host_imports";
 pub const CM_PARAMS: &str = "cm_params";
 pub const COMPILER_ITEM: &str = "compiler_item";
+pub const COVERAGE: &str = "coverage";
 pub const EXPECT_TRAP: &str = "expect_trap";
 pub const EXPORT_NAME: &str = "export_name";
 pub const GENERATED: &str = "generated";
@@ -373,6 +374,14 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         bodyless: None,
     },
     AttributeSchema {
+        name: COVERAGE,
+        targets: &[AttrTarget::Module, AttrTarget::Function, AttrTarget::Impl],
+        args: AttrArgs::Read("`off`"),
+        summary: "`wado test --coverage` leaves this code unmeasured",
+        stdlib_only: false,
+        bodyless: None,
+    },
+    AttributeSchema {
         name: EXPECT_TRAP,
         targets: TEST_TARGET,
         args: AttrArgs::None,
@@ -695,7 +704,17 @@ pub fn check(written: &WrittenAttribute<'_>, in_program: bool) -> Option<Attribu
     if name == WIRE {
         return wire_fault(written, schema);
     }
+    if name == COVERAGE && !matches!(args, [AttrArg::Ident(word)] if word == "off") {
+        return Some(AttributeFault::Arguments { schema });
+    }
     None
+}
+
+/// Whether `attrs` holds `#[coverage(off)]`, which [`check`] admits in no other
+/// form.
+#[must_use]
+pub fn coverage_off(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| attr.name == COVERAGE)
 }
 
 fn wire_fault(

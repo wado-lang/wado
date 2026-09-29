@@ -364,10 +364,11 @@ fn analyze_body(
 
 /// Forward pass over a body collecting move-eligibility facts: every local
 /// binding site, and the locals that must be excluded from move eligibility
-/// because their address is taken (`&x` / `&mut x`, at any projection root),
-/// they are captured by a closure, or they name storage the scrutinee owns.
+/// because they are captured by a closure or name storage the scrutinee owns.
 /// Over-exclusion only costs an extra copy, so the pass errs toward marking a
-/// local ineligible whenever unsure.
+/// local ineligible whenever unsure. A borrowed local stays eligible: whether a
+/// borrow outlives its final read is the value-copy planner's pin analysis,
+/// which vetoes a final read a live borrow still reaches.
 struct EligibilityPass<'a> {
     references: &'a IndexMap<AstId, AstId>,
     bindings: IndexSet<AstId>,
@@ -426,11 +427,6 @@ impl AstVisitor for EligibilityPass<'_> {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
-                if let Some(root) = root_local_def(&u.expr, self.references) {
-                    self.excluded.insert(root);
-                }
-            }
             Expr::Closure(_) => {
                 self.closure_depth += 1;
                 ast::walk_expr(self, expr);
@@ -448,22 +444,6 @@ impl AstVisitor for EligibilityPass<'_> {
             _ => {}
         }
         ast::walk_expr(self, expr);
-    }
-}
-
-/// Follow projections (`.field`, `[i]`, `as`, `*`) down to the root identifier
-/// and return the local it resolves to, if any. Used to attribute `&place` to
-/// the local whose storage the reference aliases.
-fn root_local_def(expr: &Expr, references: &IndexMap<AstId, AstId>) -> Option<AstId> {
-    match expr {
-        Expr::Ident(ident) => references.get(&ident.id).copied(),
-        Expr::FieldAccess(e) => root_local_def(&e.expr, references),
-        Expr::Index(e) => root_local_def(&e.expr, references),
-        Expr::Cast(e) => root_local_def(&e.expr, references),
-        Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Deref) => {
-            root_local_def(&u.expr, references)
-        }
-        _ => None,
     }
 }
 
@@ -880,11 +860,11 @@ impl LastUseAnalyzer<'_> {
                 self.walk_expr(&e.start, live, record);
             }
             Expr::StructLiteral(e) => {
-                for spread in e.spreads.iter().rev() {
-                    self.walk_expr(&spread.expr, live, record);
-                }
                 for field in e.fields.iter().rev() {
                     self.walk_expr(&field.value, live, record);
+                }
+                for spread in e.spreads.iter().rev() {
+                    self.walk_expr(&spread.expr, live, record);
                 }
             }
             Expr::TupleLiteral(e) => {
@@ -1230,11 +1210,11 @@ mod last_use_tests {
     }
 
     #[test]
-    fn address_taken_local_is_not_move_eligible() {
-        let src = "export fn f() -> i32 { \
-                   let a = 1; let r = &a; return *r; }";
-        // `a` has its address taken, so its use is never a last-use candidate.
-        assert_eq!(count(src, "a"), 0);
+    fn a_borrowed_local_keeps_its_final_use() {
+        let src = "export fn f(a: List<i32>) -> i32 { \
+                   let n = (&a).len(); let b = a; return n + b.len(); }";
+        // The borrow ends before `let b = a`, which is `a`'s final read.
+        assert_eq!(count(src, "a"), 1);
     }
 
     #[test]

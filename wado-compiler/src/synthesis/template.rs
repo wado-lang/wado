@@ -32,9 +32,9 @@ use crate::name::{
 use crate::synthesis::common::{field_access, locals_from_params, make_synthetic_free_function};
 use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TemplateShape,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt,
-    TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TraitRef, TypeId, TypeTable,
+    CallArg, FunctionRef, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId,
+    TemplateShape, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
+    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TraitRef, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
@@ -485,7 +485,7 @@ fn build_template_block(
             is_reactive: false,
             type_id: string_type,
             value: with_capacity_call,
-            skip_value_copy: false,
+            storage: LetStorage::Planned,
         },
         span,
     )];
@@ -549,7 +549,7 @@ fn build_template_block(
                             is_reactive: false,
                             type_id: formatter_type,
                             value: formatter_expr(),
-                            skip_value_copy: false,
+                            storage: LetStorage::Planned,
                         },
                         span,
                     ));

@@ -6,8 +6,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::place_root;
 use crate::name::{capture_ref_name, is_for_body_label};
 use crate::tir::{
-    CaptureSource, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    CaptureSource, LetStorage, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
@@ -281,7 +281,7 @@ fn redeclaration(locals: &FrameLocals, header: u32) -> TirStmt {
                 type_id,
                 Span::default(),
             ),
-            skip_value_copy: false,
+            storage: LetStorage::Planned,
         },
         Span::default(),
     )
@@ -592,7 +592,7 @@ impl TirMutVisitor for Rewriter<'_, '_> {
                     is_reactive: false,
                     type_id: ref_type,
                     value: borrow,
-                    skip_value_copy: false,
+                    storage: LetStorage::Planned,
                 },
                 span,
             ));

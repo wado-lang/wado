@@ -1,0 +1,22 @@
+// A dead global whose initializer calls a builtin, every `#[trap]` check
+// holding at the call, goes with its module initializer: the call can neither
+// trap nor write anything another reader sees. `BYTES` calls the builtin
+// directly. `SEEN` reaches it through `List::from`, whose body inlining brings
+// into the initializer.
+use { println, Stdout } from "core:cli";
+
+global mut SEEN: List<u8> = [];
+global mut BYTES: Array<u8> = builtin::array_new::<u8>(0);
+
+export fn run() with Stdout {
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": [
+        "$modules_initialized",
+        "$initialize_module"
+    ]
+}

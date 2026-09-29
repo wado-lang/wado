@@ -8,10 +8,12 @@ Generates Wado binding modules from IDL files: the stdlib from WIT, and
 - `wasi:*` — the WASI P3 bindings in `wado-compiler/lib/wasi/`, generated from
   wasmtime's WIT. Regenerate with `mise run update-stdlib-wasi`; it requires the
   `vendor/wasmtime` submodule.
-- `core:kiln` and `core:eval` — the submodules under
-  `wado-compiler/lib/core/kiln/` and `wado-compiler/lib/core/eval/`. Regenerate
-  with `mise run update-stdlib-core-wit`. The facades `lib/core/kiln.wado` and
-  `lib/core/eval.wado` are hand-written and must be preserved.
+- `core:kiln`, `core:eval` and `core:coverage` — the submodules under
+  `wado-compiler/lib/core/kiln/`, `wado-compiler/lib/core/eval/` and
+  `wado-compiler/lib/core/coverage/`. Regenerate with
+  `mise run update-stdlib-core-wit`. The facades `lib/core/kiln.wado` and
+  `lib/core/eval.wado` are hand-written and must be preserved; `core:coverage`
+  has none, since only `core:rt` calls it.
 - `wado-lang:web` — `package-web/src/dom.wado` and its browser glue
   `package-web/glue/dom.js`, generated from the WebIDL snapshot
   `package-web/idl/dom.webidl.json`. Regenerate with
