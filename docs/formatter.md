@@ -58,16 +58,14 @@ Four things force the wrapped form whatever the width allows.
 
 - A trailing comma in the source. Writing `S { x: 1, }` asks for one field per
   line, and the request round-trips.
-- A nested container. A struct literal or array holding another one breaks, and
-  each nested container takes a line of its own.
+- A nested container: a struct literal or array holding another one.
 - More than one element bearing a call, which keeps a dense line readable.
 - A comment inside the construct that the compact form has no place for.
 
 An array that does not fit packs as many elements per line as the budget
 allows, if no element is a call or a nested container. Every other wrapped list
-is one entry per line with a trailing comma.
-Declaration bodies, a `match` with more than one arm, and `if` / `else` chains
-are always multi-line.
+is one entry per line with a trailing comma. Declaration bodies, a `match` with
+more than one arm, and `if` / `else` chains are always multi-line.
 
 Blank lines follow the source: none stays none, one stays one, and a larger gap
 collapses to two.

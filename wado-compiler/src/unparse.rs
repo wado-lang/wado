@@ -1842,11 +1842,8 @@ impl<'a> Unparser<'a> {
             return;
         }
 
-        // Inline `[a, b, c]` only when the array is flat (no nested container),
-        // holds at most one call-bearing element, and fits the width. A nested
-        // container (depth rule) or a second call forces the multi-line form so
-        // complex / deeply-structured arrays stay readable. A comment forces it
-        // too: the packed and inline forms have no slot for one.
+        // The wrapping rules are docs/formatter.md's. A comment forces the
+        // wrapped form too: the inline and packed forms have no slot for one.
         let has_container = elements.iter().any(expr_is_container);
         let call_elems = elements.iter().filter(|e| contains_call(e)).count();
         if !has_comment && !has_container && call_elems <= 1 {
@@ -1858,11 +1855,9 @@ impl<'a> Unparser<'a> {
             self.rollback(snap);
         }
 
-        // Only an array of plain values packs; one holding a call or a container
-        // is one entry per line (docs/formatter.md). Leading comments are
-        // emitted positionally (by source span) because a comment before a
-        // container element attaches to that element's *head* node, not to the
-        // element expression's own id.
+        // Leading comments are emitted positionally (by source span) because a
+        // comment before a container element attaches to that element's *head*
+        // node, not to the element expression's own id.
         if has_comment || has_container || call_elems > 0 {
             self.emit_entries_per_line(
                 ["[", "]"],

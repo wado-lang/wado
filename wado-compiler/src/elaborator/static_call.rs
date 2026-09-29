@@ -228,9 +228,10 @@ impl StaticLookup {
     pub(super) fn found(&self) -> Option<&StaticCallee> {
         match self {
             Self::Found(callee) => Some(callee),
-            Self::Overloaded { .. } | Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::NotStatic => {
-                None
-            }
+            Self::Overloaded { .. }
+            | Self::Ambiguous(_)
+            | Self::OutOfScope { .. }
+            | Self::NotStatic => None,
         }
     }
 
@@ -250,9 +251,10 @@ impl StaticLookup {
     pub(super) fn params(self) -> (CalleeParams, bool) {
         match self {
             Self::Found(callee) => (callee.params, true),
-            Self::Overloaded { .. } | Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::NotStatic => {
-                (CalleeParams::default(), false)
-            }
+            Self::Overloaded { .. }
+            | Self::Ambiguous(_)
+            | Self::OutOfScope { .. }
+            | Self::NotStatic => (CalleeParams::default(), false),
         }
     }
 }
@@ -324,12 +326,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(required) = required_trait {
             candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
         } else {
-            let frame = self.frame_module().clone();
+            let frame = self.frame_module();
             let resolutions = &self.tysys.resolutions;
             (candidates, out_of_scope) = candidates.into_iter().partition(|c| {
                 c.supply
                     .as_ref()
-                    .is_none_or(|s| resolutions.decl_in_scope(&frame, s.trait_decl))
+                    .is_none_or(|s| resolutions.decl_in_scope(frame, s.trait_decl))
             });
         }
         let resolved = match self.select_candidate(candidates, arg_types) {
