@@ -1973,12 +1973,7 @@ pub fn element_is_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool 
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
-fn lower_scan_body<S: AsStrSlice>(
-    alt: &Alternative,
-    ctx: &mut GenContext,
-    rule_name: S,
-    end: AltEnd,
-) -> ScanBody {
+fn lower_scan_body<S: AsStrSlice>(alt: &Alternative, ctx: &mut GenContext, rule_name: S, end: AltEnd) -> ScanBody {
     let probe_rule = rule_name.to_string();
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
@@ -2458,30 +2453,17 @@ fn rebind_scan_repeat_caller_follow(
     rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     if let Repeat(re) = se {
-        let probe = lower_continuation_probe(re.non_greedy, re.kind, alt_elements, index, ctx, end, rule_name);
-        let probe_contested = optional_probe_contested(
+        let stamps = lower_repeat_exit_stamps(
             re.non_greedy,
             re.kind,
-            &re.inner_admits,
-            &caller_follow_first,
-            alt_elements,
-            index,
-            ctx,
-        );
-        let static_exit_undecided = non_greedy_static_undecided(
             &re.inner_admits,
             &caller_follow_first,
             &scan_repeat_body_second(&alt_elements[index], ctx),
             &compute_caller_follow_second(alt_elements, index + 1, ctx),
-        );
-        let duties = lower_iteration_duties(
-            re.non_greedy,
-            re.kind,
-            &admits_kinds(&re.inner_admits),
             alt_elements,
             index,
             ctx,
-            end matches { Rule },
+            end,
             rule_name,
         );
         return ScanElement::Repeat(ScanRepeatElement {
@@ -2491,14 +2473,14 @@ fn rebind_scan_repeat_caller_follow(
             caller_follow_first: caller_follow_first,
             gate_caller_follow: re.gate_caller_follow,
             non_greedy: re.non_greedy,
-            continuation_scan: probe.scan,
-            continuation_scannable: probe.scannable,
-            probe_asks_caller: probe.asks_caller,
-            probe_contested,
-            static_exit_undecided,
-            probe_viable: probe.viable,
+            continuation_scan: stamps.probe.scan,
+            continuation_scannable: stamps.probe.scannable,
+            probe_asks_caller: stamps.probe.asks_caller,
+            probe_contested: stamps.probe_contested,
+            static_exit_undecided: stamps.static_exit_undecided,
+            probe_viable: stamps.probe.viable,
             body_scannable: re.body_scannable,
-            duties,
+            duties: stamps.duties,
         });
     }
     return se;
@@ -4376,43 +4358,82 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
     end: AltEnd,
     rule_name: S,
 ) -> RepeatOp {
-    let probe = lower_continuation_probe(rep_op.non_greedy, rep_op.kind, alt_elements, index, ctx, end, rule_name);
-    let probe_contested = optional_probe_contested(
+    let stamps = lower_repeat_exit_stamps(
         rep_op.non_greedy,
         rep_op.kind,
-        &rep_op.body_admits,
-        &caller_follow_first,
-        alt_elements,
-        index,
-        ctx,
-    );
-    let static_exit_undecided = non_greedy_static_undecided(
         &rep_op.body_admits,
         &caller_follow_first,
         &rep_op.body_second_position_first,
         &caller_follow_second,
-    );
-    let duties = lower_iteration_duties(
-        rep_op.non_greedy,
-        rep_op.kind,
-        &admits_kinds(&rep_op.body_admits),
         alt_elements,
         index,
         ctx,
-        end matches { Rule },
+        end,
         rule_name,
     );
     return RepeatOp {
         ..*rep_op,
         caller_follow_first,
         caller_follow_second,
-        continuation_scan: probe.scan,
-        continuation_scannable: probe.scannable,
-        probe_asks_caller: probe.asks_caller,
-        probe_contested,
-        static_exit_undecided,
-        probe_viable: probe.viable,
-        duties,
+        continuation_scan: stamps.probe.scan,
+        continuation_scannable: stamps.probe.scannable,
+        probe_asks_caller: stamps.probe.asks_caller,
+        probe_contested: stamps.probe_contested,
+        static_exit_undecided: stamps.static_exit_undecided,
+        probe_viable: stamps.probe.viable,
+        duties: stamps.duties,
+    };
+}
+
+/// What a loop's exit reads from its place in the alternative, stamped alike on
+/// the parse's `RepeatOp` and the scan's `ScanRepeatElement`.
+struct RepeatExitStamps {
+    probe: ContinuationProbe,
+    probe_contested: bool,
+    static_exit_undecided: bool,
+    duties: IterationDuties,
+}
+
+fn lower_repeat_exit_stamps<S: AsStrSlice>(
+    non_greedy: bool,
+    kind: RepeatKind,
+    body_admits: &Admits,
+    caller_follow_first: &List<String>,
+    body_second: &List<String>,
+    caller_follow_second: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    end: AltEnd,
+    rule_name: S,
+) -> RepeatExitStamps {
+    return RepeatExitStamps {
+        probe: lower_continuation_probe(non_greedy, kind, alt_elements, index, ctx, end, rule_name),
+        probe_contested: optional_probe_contested(
+            non_greedy,
+            kind,
+            body_admits,
+            caller_follow_first,
+            alt_elements,
+            index,
+            ctx,
+        ),
+        static_exit_undecided: non_greedy_static_undecided(
+            body_admits,
+            caller_follow_first,
+            body_second,
+            caller_follow_second,
+        ),
+        duties: lower_iteration_duties(
+            non_greedy,
+            kind,
+            &admits_kinds(body_admits),
+            alt_elements,
+            index,
+            ctx,
+            end matches { Rule },
+            rule_name,
+        ),
     };
 }
 

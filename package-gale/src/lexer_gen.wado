@@ -3459,14 +3459,8 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     }
     w.line(`pos = ${accept_var};`);
 
-    // Re-consume the suffix to advance `pos` past it. The peek that
-    // recorded `accept_var` already proved every suffix element
-    // matches at that position, so divergence here can only mean a
-    // codegen bug in `gen_lexer_suffix_peek` (peek and commit emit
-    // different element shapes). Pass a `panic` fail-action instead
-    // of the caller's `return -1` so such divergence traps loudly at
-    // runtime rather than silently degrading to a "rule rejected"
-    // verdict.
+    // The peek that recorded `accept_var` proved the suffix matches there, so a
+    // mismatch is a codegen bug: trap rather than degrade to "rule rejected".
     let assert_msg = `lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)`;
     let assert_fail = `panic("${assert_msg}")`;
     gen_lexer_suffix_seq(w, alt, plan, from, all_rules, &assert_fail, ci, ea, hm);
