@@ -8,8 +8,8 @@ and their precedence, and ranges. Branches and loops are in
 
 ## Statements
 
-An expression is also a statement, which evaluates it and discards its value. A
-function returns a value only through `return`
+An expression may stand as a statement. It is evaluated and its value
+discarded. A function returns a value only through `return`
 ([Return Values](./spec-functions.md#return-values)).
 
 ### Semicolons
@@ -55,8 +55,8 @@ let u = if c { g(); () } else { () };  // write `()` to mean `()`
 assert a == 1 && b == 1 && u == ();
 ```
 
-Only `if`, `match`, `with … do` and [labeled blocks](./spec-control-flow.md#labeled-blocks) produce a
-block value.
+Only `if`, `match`, `with … do` and
+[labeled blocks](./spec-control-flow.md#labeled-blocks) produce a block value.
 A brace in value position is a struct literal: `let x = { 1 };` is an error, and
 `let p = { x: 1, y: 2 };` is an implicit struct literal.
 
@@ -378,8 +378,8 @@ a prefix one, so `-x?` is `-(x?)` and `*p.x` is `*(p.x)`. The postfix `?` is
 binds looser than `matches` and tighter than comparison, unlike the other prefix
 operators. So:
 
-- `!x matches { Some(_) }` is `!(x matches { Some(_) })` — "`x` does not match
-  `Some(_)`".
+- `!x matches { Some(_) }` is `!(x matches { Some(_) })`, which says `x` does
+  not match `Some(_)`.
 - `*x matches { "kw" }`, `x as i32 matches { 0 }`, `a + b matches { 10 }`, and
   `flags & MASK matches { 0 }` need no parentheses. A comparison, range, or
   assignment scrutinee does: `(a == b) matches { true }`.

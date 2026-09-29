@@ -40,6 +40,11 @@ test {
 }
 ```
 
+A primitive type has
+[associated constants](./spec-functions.md#associated-constants) and static
+methods, such as `i32::MAX` and `f64::sqrt`.
+[`core:prelude`](./stdlib-core-prelude.md) lists them.
+
 ### Half Precision (`f16`, `bf16`)
 
 `f16` is IEEE 754 binary16. `bf16` is bfloat16: `f32`'s exponent range with an
@@ -97,29 +102,6 @@ A template renders either type through its `f32` value, as
 read.
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
-
-## Associated Constants
-
-Associated constants are compile-time constants defined in `impl` blocks using the `const` keyword. They cannot be mutated.
-
-<!-- {"fixture":"spec_types_assoc_const.wado"} -->
-
-```wado
-struct Board {
-    cells: List<i32>,
-}
-
-impl Board {
-    pub const SIZE: i32 = 8;
-}
-
-test {
-    assert Board::SIZE * Board::SIZE == 64;
-    assert f64::PI > 3.14;
-}
-```
-
-Primitive types provide built-in associated constants and static methods. See [`core:prelude`](./stdlib-core-prelude.md) for the full list.
 
 ## 128-bit Integer Types (i128/u128)
 
@@ -523,7 +505,7 @@ Three prelude types hold contiguous sequences:
 `Slice<T>` is the read-only vocabulary type. An algorithm that only reads is
 written once against a slice, and the owned types reach it through
 `as_slice()`. The methods the three share come from the
-[`Sequence` and `AsSlice`](./spec-standard-traits.md#sequence-and-aslice)
+[`Sequence` and `AsSlice`](./spec-standard-traits.md#sequence-and-asslice)
 traits.
 
 A conversion's name says what it costs: `as_*` returns a view of the same
@@ -558,9 +540,9 @@ buffer it refers to.
 ### Bounds Checks
 
 `get(i)` returns `Option<T>` on all three types. `xs[i]` traps when `i` is
-outside `0..<len()`, and the trap is the whole contract: its message is
-implementation-defined. On a slice this includes a negative index, although the
-backing array holds an element there: a view never reads outside itself.
+outside `0..<len()`. On a slice that includes a negative index, even where the
+backing array holds an element, since a view never reads outside itself. The
+trap is the whole contract, and its message is implementation-defined.
 
 `get_unchecked(i)` leaves the check to the caller, who must guarantee
 `0 <= i < len()`. Violating that yields an unspecified value of the element type

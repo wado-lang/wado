@@ -180,6 +180,8 @@ fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
     })
 }
 
+/// Lower the clause of one generated import (`attrs` names a `generator`) to
+/// its invocation, or every error the clause carries.
 fn lower_inline(
     module_path: &str,
     use_decl: &UseDecl,

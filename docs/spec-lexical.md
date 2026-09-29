@@ -93,8 +93,7 @@ export fn run() {
 
 A line holding only `__DATA__` separates the source code from the data section.
 Everything after that line is raw text, not Wado code, and
-[`#data`](./spec-literals.md#data) reads it. The marker must start its line, and
-nothing may follow it on the line. A module needs no data section.
+[`#data`](./spec-literals.md#data) reads it. A module needs no data section.
 
 <!-- {"fixture": "sub/location_submodule_helper.wado"} -->
 

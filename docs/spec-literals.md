@@ -35,7 +35,12 @@ assert missing == also_missing;
 `null` is a keyword, while `None` is a case of the prelude's `Option`. A bare
 `None` needs an expected type to say which `Option` it belongs to.
 
-A `null` takes the `Option` its context expects, or the newtype over an `Option` it expects, as any literal coerces to a newtype whose base takes it: with `type Opt<T> = Option<T>`, `let a: Opt<i64> = null` holds, and so does `a == null`. With no context it has the type `Option<!>`, the `Option` with no `Some`. A `null` is never any other type, so `let x: i32 = null` is a type error.
+A `null` takes the `Option` its context expects. It also takes a newtype over an
+`Option`, as any literal coerces to a newtype whose base takes it: with
+`type Opt<T> = Option<T>`, `let a: Opt<i64> = null` holds, and so does
+`a == null`. With no context its type is `Option<!>`, the `Option` with no
+`Some`. A `null` is never any other type, so `let x: i32 = null` is a type
+error.
 
 `Option<!>` is a value of every `Option<T>`. Like an integer literal, a `null` answers a type parameter last, so a sibling argument decides which `Option` it is. A `let` settles its type at once, as it does an integer literal's:
 
@@ -102,7 +107,8 @@ assert unicode == letter && digit as u32 == 57;
 assert emoji as u32 == 0x1F600 && newline as u32 == 10;
 ```
 
-See [Escape Sequences](#escape-sequences) for the supported escapes.
+A `\u` escape writes a scalar by its code point, one of the
+[escape sequences](#escape-sequences) a character literal accepts:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -146,6 +152,17 @@ test {
 }
 ```
 
+A cast to an integer type types the literal as an annotation does:
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+let byte: i8 = 127 as i8;
+let long: i64 = 9_223_372_036_854_775_807 as i64;
+let unsigned: u32 = 4_294_967_295 as u32;
+assert byte == i8::MAX && long == i64::MAX && unsigned == u32::MAX;
+```
+
 An expression built from literals alone, through unary `-` and `~` and the
 arithmetic, bitwise and shift operators, takes its type from its context the
 same way. As an operand, it takes the type of the other operand:
@@ -160,9 +177,10 @@ assert t & (1 << 31) == 0x8000_0000;
 
 #### Compile-time range checking
 
-The compiler rejects literal coercions whose value falls outside the target type's range. All literal bases (decimal, hex `0x`, octal `0o`, binary `0b`) use strict numeric range: the value must lie within `[MIN, MAX]` for signed types or `[0, MAX]` for unsigned types.
-
-To reinterpret a bit pattern as a signed integer, use an explicit `as` cast.
+A literal's value must lie in its type's range: `[MIN, MAX]` for a signed type,
+`[0, MAX]` for an unsigned one. This holds in every base, so a hex, octal or
+binary literal is a number, not a bit pattern. An explicit `as` cast
+reinterprets a bit pattern as a signed integer:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -220,17 +238,6 @@ let k = 4294967296;               // compile error: literal out of range for `i3
 let m = -2147483649;              // compile error: literal out of range for `i32`: -2147483649
 ```
 
-Type conversion (via `as`):
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let byte: i8 = 127 as i8;
-let long: i64 = 9_223_372_036_854_775_807 as i64;
-let unsigned: u32 = 4_294_967_295 as u32;
-assert byte == i8::MAX && long == i64::MAX && unsigned == u32::MAX;
-```
-
 ### Floating-Point Literals
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
@@ -259,6 +266,16 @@ let weights: List<bf16> = [0.5, -1.25, 3.0];
 assert f32::from(half) == 0.5 && f32::from(weights[1]) == -1.25;
 ```
 
+A cast to `f32` or `f64` types the literal the same way:
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+let single: f32 = 3.14 as f32;
+let double: f64 = 3.14159265358979 as f64;
+assert single as f64 != double;
+```
+
 A literal is rounded once, from its decimal text to the nearest value of its
 type, ties to even. One that rounds past the type's largest finite value is a
 compile error, as an integer literal past its type's range is:
@@ -270,21 +287,9 @@ let x: f16 = 65520.0;             // compile error: literal out of range for `f1
 let y: f32 = 1e39;                // compile error: literal out of range for `f32`: 1e39
 ```
 
-Type conversion (via `as`):
+## String Literals
 
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let single: f32 = 3.14 as f32;
-let double: f64 = 3.14159265358979 as f64;
-assert single as f64 != double;
-```
-
-### String Literals
-
-String literals create `String` values.
-
-Regular strings use double quotes:
+A string literal is written in double quotes and has the type `String`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -338,9 +343,8 @@ too. A Unicode escape (`\u{...}` or `\uHHHH`) is an error, since it denotes a
 scalar, not a byte. [`#include_bytes`](#include_str-and-include_bytes) builds
 the same `ByteList` from a file.
 
-A byte string's type is `ByteList`. Like any literal it coerces to a newtype's
-base, so it flows into a `List<u8>` context, or one whose base is `List<u8>`,
-with no cast.
+Like any literal, a byte string coerces to the base of its newtype, so it flows
+into a `List<u8>` context, or one whose base is `List<u8>`, with no cast.
 
 Byte literals are the single-byte analog: `b'x'` is one `u8`.
 
@@ -917,6 +921,35 @@ assert pair.1 == "hello" && triple.2 && single.0 == 42 && trailing.2 == 3;
 
 The tuple type and its element access are in [Tuples](./spec-types.md#tuples).
 
+### Value Spread
+
+`..expr` inside a tuple literal splices the elements of the tuple `expr` into
+it:
+
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
+```wado
+let a = [1, "hello"];
+let b = [..a, true];   // b: [i32, String, bool]
+let c = [42, ..a];     // c: [i32, i32, String]
+assert b == [1, "hello", true];
+assert c == [42, 1, "hello"];
+```
+
+The spread expression is evaluated exactly once:
+
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
+
+```wado
+// make_pair() is called once, not twice
+let t = [..make_pair(), 30];
+assert PAIRS == 1;
+assert t == [10, 20, 30];
+```
+
+A spread of a [type pack](./spec-functions.md#variadic-type-packs) value splices
+however many elements the pack holds.
+
 ## List Literals
 
 A bracket literal coerces to a `List` where the target type is known, as a
@@ -983,8 +1016,6 @@ nominal struct with matching fields is still a struct literal.
 A key-value literal is an array of pairs, so `[["a", 1]]` builds the same map
 `{ a: 1 }` does. `Array<T>` itself needs no impl, since the array the coercion
 materializes is already the result.
-
-### Usage
 
 <!-- {"fixture":"spec_literals_lists.wado"} -->
 
@@ -1125,7 +1156,7 @@ These are compile errors:
 - the same key written twice as an explicit member.
 
 A sequence literal cannot carry a spread: `[..xs, 4]` is a
-[tuple spread](./spec-functions.md#value-spread). The struct forms of `..base`
+[tuple spread](#value-spread). The struct forms of `..base`
 are in [Struct Construction](./spec-types.md#struct-construction) and
 [Anonymous Structs](./spec-types.md#composition).
 
@@ -1137,14 +1168,14 @@ Rationale: [WEP: Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-litera
 A literal that starts with `#` takes its value when the program is compiled:
 where it stands in the source, or what a file holds.
 
-| Literal                  | Type       | Value                                   |
-| ------------------------ | ---------- | --------------------------------------- |
-| `#file`                  | `String`   | Current source file path                |
-| `#line`                  | `i32`      | Current line number (1-indexed)         |
-| `#function`              | `String`   | Name of the enclosing function          |
-| `#data`                  | `String`   | The module's `__DATA__` section         |
-| `#include_str("path")`   | `String`   | External file content as a string       |
-| `#include_bytes("path")` | `ByteList` | External file content as bytes          |
+| Literal                  | Type       | Value                             |
+| ------------------------ | ---------- | --------------------------------- |
+| `#file`                  | `String`   | Current source file path          |
+| `#line`                  | `i32`      | Current line number (1-indexed)   |
+| `#function`              | `String`   | Name of the enclosing function    |
+| `#data`                  | `String`   | The module's `__DATA__` section   |
+| `#include_str("path")`   | `String`   | External file content as a string |
+| `#include_bytes("path")` | `ByteList` | External file content as bytes    |
 
 <!-- {"fixture":"spec_literals_location.wado"} -->
 

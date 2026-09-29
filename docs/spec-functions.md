@@ -1,5 +1,10 @@
 # Functions
 
+This chapter covers functions and what calls them: declarations and calls,
+methods, generic functions, closures and function values, and default
+arguments. It ends with variadic type packs, which let one function take tuples
+of any arity.
+
 ## Function Declarations
 
 A function declaration is `fn`, a name, a parameter list in parentheses, an
@@ -178,6 +183,8 @@ test "arguments are evaluated left to right" {
     assert n == 123 && order == [1, 2, 3];
 }
 ```
+
+### Scope
 
 A module-level function is in scope in the whole module, before its declaration
 as well as after it. Functions may call each other recursively:
@@ -434,6 +441,28 @@ test "a field and a method may share a name" {
 When a trait declares a method of the same name,
 [Method Resolution](./spec-traits.md#method-resolution) says which one a call
 reaches.
+
+### Associated Constants
+
+An `impl` block may declare a `const` with a type and a value. It is named
+through the type, as a static method is, and it cannot be assigned:
+
+<!-- {"fixture":"spec_types_assoc_const.wado"} -->
+
+```wado
+struct Board {
+    cells: List<i32>,
+}
+
+impl Board {
+    pub const SIZE: i32 = 8;
+}
+
+test {
+    assert Board::SIZE * Board::SIZE == 64;
+    assert f64::PI > 3.14;
+}
+```
 
 ## Generic Functions
 
@@ -891,19 +920,33 @@ test {
 }
 ```
 
-Key points:
+A function value carries no observable identity. It holds no state to observe,
+and two `fn` values cannot be compared.
 
-- Function values carry no observable identity. There is no state to observe, and no way to compare two `fn` values.
-- `&` and `&mut` apply to `fn`-typed values like to any other value, with no special-casing:
-  - `&f` has type `&fn(...)`; `&mut f` (on a mutable binding) has type `&mut fn(...)`.
-  - These references behave per the [Reference Types](./spec-memory.md#reference-types) rules. `&fn(...)` is _not_ a synonym for `fn(...)`; passing one where the other is expected is a type error.
-  - `&mut fn(...)` parameters are useful as out-parameters: the callee can reassign the referenced slot via `*p = other_fn`, and the caller observes the new value through the same binding.
-- A `&fn(...)` or `&mut fn(...)` value is directly callable; the call expression auto-derefs to invoke the underlying `fn(...)`. `let r = &double; r(21)` works without an explicit `*r`.
-- Generic functions taken as values need their type arguments pinned. Two principled forms are supported:
-  - Turbofish on the name itself: `let f = identity::<i32>;` evaluates to a `fn(i32) -> i32` value, and a non-call use like `apply(identity::<i32>, 7)` works the same way.
-  - An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;` and `apply(identity, 7)` (where `apply`'s parameter is `fn(i32) -> i32`) both pin the type arguments through positional inference against the expected signature.
-  - When neither form applies, it is a compile error, and the diagnostic suggests turbofish or a closure wrapper (`|x| identity(x)`).
-- A function type crosses the Component Model boundary only as a callback; see [Component Model Callbacks](#component-model-callbacks).
+`&` and `&mut` apply to a function value as to any other value
+([Reference Types](./spec-memory.md#reference-types)). `&f` has type
+`&fn(...)`, and `&mut f` on a mutable binding has type `&mut fn(...)`.
+`&fn(...)` is not a synonym for `fn(...)`, so passing one where the other is
+expected is a type error. Through a `&mut fn(...)` parameter the callee may
+store another function (`*p = other_fn`), and the caller sees it.
+
+A `&fn(...)` or `&mut fn(...)` is callable directly: the call dereferences it,
+so `let r = &double; r(21)` needs no `*r`.
+
+A generic function taken as a value needs its type arguments pinned, in one of
+two ways:
+
+- A turbofish on the name: `let f = identity::<i32>;` is a `fn(i32) -> i32`,
+  and so is `identity::<i32>` passed as `apply(identity::<i32>, 7)`.
+- An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;`,
+  or `apply(identity, 7)` where `apply`'s parameter is `fn(i32) -> i32`. The
+  expected signature settles the type arguments by position.
+
+Without either, it is a compile error, which suggests a turbofish or a closure
+wrapper (`|x| identity(x)`).
+
+A function type crosses the Component Model boundary only as a
+[callback](#component-model-callbacks).
 
 ## Component Model Callbacks
 
@@ -956,7 +999,7 @@ Rationale: [WEP: The Web Interface for Wado](./wep-2026-04-01-web.md#callbacks).
 
 Trailing function parameters may declare default values with `= expr`. A call
 that omits a defaulted argument gets the default expression filled in at the
-call site, so it costs what the call with every argument written costs:
+call site:
 
 <!-- {"fixture":"spec_functions_default_args.wado"} -->
 
@@ -1093,11 +1136,11 @@ site (see
 
 ### Restrictions
 
-- Function types do not carry default information; assigning a function with defaults to a `fn(...)` type erases them, and every call site of that variable must supply every argument.
-- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type, so `= expr` on a closure parameter is a compile error.
-- `export fn` cannot declare defaults, since the component's WIT signature requires every parameter. A private helper can declare them behind a thin `export fn` wrapper.
+- A function type carries no defaults. A function with defaults assigned to a `fn(...)` type loses them, and every call through that value supplies every argument.
+- A closure cannot declare defaults, since its arity must match its `fn(...)` type. `= expr` on a closure parameter is a compile error.
+- An `export fn` cannot declare defaults, since the component's WIT signature requires every parameter. A private helper can declare them behind a thin `export fn` wrapper.
 - An import may declare defaults: a `#[cm]` resource method, or an `interface` operation (see [Default Implementations](./spec-effects.md#default-implementations)). The call fills the default in, and the import receives every argument.
-- Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. An implementation that writes a default is a compile error. Every spelling of a call fills the trait's defaults: `x.m()`, `Type::m(..)`, and `T::m(..)` through a bound. A default-bodied method in the trait is the declaration, so it may write defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
+- A trait method declares its defaults in the trait only, including in a default body there. An implementation receives every parameter, and one that writes a default is a compile error. Every spelling of a call fills the trait's defaults: `x.m()`, `Type::m(..)`, and `T::m(..)` through a bound. A method of an inherent `impl Type { ... }` may declare defaults freely.
 
 ### Type Parameter Defaults
 
@@ -1166,7 +1209,7 @@ struct Ping<X, Y = Pong<X>> { v: i32 }   // ERROR, paired with
 struct Pong<X, Y = Ping<X>> { v: i32 }   // this one
 ```
 
-A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the list — the same parameters in the same order, with the defaults omitted — and every spelling of the call fills them from the trait's declaration:
+A trait method's type parameter default belongs to the trait, as its value defaults do. The implementation restates the same parameters in the same order and omits the defaults. Every spelling of the call fills them from the trait's declaration:
 
 <!-- {"fixture":"spec_functions_trait_type_param_default.wado"} -->
 
@@ -1195,7 +1238,7 @@ test {
 }
 ```
 
-Rust rejects a type parameter default on every function, method and `impl` (rust-lang/rust#36887), allowing them only on type and trait declarations. Wado accepts them wherever a parameter list is written.
+Wado accepts a type parameter default wherever a parameter list is written. Rust accepts one only on a type or trait declaration (rust-lang/rust#36887).
 
 The same `= expr` syntax applies to struct fields; see [Struct Field Defaults](./spec-types.md#struct-field-defaults).
 
@@ -1203,7 +1246,8 @@ Rationale: [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
 
 ## Variadic Type Packs
 
-Use `<..T>` to declare a type pack parameter that represents zero or more types. Type packs enable writing functions that operate on tuples of any arity.
+`<..T>` declares a type pack: a parameter that stands for zero or more types. A
+function over a pack takes tuples of any arity.
 
 <!-- {"fixture":"spec_functions_type_packs.wado"} -->
 
@@ -1222,15 +1266,15 @@ test {
 }
 ```
 
-Type pack parameters:
+A pack is declared with the `..` prefix in a generic parameter list: `<..T>`,
+`<A, ..T>`. `...` (three dots) is a parse error, which suggests `..`. A pack
+cannot be an effect parameter, so `<effect ..T>` is invalid. A list may declare
+more than one pack ([Multiple Type Packs](#multiple-type-packs)).
 
-- Are declared with `..` prefix in generic parameter lists: `<..T>`, `<A, ..T>`
-- May appear more than once per list, each settled on its own (see
-  [Multiple Type Packs](#multiple-type-packs))
-- Cannot be combined with `effect`: `<effect ..T>` is invalid
-- Appear inside tuple types as `[..T]` (type pack spread)
-- Can be mixed with fixed type elements: `[A, ..T]`, `[..T, B]`
-- Type arguments are inferred from tuple argument types at call sites
+A pack is used inside a tuple type as `[..T]`, alone or beside fixed elements:
+`[A, ..T]`, `[..T, B]`. A call infers the pack from the tuple it passes. A
+[value spread](./spec-literals.md#value-spread) builds a value of such a type,
+as `[a, ..rest]` does.
 
 ### Multiple Type Packs
 
@@ -1339,32 +1383,3 @@ flat form stays available where a single pack absorbs the surplus on its own
 `zip` transposes its operands position by position, so its rows must be equally
 long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
 rejected where it is written.
-
-### Lexical note
-
-`..` is one token. Writing `...` (three dots) is a parse error with the diagnostic _"unexpected `...`; did you mean `..`?"_.
-
-### Value Spread
-
-Value spread `[..expr]` splices a tuple's elements into an enclosing tuple literal:
-
-<!-- {"fixture":"spec_functions_type_packs.wado"} -->
-
-```wado
-let a = [1, "hello"];
-let b = [..a, true];   // b: [i32, String, bool]
-let c = [42, ..a];     // c: [i32, i32, String]
-assert b == [1, "hello", true];
-assert c == [42, 1, "hello"];
-```
-
-The spread expression is evaluated exactly once:
-
-<!-- {"fixture":"spec_functions_type_packs.wado"} -->
-
-```wado
-// make_pair() is called once, not twice
-let t = [..make_pair(), 30];
-assert PAIRS == 1;
-assert t == [10, 20, 30];
-```

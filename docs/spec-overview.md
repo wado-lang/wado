@@ -1,6 +1,6 @@
 # Wado Language Specification
 
-Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
+Wado is a programming language that targets Wasm and WASI: Wasm in plain sight.
 
 ## Status
 
@@ -79,7 +79,8 @@ produced are stated here, each where it applies: [Memory Model](./spec-memory.md
 | Functions          | `snake_case`     |
 | Local variables    | `snake_case`     |
 
-Component Model interop: The compiler automatically converts between Wado conventions and WIT conventions (kebab-case) at component boundaries.
+At a component boundary, the compiler converts these names to WIT's
+`kebab-case` and back.
 
 ### Terminology
 
@@ -93,5 +94,6 @@ Component Model interop: The compiler automatically converts between Wado conven
 - effect interface: the declaration (`interface Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
 - operation: a function in an effect interface; synonym: "effect operation"
 - handler: provides implementations for operations
-- hosted world: a world that a runtime knows how to instantiate and drive (e.g., `wasi:cli/command` for `wado run`, `wasi:http/service` for `wado serve`); informally called "well-known world"
-- library world: a world that defines a component's public API for composition with other components, rather than for direct execution by a runtime
+- hosted world, library world: the two kinds of world, defined in
+  [What is a World?](./spec-worlds.md#what-is-a-world); a hosted world is
+  informally called a "well-known world"

@@ -7,6 +7,8 @@ error handling. The patterns these statements take apart are in
 
 ## Conditional Statements
 
+A condition is a `bool`. No other type converts to one.
+
 <!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
 
 ```wado
@@ -54,8 +56,8 @@ assert got == 42;
 ### Let Else
 
 `let PATTERN = EXPR else { ... };` binds a refutable pattern whose bindings
-escape into the enclosing scope. On a match they cover the rest of the block;
-otherwise the `else` block runs and must diverge (`return`, `break`,
+escape into the enclosing scope. On a match they cover the rest of the block.
+Otherwise the `else` block runs, and it must diverge (`return`, `break`,
 `continue`, `panic`, …). The `else` block does not see the bindings.
 
 <!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
@@ -190,7 +192,8 @@ runs after each iteration.
 
 ## For-Of Loop
 
-For iterating over any type that implements `IntoIterator`:
+`for-of` walks any value whose type implements
+[`IntoIterator`](./spec-standard-traits.md#iterator-traits):
 
 <!-- {"fixture":"spec_control_flow_loops.wado"} -->
 
@@ -225,8 +228,11 @@ before the first iteration. Each iteration then calls `next()` on the result,
 binds the element to `item` and runs the body. The loop ends when `next()`
 returns `None`.
 
-The binding is a copy of each element (value semantics), so modifying it does
-not affect the original collection. Each iteration binds it anew, so a closure
+The binding is a copy of each element
+([Value Semantics](./spec-memory.md#value-semantics)), so changing it does not
+change the collection. `for let x of &xs` and `for let x of &mut xs` bind
+references instead, as
+[iteration by reference](./spec-standard-traits.md#value-semantics) states. Each iteration binds it anew, so a closure
 or a reference taken in one iteration keeps that iteration's element.
 
 The binding must match every element, as a `let` pattern must (see
@@ -236,7 +242,9 @@ Match on the element in the body instead.
 
 ### Tuple for-of (compile-time expansion)
 
-When the iterable is a tuple, the loop body is expanded once per element at compile time. Each expansion independently types the binding, enabling heterogeneous iteration with per-element trait dispatch.
+When the iterable is a tuple, the body runs once per element, and each run types
+the binding as that element's type. So one loop walks elements of different
+types, and each call in the body dispatches on its element's type.
 
 <!-- {"fixture":"spec_control_flow_loops.wado"} -->
 
@@ -249,11 +257,15 @@ for let v of t {
 assert out == "42 hello true ";
 ```
 
-`break` and `continue` are not allowed inside a tuple for-of body because the loop is unrolled at compile time into sequential blocks and these have no natural target. `.enumerate()` is supported and provides a compile-time index.
+`break` and `continue` are errors inside a tuple for-of body, since the runs are
+not iterations of one loop. `.enumerate()` binds a compile-time index beside the
+element.
 
 ### Tuple comprehension
 
-Wrapping the same walk in `[...]` collects one result element per source element. The braces hold a single expression — the element's value — since every position of the result tuple has one.
+Wrapping the same walk in `[...]` collects one result element per source
+element. The braces hold a single expression, the element's value, since every
+position of the result tuple has one.
 
 <!-- {"fixture":"spec_control_flow_labeled_blocks.wado"} -->
 
@@ -271,7 +283,8 @@ test {
 
 The `.enumerate()` form binds the index alongside the value (`[for let [i, v] of t.enumerate() { ... }]`). The index is a compile-time constant, so it is also the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and writes alike. A `mut` index can change, so it is not a subscript.
 
-The source must be a variadic tuple (`[..T]`); a concrete tuple is not walkable this way.
+The source must be a variadic tuple (`[..T]`). A concrete tuple cannot be
+walked this way.
 
 ## Infinite Loop
 
@@ -333,24 +346,21 @@ it. It is Wado's only non-local jump, and it replaces loop labels, labeled
 
 `LABEL: { ... }`, in statement or expression position.
 
-- The label is an identifier followed by a colon
-- `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value
-- `()` is a value like any other, so `break LABEL: ()` says what `break LABEL`
-  says, and `break ()` says what `break` says
-- Nested blocks may reuse a label name; a `break` targets the innermost match
-- The block opens a new scope, and a name declared inside may shadow an outer
-  one
+The label is an identifier followed by a colon. `break LABEL;` leaves the
+block, and `break LABEL: expr;` leaves it with a value. `()` is a value like any
+other, so `break LABEL: ()` says what `break LABEL` says, and `break ()` says
+what `break` says. Nested blocks may reuse a label, and a `break` targets the
+innermost block with that label. The block opens a new scope, and a name
+declared inside may shadow an outer one.
 
-The label is mandatory to tell a block apart from a struct literal, since
-`{ field: value }` on its own could be either. An unlabeled `{ ... }` block is
-therefore a parse error.
+The label is required because `{ field: value }` on its own could be a block or
+a struct literal. An unlabeled `{ ... }` block is a parse error.
 
 ### Escaping and Early Exit
 
 `break LABEL` inside a loop nest leaves all of it at once, and the block's tail
-is the path no `break` took. Inside a block,
-`break LABEL` skips the rest, so a chain of guards stays flat instead of nesting
-one inside the next. A `break` may also leave an effect handler's `do` block
+is the path no `break` took. Inside a block, `break LABEL` skips the rest, so a
+chain of guards stays flat instead of nesting one inside the next. A `break` may also leave an effect handler's `do` block
 (see [Handler Scope](./spec-effects.md#handler-scope)).
 
 <!-- {"fixture":"spec_control_flow_labeled_blocks.wado"} -->
@@ -498,9 +508,9 @@ assert opt matches { Some(x) && x > 0 };
 
 ## Branch Hints
 
-`builtin::cold_path()` marks the path that contains it as rarely run. It is a
-statement with no effect on what the program computes. It hints that the other
-side of the branch containing it is the likely one.
+`builtin::cold_path()` marks the path that contains it as rarely run, so the
+other side of its branch is the likely one. It does not change what the program
+computes.
 
 It is a statement rather than a condition wrapper, so it works anywhere a branch
 body does. That includes an `if let` or `match` arm, where no boolean condition
@@ -580,6 +590,8 @@ The barrier binds the Wado compiler only. The Wasm engine that runs the program
 is still free to fold the value.
 
 ## Error Handling
+
+An error either traps, which ends the program, or is a value the caller handles.
 
 ### Unrecoverable Errors (Traps)
 

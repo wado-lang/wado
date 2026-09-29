@@ -171,7 +171,8 @@ for let mut i = 0; i < arr.len(); i += 1 {
 assert arr == [2, 4, 6];
 ```
 
-Taking `&mut` of such a field or element is itself an error
+Outside iteration too, `&mut` of such a field or element is an error, a
+`variant` excepted
 ([Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements)).
 
 ### Custom Iterables

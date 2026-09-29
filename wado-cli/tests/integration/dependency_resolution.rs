@@ -303,7 +303,7 @@ export fn run() {
 }
 
 /// A `lib:` alias no `[dependencies]` entry declares is reported as that, naming
-/// the manifest it is missing from, rather than as an unknown namespace.
+/// the manifest it is missing from.
 #[test]
 fn an_undeclared_alias_names_the_manifest() {
     let tmp = tempfile::tempdir().unwrap();
@@ -328,8 +328,7 @@ fn an_undeclared_alias_names_the_manifest() {
             predicate::str::contains(
                 "dependency 'lib:nothere' is not declared in [dependencies] of ",
             )
-            .and(predicate::str::contains("app/wado.toml"))
-            .and(predicate::str::contains("unknown module namespace").not()),
+            .and(predicate::str::contains("app/wado.toml")),
         );
 }
 

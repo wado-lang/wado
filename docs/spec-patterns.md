@@ -48,8 +48,8 @@ test {
 ## Patterns That Cannot Fail
 
 A `let` or `for` binding takes a pattern that matches every value of its type.
-A case pattern does so when no other case of the type holds a value, as defined
-under Exhaustiveness below. A literal, a range, a constant, an or-pattern, and a
+A case pattern does so when no other case of the type holds a value
+([Exhaustiveness](#exhaustiveness)). A literal, a range, a constant, an or-pattern, and a
 narrowing type pattern never do.
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
@@ -285,9 +285,10 @@ assert level == "low";
 assert shape matches { Circle(_) | Square(_) };
 ```
 
-## Nested Sub-Patterns in Tuple/Struct Destructuring
+## Nested Sub-Patterns
 
-Tuple and struct patterns support literal, variant, enum, or-pattern, and range sub-patterns:
+A tuple or struct pattern may hold any refutable pattern in an element or field:
+a literal, a case, an or-pattern, or a range.
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -335,7 +336,7 @@ assert v == -4;
 
 ## Mutable Bindings in Patterns
 
-The `mut` keyword before a binding name makes it mutable inside the pattern body:
+`mut` before a binding name makes that binding mutable:
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -380,11 +381,11 @@ A pattern may ascribe a type: `p: T` matches when the subject is a `T`, and `p` 
 
 Whether the pattern can fail is decided statically, from the subject's type `S`:
 
-| Relation          | Meaning                                                              |
-| ----------------- | -------------------------------------------------------------------- |
-| `S <: T`          | irrefutable — an upcast, or an ordinary type annotation              |
-| `T <: S`, `T ≠ S` | refutable — a runtime test, and only where `extends` relates the two |
-| otherwise         | a type error, as a mismatched annotation is                          |
+| Relation          | Meaning                                                             |
+| ----------------- | ------------------------------------------------------------------- |
+| `S <: T`          | irrefutable: an upcast, or an ordinary type annotation              |
+| `T <: S`, `T ≠ S` | refutable: a runtime test, and only where `extends` relates the two |
+| otherwise         | a type error, as a mismatched annotation is                         |
 
 An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal. A refutable one needs a pattern position that admits failure, so `let` and a `for` binding reject it exactly as they reject `Some(x)`:
 

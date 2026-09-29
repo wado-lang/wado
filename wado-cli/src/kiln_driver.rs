@@ -38,7 +38,6 @@ use wado_compiler::kiln::{
     has_generated_marker, hex_digest, validate_options,
 };
 use wado_compiler::{Code, Diagnostic, Severity};
-use wado_manifest::Manifest;
 
 use crate::cache::{is_staging_file, write_atomic};
 use crate::kiln_metadata::{

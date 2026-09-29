@@ -64,7 +64,7 @@ let back = grog::decode::<Account, ByteList>(bytes)?;
 
 A `.wasm` / `.wat` asset is imported with `with { type: "wasm" | "wat" }`. The
 compiler detects from the binary whether the file is a core module or a
-Component Model component — both use `type: "wasm"`. See [the spec](./spec-modules.md#wasm-module-and-component-imports).
+Component Model component, so both use `type: "wasm"`. See [the spec](./spec-modules.md#wasm-module-and-component-imports).
 
 ```wado
 // Core wasm / wat: each export becomes a free function.
@@ -192,9 +192,8 @@ fn example() {
 ```
 
 An initializer must be pure: calling a function that declares an effect is a
-compile error. A user-defined effect's operation is another matter — it may be
-dispatched, and traps at module init where no `with … do` installs a handler,
-just as it would in a function body. An initializer may install its own.
+compile error. It may still dispatch a user-defined effect's operation, which
+behaves as it would in a function body, and it may install its own handler.
 
 ## Types
 
@@ -356,8 +355,8 @@ for let c of "hello".chars() {
 A `StrSlice` views part of a string without copying it. Its ends are always on
 character boundaries, which is why it is a `struct` and not a newtype over
 `ByteSlice`. `AsStrSlice` lets one signature take an owned `String`, a
-reference to one, or a view of one — Wado's answer to Rust's `AsRef<str>`. See
-[the spec](./spec-standard-traits.md#string-views).
+reference to one, or a view of one. It is Wado's answer to Rust's `AsRef<str>`. See
+[the spec](./spec-types.md#string-views).
 
 ```wado
 let v = "banana".as_str_slice();
@@ -825,10 +824,10 @@ let first_even = find: {
 ### Branch Hints
 
 `builtin::cold_path()` marks the path containing it as rarely executed, and
-emits no code. The engine predicts the other side of the branch, and the inliner
-leaves the cold path out of its cost estimate. It is a statement rather than a
-condition wrapper, so it also works in a `match` or `if let` arm, where no
-boolean is available. See [the spec](./spec-control-flow.md#branch-hints).
+changes nothing the program computes. It hints that the other side of the
+branch is the likely one. It is a statement rather than a condition wrapper, so
+it also works in a `match` or `if let` arm, where no boolean is available. See
+[the spec](./spec-control-flow.md#branch-hints).
 
 ```wado
 if i >= len {
@@ -1488,7 +1487,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec-effects.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are. An operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec-effects.md#default-implementations).
 
 ```wado
 interface Log {
@@ -1560,8 +1559,7 @@ or `#[TODO]` test that resolved unexpectedly.
 `--test-name <pattern>` selects individual `test "name"` blocks the way
 `cargo test <name>` does: a case-sensitive substring match against the test's
 original name (matched against the source name, so multibyte names work).
-It is repeatable and combines with OR — a test runs if its name contains any
-pattern.
+It is repeatable, and a test runs if its name contains any of the patterns.
 
 ```wado
 test {
@@ -1615,8 +1613,8 @@ let src = #include_str("./runtime.wado");  // include file as String
 let icon = #include_bytes("./icon.png");   // include file as ByteList
 ```
 
-A literal read as numbers becomes a constant, with no decode loop at startup.
-See [the spec](./spec-literals.md#embedded-data).
+`List::from_le_bytes` reads a byte literal as little-endian numbers. See
+[the spec](./spec-literals.md#embedded-data).
 
 ```wado
 let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s
@@ -1812,8 +1810,8 @@ let p = from_string::<Point>("{\"x\":1,\"y\":2}"); // Ok(Point { x: 1, y: 2 })
 
 ### core:cbor
 
-CBOR (RFC 8949), same serde model as JSON — any JSON-serializable type works
-unchanged. See [`core:cbor`](./stdlib-core-cbor.md).
+CBOR (RFC 8949) uses the same serde model as JSON, so any JSON-serializable type
+works unchanged. See [`core:cbor`](./stdlib-core-cbor.md).
 
 ```wado
 use { to_bytes, from_bytes, to_bytes_canonical } from "core:cbor";

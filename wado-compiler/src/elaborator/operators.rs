@@ -539,78 +539,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // substitutes it with the concrete type and either resolves the
             // method call normally, or converts back to a binary op for primitives.
             if let Some(operand) = self.bounded_operand(left, span) {
-                if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
-                    let eq_method = self.tysys.operator_method_name(CompilerItem::Eq);
-                    if let Some((bound_trait_name, info)) = self.find_operator_in_bounds(
-                        &operand.bounds,
-                        left,
-                        CompilerItem::Eq,
-                        &eq_method,
-                        Some(right),
-                        span,
-                    ) {
-                        // The bound's own spelling, so an argument it writes
-                        // (`S: Eq<String>`) names the impl that answers it.
-                        let resolved = ResolvedTraitMethod::through_bound(
-                            operand.receiver,
-                            bound_trait_name,
-                            &eq_method,
-                            info,
-                        );
-                        // Reify rebuilds the `!` wrapper for `!=`.
-                        return self.dispatch_trait_op_method(
-                            left,
-                            vec![(right, right_span)],
-                            &resolved,
-                            origin,
-                        );
-                    }
-                } else {
-                    let ord_method = self.tysys.operator_method_name(CompilerItem::Ord);
-                    if let Some((_, info)) = self.find_operator_in_bounds(
-                        &operand.bounds,
-                        left,
-                        CompilerItem::Ord,
-                        &ord_method,
-                        Some(right),
-                        span,
-                    ) {
-                        let ord_trait_name = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .compiler_trait_fq(CompilerItem::Ord);
-                        let resolved = ResolvedTraitMethod::through_bound(
-                            operand.receiver,
-                            ord_trait_name,
-                            &ord_method,
-                            info,
-                        );
-                        let cmp_call = self.dispatch_trait_op_method(
-                            left,
-                            vec![(right, right_span)],
-                            &resolved,
-                            origin,
-                        );
-                        if cmp_call == TypeTable::ERROR {
-                            return TypeTable::ERROR;
-                        }
-                        return TypeTable::BOOL;
-                    }
-                }
-                let item = if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
+                let is_eq = matches!(op, BinaryOp::Eq | BinaryOp::NotEq);
+                let item = if is_eq {
                     CompilerItem::Eq
                 } else {
                     CompilerItem::Ord
                 };
-                let trait_name = self
+                let method = self.tysys.operator_method_name(item);
+                let Some((bound_trait_name, info)) = self.find_operator_in_bounds(
+                    &operand.bounds,
+                    left,
+                    item,
+                    &method,
+                    Some(right),
+                    span,
+                ) else {
+                    self.report_operator_bound_missing(&operand.spelled, item, span);
+                    return TypeTable::ERROR;
+                };
+                if is_eq {
+                    // The bound's own spelling, so an argument it writes
+                    // (`S: Eq<String>`) names the impl that answers it.
+                    let resolved = ResolvedTraitMethod::through_bound(
+                        operand.receiver,
+                        bound_trait_name,
+                        &method,
+                        info,
+                    );
+                    // Reify rebuilds the `!` wrapper for `!=`.
+                    return self.dispatch_trait_op_method(
+                        left,
+                        vec![(right, right_span)],
+                        &resolved,
+                        origin,
+                    );
+                }
+                let ord_trait_name = self
                     .tysys
                     .type_table
                     .borrow()
-                    .compiler_trait_name(item)
-                    .to_string();
-                self.report_operator_bound_missing(&operand.spelled, &trait_name, span);
-                return TypeTable::ERROR;
+                    .compiler_trait_fq(CompilerItem::Ord);
+                let resolved = ResolvedTraitMethod::through_bound(
+                    operand.receiver,
+                    ord_trait_name,
+                    &method,
+                    info,
+                );
+                let cmp_call = self.dispatch_trait_op_method(
+                    left,
+                    vec![(right, right_span)],
+                    &resolved,
+                    origin,
+                );
+                if cmp_call == TypeTable::ERROR {
+                    return TypeTable::ERROR;
+                }
+                return TypeTable::BOOL;
             }
         }
 
@@ -1824,13 +1808,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             rhs.map(|(rhs, _)| rhs),
             span,
         ) else {
-            let trait_name = self
-                .tysys
-                .type_table
-                .borrow()
-                .compiler_trait_name(item)
-                .to_string();
-            self.report_operator_bound_missing(&operand.spelled, &trait_name, span);
+            self.report_operator_bound_missing(&operand.spelled, item, span);
             return Some(TypeTable::ERROR);
         };
         let return_type = self.operator_output_type(receiver, &found_trait);

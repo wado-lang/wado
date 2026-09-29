@@ -265,8 +265,7 @@ version = "0.1.0"
 }
 
 /// Every subcommand that reads the governing `wado.toml` fails on an invalid
-/// one. `wado build` always did; the ones that take a file argument dropped the
-/// parse error and compiled as if no manifest were there.
+/// one, rather than compiling as if there were none.
 #[test]
 fn an_invalid_manifest_fails_every_subcommand_that_reads_it() {
     let tmp = tempfile::tempdir().unwrap();

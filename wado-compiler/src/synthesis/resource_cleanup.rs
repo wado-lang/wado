@@ -9,14 +9,13 @@
 use crate::canonical::{CanonicalIntrinsic, CmDecl};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
+use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::minted_name;
 use crate::package::Package;
 use crate::synthesis::common;
-use crate::synthesis::common::{
-    cm_canonical_call, expr_stmt, let_stmt, local_ref, return_stmt, synth_span,
-};
+use crate::synthesis::common::{cm_canonical_call, expr_stmt, let_stmt, local_ref, synth_span};
 use crate::tir::{
     FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
     TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
@@ -57,9 +56,7 @@ struct BreakTarget {
 }
 
 struct Cx<'a> {
-    tt: &'a TypeTable,
-    reg: &'a CmInterfaceRegistry,
-    struct_fields: &'a StructFieldReg,
+    resources: Resources<'a>,
     callees: &'a CalleeFacts,
     locals: &'a mut Vec<TirLocal>,
     local_count: &'a mut u32,
@@ -84,7 +81,7 @@ impl Cx<'_> {
     }
 
     fn carries_resource(&self, type_id: TypeId) -> bool {
-        carries_resource(self.tt, self.reg, self.struct_fields, type_id)
+        self.resources.carried_by(type_id)
     }
 
     /// The first slot a `break label` (or, with `None`, a `break` or
@@ -120,67 +117,149 @@ fn build_struct_field_reg(project: &Package) -> StructFieldReg {
     reg
 }
 
-/// Whether `type_id` owns, or structurally carries, a Component Model
-/// resource that this pass knows how to drop: a bare resource, or a struct /
-/// tuple / variant / `Result` that transitively contains one.
-///
-/// `GenericResource` (`Future` / `Stream`) is excluded: those handles have
-/// their own explicit drop discipline and must not be touched here. A
-/// reference stops the walk — a borrowed place owns nothing.
-fn carries_resource(
-    tt: &TypeTable,
-    reg: &CmInterfaceRegistry,
-    sfr: &StructFieldReg,
-    type_id: TypeId,
-) -> bool {
-    carries_resource_rec(tt, reg, sfr, type_id, &mut Vec::new())
+/// What a type holds that this pass drops, one level down.
+enum Layout<'a> {
+    /// A resource, released by `resource.drop` under this CM name.
+    Resource(DefId, &'a str),
+    /// A struct, dropped field by field: `(index, name, type_id)`.
+    Struct(&'a [(u32, String, TypeId)]),
+    /// A tuple, dropped element by element.
+    Tuple(Vec<TypeId>),
+    /// A `Result`, dropped by a `match` on its case: `(ok, err)`.
+    Result(TypeId, TypeId),
+    /// Nothing this pass drops.
+    Opaque,
 }
 
-fn carries_resource_rec(
-    tt: &TypeTable,
-    reg: &CmInterfaceRegistry,
-    sfr: &StructFieldReg,
-    type_id: TypeId,
-    visited: &mut Vec<TypeId>,
-) -> bool {
-    let base = tt.representation_head(type_id);
-    if visited.contains(&base) {
-        return false;
+/// The tables that tell which types carry a resource this pass drops.
+#[derive(Clone, Copy)]
+struct Resources<'a> {
+    tt: &'a TypeTable,
+    reg: &'a CmInterfaceRegistry,
+    struct_fields: &'a StructFieldReg,
+}
+
+impl<'a> Resources<'a> {
+    /// Whether `type_id` owns, or structurally carries, a Component Model
+    /// resource that this pass knows how to drop: a bare resource, or a struct
+    /// / tuple / `Result` that transitively contains one.
+    fn carried_by(&self, type_id: TypeId) -> bool {
+        self.carried_by_rec(type_id, &mut Vec::new())
     }
-    visited.push(base);
-    let children: Vec<TypeId> = match tt.get(base).clone() {
-        ResolvedType::Resource { def } => {
-            return !tt.is_unrestricted_resource(def)
-                && reg
-                    .get_resource_cm_name_by_module(
-                        &tt.def_module(def).to_string(),
-                        tt.def_name(def),
-                    )
-                    .is_some();
-        }
-        ResolvedType::GenericResource { .. } | ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+
+    fn carried_by_rec(&self, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
+        let base = self.tt.representation_head(type_id);
+        if visited.contains(&base) {
             return false;
         }
-        ResolvedType::Struct { def, type_args } => sfr
-            .get(&(
-                tt.struct_rendered_name(def, &type_args),
-                tt.struct_head_module(def).clone(),
-            ))
-            .map(|fields| fields.iter().map(|(_, _, t)| *t).collect())
-            .unwrap_or_default(),
-        _ => {
-            if let Some(elems) = tt.as_tuple(base) {
-                elems
-            } else if let Some((ok, err)) = tt.as_result(base) {
-                vec![ok, err]
-            } else {
-                Vec::new()
+        visited.push(base);
+        match self.layout(base) {
+            Layout::Resource(..) => true,
+            Layout::Struct(fields) => fields
+                .iter()
+                .any(|(_, _, field_ty)| self.carried_by_rec(*field_ty, visited)),
+            Layout::Tuple(elems) => elems
+                .into_iter()
+                .any(|elem_ty| self.carried_by_rec(elem_ty, visited)),
+            Layout::Result(ok, err) => {
+                self.carried_by_rec(ok, visited) || self.carried_by_rec(err, visited)
+            }
+            Layout::Opaque => false,
+        }
+    }
+
+    /// `GenericResource` (`Future` / `Stream`) is opaque: those handles have
+    /// their own explicit drop discipline and must not be touched here. So is
+    /// a reference — a borrowed place owns nothing — and an unrestricted
+    /// resource, which is never dropped.
+    fn layout(&self, type_id: TypeId) -> Layout<'a> {
+        let tt = self.tt;
+        let base = tt.representation_head(type_id);
+        match tt.get(base) {
+            ResolvedType::Resource { def } if !tt.is_unrestricted_resource(*def) => {
+                match self
+                    .reg
+                    .get_resource_cm_name_by_module(&tt.def_module(*def).to_string(), tt.def_name(*def))
+                {
+                    Some(cm) => Layout::Resource(*def, cm),
+                    None => Layout::Opaque,
+                }
+            }
+            ResolvedType::Struct { def, type_args } => {
+                let key = (
+                    tt.struct_rendered_name(*def, type_args),
+                    tt.struct_head_module(*def).clone(),
+                );
+                match self.struct_fields.get(&key) {
+                    Some(fields) => Layout::Struct(fields),
+                    None => Layout::Opaque,
+                }
+            }
+            _ => {
+                if let Some(elems) = tt.as_tuple(base) {
+                    Layout::Tuple(elems)
+                } else if let Some((ok, err)) = tt.as_result(base) {
+                    Layout::Result(ok, err)
+                } else {
+                    Layout::Opaque
+                }
             }
         }
-    };
-    children
-        .into_iter()
-        .any(|t| carries_resource_rec(tt, reg, sfr, t, visited))
+    }
+
+    /// The resource-carrying values `pattern` binds (e.g. `response` in
+    /// `let [response, _tx] = Response::new(...)`).
+    fn pattern_bindings(&self, pattern: &TirPattern) -> Vec<Live> {
+        let mut collector = PatternBindings {
+            resources: *self,
+            found: Vec::new(),
+        };
+        collector.visit_pattern(pattern);
+        collector.found
+    }
+}
+
+struct PatternBindings<'a> {
+    resources: Resources<'a>,
+    found: Vec<Live>,
+}
+
+impl TirRefVisitor for PatternBindings<'_> {
+    fn visit_pattern(&mut self, pattern: &TirPattern) {
+        match pattern {
+            TirPattern::Binding {
+                name,
+                local_index,
+                type_id,
+            } => {
+                if self.resources.carried_by(*type_id) {
+                    self.found.push(Live {
+                        local: *local_index,
+                        name: name.clone(),
+                        type_id: *type_id,
+                        temporary: false,
+                    });
+                }
+            }
+            // Reify binds every alternative to the first one's locals, so the
+            // first names each value once.
+            TirPattern::Or(alternatives) => {
+                if let Some(first) = alternatives.first() {
+                    self.visit_pattern(first);
+                }
+            }
+            // An unrestricted handle is never dropped, so it owes no cleanup.
+            TirPattern::Narrow { .. } => {}
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => self.walk_pattern(pattern),
+        }
+    }
 }
 
 /// What a call reveals about ownership, by callee. Each set holds
@@ -235,7 +314,6 @@ fn callee_key(func: &FunctionRef) -> String {
 /// Entry point: elaborate resource drops for every function in the project.
 pub fn elaborate_resource_drops(project: &mut Package) {
     let struct_fields = build_struct_field_reg(project);
-    let reg = &project.cm_interface_registry;
     let Some(type_table) = project
         .tir_modules
         .values()
@@ -245,6 +323,11 @@ pub fn elaborate_resource_drops(project: &mut Package) {
         return;
     };
     let tt = type_table.borrow();
+    let resources = Resources {
+        tt: &tt,
+        reg: &project.cm_interface_registry,
+        struct_fields: &struct_fields,
+    };
 
     let mut callees = CalleeFacts::default();
     for module in project.tir_modules.values() {
@@ -253,87 +336,63 @@ pub fn elaborate_resource_drops(project: &mut Package) {
         }
     }
 
-    for module in project.tir_modules.values_mut() {
+    for module in project.tir_modules.values() {
         for func_rc in &module.functions {
-            elaborate_function(
-                &mut func_rc.borrow_mut(),
-                &tt,
-                reg,
-                &struct_fields,
-                &callees,
-            );
+            elaborate_function(&mut func_rc.borrow_mut(), resources, &callees);
         }
     }
 }
 
 /// Elaborate resource drops for a single function body.
-fn elaborate_function(
-    func: &mut TirFunction,
-    tt: &TypeTable,
-    reg: &CmInterfaceRegistry,
-    struct_fields: &StructFieldReg,
-    callees: &CalleeFacts,
-) {
-    if func.body.is_none() {
+fn elaborate_function(func: &mut TirFunction, resources: Resources, callees: &CalleeFacts) {
+    let TirFunction {
+        body: Some(body),
+        params,
+        locals,
+        local_count,
+        ..
+    } = func
+    else {
         return;
-    }
+    };
 
     // Parameters that own (or carry) a resource are live from entry. A
     // by-value `self` is just such a parameter: the method that received it
     // owns it and must drop it unless its body transfers it onward.
-    let mut owned: Owned = Vec::new();
-    for param in &func.params {
-        if carries_resource(tt, reg, struct_fields, param.type_id) {
-            owned.push(Some(Live {
+    let mut owned: Owned = params
+        .iter()
+        .filter(|param| resources.carried_by(param.type_id))
+        .map(|param| {
+            Some(Live {
                 local: param.local_index,
                 name: param.name.clone(),
                 type_id: param.type_id,
                 temporary: false,
-            }));
-        }
-    }
-    if owned.is_empty() && !body_has_resource(func.body.as_ref().unwrap(), tt, reg, struct_fields) {
+            })
+        })
+        .collect();
+    if owned.is_empty() && !body_has_resource(body, resources) {
         return;
     }
 
-    let mut body = func.body.take().expect("body present");
-    {
-        let TirFunction {
-            locals,
-            local_count,
-            ..
-        } = &mut *func;
-        let mut cx = Cx {
-            tt,
-            reg,
-            struct_fields,
-            callees,
-            locals,
-            local_count,
-            targets: Vec::new(),
-        };
-        // The function body is its own scope: parameters (slots
-        // `0..owned.len()`) count as declared here, so `entry = 0`
-        // makes them drop at body end when never transferred.
-        let stmts = std::mem::take(&mut body.stmts);
-        body.stmts = elab_block_entry(stmts, &mut owned, &mut cx, 0);
-    }
-    func.body = Some(body);
+    let mut cx = Cx {
+        resources,
+        callees,
+        locals,
+        local_count,
+        targets: Vec::new(),
+    };
+    // Parameters count as declared in the body's scope, so they drop at its
+    // end when never transferred.
+    elab_block_at(body, &mut owned, &mut cx, 0);
 }
 
 /// Cheap pre-check: does the body produce or bind any resource-carrying
 /// value? Lets the pass skip the (vast majority of) functions that touch no
 /// resources.
-fn body_has_resource(
-    block: &TirBlock,
-    tt: &TypeTable,
-    reg: &CmInterfaceRegistry,
-    sfr: &StructFieldReg,
-) -> bool {
+fn body_has_resource(block: &TirBlock, resources: Resources) -> bool {
     let mut probe = ResourceProbe {
-        tt,
-        reg,
-        sfr,
+        resources,
         found: false,
     };
     probe.visit_block(block);
@@ -341,9 +400,7 @@ fn body_has_resource(
 }
 
 struct ResourceProbe<'a> {
-    tt: &'a TypeTable,
-    reg: &'a CmInterfaceRegistry,
-    sfr: &'a StructFieldReg,
+    resources: Resources<'a>,
     found: bool,
 }
 
@@ -352,7 +409,7 @@ impl TirRefVisitor for ResourceProbe<'_> {
         if self.found {
             return;
         }
-        if carries_resource(self.tt, self.reg, self.sfr, expr.type_id) {
+        if self.resources.carried_by(expr.type_id) {
             self.found = true;
             return;
         }
@@ -360,30 +417,9 @@ impl TirRefVisitor for ResourceProbe<'_> {
     }
 
     fn visit_pattern(&mut self, pattern: &TirPattern) {
-        if pattern_carries_resource(pattern, self.tt, self.reg, self.sfr) {
+        if !self.resources.pattern_bindings(pattern).is_empty() {
             self.found = true;
         }
-    }
-}
-
-fn pattern_carries_resource(
-    pattern: &TirPattern,
-    tt: &TypeTable,
-    reg: &CmInterfaceRegistry,
-    sfr: &StructFieldReg,
-) -> bool {
-    match pattern {
-        TirPattern::Binding { type_id, .. } => carries_resource(tt, reg, sfr, *type_id),
-        TirPattern::Tuple(pats, _) | TirPattern::Or(pats) => pats
-            .iter()
-            .any(|p| pattern_carries_resource(p, tt, reg, sfr)),
-        TirPattern::Variant { bindings, .. } => bindings
-            .iter()
-            .any(|p| pattern_carries_resource(p, tt, reg, sfr)),
-        TirPattern::Struct { fields, .. } => fields
-            .iter()
-            .any(|f| pattern_carries_resource(&f.pattern, tt, reg, sfr)),
-        _ => false,
     }
 }
 
@@ -401,26 +437,27 @@ fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
     )
 }
 
+/// Build the statements that drop `lives`, in order.
+fn drop_all<'l>(lives: impl IntoIterator<Item = &'l Live>, cx: &mut Cx) -> Vec<TirStmt> {
+    lives
+        .into_iter()
+        .flat_map(|live| drop_one(live, cx))
+        .collect()
+}
+
 /// Take every value still owned in the slots from `first` up, and build the
 /// statements that drop them, innermost first.
 fn drop_slots(owned: &mut Owned, first: usize, cx: &mut Cx) -> Vec<TirStmt> {
-    let lives: Vec<Live> = owned[first..]
-        .iter_mut()
-        .rev()
-        .filter_map(Option::take)
-        .collect();
-    lives.iter().flat_map(|live| drop_one(live, cx)).collect()
+    let lives: Vec<Live> = owned[first..].iter_mut().filter_map(Option::take).collect();
+    drop_all(lives.iter().rev(), cx)
 }
 
-/// [`drop_slots`], for the temporaries alone: a statement's own spills, which
-/// drop when it ends while the bindings it opened stay owned.
-fn drop_temporaries(owned: &mut Owned, first: usize, cx: &mut Cx) -> Vec<TirStmt> {
-    let lives: Vec<Live> = owned[first..]
+/// Take the temporaries still owned in `slots`, in slot order.
+fn take_temporaries(slots: &mut [Option<Live>]) -> Vec<Live> {
+    slots
         .iter_mut()
-        .rev()
         .filter_map(|slot| slot.take_if(|live| live.temporary))
-        .collect();
-    lives.iter().flat_map(|live| drop_one(live, cx)).collect()
+        .collect()
 }
 
 /// Drop a value produced and discarded in statement position. Anything but a
@@ -440,43 +477,23 @@ fn drop_discarded(value: TirExpr, cx: &mut Cx) -> Vec<TirStmt> {
 /// Build the statements that release every Component Model resource reachable
 /// from `scrutinee` (a value of type `type_id`).
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
-    let base = cx.tt.representation_head(type_id);
-    match cx.tt.get(base).clone() {
-        ResolvedType::Resource { def } if cx.tt.is_unrestricted_resource(def) => Vec::new(),
-        ResolvedType::Resource { def } => match cx
-            .reg
-            .get_resource_cm_name_by_module(&cx.tt.def_module(def).to_string(), cx.tt.def_name(def))
-        {
-            Some(cm) => vec![expr_stmt(cm_canonical_call(
-                CanonicalIntrinsic::ResourceDrop(CmDecl::new(cx.tt.defs(), def, cm)),
-                vec![scrutinee],
-                TypeTable::UNIT,
-            ))],
-            None => Vec::new(),
-        },
-        ResolvedType::Struct { def, type_args } => {
-            let module_source = cx.tt.struct_head_module(def).clone();
-            let fields = cx
-                .struct_fields
-                .get(&(cx.tt.struct_rendered_name(def, &type_args), module_source))
-                .cloned()
-                .unwrap_or_default();
+    match cx.resources.layout(type_id) {
+        Layout::Resource(def, cm) => vec![expr_stmt(cm_canonical_call(
+            CanonicalIntrinsic::ResourceDrop(CmDecl::new(cx.resources.tt.defs(), def, cm)),
+            vec![scrutinee],
+            TypeTable::UNIT,
+        ))],
+        Layout::Struct(fields) => drop_projected(scrutinee, fields, cx),
+        Layout::Tuple(elems) => {
+            let fields: Vec<(u32, String, TypeId)> = elems
+                .into_iter()
+                .enumerate()
+                .map(|(i, ty)| (i as u32, i.to_string(), ty))
+                .collect();
             drop_projected(scrutinee, &fields, cx)
         }
-        _ => {
-            if let Some(elems) = cx.tt.as_tuple(base) {
-                let fields: Vec<(u32, String, TypeId)> = elems
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, ty)| (i as u32, i.to_string(), ty))
-                    .collect();
-                drop_projected(scrutinee, &fields, cx)
-            } else if let Some((ok_ty, err_ty)) = cx.tt.as_result(type_id) {
-                drop_result(scrutinee, type_id, ok_ty, err_ty, cx)
-            } else {
-                Vec::new()
-            }
-        }
+        Layout::Result(ok_ty, err_ty) => drop_result(scrutinee, type_id, ok_ty, err_ty, cx),
+        Layout::Opaque => Vec::new(),
     }
 }
 
@@ -544,7 +561,7 @@ fn result_drop_arm(
 ) -> TirMatchArm {
     let span = synth_span();
     let (case_name, case_index) = {
-        let (_, _, name, index) = cx.tt.compiler_variant_case(case);
+        let (_, _, name, index) = cx.resources.tt.compiler_variant_case(case);
         (name.to_string(), index)
     };
     let (payload_local, payload_name) = cx.alloc_local(payload_ty, "drop_v");
@@ -580,78 +597,8 @@ fn result_drop_arm(
 }
 
 // ---------------------------------------------------------------------------
-// Pattern resource bindings
-// ---------------------------------------------------------------------------
-
-/// Whether matching `pattern` moves a resource out of the scrutinee.
-fn pattern_extracts_resource(pattern: &TirPattern, cx: &Cx) -> bool {
-    pattern_carries_resource(pattern, cx.tt, cx.reg, cx.struct_fields)
-}
-
-/// Collect resource-carrying values bound by `pattern` (e.g. `response` in
-/// `let [response, _tx] = Response::new(...)`).
-fn pattern_resources(pattern: &TirPattern, cx: &Cx) -> Vec<Live> {
-    let mut out = Vec::new();
-    collect_pattern_resources(pattern, cx, &mut out);
-    out
-}
-
-fn collect_pattern_resources(pattern: &TirPattern, cx: &Cx, out: &mut Vec<Live>) {
-    match pattern {
-        TirPattern::Binding {
-            name,
-            local_index,
-            type_id,
-        } => {
-            if cx.carries_resource(*type_id) {
-                out.push(Live {
-                    local: *local_index,
-                    name: name.clone(),
-                    type_id: *type_id,
-                    temporary: false,
-                });
-            }
-        }
-        TirPattern::Tuple(pats, _) | TirPattern::Or(pats) => {
-            for p in pats {
-                collect_pattern_resources(p, cx, out);
-            }
-        }
-        TirPattern::Variant { bindings, .. } => {
-            for p in bindings {
-                collect_pattern_resources(p, cx, out);
-            }
-        }
-        TirPattern::Struct { fields, .. } => {
-            for f in fields {
-                collect_pattern_resources(&f.pattern, cx, out);
-            }
-        }
-        TirPattern::Wildcard
-        | TirPattern::Literal(_)
-        | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. }
-        | TirPattern::Range { .. } => {}
-        // An unrestricted handle is never dropped, so it owes no cleanup.
-        TirPattern::Narrow { .. } => {}
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Block / statement elaboration
 // ---------------------------------------------------------------------------
-
-/// Elaborate a block whose own scope starts at slot `entry`: resources in
-/// slots `>= entry` are declared here and dropped at block exit; resources in
-/// slots `< entry` belong to an enclosing scope.
-fn elab_block_entry(
-    stmts: Vec<TirStmt>,
-    owned: &mut Owned,
-    cx: &mut Cx,
-    entry: usize,
-) -> Vec<TirStmt> {
-    elab_scope_stmts(stmts, owned, cx, entry, TemporaryScope::Statement)
-}
 
 /// Which statement a temporary spilled inside a block belongs to.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -662,8 +609,10 @@ enum TemporaryScope {
     Enclosing,
 }
 
-/// [`elab_block_entry`], with the temporaries its statements spill dropping
-/// where `temporaries` says.
+/// Elaborate a block's statements as a scope starting at slot `entry`:
+/// resources in slots `>= entry` are declared here and dropped at block exit;
+/// resources in slots `< entry` belong to an enclosing scope. The temporaries
+/// its statements spill drop where `temporaries` says.
 fn elab_scope_stmts(
     stmts: Vec<TirStmt>,
     owned: &mut Owned,
@@ -686,10 +635,8 @@ fn elab_scope_stmts(
         let first_out = out.len();
         flow = elab_stmt(stmt, owned, cx, is_tail, &mut out);
         if flow == Flow::Normal && temporaries == TemporaryScope::Statement {
-            let drops = drop_temporaries(owned, first_slot, cx);
-            if drops.is_empty() {
-                continue;
-            }
+            let spilled = take_temporaries(&mut owned[first_slot..]);
+            let drops = drop_all(spilled.iter().rev(), cx);
             if is_tail {
                 // The block's value is this statement's: keep it past the drops.
                 let tail = out.split_off(first_out);
@@ -700,19 +647,14 @@ fn elab_scope_stmts(
         }
     }
 
-    let deferred: Vec<Live> = match temporaries {
+    let deferred = match temporaries {
         TemporaryScope::Statement => Vec::new(),
-        TemporaryScope::Enclosing => owned[entry..]
-            .iter_mut()
-            .filter_map(|slot| slot.take_if(|live| live.temporary))
-            .collect(),
+        TemporaryScope::Enclosing => take_temporaries(&mut owned[entry..]),
     };
     if flow == Flow::Normal {
         // Drop resources declared in this block, innermost (last) first.
         let drops = drop_slots(owned, entry, cx);
-        if !drops.is_empty() {
-            out = append_block_drops(out, drops, cx);
-        }
+        out = append_block_drops(out, drops, cx);
     }
     // Block-local slots leave scope; enclosing slots (with any transfers
     // applied within this block) remain visible to the caller.
@@ -731,9 +673,12 @@ fn elab_scope_stmts(
 /// statements are nested into an inner block expression, its value bound to a
 /// fresh local, the drops run, and that local is re-emitted as the value.
 fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> Vec<TirStmt> {
+    if drops.is_empty() {
+        return stmts;
+    }
     let span = synth_span();
     let inner = TirBlock { stmts, span };
-    let result_ty = tir::block_result_type(cx.tt, &inner);
+    let result_ty = tir::block_result_type(cx.resources.tt, &inner);
     if result_ty == TypeTable::UNIT || result_ty == TypeTable::NEVER {
         // The block yields nothing observable; the drops can simply run last.
         let mut out = inner.stmts;
@@ -749,12 +694,33 @@ fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> 
     out
 }
 
+/// [`append_block_drops`] for an expression, which keeps its value.
+fn append_expr_drops(expr: &mut TirExpr, drops: Vec<TirStmt>, cx: &mut Cx) {
+    if drops.is_empty() {
+        return;
+    }
+    if let TirExprKind::Block(block) = &mut expr.kind {
+        let stmts = std::mem::take(&mut block.stmts);
+        block.stmts = append_block_drops(stmts, drops, cx);
+    } else {
+        wrap_in_block(expr, |value| {
+            append_block_drops(vec![expr_stmt(value)], drops, cx)
+        });
+    }
+}
+
+/// Elaborate `block` in place as a scope starting at slot `entry`; see
+/// [`elab_scope_stmts`].
+fn elab_block_at(block: &mut TirBlock, owned: &mut Owned, cx: &mut Cx, entry: usize) -> Flow {
+    let stmts = std::mem::take(&mut block.stmts);
+    block.stmts = elab_scope_stmts(stmts, owned, cx, entry, TemporaryScope::Statement);
+    block_flow(&block.stmts)
+}
+
 /// Elaborate a block in place as a fresh nested scope.
 fn elab_block(block: &mut TirBlock, owned: &mut Owned, cx: &mut Cx) -> Flow {
     let entry = owned.len();
-    let stmts = std::mem::take(&mut block.stmts);
-    block.stmts = elab_block_entry(stmts, owned, cx, entry);
-    block_flow(&block.stmts)
+    elab_block_at(block, owned, cx, entry)
 }
 
 /// Elaborate a plain block expression in place. Nothing can leave it but a
@@ -856,9 +822,7 @@ fn elab_stmt(
 
         TirStmtKind::LetDestructure { pattern, value } => {
             let value = elab_value_expr(value, owned, cx);
-            for live in pattern_resources(&pattern, cx) {
-                owned.push(Some(live));
-            }
+            owned.extend(cx.resources.pattern_bindings(&pattern).into_iter().map(Some));
             out.push(TirStmt {
                 kind: TirStmtKind::LetDestructure { pattern, value },
                 span,
@@ -894,28 +858,11 @@ fn elab_stmt(
         TirStmtKind::Return { value } => {
             let value = value.map(|v| elab_value_expr(v, owned, cx));
             // Everything still owned must be dropped before leaving the
-            // function, innermost first.
+            // function.
             let drops = drop_slots(owned, 0, cx);
-            if drops.is_empty() {
-                out.push(TirStmt {
-                    kind: TirStmtKind::Return { value },
-                    span,
-                });
-                return Flow::Diverged;
-            }
-            if let Some(value) = value {
-                // Spill the return value so the drops run after it is
-                // computed (the value may borrow a dropped resource).
-                let ty = value.type_id;
-                let (tmp, tmp_name) = cx.alloc_local(ty, "drop_spill");
-                out.push(let_stmt(&tmp_name, tmp, ty, value));
-                out.extend(drops);
-                out.push(return_stmt(Some(local_ref(tmp, &tmp_name, ty))));
-            } else {
-                out.extend(drops);
-                out.push(return_stmt(None));
-            }
-            Flow::Diverged
+            leave_after_drops(value, drops, span, cx, out, |value| {
+                TirStmtKind::Return { value }
+            })
         }
 
         TirStmtKind::If {
@@ -967,45 +914,18 @@ fn elab_stmt(
 
         TirStmtKind::Break { label, value } => {
             let value = value.map(|v| elab_value_expr(v, owned, cx));
-            // `break` skips the exit drops of every scope it leaves; emit
-            // them here, innermost first.
+            // `break` skips the exit drops of every scope it leaves.
             let target = cx.target_entry(label.as_deref());
             let drops = drop_slots(owned, target, cx);
-            match value {
-                // Spill the break value so the drops run after it is computed
-                // (it may borrow a resource being dropped).
-                Some(value) if !drops.is_empty() => {
-                    let ty = value.type_id;
-                    let (tmp, tmp_name) = cx.alloc_local(ty, "drop_spill");
-                    out.push(let_stmt(&tmp_name, tmp, ty, value));
-                    out.extend(drops);
-                    out.push(TirStmt {
-                        kind: TirStmtKind::Break {
-                            label,
-                            value: Some(local_ref(tmp, &tmp_name, ty)),
-                        },
-                        span,
-                    });
-                }
-                _ => {
-                    out.extend(drops);
-                    out.push(TirStmt {
-                        kind: TirStmtKind::Break { label, value },
-                        span,
-                    });
-                }
-            }
-            Flow::Diverged
+            leave_after_drops(value, drops, span, cx, out, |value| {
+                TirStmtKind::Break { label, value }
+            })
         }
 
         TirStmtKind::Continue => {
             let target = cx.target_entry(None);
-            out.extend(drop_slots(owned, target, cx));
-            out.push(TirStmt {
-                kind: TirStmtKind::Continue,
-                span,
-            });
-            Flow::Diverged
+            let drops = drop_slots(owned, target, cx);
+            leave_after_drops(None, drops, span, cx, out, |_| TirStmtKind::Continue)
         }
 
         TirStmtKind::VariadicForOf { .. } => {
@@ -1021,6 +941,34 @@ fn elab_stmt(
     }
 }
 
+/// Emit `drops`, then the statement `leave` builds around `value`. With drops
+/// to run, `value` is spilled ahead of them: it may borrow a resource they
+/// release.
+fn leave_after_drops(
+    value: Option<TirExpr>,
+    drops: Vec<TirStmt>,
+    span: Span,
+    cx: &mut Cx,
+    out: &mut Vec<TirStmt>,
+    leave: impl FnOnce(Option<TirExpr>) -> TirStmtKind,
+) -> Flow {
+    let value = match value {
+        Some(value) if !drops.is_empty() => {
+            let ty = value.type_id;
+            let (tmp, tmp_name) = cx.alloc_local(ty, "drop_spill");
+            out.push(let_stmt(&tmp_name, tmp, ty, value));
+            Some(local_ref(tmp, &tmp_name, ty))
+        }
+        value => value,
+    };
+    out.extend(drops);
+    out.push(TirStmt {
+        kind: leave(value),
+        span,
+    });
+    Flow::Diverged
+}
+
 /// Elaborate a branch block from the current ownership state. Returns the
 /// rewritten block, its post-state (truncated back to the caller's slot
 /// count) and its control flow.
@@ -1031,8 +979,9 @@ fn elab_branch(mut block: TirBlock, base: &Owned, cx: &mut Cx) -> (TirBlock, Own
 }
 
 /// Elaborate both branches of an `if`, statement or expression, and
-/// reconcile ownership after it. Returns the branches and whether the whole
-/// `if` diverges.
+/// reconcile ownership after it. A missing `else` is elaborated as an empty
+/// one, which gains statements only when it must drop what the `then` branch
+/// consumed. Returns the branches and whether the whole `if` diverges.
 fn elab_if_branches(
     then_block: TirBlock,
     else_block: Option<TirBlock>,
@@ -1041,108 +990,54 @@ fn elab_if_branches(
     cx: &mut Cx,
 ) -> (TirBlock, Option<TirBlock>, Flow) {
     let has_else = else_block.is_some();
-    let (then_block, then_owned, then_flow) = elab_branch(then_block, owned, cx);
-    let (else_stmts, else_owned, else_flow) = match else_block {
-        Some(eb) => {
-            let (b, o, f) = elab_branch(eb, owned, cx);
-            (b.stmts, Some(o), f)
-        }
-        None => (Vec::new(), None, Flow::Normal),
-    };
-    let then_span = then_block.span;
-    let mut then_stmts = then_block.stmts;
-    let mut else_stmts = else_stmts;
-    reconcile(
-        owned,
-        &then_owned,
-        then_flow,
-        &mut then_stmts,
-        else_owned.as_ref(),
-        else_flow,
-        &mut else_stmts,
-        cx,
-    );
-    let flow = if then_flow == Flow::Diverged && has_else && else_flow == Flow::Diverged {
+    let else_block = else_block.unwrap_or_else(|| TirBlock::empty(span));
+    let (mut then_block, then_owned, then_flow) = elab_branch(then_block, owned, cx);
+    let (mut else_block, else_owned, else_flow) = elab_branch(else_block, owned, cx);
+    let drops = merge_paths(owned, &[(then_owned, then_flow), (else_owned, else_flow)]);
+    for (block, lives) in [&mut then_block, &mut else_block].into_iter().zip(drops) {
+        let stmts = std::mem::take(&mut block.stmts);
+        let drops = drop_all(&lives, cx);
+        block.stmts = append_block_drops(stmts, drops, cx);
+    }
+    let flow = if then_flow == Flow::Diverged && else_flow == Flow::Diverged {
         Flow::Diverged
     } else {
         Flow::Normal
     };
-    let else_block = (has_else || !else_stmts.is_empty()).then(|| TirBlock {
-        stmts: else_stmts,
-        span,
-    });
-    (
-        TirBlock {
-            stmts: then_stmts,
-            span: then_span,
-        },
-        else_block,
-        flow,
-    )
+    let else_block = (has_else || !else_block.stmts.is_empty()).then_some(else_block);
+    (then_block, else_block, flow)
 }
 
-/// Reconcile ownership across the two arms of an `if` so the post-state is
-/// consistent: a resource still owned on one fall-through path but consumed on
-/// the other is dropped at the end of the path that still owns it.
-#[allow(clippy::too_many_arguments)]
-fn reconcile(
-    owned: &mut Owned,
-    then_owned: &Owned,
-    then_flow: Flow,
-    then_stmts: &mut Vec<TirStmt>,
-    else_owned: Option<&Owned>,
-    else_flow: Flow,
-    else_stmts: &mut Vec<TirStmt>,
-    cx: &mut Cx,
-) {
-    let then_div = matches!(then_flow, Flow::Diverged);
-    let else_div = matches!(else_flow, Flow::Diverged);
-    let has_else = else_owned.is_some();
-
-    for slot in 0..owned.len() {
-        let Some(live) = owned[slot].clone() else {
+/// Merge the post-states of the paths out of a branch, each `(owned, flow)`
+/// elaborated from a clone of `owned`. A resource stays owned only where every
+/// path that falls through still owns it. Where one consumed it, the others
+/// still owning it drop it at their end: returns, per path, what it must drop.
+fn merge_paths(owned: &mut Owned, paths: &[(Owned, Flow)]) -> Vec<Vec<Live>> {
+    let mut drops = vec![Vec::new(); paths.len()];
+    for (slot, state) in owned.iter_mut().enumerate() {
+        let Some(live) = state.clone() else {
             continue;
         };
-        // A diverged branch has already dropped everything it owned, so it
-        // contributes nothing to the merge.
-        let then_has = !then_div && then_owned[slot].is_some();
-        let else_has = if !has_else {
-            // No else block: the else path keeps whatever was owned.
-            true
-        } else if else_div {
-            false
-        } else {
-            else_owned.unwrap()[slot].is_some()
-        };
-
-        match (then_div, else_div && has_else) {
-            (true, true) => {
-                // Whole `if` diverges; the post-state is irrelevant.
-            }
-            (true, _) => {
-                owned[slot] = if else_has { Some(live) } else { None };
-            }
-            (_, true) => {
-                owned[slot] = if then_has { Some(live) } else { None };
-            }
-            (false, false) => match (then_has, else_has) {
-                (true, true) => {}
-                (false, false) => owned[slot] = None,
-                (true, false) => {
-                    let drops = drop_one(&live, cx);
-                    let s = std::mem::take(then_stmts);
-                    *then_stmts = append_block_drops(s, drops, cx);
-                    owned[slot] = None;
-                }
-                (false, true) => {
-                    let drops = drop_one(&live, cx);
-                    let s = std::mem::take(else_stmts);
-                    *else_stmts = append_block_drops(s, drops, cx);
-                    owned[slot] = None;
-                }
-            },
+        let falling_through: Vec<usize> = paths
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, flow))| *flow == Flow::Normal)
+            .map(|(path, _)| path)
+            .collect();
+        let owners: Vec<usize> = falling_through
+            .iter()
+            .copied()
+            .filter(|&path| paths[path].0[slot].is_some())
+            .collect();
+        if falling_through.is_empty() || owners.len() == falling_through.len() {
+            continue;
         }
+        for path in owners {
+            drops[path].push(live.clone());
+        }
+        *state = None;
     }
+    drops
 }
 
 /// Clear every slot of `owned` that `branch`, a clone of it elaborated along
@@ -1218,9 +1113,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
 
         TirExprKind::Call { func, args, .. } => {
             // The receiver is transferred exactly when the method takes
-            // `self` by value. Extraction (`Result::unwrap`) is such a
-            // by-value method, so it is covered here with no aggregate-shape
-            // guessing.
+            // `self` by value.
             let receiver_consumed = cx.callees.owned_self.contains(&callee_key(func));
             let (receiver, rest) = args.split_mut();
             if let Some(receiver) = receiver {
@@ -1410,12 +1303,7 @@ fn elab_expr_scope(expr: &mut TirExpr, owned: &mut Owned, entry: usize, cx: &mut
     elab_expr(expr, true, owned, cx);
     let drops = drop_slots(owned, entry, cx);
     owned.truncate(entry);
-    if drops.is_empty() {
-        return;
-    }
-    wrap_in_block(expr, |value| {
-        append_block_drops(vec![expr_stmt(value)], drops, cx)
-    });
+    append_expr_drops(expr, drops, cx);
 }
 
 /// Replace `expr` with a block of the same type, built from its value.
@@ -1441,111 +1329,39 @@ fn elab_conditional_expr(expr: &mut TirExpr, owned: &mut Owned, cx: &mut Cx) {
 /// Elaborate a `match`: its scrutinee, then each arm from the ownership state
 /// after it, then merge the arms' post-states.
 fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], owned: &mut Owned, cx: &mut Cx) {
+    let bindings: Vec<Vec<Live>> = arms
+        .iter()
+        .map(|arm| cx.resources.pattern_bindings(&arm.pattern))
+        .collect();
     // The scrutinee is consumed only if some arm destructures a resource out
     // of it; a pure `matches`-style test leaves the scrutinee — and its drop
     // obligation — intact.
-    let extracts = arms
-        .iter()
-        .any(|arm| pattern_extracts_resource(&arm.pattern, cx));
+    let extracts = bindings.iter().any(|arm_bindings| !arm_bindings.is_empty());
     elab_expr(scrutinee, extracts, owned, cx);
-    let base = owned.clone();
+    let entry = owned.len();
     let mut arm_states: Vec<(Owned, Flow)> = Vec::with_capacity(arms.len());
-    for arm in arms.iter_mut() {
-        let mut arm_owned = base.clone();
-        arm_owned.extend(pattern_resources(&arm.pattern, cx).into_iter().map(Some));
+    for (arm, arm_bindings) in arms.iter_mut().zip(bindings) {
+        let mut arm_owned = owned.clone();
+        arm_owned.extend(arm_bindings.into_iter().map(Some));
         if let Some(guard) = arm.guard.as_mut() {
-            let entry = arm_owned.len();
-            elab_expr_scope(guard, &mut arm_owned, entry, cx);
+            let guard_entry = arm_owned.len();
+            elab_expr_scope(guard, &mut arm_owned, guard_entry, cx);
         }
-        let body = std::mem::replace(
-            &mut arm.body,
-            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-        );
-        let (body, flow) = elab_arm_body(body, &mut arm_owned, cx, base.len());
-        arm.body = body;
-        arm_owned.truncate(base.len());
+        let flow = elab_arm_body(&mut arm.body, &mut arm_owned, cx, entry);
         arm_states.push((arm_owned, flow));
     }
-    // Merge: a resource is still owned only if every fall-through arm still
-    // owns it; drop it at the end of the fall-through arms that do when
-    // another consumed it.
-    for (slot, live) in base.iter().enumerate() {
-        let Some(live) = live else {
-            continue;
-        };
-        let mut falling_through = arm_states
-            .iter()
-            .filter(|(_, flow)| *flow == Flow::Normal)
-            .peekable();
-        if falling_through.peek().is_none()
-            || falling_through.all(|(arm_owned, _)| arm_owned[slot].is_some())
-        {
-            continue;
-        }
-        for (arm, (arm_owned, flow)) in arms.iter_mut().zip(&arm_states) {
-            if *flow == Flow::Normal && arm_owned[slot].is_some() {
-                append_arm_drop(arm, live, cx);
-            }
-        }
-        owned[slot] = None;
+    for (arm, lives) in arms.iter_mut().zip(merge_paths(owned, &arm_states)) {
+        let drops = drop_all(&lives, cx);
+        append_expr_drops(&mut arm.body, drops, cx);
     }
 }
 
-/// Elaborate a `match` arm body as a scope starting at slot `entry`, which
-/// holds the arm's pattern bindings.
-fn elab_arm_body(body: TirExpr, owned: &mut Owned, cx: &mut Cx, entry: usize) -> (TirExpr, Flow) {
-    let type_id = body.type_id;
-    let span = body.span;
-    match body.kind {
-        TirExprKind::Block(block) => {
-            let stmts = elab_block_entry(block.stmts, owned, cx, entry);
-            let flow = block_flow(&stmts);
-            (
-                TirExpr {
-                    kind: TirExprKind::Block(TirBlock {
-                        stmts,
-                        span: block.span,
-                    }),
-                    type_id,
-                    span,
-                },
-                flow,
-            )
-        }
-        other => {
-            let mut expr = TirExpr {
-                kind: other,
-                type_id,
-                span,
-            };
-            elab_expr_scope(&mut expr, owned, entry, cx);
-            (expr, Flow::Normal)
-        }
+/// Elaborate a `match` arm body in place as a scope starting at slot `entry`,
+/// which holds the arm's pattern bindings.
+fn elab_arm_body(body: &mut TirExpr, owned: &mut Owned, cx: &mut Cx, entry: usize) -> Flow {
+    if let TirExprKind::Block(block) = &mut body.kind {
+        return elab_block_at(block, owned, cx, entry);
     }
-}
-
-/// Append a `resource.drop` to a `match` arm body, preserving the arm's value
-/// (via [`append_block_drops`]) so the drop runs after the value is computed.
-fn append_arm_drop(arm: &mut TirMatchArm, live: &Live, cx: &mut Cx) {
-    let body = std::mem::replace(
-        &mut arm.body,
-        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-    );
-    let type_id = body.type_id;
-    let span = body.span;
-    let stmts = match body.kind {
-        TirExprKind::Block(block) => block.stmts,
-        other => vec![expr_stmt(TirExpr {
-            kind: other,
-            type_id,
-            span,
-        })],
-    };
-    let drops = drop_one(live, cx);
-    let stmts = append_block_drops(stmts, drops, cx);
-    arm.body = TirExpr {
-        kind: TirExprKind::Block(TirBlock { stmts, span }),
-        type_id,
-        span,
-    };
+    elab_expr_scope(body, owned, entry, cx);
+    Flow::Normal
 }
