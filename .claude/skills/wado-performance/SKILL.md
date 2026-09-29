@@ -209,28 +209,37 @@ paid on a benchmark `fts` never touched.
   and the guard as separate arms: folded into one they read as a single cost,
   and the assert takes the blame for what the guard spent.
 
-## 4. Inlining is usually not the lever
+## 4. Inlining: fix the inliner, never the code
 
-wasmtime/Cranelift call small Wasm functions cheaply, so forcing inlining rarely
-moves wall-time and raising the threshold bloats hot loops (measured slower). The
-exception is a tight iteration-bound loop with a trivial body.
+Improving the inliner pays, and it keeps being improved. A better price reaches
+every program at once. When it declines a callee that should be spliced, that is
+a cost-model bug: find the price with `WADO_TRACE=inline` and fix it in
+`optimize/inline.rs`.
 
-A rare heavy sub-case behind a `cold_path()` marker usually needs no
-hand-splitting: `nir/cold_outline` moves what the marker opens into a function of
-its own, so the leaf inlines at its hot-path size. Its region runs to the end of
-the enclosing block, so a marker mid-loop-body is one it cannot take (see that
-pass's module doc) and that shape still needs the split written out. Split by
-hand also when the slow path is not rare: a `width > 0` branch that runs every
-time a width is set is hot when taken, which no marker should claim otherwise.
+Never bend source to the inliner's current prices. Collapsing `let`s into one
+expression, choosing an operation width, or splitting a function only to get
+under the threshold are all banned. It is §2's rule applied to the inliner: the
+contortion reaches one call site and hides the gap from every other. zlib's
+`read_u32_le` is the case that set this rule. Written with a `let` per byte, it
+was declined, because each `let` is priced as a `local.set` and a `local.get`
+that Cranelift makes free once the body is spliced. That fix belongs in the
+price.
 
-**Write the stdlib to be fast without inline hints.** A `#[inline]` /
-`#[inline(never)]` in `wado-compiler/lib/` is a claim the cost model got it
-wrong, and it silently outlives whatever measurement justified it — the split
-that `#[inline(never)]` was added for is usually one the inliner already
-declines on size. Prefer changing the shape (a separate function, a smaller hot
-path) and leave the decision to the threshold; reach for a hint only after
-measuring that the shape alone does not get there, and say in a comment what it
-buys.
+Raising the threshold wholesale is not the lever: it bloats hot loops and
+measured slower. The lever is a price that matches what the spliced code costs.
+
+The same holds for hints. A `#[inline]` / `#[inline(never)]` in
+`wado-compiler/lib/` claims the cost model got it wrong, and it silently
+outlives the measurement that justified it. The stdlib carries none; fix the
+cost model instead.
+
+A split that is right on its own stays. A slow path that is not rare is one: a
+`width > 0` branch runs every time a width is set, so it is hot when taken and
+no `cold_path()` marker should claim otherwise. A rare heavy sub-case needs no
+hand-split at all: `nir/cold_outline` moves what the marker opens into a
+function of its own, so the leaf inlines at its hot-path size. A marker
+`cold_outline` cannot take (mid-loop-body, see that pass's module doc) is a gap
+in that pass, per §2.
 
 ## 5. Measurement
 
