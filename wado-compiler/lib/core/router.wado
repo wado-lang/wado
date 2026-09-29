@@ -28,11 +28,9 @@ use {
     Deserialize,
     DeserializeError,
     Deserializer,
-    DeserializeSeq,
-    DeserializeMap,
     DeserializeStruct,
-    DeserializeVariant,
     FieldSchema,
+    NoCompound,
     Visitor,
 } from "core:serde";
 pub use { Method } from "wasi:http";
@@ -802,10 +800,10 @@ pub struct PathParamsStructAccess {
 }
 
 impl Deserializer for PathParamsDeserializer {
-    type SeqAccess = PathParamsSeqStub;
-    type MapAccess = PathParamsMapStub;
+    type SeqAccess = NoCompound;
+    type MapAccess = NoCompound;
     type StructAccess = PathParamsStructAccess;
-    type VariantAccess = PathParamsVariantStub;
+    type VariantAccess = NoCompound;
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
         return self.parse_scalar::<i32>("i32");
@@ -865,11 +863,11 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Ok(false);
     }
 
-    fn begin_seq(&mut self) -> Result<PathParamsSeqStub, DeserializeError> {
+    fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a seq", -1));
     }
 
-    fn begin_map(&mut self) -> Result<PathParamsMapStub, DeserializeError> {
+    fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a map", -1));
     }
 
@@ -891,11 +889,7 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Ok(PathParamsStructAccess { de: *self });
     }
 
-    fn begin_variant<S: AsStrSlice>(
-        &mut self,
-        _type_name: S,
-        _num_cases: i32,
-    ) -> Result<PathParamsVariantStub, DeserializeError> {
+    fn begin_variant<S: AsStrSlice>(&mut self, _type_name: S, _num_cases: i32) -> Result<NoCompound, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a variant", -1));
     }
 
@@ -974,63 +968,6 @@ impl DeserializeStruct for PathParamsStructAccess {
 
     fn skip(&mut self) -> Result<(), DeserializeError> {
         return Result::Ok(());
-    }
-
-    fn end(&mut self) -> Result<(), DeserializeError> {
-        return Result::Ok(());
-    }
-}
-
-// Unused sub-deserializers — required to satisfy the `Deserializer` trait's
-// associated-type bounds. Path params can only be deserialized into a struct
-// (or scalar at the field level), so seq/map/variant accesses are stubs that
-// fail if invoked.
-
-pub struct PathParamsSeqStub {
-}
-impl DeserializeSeq for PathParamsSeqStub {
-    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("path params: seq not supported", -1));
-    }
-
-    fn end(&mut self) -> Result<(), DeserializeError> {
-        return Result::Ok(());
-    }
-}
-
-pub struct PathParamsMapStub {
-}
-impl DeserializeMap for PathParamsMapStub {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("path params: map not supported", -1));
-    }
-
-    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("path params: map not supported", -1));
-    }
-
-    fn end(&mut self) -> Result<(), DeserializeError> {
-        return Result::Ok(());
-    }
-}
-
-pub struct PathParamsVariantStub {
-}
-impl DeserializeVariant for PathParamsVariantStub {
-    fn variant_name(&mut self) -> Result<String, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
-    }
-
-    fn disc(&mut self) -> Result<i32, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
-    }
-
-    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        return Result::Err(DeserializeError::unexpected_type("path params: variant not supported", -1));
-    }
-
-    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
-        return Result::Ok(false);
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {

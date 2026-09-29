@@ -38,7 +38,7 @@ impl Deserialize for Header {
         let on_duplicate = d.on_duplicate_key();
         let mut map = d.begin_map()?;
         let mut entries = TreeMap::<String, HeaderEntry>::new();
-        while let Some(key) = map.next_key_string()? {
+        while let Some(key) = map.next_key::<String>()? {
             if key == METADATA_KEY {
                 let _ = map.next_value::<IgnoredAny>()?;
                 continue;

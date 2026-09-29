@@ -425,7 +425,7 @@ impl DeserializeSeq for ArgvSeqAccess {
 }
 
 impl DeserializeMap for ArgvMapAccess {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
         return Result::Err(unsupported("map"));
     }
 

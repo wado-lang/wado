@@ -99,6 +99,12 @@ pub struct SerializeError {
     pub message: String,
 }
 
+impl SerializeError {
+    pub fn unsupported_value<S: AsStrSlice>(msg: S) -> SerializeError {
+        return SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: msg.to_string() };
+    }
+}
+
 impl Display for SerializeError {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(&self.message);
@@ -382,7 +388,9 @@ pub trait DeserializeSeq with () {
 }
 
 pub trait DeserializeMap with () {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>;
+    /// The next entry's key, or `null` past the last one. A text format spells
+    /// every key as a string, so there a key is a scalar parsed back as `K`.
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>;
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>;
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
@@ -944,11 +952,246 @@ impl Visitor for IgnoredAnyVisitor {
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<IgnoredAny, DeserializeError> {
-        while let Some(_) = map.next_key_string()? {
+        while let Some(_) = map.next_key::<IgnoredAny>()? {
             let _ = map.next_value::<IgnoredAny>()?;
         }
         map.end()?;
         return Result::Ok(IgnoredAny {});
+    }
+}
+
+/// The compound access of a serializer or deserializer that has none, such as
+/// a map key's. The private field keeps it unbuilt outside this module, so the
+/// `begin_*` that would hand one out always fails first.
+pub struct NoCompound {
+    unbuilt: (),
+}
+
+#[coverage(off)]
+impl SerializeSeq for NoCompound {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl SerializeMap for NoCompound {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl SerializeStruct for NoCompound {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl SerializeVariant for NoCompound {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl DeserializeSeq for NoCompound {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl DeserializeMap for NoCompound {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
+        return unreachable();
+    }
+
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl DeserializeStruct for NoCompound {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        return unreachable();
+    }
+
+    fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return unreachable();
+    }
+
+    fn skip(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl DeserializeVariant for NoCompound {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        return unreachable();
+    }
+
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        return unreachable();
+    }
+
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return unreachable();
+    }
+
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+}
+
+/// The error a map key reports when its type is not a scalar.
+pub fn compound_key_error(offset: i64) -> DeserializeError {
+    builtin::cold_path();
+    return DeserializeError::unexpected_type("a map key must be a scalar", offset);
+}
+
+/// Reads a map key a text format spelled as a string, parsed as the scalar the
+/// key type asks for.
+pub struct TextKeyDeserializer {
+    pub key: String,
+    /// Where the key starts in the input, or -1 where it has no position.
+    pub offset: i64,
+}
+
+impl TextKeyDeserializer {
+    fn parse<T: FromStr, S: AsStrSlice>(&self, type_name: S) -> Result<T, DeserializeError> {
+        return match T::from_str(&self.key) {
+            Ok(v) => Result::Ok(v),
+            Err(e) => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::invalid_value(
+                    `map key "${self.key}" is not a valid ${type_name}: ${e}`,
+                    self.offset,
+                ));
+            },
+        };
+    }
+}
+
+impl Deserializer for TextKeyDeserializer {
+    type SeqAccess = NoCompound;
+    type MapAccess = NoCompound;
+    type StructAccess = NoCompound;
+    type VariantAccess = NoCompound;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return self.parse::<i32>("i32");
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return self.parse::<i64>("i64");
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return self.parse::<u32>("u32");
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return self.parse::<u64>("u64");
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return self.parse::<i128>("i128");
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return self.parse::<u128>("u128");
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return self.parse::<f32>("f32");
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return self.parse::<f64>("f64");
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.parse::<f16>("f16");
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.parse::<bf16>("bf16");
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        return self.parse::<bool>("bool");
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        return self.parse::<char>("char");
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return Result::Ok(self.key);
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(false);
+    }
+
+    fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(compound_key_error(self.offset));
+    }
+
+    fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(compound_key_error(self.offset));
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(compound_key_error(self.offset));
+    }
+
+    fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(compound_key_error(self.offset));
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return visitor.visit_string(&self.key);
     }
 }
 

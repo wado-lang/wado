@@ -12,7 +12,7 @@ use {
     DeserializeErrorKind,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 
 use {
     to_string,
@@ -942,6 +942,80 @@ test "distinct map keys still parse" {
 test "a repeated key in a nested map is rejected" {
     let r: Result<TreeMap<String, Value>, DeserializeError> = from_string(`{"a":{"b":1,"b":2}}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+test "a scalar map key is written as the string of its spelling" {
+    let mut ints = TreeMap::<i32, String>::new();
+    ints[2] = "two";
+    ints[-10] = "minus ten";
+    assert to_string(&ints) == Result::Ok(`{"2":"two","-10":"minus ten"}`);
+    assert to_string_pretty(&ints) == Result::Ok("{\n  \"2\": \"two\",\n  \"-10\": \"minus ten\"\n}");
+    let mut wide = TreeMap::<u64, i32>::new();
+    wide[u64::MAX] = 1;
+    assert to_string(&wide) == Result::Ok(`{"18446744073709551615":1}`);
+    let mut flags = TreeMap::<bool, i32>::new();
+    flags[true] = 1;
+    flags[false] = 0;
+    assert to_string(&flags) == Result::Ok(`{"true":1,"false":0}`);
+    let mut chars = TreeMap::<char, i32>::new();
+    chars['"'] = 1;
+    assert to_string(&chars) == Result::Ok(`{"\\"":1}`);
+    let mut floats = TreeMap::<f64, i32>::new();
+    floats[1.5] = 1;
+    assert to_string(&floats) == Result::Ok(`{"1.5":1}`);
+}
+
+test "a scalar map key reads back from its string" {
+    let ints: TreeMap<i32, String> = from_string(`{"2":"two","-10":"minus ten"}`).unwrap();
+    assert ints.len() == 2 && ints[2] == "two" && ints[-10] == "minus ten";
+    let wide: TreeMap<u128, i32> = from_string(`{"340282366920938463463374607431768211455":1}`).unwrap();
+    assert wide[u128::MAX] == 1;
+    let flags: TreeMap<bool, i32> = from_string(`{"true":1}`).unwrap();
+    assert flags[true] == 1;
+    let chars: TreeMap<char, i32> = from_string(`{"\\u00e9":1}`).unwrap();
+    assert chars['é'] == 1;
+}
+
+test "a map key that does not parse as its type names the key" {
+    let e = de_err::<TreeMap<i32, i32>>(`{"x":1}`);
+    assert e.kind == DeserializeErrorKind::InvalidValue && e.offset == 1;
+    assert e.message.contains("\"x\"") && e.message.contains("i32");
+    assert de_err::<TreeMap<char, i32>>(`{"ab":1}`).kind == DeserializeErrorKind::InvalidValue;
+    assert de_err::<TreeMap<i32, i32>>(`{1:1}`).kind == DeserializeErrorKind::UnexpectedType;
+}
+
+test "a repeated scalar key is rejected like a string one" {
+    let e = de_err::<TreeMap<i32, i32>>(`{"1":1,"01":2,"1":3}`);
+    assert e.kind == DeserializeErrorKind::DuplicateField;
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+test "a compound map key is refused both ways" {
+    let mut pairs = TreeMap::<Pair, i32>::new();
+    pairs[Pair { a: 1, b: 2 }] = 3;
+    assert to_string(&pairs) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    assert to_bytes_canonical(&pairs) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    assert to_string_pretty(&pairs) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    assert de_err::<TreeMap<List<i32>, i32>>(`{"1":1}`).kind == DeserializeErrorKind::UnexpectedType;
+}
+
+test "a canonical map sorts scalar keys by their spelling" {
+    let mut ints = TreeMap::<i32, i32>::new();
+    ints[10] = 1;
+    ints[9] = 2;
+    assert_bytes_eq_string(&to_bytes_canonical(&ints).unwrap(), &"{\"10\":1,\"9\":2}");
+}
+
+test "a set is a sequence" {
+    let set = [3, 1, 2] as TreeSet<i32>;
+    assert to_string(&set) == Result::Ok("[3,1,2]");
+    let back: TreeSet<i32> = from_string("[3,1,2]").unwrap();
+    assert back.len() == 3 && back.contains(1);
+    assert de_err::<TreeSet<i32>>("[1,2,1]").kind == DeserializeErrorKind::DuplicateField;
 }
 
 test "a StrSlice parses without copying out" {

@@ -811,6 +811,16 @@ fn nested_skip(levels: i32) -> ByteList {
     return b;
 }
 
+test "an integer map key is a native integer" {
+    let mut m = TreeMap::<i32, String>::new();
+    m[1] = "a";
+    m[-2] = "b";
+    assert enc(&m) == "a2016161216162";
+    let back = dec::<TreeMap<i32, String>>("a2016161216162");
+    assert back.len() == 2 && back[1] == "a" && back[-2] == "b";
+    assert fails_with::<TreeMap<i32, String>>("a1616161616161", DeserializeErrorKind::UnexpectedType);
+}
+
 test "a lone break is malformed wherever an item is read" {
     assert fails_with::<Value>("ff", DeserializeErrorKind::MalformedInput);
     assert fails_with::<Value>("81 ff", DeserializeErrorKind::MalformedInput);
@@ -821,7 +831,7 @@ test "a lone break is malformed wherever an item is read" {
 test "an unsigned target names the item's type, and overflow only for a negative" {
     assert fails_with::<u64>("61 61", DeserializeErrorKind::UnexpectedType);
     assert fails_with::<u32>("f5", DeserializeErrorKind::UnexpectedType);
-    assert fails_with::<u128>("c4 00",DeserializeErrorKind::UnexpectedType);
+    assert fails_with::<u128>("c4 00", DeserializeErrorKind::UnexpectedType);
     assert fails_with::<u64>("20", DeserializeErrorKind::Overflow);
     assert fails_with::<u128>("c3 41 01", DeserializeErrorKind::Overflow);
 }

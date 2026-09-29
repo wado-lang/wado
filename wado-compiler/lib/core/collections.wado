@@ -736,7 +736,7 @@ impl<T: Ord> From<Array<T>> for TreeSet<T> {
     }
 }
 
-impl<V: Serialize> Serialize for TreeMap<String, V> {
+impl<K: Ord + Serialize, V: Serialize> Serialize for TreeMap<K, V> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let mut m = s.begin_map(self.len())?;
         for let entry of &self.entries {
@@ -749,27 +749,47 @@ impl<V: Serialize> Serialize for TreeMap<String, V> {
     }
 }
 
-impl<V: Deserialize> Deserialize for TreeMap<String, V> {
-    fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError> {
+impl<K: Ord + Deserialize + Inspect, V: Deserialize> Deserialize for TreeMap<K, V> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<K, V>, DeserializeError> {
         let on_duplicate = d.on_duplicate_key();
         let mut map = d.begin_map()?;
-        let mut result: TreeMap<String, V> = {};
-        loop {
-            let key_opt = map.next_key_string()?;
-            if let Some(key) = key_opt {
-                let val = map.next_value::<V>()?;
-                // The losing insert keeps the first value, so a lenient
-                // policy re-assigns to take the last.
-                if !result.try_insert(key, val) {
-                    report_duplicate_key(on_duplicate, &key)?;
-                    result[key] = val;
-                }
-            } else {
-                map.end()?;
-                return Result::Ok(result);
+        let mut result = TreeMap::<K, V>::new();
+        while let Some(key) = map.next_key::<K>()? {
+            let val = map.next_value::<V>()?;
+            // The losing insert keeps the first value, so a lenient policy
+            // re-assigns to take the last.
+            if !result.try_insert(key, val) {
+                report_duplicate_key(on_duplicate, `${key:?}`)?;
+                result[key] = val;
             }
         }
-        unreachable();
+        map.end()?;
+        return Result::Ok(result);
+    }
+}
+
+impl<T: Ord + Serialize> Serialize for TreeSet<T> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut seq = s.begin_seq(self.len())?;
+        for let element of self.iter_ref() {
+            seq.element(element)?;
+        }
+        return seq.end();
+    }
+}
+
+impl<T: Ord + Deserialize + Inspect> Deserialize for TreeSet<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeSet<T>, DeserializeError> {
+        let on_duplicate = d.on_duplicate_key();
+        let mut seq = d.begin_seq()?;
+        let mut result = TreeSet::<T>::new();
+        while let Some(element) = seq.next_element::<T>()? {
+            if !result.insert(element) {
+                report_duplicate_key(on_duplicate, `${element:?}`)?;
+            }
+        }
+        seq.end()?;
+        return Result::Ok(result);
     }
 }
 

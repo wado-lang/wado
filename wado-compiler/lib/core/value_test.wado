@@ -959,6 +959,29 @@ test "a variant read from a Value tells a unit case from a payload case" {
 
 // --- duplicate keys ---
 
+test "a scalar map key round-trips through its object spelling" {
+    let mut wide = TreeMap::<i128, String>::new();
+    wide[1] = "one";
+    wide[-2] = "minus two";
+    let v = to_value(&wide).unwrap();
+    assert `${v:?}` == "{\"1\": \"one\", \"-2\": \"minus two\"}";
+    let back = from_value::<TreeMap<i128, String>>(&v).unwrap();
+    assert back.len() == 2 && back.get(-2 as i128) == Option::Some("minus two");
+    let mut floats = TreeMap::<f64, i32>::new();
+    floats[0.5] = 1;
+    assert `${to_value(&floats).unwrap():?}` == "{\"0.5\": 1}";
+}
+
+test "a compound map key is refused both ways" {
+    let mut lists = TreeMap::<List<i32>, i32>::new();
+    lists[[1]] = 1;
+    assert to_value(&lists) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    let v = to_value(&({ a: 1 } as TreeMap<String, i32>)).unwrap();
+    assert from_value::<TreeMap<List<i32>, i32>>(&v) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    let bad = to_value(&({ x: 1 } as TreeMap<String, i32>)).unwrap();
+    assert from_value::<TreeMap<i32, i32>>(&bad) matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+}
+
 test "a Value read from JSON rejects a repeated key" {
     let r: Result<Value, DeserializeError> = from_string(`{"a":1,"a":2}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };

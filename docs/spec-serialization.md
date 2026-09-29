@@ -106,7 +106,15 @@ The standard library's own impls:
 | `Option<T>`                          | null for `None`; the held value for `Some` |
 | `Result<T, E>`                       | a variant with cases `Ok` and `Err`        |
 | `List<T>`                            | a sequence                                 |
-| `TreeMap<String, V>`                 | a map                                      |
+| `TreeMap<K, V>`                      | a map                                      |
+| `TreeSet<T>`                         | a sequence                                 |
+
+A text format spells every map key as a string, so there a key must be a scalar:
+an integer, a float, `bool`, `char` or a string. A non-string key is written as
+the string of its spelling (`{"1": …}` for the integer `1`) and parsed back from
+it. Any other key type is an `UnsupportedValue` error on writing and an
+`UnexpectedType` error on reading. A binary format with keys of its own, such as
+`core:cbor`, writes the key as the value it is.
 
 A format with no byte string of its own writes one as a sequence of `u8`. `()`
 and `None` both write null, so `Option<()>` carries no information: `Some(())`

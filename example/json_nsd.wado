@@ -26,6 +26,7 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
+    TextKeyDeserializer,
     deeper,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
@@ -352,7 +353,7 @@ fn entry_head(de: &mut JsonDeserializer, close: i32, first: bool) -> Result<bool
 
 impl DeserializeSeq for NsdSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
-        if !entry_head(self.de,b']', self.first)? {
+        if !entry_head(self.de, b']', self.first)? {
             return Result::Ok(null);
         }
         self.first = false;
@@ -367,12 +368,13 @@ impl DeserializeSeq for NsdSeqAccess {
 }
 
 impl DeserializeMap for NsdMapAccess {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        if !entry_head(self.de,b'}', self.first)? {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
+        if !entry_head(self.de, b'}', self.first)? {
             return Result::Ok(null);
         }
         self.first = false;
-        let key = self.de.read_json_string()?;
+        let offset = self.de.pos as i64;
+        let key = K::deserialize(&mut TextKeyDeserializer { key: self.de.read_json_string()?, offset })?;
         self.de.expect_char(b':')?;
         return Result::Ok(Option::Some(key));
     }
@@ -392,7 +394,7 @@ impl DeserializeStruct for NsdStructAccess {
     // the signature to satisfy the `DeserializeStruct` trait; the same generated
     // `next_field::<StructType>()` call site drives both SD and NSD formats.
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
-        if !entry_head(self.de,b']', self.first)? {
+        if !entry_head(self.de, b']', self.first)? {
             return Result::Ok(null);
         }
         self.first = false;

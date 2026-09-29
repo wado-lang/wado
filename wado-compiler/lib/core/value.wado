@@ -35,6 +35,7 @@ use {
     DeserializeErrorKind,
     Visitor,
     DuplicateKeyPolicy,
+    TextKeyDeserializer,
     report_duplicate_key,
 } from "core:serde";
 
@@ -291,7 +292,7 @@ impl Visitor for ValueVisitor {
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Value, DeserializeError> {
         let mut obj: TreeMap<String, Value> = TreeMap::new();
         loop {
-            match map.next_key_string()? {
+            match map.next_key::<String>()? {
                 Some(key) => {
                     let val = map.next_value::<Value>()?;
                     if !obj.try_insert(key, val) {
@@ -469,13 +470,18 @@ pub struct ValueVariantSerializer {
     payloads: List<Value>,
 }
 
-fn value_key(v: Value) -> String {
+/// An object key's text: a string as itself, any other scalar as its spelling,
+/// which `TextKeyDeserializer` parses back.
+fn value_key(v: Value) -> Result<String, SerializeError> {
     return match v {
-        String(s) => s,
-        Int(n) => n.to_string(),
-        UInt(n) => n.to_string(),
-        Bool(b) => b.to_string(),
-        _ => "",
+        String(s) => Result::Ok(s),
+        Int(n) => Result::Ok(n.to_string()),
+        UInt(n) => Result::Ok(n.to_string()),
+        Int128(n) => Result::Ok(n.to_string()),
+        UInt128(n) => Result::Ok(n.to_string()),
+        Float(n) => Result::Ok(n.to_string()),
+        Bool(b) => Result::Ok(b.to_string()),
+        _ => Result::Err(SerializeError::unsupported_value("an object key must be a scalar")),
     };
 }
 
@@ -499,7 +505,7 @@ impl SerializeMap for ValueMapSerializer {
         let mut k: Value = Value::Null;
         let mut ser = ValueSerializer { out: &mut k };
         key.serialize(&mut ser)?;
-        self.pending = Option::Some(value_key(k));
+        self.pending = Option::Some(value_key(k)?);
         return Result::Ok(());
     }
 
@@ -841,7 +847,7 @@ impl DeserializeSeq for ValueSeqAccess {
 
 impl ValueObjectAccess {
     /// The next key, leaving its value pending.
-    fn next_key(&mut self) -> Option<&String> {
+    fn advance(&mut self) -> Option<&String> {
         let Some([key, value]) = self.entries.next() else {
             return null;
         };
@@ -856,8 +862,11 @@ impl ValueObjectAccess {
 }
 
 impl DeserializeMap for ValueObjectAccess {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        return Result::Ok(self.next_key().map(|key| *key));
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
+        let Some(key) = self.advance() else {
+            return Result::Ok(null);
+        };
+        return Result::Ok(Option::Some(K::deserialize(&mut TextKeyDeserializer { key: *key, offset: -1 })?));
     }
 
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
@@ -871,7 +880,7 @@ impl DeserializeMap for ValueObjectAccess {
 
 impl DeserializeStruct for ValueObjectAccess {
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
-        return Result::Ok(self.next_key().map(|key| S::lookup(key.as_bytes()).unwrap_or(-1)));
+        return Result::Ok(self.advance().map(|key| S::lookup(key.as_bytes()).unwrap_or(-1)));
     }
 
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {

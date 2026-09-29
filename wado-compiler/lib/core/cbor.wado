@@ -1234,7 +1234,10 @@ impl CborDeserializer {
                 },
                 MAJOR_NINT => {
                     builtin::cold_path();
-                    return Result::Err(DeserializeError::overflow("negative integer for an unsigned type", self.pos as i64));
+                    return Result::Err(DeserializeError::overflow(
+                        "negative integer for an unsigned type",
+                        self.pos as i64,
+                    ));
                 },
                 MAJOR_TAG => {
                     if is_passthrough_tag(arg) {
@@ -1245,7 +1248,10 @@ impl CborDeserializer {
                     }
                     if arg == TAG_BIGNUM_NEG {
                         builtin::cold_path();
-                        return Result::Err(DeserializeError::overflow("negative bignum for an unsigned type", self.pos as i64));
+                        return Result::Err(DeserializeError::overflow(
+                            "negative bignum for an unsigned type",
+                            self.pos as i64,
+                        ));
                     }
                     builtin::cold_path();
                     return Result::Err(DeserializeError::unexpected_type("expected unsigned integer", self.pos as i64));
@@ -1479,15 +1485,15 @@ impl DeserializeSeq for CborSeqAccess {
 }
 
 impl DeserializeMap for CborMapAccess {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
         if self.de.container_step(self.remaining, self.indef)? {
             return Result::Ok(null);
         }
         if !self.indef {
             self.remaining -= 1;
         }
-        let key = self.de.deserialize_string()?;
-        return Result::Ok(Option::Some(key));
+        self.de.depth = self.depth;
+        return Result::Ok(Option::Some(K::deserialize(self.de)?));
     }
 
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
