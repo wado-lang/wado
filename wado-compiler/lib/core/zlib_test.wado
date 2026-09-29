@@ -888,9 +888,7 @@ test "gzip members after a long member decode in place" {
     let first = make_wordy(5000);
     let second = make_wordy(3000);
     let mut members = gzip_compress(&first);
-    for let b of gzip_compress(&second) {
-        members.push(b);
-    }
+    members.extend(&gzip_compress(&second));
     let out = inflate_gzip(&members).unwrap();
     assert out.len() == first.len() + second.len();
     assert bytes_equal(&(out[0..<first.len()].to_list() as ByteList), &first);

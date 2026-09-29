@@ -808,6 +808,10 @@ impl InflateState {
         self.bits -= n;
     }
 
+    fn drop_to_byte_boundary(&mut self) {
+        self.drop_bits(self.bits & 7);
+    }
+
     fn take_bits(&mut self, n: i32) -> i32 {
         let value = low_bits(self.hold, n);
         self.drop_bits(n);
@@ -987,8 +991,7 @@ fn inflate_raw_ex(
         match state.mode {
             TypeDo => {
                 if state.last_block {
-                    // discard remaining bits to byte boundary
-                    state.drop_bits(state.bits & 7);
+                    state.drop_to_byte_boundary();
                     state.mode = InflateMode::Done;
                 } else {
                     if !state.need_bits(input, 3) {
@@ -1014,8 +1017,7 @@ fn inflate_raw_ex(
                 }
             },
             Stored => {
-                // go to byte boundary
-                state.drop_bits(state.bits & 7);
+                state.drop_to_byte_boundary();
                 if !state.need_bits(input, 32) {
                     break;
                 }
@@ -1125,10 +1127,10 @@ fn inflate_raw_ex(
                 }
 
                 if state.lens[256] == 0 {
-                    // check for end-of-block code
+                    // Symbol 256 ends the block, so a block without a code for it
+                    // could never end.
                     state.mode = InflateMode::Bad;
                 } else {
-                    // build code tables
                     let result1 = inflate_table(
                         LENS_TYPE,
                         &state.lens,
