@@ -53,11 +53,14 @@ value into the message yourself shows all of it.
 ## Assertions Are Never Removed
 
 No build removes an assertion. At every optimization level the condition is
-evaluated, and a false one traps.
+evaluated, and a false one traps. An invariant an `assert` states therefore
+holds in every build, so a program can rely on `assert` to protect its state.
 
-What a build can drop is the failure message. Under `-f bare-asserts` a failed
-assertion traps without printing anything, and nothing that builds the message
-is compiled in. `-Os` turns it on, and `-f no-bare-asserts` turns it back off:
+Checking costs run time. The part that can be dropped is the power-assert
+overhead: capturing the operands and building the failure message. Under
+`-f bare-asserts` a failed assertion traps without printing anything, and
+nothing that captures or builds the message is compiled in. `-Os` turns it on,
+and `-f no-bare-asserts` turns it back off:
 
 ```sh
 wado compile -Os app.wado                     # a failed assert traps silently
