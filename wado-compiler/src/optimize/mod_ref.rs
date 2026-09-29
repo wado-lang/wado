@@ -8,13 +8,7 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir;
-<<<<<<< HEAD
-use crate::nir::{NirFunction, NirUnaryOp};
-||||||| 4e0a100fd
-use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
-=======
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
->>>>>>> origin/main
+use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };

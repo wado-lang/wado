@@ -19,13 +19,7 @@ use crate::git::materialize;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
-<<<<<<< HEAD
-use crate::manifest::{DiscoveryError, openable_dir, resolve_manifest};
-||||||| 4e0a100fd
-use crate::manifest::{openable_dir, resolve_manifest};
-=======
-use crate::manifest::{absolute, openable_dir, resolve_manifest};
->>>>>>> origin/main
+use crate::manifest::{DiscoveryError, absolute, openable_dir, resolve_manifest};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;

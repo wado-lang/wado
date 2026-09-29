@@ -26,18 +26,9 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
-<<<<<<< HEAD
 use crate::optimize::arena_query::{
-    expr_node_may_trap, is_pure_nontrapping_expr_typed, operand_values_may_trap,
-    promoted_local_reads,
+    expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
 };
-||||||| 4e0a100fd
-use crate::optimize::arena_query::{
-    expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
-};
-=======
-use crate::optimize::arena_query::{expr_node_may_trap, promoted_local_reads};
->>>>>>> origin/main
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
 use crate::{hashmap, nir, tir};
 
