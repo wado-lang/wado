@@ -2742,7 +2742,7 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                             ctx.entry_source,
                         )
                     })
-            } else if let ModuleSource::Local { path } = &func.module_source
+            } else if let ModuleSource::Local { path, .. } = &func.module_source
                 && let Some(wrapper) = ctx
                     .user_to_wrapper
                     .get(&(path.to_string(), func.name.clone()))

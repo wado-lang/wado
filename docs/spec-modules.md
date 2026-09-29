@@ -87,7 +87,10 @@ test {
   imports, and the Wasm assets those modules import.
 - Each dependency. A relative import inside a dependency stays in that
   dependency's package.
-- `core:*`, which is one package, and `wasi:*`, which is another.
+- `core:*`, which is one package, and `wasi:*`, which is another. A test of
+  the standard library is an entry module in its `core` directory, and it
+  joins `core:*`'s package together with its local modules, so it reaches
+  their `internal` items.
 - A [generated module](#generated-imports-kiln) belongs to the package of the
   module that imports it.
 

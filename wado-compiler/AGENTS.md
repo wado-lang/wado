@@ -70,9 +70,10 @@ renders it as the module's `## Synopsis`. Write the shortest program that shows
 what the module is for, not a tour of its API. Leave it out only where such a
 program cannot be written.
 
-Tests for what a module exports live in `<module>_test.wado` beside it. A
-private item cannot be reached from there, so its test goes in the module. A
-facade puts each test beside the file that implements it, which is why
+Tests for a module live in `<module>_test.wado` beside it. The test file
+joins `core:*`'s package, so it reaches `internal` items as well as `pub`
+ones. A private item cannot be reached from there, so its test goes in the
+module. A facade puts each test beside the file that implements it, which is why
 `core:collections` is tested from `collections/treemap_test.wado` and
 `collections/treeset_test.wado`.
 

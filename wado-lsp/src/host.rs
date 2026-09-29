@@ -122,6 +122,29 @@ impl CompilerHost for FilesystemCompilerHost {
         };
         dependency_index_from(&manifest, &root, &self.base_path)
     }
+
+    fn serves_core(&self) -> bool {
+        is_in_dev_stdlib_core(&self.base_path)
+    }
+}
+
+/// Whether `dir` lies in the `core` tree of the stdlib this dev build reads,
+/// as a stdlib test's directory does.
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+fn is_in_dev_stdlib_core(dir: &Path) -> bool {
+    use wado_compiler::stdlib::DEV_STDLIB_ROOT;
+
+    let core = Path::new(DEV_STDLIB_ROOT).join("core");
+    match (std::fs::canonicalize(dir), std::fs::canonicalize(core)) {
+        (Ok(dir), Ok(core)) => dir.starts_with(core),
+        _ => false,
+    }
+}
+
+/// A release or `wasm32` build embeds the stdlib, so it runs none of its tests.
+#[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
+fn is_in_dev_stdlib_core(_dir: &Path) -> bool {
+    false
 }
 
 /// Build the compiler's dependency index from a manifest's `[dependencies]`.
