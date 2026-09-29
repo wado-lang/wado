@@ -295,6 +295,21 @@ it does in a function body
 ([With No Handler Installed](./spec-effects.md#with-no-handler-installed)). It
 may also install its own handler.
 
+An initializer runs at module initialization whether or not anything reads the
+global, so one that traps traps the program at start, at every optimization
+level:
+
+<!-- {"fixture":"global_unread_trapping_init.wado"} -->
+
+```wado
+global Z: i32 = 1 / 0;
+
+#[expect_trap]
+test "an unread global's trapping initializer still runs" {
+    assert builtin::black_box(1) == 1;
+}
+```
+
 ### Mutability
 
 Globals follow [Variable Mutability](#variable-mutability): without `mut` a

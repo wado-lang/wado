@@ -17,7 +17,7 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, ValuePool};
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -577,9 +577,7 @@ pub(super) fn is_pure_nontrapping_expr_typed(
     is_pure_expr(body, id) && !mod_ref::ModRef::of_expr_typed(body, id, types).may_trap
 }
 
-/// [`is_pure_nontrapping_expr_typed`] for an operand. A promoted value is pure
-/// by construction but not necessarily total — `let _ = 1 / 0` freezes a
-/// trapping division into one — so its tree is walked in the pool.
+/// [`is_pure_nontrapping_expr_typed`] for an operand.
 pub(super) fn is_pure_nontrapping_operand_typed(
     body: &Body,
     op: Operand,
@@ -587,7 +585,7 @@ pub(super) fn is_pure_nontrapping_operand_typed(
 ) -> bool {
     match op {
         Operand::Expr(e) => is_pure_nontrapping_expr_typed(body, e, types),
-        Operand::Value(v) => !value_may_trap(&body.values, v),
+        Operand::Value(v) => !body.values.may_trap(v),
     }
 }
 
@@ -652,29 +650,16 @@ fn is_pure_block(body: &Body, block: BlockId) -> bool {
 // Per-node trap taxonomy
 // ---------------------------------------------------------------------------
 //
-// The single listing of which operation traps, shared so no two passes reasoning
-// about trap preservation can drift apart — an earlier trap-deletion P0 was
-// exactly that. Mirrors per node what `mod_ref::ModRef::may_trap` accumulates
-// recursively; `mod_ref` remains the recursive authority these reproduce.
+// Which operation traps is listed once, on the operation itself
+// (`NirBinaryOp::may_trap`, `NirUnaryOp::may_trap`, `ValuePool::may_trap`), so
+// no two passes reasoning about trap preservation can drift apart — an earlier
+// trap-deletion P0 was exactly that. These answer per node what
+// `mod_ref::ModRef::may_trap` accumulates recursively.
 
-/// Whether a [`NirBinaryOp`] may trap at runtime, independent of its operands.
-/// Integer `Div` / `Mod` trap on a zero divisor (and `INT_MIN / -1`); every
-/// other binary op is total.
-pub(super) fn binary_op_may_trap(op: NirBinaryOp) -> bool {
-    matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-}
-
-/// Whether a [`NirUnaryOp`] may trap, independent of its operand. `Deref`
-/// traps on a null reference; `Ref` / `MutRef` / `Neg` / `Not` / `BitNot`
-/// are total.
-pub(super) fn unary_op_may_trap(op: NirUnaryOp) -> bool {
-    matches!(op, NirUnaryOp::Deref)
-}
-
-/// [`unary_op_may_trap`] knowing the operand: `*&x` reads `x` back, and a
+/// [`NirUnaryOp::may_trap`] knowing the operand: `*&x` reads `x` back, and a
 /// reference just taken is never null.
 pub(super) fn unary_may_trap(body: &Body, op: NirUnaryOp, operand: Operand) -> bool {
-    unary_op_may_trap(op)
+    op.may_trap()
         && !operand.as_expr().is_some_and(|e| {
             matches!(
                 body.exprs[e].kind,
@@ -686,37 +671,16 @@ pub(super) fn unary_may_trap(body: &Body, op: NirUnaryOp, operand: Operand) -> b
         })
 }
 
-/// Whether running the value tree at `v` can trap. The [`ValuePool`] counterpart
-/// of [`expr_node_may_trap`], recursive because a value tree has no skeleton
-/// nodes for a walker to descend through.
-///
-/// Two callers, for the two ways a promoted value can lose a trap: extraction
-/// materialises it at a point that dominates the uses — above the guard each use
-/// sits behind — and the deletion predicates drop the statement holding it.
-pub(super) fn value_may_trap(pool: &ValuePool, v: ValueId) -> bool {
-    match pool.kind(v) {
-        ValueKind::Binary { op, lhs, rhs, .. } => {
-            binary_op_may_trap(*op) || value_may_trap(pool, *lhs) || value_may_trap(pool, *rhs)
-        }
-        ValueKind::Unary { op, operand, .. } => {
-            unary_op_may_trap(*op) || value_may_trap(pool, *operand)
-        }
-        ValueKind::Cast { operand, .. } => value_may_trap(pool, *operand),
-        ValueKind::Select { cond, then, else_ } => {
-            value_may_trap(pool, *cond)
-                || value_may_trap(pool, *then)
-                || value_may_trap(pool, *else_)
-        }
-        ValueKind::FieldAccess { .. } | ValueKind::LoopPhi { .. } => true,
-        ValueKind::Int(..)
-        | ValueKind::Float(..)
-        | ValueKind::Bool(_)
-        | ValueKind::Char(_)
-        | ValueKind::Null
-        | ValueKind::Unit
-        | ValueKind::Const(..)
-        | ValueKind::Opaque(_) => false,
-    }
+/// Whether a promoted value in one of `node`'s own operand slots may trap. A
+/// value has no skeleton node, so a walk over nodes meets its trap here, at the
+/// node holding it; one that asks only [`expr_node_may_trap`] loses `1 / 0`
+/// once promotion freezes it into the pool.
+pub(super) fn operand_values_may_trap(body: &Body, node: NodeRef) -> bool {
+    let mut may_trap = false;
+    body.for_each_operand(node, |op| {
+        may_trap |= op.as_value().is_some_and(|v| body.values.may_trap(v));
+    });
+    may_trap
 }
 
 /// Whether the expression *node* at `id` — its own operation only, not its
@@ -754,7 +718,7 @@ pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
 /// [`expr_node_may_trap`], with a type table to settle a field read.
 pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&TypeTable>) -> bool {
     match &body.exprs[id].kind {
-        ExprKind::Binary { op, .. } => binary_op_may_trap(*op),
+        ExprKind::Binary { op, .. } => op.may_trap(),
         ExprKind::Unary { op, expr } => unary_may_trap(body, *op, *expr),
         ExprKind::FieldAccess { expr, .. } => !field_receiver_nonnull(body, types, *expr),
         // Heap projections on a possibly-null (or case-mismatched, or short)

@@ -177,6 +177,13 @@ impl NirBinaryOp {
             _ => None,
         }
     }
+
+    /// Whether this op may trap, whatever its operands. Integer `Div` / `Mod`
+    /// trap on a zero divisor (and `MIN / -1`); every other binary op is total.
+    /// The one listing every pass that deletes or moves an operation consults.
+    pub fn may_trap(self) -> bool {
+        matches!(self, Self::Div | Self::Mod)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -194,6 +201,12 @@ impl NirUnaryOp {
     /// dereference names a place, and no kind carries one.
     pub fn is_pooled(self) -> bool {
         !matches!(self, Self::Ref | Self::MutRef | Self::Deref)
+    }
+
+    /// Whether this op may trap, whatever its operand. `Deref` traps on a null
+    /// reference; `Ref` / `MutRef` / `Neg` / `Not` / `BitNot` are total.
+    pub fn may_trap(self) -> bool {
+        matches!(self, Self::Deref)
     }
 }
 

@@ -1,0 +1,10 @@
+// `x | true` is true whatever `x` is, but `x` still runs, and its trap is
+// observable. The division is constant, so promotion freezes it into a pooled
+// value before the fold that absorbs it looks.
+
+#[expect_trap]
+test "an absorbed operand that traps still runs" {
+    if (1 / 0 == 0) | true {
+        assert builtin::black_box(1) == 1;
+    }
+}
