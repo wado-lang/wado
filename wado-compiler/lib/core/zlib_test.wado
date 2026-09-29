@@ -84,9 +84,7 @@ fn make_wordy(size: i32) -> ByteList {
         state = state ^ state >> 17;
         state = state ^ state << 5;
         let word = words[(state % 10) as i32];
-        for let mut i = 0; i < word.len(); i += 1 {
-            data.push(word.get_byte_unchecked(i));
-        }
+        data.extend_from_slice(word.as_bytes() as Slice<u8>);
         let digits = (state >> 8 & 7) as i32;
         for let mut i = 0; i < digits; i += 1 {
             state = state ^ state << 13;
@@ -172,13 +170,7 @@ test "crc32" {
 test "adler32_combine" {
     let seg1 = b"Hello, ";
     let seg2 = b"World!";
-    let mut combined = ByteList::with_capacity(seg1.len() + seg2.len());
-    for let mut i = 0; i < seg1.len(); i += 1 {
-        combined.push(seg1[i]);
-    }
-    for let mut i = 0; i < seg2.len(); i += 1 {
-        combined.push(seg2[i]);
-    }
+    let combined = b"Hello, World!";
 
     let a1 = adler32(adler32_init(), &seg1, 0, seg1.len());
     let a2 = adler32(adler32_init(), &seg2, 0, seg2.len());
@@ -190,13 +182,7 @@ test "adler32_combine" {
 test "crc32_combine" {
     let seg1 = b"Hello, ";
     let seg2 = b"World!";
-    let mut combined = ByteList::with_capacity(seg1.len() + seg2.len());
-    for let mut i = 0; i < seg1.len(); i += 1 {
-        combined.push(seg1[i]);
-    }
-    for let mut i = 0; i < seg2.len(); i += 1 {
-        combined.push(seg2[i]);
-    }
+    let combined = b"Hello, World!";
 
     let c1 = crc32(crc32_init(), &seg1, 0, seg1.len());
     let c2 = crc32(crc32_init(), &seg2, 0, seg2.len());
@@ -469,25 +455,11 @@ test "gzip uncompress auto-detection" {
 test "gzip multi-member" {
     let seg1 = b"First member";
     let seg2 = b"Second member";
-    let gz1 = gzip_compress(&seg1);
-    let gz2 = gzip_compress(&seg2);
-
-    let mut multi = ByteList::with_capacity(gz1.len() + gz2.len());
-    for let mut i = 0; i < gz1.len(); i += 1 {
-        multi.push(gz1[i]);
-    }
-    for let mut i = 0; i < gz2.len(); i += 1 {
-        multi.push(gz2[i]);
-    }
-
-    let decompressed = inflate_gzip(&multi).unwrap();
-    assert decompressed.len() == seg1.len() + seg2.len();
-    for let mut i = 0; i < seg1.len(); i += 1 {
-        assert decompressed[i] == seg1[i];
-    }
-    for let mut i = 0; i < seg2.len(); i += 1 {
-        assert decompressed[seg1.len() + i] == seg2[i];
-    }
+    let mut multi = gzip_compress(&seg1);
+    multi.extend(&gzip_compress(&seg2));
+    let mut expected = seg1;
+    expected.extend(&seg2);
+    assert inflate_gzip(&multi).unwrap() == expected;
 }
 
 test "DeflateStream one-shot" {
@@ -509,18 +481,9 @@ test "InflateStream one-shot" {
 
 test "DeflateStream chunked update/finish" {
     let data = make_pattern_data(500);
-    let mut chunk1 = ByteList::with_capacity(200);
-    for let mut i = 0; i < 200; i += 1 {
-        chunk1.push(data[i]);
-    }
-    let mut chunk2 = ByteList::with_capacity(300);
-    for let mut i = 200; i < 500; i += 1 {
-        chunk2.push(data[i]);
-    }
-
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
-    ds.update(&chunk1);
-    ds.update(&chunk2);
+    ds.update(&(data[0..<200].to_list() as ByteList));
+    ds.update(&(data[200..<500].to_list() as ByteList));
     let compressed = ds.finish();
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed == data;
@@ -532,18 +495,9 @@ test "InflateStream chunked update/finish" {
     let compressed = ds.compress(&data);
 
     let half = compressed.len() / 2;
-    let mut c1 = ByteList::with_capacity(half);
-    for let mut i = 0; i < half; i += 1 {
-        c1.push(compressed[i]);
-    }
-    let mut c2 = ByteList::with_capacity(compressed.len() - half);
-    for let mut i = half; i < compressed.len(); i += 1 {
-        c2.push(compressed[i]);
-    }
-
     let mut is = InflateStream::new();
-    is.update(&c1);
-    is.update(&c2);
+    is.update(&(compressed[0..<half].to_list() as ByteList));
+    is.update(&(compressed[half..<compressed.len()].to_list() as ByteList));
     let decompressed = is.finish().unwrap();
     assert decompressed == data;
 }
