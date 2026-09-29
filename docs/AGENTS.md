@@ -47,8 +47,10 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - Title: Short description of the proposal
 - Context: Background and problem statement
 - Decision: What was decided and why
-- Roadmap: What will be done, in order
-- Known gaps: What is missing, whether or not it will be closed
+- Roadmap (optional): What will be done, in order
+- Known gaps (optional): What is missing, whether or not it will be closed
+
+A WEP without work ahead or without known gaps leaves that section out.
 
 Once a design settles, its rules move to the specification, and the WEP stops
 being where a reader looks a rule up. Where a WEP and the specification
