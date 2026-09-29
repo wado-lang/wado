@@ -970,9 +970,11 @@ This enables seamless local development while ensuring published packages are se
   index, from the consuming project's `wado.toml`, and a `use` inside a
   dependency does not consult it. Nothing reads the dependency's own
   `[dependencies]`, so a library whose `lib` reaches a `use` of `lib:x` or
-  `ns:x` fails to compile as anyone's dependency. The error reports an unknown
-  `lib` namespace. `wado update` does resolve and lock those transitive
-  dependencies.
+  `ns:x` fails to compile as anyone's dependency. The error reports the
+  dependency as undeclared. `wado update` does resolve and lock those
+  transitive dependencies.
+- An inline source takes no `path`. Nothing reads the key, so `with` rejects
+  it as unknown, and a single-file script cannot name a local dependency.
 - Semver-incompatible versions of one package cannot coexist. The resolver
   gives each package one version, so two requirements from different
   compatibility ranges conflict instead of resolving to two instances. The same

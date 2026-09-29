@@ -336,6 +336,15 @@ dependency its source with no `wado.toml`
 import a [generated import](./spec-kiln.md), and `provider` satisfies a
 component's guest effect ([Wasm Module and Component Imports](#wasm-module-and-component-imports)).
 
+Any other key is an error, and so is a value of the wrong kind. Every key but
+`generator` takes a string:
+
+<!-- {"fixture":"import_attr_unknown_key_error.wado"} -->
+
+```wado
+use { println, Stdout } from "core:cli" with { tpye: "wasm", provider: 1 };
+```
+
 ### Type Attribute Requirement
 
 | Import Source      | `type` Attribute | Notes                          |
