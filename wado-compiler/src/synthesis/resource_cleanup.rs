@@ -168,6 +168,8 @@ impl<'a> Resources<'a> {
         }
     }
 
+    /// The [`Layout`] of `type_id`.
+    ///
     /// `GenericResource` (`Future` / `Stream`) is opaque: those handles have
     /// their own explicit drop discipline and must not be touched here. So is
     /// a reference — a borrowed place owns nothing — and an unrestricted
@@ -177,10 +179,10 @@ impl<'a> Resources<'a> {
         let base = tt.representation_head(type_id);
         match tt.get(base) {
             ResolvedType::Resource { def } if !tt.is_unrestricted_resource(*def) => {
-                match self
-                    .reg
-                    .get_resource_cm_name_by_module(&tt.def_module(*def).to_string(), tt.def_name(*def))
-                {
+                match self.reg.get_resource_cm_name_by_module(
+                    &tt.def_module(*def).to_string(),
+                    tt.def_name(*def),
+                ) {
                     Some(cm) => Layout::Resource(*def, cm),
                     None => Layout::Opaque,
                 }
@@ -822,7 +824,12 @@ fn elab_stmt(
 
         TirStmtKind::LetDestructure { pattern, value } => {
             let value = elab_value_expr(value, owned, cx);
-            owned.extend(cx.resources.pattern_bindings(&pattern).into_iter().map(Some));
+            owned.extend(
+                cx.resources
+                    .pattern_bindings(&pattern)
+                    .into_iter()
+                    .map(Some),
+            );
             out.push(TirStmt {
                 kind: TirStmtKind::LetDestructure { pattern, value },
                 span,
@@ -860,8 +867,8 @@ fn elab_stmt(
             // Everything still owned must be dropped before leaving the
             // function.
             let drops = drop_slots(owned, 0, cx);
-            leave_after_drops(value, drops, span, cx, out, |value| {
-                TirStmtKind::Return { value }
+            leave_after_drops(value, drops, span, cx, out, |value| TirStmtKind::Return {
+                value,
             })
         }
 
@@ -917,8 +924,9 @@ fn elab_stmt(
             // `break` skips the exit drops of every scope it leaves.
             let target = cx.target_entry(label.as_deref());
             let drops = drop_slots(owned, target, cx);
-            leave_after_drops(value, drops, span, cx, out, |value| {
-                TirStmtKind::Break { label, value }
+            leave_after_drops(value, drops, span, cx, out, |value| TirStmtKind::Break {
+                label,
+                value,
             })
         }
 
@@ -1014,16 +1022,16 @@ fn elab_if_branches(
 /// still owning it drop it at their end: returns, per path, what it must drop.
 fn merge_paths(owned: &mut Owned, paths: &[(Owned, Flow)]) -> Vec<Vec<Live>> {
     let mut drops = vec![Vec::new(); paths.len()];
+    let falling_through: Vec<usize> = paths
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, flow))| *flow == Flow::Normal)
+        .map(|(path, _)| path)
+        .collect();
     for (slot, state) in owned.iter_mut().enumerate() {
-        let Some(live) = state.clone() else {
+        let Some(live) = state.as_ref() else {
             continue;
         };
-        let falling_through: Vec<usize> = paths
-            .iter()
-            .enumerate()
-            .filter(|(_, (_, flow))| *flow == Flow::Normal)
-            .map(|(path, _)| path)
-            .collect();
         let owners: Vec<usize> = falling_through
             .iter()
             .copied()

@@ -24,9 +24,7 @@ Scoping rules, matching Rust's:
 - **Block-scoped.** A local item is visible in the block that declares it and
   nowhere else, so a nested `if`/`while`/`for` body cannot export one to the
   rest of the function. Two unrelated blocks may declare same-named local
-  items without collision; a closure literal inside the function does not
-  currently see its enclosing function's local items (an unhandled edge case,
-  not a deliberate restriction).
+  items without collision.
 - **Hoisted within the block.** A local item is in scope for the whole of its
   block, so a use may precede the declaration statement and one local item may
   name another declared later in the same block.
@@ -81,21 +79,19 @@ generic-struct machinery unchanged: the monomorphizer already treats any
 `TirStruct` with non-empty type params as a template to expand, regardless of
 whether reify or this WEP's eager annotate-time emission produced it.
 
-## Consequences
+## Known gaps
 
-- Supported today: local `struct` and local `type` (newtype), generic or not —
-  declare, construct, field/case access, comparison, `assert`, and
-  auto-derived traits (`Display` etc.: structural for a struct, forwarded from
-  the base type for a newtype).
-- Not yet supported: parses, but a reference fails downstream with whatever
-  error fits how it was referenced, not a dedicated message. Local
-  `enum`/`variant`/`flags` surfaces as `unknown identifier` for a case path
-  (e.g. `Color::Red`) or `unknown function` for variant construction. Methods
-  on any local type surface as `no method 'x' found on type`.
+### Cases of a local `enum`, `variant` or `flags`
 
-## Known gap: methods on a local type
+A local `enum`, `variant` or `flags` parses, but no reference to one of its
+cases resolves. A case path fails as `unknown identifier` (`Color::Red`), and a
+variant construction as `unknown function` (`Shape::Circle(1)`), not with a
+message of its own. Only a local `struct` and a local newtype work in full.
 
-Two module-wide registries are built before any function body is walked, and a
+### Methods on a local type
+
+A local `impl` parses, but its methods never reach a call, which fails as
+`no method 'x' found on type`. Two module-wide registries are built before any function body is walked, and a
 local `impl` needs both.
 
 - `TraitEnv` indexes `module.items`, so no local block reaches it. A block whose
@@ -112,7 +108,7 @@ only. And a `TraitEnv` that reaches a local block while `Signatures` does not is
 worse than the gap: the header resolves where no signature exists, so the
 diagnostic becomes a panic.
 
-## Known gap: `Self` in a local struct
+### `Self` in a local struct
 
 A local struct's `Self` is that struct. Inside an `impl` or `trait` method, the
 compiler resolves `Self` in the struct's field types to the type the `impl` is

@@ -88,7 +88,7 @@ Waives a lint on the item carrying it. As the module inner attribute
 `#[deny(...)]`. The lints are:
 
 - `dead_code`: an unused or test-only free function or global (see [The `dead_code` Lint](#the-dead_code-lint)).
-- `shadowed_name`: a binder that takes a name already reaching a known symbol.
+- `shadowed_name`: a binder that takes a name already reaching a known symbol (see [The `shadowed_name` Lint](./spec-expressions.md#the-shadowed_name-lint)).
 - `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](./spec-effects.md#the-trait-head)).
 
 <!-- {"fixture":"spec_attributes_allow.wado"} -->
@@ -374,7 +374,9 @@ library and generated code do.
 
 ### `#![no_prelude]`
 
-Module-level inner attribute. Prevents the automatic import of `core:prelude`. Used by low-level modules that define the prelude itself or that operate below the prelude layer.
+Module-level inner attribute. Turns off the automatic import of
+[the prelude](./spec-modules.md#the-prelude). Used by low-level modules that
+define the prelude itself or that operate below the prelude layer.
 
 <!-- {"fixture":"spec_attributes_no_prelude.wado"} -->
 

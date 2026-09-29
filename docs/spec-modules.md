@@ -632,10 +632,13 @@ Re-export rules:
 
 Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 
-## Exception: The Prelude
+## The Prelude
 
-The prelude is imported into every module automatically, so its names need no
-`use`. [The Prelude](./spec-types.md#the-prelude) lists the types it provides.
+The prelude (`core:prelude`) is imported into every module automatically, so
+its names need no `use`. It is the one exception to explicit imports.
+[Prelude Types](./spec-types.md#prelude-types) lists the types it provides, and
+[`#![no_prelude]`](./spec-attributes.md#no_prelude) turns the import off for one
+module.
 
 The prelude's names are what `core:prelude` exports: its own `pub`
 declarations and its `pub use` re-exports. A name that one of its

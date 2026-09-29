@@ -1021,8 +1021,7 @@ Each prelude trait follows one policy for when an impl exists:
 Two exceptions narrow the on-demand row. `Default` asks that every field carry a
 default expression, not that every member satisfy `Default`
 ([Auto-Derivation](./spec-standard-traits.md#auto-derivation)). A `variant`
-derives `Eq` but never `Ord`
-([Auto-derived Traits](./spec-types.md#auto-derived-traits)).
+derives `Eq` but never `Ord`.
 
 An on-demand impl is generated only where a use needs it, not for every declared
 type. For `Eq` and `Ord` that use is an operator, a comparison method, or a
@@ -1030,8 +1029,9 @@ bound; for `Default`, a `T: Default` bound or a `T::default()` call; for serde,
 a bound. A [marker](#compiler-synthesized-impl) needs one too.
 
 A `fn`-typed member blocks `Eq`, `Ord`, and serde. A plain `enum` and a `flags`
-type have no members, so they satisfy every structural obligation: `Eq` and
-`Ord` compare the discriminant or the bitmask.
+type have no members, so they satisfy every structural obligation.
+[Auto-derived Traits](./spec-types.md#auto-derived-traits) says what each
+derived `Eq` and `Ord` compares.
 
 A generic declaration derives once, for every instantiation whose type
 arguments satisfy the trait: `Pair<T>` is `Eq` where `T: Eq`.

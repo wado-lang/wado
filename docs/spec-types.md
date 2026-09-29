@@ -5,10 +5,10 @@ strings, tuples, lists, the never type, newtypes, structs, enums, variants and
 flags, and how type arguments are inferred. Traits over these types are in
 [Traits](./spec-traits.md).
 
-## The Prelude
+## Prelude Types
 
-The prelude (`core:prelude`) is imported into every module, so its types need no
-`use`:
+These types come from the [prelude](./spec-modules.md#the-prelude), so they need
+no `use`:
 
 - `String`, UTF-8 text.
 - `List<T>`, a growable sequence.
@@ -16,10 +16,6 @@ The prelude (`core:prelude`) is imported into every module, so its types need no
 - `Result<T, E>` with its cases `Ok(x)` and `Err(e)`.
 - `Stream<T>` and `Future<T>`, the Component Model's async stream and future.
 - `i128` and `u128`, the 128-bit integers.
-
-A case is written bare (`Some(x)`) only where an expected type says which type
-it belongs to. Elsewhere it is qualified: `Option::Some(x)`.
-[`#![no_prelude]`](./spec-attributes.md#no_prelude) turns the prelude off.
 
 ## Primitive Types
 
@@ -1487,8 +1483,8 @@ A derived `Eq` or `Ord` compares by the type's shape:
   declaration order.
 - An enum compares its case. `Ord` follows declaration order.
 - A flags type compares its raw bits.
-- A variant derives `Eq` only, never `Ord`. Two values are equal when they are
-  the same case and their payloads, if any, are equal.
+- A variant compares for equality only: two values are equal when they are the
+  same case and their payloads, if any, are equal.
 
 When a derived impl exists, which instantiations of a generic type it covers,
 and how a written impl overrides it are stated in

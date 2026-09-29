@@ -921,8 +921,9 @@ fn area(width: i32, height: i32) -> i32 {
 ```
 
 Always private, and shadows a same-named module-level item.
-Either may be generic. `enum`/`variant`/`flags` and a local `impl`/`trait` are
-not yet supported.
+Either may be generic. A local `enum`/`variant`/`flags` and a local
+`impl`/`trait` are specified but do not work yet; see the
+[known gaps](./wep-2026-07-09-local-item-definitions.md#known-gaps).
 
 ### Methods
 

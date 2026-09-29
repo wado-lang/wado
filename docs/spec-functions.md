@@ -946,54 +946,7 @@ Without either, it is a compile error, which suggests a turbofish or a closure
 wrapper (`|x| identity(x)`).
 
 A function type crosses the Component Model boundary only as a
-[callback](#component-model-callbacks).
-
-## Component Model Callbacks
-
-A function type crosses the Component Model boundary in one place: as a
-parameter of a `#[cm]` import, where it is a callback. Anywhere else it is a
-compile error: in an `export fn`'s parameters or result, in an import's result,
-and inside a type that crosses, as a field or a payload (`Option<fn(..)>`
-included).
-
-<!-- {"fixture":"spec_functions_cm_callback.wado"} -->
-
-```wado
-#[cm("example:demo/target", linearity = "unrestricted")]
-resource Target {
-    #[cm("example:demo/target#listen")]
-    #[cm_params("self", "listener")]
-    fn listen(&self, listener: fn mut(i32));
-}
-
-test {
-    let target = mock_target();
-    let mut seen: List<i32> = [];
-    with Target => &mut EchoTarget {} do {
-        target.listen(|v| seen.push(v));
-    }
-    assert seen == [7];                 // `EchoTarget` calls the listener with 7
-}
-```
-
-- A callback's parameters are scalars and handles, and it returns nothing. Any
-  other function type on a `#[cm]` declaration is a compile error.
-- The closure stays in the guest. The call registers it and passes a `u32` key
-  in its place. One closure value has one key.
-- The host calls the closure back through the `wado:callback/callback`
-  interface, which the component exports. It holds one function per argument
-  shape, named `call` followed by one word per argument: the argument's
-  primitive type, or `handle` for a handle (`call`, `call-i32`, `call-handle`).
-  Each takes the key first, is lifted synchronously, and returns nothing.
-  `wado wit` lists the interface among the world's exports.
-- The host may call a callback during an import call, which reenters the
-  component, or while `run` is suspended.
-- A callback runs as a task of its own. It may perform an effect a world import
-  backs.
-- Where a Wado handler answers the `#[cm]` interface instead of the host, the
-  handler receives the closure itself and may call it.
-
-Rationale: [WEP: The Web Interface for Wado](./wep-2026-04-01-web.md#callbacks).
+[callback](./spec-components.md#callbacks).
 
 ## Default Arguments
 

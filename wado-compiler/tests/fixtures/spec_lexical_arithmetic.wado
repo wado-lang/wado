@@ -1,0 +1,29 @@
+// Integer `+`, `-` and `*` wrap, and integer `/` and `%` by zero trap. Float
+// division by zero follows IEEE 754.
+
+test "integer arithmetic wraps" {
+    let max: i8 = 127;
+    assert max + 1 == -128;
+    let zero: u8 = 0;
+    assert zero - 1 == 255;
+    assert i32::MAX * 2 == -2;
+    assert -i64::MIN == i64::MIN;
+}
+
+#[expect_trap]
+test "integer division by zero traps" {
+    let divisor = 0;
+    let _ = 10 / divisor;
+}
+
+#[expect_trap]
+test "integer remainder by zero traps" {
+    let divisor: u64 = 0;
+    let _ = 10 % divisor;
+}
+
+test "float division by zero follows IEEE 754" {
+    let zero = 0.0;
+    assert 1.0 / zero == f64::INFINITY;
+    assert (0.0 / zero).is_nan();
+}

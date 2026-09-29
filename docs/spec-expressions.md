@@ -393,6 +393,32 @@ prefix `+`, so `x++` and `a++b` are parse errors.
 
 It has no `**` power operator: call `f64::pow(x, y)` or `f32::pow(x, y)`.
 
+### Overflow and Division by Zero
+
+Integer `+`, `-`, `*` and unary `-` wrap in two's complement at every width,
+signed and unsigned alike, so an overflow never traps. An integer `/` or `%`
+whose divisor is zero traps. A float operation follows IEEE 754: dividing by
+zero gives an infinity, or NaN for `0.0 / 0.0`.
+
+<!-- {"fixture":"spec_lexical_arithmetic.wado"} -->
+
+```wado
+test "integer arithmetic wraps" {
+    let max: i8 = 127;
+    assert max + 1 == -128;
+    let zero: u8 = 0;
+    assert zero - 1 == 255;
+    assert i32::MAX * 2 == -2;
+    assert -i64::MIN == i64::MIN;
+}
+
+#[expect_trap]
+test "integer division by zero traps" {
+    let divisor = 0;
+    let _ = 10 / divisor;
+}
+```
+
 ### Type Cast (`as`)
 
 The `as` operator converts between primitive types. It also reinterprets a
