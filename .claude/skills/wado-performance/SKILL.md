@@ -211,9 +211,14 @@ paid on a benchmark `fts` never touched.
 
 ## 4. Inlining: fix the inliner, never the code
 
-Improving the inliner pays, and it keeps being improved. A better price reaches
-every program at once. When it declines a callee that should be spliced, that is
-a cost-model bug: find the price with `WADO_TRACE=inline` and fix it in
+An inline hint or a hand-inlined body is almost never worth it: it reaches one
+call site, and it silently outlives the measurement that justified it. The
+stdlib carries no `#[inline]` / `#[inline(never)]`, because a hint that makes
+code faster marks a case the optimizer misses.
+
+Improving the inliner is what pays, and it keeps being improved. A better price
+reaches every program at once. When it declines a callee that should be spliced,
+that is a cost-model bug: find the price with `WADO_TRACE=inline` and fix it in
 `optimize/inline.rs`.
 
 Never bend source to the inliner's current prices. Collapsing `let`s into one
@@ -227,11 +232,6 @@ price.
 
 Raising the threshold wholesale is not the lever: it bloats hot loops and
 measured slower. The lever is a price that matches what the spliced code costs.
-
-The same holds for hints. A `#[inline]` / `#[inline(never)]` in
-`wado-compiler/lib/` claims the cost model got it wrong, and it silently
-outlives the measurement that justified it. The stdlib carries none; fix the
-cost model instead.
 
 A split that is right on its own stays. A slow path that is not rare is one: a
 `width > 0` branch runs every time a width is set, so it is hot when taken and
