@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790652300333,
+  "lastUpdate": 1790670561824,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61853,6 +61853,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 313351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f495f8e2350e13ae51e5059d188a4b2166b18748",
+          "message": "Merge pull request #2220 from wado-lang/zlib-inflate-fast\n\nperf(zlib)!: decode DEFLATE 30% faster with an inflate_fast loop",
+          "timestamp": "2026-09-29T16:58:20+09:00",
+          "tree_id": "227a066f72e5a15e228d92ee27fdee233429f0e6",
+          "url": "https://github.com/wado-lang/wado/commit/f495f8e2350e13ae51e5059d188a4b2166b18748"
+        },
+        "date": 1790670561318,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22798,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
             "unit": "bytes"
           }
         ]
