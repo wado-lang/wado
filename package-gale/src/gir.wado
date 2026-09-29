@@ -988,10 +988,10 @@ pub struct RepeatOp {
     pub probe_contested: bool = false,
     /// What each iteration owes before it commits. See `IterationDuties`.
     pub duties: IterationDuties = IterationDuties {},
-    /// A non-greedy `*?` / `+?` no lookahead separates from its continuation,
-    /// so the runtime simulator decides each exit (`non_greedy_static_undecided`).
-    /// Stamped rather than recomputed so the two emit walkers and the scan side
-    /// cannot answer it differently.
+    /// `non_greedy_static_undecided` for this Repeat — no lookahead
+    /// separates the loop body from the continuation. Stamped rather than
+    /// recomputed so the two emit walkers and the scan side cannot answer
+    /// it differently.
     pub static_exit_undecided: bool = false,
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
     /// verdict: its continuation scan ends at the rule's tail, and a token

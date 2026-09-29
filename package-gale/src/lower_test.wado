@@ -2233,13 +2233,9 @@ test "lower non-greedy Wildcard Repeat carries outer_follow as exit_first" {
 test "lower non-greedy single-element Group Repeat lowers body to TransparentGroup with empty body_first_set" {
     // `r : (.)*? '=' ;` — `(.)` is a single-alt single-element Group
     // that `lower_transparent_group` collapses to `Op::Group(Transparent)`
-    // wrapping `Op::Wildcard`. This is the regression case fixed in
-    // PR #1064: emit's `non_greedy_loop_cond` keys on
-    // `body_first_set.is_empty()` so the wildcard non-greedy condition
-    // (`while !EOF && peek not in follow`) fires for the wrapped
-    // shape just as it does for bare `.*?`. Without an empty
-    // body_first_set on the lowered Repeat, emit would fall through to
-    // a `false` while-condition and the loop would never enter.
+    // wrapping `Op::Wildcard`. The body admits every token, so the wrapped
+    // shape exits by the simulator just as bare `.*?` does
+    // (`non_greedy_exit_by_atn`).
     let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
@@ -2371,7 +2367,7 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
             }
             // body_second_position_first = first of inner-Group's
             // elements from index 1 = { TK_INT }. Consumed by emit's
-            // `non_greedy_loop_cond` 2-token disambiguation arm.
+            // `compute_non_greedy_condition` 2-token disambiguation arm.
             assert rep.body_second_position_first.len() == 1, `expected 1, got ${rep.body_second_position_first.len()}`;
             assert rep.body_second_position_first[0] == "TK_INT", rep.body_second_position_first[0];
             // body_shape classifies the body op for emit's exhaustive

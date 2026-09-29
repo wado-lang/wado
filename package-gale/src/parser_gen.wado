@@ -205,7 +205,13 @@ use {
     expect_set_call,
     kind_bitset_words,
 } from "./kind_set_gen.wado";
-use { group_alt_classes, non_greedy_static_undecided, peel_repeat_body_label, rebind_op_field } from "./lower.wado";
+use {
+    group_alt_classes,
+    non_greedy_exit_by_atn,
+    non_greedy_static_undecided,
+    peel_repeat_body_label,
+    rebind_op_field,
+} from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -1943,6 +1949,42 @@ fn gen_scan_optional_probe(
     w.end();
 }
 
+/// Scan mirror of `begin_non_greedy_probe_loop`: iterate only while exiting
+/// stays non-viable, so the tournament measures what the parse consumes.
+/// `Plus`'s mandatory first iteration is emitted by the caller.
+fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext) {
+    let no_gate = String::new();
+    let guard = scan_repeat_guard(&re.inner_admits, &no_gate, ctx);
+    w.begin("loop");
+    gen_scan_mark(w, ctx, "ep");
+    w.line("let mut ng_exit: bool = false;");
+    w.begin("ng_exit_scan:");
+    let fail = "break ng_exit_scan;";
+    for let se of &re.continuation_scan {
+        gen_scan_op_element(w, se, ctx, &fail);
+    }
+    let ng_exit = "ng_exit";
+    emit_probe_verdict(w, re.probe_asks_caller, &re.probe_viable, &ng_exit, ctx);
+    w.end();
+    gen_scan_rewind(w, ctx, "ep");
+    w.line("if ng_exit { break; }");
+    w.line(`if !(${guard}) { break; }`);
+    gen_scan_mark(w, ctx, "sp");
+    gen_scan_op_element_assign(w, &re.body, ctx, &known_at_start(&admits_kinds(&re.inner_admits)));
+    gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
+    w.line("if pos == sp { break; }");
+    w.end();
+}
+
+/// Whether the exit probe decides this scan-side loop, from the same stamp
+/// and parts the parse side reads.
+fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
+    return re.non_greedy
+        && re.static_exit_undecided
+        && !admits_kinds(&re.inner_admits).is_empty()
+        && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
+}
+
 /// Scan-side twin of `optional_probe_decides` — same conjuncts off the mirror
 /// stamps, so the two sides answer identically.
 fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
@@ -2115,7 +2157,11 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     if re.kind matches { Plus } {
         gen_scan_op_element(w, &re.body, ctx, fail_stmt, known);
     }
-    let guard = if re.static_exit_undecided {
+    if scan_non_greedy_probe_decides(re, ctx) {
+        gen_scan_non_greedy_probe_loop(w, re, ctx);
+        return;
+    }
+    let guard = if non_greedy_exit_by_atn(re.non_greedy, re.kind, &loop_admits) {
         atn_enters_cond(ctx, re.atn_decision, "tokens", "pos")
     } else {
         scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)
@@ -4448,23 +4494,77 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     }
 }
 
-/// Non-greedy `*?` / `+?` under the emitter: loop only while the exit
-/// condition says to, so the inner yields the closing delimiter to the
-/// continuation. `??` lowers to `Plain` and so never reaches here.
+/// Non-greedy `*?` / `+?` under the emitter: loop only while the
+/// lowered static exit condition holds, so the inner yields the closing
+/// delimiter to the continuation (the same gate cst_gen computes). `??` lowers
+/// to `Plain` + `mark_needs_atn` and so never reaches here.
 fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
-    let cond = non_greedy_loop_cond(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
+    let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
+    if non_greedy_probe_decides(r, ctx) {
+        if let Plus = r.kind {
+            begin_plus_first_iteration(w, nc);
+            gen_op(w, &r.body, ctx, nc);
+            w.end();
+        }
+        begin_non_greedy_probe_loop(w, r, ctx, nc);
+        gen_op(w, &r.body, ctx, nc);
+        w.end();
+        return;
+    }
+    let loops = cond != "false";
     match r.kind {
         Plus => {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
+            if loops {
+                w.begin(`while !p.recovering && (${cond})`);
+                gen_op(w, &r.body, ctx, nc);
+                w.end();
+            }
         },
-        Star => {},
-        Optional => panic("gen_repeat_non_greedy_body: non-greedy `??` lowers to `Plain`"),
+        Star => {
+            if loops {
+                w.begin(`while !p.recovering && (${cond})`);
+                gen_op(w, &r.body, ctx, nc);
+                w.end();
+            }
+        },
+        Optional => panic("gen_repeat_non_greedy_body: non-greedy `??` should be excluded by needs_atn"),
     }
-    w.begin(`while !p.recovering && (${cond})`);
-    gen_op(w, &r.body, ctx, nc);
-    w.end();
+}
+
+/// Whether the exit probe should decide this loop. Unlike the Optional the
+/// competing readings are the loop's own, so `body_admits` stands in for
+/// the overlap; it also gates each iteration, hence non-empty.
+fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
+    return r.static_exit_undecided
+        && r.kind matches { Star | Plus }
+        && !admits_kinds(&r.body_admits).is_empty()
+        && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
+}
+
+/// Open a non-greedy loop that exits only when exiting is viable. The caller
+/// emits the body and closes the block, so both emit walkers share one
+/// decision.
+fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    w.begin("loop");
+    w.line("if p.recovering { break; }");
+    let verdict = dedup_name("ng_exit", nc);
+    w.line(`let mut ${verdict}: bool = false;`);
+    gen_viability_probe(
+        w,
+        &r.continuation_scan,
+        &verdict,
+        "ng_exit_scan",
+        ctx,
+        nc,
+        null,
+        r.probe_asks_caller,
+        &r.probe_viable,
+    );
+    w.line(`if ${verdict} { break; }`);
+    w.line(`if !(${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}) { break; }`);
 }
 
 /// A labelled block that scans `continuation` from the parse position and,
@@ -5102,7 +5202,6 @@ fn atn_prec_arg(ctx: &GenContext) -> String {
 fn atn_reads_prec(ctx: &GenContext) -> bool {
     return ctx.lr_loop_entry_decision(ctx.current_rule_index()) >= 0;
 }
-
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
 /// yield gate: `!(follow_yields(...)) && (cond)` when the Repeat is
@@ -5869,7 +5968,10 @@ fn gen_op_repeat_with_follow_override(
 /// leaf and `StorableGroup` bodies push every iteration's binding
 /// into a list; `TransparentGroup` walks the loop without a list
 /// (each iteration inlines the inner alt), since the group itself
-/// contributes no CST field.
+/// contributes no CST field. `compute_non_greedy_condition` is op-
+/// driven now: Wildcard / Not detection reads the body op shape, and
+/// the inner second-position first set is baked on
+/// `rep_op.body_second_position_first`.
 fn gen_op_repeat_non_greedy(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -5878,7 +5980,8 @@ fn gen_op_repeat_non_greedy(
     name_counts: &mut List<[String, i32]>,
     follow: &List<String>,
 ) {
-    let while_cond = non_greedy_loop_cond(rep_op, follow, &rep_op.caller_follow_second, ctx);
+    let follow_second = &rep_op.caller_follow_second;
+    let while_cond = compute_non_greedy_condition(rep_op, follow, follow_second, ctx);
     return match rep_op.body_shape {
         LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_non_greedy_storable(
             w,
@@ -5929,11 +6032,20 @@ fn gen_op_repeat_non_greedy_storable<S: AsStrSlice>(
         );
         w.end();
     }
-    let guard = if is_plus { `!p.recovering && (${while_cond})` } else { while_cond.to_string() };
-    w.begin(`while ${guard}`);
-    let mut nc: List<[String, i32]> = [];
-    gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
-    w.end();
+    if non_greedy_probe_decides(rep_op, ctx) {
+        begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
+        w.end();
+        return;
+    }
+    if while_cond != "false" {
+        let guard = if is_plus { `!p.recovering && (${while_cond})` } else { while_cond.to_string() };
+        w.begin(`while ${guard}`);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
+        w.end();
+    }
 }
 
 /// Non-greedy arm for a `TransparentGroup` body — the group has no
@@ -5975,10 +6087,19 @@ fn gen_op_repeat_non_greedy_transparent<S: AsStrSlice>(
         gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Required);
         w.end();
     }
-    w.begin(`while ${while_cond}`);
-    let mut nc: List<[String, i32]> = [];
-    gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
-    w.end();
+    if non_greedy_probe_decides(rep_op, ctx) {
+        begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+        w.end();
+        return;
+    }
+    if while_cond != "false" {
+        w.begin(`while ${while_cond}`);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+        w.end();
+    }
 }
 
 /// Greedy `?` Repeat. Dispatches on `rep_op.body_shape`: RuleCall
@@ -7024,20 +7145,23 @@ fn decided_entry<S: AsStrSlice>(decided: &Option<String>, plus_flag: S) -> Group
     return GroupEntry::Looped(plus_flag.to_string());
 }
 
-/// When a non-greedy loop takes another iteration: where lookahead cannot tell
-/// the body from the continuation, the simulator's answer.
-fn non_greedy_loop_cond(
+fn compute_non_greedy_condition(
     rep_op: &RepeatOp,
     follow_first: &List<String>,
     follow_second: &List<String>,
     ctx: &mut GenContext,
 ) -> String {
-    if rep_op.static_exit_undecided {
+    if non_greedy_exit_by_atn(rep_op.non_greedy, rep_op.kind, &rep_op.body_admits) {
         return atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos");
     }
-    assert !admits_tests_nothing(&rep_op.body_admits), "a body taking every token is undecided, and `check_epsilon_closure` rejects one taking none";
+    assert !admits_tests_nothing(&rep_op.body_admits), "a body taking every token exits by the simulator, and `check_epsilon_closure` rejects one taking none";
     let raw_first = &admits_kinds(&rep_op.body_admits);
+
     let inner_second_first = &rep_op.body_second_position_first;
+    if non_greedy_static_undecided(raw_first, follow_first, inner_second_first, follow_second) {
+        return "false";
+    }
+
     let continue_first = subtract_sets(raw_first, follow_first);
     if !continue_first.is_empty() {
         return ctx.first_check_str(&continue_first);

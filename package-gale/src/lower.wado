@@ -3920,7 +3920,7 @@ fn lower_repeat_op<S: AsStrSlice>(
 }
 
 /// Inner second-position first set for the non-greedy 2-token
-/// disambiguation `non_greedy_loop_cond` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
+/// disambiguation `compute_non_greedy_condition` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> List<String> {
     if let Group(g) = peel_repeat_body_label(elem) {
@@ -3962,7 +3962,7 @@ fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
 /// second sub-position when the next element (at `start`) is itself a
 /// Repeat over a single-alt Group of ≥ 2 elements (the common
 /// `(',' x)*?` followed by `(',' y)*` disambiguation pattern). Returns
-/// `[]` otherwise — emit's `non_greedy_loop_cond` mirror
+/// `[]` otherwise — emit's `compute_non_greedy_condition` mirror
 /// already handles the empty case.
 fn compute_caller_follow_second(elements: &List<Element>, start: i32, ctx: &mut GenContext) -> List<String> {
     if start >= elements.len() {
@@ -4307,22 +4307,15 @@ fn compute_non_greedy_strategy(inner: &Element, outer_follow: &List<String>, ctx
 pub global BROAD_FIRST_SET_THRESHOLD: i32 = 20;
 
 /// True when no lookahead separates a non-greedy loop's body from its
-/// continuation, so only the runtime simulator can say where the loop exits.
-/// Stamped on the op and its scan mirror, so both decide on one answer.
-///
-/// A body taking every token (`.*?`) is undecided at any depth: exiting at the
-/// first token the continuation starts with is viable only if the rest of the
-/// input matches too, and ANTLR4 predicts on the whole.
+/// continuation, so the static exit condition collapses to the minimum
+/// match. Stamped on the op and its scan mirror, and consumed by emit's
+/// `compute_non_greedy_condition`, so all three decide on one answer.
 pub fn non_greedy_static_undecided(
-    body: &Admits,
+    body_first: &List<String>,
     follow_first: &List<String>,
     body_second: &List<String>,
     follow_second: &List<String>,
 ) -> bool {
-    if admits_is_everything(body) {
-        return true;
-    }
-    let body_first = &admits_kinds(body);
     if body_first.is_empty() {
         return false;
     }
@@ -4334,6 +4327,14 @@ pub fn non_greedy_static_undecided(
         return subtract_sets(body_second, follow_second).is_empty();
     }
     return true;
+}
+
+/// A non-greedy `*?` / `+?` over a body taking every token (`.*?`, `~X*?`).
+/// No lookahead says where it stops: exiting is viable only where the whole rest
+/// of the input matches, which ANTLR4 predicts on, so the runtime simulator
+/// decides each exit on the parse and the scan alike.
+pub fn non_greedy_exit_by_atn(non_greedy: bool, kind: RepeatKind, body: &Admits) -> bool {
+    return non_greedy && kind matches { Star | Plus } && admits_is_everything(body);
 }
 
 /// Rebuild a `RepeatOp` with fresh `caller_follow_first` /
@@ -4400,10 +4401,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     reaches_rule_tail: bool,
     rule_name: S,
 ) -> RepeatExitStamps {
-    let static_exit_undecided = non_greedy
-        && kind matches { Star | Plus }
-        && non_greedy_static_undecided(body_admits, caller_follow_first, body_second, caller_follow_second);
-    if static_exit_undecided {
+    if non_greedy_exit_by_atn(non_greedy, kind, body_admits) {
         ctx.mark_needs_scan_atn();
     }
     return RepeatExitStamps {
@@ -4417,7 +4415,12 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             index,
             ctx,
         ),
-        static_exit_undecided,
+        static_exit_undecided: non_greedy_static_undecided(
+            &admits_kinds(body_admits),
+            caller_follow_first,
+            body_second,
+            caller_follow_second,
+        ),
         duties: lower_iteration_duties(
             non_greedy,
             kind,
@@ -4575,7 +4578,7 @@ fn lower_continuation_probe<S: AsStrSlice>(
     reaches_rule_tail: bool,
     rule_name: S,
 ) -> ContinuationProbe {
-    let wants_probe = !non_greedy && kind matches { Optional };
+    let wants_probe = non_greedy || kind matches { Optional };
     // Only a tail walk may ask the caller's FOLLOW (invariant 10: a group's walk
     // ends at the group, `use foo::*`); elsewhere the continuation must consume.
     if !wants_probe || !reaches_rule_tail && ctx.tail_is_nullable_deep(alt_elements, index + 1) {
