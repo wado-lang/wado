@@ -6,10 +6,10 @@
 Command-line argument parsing (WEP `wep-2026-06-22-core-args.md`).
 
 `core:args` is a non-self-describing, parse-only `Deserializer` over `argv`.
-Argument types are ordinary `struct`s with
-`impl Deserialize for T;` — no bespoke derive. Struct fields become `--long`
-options; fields marked `#[wire(positional)]` are filled from bare tokens in
-declaration order. Scalar tokens are converted with `LenientFromStr`.
+Argument types are ordinary `struct`s with `impl Deserialize for T;` — no
+bespoke derive. Struct fields become `--long` options; fields marked
+`#[wire(positional)]` are filled from bare tokens in declaration order.
+Scalar tokens are converted with `LenientFromStr`.
 
 Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
 `Option<T> = null`, required/optional/variadic positionals, repeatable

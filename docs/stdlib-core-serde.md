@@ -95,10 +95,11 @@ which is unrecoverable unlike an error.
 
 ## Functions
 
-### `pub fn report_duplicate_key<S: AsStrSlice>(policy: DuplicateKeyPolicy, name: S) -> Result<(), DeserializeError>`
+### `pub fn report_duplicate_key<K: Inspect>(policy: DuplicateKeyPolicy, key: &K) -> Result<(), DeserializeError>`
 
 Applies `policy` to a key the wire already wrote. Detecting the repeat is
-the caller's job: a struct sees a filled slot, a map asks `try_insert`.
+the caller's job: a struct sees a filled slot, a map asks `try_insert`, a
+set asks `insert`, whose element is its key.
 
 ### `pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, DeserializeError>`
 
@@ -480,7 +481,10 @@ a whole-value rejection, or a format that counts nothing.
 
 #### `pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError`
 
-#### `pub fn duplicate_field<S: AsStrSlice>(name: S) -> DeserializeError`
+#### `pub fn duplicate_key<K: Inspect>(key: &K) -> DeserializeError`
+
+A repeated field or key, named as `Inspect` spells it: a string key is
+quoted, so it reads apart from a number.
 
 #### `pub fn non_scalar_key(offset: i64) -> DeserializeError`
 

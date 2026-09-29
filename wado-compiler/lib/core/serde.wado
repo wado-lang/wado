@@ -208,6 +208,8 @@ impl DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg.to_string(), offset };
     }
 
+    /// A repeated field or key, named as `Inspect` spells it: a string key is
+    /// quoted, so it reads apart from a number.
     pub fn duplicate_key<K: Inspect>(key: &K) -> DeserializeError {
         return DeserializeError {
             kind: DeserializeErrorKind::DuplicateField,

@@ -1103,7 +1103,7 @@ struct Unencodable {
 
 impl Serialize for Unencodable {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        return Result::Err(SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: "unencodable" });
+        return Result::Err(SerializeError::unsupported_value("unencodable"));
     }
 }
 

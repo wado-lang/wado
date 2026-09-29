@@ -2026,9 +2026,6 @@ pub struct JsonMapAccess {
     first: bool,
 }
 
-// A `String` key is read straight into place. Handing every key to a
-// `TextKeyDeserializer` instead copies it once more.
-
 /// Reads an object key as the scalar `JsonKeySerializer` wrote: a string as
 /// itself, any other scalar parsed from the string's text.
 pub struct JsonKeyDeserializer {
@@ -2096,6 +2093,8 @@ impl Deserializer for JsonKeyDeserializer {
         return self.text()?.deserialize_char();
     }
 
+    // Read straight into place: going through `text()` like the other
+    // scalars copies the key once more.
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
         return self.de.read_json_string();
     }
