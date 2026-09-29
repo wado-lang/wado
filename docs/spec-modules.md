@@ -89,36 +89,7 @@ test {
 [The Modules of a Package](./spec-packages.md#the-modules-of-a-package) lists
 them.
 
-<<<<<<< HEAD
 ### Signature Reach
-||||||| fb4d90a84
-`internal` reaches the files of one package. The packages are:
-
-- The entry module, every local module it reaches through `./` / `../`
-  imports, and the Wasm assets those modules import.
-- Each dependency. A relative import inside a dependency stays in that
-  dependency's package.
-- `core:*`, which is one package, and `wasi:*`, which is another.
-- A [generated module](#generated-imports-kiln) belongs to the package of the
-  module that imports it.
-
-### Signature reach
-=======
-`internal` reaches the files of one package. The packages are:
-
-- The entry module, every local module it reaches through `./` / `../`
-  imports, and the Wasm assets those modules import.
-- Each dependency. A relative import inside a dependency stays in that
-  dependency's package.
-- `core:*`, which is one package, and `wasi:*`, which is another. A test of
-  the standard library is an entry module in its `core` directory, and it
-  joins `core:*`'s package together with its local modules, so it reaches
-  their `internal` items.
-- A [generated module](#generated-imports-kiln) belongs to the package of the
-  module that imports it.
-
-### Signature reach
->>>>>>> origin/main
 
 An item's signature may not name a declaration that reaches less far than the
 item itself. Naming one is a compile error at the reference. A caller that
