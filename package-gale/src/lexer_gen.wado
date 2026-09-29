@@ -285,7 +285,8 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
             continue;
         }
         if let Some(target) = &rule.type_override {
-            if let Some(n) = parse_token_type_numeric(target) {
+            // A name, or a number past `i32`, is the regular `TK_<name>` path.
+            if let Ok(n) = i32::from_str(target) {
                 if n < 1 {
                     continue;
                 }
@@ -298,16 +299,6 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
         }
     }
     w.blank();
-}
-
-/// Returns `Some(n)` when `s` is a base-10 integer that fits in `i32` (the
-/// runtime token-kind type). A token name, or a value that overflows, returns
-/// `None` so the caller can defer to the regular `TK_<name>` path.
-fn parse_token_type_numeric<S: AsStrSlice>(s: S) -> Option<i32> {
-    return match i32::from_str(s) {
-        Ok(n) => Option::Some(n),
-        Err(_) => null,
-    };
 }
 
 fn rule_name_exists<S: AsStrSlice>(lexer_rules: &List<LexerRule>, name: S) -> bool {

@@ -3442,19 +3442,19 @@ A : 'a' ; B : 'b' ;
 }
 
 test "a caller argument holding a quoted comma is one argument, in Java and in Wado" {
-    let java = parses("grammar T;
+    let in_java = parses("grammar T;
 s : e[\"x,y\", 2] EOF ;
 e[String t, int n] : ID { System.out.print($t); System.out.print($n); } ;
 ID : [a-z]+ ;
 ", "s", ["a"]);
-    assert java == "a => (s (e a)) [x,y2]\n", java;
-    let wado = parses("grammar T;
+    assert in_java == "a => (s (e a)) [x,y2]\n", in_java;
+    let in_wado = parses("grammar T;
 options { language = Wado; }
 s : e[\"x,y\", 2] EOF ;
 e[String t, i32 n] : ID { p.emit(`${$t}${$n}`); } ;
 ID : [a-z]+ ;
 ", "s", ["a"]);
-    assert wado == "a => (s (e a)) [x,y2]\n", wado;
+    assert in_wado == "a => (s (e a)) [x,y2]\n", in_wado;
 }
 
 // Java's `+` concatenates a String and an int; the translated body applies

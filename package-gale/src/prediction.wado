@@ -340,10 +340,8 @@ struct SllConfig {
     return_stack: List<SllReturn>,
 }
 
-/// An opaque config is an answer of `sll_advance`, which every caller sets
-/// aside as an opaque alt; only live configs are walked further.
 fn assert_live(c: &SllConfig) {
-    assert c.pos != SLL_POS_OPAQUE, "an opaque config is set aside, never walked";
+    assert c.pos != SLL_POS_OPAQUE, "`build_sll_node` and `try_expand_opaque` set an opaque config aside, never walk it";
 }
 
 fn push_return(stack: &List<SllReturn>, elements: &List<Element>, pos: i32) -> List<SllReturn> {
@@ -710,8 +708,7 @@ fn build_sll_node(
                     opaque_alts.push(closed[i].alt_index);
                 }
                 for let a of advanced {
-                    if a.pos == -1 {
-                        // Opaque config: multi-token RuleRef, can't advance past.
+                    if a.pos == SLL_POS_OPAQUE {
                         if !opaque_alts.contains(&a.alt_index) {
                             opaque_alts.push(a.alt_index);
                         }
