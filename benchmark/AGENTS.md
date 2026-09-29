@@ -2,6 +2,12 @@
 
 Performance benchmarks comparing Wado against C and JavaScript.
 
+Read the `wado-performance` skill before measuring a change, and its section
+"A/B-ing a stdlib change" before comparing two versions of `wado-compiler/lib`.
+Without `WADO_BIN`, `wado.sh` runs `cargo run --release`, and a release build
+embeds the stdlib. So an A/B that swaps stdlib files into the tree rebuilds the
+compiler for every run.
+
 ## Setup
 
 ```sh
