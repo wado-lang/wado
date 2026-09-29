@@ -293,7 +293,10 @@ same arms over `all-wado`, six rounds seconds apart, settled every row. Keep
 `sieve` in the selection as the in-band control, and run `benchmark-all` once at
 the end for the record.
 
+It is a task of `benchmark/mise.toml`, so it runs from `benchmark/` only.
+
 ```sh
+cd benchmark
 mise run all-wado                                # every Wado row
 mise run all-wado json_catalog sieve             # those, by name
 ```
