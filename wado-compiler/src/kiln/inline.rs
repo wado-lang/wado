@@ -6,10 +6,8 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::ast::{
-    AttrEntry, AttrObject, AttrValue, ImportAttributes, Item, Module, UseDecl, attr_value,
-};
-use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::ast::{AttrObject, AttrValue, ImportAttributes, Item, Module, UseDecl, attr_value};
+use crate::compiler_host::Diagnostic;
 use crate::hashmap::IndexMap;
 use crate::name::resolve_module_path;
 use crate::path::is_cwd_relative;
@@ -17,7 +15,7 @@ use crate::path::is_cwd_relative;
 use super::cache::{encode_written_options, hex_digest};
 use super::invocation::{DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationPath};
 use super::options::OptionsDescriptor;
-use super::options_check::{CanonicalOptions, OptionsAnchor, validate};
+use super::options_check::{CanonicalOptions, OptionsAnchor, clause_error, validate};
 
 /// Default output-directory prefix for inline invocations: each clause lands
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
@@ -133,12 +131,9 @@ where
 
     for (module_path, module) in modules {
         for use_decl in use_decls_of(module) {
-            let Some(attrs) = use_decl.attributes.as_ref() else {
+            let Some(attrs) = use_decl.attributes.as_ref().filter(|a| a.is_generated()) else {
                 continue;
             };
-            if !attrs.entries.contains_key(ImportAttributes::GENERATOR) {
-                continue;
-            }
 
             match lower_inline(module_path, use_decl, attrs, descriptors, manifest_root) {
                 Ok(invocation) => {
@@ -154,18 +149,17 @@ where
                     if let Some((prior_key, prior_mod)) = by_from.get(&from_key)
                         && *prior_key != tuple_key
                     {
-                        diagnostics.push(Diagnostic {
-                            severity: Severity::Error,
-                            code: Code::GeneratorOptionsInvalid,
-                            message: format!(
+                        diagnostics.push(use_error(
+                            module_path,
+                            use_decl,
+                            format!(
                                 "kiln: two inline generator clauses disagree for `from = \"{}\"` \
                                      (first in {}, second in {})",
                                 invocation.from.as_str(),
                                 prior_mod,
                                 module_path,
                             ),
-                            span: Some(span_of(module_path, use_decl)),
-                        });
+                        ));
                         continue;
                     }
                     by_from.insert(from_key, (tuple_key.clone(), module_path.to_string()));
@@ -194,20 +188,12 @@ fn lower_inline(
     manifest_root: &str,
 ) -> Result<Invocation, Vec<Diagnostic>> {
     let mut errors: Vec<Diagnostic> = Vec::new();
-    let key_error = |entry: &AttrEntry, message: String| Diagnostic {
-        severity: Severity::Error,
-        code: Code::GeneratorOptionsInvalid,
-        message,
-        span: Some(DiagnosticSpan::from_span(
-            &entry.key_span,
-            Some(module_path),
-        )),
-    };
 
     for (key, entry) in &attrs.entries {
         if key != ImportAttributes::GENERATOR {
-            errors.push(key_error(
-                entry,
+            errors.push(clause_error(
+                module_path,
+                &entry.key_span,
                 format!(
                     "kiln: unknown key `{key}` beside `generator`; a generated import's \
                      `with` holds `generator` alone"
@@ -217,8 +203,9 @@ fn lower_inline(
     }
     let generator = &attrs.entries[ImportAttributes::GENERATOR];
     let Some(cfg) = generator.value.as_object() else {
-        errors.push(key_error(
-            generator,
+        errors.push(clause_error(
+            module_path,
+            &generator.key_span,
             format!(
                 "kiln: `generator` must be an object, got {}",
                 generator.value.kind()
@@ -226,13 +213,12 @@ fn lower_inline(
         ));
         return Err(errors);
     };
-    let (last_field, other_fields) = GENERATOR_FIELDS
-        .split_last()
-        .expect("the generator has fields");
+    let [other_fields @ .., last_field] = GENERATOR_FIELDS;
     for (key, entry) in cfg {
         if !GENERATOR_FIELDS.contains(&key.as_str()) {
-            errors.push(key_error(
-                entry,
+            errors.push(clause_error(
+                module_path,
+                &entry.key_span,
                 format!(
                     "kiln: unknown `generator` field `{key}`; the fields are `{}`, and \
                      `{last_field}`",
@@ -256,26 +242,23 @@ fn lower_inline(
             lower_module_specifier(module_path, use_decl, s, manifest_root, &mut errors)
         }
         Some(other) => {
-            errors.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsInvalid,
-                message: format!(
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                format!(
                     "kiln: `generator.module` must be a module specifier string \
                      (\"./path/to/generator.wado\" or \"ns:name@ver\"), got {}",
                     other.kind(),
                 ),
-                span: Some(span_of(module_path, use_decl)),
-            });
+            ));
             None
         }
         None => {
-            errors.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsInvalid,
-                message: "kiln: inline `with { generator: {...} }` requires a `module` field"
-                    .to_string(),
-                span: Some(span_of(module_path, use_decl)),
-            });
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                "kiln: inline `with { generator: {...} }` requires a `module` field".to_string(),
+            ));
             None
         }
     };
@@ -294,14 +277,13 @@ fn lower_inline(
         }
         other => {
             if inline_version.is_some() || inline_registry.is_some() {
-                errors.push(Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::GeneratorOptionsInvalid,
-                    message: "kiln: `generator.version` / `generator.registry` apply only to a \
-                              `[build-dependencies]` specifier `module`, not a relative path"
+                errors.push(use_error(
+                    module_path,
+                    use_decl,
+                    "kiln: `generator.version` / `generator.registry` apply only to a \
+                     `[build-dependencies]` specifier `module`, not a relative path"
                         .to_string(),
-                    span: Some(span_of(module_path, use_decl)),
-                });
+                ));
             }
             other
         }
@@ -333,29 +315,27 @@ fn lower_inline(
                     &mut errors,
                 )),
                 other => {
-                    errors.push(Diagnostic {
-                        severity: Severity::Error,
-                        code: Code::GeneratorOptionsInvalid,
-                        message: format!(
+                    errors.push(use_error(
+                        module_path,
+                        use_decl,
+                        format!(
                             "kiln: `generator.inputs[{i}]` must be a string, got {}",
                             other.kind(),
                         ),
-                        span: Some(span_of(module_path, use_decl)),
-                    });
+                    ));
                     None
                 }
             })
             .collect(),
         Some(other) => {
-            errors.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsInvalid,
-                message: format!(
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                format!(
                     "kiln: `generator.inputs` must be an array of strings, got {}",
                     other.kind(),
                 ),
-                span: Some(span_of(module_path, use_decl)),
-            });
+            ));
             Vec::new()
         }
     };
@@ -388,15 +368,14 @@ fn lower_inline(
             &mut errors,
         )),
         Some(other) => {
-            errors.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsInvalid,
-                message: format!(
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                format!(
                     "kiln: `generator.output_dir` must be a string, got {}",
                     other.kind(),
                 ),
-                span: Some(span_of(module_path, use_decl)),
-            });
+            ));
             None
         }
     };
@@ -461,14 +440,11 @@ fn resolve_or_reject(
     if is_cwd_relative(raw) {
         return resolve_decl_relative(module_path, raw, manifest_root);
     }
-    errors.push(Diagnostic {
-        severity: Severity::Error,
-        code: Code::GeneratorOptionsInvalid,
-        message: format!(
-            "kiln: `{field}` must be a relative path starting with `./` or `../`, got `{raw}`"
-        ),
-        span: Some(span_of(module_path, use_decl)),
-    });
+    errors.push(use_error(
+        module_path,
+        use_decl,
+        format!("kiln: `{field}` must be a relative path starting with `./` or `../`, got `{raw}`"),
+    ));
     InvocationPath::normalize(raw)
 }
 
@@ -486,15 +462,14 @@ fn optional_source_string(
         None => None,
         Some(AttrValue::String(s)) => Some(s.clone()),
         Some(other) => {
-            errors.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsInvalid,
-                message: format!(
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                format!(
                     "kiln: `generator.{field}` must be a string, got {}",
                     other.kind(),
                 ),
-                span: Some(span_of(module_path, use_decl)),
-            });
+            ));
             None
         }
     }
@@ -545,16 +520,15 @@ fn lower_module_specifier(
     }
     // A bare name (no `:`) is not a valid specifier — the same rule that rejects
     // bare `[dependencies]` keys, applied at the reference site.
-    errors.push(Diagnostic {
-        severity: Severity::Error,
-        code: Code::GeneratorOptionsInvalid,
-        message: format!(
+    errors.push(use_error(
+        module_path,
+        use_decl,
+        format!(
             "kiln: `generator.module` must be a relative path (\"./generator.wado\") \
              or a `[build-dependencies]` specifier — an open coordinate (\"ns:name@ver\") \
              or a `lib:` nickname (\"lib:gale\"); a bare name is not allowed, got `{spec}`"
         ),
-        span: Some(span_of(module_path, use_decl)),
-    });
+    ));
     None
 }
 
@@ -640,14 +614,16 @@ fn clause_digest(
     hex_digest(&digest)
 }
 
-fn span_of(module_path: &str, use_decl: &UseDecl) -> DiagnosticSpan {
-    DiagnosticSpan::from_span(&use_decl.span, Some(module_path))
+/// A clause error with no key of its own, blamed on the whole `use`.
+fn use_error(module_path: &str, use_decl: &UseDecl, message: String) -> Diagnostic {
+    clause_error(module_path, &use_decl.span, message)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstId, AttrEntry, ImportAttributes, Item, UseDecl, UseItem, Visibility};
+    use crate::ast::{AstId, AttrEntry, UseItem, Visibility};
+    use crate::compiler_host::{Code, Severity};
     use crate::token::Span;
     use std::assert_matches;
 

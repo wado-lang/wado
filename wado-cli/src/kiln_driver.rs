@@ -938,7 +938,6 @@ impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
 /// # Errors
 /// See [`PipelineError`].
 pub async fn run_pipeline<H, P>(
-    manifest: &Manifest,
     manifest_root: &Path,
     host: &H,
     provider: &P,
@@ -964,7 +963,7 @@ where
 
     let invalid_options = {
         let _s = KilnSpan::new(host, "kiln/typed_encode_options");
-        typed_encode_options(manifest, &mut planned.plan.order, &resolved, host)
+        typed_encode_options(&mut planned.plan.order, &resolved, host)
     };
     if invalid_options > 0 {
         return Err(PipelineError::InlineClause(invalid_options));
@@ -1250,7 +1249,6 @@ fn lookup_resolved(
 /// surface as error diagnostics on `host`, and their count is returned: the
 /// generator must not run on options its use site did not write.
 fn typed_encode_options<H: CompilerHost>(
-    manifest: &Manifest,
     invocations: &mut [Invocation],
     resolved: &[(
         GeneratorModule,
@@ -1258,7 +1256,6 @@ fn typed_encode_options<H: CompilerHost>(
     )],
     host: &H,
 ) -> usize {
-    let _ = manifest;
     let mut invalid = 0;
     for inv in invocations.iter_mut() {
         let descriptor = match lookup_resolved(resolved, &inv.module) {

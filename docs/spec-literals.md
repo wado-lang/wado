@@ -1,5 +1,11 @@
 # Literals
 
+This chapter covers the values a program writes directly: booleans, `null`,
+characters, numbers, strings and byte strings, template strings and their
+format specifiers, tuple, list and object literals, and the compile-time
+literals that start with `#`. The types these values have are in
+[Types](./spec-types.md).
+
 ## Primitive Literals
 
 ### Boolean Literals
@@ -14,7 +20,7 @@ assert active && !disabled;
 
 ### Null Literal
 
-The `null` keyword is equivalent to `None` and represents the absence of a value:
+`null` is the `None` of an `Option`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -26,7 +32,8 @@ let also_missing = Option::<i32>::None;
 assert missing == also_missing;
 ```
 
-Note: `null` is a language keyword, while `None` is a case of the prelude's `Option`. Bare `None` needs an expected type to say which `Option` it belongs to.
+`null` is a keyword, while `None` is a case of the prelude's `Option`. A bare
+`None` needs an expected type to say which `Option` it belongs to.
 
 A `null` takes the `Option` its context expects, or the newtype over an `Option` it expects, as any literal coerces to a newtype whose base takes it: with `type Opt<T> = Option<T>`, `let a: Opt<i64> = null` holds, and so does `a == null`. With no context it has the type `Option<!>`, the `Option` with no `Some`. A `null` is never any other type, so `let x: i32 = null` is a type error.
 
@@ -103,63 +110,6 @@ See [Escape Sequences](#escape-sequences) for the supported escapes.
 let a = '\u0041';         // 'A' (BMP)
 let smiley = '\u{1F600}'; // '😀' (non-BMP)
 assert a == 'A' && smiley == '😀';
-```
-
-#### char Casting and Conversion
-
-`char` can be cast to any integer type to extract the Unicode scalar value (possibly truncated for smaller types):
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let c = 'A';
-let code = c as i32;
-let ucode = c as u32;
-let byte = c as u8;     // truncated to low byte
-assert code == 65 && ucode == 65 && byte == 65;
-```
-
-`u8 as char` is allowed because all `u8` values (0..255) are valid Unicode scalar values:
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let b: u8 = 65;
-assert b as char == 'A';
-```
-
-All other integer-to-char casts are prohibited because not all values are valid Unicode scalar values (surrogates `0xD800..0xDFFF` and values `> 0x10FFFF` are invalid):
-
-<!-- {"fixture":"spec_literals_char_from_int.wado"} -->
-
-```wado
-let x: i32 = 65;
-let c = x as char;  // compile error
-
-let y: i8 = 65;
-let d = y as char;  // compile error (i8 can be negative)
-```
-
-Use checked conversion functions instead:
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let from_u32 = char::from_u32(65 as u32);
-let from_i32 = char::from_i32(65);
-assert from_u32 == Option::Some('A') && from_i32 == Option::Some('A');
-```
-
-See [`core:prelude`](./stdlib-core-prelude.md) for the full `char` API.
-
-Casting `char` to non-integer types is a compile error:
-
-<!-- {"fixture":"spec_literals_char_to_non_int.wado"} -->
-
-```wado
-let c = 'A';
-let f = c as f64;     // compile error: char can only be cast to integer types
-let s = c as String;  // compile error: the two types share no representation
 ```
 
 ### Integer Literals
@@ -345,8 +295,33 @@ let escaped = "Line 1\nLine 2\tTabbed";
 assert escaped.lines().count() == 2 && escaped.len() == 20;
 ```
 
-Byte strings use a `b` prefix and create a constant `ByteList` (the
-first-class byte-buffer newtype over `List<u8>`):
+A string or template string may span lines. Each newline in the source is a
+newline in the value:
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+test "multiline" {
+    // Regular multiline string
+    let poem = "Roses are red,
+Violets are blue,
+Wado is great,
+And so are you!";
+
+    // Multiline template string
+    let name = "Alice";
+    let message = `Dear ${name},
+
+Welcome to Wado!
+
+Best regards`;
+    assert poem.lines().count() == 4;
+    assert message == "Dear Alice,\n\nWelcome to Wado!\n\nBest regards";
+}
+```
+
+Byte strings use a `b` prefix and create a constant `ByteList`, the byte-buffer
+newtype over `List<u8>`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -356,13 +331,16 @@ let raw: List<u8> = b"\x89PNG\r\n";     // Also OK: newtype literal coercion to 
 assert raw == [137, 80, 78, 71, 13, 10] && magic as List<u8> == raw;
 ```
 
-The content must be ASCII; each `\xNN` escape (two hex digits) or source
-character contributes one byte, and the standard escapes (`\n`, `\t`, `\\`,
-`\"`, `\0`, `\r`, `\'`) are also accepted. Unicode escapes (`\u{...}` /
-`\uHHHH`) are rejected, since a Unicode escape denotes a scalar, not a byte. Use
-`\xNN` for a raw byte. (`#include_bytes("path")` produces the same `ByteList` from a file.)
-The default type is `ByteList`, but newtype literal coercion lets it flow into a
-`List<u8>` context (or any type whose base is `List<u8>`) with no cast.
+Each source character and each escape contributes one byte. The source
+characters must be ASCII. A `\xNN` escape (two hex digits) writes any byte, and
+the standard escapes `\n`, `\t`, `\\`, `\"`, `\0`, `\r` and `\'` are accepted
+too. A Unicode escape (`\u{...}` or `\uHHHH`) is an error, since it denotes a
+scalar, not a byte. [`#include_bytes`](#include_str-and-include_bytes) builds
+the same `ByteList` from a file.
+
+A byte string's type is `ByteList`. Like any literal it coerces to a newtype's
+base, so it flows into a `List<u8>` context, or one whose base is `List<u8>`,
+with no cast.
 
 Byte literals are the single-byte analog: `b'x'` is one `u8`.
 
@@ -375,10 +353,10 @@ let n: i32 = b'A';         // coerces like an integer literal
 assert a == 65 && hi == 255 && n == 65;
 ```
 
-A byte literal is an integer literal defaulting to `u8`, so it coerces like any
-integer literal (its value is always `0..=255`). Its content follows the same
-one-byte rule as a byte string (`\xNN` for `0x80..=0xFF`; no `\u`); use a char
-literal `'…'` for a Unicode scalar.
+A byte literal is an integer literal whose default type is `u8`, so it coerces
+as any integer literal does. Its value is always in `0..=255`. Its content
+follows a byte string's rule: one ASCII character or escape, with `\xNN` for
+`0x80..=0xFF` and no `\u`. A char literal `'…'` writes a Unicode scalar.
 
 ### Escape Sequences
 
@@ -404,42 +382,18 @@ except where the table names one:
 | `\uHHHH` | Unicode BMP (4 hex digits)  |
 | `\u{H+}` | Unicode full range          |
 
-A bare `{` or `}` in a template string needs no escape, as
-[Template Strings](#template-strings) states, but `\{` and `\}` are accepted.
-Use `\$` to write a literal `$` before a `{`: `` `\${x}` `` renders the text
-`${x}`.
+A bare `{` or `}` in a template string needs no escape
+([Template Strings](#template-strings)), but `\{` and `\}` are accepted. `\$`
+writes a literal `$` before a `{`: `` `\${x}` `` renders the text `${x}`.
 
-For characters outside BMP (U+10000 and above), use either:
+A character outside the Basic Multilingual Plane (U+10000 and above) is written
+as a surrogate pair of `\uHHHH` escapes, or as one `\u{H+}`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
 ```wado
 assert "\uD83D\uDE00" == "😀";   // Surrogate pair
 assert "\u{1F600}" == "😀";      // Variable-length escape
-```
-
-Multiline strings are supported in both regular and template strings. Literal newlines are preserved:
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-test "multiline" {
-    // Regular multiline string
-    let poem = "Roses are red,
-Violets are blue,
-Wado is great,
-And so are you!";
-
-    // Multiline template string
-    let name = "Alice";
-    let message = `Dear ${name},
-
-Welcome to Wado!
-
-Best regards`;
-    assert poem.lines().count() == 4;
-    assert message == "Dear Alice,\n\nWelcome to Wado!\n\nBest regards";
-}
 ```
 
 ## Template Strings
@@ -988,6 +942,28 @@ What a `List` offers once built is in [Lists](./spec-types.md#lists).
 
 Rationale: [WEP: Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md).
 
+## Object Literals
+
+A `{ … }` literal lists members separated by commas. A member is `key: value`,
+a shorthand `name` that stands for `name: name`, or a `..base` spread. A key is
+an identifier or a string literal, so `{ "x": 1 }` writes the key `{ x: 1 }`
+writes. Any other key is an error.
+
+<!-- {"fixture":"spec_literals_objects.wado"} -->
+
+```wado
+// Functional-update spread: seed from a base map, then override/add keys
+let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
+assert m2["x"] == 99 && m2["y"] == 20 && m2["w"] == 40;
+```
+
+The type expected of the literal decides what it builds: a named struct
+([Struct Construction](./spec-types.md#struct-construction)), a collection such
+as a map ([Collection Literal Coercion](#collection-literal-coercion)), or, with
+no type expected, an [anonymous struct](./spec-types.md#anonymous-structs).
+
+Rationale: [WEP: JSON Literal Compatibility](./wep-2026-01-18-json-literal-compatibility.md).
+
 ## Collection Literal Coercion
 
 Sequence literals `[e0, e1, ...]` and key-value literals `{ k: v, ... }` can be
@@ -1156,69 +1132,19 @@ are in [Struct Construction](./spec-types.md#struct-construction) and
 Rationale: [WEP: Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md),
 [WEP: Literal Spread (`..base`)](./wep-2026-07-03-literal-spread.md).
 
-## Object Literals
+## Compile-Time Literals
 
-Object literal syntax supports unquoted keys and shorthand properties.
+A literal that starts with `#` takes its value when the program is compiled:
+where it stands in the source, or what a file holds.
 
-For struct initialization syntax, see the [Structs](./spec-types.md#structs) section.
-
-### TreeMap (Insertion-Order Map)
-
-For associative arrays, use `TreeMap` from `core:collections`:
-
-<!-- {"fixture":"spec_literals_objects.wado"} -->
-
-```wado
-use { TreeMap } from "core:collections";
-
-test {
-    let mut map = TreeMap::<String, i32>::new();
-    map["x"] = 10;                   // insert or overwrite
-    map["y"] = 20;
-
-    let v = map["x"];                // panics if key not found
-    let opt = map.get("x");          // returns Option<V>
-    assert !map.try_insert("x", 99); // inserts only if absent; reports whether it did
-    assert v == 10 && opt == Option::Some(10) && map["x"] == 10;
-
-    // Keys preserve insertion order
-    let mut keys = map.keys();  // an iterator over the keys, in insertion order
-    assert *keys.next().unwrap() == "x" && *keys.next().unwrap() == "y";
-
-    // Functional-update spread: seed from a base map, then override/add keys
-    let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
-    assert m2["x"] == 99 && m2["y"] == 20 && m2["w"] == 40;
-}
-```
-
-The rules for a spread in a key-value literal are in
-[`..base` Spread](#base-spread).
-
-### Access Methods
-
-<!-- {"fixture":"spec_literals_objects.wado"} -->
-
-```wado
-// Struct: dot notation
-assert user.name == "Alice";
-
-// TreeMap: bracket notation or methods
-assert map["key"] == 1;                    // panics if key not found
-assert map.get("key") == Option::Some(1);  // returns Option<V>
-```
-
-## Compile-Time Location Literals
-
-Compile-time location literals provide source location information at compile time. They use the `#` prefix to clearly signal compile-time evaluation.
-
-| Literal                  | Type       | Value                                              |
-| ------------------------ | ---------- | -------------------------------------------------- |
-| `#file`                  | `String`   | Current source file path                           |
-| `#line`                  | `i32`      | Current line number (1-indexed)                    |
-| `#function`              | `String`   | Name of the enclosing function                     |
-| `#data`                  | `String`   | `__DATA__` section content (compile error if none) |
-| `#include_str("path")`   | `String`   | External file content as string                    |
-| `#include_bytes("path")` | `ByteList` | External file content as bytes                     |
+| Literal                  | Type       | Value                                   |
+| ------------------------ | ---------- | --------------------------------------- |
+| `#file`                  | `String`   | Current source file path                |
+| `#line`                  | `i32`      | Current line number (1-indexed)         |
+| `#function`              | `String`   | Name of the enclosing function          |
+| `#data`                  | `String`   | The module's `__DATA__` section         |
+| `#include_str("path")`   | `String`   | External file content as a string       |
+| `#include_bytes("path")` | `ByteList` | External file content as bytes          |
 
 <!-- {"fixture":"spec_literals_location.wado"} -->
 
@@ -1232,9 +1158,20 @@ test {
 }
 ```
 
+`#function` names the function without type arguments or signature:
+
+| Context                 | `#function` value            |
+| ----------------------- | ---------------------------- |
+| Free function           | `my_function`                |
+| Method                  | `Point::distance`            |
+| Method of `Box<String>` | `Box::name`                  |
+| Closure                 | `parent_function::{closure}` |
+
 ### `#data`
 
-Returns the raw text content of the `__DATA__` section as a `String`. This is useful for programs that need to access embedded metadata at runtime (e.g., configuration, test fixtures, embedded documents). Using `#data` in a file that has no `__DATA__` section is a compile error.
+`#data` is the raw text of the module's
+[data section](./spec-lexical.md#data-section). In a file with no `__DATA__`
+section it is a compile error.
 
 In a file whose `__DATA__` section is `{"test": {}}`:
 
@@ -1247,9 +1184,12 @@ assert config.starts_with("{\"test\": {}}");
 
 ### `#include_str` and `#include_bytes`
 
-`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `ByteList` without UTF-8 validation.
+`#include_str("path")` is the content of a file as a `String`. A file that is
+not valid UTF-8 is a compile error. `#include_bytes("path")` is the raw bytes as
+a `ByteList`, with no UTF-8 check.
 
-The argument is a parenthesized string literal; any other expression is a compile error. A local path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file that does not exist is a compile error.
+The argument is a parenthesized string literal. Any other expression is a
+compile error. A local path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file that does not exist is a compile error.
 
 <!-- {"fixture":"spec_literals_location.wado"} -->
 
@@ -1263,24 +1203,17 @@ The file is read once, at compile time, and its content is a constant. Changing 
 
 Rationale: [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
-#### Embedded Data
+### Embedded Data
 
 `List::<T>::from_le_bytes(bytes)` reads `bytes` as little-endian `T`s, back to
 back, for any `T: FromLeBytes`: the fixed-width integers, `f16`, `bf16`, `f32`
 and `f64`. It panics when the byte count is not a whole number of `T`s.
 
-When the argument is a byte string literal or `#include_bytes` and `T` is
-concrete, the compiler folds the call into a constant, so no decode loop runs at
-startup. A long list is created from a data segment with one `array.new_data`,
-and the Wasm grows by the byte count alone. A short one is built inline, where
-that encodes smaller. Either way the result is an ordinary `List<T>`. A ragged
-literal is not folded, and panics as it would at run time. Nor is a call whose
-`T` is a newtype with its own `FromLeBytes`, which decides what the bytes mean.
-
-`builtin::array_new_data::<T>(bytes)` is the same fold returning an `Array<T>`,
-for a caller building its own container. It has no run-time form, so its
-argument must be a literal, `T` must be a numeric primitive, and the byte count
-must be a whole number of `T`s. Each is a compile error otherwise.
+`builtin::array_new_data::<T>(bytes)` reads the bytes the same way into an
+`Array<T>`, for a caller building its own container. It is evaluated at compile
+time only. So its argument must be a byte string literal or `#include_bytes`,
+`T` must be a numeric primitive, and the byte count must be a whole number of
+`T`s. Each is a compile error otherwise.
 
 <!-- {"fixture":"spec_control_flow_embedded_data.wado"} -->
 
@@ -1290,17 +1223,6 @@ let bias = List::<bf16>::from_le_bytes(b"\x80\x3f\x00\x40");
 let want: List<bf16> = [1.0, 2.0];
 assert weights == [1.0, 2.0] && bias == want;
 ```
-
-### `#function` Format
-
-Returns the name without type arguments or signature:
-
-| Context                 | `#function` value            |
-| ----------------------- | ---------------------------- |
-| Free function           | `my_function`                |
-| Method                  | `Point::distance`            |
-| Method of `Box<String>` | `Box::name`                  |
-| Closure                 | `parent_function::{closure}` |
 
 ### Call-site evaluation in default arguments
 

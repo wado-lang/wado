@@ -2210,10 +2210,11 @@ impl ImportAttributes {
         self.get_str("type")
     }
 
-    /// Inline Kiln generator configuration (`with { generator: { ... } }`).
+    /// Whether the clause names a Kiln generator (`with { generator: … }`),
+    /// whatever its value.
     #[must_use]
-    pub fn generator(&self) -> Option<&AttrObject> {
-        self.get(Self::GENERATOR).and_then(AttrValue::as_object)
+    pub fn is_generated(&self) -> bool {
+        self.entries.contains_key(Self::GENERATOR)
     }
 
     /// Inline provider source (`with { provider: "./ext.wado" }`): a Wado file

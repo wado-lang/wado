@@ -942,7 +942,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             else {
                 continue;
             };
-            if attrs.entries.contains_key(ImportAttributes::GENERATOR) {
+            if attrs.is_generated() {
                 continue;
             }
             for (key, entry) in &attrs.entries {

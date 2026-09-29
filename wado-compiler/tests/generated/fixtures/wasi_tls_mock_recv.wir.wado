@@ -181,13 +181,15 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(62)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(63)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(64)
+type "functype//wasi/resource-drop:wasi/tls/types.wado#error" = fn(i32);  // TypeId(64)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(65)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(65)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(66)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(66)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(67)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(67)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(68)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -206,6 +208,7 @@ import fn wasi/wasi:tls/Error::to_debug_string from "wasi/wasi:tls/Error::to_deb
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
+import fn wasi/resource-drop:wasi/tls/types.wado#error from "wasi/resource-drop:wasi/tls/types.wado#error";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
@@ -301,6 +304,8 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
             $local_12.used = new_used_49;
             builtin::array_copy<u8>($local_12.repr, start_50, other_40.repr, 0, n_45);
         }; $local_12);
+        unreachable;
+        "wasi/resource-drop:wasi/tls/types.wado#error"(e);
         unreachable;
     }
     received = $inline_core_prelude_types_wado_Stream_u8___read_to_end_14: block -> ref "core:prelude//List<u8>" {

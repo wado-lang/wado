@@ -147,14 +147,9 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         let project = build::project_at(&path, NO_PROJECT)?;
         return check_declared_worlds(&project, &opts).await;
     }
-    let world = check_world(
-        opts.target_world.as_deref(),
-        &path,
-        load_nearest_manifest(&path)
-            .map_err(CliExit::error)?
-            .as_ref(),
-    );
-    check_entry(&path, world, &opts).await
+    let project = load_nearest_manifest(&path).map_err(CliExit::error)?;
+    let world = check_world(opts.target_world.as_deref(), &path, project.as_ref());
+    check_entry(&path, world, project, &opts).await
 }
 
 const NO_PROJECT: &str = "no wado.toml found; name a file to check \
@@ -181,19 +176,25 @@ async fn check_declared_worlds(
             (_, Some(fq)) => CheckWorld::Target(fq.clone()),
             _ => unreachable!("a build target names exactly one world"),
         };
-        check_entry(&target.entry, world, opts).await?;
+        let entry_project = load_nearest_manifest(&target.entry).map_err(CliExit::error)?;
+        check_entry(&target.entry, world, entry_project, opts).await?;
     }
     Ok(())
 }
 
-async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Result<(), CliExit> {
+/// Check `path` against `world`, under `manifest_pair`, the manifest nearest it.
+async fn check_entry(
+    path: &Path,
+    world: CheckWorld,
+    manifest_pair: Option<manifest::ProjectManifest>,
+    opts: &CheckOptions,
+) -> Result<(), CliExit> {
     let base_path = path
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
     let source = std::fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
-    let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
     let (target_world, lib_world) = world.options();
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level),

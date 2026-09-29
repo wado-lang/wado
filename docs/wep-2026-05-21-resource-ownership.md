@@ -15,8 +15,8 @@ whether a materialization needs a deep copy or can transfer storage in place. So
 value-copy elision is a second client; this WEP records its implementation too.
 
 The `move` and `unique` keywords once reserved for this work are unnecessary:
-the analysis needs move-only semantics, not new syntax. They are deferred (last
-section).
+the analysis needs move-only semantics, not new syntax
+([No `move` or `unique` keyword](#no-move-or-unique-keyword)).
 
 ### CM handle types
 
@@ -503,110 +503,17 @@ types a program declares, since no expression rewrite introduces a type the
 program did not already name. Over-synthesis costs nothing — `dce` removes an
 unused helper — while a miss leaves the fold no helper to call.
 
-### Known gap: the release that lets a binding leave the function
+### No `move` or `unique` keyword
 
-`let v = self.held; self.held = null;` gives `v` what the place held. In
-principle `v` may then be handed to a new owner with no copy, which is the
-`take` / `drain` / `snapshot` idiom. The compiler copies instead.
-
-A repoint of the place is not the proof this needs, for two reasons.
-
-It says nothing about _when_ it runs, so a repoint under an `if` that never
-executes would license the elision. `value_copy_release_is_not_a_proof` is that
-program.
-
-It says nothing about a _second_ binding read out of the same place, where a
-write through one is observed through the other. `value_copy_new_owner_needs_a_proof`
-is that one, and this half is answered: a hand-over is refused when another chain
-reaches the same place (`value_copy_two_readers_of_one_place`). That states the
-sibling case as a rule instead of counting bindings.
-
-The first half stands. The backward walk records a live set per write and no
-position, so it cannot say today which repoints dominate a site.
-
-### Known gap: a borrowed projection behind a variant
-
-`projection_param` matches a syntactic deref / field / index / payload / cast
-chain rooted at a parameter, so `build(&self) -> List { return *self }` is
-self-projecting but `SliceValueIter<T>::next` is not:
-
-```wado
-let item = builtin::array_get_value(self.repr, self.index);
-return Option::Some(item);
-```
-
-`array_get_value` is already a container alias read, and `Option<T>` over a reference
-type lowers to a bare nullable ref, so the borrowed element could be returned as
-it stands. Two things hide it: the projection is behind a `let` binding, and it
-is wrapped in a variant construction. So `next` returns owned, and the fold
-deep-copies the element into the payload — every `for x of list` over a `List` of
-aggregates pays a copy of each element even when the loop body only reads it.
-Nothing about the copy is required: the same walk written over `&list`, or as an
-index loop in one body, reads the element in place under the read-only share.
-
-Two halves of the one fixpoint miss it. The recognizer does not see the
-projection through the binding and the variant, and the fold reads the
-materialization into that payload as a copy. Neither the inliner nor any NIR
-pass can stand in: the copy is chosen before NIR exists, and
-`#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
-untouched even with the cloned array provably unread.
-
-### Known gap: a declared retention the walk does not confirm
-
-Only a body-less declaration carries retention now
-([Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)),
-and it has no body for the walk to confirm it against. A `#[retain(p)]` is taken
-at its word on both channels, so a caller stays conservative whether or not the
-declaration was right; what nothing can catch is a declaration that understates
-what the callee keeps.
-
-`carries` drops at a projection whose type only _holds_ a reference — `w.h`
-where `Held { r: &Rep }` — since the arm keys on the projection being a
-reference itself. A parameter that only holds one is seeded, through
-`RefCarrying`: the memoized "can a value of this type hold a reference"
-predicate, which is what keeps `List::push(Sink { r: &it })` retaining `it` now
-that no frontend obligation makes the caller declare it. The projection arm is
-still the narrower reading: the walk loses a reference at the first projection
-rather than following it through an adapter chain.
-
-### Known gap: a generic resource a user module declares
-
-The move check reads the type a binding resolves to, and a generic resource a
-user module declares resolves to no resource type at all. `Stream<u8>` and
-`Future<T>` resolve to `GenericResource` and are checked; a program's own
-`resource Handle<T>` does not, so `consume(h); consume(h);` on a `Handle<i32>`
-compiles with no diagnostic while the same code on a non-generic `Handle` is
-rejected.
-
-Nothing can be built through the gap today: a `#[cm]` resource a user module
-declares has no import binding, so no program can obtain such a handle. Closing
-it means resolving `Name<args>` against the resource declarations in the
-elaborator's main type resolution, as `resolve_type_static_with_params` already
-does for the struct-field pre-pass.
-
-### Known gap: a `Stream` or `Future` handle nothing drops
-
-"Deterministic drop" says an owned, un-moved resource is dropped at scope exit
-on every path. Cleanup does not do that for `GenericResource`, meaning
-`Stream<T>` and `Future<T>`: it excludes them, so every path out of a function
-holding one has to call `drop` itself, and nothing diagnoses a path that does
-not. The handle leaks with no trace.
-
-A `?` or an early `return` inside the region holding the handle is the shape
-that admits it. `core:fs` drains the stream and drops before it decides what to
-return. `core:kiln` lends the handle to a helper, so the body that owns it
-cannot return early at all.
-
-### Known gap: resources cleanup does not reach
-
-Cleanup walks function bodies only. A resource a closure body binds, or a
-temporary it borrows, is never dropped.
-
-Moving one resource field out of a temporary aggregate (`make().a`) drops
-nothing else the temporary owns, so a second resource field leaks.
-
-A `List` element is never dropped, so a list of owned resources leaks each one
-when the list goes out of scope.
+Move-only semantics need no syntax: transfer is implicit, a use-after-move
+diagnostic replaces a `move` operator's local visibility, and the consuming
+receiver is spelled bare `self` (scoped to resources, so it never contradicts
+value semantics — see the receiver grammar under [Roadmap](#roadmap)). `unique`
+as a `struct` modifier only matters for a move-only type that carries no
+resource — a resource-bearing aggregate is already move-only by composition, and
+no use case has appeared. Current state: `move` is not tokenized; `unique` is
+lexed to `TokenKind::Unique` but never parsed. If revived, `unique struct`
+reuses the same move-check machinery, resources being its first client.
 
 ## Amendments to earlier WEPs
 
@@ -633,7 +540,7 @@ when the list goes out of scope.
   moving a field out of a _live_ aggregate, or through a deref / index, still
   copies.
 
-## Implementation status
+## Roadmap
 
 Verified against the tree.
 
@@ -699,7 +606,9 @@ Verified against the tree.
       deep-copying the error it propagates.
 - [x] A repoint of a place costs a binding that read it nothing: the binding
       keeps its share across it. Handing that binding on to a new owner is a
-      separate claim, and the gap above says what proving it would take.
+      separate claim, and
+      [the release that lets a binding leave the function](#the-release-that-lets-a-binding-leave-the-function)
+      says what proving it would take.
 - [x] Whether a binding aliases storage something still reads is asked of the
       whole chain its source stands on, so a match temp standing between the
       binding and the holder does not read as the holder's death.
@@ -819,7 +728,7 @@ Verified against the tree.
       `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
       value pays it.
 
-- [ ] Say which _field_ a stored parameter is stored into. The gap above needs
+- [ ] Say which _field_ a stored parameter is stored into. The item above needs
       it to re-root an iterator's element read at the list, and `array_copy`
       needs it because its elements reach `dst`. Recorded with the rest of
       what the facts cannot yet say, in
@@ -839,14 +748,118 @@ Verified against the tree.
       `wrap(h: &Holder) -> List<i32> { return get_items(h); }` called with a fresh
       `Holder` — is byte-identical at `-O0` too.
 
-### Known gap: a destructured field's path is assumed to borrow
+## Known gaps
+
+### The release that lets a binding leave the function
+
+`let v = self.held; self.held = null;` gives `v` what the place held. In
+principle `v` may then be handed to a new owner with no copy, which is the
+`take` / `drain` / `snapshot` idiom. The compiler copies instead.
+
+A repoint of the place is not the proof this needs, for two reasons.
+
+It says nothing about _when_ it runs, so a repoint under an `if` that never
+executes would license the elision. `value_copy_release_is_not_a_proof` is that
+program.
+
+It says nothing about a _second_ binding read out of the same place, where a
+write through one is observed through the other. `value_copy_new_owner_needs_a_proof`
+is that one, and this half is answered: a hand-over is refused when another chain
+reaches the same place (`value_copy_two_readers_of_one_place`). That states the
+sibling case as a rule instead of counting bindings.
+
+The first half stands. The backward walk records a live set per write and no
+position, so it cannot say today which repoints dominate a site.
+
+### A borrowed projection behind a variant
+
+`projection_param` matches a syntactic deref / field / index / payload / cast
+chain rooted at a parameter, so `build(&self) -> List { return *self }` is
+self-projecting but `SliceValueIter<T>::next` is not:
+
+```wado
+let item = builtin::array_get_value(self.repr, self.index);
+return Option::Some(item);
+```
+
+`array_get_value` is already a container alias read, and `Option<T>` over a reference
+type lowers to a bare nullable ref, so the borrowed element could be returned as
+it stands. Two things hide it: the projection is behind a `let` binding, and it
+is wrapped in a variant construction. So `next` returns owned, and the fold
+deep-copies the element into the payload — every `for x of list` over a `List` of
+aggregates pays a copy of each element even when the loop body only reads it.
+Nothing about the copy is required: the same walk written over `&list`, or as an
+index loop in one body, reads the element in place under the read-only share.
+
+Two halves of the one fixpoint miss it. The recognizer does not see the
+projection through the binding and the variant, and the fold reads the
+materialization into that payload as a copy. Neither the inliner nor any NIR
+pass can stand in: the copy is chosen before NIR exists, and
+`#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
+untouched even with the cloned array provably unread.
+
+### A declared retention the walk does not confirm
+
+Only a body-less declaration carries retention now
+([Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)),
+and it has no body for the walk to confirm it against. A `#[retain(p)]` is taken
+at its word on both channels, so a caller stays conservative whether or not the
+declaration was right; what nothing can catch is a declaration that understates
+what the callee keeps.
+
+`carries` drops at a projection whose type only _holds_ a reference — `w.h`
+where `Held { r: &Rep }` — since the arm keys on the projection being a
+reference itself. A parameter that only holds one is seeded, through
+`RefCarrying`: the memoized "can a value of this type hold a reference"
+predicate, which is what keeps `List::push(Sink { r: &it })` retaining `it` now
+that no frontend obligation makes the caller declare it. The projection arm is
+still the narrower reading: the walk loses a reference at the first projection
+rather than following it through an adapter chain.
+
+### A generic resource a user module declares
+
+The move check reads the type a binding resolves to, and a generic resource a
+user module declares resolves to no resource type at all. `Stream<u8>` and
+`Future<T>` resolve to `GenericResource` and are checked; a program's own
+`resource Handle<T>` does not, so `consume(h); consume(h);` on a `Handle<i32>`
+compiles with no diagnostic while the same code on a non-generic `Handle` is
+rejected.
+
+Nothing can be built through the gap today: a `#[cm]` resource a user module
+declares has no import binding, so no program can obtain such a handle.
+
+### A `Stream` or `Future` handle nothing drops
+
+"Deterministic drop" says an owned, un-moved resource is dropped at scope exit
+on every path. Cleanup does not do that for `GenericResource`, meaning
+`Stream<T>` and `Future<T>`: it excludes them, so every path out of a function
+holding one has to call `drop` itself, and nothing diagnoses a path that does
+not. The handle leaks with no trace.
+
+A `?` or an early `return` inside the region holding the handle is the shape
+that admits it. `core:fs` drains the stream and drops before it decides what to
+return. `core:kiln` lends the handle to a helper, so the body that owns it
+cannot return early at all.
+
+### What cleanup does not reach
+
+Cleanup walks function bodies only. A resource a closure body binds, or a
+temporary it borrows, is never dropped.
+
+Moving one resource field out of a temporary aggregate (`make().a`) drops
+nothing else the temporary owns, so a second resource field leaks.
+
+A `List` element is never dropped, so a list of owned resources leaks each one
+when the list goes out of scope.
+
+### A destructured field's path is assumed to borrow
 
 A pattern-destructured field's path is marked as borrowing, because the pattern
 carries no type saying whether that field does, and the mark refuses those paths
 a share outright. Every WIR golden is byte-identical with the mark removed, so
 nothing measured pays for it.
 
-### Known gap: freshness does not read the fold's own wraps
+### Freshness does not read the fold's own wraps
 
 A copy hands its target storage nothing else reaches. Ownedness is computed from
 a local's source before any wrap site is chosen, so a wrap the fold has just
@@ -857,35 +870,22 @@ be refused, and a copied local aliases nothing, so only a read that is not the
 last one refuses — and there the second copy is a second live object, which is
 needed.
 
-### Known gap: some resource holders are not move-checked or dropped
+### Some resource holders are not move-checked or dropped
 
 Every value holding an affine resource is move-only and dropped, but only a
 struct, a tuple and a `Result` are checked. An `Option`, a user variant or a
 `List` holding one can be moved twice with no diagnostic, and is not dropped at
 scope exit.
 
-### Known gap: a resource field moves out of its holder
+### A resource field moves out of its holder
 
 `let c = h.c;` over a struct `h` holding a resource compiles, and `h` stays
 usable. Moving `h` afterwards leaves two owners of one handle.
 
-### Known gap: an integer casts to an affine resource
+### An integer casts to an affine resource
 
 `5 as Counter` compiles for an affine `Counter` in any module. The result is a
 handle nothing minted, which the program then owns and drops.
-
-## Deferred: the `move` and `unique` keywords
-
-Intentionally not implemented. Move-only semantics need no syntax: transfer is
-implicit, a use-after-move diagnostic replaces a `move` operator's local
-visibility, and the consuming receiver is spelled bare `self` (scoped to
-resources, so it never contradicts value semantics — see the receiver grammar
-above). `unique` as a `struct` modifier only matters for a move-only type that
-carries no resource — a resource-bearing aggregate is already move-only by
-composition, and no use case has appeared. Current state: `move` is not
-tokenized; `unique` is lexed to `TokenKind::Unique` but never parsed. If revived,
-`unique struct` reuses the same move-check machinery, resources being its first
-client.
 
 ## References
 

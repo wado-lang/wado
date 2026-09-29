@@ -727,9 +727,9 @@ test "a free function takes the bound and its caller names neither parameter" {
 
 ## Visibility
 
-A kind trait holds only where every member of the subject is visible, as
-[Eligibility](./spec-traits.md#eligibility) states. The gate is on the kind
-traits alone. `Reflect` holds for a type whose fields are private, and the
+A kind trait (`ReflectStruct` and its siblings) holds only where every member
+of the subject is visible at the use site. The root `Reflect` names the type and
+no member, so it holds anywhere, a type whose fields are private included. The
 impls derived where the type is declared still see every field:
 
 <!-- {"fixture":"spec_reflection_visibility.wado"} -->

@@ -81,16 +81,9 @@ it names a case of the type it matches, and a binding otherwise. It never names
 a global: a constant pattern can always fail, so reading one here could only be
 rejected. So `let [None, n] = pair` tests its first element and is an error,
 since `None` may not match, while `let limit = 1` binds even where a
-`global limit` is in scope. The `shadowed_name` lint reports that global.
-
-A refutable pattern reads a bare name that names an immutable global as a
-constant pattern instead. The refutable positions are a `match` arm, `if let`,
-`while let`, and `let ... else`, so `let limit = v else { … }` runs the `else`
-block unless `v == limit`. A local, a parameter, or a closure capture that takes
-the name puts the global out of reach, so the name binds there as it would
-anywhere else. What counts is what is in scope where the pattern starts. A name
-the pattern binds itself reaches none of its own sites, so `[mut limit, limit]`
-binds the first element and tests the second against the global.
+`global limit` is in scope. The `shadowed_name` lint reports that global. A
+refutable pattern reads such a name differently
+([Constant Patterns](#constant-patterns)).
 
 An uninitialized `let x: T;` declares a single name, or `_`.
 

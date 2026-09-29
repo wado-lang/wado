@@ -1,5 +1,10 @@
 # Lexical Structure
 
+This chapter covers how source text splits into tokens: whitespace, comments,
+the shebang and the data section, identifiers, and keywords. Literal tokens are
+in [Literals](./spec-literals.md), and operators in
+[Operators](./spec-expressions.md#operators).
+
 ## Whitespace
 
 Whitespace separates tokens and is otherwise ignored. Any character with the
@@ -86,7 +91,10 @@ export fn run() {
 
 ## Data Section
 
-The `__DATA__` marker separates source code from embedded data. Everything after `__DATA__` on its own line is captured as raw text and is not parsed as Wado code. `#data` reads it.
+A line holding only `__DATA__` separates the source code from the data section.
+Everything after that line is raw text, not Wado code, and
+[`#data`](./spec-literals.md#data) reads it. The marker must start its line, and
+nothing may follow it on the line. A module needs no data section.
 
 <!-- {"fixture": "sub/location_submodule_helper.wado"} -->
 
@@ -98,17 +106,6 @@ pub fn show_data() with Stdout {
 __DATA__
 SUBMODULE_DATA_MARKER
 ```
-
-### Syntax Rules
-
-- `__DATA__` must appear at the start of a line (after any preceding newline)
-- The line must contain only `__DATA__` followed by a newline (no trailing content on the same line)
-- Everything after the `__DATA__` line becomes the data section
-- The data section is optional; most modules won't have one
-
-### Accessing Data
-
-Within Wado code, the content is available through the `#data` compile-time location literal. See [Compile-Time Location Literals](./spec-literals.md#compile-time-location-literals).
 
 ## Identifiers
 
@@ -140,6 +137,20 @@ let é = 1;    // Error: the first character must be ASCII
 
 Identifiers are case-sensitive.
 
+## Keywords
+
+A keyword is not an identifier, so it cannot name a variable, parameter, item
+or import:
+
+```text
+as        assert    async     break     const     continue  effect
+else      enum      export    false     fn        for       global
+if        impl      import    in        interface internal  let
+loop      match     matches   mut       null      pub       reactive
+resource  return    struct    trait     true      unique    use
+variant   while     with      world
+```
+
 ## Contextual Keywords
 
 The following keywords are contextual. Each acts as a keyword only in the
@@ -160,8 +171,7 @@ position listed:
 | `resume`  | `resume expr` in an effect handler                  |
 
 Elsewhere each is an ordinary identifier: a variable, field, parameter, or type
-name. `resume` is the exception. It is a keyword in every expression position,
-so it serves only as a field name.
+name.
 
 <!-- {"fixture":"spec_lexical_contextual_keywords.wado"} -->
 
@@ -184,7 +194,7 @@ for let of of arr {
 assert sum == 6;
 ```
 
-A variable, parameter, item, case or import may not be named `resume`. Only a
-field or a method, reached through `.`, may take the name. The reason is that
-`resume` begins an expression (`resume value`), so such a name could never be
-read.
+`resume` is the exception. It begins an expression (`resume value`) in every
+expression position, so a name spelled `resume` could never be read. A
+variable, parameter, item, case or import may not take it. Only a field or a
+method, reached through `.`, may.

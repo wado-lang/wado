@@ -1,5 +1,9 @@
 # Assertions and Testing
 
+`assert` checks a condition while a program runs, and a `test` block declares a
+test. This chapter covers both, how a test's outcome is judged, and how
+`wado test` finds the files to run.
+
 ## The `assert` Statement
 
 `assert` checks that a condition is true. If it is false, the program panics
@@ -101,7 +105,7 @@ test {
 ```
 
 A TODO test marks a test for an unimplemented feature. It is reported on a
-separate axis from pass and fail (see Test Outcome Model):
+separate axis from pass and fail (see [Test Outcome Model](#test-outcome-model)):
 
 <!-- {"fixture": "test_todo.wado"} -->
 
@@ -117,8 +121,7 @@ test "not yet implemented feature" {
 - `test` is a contextual keyword (functions named `test` are still allowed)
 - Test name is an optional string literal
 - Test body is a block containing statements
-- No return type or effect declarations needed
-- Tests can use any effects (side effects are allowed in tests)
+- A test declares no return type and no effects, and may perform any effect
 - Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, [`#[synopsis]`](./spec-attributes.md#synopsis)) may appear before the `test` keyword
 
 ### Test Semantics

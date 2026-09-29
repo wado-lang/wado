@@ -1,10 +1,24 @@
 # Packages
 
 A package is a set of modules that is built, versioned and depended on as one
-unit. [Packages](./spec-modules.md#packages) says which modules belong to a
-package, and so how far `internal` reaches. This chapter covers the manifest that
-describes a package, the dependencies it declares, and what a package offers the
-packages that depend on it.
+unit. This chapter covers which modules make up a package, the manifest that
+describes it, the dependencies it declares, and what it offers the packages that
+depend on it.
+
+## The Modules of a Package
+
+A package bounds how far
+`internal` reaches ([Visibility](./spec-modules.md#visibility)) and which impls
+it may write ([Package Boundary](./spec-traits.md#package-boundary)). The
+packages are:
+
+- The entry module, every local module it reaches through `./` / `../`
+  imports, and the Wasm assets those modules import.
+- Each dependency. A relative import inside a dependency stays in that
+  dependency's package.
+- `core:*`, which is one package, and `wasi:*`, which is another.
+- A [generated module](./spec-kiln.md) belongs to the package of the
+  module that imports it.
 
 ## The Manifest
 
@@ -496,11 +510,11 @@ a dependency never resolves against them.
 ### The Library World as a Component
 
 Built on its own, the library world is a component. Its interface carries the
-entry module's `export` items and no `pub`-only item
-([Selecting a World](./spec-worlds.md#selecting-a-world)). The interface is
-named after the package's coordinate, so building it needs
-`[package].namespace`. An entry module that exports nothing gives the component
-no interface, and building it is an error.
+entry module's `export` items and no `pub`-only item. The interface is named
+after the package, `<namespace>:<name>/<name>@<version>`, so building it needs
+`[package].namespace`. The world itself is named `root`, so no package may take
+that name, in any letter case. An entry module that exports nothing gives the
+component no interface, and building it is an error.
 
 ## The Lock File
 

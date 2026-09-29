@@ -113,9 +113,11 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(44)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(45)
+type "functype//wasi/resource-drop:wasi/tls/types.wado#error" = fn(i32);  // TypeId(45)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(46)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(46)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -134,6 +136,7 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/resource-drop:wasi/tls/types.wado#error from "wasi/resource-drop:wasi/tls/types.wado#error";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
@@ -162,17 +165,17 @@ fn "wasi_tls_mock_error.wado/run"() with Stdout, Connector, Error {
     let rx_20: i32;
     let tx_21: i32;
     let handle_25: i32;
-    let other_42: ref "core:prelude/string.wado//String";
-    let n_47: i32;
-    let new_used_51: i32;
-    let start_52: i32;
-    let handle_57: i32;
-    let packed_63: i64;
-    let rx_64: i32;
-    let tx_65: i32;
-    let packed_70: i64;
-    let rx_71: i32;
-    let tx_72: i32;
+    let handle_30: i32;
+    let other_47: ref "core:prelude/string.wado//String";
+    let n_52: i32;
+    let new_used_56: i32;
+    let start_57: i32;
+    let packed_59: i64;
+    let rx_60: i32;
+    let tx_61: i32;
+    let packed_72: i64;
+    let rx_73: i32;
+    let tx_74: i32;
     conn = "wasi_tls_mock_error.wado/$cm_binding__Connector_new"();
     rx_17 = builtin::i32_wrap_i64(local.tee packed_16("wasi/stream-new"()));
     tx_18 = builtin::i32_wrap_i64(packed_16 >> 32_i64);
@@ -184,36 +187,37 @@ fn "wasi_tls_mock_error.wado/run"() with Stdout, Connector, Error {
     "wasi/stream-drop-writable"(tx_21);
     $match_15 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_mock_error.wado/$cm_binding__Connector_connect"(conn, global:wasi_tls_mock_error.wado::$const_obj_3));
     if $match_15.discriminant == 0 {
-        rx_64 = builtin::i32_wrap_i64(local.tee packed_63("wasi/stream-new"()));
-        tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
-        handle_25 = "wasi_tls_mock_error.wado/$cm_binding__Stdout_write_via_stream"(rx_64);
+        rx_73 = builtin::i32_wrap_i64(local.tee packed_72("wasi/stream-new"()));
+        tx_74 = builtin::i32_wrap_i64(packed_72 >> 32_i64);
+        handle_25 = "wasi_tls_mock_error.wado/$cm_binding__Stdout_write_via_stream"(rx_73);
         let $mv_arg_4: ref "core:prelude/string.wado//String";
         $mv_arg_4 = global:wasi_tls_mock_error.wado::$const_obj_2;
-        "core:rt/write_string_to_stream$spec0"(tx_65, $mv_arg_4.repr, $mv_arg_4.used);
+        "core:rt/write_string_to_stream$spec0"(tx_74, $mv_arg_4.repr, $mv_arg_4.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_25);
     } else {
         e = ref.cast "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err"($match_15).payload_0;
         $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
         $local_10.used = 8;
         builtin::array_copy<u8>($local_10.repr, 0, global:wasi_tls_mock_error.wado::$const_obj_1, 0, 8);
-        other_42 = "wasi_tls_mock_error.wado/$cm_binding__Error_to_debug_string"(e);
-        $inline_core_prelude_string_wado_String__internal_push_string_12: block {
-            n_47 = other_42.used;
-            break_if $inline_core_prelude_string_wado_String__internal_push_string_12 n_47 == 0;
-            new_used_51 = $local_10.used + n_47;
-            if @unlikely(new_used_51 > builtin::array_len($local_10.repr)) {
+        other_47 = "wasi_tls_mock_error.wado/$cm_binding__Error_to_debug_string"(e);
+        $inline_core_prelude_string_wado_String__internal_push_string_13: block {
+            n_52 = other_47.used;
+            break_if $inline_core_prelude_string_wado_String__internal_push_string_13 n_52 == 0;
+            new_used_56 = $local_10.used + n_52;
+            if @unlikely(new_used_56 > builtin::array_len($local_10.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, new_used_51);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, new_used_56);
             }
-            start_52 = $local_10.used;
-            $local_10.used = new_used_51;
-            builtin::array_copy<u8>($local_10.repr, start_52, other_42.repr, 0, n_47);
+            start_57 = $local_10.used;
+            $local_10.used = new_used_56;
+            builtin::array_copy<u8>($local_10.repr, start_57, other_47.repr, 0, n_52);
         };
-        rx_71 = builtin::i32_wrap_i64(local.tee packed_70("wasi/stream-new"()));
-        tx_72 = builtin::i32_wrap_i64(packed_70 >> 32_i64);
-        handle_57 = "wasi_tls_mock_error.wado/$cm_binding__Stdout_write_via_stream"(rx_71);
-        "core:rt/write_string_to_stream$spec0"(tx_72, $local_10.repr, $local_10.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_57);
+        rx_60 = builtin::i32_wrap_i64(local.tee packed_59("wasi/stream-new"()));
+        tx_61 = builtin::i32_wrap_i64(packed_59 >> 32_i64);
+        handle_30 = "wasi_tls_mock_error.wado/$cm_binding__Stdout_write_via_stream"(rx_60);
+        "core:rt/write_string_to_stream$spec0"(tx_61, $local_10.repr, $local_10.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_30);
+        "wasi/resource-drop:wasi/tls/types.wado#error"(e);
     }
 }
 

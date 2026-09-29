@@ -18,7 +18,6 @@ use wado_compiler::compiler_host::{
     GeneratorRunnerError, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
-use wado_manifest::Manifest;
 
 use crate::common::runtime;
 
@@ -107,21 +106,14 @@ impl CompilerHost for StubHost {
     }
 }
 
-fn empty_manifest() -> Manifest {
-    "[package]\nname = \"host\"\nversion = \"0.1.0\""
-        .parse()
-        .unwrap()
-}
-
 fn run(
-    manifest: &Manifest,
     root: &Path,
     host: &StubHost,
     provider: &StubProvider,
     inline: Vec<Invocation>,
 ) -> PipelineOutcome {
     runtime()
-        .block_on(async { run_pipeline(manifest, root, host, provider, inline, false).await })
+        .block_on(async { run_pipeline(root, host, provider, inline, false).await })
         .unwrap()
 }
 
@@ -182,7 +174,6 @@ fn beta_inv() -> Invocation {
 #[test]
 fn end_to_end_two_generators_execute_cache_and_reuse() {
     let tmp = tempfile::tempdir().unwrap();
-    let m = empty_manifest();
     let invs = vec![alpha_inv(), beta_inv()];
 
     let host1 = StubHost::new(
@@ -197,7 +188,7 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     );
     let provider1 = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome = run(&m, tmp.path(), &host1, &provider1, invs.clone());
+    let outcome = run(tmp.path(), &host1, &provider1, invs.clone());
     assert_eq!(outcome.executed.len(), 2);
     assert!(outcome.executed.contains(&"kiln-alpha".to_string()));
     assert!(outcome.executed.contains(&"kiln-beta".to_string()));
@@ -233,7 +224,7 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     );
     let provider2 = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome2 = run(&m, tmp.path(), &host2, &provider2, invs);
+    let outcome2 = run(tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome2.cached.len(), 2);
     assert!(outcome2.executed.is_empty());
     // alpha and beta declare distinct `GeneratorModule` values, so the
@@ -249,7 +240,6 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
 #[test]
 fn each_invocation_writes_its_own_metadata_file() {
     let tmp = tempfile::tempdir().unwrap();
-    let m = empty_manifest();
 
     let z_inv = invocation(
         "entry.wado",
@@ -287,7 +277,7 @@ fn each_invocation_writes_its_own_metadata_file() {
     );
     let provider = StubProvider::new(b"component-bytes".to_vec());
     let invs = vec![z_inv, a_inv, m_inv];
-    run(&m, tmp.path(), &host, &provider, invs.clone());
+    run(tmp.path(), &host, &provider, invs.clone());
 
     for inv in &invs {
         let id = inv.decl_site().synthetic_id.as_str();
@@ -305,7 +295,6 @@ fn each_invocation_writes_its_own_metadata_file() {
 #[test]
 fn end_to_end_input_change_invalidates_exactly_that_invocation() {
     let tmp = tempfile::tempdir().unwrap();
-    let m = empty_manifest();
     let invs = vec![alpha_inv(), beta_inv()];
 
     let host1 = StubHost::new(
@@ -319,7 +308,7 @@ fn end_to_end_input_change_invalidates_exactly_that_invocation() {
         ],
     );
     let provider1 = StubProvider::new(b"component-bytes".to_vec());
-    run(&m, tmp.path(), &host1, &provider1, invs.clone());
+    run(tmp.path(), &host1, &provider1, invs.clone());
 
     let host2 = StubHost::new(
         &[
@@ -330,7 +319,7 @@ fn end_to_end_input_change_invalidates_exactly_that_invocation() {
     );
     let provider2 = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome = run(&m, tmp.path(), &host2, &provider2, invs);
+    let outcome = run(tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome.executed, vec!["kiln-alpha".to_string()]);
     assert_eq!(outcome.cached, vec!["kiln-beta".to_string()]);
     // 2 = one provider call per invocation (alpha + beta) for source-hash
@@ -341,7 +330,6 @@ fn end_to_end_input_change_invalidates_exactly_that_invocation() {
 #[test]
 fn cache_miss_on_output_io_error_emits_warning() {
     let tmp = tempfile::tempdir().unwrap();
-    let m = empty_manifest();
     let invs = vec![alpha_inv(), beta_inv()];
 
     let host1 = StubHost::new(
@@ -355,7 +343,7 @@ fn cache_miss_on_output_io_error_emits_warning() {
         ],
     );
     let provider1 = StubProvider::new(b"component-bytes".to_vec());
-    run(&m, tmp.path(), &host1, &provider1, invs.clone());
+    run(tmp.path(), &host1, &provider1, invs.clone());
 
     let cached_output = tmp.path().join("build/kiln/kiln-alpha/alpha.wado");
     assert!(cached_output.exists());
@@ -370,7 +358,7 @@ fn cache_miss_on_output_io_error_emits_warning() {
     );
     let provider2 = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome = run(&m, tmp.path(), &host2, &provider2, invs);
+    let outcome = run(tmp.path(), &host2, &provider2, invs);
     assert!(outcome.executed.contains(&"kiln-alpha".to_string()));
 
     let diags = host2.take_diagnostics();
@@ -387,7 +375,6 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
     use wado_compiler::CompilerOptions;
 
     let tmp = tempfile::tempdir().unwrap();
-    let m = empty_manifest();
 
     let inline_inv = Invocation {
         decl_sites: vec![DeclSite {
@@ -423,7 +410,7 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
 
     let outcome = runtime()
         .block_on(async {
-            run_pipeline(&m, tmp.path(), &host, &provider, vec![inline_inv], false).await
+            run_pipeline(tmp.path(), &host, &provider, vec![inline_inv], false).await
         })
         .unwrap();
 
@@ -451,7 +438,6 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
 #[test]
 fn inline_invocation_populates_invocation_index_for_redirect() {
     let tmp = tempfile::tempdir().unwrap();
-    let m = empty_manifest();
 
     let inline_inv = Invocation {
         decl_sites: vec![DeclSite {
@@ -477,7 +463,7 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
 
     let outcome = runtime()
         .block_on(async {
-            run_pipeline(&m, tmp.path(), &host, &provider, vec![inline_inv], false).await
+            run_pipeline(tmp.path(), &host, &provider, vec![inline_inv], false).await
         })
         .unwrap();
 
@@ -508,7 +494,6 @@ fn shared_module_across_invocations_calls_provider_once() {
     // Two invocations targeting the same module must therefore trigger
     // exactly one provider call.
     let tmp = tempfile::tempdir().unwrap();
-    let m = empty_manifest();
 
     // Two invocations sharing the same `Spec` module. (Spec doesn't
     // resolve through `CliGeneratorProvider` in v1, but the dedup is
@@ -538,7 +523,7 @@ fn shared_module_across_invocations_calls_provider_once() {
     );
     let provider = StubProvider::new(b"component-bytes".to_vec());
 
-    let outcome = run(&m, tmp.path(), &host, &provider, vec![inv_a, inv_b]);
+    let outcome = run(tmp.path(), &host, &provider, vec![inv_a, inv_b]);
     assert_eq!(outcome.executed.len(), 2);
     assert_eq!(
         *provider.calls.lock().unwrap(),

@@ -1,6 +1,9 @@
 # Module System
 
-Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
+A module is one Wado file. This chapter covers how far a declaration reaches,
+how a module names another, and how it imports and re-exports names. The import
+syntax follows ES modules (`use { x } from "module"`), since JavaScript is a
+primary host for Wado.
 
 ## Visibility
 
@@ -79,17 +82,9 @@ test {
 }
 ```
 
-### Packages
-
-`internal` reaches the files of one package. The packages are:
-
-- The entry module, every local module it reaches through `./` / `../`
-  imports, and the Wasm assets those modules import.
-- Each dependency. A relative import inside a dependency stays in that
-  dependency's package.
-- `core:*`, which is one package, and `wasi:*`, which is another.
-- A [generated module](./spec-kiln.md) belongs to the package of the
-  module that imports it.
+`internal` reaches the files of one package, as
+[The Modules of a Package](./spec-packages.md#the-modules-of-a-package) lists
+them.
 
 ### Signature reach
 

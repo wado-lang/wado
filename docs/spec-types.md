@@ -1,39 +1,25 @@
 # Types
 
+This chapter covers the types a program declares values of: the primitives,
+strings, tuples, lists, the never type, newtypes, structs, enums, variants and
+flags, and how type arguments are inferred. Traits over these types are in
+[Traits](./spec-traits.md).
+
 ## The Prelude
 
-The prelude (`core:prelude`) is automatically imported into every module, providing access to fundamental types without requiring explicit imports:
+The prelude (`core:prelude`) is imported into every module, so its types need no
+`use`:
 
-### Automatically Available
-
-- `String` - UTF-8 string type
-- `List<T>` - Dynamic array type
-- `Option<T>` and its cases `Some(x)` and `None` (`null` also denotes `None`)
-- `Result<T, E>` and its cases `Ok(x)` and `Err(e)`
-- `Stream<T>` - Component Model async stream
-- `Future<T>` - Component Model async future
-- `i128`, `u128` - 128-bit integer types
+- `String`, UTF-8 text.
+- `List<T>`, a growable sequence.
+- `Option<T>` with its cases `Some(x)` and `None`, which `null` also denotes.
+- `Result<T, E>` with its cases `Ok(x)` and `Err(e)`.
+- `Stream<T>` and `Future<T>`, the Component Model's async stream and future.
+- `i128` and `u128`, the 128-bit integers.
 
 A case is written bare (`Some(x)`) only where an expected type says which type
 it belongs to. Elsewhere it is qualified: `Option::Some(x)`.
-
-### Disabling the Prelude
-
-`#![no_prelude]` at the top of a module turns the prelude off, and the module
-imports what it uses:
-
-<!-- {"fixture":"spec_types_no_prelude.wado"} -->
-
-```wado
-#![no_prelude]
-
-use { String, List, Option, Result, Stream, Future } from "core:prelude";
-
-test {
-    let xs: List<i32> = [1, 2];
-    assert xs.len() == 2;
-}
-```
+[`#![no_prelude]`](./spec-attributes.md#no_prelude) turns the prelude off.
 
 ## Primitive Types
 
@@ -137,7 +123,8 @@ Primitive types provide built-in associated constants and static methods. See [`
 
 ## 128-bit Integer Types (i128/u128)
 
-Unlike primitive types, `i128` and `u128` are implemented as structs in the prelude. They can be used like primitives thanks to operator overloading:
+`i128` and `u128` are prelude types, not primitives. Literals, operators and
+casts treat them as integers all the same:
 
 <!-- {"fixture":"spec_types_wide_int.wado"} -->
 
@@ -178,7 +165,8 @@ assert (a + 256) as u8 == 42;          // wide int → int keeps the low bits
 assert (-1 as i128) as u128 == u128::MAX;  // i128 ↔ u128 reinterprets the bits
 ```
 
-Checked conversions are available through `TryFrom` (e.g. `i64::try_from(a)`, `u128::try_from(n)`), returning `Err` when the value is out of range for the target type.
+`TryFrom` gives the checked conversions, such as `i64::try_from(a)` and
+`u128::try_from(n)`. Each answers `Err` for a value out of the target's range.
 
 ## SIMD Types (v128)
 
@@ -253,20 +241,14 @@ Rationale: [WEP: SIMD v128 Types](./wep-2026-01-31-simd-v128.md).
 
 ## String Type
 
-`String` is a built-in type representing UTF-8 encoded text with value semantics and GC management.
+`String` is text: a sequence of Unicode scalar values, stored as UTF-8. Every
+`String` is valid UTF-8, so it crosses a component boundary as a Component
+Model `string` unchanged.
 
-### Design Principles
-
-- Value semantics: deep-copied on assignment, parameter passing, and return — passing a `String` to a function gives the callee its own buffer
-- Mutable through the local binding: `push_str` modifies the receiver in place and `+=` reassigns the binding, but neither reaches the caller's value
-- GC-managed: Memory is automatically managed by Wasm GC
-- UTF-8 encoding: Direct mapping to Component Model `string`
-
-### Semantics and Encoding
-
-- Semantically, a `String` is a sequence of Unicode scalar values
-- Invalid UTF-8 byte sequences are not allowed; all String values must be valid UTF-8
-- This ensures interoperability with Component Model `string` type and safe string operations
+A `String` is a value like any other
+([Value Semantics](./spec-memory.md#value-semantics)). `push_str` changes the
+receiver in place and `+=` reassigns the binding, and neither reaches a copy
+the caller holds.
 
 ### Index Access (Prohibited)
 
@@ -309,7 +291,7 @@ assert !s.is_empty();
 
 ### Iterating Bytes and Characters
 
-`bytes()` and `chars()` return iterator objects (`StrUtf8ByteIter` and `StrCharIter`) that implement both `Iterator` and `IntoIterator`, so they work with `for-of` directly:
+`bytes()` and `chars()` return iterators, so `for-of` walks them directly:
 
 <!-- {"fixture":"spec_types_string.wado"} -->
 
@@ -465,11 +447,8 @@ let len = arr.len(); // Get length
 assert arr == [100, 200, 3, 4] && len == 4;
 ```
 
-### Index Assignment Rules
-
-- Requires the list binding to be declared with `let mut`
-- Index must be within bounds (runtime check, traps if out of bounds)
-- Works with lists of any element type
+An index outside the list traps, on a read as on a write. A write needs a
+mutable binding ([Variable Mutability](./spec-expressions.md#variable-mutability)).
 
 ### Sorting
 
@@ -500,9 +479,12 @@ assert asc == [1, 3, 5, 8] && orig == [5, 3, 8, 1];
 
 ## The Never Type `!`
 
-The never type `!` is the bottom type: it is a subtype of every type. An expression of type `!` never returns, because it always diverges (traps). `panic()` and `unreachable()` both return `!`.
+The never type `!` is the bottom type: it is a subtype of every type. An
+expression of type `!` never produces a value. `panic()` and `unreachable()`
+both return `!`.
 
-Because `!` is assignable to any type, an expression of type `!` may appear in any value position without a type mismatch:
+So an expression of type `!` may stand in any value position without a type
+mismatch:
 
 <!-- {"fixture":"spec_literals_tuples.wado"} -->
 
@@ -968,16 +950,6 @@ for let { x, y } of points {
 assert sum == 14;
 ```
 
-### Auto-derived Traits
-
-A struct derives `Eq` field by field, and `Ord` lexicographically in field
-declaration order. A variant derives `Eq` only, not `Ord`: two values are equal
-when they are the same case and their payloads, if any, are equal.
-
-When a derived impl exists, which instantiations of a generic type it covers,
-and how a written impl overrides it are stated in
-[Derivation Policy](./spec-traits.md#derivation-policy).
-
 ### Struct Field Defaults
 
 Struct fields may declare a default expression with `= expr`. Fields with defaults may be omitted at construction sites; fields without defaults are required:
@@ -1009,13 +981,14 @@ A literal that leaves out a field with no default is an error:
 let c = ServerConfig { port: 3000 };
 ```
 
-A default expression is evaluated each time a literal omits its field. It must be effect-free and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected: destructuring sees every field regardless of defaults. A literal may omit every field that has a default, down to `ServerConfig {}` where all of them do.
+A default expression is evaluated each time a literal omits its field. It must
+perform no effect, and it cannot name another field. A literal may omit every
+field that has a default, down to `ServerConfig {}` where all of them do.
+Destructuring sees every field, defaulted or not.
 
 A default resolves its names in the module that declares the struct, not where
-the literal is written. It may name that module's private items, its import
-aliases, and a type or variant case the constructing module never imports.
-Nothing the constructing module declares, imports, or binds changes what an
-omitted field evaluates to.
+the literal is written, as a function's default does
+([Where a Default Resolves](./spec-functions.md#where-a-default-resolves)).
 
 A default may name the struct's own type parameters. Each literal settles them
 first, from a turbofish, its annotation, or the fields it lists, and the default
@@ -1240,9 +1213,12 @@ test "a partial turbofish" {
 
 ## Enums, Variants, and Flags
 
-Wado follows Component Model's distinction between enums and variants (unlike Rust):
+Wado splits what Rust's `enum` covers into three kinds, as the Component Model
+does. An `enum` has cases with no payload, a `variant` has cases that may carry
+one, and a `flags` type is a set of bits. Each crosses a component boundary as
+the Component Model type of the same name.
 
-Enums (no payloads - Component Model `enum`):
+### Enums
 
 <!-- {"fixture":"spec_types_enum.wado"} -->
 
@@ -1278,9 +1254,7 @@ A bare case with no expected type is an error:
 let red = Red;
 ```
 
-Enums auto-derive `Display` as the bare case name (`Red`), distinct from `Inspect`'s `Color::Red`. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs. See [Auto-derived Traits](#auto-derived-traits) above.
-
-Enums can have `impl` blocks:
+An enum may have `impl` blocks:
 
 <!-- {"fixture":"spec_types_enum.wado"} -->
 
@@ -1299,9 +1273,10 @@ test {
 }
 ```
 
-Variants (with payloads - Component Model `variant`):
+### Variants
 
-Wado variants have exactly one payload type per case. Unit cases have no payload, and multiple values require explicit tuple syntax `[T, U]`:
+A variant case carries one payload type or none. Several values travel as one
+tuple payload, `[T, U]`:
 
 <!-- {"fixture":"spec_types_variant.wado"} -->
 
@@ -1378,7 +1353,9 @@ test {
 
 `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
 
-Flags (bit flags - Component Model `flags`):
+### Flags
+
+Each member of a flags type is one bit, in declaration order:
 
 <!-- {"fixture":"spec_types_flags.wado"} -->
 
@@ -1409,9 +1386,9 @@ let w = Perms::Write;
 let bad = r + w;
 ```
 
-Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant. See [Auto-derived Traits](#auto-derived-traits).
-
-A flags type is a newtype over `u32`: an integer literal coerces to it, `as` converts to and from `u32`, and it inherits `u32`'s methods. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
+A flags type is a newtype over `u32`: an integer literal coerces to it, `as`
+converts to and from `u32`, and it inherits `u32`'s methods. A member may carry
+a `#[cm("...")]` attribute that names it at a component boundary:
 
 <!-- {"fixture":"spec_types_flags.wado"} -->
 
@@ -1426,4 +1403,19 @@ test {
 }
 ```
 
-Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.
+## Auto-derived Traits
+
+A derived `Eq` or `Ord` compares by the type's shape:
+
+- A struct compares field by field. `Ord` is lexicographic, in field
+  declaration order.
+- An enum compares its case. `Ord` follows declaration order.
+- A flags type compares its raw bits.
+- A variant derives `Eq` only, never `Ord`. Two values are equal when they are
+  the same case and their payloads, if any, are equal.
+
+When a derived impl exists, which instantiations of a generic type it covers,
+and how a written impl overrides it are stated in
+[Derivation Policy](./spec-traits.md#derivation-policy). Which types have
+`Display`, a plain enum among them, is stated in
+[Format Traits](./spec-traits.md#format-traits).

@@ -1,8 +1,13 @@
 # Traits
 
-## Traits
+A trait names methods that types implement. This chapter covers declaring,
+implementing and bounding traits, how a call finds the impl that answers it,
+where an impl may be written, and which impls the compiler derives. The traits
+the prelude declares are in [Standard Traits](./spec-standard-traits.md).
 
-Traits define shared behavior that types can implement. Trait methods use static dispatch: every call is resolved at compile time.
+## Declaring and Implementing Traits
+
+Trait methods use static dispatch: every call is resolved at compile time.
 
 A `trait` and an `interface` are declared in the type namespace: one name reaches one declaration wherever it is written. Neither denotes a type. Each names a set of operations, and no value has one as its type, so a type position naming one is a compile error. A trait reaches a type only as a bound (`fn f<T: Greet>(x: T)`).
 
@@ -305,9 +310,8 @@ A rigid type parameter satisfies a bound from the bounds in force on it and from
 nothing else. So `[..T]: Ord` does not hold of `[A, B]` under
 `A: Inspect, B: Inspect`, and the body that wants it writes `A: Ord, B: Ord`.
 
-A bound on a kind trait of the `Reflect` family (`ReflectStruct` and its
-siblings) holds only where every member of the receiver is visible at the use
-site. The root `Reflect` names the type and no member, so it holds anywhere.
+A bound on a kind trait of the `Reflect` family holds only where the receiver's
+members are visible ([Visibility](./spec-reflection.md#visibility)).
 
 A blanket's receiver parameter is matched by position, not by spelling: a method
 parameter named `T` inside the method is the method's own `T`.
@@ -682,18 +686,12 @@ That is a rule about where impls may be written, not about how many apply to a c
 
 ### Package Boundary
 
-The unit of coherence is a package: all source files compiled together from the same `wado.toml` project. Types and traits are classified relative to that boundary:
-
-| Module source                                       | Classification |
-| --------------------------------------------------- | -------------- |
-| `./file.wado` (relative path import)                | Local          |
-| Entry-point file                                    | Local          |
-| A module a Kiln generator produces for this package | Local          |
-| A `[dependencies]` package                          | Foreign        |
-| `core:*` (standard library)                         | Foreign        |
-| `wasi:*` (WASI interfaces)                          | Foreign        |
-| A Wasm asset (`with { type: "wasm" }` or `"wat"`)   | Foreign        |
-| Remote URL                                          | Foreign        |
+The unit of coherence is the package
+([The Modules of a Package](./spec-packages.md#the-modules-of-a-package)). A
+type or trait is local when a module of the current package declares it, and
+foreign otherwise: a dependency's, and the standard library's (`core:*` and
+`wasi:*`). A Wasm asset belongs to the package that imports it, but what it
+declares is foreign.
 
 ### The Orphan Rule
 
@@ -1019,9 +1017,11 @@ Each prelude trait follows one policy for when an impl exists:
 | written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                          |
 | explicit  | an impl is written                                                                | every user-defined trait                           |
 
-`Default` is the one on-demand trait with a condition of its own: every field
-carries a default expression, rather than every member satisfying `Default`
-(see [Auto-Derivation](./spec-standard-traits.md#auto-derivation)).
+Two on-demand traits have a condition of their own. `Default` asks that every
+field carry a default expression, not that every member satisfy `Default`
+([Auto-Derivation](./spec-standard-traits.md#auto-derivation)). A `variant`
+derives `Eq` but never `Ord`
+([Auto-derived Traits](./spec-types.md#auto-derived-traits)).
 
 An on-demand impl is generated only where a use needs it, not for every declared
 type. For `Eq` and `Ord` that use is an operator, a comparison method, or a
@@ -1096,10 +1096,18 @@ or a newtype has.
 
 ### Format Traits
 
-`${x:?}` / `${x:#?}` render through `Inspect`, which every type has, so they
+`${x:?}` and `${x:#?}` render through `Inspect`, which every type has, so they
 need no bound.
 
-`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one. So do the prelude's sequences, tuples and ranges, where their elements allow it. Any other struct or variant needs a hand-written `impl Display`; otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation. For example, `String::push_display` takes any `Display`. `${x:#}` is its [alternate form](./spec-literals.md#alternate-form).
+`${x}` renders through the type's `impl Display`. The primitives and `String`
+have one. So do the prelude's sequences, tuples and ranges, where their elements
+allow it. A plain enum renders its bare case name, and a newtype inherits its
+base's impl. Any other struct or variant needs a hand-written `impl Display`.
+Without one, `${x}` is a compile error, and `${x:?}` gives the debug form.
+
+So a `T: Display` bound certifies a real string representation, and
+`String::push_display` takes any `Display`. `${x:#}` is the
+[alternate form](./spec-literals.md#alternate-form).
 
 <!-- {"fixture":"spec_traits_format_bounds.wado"} -->
 

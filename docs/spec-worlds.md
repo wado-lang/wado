@@ -95,12 +95,9 @@ lib = "src/lib.wado"
 ```
 
 A hosted world's entry module exports the entry point that world requires. The
-library world requires none. Every `export` item of its entry module becomes
-part of an interface named after the package,
-`<namespace>:<name>/<name>@<version>`. The world itself is named `root`, so no
-package may take that name, in any letter case.
-[The Library World](./spec-packages.md#the-library-world) says what the library
-world offers other packages, and what building it needs.
+library world requires none.
+[The Library World](./spec-packages.md#the-library-world) says what it offers
+other packages, and what building it produces.
 
 Rationale: [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md).
 
@@ -591,8 +588,8 @@ test "run prints without declaring Stdout" {
 }
 ```
 
-A test declares no effects and may perform any. So a test may call a
-command's `run`, and a service's `handle`. The call returns what the handler's
+A test may perform any effect ([Syntax Rules](./spec-testing.md#syntax-rules)),
+so it may call a command's `run` and a service's `handle`. The call returns what the handler's
 `task return` delivered:
 
 <!-- {"fixture":"spec_worlds_test_handler.wado"} -->

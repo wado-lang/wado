@@ -10,7 +10,7 @@ dependency:
   into a calculator parser at compile time; `main.wado` parses `1 + 2 * 3`
   through it.
 
-## Registry vs local, today
+## Where the dependencies come from
 
 Both dependencies are consumed from the OCI registry:
 
@@ -87,15 +87,14 @@ generator. Without a lock the compiler resolves and pulls lazily.
 ### Options and defaults
 
 A registry generator's options shape comes from its component WIT, and a WIT
-`record` has no notion of a field default — so **every non-`option<T>` field is
-required** at the consuming site (`{ highlight: false, trace: false }` above,
-even though `trace` defaults to `false` in gale's source). Source-level defaults
-do not cross the registry boundary; supply each field explicitly.
+`record` has no field defaults. So every field is required at the use site
+unless its type is an `Option`, a `List` or a `TreeMap`
+([Options](../../docs/spec-kiln.md#options)). That is why the clause above
+writes `trace: false`, although `trace` defaults to `false` in gale's source.
 
 ### Remaining follow-ups
 
-- Carrying source-level option defaults across the boundary (so an omitted field
-  falls back to the generator's default) needs the component to encode them; see
-  the Kiln WEP's "Source vs registry options descriptor" note.
-- `wado.lock`'s recorded integrity is not yet enforced on fetch/compile (a
-  `--locked` / `--offline` mode is a separate dependency-management phase).
+- [ ] Carry source-level option defaults across the registry boundary, so an
+      omitted field falls back to the generator's default.
+- [ ] Enforce the integrity `wado.lock` records on fetch and compile, with a
+      `--locked` / `--offline` mode.

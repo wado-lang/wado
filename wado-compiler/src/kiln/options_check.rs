@@ -48,12 +48,17 @@ impl<'a> Site<'a> {
 
     /// An error about this site, blamed on the key at `span`.
     fn error_at(self, span: Span, message: String) -> Diagnostic {
-        Diagnostic {
-            severity: Severity::Error,
-            code: Code::GeneratorOptionsInvalid,
-            message,
-            span: Some(DiagnosticSpan::from_span(&span, Some(self.file))),
-        }
+        clause_error(self.file, &span, message)
+    }
+}
+
+/// An error in a `with { generator: … }` clause of `file`, blamed on `span`.
+pub(super) fn clause_error(file: &str, span: &Span, message: String) -> Diagnostic {
+    Diagnostic {
+        severity: Severity::Error,
+        code: Code::GeneratorOptionsInvalid,
+        message,
+        span: Some(DiagnosticSpan::from_span(span, Some(file))),
     }
 }
 

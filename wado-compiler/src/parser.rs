@@ -1723,7 +1723,7 @@ impl Parser {
     /// Parse import attributes: `{ type: "wasm", provider: "./impl.wado" }`
     ///
     /// Attribute values are a generic scalar/array/object tree. Any key parses
-    /// here: the loader checks a clause's keys, and Kiln a generated one's.
+    /// here: the analyzer checks a clause's keys, and Kiln a generated one's.
     fn parse_import_attributes(&mut self) -> ParseResult<ImportAttributes> {
         let open = self.pos;
         let entries = self.parse_attr_object()?;

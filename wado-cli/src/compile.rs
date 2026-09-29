@@ -573,7 +573,6 @@ async fn materialize_git_dependencies(
 /// manifest they are anchored in, the provider that resolves their generators,
 /// and a host rebased on the manifest root.
 pub(crate) struct KilnSetup {
-    pub manifest: wado_manifest::Manifest,
     pub manifest_root: PathBuf,
     pub invocations: Vec<wado_compiler::kiln::Invocation>,
     pub provider: CliGeneratorProvider,
@@ -679,13 +678,12 @@ pub(crate) async fn prepare_kiln(
         .with_run(run.clone())
         .with_log_level(host.log_level())
         .with_registry_context(RegistryContext {
-            build_dependencies: manifest.build_dependencies.clone(),
-            registries: manifest.registries.clone(),
+            build_dependencies: manifest.build_dependencies,
+            registries: manifest.registries,
             locked_versions: locked_generator_versions(&manifest_root),
         });
     let kiln_host = host.rebased(manifest_root.clone());
     Ok(Some(KilnSetup {
-        manifest,
         manifest_root,
         invocations,
         provider,
@@ -699,7 +697,6 @@ impl KilnSetup {
     /// Run the harvested invocations, writing what they produce.
     pub(crate) async fn run(&mut self) -> Result<PipelineOutcome, PipelineError> {
         kiln_driver::run_pipeline(
-            &self.manifest,
             &self.manifest_root,
             &self.host,
             &self.provider,
@@ -1119,9 +1116,8 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
         .then(|| opts.embed.wit.resolve(opts.knobs.opt_level))
         .flatten();
 
-    // Discover the package manifest once, reused for the interface name, the
-    // default output path and the wasm-output embedding paths (WIT + metadata)
-    // so nothing re-parses it.
+    // Up front, since the WIT contract names its interface after the package
+    // before the compile; the output path and metadata embedding reuse it.
     let nearest = load_nearest_manifest(Path::new(&opts.input)).map_err(CliExit::error)?;
 
     let mut flags = opts.flags();

@@ -1,6 +1,9 @@
 # Effect System
 
-## Design Philosophy
+An effect is a capability a function uses, such as writing to standard output.
+This chapter covers declaring an effect, declaring the effects a function
+performs and how they propagate to callers, functions generic over effects,
+effects on trait methods, and handlers.
 
 The effect system does three jobs:
 
@@ -282,7 +285,7 @@ test {
 }
 ```
 
-A test block declares no effects and may perform any (see [Syntax Rules](./spec-testing.md#syntax-rules)).
+A test block may perform any effect without declaring it (see [Syntax Rules](./spec-testing.md#syntax-rules)).
 
 ### Resources as Effects
 

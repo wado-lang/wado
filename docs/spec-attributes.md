@@ -1,6 +1,9 @@
 # Compiler Attributes
 
-Wado uses `#[...]` attributes (item-level) and `#![...]` inner attributes (module-level) to control compiler behavior.
+An attribute `#[...]` applies to the item it precedes, and an inner attribute
+`#![...]` to the whole module. This chapter lists them in three groups: those
+any program writes, those valid anywhere that mostly the standard library and
+generated code write, and those valid only in the standard library.
 
 ## User-Facing Attributes
 
@@ -309,11 +312,11 @@ Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 Each declaration reads its own keys:
 
-| Declaration                                   | Keys                            |
-| --------------------------------------------- | ------------------------------- |
-| `struct`, `enum`, `variant`, `flags`, newtype | `name_policy`                   |
-| Struct field                                  | `name`, `positional`, `default` |
-| Enum case, variant case                       | `name`                          |
+| Declaration                                   | Keys                 |
+| --------------------------------------------- | -------------------- |
+| `struct`, `enum`, `variant`, `flags`, newtype | `name_policy`        |
+| Struct field                                  | `name`, `positional` |
+| Enum case, variant case                       | `name`               |
 
 A key the declaration does not read is an error, and so is `#[wire]` anywhere
 else, a flags member included. The keys may be split across several `#[wire]`

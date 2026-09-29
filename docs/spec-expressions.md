@@ -8,8 +8,9 @@ and their precedence, and ranges. Branches and loops are in
 
 ## Statements
 
-- `expr;` makes a statement.
-- `return expr;` is necessary for a function to return a value.
+An expression is also a statement, which evaluates it and discards its value. A
+function returns a value only through `return`
+([Return Values](./spec-functions.md#return-values)).
 
 ### Semicolons
 
@@ -182,10 +183,10 @@ test {
 }
 ```
 
-A bare identifier pattern is exempt where the name reaches a case, or, in a
-refutable pattern, an immutable `global`. Such a pattern matches by value rather
-than binding, and the scrutinee's type decides which it does. In a `let` or
-`for` binding a name reaching a `global` binds, so the lint reports it.
+A bare name that a pattern reads as a case or a constant binds nothing, so the
+lint skips it. [Patterns](./spec-patterns.md#patterns-that-cannot-fail) says
+which reading a name takes. In a `let` or `for` binding a name reaching a
+`global` binds, so the lint reports it.
 
 The derivation is read off the binder's own source, not off the `let` keyword,
 and holds at any scope. `let x = x + 1` under an `if`, `if let Some(x) = x` and
@@ -283,15 +284,16 @@ test {
 }
 ```
 
-Any type is supported. Any pure expression (no effects) can be used as an
-initializer. An initializer runs at module initialization, with no handler
-installed for it and in an order it does not choose. It declares no `with`
-clause and has nowhere to declare one, so calling a function that declares an
-effect is an error, as is dispatching an operation backed by the host.
+A global may have any type. Its initializer runs at module initialization, with
+no handler installed for it and in an order it does not choose. It declares no
+`with` clause and has nowhere to declare one. So calling a function that
+declares an effect is an error, as is dispatching an operation backed by the
+host.
 
-A user-defined effect's operation is answered by an installed handler and traps
-where none is, in an initializer as in a function body, so an initializer may
-dispatch one. It may also install its own handler.
+An initializer may dispatch a user-defined effect's operation, which behaves as
+it does in a function body
+([With No Handler Installed](./spec-effects.md#with-no-handler-installed)). It
+may also install its own handler.
 
 ### Mutability
 
@@ -337,8 +339,8 @@ fn example() {
 ### Initialization Order
 
 Initializers run in dependency order, so one may read another global whatever
-the declaration order — across modules too, and whether it names the global or
-reaches it through a call. A cycle among them is an error.
+the declaration order. This holds across modules, and whether the initializer
+names the global or reaches it through a call. A cycle among them is an error.
 
 ## Operators
 
@@ -367,37 +369,14 @@ From the tightest binding to the loosest:
 
 The bitwise operators bind tighter than comparison, so `flags & MASK ==
 EXPECTED` is `(flags & MASK) == EXPECTED`. A postfix operator binds tighter than
-a prefix one, so `-x?` is `-(x?)` and `*p.x` is `*(p.x)`.
+a prefix one, so `-x?` is `-(x?)` and `*p.x` is `*(p.x)`. The postfix `?` is
+[error propagation](./spec-control-flow.md#error-propagation).
 
-### Unary Operators
+### `matches` and `!`
 
-| Operator | Description |
-| -------- | ----------- |
-| `-`      | Negation    |
-| `!`      | Logical NOT |
-| `~`      | Bitwise NOT |
-| `&`      | Reference   |
-| `&mut`   | Mut ref     |
-| `*`      | Dereference |
-
-### Postfix Operators
-
-| Operator              | Description       |
-| --------------------- | ----------------- |
-| `.`                   | Field access      |
-| `[]`                  | Index access      |
-| `()`                  | Function call     |
-| `::`                  | Namespace access  |
-| `matches { pattern }` | Pattern test      |
-| `as Type`             | Type cast         |
-| `?`                   | Error propagation |
-
-### `matches` and `!` binding
-
-The two tables above group operators by form, not by binding strength. In the
-[precedence table](#precedence), `matches` binds looser than the arithmetic and
-bitwise operators. Logical `!` binds looser than `matches` and tighter than
-comparison. So:
+`matches` binds looser than the arithmetic and bitwise operators. Logical `!`
+binds looser than `matches` and tighter than comparison, unlike the other prefix
+operators. So:
 
 - `!x matches { Some(_) }` is `!(x matches { Some(_) })` — "`x` does not match
   `Some(_)`".
@@ -429,7 +408,7 @@ function types follow [Casts](./spec-types.md#casts).
 
 Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
 direction, and an integer converts to `char` only from `u8` (see
-[char Casting and Conversion](./spec-literals.md#char-casting-and-conversion)).
+[`char` Casts](#char-casts)).
 
 A float converts to an integer as Rust's `as` does. It truncates toward zero,
 and a value outside the target's range becomes the target's `MIN` or `MAX`.
@@ -455,6 +434,66 @@ assert x == 10.0;
 // Cast in expressions
 let result = (a as f64) + b;
 assert result == 1.5;
+```
+
+#### `char` Casts
+
+A `char` casts to any integer type, which yields its Unicode scalar value. A
+type too narrow for the value keeps its low bits:
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+let c = 'A';
+let code = c as i32;
+let ucode = c as u32;
+let byte = c as u8;     // truncated to low byte
+assert code == 65 && ucode == 65 && byte == 65;
+```
+
+`u8 as char` is allowed, because every `u8` value is a Unicode scalar value:
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+let b: u8 = 65;
+assert b as char == 'A';
+```
+
+Every other integer-to-`char` cast is an error, because the source type holds
+values that are not scalar values: a surrogate (`0xD800..=0xDFFF`), a value past
+`0x10FFFF`, or a negative number:
+
+<!-- {"fixture":"spec_literals_char_from_int.wado"} -->
+
+```wado
+let x: i32 = 65;
+let c = x as char;  // compile error
+
+let y: i8 = 65;
+let d = y as char;  // compile error (i8 can be negative)
+```
+
+The checked conversions take their place. They answer `None` for a value that
+is not a scalar value. [`core:prelude`](./stdlib-core-prelude.md) has the full
+`char` API.
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+let from_u32 = char::from_u32(65 as u32);
+let from_i32 = char::from_i32(65);
+assert from_u32 == Option::Some('A') && from_i32 == Option::Some('A');
+```
+
+A `char` casts to no type but an integer:
+
+<!-- {"fixture":"spec_literals_char_to_non_int.wado"} -->
+
+```wado
+let c = 'A';
+let f = c as f64;     // compile error: char can only be cast to integer types
+let s = c as String;  // compile error: the two types share no representation
 ```
 
 ### Parentheses for Grouping
