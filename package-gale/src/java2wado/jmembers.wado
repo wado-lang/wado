@@ -6,7 +6,7 @@ use { ParserRule, Visibility } from "../ir.wado";
 use { JToken } from "./jlexer.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr, JStmt } from "./jparser.wado";
-use { emit_java_stmts, emit_expr, map_java_type, with_locals, JEnv } from "./jemit.wado";
+use { emit_java_stmts, emit_expr, map_java_type, with_locals, name_is, JEnv } from "./jemit.wado";
 use { to_snake_case, escape_ident } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 
@@ -215,7 +215,7 @@ fn stmts_mutate(stmts: &List<JStmt>, scope: &mut List<String>, mutators: &List<S
 fn assigns_field(target: &JExpr, scope: &List<String>) -> bool {
     return match target {
         Name(n) => !scope.contains(n),
-        Member(m) => name_is_this(&m.recv),
+        Member(m) => name_is(&m.recv, "this"),
         _ => false,
     };
 }
@@ -267,15 +267,8 @@ fn is_print_call(callee: &JExpr) -> bool {
 fn call_method_name(callee: &JExpr) -> String {
     return match callee {
         Name(n) => *n,
-        Member(m) => if name_is_this(&m.recv) { m.name } else { "" },
+        Member(m) => if name_is(&m.recv, "this") { m.name } else { "" },
         _ => "",
-    };
-}
-
-fn name_is_this(e: &JExpr) -> bool {
-    return match e {
-        Name(n) => *n == "this",
-        _ => false,
     };
 }
 

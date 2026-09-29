@@ -191,7 +191,6 @@ pub fn translate_java_lexer_stmts<S: AsStrSlice>(body: S, env: &JEnv) -> Result<
     return emit_java_stmts(&rule, &rules, &stmts, false, &bindings, &with_locals(env, &stmts));
 }
 
-
 /// Translate a lexer `{ ... }?` predicate body to a Wado boolean expression.
 pub fn translate_java_lexer_expr<S: AsStrSlice>(body: S, env: &JEnv) -> Result<String, String> {
     let mut env = *env;
@@ -799,7 +798,8 @@ fn call_names<S: AsStrSlice>(e: &JExpr, name: S) -> bool {
     return false;
 }
 
-fn name_is<S: AsStrSlice>(e: &JExpr, s: S) -> bool {
+/// Whether `e` is the bare name `s`.
+pub fn name_is<S: AsStrSlice>(e: &JExpr, s: S) -> bool {
     return match e {
         Name(n) => *n == s.as_str_slice(),
         _ => false,
@@ -895,9 +895,8 @@ fn declares_string<S: AsStrSlice>(decls: &List<AttrDecl>, name: S) -> bool {
 /// Whether `callee` is `name` or `<receiver>.name`.
 fn callee_named<S: AsStrSlice>(callee: &JExpr, name: S) -> bool {
     return match callee {
-        Name(n) => *n == name.as_str_slice(),
         Member(m) => m.name == name.as_str_slice(),
-        _ => false,
+        _ => name_is(callee, name),
     };
 }
 
