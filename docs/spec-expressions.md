@@ -610,7 +610,9 @@ assert c.is_empty();
 Bounds known only at run time are not checked. A reversed range is then empty.
 
 A range written as a pattern is a
-[range pattern](./spec-patterns.md#range-patterns), with rules of its own.
+[range pattern](./spec-patterns.md#range-patterns), with rules of its own. A
+range of `i32` used as an index gives a `Slice<T>`
+([The Sequence Family](./spec-types.md#the-sequence-family)).
 
 ### Range Methods
 
@@ -641,11 +643,5 @@ assert steps == [0, 3, 6, 9];
 
 Iteration never steps past `T`'s maximum. `0 as u8..=255` yields all 256 values
 and stops. A float range does not iterate, but `contains` still works on it.
-
-### Range Indexing
-
-A `List<T>`, `Array<T>` or `Slice<T>` indexed by a range of `i32` gives a
-`Slice<T>` of the elements the range covers: `xs[1..<4]` holds `xs[1]`, `xs[2]`
-and `xs[3]`, as does `xs[1..=3]`.
 
 Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).

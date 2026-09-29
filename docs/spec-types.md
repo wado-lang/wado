@@ -356,6 +356,41 @@ assert s == "hello world!";
 
 Rationale: [WEP: String Type Design](./wep-2026-01-15-string-type-design.md).
 
+### String Views
+
+`StrSlice` is a prelude type: a view of part of a string, its ends on UTF-8
+character boundaries. Creating one copies nothing, and `to_string()` is where a
+copy is made. It is an ordinary library type; nothing in the language treats
+the name specially.
+
+<!-- {"fixture":"spec_traits_str_slice.wado"} -->
+
+```wado
+let v = "banana".as_str_slice();
+let part = v.slice(1, 4);            // panics off a character boundary
+assert part == "ana";
+assert part.len() == 3;              // in bytes
+assert part.to_string() == "ana";    // copies out, here and only here
+```
+
+`slice(start, end)` takes byte offsets from the view's start. It traps when the
+range is out of bounds or either end is not a character boundary.
+`slice_unchecked` leaves both checks to the caller. A view refers to its
+string's bytes as a [slice](#slice-semantics) does, with the same snapshot and
+aliasing behavior.
+
+`StrSlice` carries the search and split methods (`contains`, `starts_with`,
+`find`, `split`, `split_once`, the trims, the `strip_*` family), and `String`'s
+own delegate to it. A method that answers with part of its input returns a view
+of it, so working on part of a string does not copy it out. `StrSlice` and
+`String` compare in either order, and two views compare and order by their
+text.
+
+A signature takes a `String`, a reference to one, or a view of one alike through
+[`AsStrSlice`](./spec-standard-traits.md#asstrslice).
+
+Rationale: [WEP: String Views](./wep-2026-09-13-string-slice.md).
+
 ## Tuples
 
 Tuple types use bracket syntax `[T1, T2, ...]`. The literal that builds one is
@@ -447,8 +482,7 @@ let len = arr.len(); // Get length
 assert arr == [100, 200, 3, 4] && len == 4;
 ```
 
-An index outside the list traps, on a read as on a write. A write needs a
-mutable binding ([Variable Mutability](./spec-expressions.md#variable-mutability)).
+An index outside the list traps ([Bounds Checks](#bounds-checks)).
 
 ### Sorting
 
@@ -476,6 +510,66 @@ let orig: List<i32> = [5, 3, 8, 1];
 let asc = orig.sorted();                // returns a new sorted list
 assert asc == [1, 3, 5, 8] && orig == [5, 3, 8, 1];
 ```
+
+## The Sequence Family
+
+Three prelude types hold contiguous sequences:
+
+|                | Fixed length | Growable  |
+| -------------- | ------------ | --------- |
+| Owned          | `Array<T>`   | `List<T>` |
+| Reference view | `Slice<T>`   | —         |
+
+`Slice<T>` is the read-only vocabulary type. An algorithm that only reads is
+written once against a slice, and the owned types reach it through
+`as_slice()`. The methods the three share come from the
+[`Sequence` and `AsSlice`](./spec-standard-traits.md#sequence-and-aslice)
+traits.
+
+A conversion's name says what it costs: `as_*` returns a view of the same
+elements, and `to_*` copies them.
+
+| From → To                  | Method       | Elements copied       |
+| -------------------------- | ------------ | --------------------- |
+| `Array` / `List` → `Slice` | `as_slice()` | none                  |
+| `Slice` → `Array` / `List` | `to_*()`     | all                   |
+| `List` → `Array`           | `to_array()` | all, sized to `len()` |
+
+Indexing by a range of `i32` yields a `Slice<T>` of the elements the range
+covers, as `slice(start, end)` does: `xs[1..<4]` holds `xs[1]`, `xs[2]` and
+`xs[3]`, as does `xs[1..=3]`. Both clamp the range to the sequence.
+
+### Slice Semantics
+
+A slice refers to the whole backing array plus a start and an end. It is an
+ordinary value: assigning one copies those three fields and never the elements.
+A view reads its elements but never hands out `&mut` into the array, so nothing
+writes through it (see [Dispatch](./spec-standard-traits.md#dispatch)). Two
+consequences follow, both memory-safe:
+
+- Snapshot. A view keeps referring to the buffer it was created from, so a
+  source `List` that grows and reallocates is not observed.
+- Aliasing. A write to the source that does not reallocate is visible through
+  the view.
+
+A slice compares, orders, displays, and inspects by its elements, not by the
+buffer it refers to.
+
+### Bounds Checks
+
+`get(i)` returns `Option<T>` on all three types. `xs[i]` traps when `i` is
+outside `0..<len()`, and the trap is the whole contract: its message is
+implementation-defined. On a slice this includes a negative index, although the
+backing array holds an element there: a view never reads outside itself.
+
+`get_unchecked(i)` leaves the check to the caller, who must guarantee
+`0 <= i < len()`. Violating that yields an unspecified value of the element type
+or traps. It is never undefined behavior and never compromises memory safety,
+because every element read is bounds-checked by the Wasm engine. Wado's
+`_unchecked` elides a semantic check, not a memory check, which is why Wado
+needs no `unsafe`.
+
+Rationale: [WEP: The Sequence Family](./wep-2026-06-02-sequence-family.md).
 
 ## The Never Type `!`
 

@@ -771,32 +771,32 @@ sibling case as a rule instead of counting bindings.
 The first half stands. The backward walk records a live set per write and no
 position, so it cannot say today which repoints dominate a site.
 
-### A borrowed projection behind a variant
+### A returned projection behind a `let`
 
 `projection_param` matches a syntactic deref / field / index / payload / cast
-chain rooted at a parameter, so `build(&self) -> List { return *self }` is
-self-projecting but `SliceValueIter<T>::next` is not:
+chain rooted at a parameter. Returned as written, such a chain is handed out as
+a borrow, inside a variant construction too: `return Option::Some(h.item)`
+copies nothing. Bound by a `let` first, it is not recognized.
+`let item = h.item; return item;` returns owned, and the fold deep-copies
+`h.item` into `item`.
+
+`SliceValueIter<T>::next` has that shape:
 
 ```wado
 let item = builtin::array_get_value(self.repr, self.index);
 return Option::Some(item);
 ```
 
-`array_get_value` is already a container alias read, and `Option<T>` over a reference
-type lowers to a bare nullable ref, so the borrowed element could be returned as
-it stands. Two things hide it: the projection is behind a `let` binding, and it
-is wrapped in a variant construction. So `next` returns owned, and the fold
-deep-copies the element into the payload — every `for x of list` over a `List` of
-aggregates pays a copy of each element even when the loop body only reads it.
-Nothing about the copy is required: the same walk written over `&list`, or as an
-index loop in one body, reads the element in place under the read-only share.
+So every by-value `for x of list` over a `List` of aggregates pays a copy of
+each element, even when the loop body only reads it. The element is also reached
+through the borrowed field `repr`, which the Roadmap item "Follow a borrowed
+field back to what it borrows" covers. Nothing about the copy is required: the
+same walk written over `&list`, or as an index loop in one body, reads the
+element in place under the read-only share.
 
-Two halves of the one fixpoint miss it. The recognizer does not see the
-projection through the binding and the variant, and the fold reads the
-materialization into that payload as a copy. Neither the inliner nor any NIR
-pass can stand in: the copy is chosen before NIR exists, and
-`#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
-untouched even with the cloned array provably unread.
+Neither the inliner nor any NIR pass can stand in: the copy is chosen before NIR
+exists, and `#[inline(always)]` on `next` leaves the expanded clone in the
+caller's loop untouched even with the cloned array provably unread.
 
 ### A declared retention the walk does not confirm
 

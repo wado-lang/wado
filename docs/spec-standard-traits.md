@@ -171,9 +171,8 @@ for let mut i = 0; i < arr.len(); i += 1 {
 assert arr == [2, 4, 6];
 ```
 
-For `primitive`, `enum`, `flags`, and `fn`, nothing survives the copy, so taking `&mut` of a field or element is a compile error outright. That holds whether it is written `&mut x.f` / `&mut xs[i]` or taken implicitly by a `&mut self` receiver. A `&mut` of a _local_ is fine, since it writes to the variable itself.
-
-A `variant` place admits `&mut`. Its payload is shared, so a mutation _through_ it lands, though replacing the whole value does not.
+Taking `&mut` of such a field or element is itself an error
+([Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements)).
 
 ### Custom Iterables
 
@@ -239,35 +238,12 @@ let result = arr.into_iter()
 assert result == [30, 40, 50];
 ```
 
-## The Sequence Family
+## Sequence and AsSlice
 
-Three prelude types hold contiguous sequences:
-
-|                | Fixed length | Growable  |
-| -------------- | ------------ | --------- |
-| Owned          | `Array<T>`   | `List<T>` |
-| Reference view | `Slice<T>`   | —         |
-
-`Slice<T>` is the read-only vocabulary type. An algorithm that only reads is
-written once against a slice, and the owned types reach it through
-`as_slice()`.
-
-A conversion's name says what it costs: `as_*` returns a view of the same
-elements, and `to_*` copies them.
-
-| From → To                  | Method       | Elements copied       |
-| -------------------------- | ------------ | --------------------- |
-| `Array` / `List` → `Slice` | `as_slice()` | none                  |
-| `Slice` → `Array` / `List` | `to_*()`     | all                   |
-| `List` → `Array`           | `to_array()` | all, sized to `len()` |
-
-Indexing by a range (`xs[1..<3]`, `xs[1..=2]`) yields a `Slice<T>`, as
-`slice(start, end)` does. Both clamp the range to the sequence.
-
-### Sequence and AsSlice
-
-Two prelude traits carry the family's shared methods, split by whether the
-implementor has a contiguous backing. All three types implement both.
+Two prelude traits carry the shared methods of the
+[sequence family](./spec-types.md#the-sequence-family), split by whether the
+implementor has a contiguous backing. `Array`, `List` and `Slice` implement
+both.
 
 <!-- {"fixture":"spec_traits_sequence_decls.wado"} -->
 
@@ -317,7 +293,7 @@ The element type is an associated type, so a bound reads
 bounded inherent method. Mutation is in neither trait, since a `Slice` has no
 mutable backing and length changes belong to `List` alone. `String` implements
 neither; its bytes are viewed through `AsByteSlice`, and its text through
-[`AsStrSlice`](#string-views).
+[`AsStrSlice`](#asstrslice).
 
 A function that reads any of the three takes the trait by value:
 
@@ -333,36 +309,6 @@ test {
     assert total(list) == 6 && total(list.to_array()) == 6 && total(list.as_slice()) == 6;
 }
 ```
-
-### Slice Semantics
-
-A slice refers to the whole backing array plus a start and an end. It is an
-ordinary value: assigning one copies those three fields and never the elements.
-A view reads its elements but never hands out `&mut` into the array, so nothing
-writes through it (see [Dispatch](#dispatch)). Two consequences follow, both
-memory-safe:
-
-- Snapshot. A view keeps referring to the buffer it was created from, so a
-  source `List` that grows and reallocates is not observed.
-- Aliasing. A write to the source that does not reallocate is visible through
-  the view.
-
-A slice compares, orders, displays, and inspects by its elements, not by the
-buffer it refers to.
-
-### Bounds Checks
-
-`get(i)` returns `Option<T>` on all three types. `xs[i]` traps when `i` is
-outside `0..<len()`, and the trap is the whole contract: its message is
-implementation-defined. On a slice this includes a negative index, although the
-backing array holds an element there: a view never reads outside itself.
-
-`get_unchecked(i)` leaves the check to the caller, who must guarantee
-`0 <= i < len()`. Violating that yields an unspecified value of the element type
-or traps. It is never undefined behavior and never compromises memory safety,
-because every element read is bounds-checked by the Wasm engine. Wado's
-`_unchecked` elides a semantic check, not a memory check, which is why Wado
-needs no `unsafe`.
 
 Rationale: [WEP: The Sequence Family](./wep-2026-06-02-sequence-family.md).
 
@@ -580,7 +526,7 @@ assert f64::from_str_lenient("inf").unwrap() == f64::INFINITY;
 assert i32::from_str_lenient(" 1 ").is_err();           // never trims whitespace
 ```
 
-A `StrSlice` is an `AsStrSlice`, so a field is parsed out of a larger buffer with no substring allocation (see [String Views](#string-views)).
+A `StrSlice` is an `AsStrSlice`, so a field is parsed out of a larger buffer with no substring allocation (see [String Views](./spec-types.md#string-views)).
 
 <!-- {"fixture":"spec_traits_parse_decls.wado"} -->
 
@@ -637,31 +583,10 @@ is `LenientParseError`.
 
 Rationale: [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 
-## String Views
-
-`StrSlice` is a prelude type: a view of part of a string, its ends on UTF-8
-character boundaries. Creating one copies nothing, and `to_string()` is where a
-copy is made. It is an ordinary library type; nothing in the language treats
-the name specially.
-
-<!-- {"fixture":"spec_traits_str_slice.wado"} -->
-
-```wado
-let v = "banana".as_str_slice();
-let part = v.slice(1, 4);            // panics off a character boundary
-assert part == "ana";
-assert part.len() == 3;              // in bytes
-assert part.to_string() == "ana";    // copies out, here and only here
-```
-
-`slice(start, end)` takes byte offsets from the view's start. It traps when the
-range is out of bounds or either end is not a character boundary.
-`slice_unchecked` leaves both checks to the caller. A view refers to its
-string's bytes as a [slice](#slice-semantics) does, with the same snapshot and
-aliasing behavior.
+## AsStrSlice
 
 `AsStrSlice` is the conversion that lets one signature take an owned `String`, a
-reference to one, or a view of one:
+reference to one, or a [`StrSlice`](./spec-types.md#string-views) view of one:
 
 <!-- {"fixture":"spec_traits_as_str_slice_decl.wado"} -->
 
@@ -684,13 +609,7 @@ passes a reference through. A parameter that only reads its text names
 `AsStrSlice` requires `Eq<String>`, so a body generic over it compares its text
 with `==` against a string, and a string-literal pattern matches it. `==` on a
 type parameter reads the parameter's bounds, so without the requirement neither
-would resolve. `StrSlice` and `String` compare in either order, and two views
-compare and order by their text.
-
-`StrSlice` carries the search and split methods (`contains`, `starts_with`,
-`find`, `split`, `split_once`, the trims, the `strip_*` family), and `String`'s
-own delegate to it. A method that answers with part of its input returns a view
-of it, so working on part of a string does not copy it out.
+would resolve.
 
 Rationale: [WEP: String Views](./wep-2026-09-13-string-slice.md).
 
@@ -893,7 +812,7 @@ The standard containers implement:
 | `TreeMap<K, V>` | every `V`    | every `V`     | `V: Ref`   | `V: RefMut`   |
 
 `List`, `Array` and `Slice` are indexed by `i32` and by a range, which yields a
-`Slice<T>` (see [The Sequence Family](#the-sequence-family)); `TreeMap` by `K`.
+`Slice<T>` (see [The Sequence Family](./spec-types.md#the-sequence-family)); `TreeMap` by `K`.
 A slice is a shared view, so it has nothing to write through.
 
 <!-- {"fixture":"spec_traits_index_dispatch.wado"} -->

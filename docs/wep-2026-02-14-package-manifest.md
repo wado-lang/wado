@@ -988,3 +988,10 @@ This enables seamless local development while ensuring published packages are se
   no `--locked`. The lock also records no `lib` for a package, so it is not
   self-sufficient: a build still reads each dependency's `wado.toml` to find its
   entry module.
+- The lock's `integrity` is recorded and never verified. `wado fetch` and a
+  build pull a registry package or generator by its version tag, and nothing
+  compares what arrives with the lock, so a tag moved to other content installs
+  without an error. A component already in the shared cache is used unchecked.
+  What the lock records is the digest of the artifact's OCI manifest, not a hash
+  of the downloaded bytes as [Integrity Verification](#integrity-verification)
+  decides.
