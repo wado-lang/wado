@@ -112,6 +112,25 @@ fn cast_emits_instruction(type_table: &TypeTable, from: TypeId, to: TypeId) -> b
     from_shape != to_shape || narrows
 }
 
+/// Whether a cast widens an unsigned 32-bit-shaped value to 64 bits, an
+/// `i64.extend_i32_u`. A 64-bit target writes a 32-bit result with its upper
+/// half cleared, so Cranelift folds the extension into an arithmetic producer or
+/// a load (`extend_to_gpr` in the x64 backend), and anywhere else it is a 32-bit
+/// register move.
+fn is_zero_extension(type_table: &TypeTable, from: TypeId, to: TypeId) -> bool {
+    let unsigned = matches!(
+        type_table.get(from),
+        ResolvedType::Primitive(
+            PrimitiveType::U8
+                | PrimitiveType::U16
+                | PrimitiveType::U32
+                | PrimitiveType::Bool
+                | PrimitiveType::Char
+        )
+    );
+    unsigned && wasm_shape(type_table, to) == Some(PrimitiveType::I64)
+}
+
 /// True when an expression is a `builtin::cold_path()` marker call.
 fn is_cold_path_call(body: &Body, id: ExprId, descriptors: &[FunctionRef]) -> bool {
     matches!(
@@ -454,6 +473,20 @@ impl<'a> CostWalk<'a> {
         }
     }
 
+    /// What a cast from `from` (unknown where the body records no type) to `to`
+    /// costs. A zero-extension is emitted but runs as nothing or a register
+    /// move, so only [`Price::Size`] charges it.
+    fn cast_price(&self, from: Option<TypeId>, to: TypeId) -> usize {
+        let Some(from) = from else {
+            return weight::OP;
+        };
+        let runs = match self.price {
+            Price::Hot => !is_zero_extension(self.type_table, from, to),
+            Price::Size => true,
+        };
+        usize::from(runs && cast_emits_instruction(self.type_table, from, to)) * weight::OP
+    }
+
     /// Cost of a promoted pure value, charged once per distinct `ValueId`.
     fn value(&self, v: ValueId, seen: &mut SeenValues) -> usize {
         if !seen.insert(v) {
@@ -477,12 +510,8 @@ impl<'a> CostWalk<'a> {
             }
             ValueKind::Unary { operand, .. } => weight::OP + self.value(*operand, seen),
             ValueKind::Cast { operand, target } => {
-                let emits = self
-                    .body
-                    .values
-                    .type_of(*operand)
-                    .is_none_or(|from| cast_emits_instruction(self.type_table, from, *target));
-                usize::from(emits) * weight::OP + self.value(*operand, seen)
+                self.cast_price(self.body.values.type_of(*operand), *target)
+                    + self.value(*operand, seen)
             }
             // `select_lowering`'s branchless form: one instruction, three operands.
             ValueKind::Select { cond, then, else_ } => {
@@ -521,10 +550,7 @@ impl<'a> CostWalk<'a> {
             | ExprKind::VariantTest { expr, .. }
             | ExprKind::VariantPayload { expr, .. } => weight::OP + self.operand(*expr, seen),
             ExprKind::Cast { expr, target_type } => {
-                let emits = self
-                    .operand_type(*expr)
-                    .is_none_or(|from| cast_emits_instruction(self.type_table, from, *target_type));
-                usize::from(emits) * weight::OP + self.operand(*expr, seen)
+                self.cast_price(self.operand_type(*expr), *target_type) + self.operand(*expr, seen)
             }
             ExprKind::Index { expr, index, .. } => {
                 weight::OP + self.operand(*expr, seen) + self.operand(*index, seen)
