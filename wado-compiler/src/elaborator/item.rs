@@ -1560,6 +1560,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             scope.sem.decls.clear_fn_local_items();
                             let return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
                             let mut ctx = FunctionContext::new(return_type, func.name.clone());
+                            assert_eq!(sig.param_types.len(), func.params.len());
                             for (param, &ty) in func.params.iter().zip(&sig.param_types) {
                                 scope.bind_fn_param(param, ty, &func.type_params, &mut ctx);
                             }

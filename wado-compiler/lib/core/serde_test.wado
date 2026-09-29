@@ -400,20 +400,20 @@ test "apply_case heck-parity edge corpus" {
     assert apply_case(CaseStyle::Camel, "userID") == "userId";
 }
 
-test "report_duplicate_key rejects under Error" {
-    let r = report_duplicate_key(DuplicateKeyPolicy::Error, "role");
-    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
-    if let Err(e) = r {
-        assert e.message == "duplicate field: role";
-    }
+test "report_duplicate_key rejects under Error, naming the key as Inspect does" {
+    let role: String = "role";
+    assert report_duplicate_key(DuplicateKeyPolicy::Error, &role) matches {
+        Err(e) && e.kind == DeserializeErrorKind::DuplicateField && e.message == `duplicate key: "role"`
+    };
+    assert report_duplicate_key(DuplicateKeyPolicy::Error, &7) matches { Err(e) && e.message == "duplicate key: 7" };
 }
 
 test "report_duplicate_key continues under Warn" {
-    assert report_duplicate_key(DuplicateKeyPolicy::Warn, "role") matches { Ok };
+    assert report_duplicate_key(DuplicateKeyPolicy::Warn, &7) matches { Ok };
 }
 
 test "report_duplicate_key continues under PassThru" {
-    assert report_duplicate_key(DuplicateKeyPolicy::PassThru, "role") matches { Ok };
+    assert report_duplicate_key(DuplicateKeyPolicy::PassThru, &7) matches { Ok };
 }
 
 struct KeyPair {

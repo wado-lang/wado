@@ -208,10 +208,10 @@ impl DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg.to_string(), offset };
     }
 
-    pub fn duplicate_field<S: AsStrSlice>(name: S) -> DeserializeError {
+    pub fn duplicate_key<K: Inspect>(key: &K) -> DeserializeError {
         return DeserializeError {
             kind: DeserializeErrorKind::DuplicateField,
-            message: `duplicate field: ${name}`,
+            message: `duplicate key: ${key:?}`,
             offset: -1,
         };
     }
@@ -233,16 +233,17 @@ pub enum DuplicateKeyPolicy {
 }
 
 /// Applies `policy` to a key the wire already wrote. Detecting the repeat is
-/// the caller's job: a struct sees a filled slot, a map asks `try_insert`.
-pub fn report_duplicate_key<S: AsStrSlice>(policy: DuplicateKeyPolicy, name: S) -> Result<(), DeserializeError> {
+/// the caller's job: a struct sees a filled slot, a map asks `try_insert`, a
+/// set asks `insert`, whose element is its key.
+pub fn report_duplicate_key<K: Inspect>(policy: DuplicateKeyPolicy, key: &K) -> Result<(), DeserializeError> {
     match policy {
         DuplicateKeyPolicy::Error => {
             builtin::cold_path();
-            return Result::Err(DeserializeError::duplicate_field(name));
+            return Result::Err(DeserializeError::duplicate_key(key));
         },
         DuplicateKeyPolicy::Warn => {
             builtin::cold_path();
-            log_stderr(`warning: duplicate key: ${name}`);
+            log_stderr(`warning: duplicate key: ${key:?}`);
         },
         DuplicateKeyPolicy::PassThru => {
         },

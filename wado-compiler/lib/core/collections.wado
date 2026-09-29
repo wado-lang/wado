@@ -759,7 +759,7 @@ impl<K: Ord + Deserialize + Inspect, V: Deserialize> Deserialize for TreeMap<K, 
             // The losing insert keeps the first value, so a lenient policy
             // re-assigns to take the last.
             if !result.try_insert(key, val) {
-                report_duplicate_key(on_duplicate, `${key:?}`)?;
+                report_duplicate_key(on_duplicate, &key)?;
                 result[key] = val;
             }
         }
@@ -785,7 +785,7 @@ impl<T: Ord + Deserialize + Inspect> Deserialize for TreeSet<T> {
         let mut result = TreeSet::<T>::new();
         while let Some(element) = seq.next_element::<T>()? {
             if !result.insert(element) {
-                report_duplicate_key(on_duplicate, `${element:?}`)?;
+                report_duplicate_key(on_duplicate, &element)?;
             }
         }
         seq.end()?;

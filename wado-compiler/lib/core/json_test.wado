@@ -913,13 +913,12 @@ test "a repeated unknown member is not a duplicate" {
     assert r matches { Ok(d) && d.a == 1 };
 }
 
-test "the duplicate error names the wire field" {
-    let r: Result<Dup, DeserializeError> = from_string(`{"a":1,"a":2}`);
-    if let Err(e) = r {
-        assert e.message == "duplicate field: a";
-    } else {
-        panic("expected a duplicate-field error");
-    }
+test "the duplicate error names the wire key alike for a struct, a map and a Value" {
+    let input = `{"a":1,"a":2}`;
+    assert from_string::<Dup>(input) matches { Err(e) && e.message == `duplicate key: "a"` };
+    assert from_string::<TreeMap<String, i32>>(input) matches { Err(e) && e.message == `duplicate key: "a"` };
+    assert from_string::<Value>(input) matches { Err(e) && e.message == `duplicate key: "a"` };
+    assert from_string::<TreeMap<i32, i32>>(`{"1":1,"1":2}`) matches { Err(e) && e.message == "duplicate key: 1" };
 }
 
 test "a repeated map key is rejected by default" {
