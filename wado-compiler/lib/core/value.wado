@@ -230,6 +230,21 @@ struct ValueVisitor {
     on_duplicate: DuplicateKeyPolicy,
 }
 
+/// An object key's text: a string as itself, any other scalar as a text format
+/// spells it, so a key from a format with native scalar keys reads back the
+/// same way.
+fn object_key(scalar: Value) -> Result<String, DeserializeError> {
+    if let String(s) = scalar {
+        return Result::Ok(s);
+    }
+    let mut text = String::new();
+    let spelled = scalar.serialize(&mut TextKeySerializer { out: &mut text });
+    if spelled matches { Err(_) } {
+        return Result::Err(DeserializeError::non_scalar_key(-1));
+    }
+    return Result::Ok(text);
+}
+
 impl Visitor for ValueVisitor {
     type Value = Value;
 
@@ -287,21 +302,16 @@ impl Visitor for ValueVisitor {
 
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<Value, DeserializeError> {
         let mut obj: TreeMap<String, Value> = TreeMap::new();
-        loop {
-            match map.next_key::<String>()? {
-                Some(key) => {
-                    let val = map.next_value::<Value>()?;
-                    if !obj.try_insert(key, val) {
-                        report_duplicate_key(self.on_duplicate, &key)?;
-                        obj[key] = val;
-                    }
-                },
-                None => {
-                    map.end()?;
-                    return Result::Ok(Value::Object(obj));
-                },
+        while let Some(scalar) = map.next_key::<Value>()? {
+            let key = object_key(scalar)?;
+            let val = map.next_value::<Value>()?;
+            if !obj.try_insert(key, val) {
+                report_duplicate_key(self.on_duplicate, &key)?;
+                obj[key] = val;
             }
         }
+        map.end()?;
+        return Result::Ok(Value::Object(obj));
     }
 
     fn visit_unknown(&mut self, raw: ByteList) -> Result<Value, DeserializeError> {

@@ -396,6 +396,16 @@ test "decode: dynamic Value" {
     assert dec::<Value>("a26161016162820203") == Value::Object(expected);
 }
 
+test "decode: a Value spells a scalar key as a text format would, and refuses a compound one" {
+    // {1: -7, true: 0}
+    let mut expected: TreeMap<String, Value> = TreeMap::new();
+    expected["1"] = Value::Int(-7);
+    expected["true"] = Value::Int(0);
+    assert dec::<Value>("a20126f500") == Value::Object(expected);
+    // {[1]: 0}
+    assert dec_lenient("a1810100") matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
 test "decode: Value preserves byte strings and undefined" {
     assert dec::<Value>("4401020304") == Value::Bytes([1, 2, 3, 4]);
     // undefined (0xf7) -> Value::Undefined
