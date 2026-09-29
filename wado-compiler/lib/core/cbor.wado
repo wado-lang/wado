@@ -272,9 +272,7 @@ pub struct CborSerializer {
 impl SerializeSeq for CborSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CborSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -286,16 +284,12 @@ impl SerializeSeq for CborSeqSerializer {
 impl SerializeMap for CborMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         let mut ser = CborSerializer { buf: self.buf };
-        let r = key.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return key.serialize(&mut ser);
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CborSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -307,9 +301,7 @@ impl SerializeStruct for CborStructSerializer {
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         write_text(self.buf, name);
         let mut ser = CborSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -320,9 +312,7 @@ impl SerializeStruct for CborStructSerializer {
 impl SerializeVariant for CborVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CborSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -556,9 +546,7 @@ pub struct CanonicalCborSerializer {
 impl SerializeSeq for CanonicalCborSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CanonicalCborSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -602,9 +590,7 @@ impl SerializeStruct for CanonicalCborStructSerializer {
 impl SerializeVariant for CanonicalCborVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CanonicalCborSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {

@@ -655,7 +655,6 @@ impl SerializeSeq for PrettyJsonSeqSerializer {
             depth: self.depth,
         };
         let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -687,7 +686,6 @@ impl SerializeMap for PrettyJsonMapSerializer {
             depth: self.depth,
         };
         let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -714,7 +712,6 @@ impl SerializeStruct for PrettyJsonStructSerializer {
             depth: self.depth,
         };
         let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -735,9 +732,7 @@ impl SerializeVariant for PrettyJsonVariantSerializer {
             indent: self.indent,
             depth: self.depth,
         };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -2637,7 +2632,6 @@ impl SerializeSeq for CanonicalSeqSerializer {
         }
         let mut ser = CanonicalJsonSerializer { buf: self.buf };
         let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -2686,9 +2680,7 @@ impl SerializeStruct for CanonicalStructSerializer {
 impl SerializeVariant for CanonicalVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CanonicalJsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
