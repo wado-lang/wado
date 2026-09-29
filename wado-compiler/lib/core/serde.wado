@@ -1099,6 +1099,106 @@ impl DeserializeVariant for NoCompound {
     }
 }
 
+/// Spells a map key as the text `TextKeyDeserializer` reads back: a string as
+/// itself, any other scalar as its `Display`.
+pub struct TextKeySerializer {
+    pub out: &mut String,
+}
+
+impl TextKeySerializer {
+    fn display<T: Display>(&mut self, v: &T) -> Result<(), SerializeError> {
+        self.out.push_display(v);
+        return Result::Ok(());
+    }
+}
+
+impl Serializer for TextKeySerializer {
+    type SeqSerializer = NoCompound;
+    type MapSerializer = NoCompound;
+    type StructSerializer = NoCompound;
+    type VariantSerializer = NoCompound;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        self.out.push(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
+        self.out.push_str(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<NoCompound, SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        variant_name: S1,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        variant_name: S1,
+        disc: i32,
+    ) -> Result<NoCompound, SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+}
+
 /// Reads a map key a text format spelled as a string, parsed as the scalar the
 /// key type asks for.
 pub struct TextKeyDeserializer {

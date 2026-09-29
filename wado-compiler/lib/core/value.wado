@@ -35,6 +35,7 @@ use {
     Visitor,
     DuplicateKeyPolicy,
     TextKeyDeserializer,
+    TextKeySerializer,
     report_duplicate_key,
 } from "core:serde";
 
@@ -465,21 +466,6 @@ pub struct ValueVariantSerializer {
     payloads: List<Value>,
 }
 
-/// An object key's text: a string as itself, any other scalar as its spelling,
-/// which `TextKeyDeserializer` parses back.
-fn value_key(v: Value) -> Result<String, SerializeError> {
-    return match v {
-        String(s) => Result::Ok(s),
-        Int(n) => Result::Ok(n.to_string()),
-        UInt(n) => Result::Ok(n.to_string()),
-        Int128(n) => Result::Ok(n.to_string()),
-        UInt128(n) => Result::Ok(n.to_string()),
-        Float(n) => Result::Ok(n.to_string()),
-        Bool(b) => Result::Ok(b.to_string()),
-        _ => Result::Err(SerializeError::non_scalar_key()),
-    };
-}
-
 impl SerializeSeq for ValueSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut v: Value = Value::Null;
@@ -497,10 +483,9 @@ impl SerializeSeq for ValueSeqSerializer {
 
 impl SerializeMap for ValueMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
-        let mut k: Value = Value::Null;
-        let mut ser = ValueSerializer { out: &mut k };
-        key.serialize(&mut ser)?;
-        self.pending = Option::Some(value_key(k)?);
+        let mut k = String::new();
+        key.serialize(&mut TextKeySerializer { out: &mut k })?;
+        self.pending = Option::Some(k);
         return Result::Ok(());
     }
 

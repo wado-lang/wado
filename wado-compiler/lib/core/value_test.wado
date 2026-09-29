@@ -984,6 +984,20 @@ test "a compound map key is refused both ways" {
     assert fails_with::<FirstKey<()>>(&v, UnexpectedType);
 }
 
+enum KeyHue {
+    Red,
+    Blue,
+}
+
+test "a unit-case map key is refused on writing, as on reading" {
+    let mut hues = TreeMap::<KeyHue, i32>::new();
+    hues[KeyHue::Red] = 1;
+    assert to_value(&hues) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    let mut units = TreeMap::<(), i32>::new();
+    units[()] = 1;
+    assert to_value(&units) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+}
+
 test "an ignored map reads each key as a string" {
     let v: Value = { a: 1 };
     assert from_value::<IgnoredAny>(&v) matches { Ok(_) };
