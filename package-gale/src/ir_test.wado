@@ -28,7 +28,7 @@ use {
 } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 
-test "assign_action_ids stamps distinct ids across alt actions, prequels, and lexer" {
+test "assign_action_ids numbers a rule's actions in source order and every action apart" {
     let input = "grammar Test;
 @members { int i = 0; }
 r @init { x = 0; } @after { print(x); } : A {act1();} B {p()}? C ;
@@ -38,25 +38,17 @@ TOK : 'a' {more();} 'b' ;
     let mut g = parse(input).unwrap();
     assign_action_ids(&mut g);
     let rule = &g.parser_rules[0];
-    let alt = &rule.alternatives[0];
-    assert g.lexer_rules[0].body[0].actions[0].source.action_id >= 0, "lexer action stamped";
-    assert g.named_actions[0].body.action_id >= 0, "named action stamped";
     let mut ids: List<i32> = [rule.init_action.unwrap().action_id];
-    for let act of &alt.actions {
+    for let act of &rule.alternatives[0].actions {
         ids.push(act.source.action_id);
     }
     ids.push(rule.after_action.unwrap().action_id);
     ids.push(rule.catches[0].body.action_id);
     ids.push(rule.finally_action.unwrap().action_id);
-    // Source order: @init, the alternatives, @after, catch, finally.
     assert ids == [0, 1, 2, 3, 4, 5], `${ids:?}`;
-    ids.push(g.lexer_rules[0].body[0].actions[0].source.action_id);
-    ids.push(g.named_actions[0].body.action_id);
-    for let mut i = 0; i < ids.len(); i += 1 {
-        for let mut j = i + 1; j < ids.len(); j += 1 {
-            assert ids[i] != ids[j], `duplicate action_id ${ids[i]}`;
-        }
-    }
+    let lexer_id = g.lexer_rules[0].body[0].actions[0].source.action_id;
+    let named_id = g.named_actions[0].body.action_id;
+    assert lexer_id > 5 && named_id > 5 && lexer_id != named_id, `lexer ${lexer_id}, named ${named_id}`;
 }
 
 test "merge_grammars strips matching Lexer/Parser suffix to a common base" {

@@ -522,9 +522,6 @@ test "parse unicode_props.g4" {
     let input = #include_str("../../tests/grammars/unicode_props.g4");
     let g = parse(input).unwrap();
     assert g.name == "unicode_props";
-
-    // Exercises \p{L}, \p{Nd}, \p{Zs} — structural parse is the main
-    // coverage; driver tests exercise match behaviour end-to-end.
     assert g.lexer_rules.len() >= 3;
 }
 

@@ -374,8 +374,8 @@ X : [\\P{Nd}a] ;");
 test "unicode property ranges are the real general category" {
     let cc = class_of("grammar Test;
 L : [\\p{L}] ;");
-    // Letters the hand-maintained approximation used to miss. `\P{L}` is the
-    // complement, so a gap here is not a miss but an admission.
+    // Letters outside Latin. `\P{L}` is the complement, so a gap here is not a
+    // miss but an admission.
     assert class_admits(&cc, 'א'), "Hebrew alef is Lo";
     assert class_admits(&cc, 'ก'), "Thai ko kai is Lo";
     assert class_admits(&cc, '\u{10400}'), "Deseret capital long I is Lu";
@@ -2472,8 +2472,8 @@ fn assert_escape_errors(cases: &List<[String, String]>) {
 }
 
 test "a char set rejects an escape ANTLR4 does not define" {
-    // The jar rejects `\[`, which Gale once accepted. `\'` and `\"` belong to string
-    // literals, and `\p` without `{` names no property.
+    // The jar rejects `\[`. `\'` and `\"` belong to string literals, and `\p`
+    // without `{` names no property.
     assert_escape_errors(
         &[
             ["grammar Test;\nX : [\\[] ;", "\\["],

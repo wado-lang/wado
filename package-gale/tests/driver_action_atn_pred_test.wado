@@ -1,11 +1,9 @@
 //! Stage C predicate on an ATN-routed decision: `xt` / `xr` have the
 //! `AtEndConflict` shape (`'a' 'b'` prefixes `'a' 'b' 'c'`), routed through the
-//! runtime ATN. An alt-initial `{true}?` / `{false}?` on the longer alt is
-//! honoured by excluding it from the prediction seed set (`disabled_alts`). On
-//! `abcc` only the longer alt is viable, so `{false}?` leaves no alternative:
-//! ANTLR4 finds the viable alternatives first and only then drops the ones whose
-//! predicates fail (`doc/predicates.md`), and the jar reports no viable
-//! alternative without running either action.
+//! runtime ATN. ANTLR4 finds the viable alternatives first and only then drops
+//! the ones whose predicates fail (`doc/predicates.md`). On `abcc` only the
+//! longer alt is viable, so a `{false}?` on it leaves no alternative, and the
+//! jar reports no viable alternative without running either action.
 
 use ap from "./grammars/wado_atn_pred.g4"
     with {
@@ -29,8 +27,6 @@ test "a false predicate on the only viable ATN alt leaves no alternative" {
 
 test "all-false predicates at an ATN decision fail no-viable" {
     let r = ap::parse_allfalse("abcc");
-    // Both alts excluded → no seed survives → the decision must not commit to
-    // the last (rejected) alt.
     assert !r.ok(), "no alternative is viable when every predicate is false";
     assert r.output == "", `no alt action should run: '${r.output}'`;
 }

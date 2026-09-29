@@ -590,16 +590,9 @@ impl G4Parser {
             return OptionValue::Action(body);
         }
         if self.is_kind(G4Token::Identifier) {
-            let head = self.peek().text;
-            self.advance();
-            if !(self.is_kind(G4Token::Dot) && self.next_kind() == G4Token::Identifier as i32) {
-                return OptionValue::Ident(head);
-            }
-            let mut parts: List<String> = [head];
-            while self.is_kind(G4Token::Dot) && self.next_kind() == G4Token::Identifier as i32 {
-                self.advance();
-                parts.push(self.peek().text);
-                self.advance();
+            let parts = self.parse_dotted_name();
+            if parts.len() == 1 {
+                return OptionValue::Ident(parts[0]);
             }
             return OptionValue::Qualified(parts);
         }
@@ -808,21 +801,25 @@ impl G4Parser {
         return p;
     }
 
+    /// An identifier and each `.ident` after it; a `.` not followed by an
+    /// identifier is left unread. Peeking past a `Dot` stays in bounds, since
+    /// the token stream ends in `Eof`.
+    fn parse_dotted_name(&mut self) -> List<String> {
+        let mut parts: List<String> = [self.expect(G4Token::Identifier).unwrap().text];
+        while self.is_kind(G4Token::Dot) && self.tokens[self.pos + 1].kind == G4Token::Identifier as i32 {
+            self.advance();
+            parts.push(self.advance().text);
+        }
+        return parts;
+    }
+
     fn parse_qualified_id_list(&mut self) -> List<String> {
         let mut out: List<String> = [];
         loop {
             if !self.is_kind(G4Token::Identifier) {
                 break;
             }
-            let mut qid = self.peek().text;
-            self.advance();
-            while self.is_kind(G4Token::Dot) && self.next_kind() == G4Token::Identifier as i32 {
-                self.advance();
-                qid.push('.');
-                qid.push_str(&self.peek().text);
-                self.advance();
-            }
-            out.push(qid);
+            out.push(self.parse_dotted_name().join("."));
             if self.is_kind(G4Token::Comma) {
                 self.advance();
                 continue;
@@ -1295,11 +1292,6 @@ impl G4Parser {
         return Result::<LexerElement, ParseError>::Ok(elem);
     }
 
-    fn next_kind(&self) -> i32 {
-        assert !self.at_eof(), "a lookahead is taken past a real token, so the trailing Eof bounds it";
-        return self.tokens[self.pos + 1].kind;
-    }
-
     fn parse_lexer_atom(&mut self) -> Result<LexerElement, ParseError> {
         if self.is_kind(G4Token::StringLit) {
             let tok = self.advance();
@@ -1308,14 +1300,14 @@ impl G4Parser {
             if self.is_kind(G4Token::Range) {
                 self.advance();
                 let end_tok = self.expect(G4Token::StringLit)?;
-                for let endpoint of [
+                for let [endpoint, span] of [
                     [text, start_span],
                     [end_tok.text, end_tok.span],
                 ] {
-                    if endpoint.0.chars().count() != 1 {
+                    if endpoint.chars().count() != 1 {
                         let expected: List<String> = ["single-char string literal"];
                         return Result::<LexerElement, ParseError>::Err(
-                            ParseError::new("range endpoint must be a single character", endpoint.1, expected),
+                            ParseError::new("range endpoint must be a single character", span, expected),
                         );
                     }
                 }
