@@ -19,8 +19,7 @@ use crate::synthesis::common::{
 };
 use crate::tir::{
     FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId,
-    TypeTable,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -1381,14 +1380,13 @@ fn is_temporary(kind: &TirExprKind, cx: &Cx) -> bool {
 /// holding it ends.
 fn spill_temporary(expr: &mut TirExpr, owned: &mut Owned, cx: &mut Cx) {
     let type_id = expr.type_id;
-    let span = expr.span;
     let (local, name) = cx.alloc_local(type_id, "temp");
-    let value = std::mem::replace(expr, TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span));
-    let stmts = vec![
-        let_stmt(&name, local, type_id, value),
-        expr_stmt(local_ref(local, &name, type_id)),
-    ];
-    *expr = TirExpr::new(TirExprKind::Block(TirBlock::new(stmts, span)), type_id, span);
+    wrap_in_block(expr, |value| {
+        vec![
+            let_stmt(&name, local, type_id, value),
+            expr_stmt(local_ref(local, &name, type_id)),
+        ]
+    });
     owned.push(Some(Live {
         local,
         name,
@@ -1415,11 +1413,21 @@ fn elab_expr_scope(expr: &mut TirExpr, owned: &mut Owned, entry: usize, cx: &mut
     if drops.is_empty() {
         return;
     }
+    wrap_in_block(expr, |value| {
+        append_block_drops(vec![expr_stmt(value)], drops, cx)
+    });
+}
+
+/// Replace `expr` with a block of the same type, built from its value.
+fn wrap_in_block(expr: &mut TirExpr, build: impl FnOnce(TirExpr) -> Vec<TirStmt>) {
     let type_id = expr.type_id;
     let span = expr.span;
     let value = std::mem::replace(expr, TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span));
-    let stmts = append_block_drops(vec![expr_stmt(value)], drops, cx);
-    *expr = TirExpr::new(TirExprKind::Block(TirBlock::new(stmts, span)), type_id, span);
+    *expr = TirExpr::new(
+        TirExprKind::Block(TirBlock::new(build(value), span)),
+        type_id,
+        span,
+    );
 }
 
 /// Elaborate an expression that runs on some paths only, or more than once,
@@ -1432,12 +1440,7 @@ fn elab_conditional_expr(expr: &mut TirExpr, owned: &mut Owned, cx: &mut Cx) {
 
 /// Elaborate a `match`: its scrutinee, then each arm from the ownership state
 /// after it, then merge the arms' post-states.
-fn elab_match(
-    scrutinee: &mut TirExpr,
-    arms: &mut [TirMatchArm],
-    owned: &mut Owned,
-    cx: &mut Cx,
-) {
+fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], owned: &mut Owned, cx: &mut Cx) {
     // The scrutinee is consumed only if some arm destructures a resource out
     // of it; a pure `matches`-style test leaves the scrutinee — and its drop
     // obligation — intact.
