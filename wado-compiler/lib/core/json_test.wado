@@ -5,6 +5,7 @@ use {
     Deserializer,
     SerializeStruct,
     DeserializeStruct,
+    DeserializeVariant,
     SerializeError,
     SerializeErrorKind,
     DeserializeError,
@@ -23,6 +24,7 @@ use {
     from_bytes,
     write_escaped_string,
     PrettyJsonSerializer,
+    JsonDeserializer,
 } from "core:json";
 use { Value } from "core:value";
 
@@ -952,4 +954,442 @@ test "a StrSlice parses without copying out" {
 test "DeserializeError renders its message and offset" {
     assert `${from_string::<Utf8Rec>("{}").unwrap_err()}` == "missing field: a";
     assert `${from_string::<Utf8Rec>("nope").unwrap_err()}`.contains(" at offset ");
+}
+
+fn de_err<T: Deserialize>(text: String) -> DeserializeError {
+    return from_string::<T>(text).unwrap_err();
+}
+
+// One field per scalar the serializers write. The integers sit past the f64
+// safe range where they have one, so each takes its string form.
+struct Scalars {
+    i: i64,
+    u: u32,
+    big: u64,
+    wide: i128,
+    uwide: u128,
+    f: f32,
+    b: bool,
+    c: char,
+    n: Option<i32>,
+    bytes: ByteList,
+}
+
+fn sample_scalars() -> Scalars {
+    return Scalars {
+        i: -9007199254740993,
+        u: u32::MAX,
+        big: u64::MAX,
+        wide: -1,
+        uwide: u128::MAX,
+        f: 0.5,
+        b: true,
+        c: '"',
+        n: null,
+        bytes: [0xfb, 0xff],
+    };
+}
+
+test "every scalar round-trips through the compact form" {
+    let text = to_string(&sample_scalars()).unwrap();
+    assert text == `{"i":"-9007199254740993","u":4294967295,"big":"18446744073709551615","wide":"-1","uwide":"340282366920938463463374607431768211455","f":0.5,"b":true,"c":"\\"","n":null,"bytes":"-_8"}`;
+    assert from_string::<Scalars>(text) == Result::Ok(sample_scalars());
+}
+
+test "every scalar has the same form when pretty-printed" {
+    assert to_string_pretty(&sample_scalars()).unwrap() == `{
+  "i": "-9007199254740993",
+  "u": 4294967295,
+  "big": "18446744073709551615",
+  "wide": "-1",
+  "uwide": "340282366920938463463374607431768211455",
+  "f": 0.5,
+  "b": true,
+  "c": "\\"",
+  "n": null,
+  "bytes": "-_8"
+}`;
+}
+
+test "every scalar has the same form in the canonical encoding" {
+    let b = to_bytes_canonical(&sample_scalars()).unwrap();
+    assert_bytes_eq_string(
+        &b,
+        &`{"b":true,"big":"18446744073709551615","bytes":"-_8","c":"\\"","f":0.5,"i":"-9007199254740993","n":null,"u":4294967295,"uwide":"340282366920938463463374607431768211455","wide":"-1"}`,
+    );
+}
+
+struct NoFields {
+}
+
+test "an empty struct is an empty object in every form" {
+    assert to_string(&NoFields {}) == Result::Ok("{}");
+    assert to_string_pretty(&NoFields {}) == Result::Ok("{}");
+    assert_bytes_eq_string(&to_bytes_canonical(&NoFields {}).unwrap(), &"{}");
+}
+
+test "a lone char serializes as an escaped one-character string" {
+    assert to_string(&'日') == Result::Ok(`"日"`);
+    assert to_string(&'\u{1}') == Result::Ok(`"\\u0001"`);
+    assert to_string(&"a\rb") == Result::Ok(`"a\\rb"`);
+}
+
+struct OddKeys {
+    #[wire(name = "say \"hi\"")]
+    quoted: i32,
+    #[wire(name = "tab\there")]
+    tabbed: i32,
+}
+
+test "a field name JSON must escape is escaped as a key, and read back" {
+    let v = OddKeys { quoted: 1, tabbed: 2 };
+    let text = to_string(&v).unwrap();
+    assert text == `{"say \\"hi\\"":1,"tab\\there":2}`;
+    assert to_string_pretty(&v).unwrap() == `{
+  "say \\"hi\\"": 1,
+  "tab\\there": 2
+}`;
+    assert_bytes_eq_string(&to_bytes_canonical(&v).unwrap(), &text);
+    assert from_string::<OddKeys>(text) == Result::Ok(v);
+}
+
+test "an escaped key names the field its decoding spells" {
+    assert from_string::<Utf8Rec>(`{"\\u0061":"x"}`) == Result::Ok(Utf8Rec { a: "x" });
+    assert from_string::<Utf8Rec>(`{"\\u0061" "x"}`).unwrap_err() == DeserializeError::malformed(
+        "expected ':', found '\"'",
+        10,
+    );
+    assert from_string::<Utf8Rec>(`{"\\u00"}`).unwrap_err() == DeserializeError::malformed("invalid unicode escape", 4);
+}
+
+test "a map keeps its insertion order in the compact form" {
+    let mut m: TreeMap<String, i32> = TreeMap::new();
+    m["b"] = 2;
+    m["a"] = 1;
+    assert to_string(&m) == Result::Ok(`{"b":2,"a":1}`);
+    assert to_string(&TreeMap::<String, i32>::new()) == Result::Ok("{}");
+}
+
+test "variants write a bare tag or a one-pair object in every form" {
+    let shapes: List<PrettyShape> = [PrettyShape::Point, PrettyShape::Circle(2.5)];
+    let compact = `["Point",{"Circle":2.5}]`;
+    assert to_string(&shapes) == Result::Ok(compact);
+    assert_bytes_eq_string(&to_bytes_canonical(&shapes).unwrap(), &compact);
+    assert to_string(&PrettyColor::Green) == Result::Ok(`"Green"`);
+    assert from_string::<List<PrettyShape>>(compact) == Result::Ok(shapes);
+}
+
+test "the canonical form keeps sequence order and sorts only keys" {
+    let v: List<List<i32>> = [
+        [3, 1],
+        [],
+        [2],
+    ];
+    assert_bytes_eq_string(&to_bytes_canonical(&v).unwrap(), &"[[3,1],[],[2]]");
+}
+
+struct Reading {
+    label: String,
+    value: f64,
+}
+
+test "a non-finite float fails every serializer, however deeply it sits" {
+    let inf = SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: "Infinity is not allowed in JSON" };
+    let nan = SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: "NaN is not allowed in JSON" };
+    let r = Reading { label: "x", value: f64::INFINITY };
+    assert to_string(&r).unwrap_err() == inf;
+    assert to_bytes(&r).unwrap_err() == inf;
+    assert to_string_pretty(&r).unwrap_err() == inf;
+    assert to_bytes_pretty(&r).unwrap_err() == inf;
+    assert to_bytes_canonical(&r).unwrap_err() == inf;
+
+    let seq: List<f64> = [1.0, -f64::INFINITY];
+    assert to_bytes_canonical(&seq).unwrap_err() == inf;
+    assert to_string(&f32::NAN).unwrap_err() == nan;
+
+    let mut m: TreeMap<String, f32> = TreeMap::new();
+    m["k"] = f32::NAN;
+    assert to_string(&m).unwrap_err() == nan;
+    assert to_bytes_canonical(&m).unwrap_err() == nan;
+}
+
+test "whitespace of every JSON kind and any run length surrounds tokens" {
+    let ws: List<String> = [" ", "\t", "\n", "\r"];
+    for let n of 0..<10 {
+        let mut pad = String::new();
+        for let i of 0..<n {
+            pad.push_str(&ws[i % 4]);
+        }
+        let list: Result<List<i32>, DeserializeError> = from_string(`${pad}[${pad}1${pad},${pad}2${pad}]${pad}`);
+        assert list == Result::Ok([1, 2]);
+        assert from_string::<i32>(`${pad}7`) == Result::Ok(7);
+        assert from_string::<i32>(`7${pad}`) == Result::Ok(7);
+    }
+}
+
+test "a control byte outside JSON's four is not whitespace" {
+    assert de_err::<i32>("\u{b}1") == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<i32>("\u{c}1") == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<i32>("1\u{0}") == DeserializeError::trailing(1);
+}
+
+test "a container reports a bad separator or a missing end where it stops" {
+    assert de_err::<List<i32>>("[1 2]") == DeserializeError::malformed("expected ',' or ']'", 3);
+    assert de_err::<List<i32>>("[1") == DeserializeError::eof(2);
+    assert de_err::<List<i32>>("[") == DeserializeError::eof(1);
+    assert de_err::<List<i32>>("{}") == DeserializeError::malformed("expected '[', found '{'", 0);
+
+    assert de_err::<TreeMap<String, i32>>(`{"a":1 "b":2}`) == DeserializeError::malformed("expected ',' or '}'", 7);
+    assert de_err::<TreeMap<String, i32>>(`{1:2}`) == DeserializeError::unexpected_type("expected string", 1);
+    assert de_err::<TreeMap<String, i32>>(`{"a" 1}`) == DeserializeError::malformed("expected ':', found '1'", 5);
+    assert de_err::<TreeMap<String, i32>>(`{"a"`) == DeserializeError::eof(4);
+    assert de_err::<TreeMap<String, i32>>(`{"a":1,`) == DeserializeError::eof(7);
+    assert de_err::<TreeMap<String, i32>>("[]") == DeserializeError::malformed("expected '{', found '['", 0);
+}
+
+test "a struct reports a bad separator, key, or end where it stops" {
+    assert de_err::<Utf8Rec>("{") == DeserializeError::eof(1);
+    assert de_err::<Utf8Rec>(`{"a":"x" "b":1}`) == DeserializeError::malformed("expected ',' or '}'", 9);
+    assert de_err::<Utf8Rec>(`{a:1}`) == DeserializeError::unexpected_type("expected string key", 1);
+    assert de_err::<Utf8Rec>(`{"a":"x",`) == DeserializeError::eof(9);
+    assert de_err::<Utf8Rec>(`{"a" "x"}`) == DeserializeError::malformed("expected ':', found '\"'", 5);
+    assert de_err::<Utf8Rec>("[]") == DeserializeError::malformed("expected '{', found '['", 0);
+    assert de_err::<Utf8Rec>("") == DeserializeError::eof(0);
+}
+
+test "an unknown member of any shape is skipped" {
+    let text = `{"skip":[1,-2.5e+3,0.25E-1,7e2,true,false,null,"q\\"\\/\\u0041",{"k":[]},{},[]],"a":"x"}`;
+    assert from_string::<Utf8Rec>(text) == Result::Ok(Utf8Rec { a: "x" });
+    assert from_string::<Utf8Rec>(`{"skip":-5,"a":"x"}`) == Result::Ok(Utf8Rec { a: "x" });
+    assert from_string::<Utf8Rec>(`{"\\u0062":1,"a":"x"}`) == Result::Ok(Utf8Rec { a: "x" });
+}
+
+test "a skipped object is depth-limited like a skipped array" {
+    let mut text = String::new();
+    text.push_str(`{"unknown":`);
+    for let mut i = 0; i < DEFAULT_MAX_DEPTH + 1; i += 1 {
+        text.push_str(`{"a":`);
+    }
+    text.push('1');
+    for let mut i = 0; i < DEFAULT_MAX_DEPTH + 1; i += 1 {
+        text.push('}');
+    }
+    text.push_str(`,"a":"x"}`);
+    assert de_err::<Utf8Rec>(text).kind == DeserializeErrorKind::DepthLimitExceeded;
+}
+
+test "max_depth bounds a map, a struct and a variant object too" {
+    assert from_string::<TreeMap<String, i32>>("{}", 0).unwrap_err().kind == DeserializeErrorKind::DepthLimitExceeded;
+    assert from_string::<Utf8Rec>(`{"a":"x"}`, 0).unwrap_err().kind == DeserializeErrorKind::DepthLimitExceeded;
+    assert from_string::<PrettyShape>(`{"Circle":1}`, 0).unwrap_err().kind == DeserializeErrorKind::DepthLimitExceeded;
+    assert from_string::<PrettyShape>(`"Point"`, 0) == Result::Ok(PrettyShape::Point);
+}
+
+test "a skipped member is held to the same syntax as a read one" {
+    assert de_err::<Utf8Rec>(`{"skip":[1 2],"a":"x"}`) == DeserializeError::malformed("expected ',' or ']'", 11);
+    assert de_err::<Utf8Rec>(`{"skip":[1`) == DeserializeError::eof(10);
+    assert de_err::<Utf8Rec>(`{"skip":[`) == DeserializeError::eof(9);
+    assert de_err::<Utf8Rec>(`{"skip":{"k":1 "j":2}}`) == DeserializeError::malformed("expected ',' or '}'", 15);
+    assert de_err::<Utf8Rec>(`{"skip":{"k":1,`) == DeserializeError::eof(15);
+    assert de_err::<Utf8Rec>(`{"skip":{"k":1`) == DeserializeError::eof(14);
+    assert de_err::<Utf8Rec>(`{"skip":{1:2}}`) == DeserializeError::unexpected_type("expected string key", 9);
+    assert de_err::<Utf8Rec>(`{"skip":{"k" 1}}`) == DeserializeError::malformed("expected ':', found '1'", 13);
+    assert de_err::<Utf8Rec>(`{"skip":{"a`) == DeserializeError::eof(11);
+    assert de_err::<Utf8Rec>(`{"skip":{"k":@}}`) == DeserializeError::malformed(
+        "unexpected character in JSON value",
+        13,
+    );
+    assert de_err::<Utf8Rec>(`{"skip":tru}`) == DeserializeError::malformed("expected 'true'", 8);
+    assert de_err::<Utf8Rec>(`{"skip":fals}`) == DeserializeError::malformed("expected 'false'", 8);
+    assert de_err::<Utf8Rec>(`{"skip":nul}`) == DeserializeError::malformed("expected 'null'", 8);
+    assert de_err::<Utf8Rec>(`{"skip":`) == DeserializeError::eof(8);
+    assert de_err::<Utf8Rec>(`{"skip":@}`) == DeserializeError::malformed("unexpected character in JSON value", 8);
+    assert de_err::<Utf8Rec>(`{"skip":"abc`) == DeserializeError::eof(12);
+    assert de_err::<Utf8Rec>("{\"skip\":\"ab\\") == DeserializeError::eof(12);
+}
+
+test "every short escape decodes" {
+    let r: Result<String, DeserializeError> = from_string(String::raw`"\"\\\/\b\f\n\r\t"`);
+    assert r == Result::Ok("\"\\/\u{8}\u{c}\n\r\t");
+}
+
+test "a malformed escape is an error at the escape" {
+    assert de_err::<String>(`"\\x"`) == DeserializeError::malformed("invalid escape '\\x'", 2);
+    assert de_err::<String>("\"ab\\") == DeserializeError::eof(4);
+    assert de_err::<String>(`"\\u12`) == DeserializeError::eof(3);
+    assert de_err::<String>(`"\\u12G4"`) == DeserializeError::malformed("invalid unicode escape", 3);
+    assert de_err::<String>(`"\\uD800\\u12"`) == DeserializeError::eof(9);
+
+    let after_escape: ByteList = [0x22, 0x5c, 0x6e, 0xff, 0x22];  // "\n<0xff>"
+    assert from_bytes::<String, ByteList>(after_escape).unwrap_err() == DeserializeError::malformed(
+        "invalid UTF-8 in string",
+        3,
+    );
+}
+
+test "a string is required where one is expected" {
+    assert de_err::<String>("42") == DeserializeError::unexpected_type("expected string", 0);
+    assert de_err::<String>("   ") == DeserializeError::eof(3);
+}
+
+test "negative zero keeps its sign" {
+    assert from_string::<f64>("-0").unwrap().to_bits() == 0x8000000000000000;
+    assert from_string::<f64>("-0.0").unwrap().to_bits() == 0x8000000000000000;
+    assert from_string::<f64>("0").unwrap().to_bits() == 0;
+}
+
+test "an exponent takes an optional sign and ends at the first non-digit" {
+    assert from_string::<f64>("1e+2") == Result::Ok(100.0);
+    let r: Result<List<f64>, DeserializeError> = from_string("[1e5,2E-1]");
+    assert r == Result::Ok([100000.0, 0.2]);
+}
+
+test "a float read reports a missing or malformed number" {
+    assert de_err::<f64>("") == DeserializeError::eof(0);
+    assert de_err::<f64>("-") == DeserializeError::eof(1);
+    assert de_err::<f64>("-x") == DeserializeError::unexpected_type("expected number", 1);
+    assert de_err::<f32>("x") == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<f16>("x") == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<bf16>("x") == DeserializeError::unexpected_type("expected number", 0);
+}
+
+test "an integer read rejects a fraction" {
+    let got_float = DeserializeError::unexpected_type("expected integer, got float", 0);
+    assert de_err::<i32>("1.5") == got_float;
+    assert de_err::<i64>("1.5") == got_float;
+    assert de_err::<u64>("2.5") == got_float;
+}
+
+test "i64 and u64 read every sign and length" {
+    assert from_string::<i64>("-5") == Result::Ok(-5);
+    assert from_string::<i64>("-1234567890123456789") == Result::Ok(-1234567890123456789);
+    assert de_err::<i64>("-x") == DeserializeError::unexpected_type("expected number", 1);
+    assert from_string::<u64>("5") == Result::Ok(5);
+    assert from_string::<u64>("1e3") == Result::Ok(1000);
+    assert de_err::<u64>("-1") == DeserializeError::overflow("negative value for u64", 0);
+    assert de_err::<u64>("x") == DeserializeError::unexpected_type("expected number", 0);
+    assert de_err::<u32>("-1") == DeserializeError::overflow("value out of range for u32", 0);
+}
+
+test "i64 and u64 read their string form" {
+    assert from_string::<i64>(`"123"`) == Result::Ok(123);
+    assert from_string::<i64>(`"1e2"`) == Result::Ok(100);
+    assert de_err::<i64>(`"abc"`) == DeserializeError::invalid_value("invalid digit in number", 0);
+    assert de_err::<i64>(`"99999999999999999999"`) == DeserializeError::overflow("value out of range for i64", 0);
+    assert de_err::<i64>(`"1.x"`).kind == DeserializeErrorKind::InvalidValue;
+    assert de_err::<i64>(`"12`) == DeserializeError::eof(3);
+
+    assert from_string::<u64>(`"42"`) == Result::Ok(42);
+    assert from_string::<u64>(`"1e3"`) == Result::Ok(1000);
+    assert de_err::<u64>(`"-1"`) == DeserializeError::overflow("negative value for u64", 0);
+    assert de_err::<u64>(`"x"`) == DeserializeError::invalid_value("invalid digit in number", 0);
+    assert de_err::<u64>(`"1.x"`).kind == DeserializeErrorKind::InvalidValue;
+    assert de_err::<u64>(`"12`) == DeserializeError::eof(3);
+}
+
+test "i128 and u128 report a truncated token" {
+    assert de_err::<i128>("-") == DeserializeError::eof(1);
+    assert de_err::<u128>("-") == DeserializeError::eof(1);
+    assert de_err::<i128>(`"12`) == DeserializeError::eof(3);
+    assert de_err::<u128>(`"12`) == DeserializeError::eof(3);
+}
+
+test "a bool is exactly true or false" {
+    assert de_err::<bool>("") == DeserializeError::eof(0);
+    assert de_err::<bool>("1") == DeserializeError::unexpected_type("expected bool", 0);
+    assert de_err::<bool>("tru") == DeserializeError::malformed("expected 'true'", 0);
+    assert de_err::<bool>("fals") == DeserializeError::malformed("expected 'false'", 0);
+}
+
+test "an Option reads null as None and anything else as the value" {
+    assert from_string::<Option<i32>>("5") == Result::Ok(Option::Some(5));
+    assert from_string::<Option<i32>>(" null") == Result::Ok(Option::<i32>::None);
+    assert de_err::<Option<i32>>("nul") == DeserializeError::malformed("expected 'null'", 0);
+}
+
+test "a char is a string of exactly one character" {
+    assert from_string::<char>(`"a"`) == Result::Ok('a');
+    assert from_string::<char>(`"é"`) == Result::Ok('é');
+    assert de_err::<char>(`"ab"`) == DeserializeError::invalid_value("expected single char", 4);
+    assert de_err::<char>(`""`) == DeserializeError::invalid_value("empty string for char", 2);
+    assert de_err::<char>("5") == DeserializeError::unexpected_type("expected string", 0);
+}
+
+test "bytes read either base64 alphabet, padded or not" {
+    let want: ByteList = [0xfb, 0xff];
+    assert from_string::<ByteList>(`"-_8"`) == Result::Ok(want);
+    assert from_string::<ByteList>(`"+/8="`) == Result::Ok(want);
+    assert de_err::<ByteList>(`"!!"`) == DeserializeError::invalid_value("invalid base64 byte string", 4);
+    assert de_err::<ByteList>("5") == DeserializeError::unexpected_type("expected string", 0);
+}
+
+test "a variant reads a bare tag or a one-pair object" {
+    assert from_string::<PrettyShape>(`"Point"`) == Result::Ok(PrettyShape::Point);
+    assert de_err::<PrettyShape>("5") == DeserializeError::unexpected_type("expected string or object for variant", 0);
+    assert de_err::<PrettyShape>("") == DeserializeError::eof(0);
+    assert de_err::<PrettyShape>(`"Point`) == DeserializeError::eof(6);
+    assert de_err::<PrettyShape>(`{5:1}`) == DeserializeError::unexpected_type("expected string", 1);
+    assert de_err::<PrettyShape>(`{"Circle"`) == DeserializeError::eof(9);
+    assert de_err::<PrettyShape>(`{"Circle":1.5`) == DeserializeError::eof(13);
+}
+
+variant Signal {
+    Stop,
+    Go(i32),
+}
+
+// Reads the tag shape through `is_unit` rather than by name, as a hand-written
+// impl for a format-agnostic variant may.
+impl Deserialize for Signal {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Signal, DeserializeError> {
+        let mut access = d.begin_variant("Signal", 2)?;
+        let signal = if access.is_unit()? { Signal::Stop } else { Signal::Go(access.payload::<i32>()?) };
+        access.end()?;
+        return Result::Ok(signal);
+    }
+}
+
+test "is_unit tells a bare tag from a tag with a payload" {
+    assert from_string::<Signal>(`"Stop"`) == Result::Ok(Signal::Stop);
+    assert from_string::<Signal>(`{"Go":3}`) == Result::Ok(Signal::Go(3));
+}
+
+test "a Value reads every JSON value kind" {
+    let r: Result<Value, DeserializeError> = from_string(`[null,true,false,"s",-1.5,{"k":[]}]`);
+    let object = { k: Value::List([]) } as TreeMap<String, Value>;
+    assert r == Result::Ok(Value::List([
+        Value::Null, Value::Bool(true),
+        Value::Bool(false),
+        Value::String("s"),
+        Value::Float(-1.5),
+        Value::Object(object),
+    ]));
+}
+
+test "a Value read reports a missing or malformed token" {
+    assert de_err::<Value>("") == DeserializeError::eof(0);
+    assert de_err::<Value>("x") == DeserializeError::unexpected_type("unexpected byte in JSON value", 0);
+    assert de_err::<Value>("nul") == DeserializeError::malformed("expected 'null'", 0);
+    assert de_err::<Value>("tru") == DeserializeError::malformed("expected 'true'", 0);
+    assert de_err::<Value>(`"ab`) == DeserializeError::eof(3);
+    assert de_err::<Value>("-") == DeserializeError::eof(1);
+    assert de_err::<Value>("[1") == DeserializeError::eof(2);
+    assert de_err::<Value>("{") == DeserializeError::eof(1);
+}
+
+test "JsonDeserializer reads a token stream by hand" {
+    let text = ` [18446744073709551615, -9223372036854775808, -1.5e+3, {"k": [true]}]`;
+    let mut de = JsonDeserializer { input: text.as_bytes(), pos: 0 };
+    assert de.peek() == b' ';
+    assert de.peek_after_whitespace() == b'[';
+    de.advance();
+    assert de.parse_u64_direct() == Result::Ok(u64::MAX);
+    assert de.expect_char(b',') matches { Ok };
+    assert de.parse_i64_direct() == Result::Ok(i64::MIN);
+    assert de.expect_char(b',') matches { Ok };
+    assert de.read_number_raw() == Result::Ok("-1.5e+3");
+    assert de.expect_char(b',') matches { Ok };
+    assert de.skip_value(0) matches { Ok };
+    assert de.expect_char(b']') matches { Ok };
+    assert de.peek() == -1;
 }

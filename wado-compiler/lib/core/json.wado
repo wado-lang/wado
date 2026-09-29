@@ -1358,16 +1358,9 @@ impl JsonDeserializer {
             }
             code = 0x10000 + (hi - 0xD800 << 10) + (lo - 0xDC00);
         }
-        return match char::from_u32(code) {
-            Some(c) => Result::Ok(c),
-            None => {
-                builtin::cold_path();
-                Result::Err(DeserializeError::malformed(
-                    "invalid unicode codepoint",
-                    start,
-                ));
-            },
-        };
+        return Result::Ok(
+            char::from_u32(code).expect("a lone surrogate is rejected above, so `code` is a scalar value"),
+        );
     }
 
     /// Reads a JSON number token as a String. Validates the token's prefix
@@ -1881,7 +1874,6 @@ impl JsonDeserializer {
                 },
             }
         }
-        unreachable();
     }
 
     /// Skips object members through the closing `}`; `depth` is their level.
@@ -1921,7 +1913,6 @@ impl JsonDeserializer {
                 },
             }
         }
-        unreachable();
     }
 
     /// Skips the next JSON value without allocating.
