@@ -507,11 +507,6 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx));
     }
-    // Phase 2.7 — pre-intern multi-element token-kind sets that
-    // surface in dispatch branches and `Op::Excluded` kinds. The
-    // resulting registry is the source of truth for `_kind_set_<id>`
-    // helper-function emission; emit consults it in lockstep with
-    // the dispatch / op walk it does anyway.
     let kind_sets = intern_kind_sets(&parser_rules, ctx);
     ctx.set_follow_rule_snakes(&follow_rule_snakes(grammar, ctx));
     return LoweredGrammar {
@@ -594,8 +589,8 @@ fn intern_kind_sets(parser_rules: &List<Rule>, ctx: &mut GenContext) -> List<Kin
     }
     // Snapshot ctx's current state. Emit may grow this registry
     // further when `kind_check_str` hits a set lower didn't see
-    // (e.g. token sets that surface only from the legacy emit
-    // walks that don't read from GIR yet). Those tail entries
+    // (e.g. token sets that surface only from the emit walks over
+    // surface IR). Those tail entries
     // remain reachable via `ctx.kind_sets()` and the kind-set
     // helper emitter handles them via the salvage tail.
     let entries = ctx.kind_sets();
@@ -766,9 +761,6 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
 /// Classify a parser rule by shape and dispatch to the matching
 /// lowering. Single-alt → `Simple`; multi-alt with no LR alt →
 /// `MultiAlt`; multi-alt with at least one LR alt → `LeftRecursive`.
-/// The shape decision matches `parser_gen::gen_parse_fn_named`'s
-/// branching exactly so the eventual Phase 4 split is a structural
-/// translation rather than a re-classification.
 fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
     // Scan-group leniency (`scan_group_is_nullable`) reads the rule's
     // scan-cyclic flag; record which rule we are lowering. Emit re-sets this per
@@ -3966,9 +3958,8 @@ fn lower_repeat_op<S: AsStrSlice>(
     });
 }
 
-/// Inner second-position first set for non-greedy 2-token disambiguation.
-/// Mirrors the surface check `compute_non_greedy_condition` used to perform
-/// at emit time: when the inner is a single-alt `Group` of ≥ 2 elements,
+/// Inner second-position first set for the non-greedy 2-token
+/// disambiguation `compute_non_greedy_condition` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> List<String> {
     if let Group(g) = peel_repeat_body_label(elem) {

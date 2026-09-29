@@ -161,17 +161,10 @@ pub fn strip_suffix<S: AsStrSlice, S1: AsStrSlice>(s: S, suffix: S1) -> String {
     return result;
 }
 
-pub fn is_simple_cst_group(alts: &List<Alternative>) -> bool {
-    if alts.len() < 2 {
-        return false;
-    }
+/// Whether each alternative is a single RuleRef, as in `(a | b)`.
+fn is_simple_cst_group(alts: &List<Alternative>) -> bool {
     for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        if let RuleRef(_) = alt.elements[0] {
-            // ok
-        } else {
+        if alt.elements.len() != 1 || !alt.elements[0] matches { RuleRef(_) } {
             return false;
         }
     }
@@ -263,14 +256,6 @@ pub fn is_storable_group(alts: &List<Alternative>) -> bool {
     return alts.len() > 1 || alts[0].elements.len() >= 2;
 }
 
-/// A general multi-alt group: 2+ alternatives that don't match any specialized pattern.
-pub fn is_general_group(alts: &List<Alternative>) -> bool {
-    if alts.len() < 2 {
-        return false;
-    }
-    return classify_group(alts) matches { General };
-}
-
 pub enum GroupClass {
     Transparent,
     SingleAlt,
@@ -303,7 +288,7 @@ pub fn classify_group(alts: &List<Alternative>) -> GroupClass {
 }
 
 /// Whether any alternative of `alts` carries an action or a predicate.
-pub fn group_alts_have_actions(alts: &List<Alternative>) -> bool {
+fn group_alts_have_actions(alts: &List<Alternative>) -> bool {
     return alts.iter_ref().any(|a: &Alternative| !a.actions.is_empty());
 }
 
@@ -326,20 +311,16 @@ fn group_nesting_count(alts: &List<Alternative>) -> i32 {
             max_nested = nested;
         }
     }
-    if is_general_group(alts) {
+    if classify_group(alts) matches { General } {
         return 1 + max_nested;
     }
     return max_nested;
 }
 
-pub fn count_element_groups(elem: &Element) -> i32 {
+fn count_element_groups(elem: &Element) -> i32 {
     return match elem {
         Group(g) => group_nesting_count(&g.alternatives),
-        Repeat(rep) => if let Group(g) = &rep.element {
-            group_nesting_count(&g.alternatives);
-        } else {
-            count_element_groups(&rep.element);
-        },
+        Repeat(rep) => count_element_groups(&rep.element),
         Label(lab) => count_element_groups(&lab.element),
         TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => 0,
     };

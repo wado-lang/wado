@@ -354,9 +354,8 @@ fn rule_first_chars_resolved<S: AsStrSlice>(g: &Grammar, name: S) -> [bool, List
 }
 
 test "compute_elem_first_chars: nullable leading element keeps a bounded first set" {
-    // Regression: `NUMBER : '-'? [0-9]+` — the nullable `'-'?` must add `-` and
-    // let the walk continue into `[0-9]`, not collapse the rule to wildcard
-    // (which used to dispatch `try_NUMBER` into every token branch).
+    // The nullable `'-'?` adds `-` and lets the walk continue into `[0-9]`; a
+    // wildcard rule would dispatch `try_NUMBER` into every token branch.
     let g = parse_grammar("grammar T; SEMI : ';' ; NUMBER : '-'? [0-9]+ ;");
     let [is_wildcard, first] = rule_first_chars(&g, "NUMBER");
     assert !is_wildcard, "NUMBER must not be classified as wildcard";
@@ -366,8 +365,6 @@ test "compute_elem_first_chars: nullable leading element keeps a bounded first s
 }
 
 test "compute_elem_first_chars: negated class is genuinely wildcard" {
-    // A negated set (`~[a]`) cannot be enumerated, so it must stay wildcard —
-    // the fix narrows only the nullable-prefix case, not real wildcards.
     let g = parse_grammar("grammar T; x : TILDE ; TILDE : ~[a] ;");
     let [is_wildcard, _first] = rule_first_chars(&g, "TILDE");
     assert is_wildcard, "negated class must remain wildcard";

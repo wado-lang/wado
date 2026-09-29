@@ -2027,8 +2027,8 @@ fn lexer_arms_share_fixed_len(alts: &List<LexerAlternative>, all_rules: &List<Le
     return true;
 }
 
-/// The emit an alternation of two or more arms takes, tail position included:
-/// the whole `gen_lexer_alts` decision as one value.
+/// The emit an alternation takes, tail position included: the whole
+/// `gen_lexer_alts` decision as one value.
 pub enum LexerAltsEmit {
     MaximalMunch,
     /// Something after the alternation still has to be consumed, so a longer
@@ -2040,12 +2040,7 @@ pub enum LexerAltsEmit {
     FirstMatchArmsDisjoint,
 }
 
-pub fn lexer_alts_emit(
-    alts: &List<LexerAlternative>,
-    all_rules: &List<LexerRule>,
-    ci: bool,
-    tail: bool,
-) -> LexerAltsEmit {
+fn lexer_alts_emit(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool, tail: bool) -> LexerAltsEmit {
     if !tail {
         return LexerAltsEmit::FirstMatchNotTail;
     }

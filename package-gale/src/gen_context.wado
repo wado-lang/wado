@@ -961,11 +961,7 @@ impl GenContext {
     /// The declaration side of `rule_reads_follow`, answered off the same list
     /// so a rule cannot declare what its callers do not pass.
     pub fn current_rule_reads_follow(&self) -> bool {
-        let idx = self.current_rule_index;
-        if idx < 0 {
-            return false;
-        }
-        return self.rule_reads_follow(&self.parser_rules[idx].snake_name);
+        return self.rule_reads_follow(&self.current_rule().snake_name);
     }
 
     pub fn set_follow_rule_snakes(&mut self, names: &List<String>) {
@@ -2144,7 +2140,7 @@ impl GenContext {
     /// "the first-set token is present at the input position" implies
     /// "this element will successfully consume that token (and only
     /// that token) when it matches". The criterion underlying LL repair
-    /// for nullable suffixes (Phase 5 step 3): a deep-nullable suffix
+    /// for nullable suffixes: a deep-nullable suffix
     /// can contribute its first set to a `RuleRef`'s caller-follow only
     /// when every walked element is first-exact. Otherwise the
     /// suffix's first might be a multi-element alt's leading token

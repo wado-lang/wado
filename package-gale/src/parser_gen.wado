@@ -5185,8 +5185,7 @@ fn gen_op_storable_optional(
 /// Runtime entry condition for a non-greedy `??`: the ATN simulator decides
 /// enter vs skip with full context. The exact ATN decision number is stamped
 /// at compile time (`RepeatElement.atn_decision` -> `Atn.decision_sites`), so
-/// each `??` predicts its own decision — several `??` in one rule no longer
-/// collide on the retired "unique exit-first BlockStart" search. Non-greedy
+/// each `??` predicts its own decision, however many one rule holds. Non-greedy
 /// optional edges are ordered `[exit=0, enter=1]`, so ENTER iff the simulator
 /// returns alt 1.
 fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
@@ -5268,11 +5267,9 @@ fn gen_op_storable_optional_body<S: AsStrSlice>(
     w.end();
 }
 
-/// Op-driven emit for Optional + non-storable (Transparent) Group.
-/// Dispatches on `rep_op.strategy`. Strategy coverage mirrors
-/// `gen_op_storable_optional` — Optional-specialised shapes from
-/// `pick_optional_specialised` plus the `Plain` fallback. No outer
-/// `Option<T>` wrapping; each branch inlines the inner alt directly.
+/// Op-driven emit for Optional + non-storable (Transparent) Group,
+/// dispatching on `rep_op.strategy`. No outer `Option<T>` wrapping;
+/// each branch inlines the inner alt directly.
 fn gen_op_transparent_optional(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -8563,16 +8560,8 @@ fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut G
 /// carries none. Registering it emits the `pred_<id>` fn the condition names,
 /// which is why this asks `alt_has_gate` first rather than registering
 /// speculatively.
-///
-/// `Option`, not an empty string: "carries no gate" and "there is no such
-/// alternative" are different answers, and a tournament candidate silently
-/// ungated is what the second would look like as the first.
 fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> Option<String> {
-    let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return null;
-    }
-    let rule = &ctx.parser_rules()[ridx];
+    let rule = ctx.current_rule();
     assert idx >= 0 && idx < rule.alternatives.len(), "alt_initial_gate: a tournament candidate is an alternative of the rule it belongs to";
     let alt = &rule.alternatives[idx];
     if !alt_has_gate(alt, ctx) {

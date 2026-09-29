@@ -457,14 +457,8 @@ ID : [a-z]+ ;";
 }
 
 test "render_dump renders a multi-token tail-greedy repeat rule" {
-    // `prog : item X Y ; item : (X Y)* ;` — `item`'s tail repeat has a
-    // multi-token inner `(X Y)`. Under the runtime-FOLLOW redesign the
-    // follow repair is no longer a per-(rule, mask) `__follow_<id>`
-    // variant baked into the dump; the caller threads a `FOLLOW_MASK`
-    // at runtime and `item`'s loop gates on it via `follow_yields`. The
-    // dump therefore no longer prints a `follow-variants:` section — it
-    // just renders the rules. (A per-call-site FollowArg dump view is a
-    // possible follow-up.)
+    // `item`'s loop gates on the FOLLOW its caller threads at runtime
+    // (`follow_yields`), so there is no per-(rule, mask) variant to print.
     let g = "grammar K;
 prog : item X Y ;
 item : (X Y)* ;
@@ -474,7 +468,6 @@ Y : 'y' ;";
 
     assert report.contains("prog"), report;
     assert report.contains("item"), report;
-    // The retired variant section must NOT appear.
     assert !report.contains("follow-variants:"), report;
 }
 
@@ -493,10 +486,10 @@ a : ('x' 'y' | 'x' 'z')? 'p'
 }
 
 test "render_dump walks a multi-token repeat body reached through an opaque rule-ref" {
-    // `p` sees `t` and `q` as opaque rule-refs and expands them. Inside `t`
-    // the walk used to step past `(ID '::')*` as one token, so `ID` at depth
-    // 1 was claimed for `t` and `'::'` for `q` alone — committing `a matches`
-    // to `t` and `a :: b` to `q`. Neither token separates the alts here.
+    // `p` sees `t` and `q` as opaque rule-refs and expands them. Stepping past
+    // `(ID '::')*` inside `t` as one token would claim `ID` at depth 1 for `t`
+    // and `'::'` for `q` alone — committing `a matches` to `t` and `a :: b` to
+    // `q`. Neither token separates the alts here.
     let g = "grammar R;
 p : t | q ;
 t : (ID '::')* ID '`' ;
