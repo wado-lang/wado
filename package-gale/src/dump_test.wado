@@ -547,3 +547,20 @@ A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ;");
     let v = section_of(&report, "v");
     assert v.contains("Ambiguous([alt 0, alt 1]) — no token named: an alt admits every one (`.` / `~X`)"), v;
 }
+
+test "the ATN dump names every state and transition kind a grammar builds" {
+    let mut merged = merge_grammars([
+        parse("grammar G;
+e : e '+' e | A* B+ ~C . ;
+A : 'a' ; B : 'b' ; C : 'c' ;").unwrap(),
+    ]);
+    synthesize_implicit_tokens(&mut merged);
+    let [lowered, _] = lower_pipeline(&mut merged);
+    let report = render_atn_dump(&merged, &lowered);
+    for let kind of ["StarLoopEntry", "StarLoopBack", "PlusLoopBack", "LoopEnd", "BlockStart", "BlockEnd"] {
+        assert report.contains(` ${kind} rule=0`), report;
+    }
+    for let arrow of ["-notatom->", "-wild->", "-prec->", "-atom->", "-rule->", "-eps->"] {
+        assert report.contains(arrow), report;
+    }
+}

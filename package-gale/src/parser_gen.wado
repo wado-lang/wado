@@ -7342,9 +7342,6 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
 }
 
 fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
-    if sorted_group.len() < 2 {
-        return false;
-    }
     for let idx_ref of sorted_group {
         let alt = &alts[*idx_ref];
         if alt.elements.len() != 1 {
@@ -8155,9 +8152,6 @@ fn gen_general_alt_parse_and_store(
 /// groups): a tournament ranks by scan length, so an alt it cannot scan has no
 /// length to rank.
 fn general_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
-    if sorted_group.len() < 2 {
-        return false;
-    }
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt = &alts[sorted_group[k]];
         // An empty alternative scans, to zero: `gen_scan_winner_round` measures
