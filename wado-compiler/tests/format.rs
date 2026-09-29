@@ -725,6 +725,32 @@ fn test_format_flat_array_stays_inline() {
     assert_eq!(formatted, expected);
 }
 
+/// Only an array of neither calls nor containers packs when it wraps. One that
+/// wraps for holding either is one entry per line, whatever the width allows.
+#[test]
+fn test_format_wrapped_array_of_calls_or_containers_one_per_line() {
+    let source = "fn run() {\n    let v = [a, b(1), c(2)];\n    let w = [1, 2, [3], 4, 5];\n}\n";
+    let expected = r"fn run() {
+    let v = [
+        a,
+        b(1),
+        c(2),
+    ];
+    let w = [
+        1,
+        2,
+        [3],
+        4,
+        5,
+    ];
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "idempotent");
+}
+
 /// A nested struct literal forces the outer struct multi-line, one field per
 /// line, while the (flat) inner struct stays inline.
 #[test]

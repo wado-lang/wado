@@ -63,8 +63,9 @@ Four things force the wrapped form whatever the width allows.
 - More than one element bearing a call, which keeps a dense line readable.
 - A comment inside the construct that the compact form has no place for.
 
-A flat array that does not fit packs as many elements per line as the budget
-allows. Every other wrapped list is one entry per line with a trailing comma.
+An array that does not fit packs as many elements per line as the budget
+allows, if no element is a call or a nested container. Every other wrapped list
+is one entry per line with a trailing comma.
 Declaration bodies, a `match` with more than one arm, and `if` / `else` chains
 are always multi-line.
 

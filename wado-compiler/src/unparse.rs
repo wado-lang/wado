@@ -1834,21 +1834,36 @@ impl<'a> Unparser<'a> {
 
     fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
         let elements = &tuple_lit.elements;
+        let has_comment = self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end);
         // An empty array still has an interior a comment can sit in, and `[]`
         // has no room for one.
-        if elements.is_empty()
-            && !self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end)
-        {
+        if elements.is_empty() && !has_comment {
             self.output.push_str("[]");
             return;
         }
 
-        // Any comment inside the array forces the one-per-line form so each
-        // comment has a place to go; the packed/inline forms have no slot and
-        // would drop it. Leading comments are emitted positionally (by source
-        // span) because a comment before a container element attaches to that
-        // element's *head* node, not to the element expression's own id.
-        if self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end) {
+        // Inline `[a, b, c]` only when the array is flat (no nested container),
+        // holds at most one call-bearing element, and fits the width. A nested
+        // container (depth rule) or a second call forces the multi-line form so
+        // complex / deeply-structured arrays stay readable. A comment forces it
+        // too: the packed and inline forms have no slot for one.
+        let has_container = elements.iter().any(expr_is_container);
+        let call_elems = elements.iter().filter(|e| contains_call(e)).count();
+        if !has_comment && !has_container && call_elems <= 1 {
+            let snap = self.snapshot();
+            self.delimited("[", "]", elements, Unparser::unparse_expr);
+            if !self.added_since(snap).contains('\n') && !self.exceeds_width_since(snap) {
+                return;
+            }
+            self.rollback(snap);
+        }
+
+        // Only an array of plain values packs; one holding a call or a container
+        // is one entry per line (docs/formatter.md). Leading comments are
+        // emitted positionally (by source span) because a comment before a
+        // container element attaches to that element's *head* node, not to the
+        // element expression's own id.
+        if has_comment || has_container || call_elems > 0 {
             self.emit_entries_per_line(
                 ["[", "]"],
                 tuple_lit.span,
@@ -1858,55 +1873,19 @@ impl<'a> Unparser<'a> {
             );
             return;
         }
-
-        // Inline `[a, b, c]` only when the array is flat (no nested container),
-        // holds at most one call-bearing element, and fits the width. A nested
-        // container (depth rule) or a second call forces the multi-line form so
-        // complex / deeply-structured arrays stay readable.
-        let has_container = elements.iter().any(expr_is_container);
-        let call_elems = elements.iter().filter(|e| contains_call(e)).count();
-        if !has_container && call_elems <= 1 {
-            let snap = self.snapshot();
-            self.delimited("[", "]", elements, Unparser::unparse_expr);
-            if !self.added_since(snap).contains('\n') && !self.exceeds_width_since(snap) {
-                return;
-            }
-            self.rollback(snap);
-        }
-
         self.emit_fill_bracketed(elements);
     }
 
     /// Emit elements in `[\n … \n]` block form, packing as many per line as fit
-    /// within `MAX_LINE_WIDTH`, while keeping at most one call-bearing element
-    /// per line and placing each nested container on its own line. The last
-    /// element carries a trailing comma.
+    /// within `MAX_LINE_WIDTH`. The last element carries a trailing comma.
     fn emit_fill_bracketed(&mut self, elements: &[Expr]) {
         self.output.push_str("[\n");
         self.indent_level += 1;
         self.write_indent();
 
-        let mut line_has_call = false;
-        let mut prev_container = false;
         for (i, elem) in elements.iter().enumerate() {
-            let is_container = expr_is_container(elem);
-            let elem_call = contains_call(elem);
-
             if i == 0 {
                 self.unparse_expr(elem);
-                line_has_call = elem_call;
-                prev_container = is_container;
-                continue;
-            }
-
-            // Containers sit alone on their own line, and a line carries at most
-            // one call-bearing element.
-            if is_container || prev_container || (elem_call && line_has_call) {
-                self.output.push_str(",\n");
-                self.write_indent();
-                self.unparse_expr(elem);
-                line_has_call = elem_call;
-                prev_container = is_container;
                 continue;
             }
 
@@ -1919,11 +1898,7 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(",\n");
                 self.write_indent();
                 self.unparse_expr(elem);
-                line_has_call = elem_call;
-            } else {
-                line_has_call |= elem_call;
             }
-            prev_container = is_container;
         }
 
         self.output.push_str(",\n");
