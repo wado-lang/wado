@@ -166,6 +166,45 @@ fn is_valid_not_set_element(elem: &Element) -> bool {
     };
 }
 
+/// The span of the first action or predicate a `~` set's alternatives carry.
+fn not_set_code_span(elem: &Element) -> Option<Span> {
+    if let Group(g) = elem {
+        for let alt of &g.alternatives {
+            if !alt.actions.is_empty() {
+                return Option::Some(alt.actions[0].source.span);
+            }
+        }
+    }
+    return null;
+}
+
+fn lexer_not_set_code_span(elem: &LexerElement) -> Option<Span> {
+    if let Group(alts) = elem {
+        for let alt of alts {
+            if !alt.actions.is_empty() {
+                return Option::Some(alt.actions[0].source.span);
+            }
+            for let e of &alt.elements {
+                if let Some(span) = lexer_not_set_code_span(e) {
+                    return Option::Some(span);
+                }
+            }
+        }
+    }
+    return null;
+}
+
+// A set is computed before any input is read, so an action has no point at
+// which to run and a predicate none at which to decide; no reading of either
+// is the grammar's, which the compatibility contract asks to reject.
+fn not_set_code_error(span: Span) -> ParseError {
+    return ParseError::new(
+        "an action or predicate inside a `~` set: the set is fixed before parsing, so the code would never run",
+        span,
+        [],
+    );
+}
+
 fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
     return match elem {
         Literal(s) => s.chars().count() == 1,
@@ -1023,6 +1062,9 @@ impl G4Parser {
             let tilde_span = tilde_tok.span;
             self.advance();
             let inner = self.parse_atom()?;
+            if let Some(span) = not_set_code_span(&inner) {
+                return Result::<Element, ParseError>::Err(not_set_code_error(span));
+            }
             if !is_valid_not_set_element(&inner) {
                 return Result::<Element, ParseError>::Err(
                     ParseError::new(
@@ -1350,6 +1392,9 @@ impl G4Parser {
             let tilde_span = self.peek().span;
             self.advance();
             let inner = self.parse_lexer_atom()?;
+            if let Some(span) = lexer_not_set_code_span(&inner) {
+                return Result::<LexerElement, ParseError>::Err(not_set_code_error(span));
+            }
             if !is_valid_lexer_not_element(&inner) {
                 let expected: List<String> = ["single char, char set, or block of them"];
                 return Result::<LexerElement, ParseError>::Err(

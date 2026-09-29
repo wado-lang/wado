@@ -1483,6 +1483,19 @@ b : 'y' ;";
     assert result matches { Err(_) }, "expected ~(block with rule ref) to be rejected";
 }
 
+// A set is fixed before any input is read, so code inside one has no point at
+// which to run. ANTLR4 rejects every form as a syntax error.
+test "an action or predicate inside a `~` set is rejected" {
+    for let src of [
+        "grammar Test;\na : ~( {true}? A | B ) ;", "grammar Test;\na : ~( {int x = 1;} A | B ) ;",
+        "grammar Test;\na : ~( A {true}? | B ) ;", "lexer grammar Test;\nL : ~( {true}? 'a' | 'b' ) ;",
+        "lexer grammar Test;\nL : ~( {int x = 1;} 'a' | 'b' ) ;",
+    ] as List<String> {
+        let message = parse(&src).unwrap_err().message;
+        assert message.contains("an action or predicate inside a `~` set"), `${src}: ${message}`;
+    }
+}
+
 test "unknown lexer command is rejected" {
     let input = "lexer grammar Test;
 FOO : 'x' -> totallymadeup ;";
