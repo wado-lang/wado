@@ -58,8 +58,8 @@ pub interface RenderHook {
     }
 }
 
-/// The default `RenderHook`: no language-specific markup, just HTML-escape —
-/// so `render` reproduces plain `<pre><code>` output.
+/// The `RenderHook` behind `render`. It HTML-escapes a code block's body, so the
+/// output is plain `<pre><code>`, and leaves comments to the default.
 struct PlainHighlight {
 }
 
@@ -77,9 +77,9 @@ export fn render(source: String) -> RenderResult {
     };
 }
 
-/// Render Markdown to HTML through a `RenderHook` handler — the extension
-/// point a consumer satisfies with, say, a syntax highlighter (a `provider`
-/// supplying `wado-lang:gale-highlight-wado`).
+/// Render Markdown to HTML through the consumer's `RenderHook` handler, for
+/// instance a `provider` that highlights code with
+/// `wado-lang:gale-highlight-wado`.
 export fn render_highlighted(source: String) -> RenderResult with RenderHook {
     return render_document(source);
 }
@@ -107,9 +107,9 @@ struct Renderer {
 impl Renderer {
     // --- blocks ---
 
-    /// Blocks join with a single newline, and front matter / reference
-    /// definitions contribute no output — they are metadata, not content. A
-    /// block that renders to nothing takes no line either.
+    /// Blocks join with a single newline. Front matter and reference
+    /// definitions are metadata, so they take no line, and neither does a
+    /// block that renders to nothing.
     fn render_blocks(&mut self, nodes: &List<Node>) -> String with RenderHook {
         let mut parts: List<String> = [];
         for let node of nodes {
