@@ -23,15 +23,16 @@ for i in 1 2 3; do mise run json-catalog; done           # before and after
 `adler32` in `core:zlib` adds each byte into `s1` and then `s1` into `s2`, so
 both sums form a serial chain. Rewriting the 16-byte block as
 `s2 += 16 * s1 + Σ (16 - k) * b_k` and `s1 += Σ b_k`, over four independent
-partial sums, shortens that chain. It measured **9% slower** over twitter.json
-(631 KB), two alternating rounds on a release compiler:
+partial sums, shortens that chain. It measured **11% slower** over twitter.json
+(631 KB), four alternating rounds with the order swapped, on a release compiler.
+The arms' ranges do not overlap:
 
-| block body        | throughput |
-| ----------------- | ---------- |
-| serial (today)    | 1.78 GB/s  |
-| four partial sums | 1.62 GB/s  |
+| block body        | best      | ms/iter range |
+| ----------------- | --------- | ------------- |
+| serial (today)    | 1.82 GB/s | 0.347-0.356   |
+| four partial sums | 1.62 GB/s | 0.390-0.399   |
 
-The chain was never the bound. At 1.78 GB/s the loop already costs about as
+The chain was never the bound. At 1.82 GB/s the loop already costs about as
 much as its 16 gets, and the weighted sums only add multiplies. SIMD does not
 apply either: `v128_load` wants a linear-memory address, and a `ByteList` is a
 GC `Array<u8>`.
