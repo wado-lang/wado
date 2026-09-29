@@ -1,10 +1,9 @@
 // `xt` / `xr` have the `AtEndConflict` shape (`'a' 'b'` is a prefix of
 // `'a' 'b' 'c'`), so the decision cannot be made statically and routes through
 // the runtime ATN simulator. An alt-initial predicate on the longer alt must
-// still be honoured: `{true}?` leaves it selectable, `{false}?` excludes it
-// from the prediction (the `disabled_alts` seed prune). For input `abcc` the
-// full-context ATN otherwise picks the longer alt; `{false}?` forces the
-// shorter one, which cannot complete, so the parse fails.
+// still be honoured: `{true}?` leaves it selectable, `{false}?` excludes it.
+// On `abcc` only the longer alt is viable, so excluding it leaves no
+// alternative and the parse fails.
 grammar WadoAtnPred;
 
 options { language = Wado; }
@@ -21,8 +20,8 @@ xr : 'a' 'b' { p.emit("ab"); }
 
 // Context-dependent predicate (`$mode`, seeded by @init) on the same ATN-routed
 // shape: it too must be honoured at the ATN decision, where the value channel is
-// in scope. `ctxkeep` keeps the longer alt (`$mode == 1` holds), `ctxdrop`
-// excludes it (`$mode == 0` is false), so the shorter alt runs.
+// in scope. `ctxkeep` keeps the longer alt (`$mode == 1` holds), and `ctxdrop`
+// excludes it (`$mode == 0` is false), which leaves no alternative.
 ctxkeep : ck 'c' ;
 ck returns [i32 mode] @init { $mode = 1; }
    : 'a' 'b' { p.emit("ab"); }

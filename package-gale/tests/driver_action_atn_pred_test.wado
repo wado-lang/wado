@@ -1,9 +1,11 @@
 //! Stage C predicate on an ATN-routed decision: `xt` / `xr` have the
 //! `AtEndConflict` shape (`'a' 'b'` prefixes `'a' 'b' 'c'`), routed through the
 //! runtime ATN. An alt-initial `{true}?` / `{false}?` on the longer alt is
-//! honoured by excluding it from the prediction seed set (`disabled_alts`). For
-//! `abcc` the full-context ATN otherwise picks the longer alt (its action emits
-//! `abc`); `{false}?` excludes it, so the shorter alt runs instead (emits `ab`).
+//! honoured by excluding it from the prediction seed set (`disabled_alts`). On
+//! `abcc` only the longer alt is viable, so `{false}?` leaves no alternative:
+//! ANTLR4 finds the viable alternatives first and only then drops the ones whose
+//! predicates fail (`doc/predicates.md`), and the jar reports no viable
+//! alternative without running either action.
 
 use ap from "./grammars/wado_atn_pred.g4"
     with {
@@ -16,11 +18,13 @@ test "a true predicate leaves the ATN-selected longer alt" {
     assert r.output == "abc", `expected the longer alt to run: '${r.output}'`;
 }
 
-test "a false predicate excludes the ATN alt" {
+// Gale drops a false-gated alt before predicting, so the shorter alt wins the
+// re-prediction and runs `ab`.
+#[TODO]
+test "a false predicate on the only viable ATN alt leaves no alternative" {
     let r = ap::parse_rejects("abcc");
-    // Same input, same ATN decision — but `{false}?` on the longer alt excludes
-    // it from the seed set, so the shorter alt is chosen instead.
-    assert r.output == "ab", `expected the shorter alt to run: '${r.output}'`;
+    assert !r.ok(), "the predicate drops the only viable alt";
+    assert r.output == "", `no alt action should run: '${r.output}'`;
 }
 
 test "all-false predicates at an ATN decision fail no-viable" {
@@ -42,7 +46,12 @@ test "a context-dependent predicate is honoured at the ATN decision" {
     // condition is evaluated there — not silently dropped.
     let keep = ap::parse_ctxkeep("abcc");
     assert keep.output == "abc", `expected the longer alt ($mode == 1): '${keep.output}'`;
+}
 
+// As for `rejects`: the false-gated alt is dropped before predicting, so `ab` runs.
+#[TODO]
+test "a false context-dependent predicate on the only viable ATN alt leaves no alternative" {
     let drop = ap::parse_ctxdrop("abcc");
-    assert drop.output == "ab", `expected the shorter alt ($mode == 0 is false): '${drop.output}'`;
+    assert !drop.ok(), "$mode == 0 is false, which drops the only viable alt";
+    assert drop.output == "", `no alt action should run: '${drop.output}'`;
 }
