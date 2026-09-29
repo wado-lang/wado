@@ -396,9 +396,11 @@ It has no `**` power operator: call `f64::pow(x, y)` or `f32::pow(x, y)`.
 ### Overflow and Division by Zero
 
 Integer `+`, `-`, `*` and unary `-` wrap in two's complement at every width,
-signed and unsigned alike, so an overflow never traps. An integer `/` or `%`
-whose divisor is zero traps. A float operation follows IEEE 754: dividing by
-zero gives an infinity, or NaN for `0.0 / 0.0`.
+signed and unsigned alike, so their overflow never traps. An integer `/` or `%`
+whose divisor is zero traps. A signed `MIN / -1` traps too, at every width from
+`i8` to `i128`, because the quotient is one past `MAX`. A signed `MIN % -1` is
+0. A float operation follows IEEE 754: dividing by zero gives an infinity, or
+NaN for `0.0 / 0.0`.
 
 <!-- {"fixture":"spec_lexical_arithmetic.wado"} -->
 
@@ -416,6 +418,17 @@ test "integer arithmetic wraps" {
 test "integer division by zero traps" {
     let divisor = 0;
     let _ = 10 / divisor;
+}
+
+#[expect_trap]
+test "signed MIN / -1 traps" {
+    let min: i8 = -128;
+    let _ = min / -1;
+}
+
+test "signed MIN % -1 is 0" {
+    let min: i8 = -128;
+    assert min % -1 == 0;
 }
 ```
 

@@ -1,5 +1,5 @@
-// Integer `+`, `-` and `*` wrap, and integer `/` and `%` by zero trap. Float
-// division by zero follows IEEE 754.
+// Integer `+`, `-` and `*` wrap, and integer `/` and `%` by zero trap, as does
+// signed `MIN / -1`. Float division by zero follows IEEE 754.
 
 test "integer arithmetic wraps" {
     let max: i8 = 127;
@@ -14,6 +14,17 @@ test "integer arithmetic wraps" {
 test "integer division by zero traps" {
     let divisor = 0;
     let _ = 10 / divisor;
+}
+
+#[expect_trap]
+test "signed MIN / -1 traps" {
+    let min: i8 = -128;
+    let _ = min / -1;
+}
+
+test "signed MIN % -1 is 0" {
+    let min: i8 = -128;
+    assert min % -1 == 0;
 }
 
 #[expect_trap]
