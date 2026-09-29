@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790647220138,
+  "lastUpdate": 1790652300333,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61789,6 +61789,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c08806ebdd0fb0542e3fe990b1479f4465416bc3"
         },
         "date": 1790647219059,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1947,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6796,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20287,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fb4d90a84488762b742e9bf34bba05375fa01669",
+          "message": "Merge pull request #2219 from wado-lang/claude/loam-gpt2-oom-issue-4iqgdc\n\nfix(lower): move a `&mut` write-back into its place instead of deep-copying it",
+          "timestamp": "2026-09-29T11:52:49+09:00",
+          "tree_id": "c193eb0c7f6cc4c550fbf892633eb77444a5c4d1",
+          "url": "https://github.com/wado-lang/wado/commit/fb4d90a84488762b742e9bf34bba05375fa01669"
+        },
+        "date": 1790652299542,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
