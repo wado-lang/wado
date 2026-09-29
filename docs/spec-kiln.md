@@ -434,15 +434,15 @@ The generator chooses the file names. Gale names its entry after the grammar:
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
 ```wado
-    let entry_name = to_snake_case(&grammar.name);
-    let files: List<OutputFile> = [
-        OutputFile {
-            path: `${entry_name}.wado`,
-            content: wado_source,
-            is_entry: true,
-        },
-    ];
-    return Result::Ok(Response { files });
+let entry_name = to_snake_case(&grammar.name);
+let files: List<OutputFile> = [
+    OutputFile {
+        path: `${entry_name}.wado`,
+        content: wado_source,
+        is_entry: true,
+    },
+];
+return Result::Ok(Response { files });
 ```
 
 ### Output directory
@@ -537,15 +537,15 @@ Gale relays the diagnostics of its own analysis:
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
 ```wado
-    for let d of &generated.diagnostics {
-        if let Some(level) = diagnostic_level(&d.kind) {
-            KilnHost::emit_diagnostic(KilnDiagnostic {
-                level: kiln_level(level),
-                span: null,
-                message: `gale: ${d.owner.label()}: ${d.message}`,
-            });
-        }
+for let d of &generated.diagnostics {
+    if let Some(level) = diagnostic_level(&d.kind) {
+        KilnHost::emit_diagnostic(KilnDiagnostic {
+            level: kiln_level(level),
+            span: null,
+            message: `gale: ${d.owner.label()}: ${d.message}`,
+        });
     }
+}
 ```
 
 Loam reports a successful check as a hint:
@@ -553,11 +553,11 @@ Loam reports a successful check as a hint:
 <!-- {"source": "package-loam/src/generator.wado"} -->
 
 ```wado
-    KilnHost::emit_diagnostic(KilnDiagnostic {
-        level: DiagnosticLevel::Hint,
-        span: null,
-        message: `loam: ${graph.name}: ${graph.nodes.len()} operators checked`,
-    });
+KilnHost::emit_diagnostic(KilnDiagnostic {
+    level: DiagnosticLevel::Hint,
+    span: null,
+    message: `loam: ${graph.name}: ${graph.nodes.len()} operators checked`,
+});
 ```
 
 ### The probe

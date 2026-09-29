@@ -1291,7 +1291,6 @@ let want: List<bf16> = [1.0, 2.0];
 assert weights == [1.0, 2.0] && bias == want;
 ```
 
-
 ### `#function` Format
 
 Returns the name without type arguments or signature:

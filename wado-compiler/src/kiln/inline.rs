@@ -198,7 +198,10 @@ fn lower_inline(
         severity: Severity::Error,
         code: Code::GeneratorOptionsInvalid,
         message,
-        span: Some(DiagnosticSpan::from_span(&entry.key_span, Some(module_path))),
+        span: Some(DiagnosticSpan::from_span(
+            &entry.key_span,
+            Some(module_path),
+        )),
     };
 
     for (key, entry) in &attrs.entries {
@@ -863,7 +866,10 @@ mod tests {
         ));
         assert_eq!(errs.len(), 1, "{errs:#?}");
         assert_eq!(errs[0].code, Code::GeneratorOptionsInvalid);
-        let at = errs[0].span.as_ref().expect("a clause error carries a span");
+        let at = errs[0]
+            .span
+            .as_ref()
+            .expect("a clause error carries a span");
         (errs[0].message.clone(), at.line, at.column)
     }
 

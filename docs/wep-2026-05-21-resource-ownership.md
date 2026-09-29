@@ -597,6 +597,17 @@ that admits it. `core:fs` drains the stream and drops before it decides what to
 return. `core:kiln` lends the handle to a helper, so the body that owns it
 cannot return early at all.
 
+### Known gap: resources cleanup does not reach
+
+Cleanup walks function bodies only. A resource a closure body binds, or a
+temporary it borrows, is never dropped.
+
+Moving one resource field out of a temporary aggregate (`make().a`) drops
+nothing else the temporary owns, so a second resource field leaks.
+
+A `List` element is never dropped, so a list of owned resources leaks each one
+when the list goes out of scope.
+
 ## Amendments to earlier WEPs
 
 - WEP 2026-04-28 (Resource Inheritance): its "value semantics, no borrow
@@ -645,6 +656,9 @@ Verified against the tree.
 
 - [x] `&self` aggregate call classified by return type (#1569).
 - [x] Discarded resource value is dropped, not leaked.
+- [x] A temporary in a borrowing position (receiver, `&` argument, field read,
+      operand, condition, scrutinee) is dropped at the end of its statement,
+      and `break` / `continue` drop what their target encloses.
 - [x] `is_resource_aggregate` retired: extraction accessors take `self` by
       value, so the receiver transfer is read directly (no shape guessing).
 

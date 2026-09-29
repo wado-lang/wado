@@ -2156,7 +2156,10 @@ impl ImportAttributes {
     ];
 
     fn get_str(&self, key: &str) -> Option<String> {
-        assert!(Self::STRING_KEYS.contains(&key), "`{key}` is not a string key");
+        assert!(
+            Self::STRING_KEYS.contains(&key),
+            "`{key}` is not a string key"
+        );
         self.get(key)
             .and_then(AttrValue::as_str)
             .map(str::to_string)
