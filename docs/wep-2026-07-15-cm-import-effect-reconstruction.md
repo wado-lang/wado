@@ -93,9 +93,9 @@ it:
   use { Marl } from "wado-lang:marl" with { provider: "./highlight.wado" };
   ```
 
-  The provider is a plain Wado file (`export fn highlight(...) { ... }`)
-  compiled into a component exporting the dependency's imported interface, bound
-  by operation name. Composition wires `provider.export → dependency.import` and
+  The provider is a plain Wado file (`export fn highlight(...) { ... }`, and
+  likewise for each other operation) compiled into a component exporting the
+  dependency's imported interface, bound by operation name. Composition wires `provider.export → dependency.import` and
   discharges the effect, so the consumer calls `Marl` with no handler installed.
 
 A provider is a _static_ link-time choice, not a per-call dynamic handler.

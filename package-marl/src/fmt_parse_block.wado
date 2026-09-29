@@ -26,8 +26,8 @@ use {
     COMMENT_CLOSE,
 } from "./fmt_ast.wado";
 use { RefTable, new_ref_table, ref_table_insert, parse_dest_and_title } from "./fmt_links.wado";
-use { parse_inline } from "./fmt_parse_inline.wado";
-use { slice_chars } from "./str_cursor.wado";
+use { parse_inline, comment_at } from "./fmt_parse_inline.wado";
+use { slice_chars, StrCursor } from "./str_cursor.wado";
 
 /// A parsed document together with its link reference definition table. The
 /// HTML backend (`fmt_html.wado`) needs the table to resolve reference-style
@@ -267,12 +267,10 @@ fn lines_slice(lines: &List<String>, s: i32, e: i32) -> List<String> {
 /// A block that is one comment and nothing more is a `Comment`; any other is
 /// `Html`.
 fn html_block_node(block: String) -> Node {
-    let Some(rest) = block.strip_prefix(&COMMENT_OPEN) else {
-        return Node::Html(block);
-    };
-    let inner = rest.to_string();
-    return match inner.find(&COMMENT_CLOSE) {
-        Some(close) && close + COMMENT_CLOSE.len() == inner.len() => Node::Comment(inner.substr_bytes(0, close)),
+    let chars = block.trim_start().to_chars();
+    let cur = StrCursor::over(&chars);
+    return match comment_at(&cur, 0) {
+        Some([comment, end]) && end == cur.end() => comment,
         _ => Node::Html(block),
     };
 }
@@ -344,8 +342,10 @@ global RAW_TEXT_TAGS: List<String> = ["script", "pre", "style", "textarea"];
 global RAW_TEXT_END_TAGS: List<String> = ["</script>", "</pre>", "</style>", "</textarea>"];
 
 /// The lowercase end markers of a CommonMark HTML block of types 1–5, any one
-/// of which ends it, and the char offset past its start marker, or `null` for
-/// types 6/7. A type-1 block ends at any raw-text end tag, not only its own.
+/// of which ends it, and the char offset on the first line from which to look
+/// for them, or `null` for types 6/7. A type-1 block ends at any raw-text end
+/// tag, not only its own. A comment's markers may overlap its opening, so
+/// `<!-->` ends where it starts.
 fn html_block_end_markers(chars: &List<char>) -> Option<[List<String>, i32]> {
     let len = chars.len();
     let p = skip_indent(chars, len);
@@ -361,7 +361,7 @@ fn html_block_end_markers(chars: &List<char>) -> Option<[List<String>, i32]> {
     if rest.starts_with(&COMMENT_OPEN) {
         return Option::Some([
             [COMMENT_CLOSE],
-            p + COMMENT_OPEN.len(),
+            p,
         ]);
     }
     if rest.starts_with("<?") {

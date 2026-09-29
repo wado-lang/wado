@@ -522,7 +522,7 @@ fn try_autolink_scheme(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
 
 fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
     if starts_with_at(cur, i, &COMMENT_OPEN) {
-        return try_comment(cur, i);
+        return comment_at(cur, i);
     }
     let end = cur.end();
     let mut j = i + 1;
@@ -545,8 +545,22 @@ fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
     return null;
 }
 
-fn try_comment(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
+/// The comment opening at `i` and the position past it, or `null` where none
+/// opens there or it never closes. As CommonMark says, `<!-->` and `<!--->` are
+/// empty comments.
+internal fn comment_at(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
+    if !starts_with_at(cur, i, &COMMENT_OPEN) {
+        return null;
+    }
     let start = i + COMMENT_OPEN.len();
+    for let empty_close of [">", "->"] {
+        if starts_with_at(cur, start, empty_close) {
+            return Option::Some([
+                Node::Comment(""),
+                start + empty_close.len(),
+            ]);
+        }
+    }
     for let mut j = start; j < cur.end(); j += 1 {
         if starts_with_at(cur, j, &COMMENT_CLOSE) {
             return Option::Some([

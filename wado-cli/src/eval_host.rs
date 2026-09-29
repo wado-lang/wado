@@ -5,7 +5,7 @@
 
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
@@ -74,7 +74,11 @@ const LINKED_INTERFACES: &[&str] = &[
 /// The binary is known by its size and modification time, as ccache knows a
 /// compiler by default. Hashing its contents costs seconds for a dev build,
 /// and every rebuild changes both anyway.
-static COMPILER_DIGEST: LazyLock<[u8; 32]> = LazyLock::new(|| {
+///
+/// A rebuild beneath a long `wado test` replaces the file at the binary's
+/// path, which then describes another compiler, so the digest is read when the
+/// run starts, and on Linux through the running image itself.
+fn compiler_digest() -> [u8; 32] {
     let exe = running_exe();
     let stat = std::fs::metadata(&exe)
         .unwrap_or_else(|e| panic!("reading the running `wado` binary {}: {e}", exe.display()));
@@ -91,11 +95,8 @@ static COMPILER_DIGEST: LazyLock<[u8; 32]> = LazyLock::new(|| {
     hasher.update(nanos_since_epoch.to_le_bytes());
     hash_dev_stdlib(&mut hasher);
     hasher.finalize().into()
-});
+}
 
-/// Linux reaches the running binary through `/proc/self/exe` even after a
-/// rebuild replaced the file at its path, as `cargo build` does beneath a long
-/// `wado test`; `current_exe` then names a path that no longer exists.
 #[cfg(target_os = "linux")]
 fn running_exe() -> PathBuf {
     PathBuf::from("/proc/self/exe")
@@ -128,6 +129,7 @@ fn hash_field(hasher: &mut Sha256, bytes: &[u8]) {
 
 /// The `core:eval` host for one `wado test` run, shared by every test in it.
 pub struct EvalHost {
+    compiler_digest: [u8; 32],
     knobs: CompileKnobs,
     engine: OnceLock<(Engine, Linker<Program>)>,
     /// One slot per key being evaluated, so calls sharing a key at once
@@ -150,6 +152,7 @@ impl EvalHost {
     pub fn new(knobs: &CompileKnobs, cpu: Arc<Semaphore>, parallelism: usize) -> Self {
         assert!(parallelism > 0, "a CPU budget of zero never runs anything");
         Self {
+            compiler_digest: compiler_digest(),
             knobs: knobs.clone(),
             engine: OnceLock::new(),
             slots: Mutex::new(IndexMap::default()),
@@ -160,7 +163,7 @@ impl EvalHost {
 
     fn key(&self, source: &str, fuel: u64) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        hasher.update(*COMPILER_DIGEST);
+        hasher.update(self.compiler_digest);
         hash_field(
             &mut hasher,
             format!("{:?}", self.knobs.opt_level).as_bytes(),

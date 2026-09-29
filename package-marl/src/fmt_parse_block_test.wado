@@ -363,6 +363,19 @@ test "parse_document keeps a comment block that holds more than the comment as H
     }
 }
 
+test "parse_document reads an empty or indented comment block as a comment" {
+    for let [source, text] of [
+        ["<!-->\nafter", ""],
+        ["<!--->\nafter", ""],
+        ["   <!-- c -->\nafter", " c "],
+    ] {
+        let children = doc_children(&source);
+        assert children.len() == 2;
+        assert children.get(0) == Option::Some(Node::Comment(text));
+        assert children.get(1) matches { Some(Node::Paragraph(_)) };
+    }
+}
+
 test "parse_document ends a processing instruction, declaration, and CDATA at their markers" {
     for let [source, html] of [
         ["<?php x ?>\ntext", "<?php x ?>"],
