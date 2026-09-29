@@ -18,7 +18,9 @@ use {
     apply_case,
     DuplicateKeyPolicy,
     report_duplicate_key,
+    TextKeySerializer,
 } from "core:serde";
+use { TreeMap } from "core:collections";
 
 struct MockWriter {
     buf: String,
@@ -412,4 +414,36 @@ test "report_duplicate_key continues under Warn" {
 
 test "report_duplicate_key continues under PassThru" {
     assert report_duplicate_key(DuplicateKeyPolicy::PassThru, "role") matches { Ok };
+}
+
+struct KeyPair {
+    a: i32,
+}
+
+variant KeyShape {
+    Dot(i32),
+}
+
+fn key_text<T: Serialize>(key: &T) -> Result<String, SerializeError> {
+    let mut out = String::new();
+    key.serialize(&mut TextKeySerializer { out: &mut out })?;
+    return Result::Ok(out);
+}
+
+fn key_refused<T: Serialize>(key: &T) -> bool {
+    return key_text(key) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+}
+
+test "TextKeySerializer spells a scalar and refuses every other shape" {
+    assert key_text(&-7) matches { Ok(s) && s == "-7" };
+    assert key_text(&'k') matches { Ok(s) && s == "k" };
+    let none: Option<i32> = null;
+    assert key_refused(&none);
+    let list: List<i32> = [1];
+    assert key_refused(&list);
+    let mut map = TreeMap::<String, i32>::new();
+    map["a"] = 1;
+    assert key_refused(&map);
+    assert key_refused(&KeyPair { a: 1 });
+    assert key_refused(&KeyShape::Dot(1));
 }

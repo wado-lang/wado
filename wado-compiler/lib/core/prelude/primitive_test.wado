@@ -585,6 +585,13 @@ test "from_str reads a view without copying out of it" {
     assert char::from_str(view.slice(16, 17)) matches { Ok(v) && v == 'x' };
 }
 
+test "to_string spells a primitive as its Display" {
+    assert true.to_string() == "true";
+    assert false.to_string() == "false";
+    assert i64::MIN.to_string() == "-9223372036854775808";
+    assert u64::MAX.to_string() == "18446744073709551615";
+}
+
 test "BITS is the width in bits" {
     assert i8::BITS == 8 && u8::BITS == 8;
     assert i16::BITS == 16 && u16::BITS == 16 && f16::BITS == 16 && bf16::BITS == 16;
