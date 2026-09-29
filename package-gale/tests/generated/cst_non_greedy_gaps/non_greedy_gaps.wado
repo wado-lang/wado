@@ -1560,9 +1560,59 @@ impl Parser {
     }
 }
 
+fn scan_constant(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_public { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_static { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_final { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_int { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_file__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
-    while !_kind_set_0(p.peek_kind()) {
+    loop {
+        if p.recovering { break; }
+        let mut ng_exit: bool = false;
+        ng_exit_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_4_done: {
+                sg_4: {
+                    pos = scan_constant(tokens, pos);
+                    if pos < 0 { break sg_4; }
+                    while pos < tokens.len() && tokens[pos] != TK_EOF { pos += 1; }
+                    break sg_4_done;
+                }
+                break ng_exit_scan;
+            }
+            while pos < tokens.len() && tokens[pos] == TK_LIT_public {
+                let sp = pos;
+                sg_5_done: {
+                    sg_5: {
+                        pos = scan_constant(tokens, pos);
+                        if pos < 0 { break sg_5; }
+                        while pos < tokens.len() && tokens[pos] != TK_EOF { pos += 1; }
+                        break sg_5_done;
+                    }
+                    pos = -1;
+                }
+                if pos < 0 { pos = sp; break; }
+                if pos == sp { break; }
+            }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
+            pos += 1;
+            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if probe_kind == TK_EOF { ng_exit = true; }
+        }
+        if ng_exit { break; }
+        if !(p.peek_kind() != TK_EOF) { break; }
         p.any();
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }

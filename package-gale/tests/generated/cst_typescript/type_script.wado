@@ -2213,21 +2213,46 @@ fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 with TypeScrip
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
+    let mut accept_17: i32 = -1;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { '0'..='7' })) { return -1; }
     pos += 1;
+    let peek_save_18 = pos;
+    let mut peek_ok_18 = false;
+    peek_18: {
+        if !(!TypeScriptLexerBase::is_strict_mode(LexerView { chars, start, pos })) { break peek_18; }
+        peek_ok_18 = true;
+    }
+    pos = peek_save_18;
+    if peek_ok_18 {
+        accept_17 = peek_save_18;
+    }
     loop {
-        let rep_saved_17 = pos;
-        rep_17: {
-            if pos >= chars.len() { break rep_17; }
-            if !((chars[pos] matches { '0'..='7' })) { break rep_17; }
+        let la_saved_17 = pos;
+        la_rep_17: {
+            if pos >= chars.len() { break la_rep_17; }
+            if !((chars[pos] matches { '0'..='7' })) { break la_rep_17; }
             pos += 1;
+            let peek_save_19 = pos;
+            let mut peek_ok_19 = false;
+            peek_19: {
+                if !(!TypeScriptLexerBase::is_strict_mode(LexerView { chars, start, pos })) { break peek_19; }
+                peek_ok_19 = true;
+            }
+            pos = peek_save_19;
+            if peek_ok_19 {
+                accept_17 = peek_save_19;
+            }
             continue;
         }
-        pos = rep_saved_17;
+        pos = la_saved_17;
         break;
     }
-    if !(!TypeScriptLexerBase::is_strict_mode(LexerView { chars, start, pos })) { return -1; }
+    if accept_17 < 0 {
+        return -1;
+    }
+    pos = accept_17;
+    if !(!TypeScriptLexerBase::is_strict_mode(LexerView { chars, start, pos })) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     return pos;
 }
 
@@ -2242,14 +2267,14 @@ fn try_OctalIntegerLiteral2(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0'..='7' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_19 = pos;
-        rep_19: {
-            if pos >= chars.len() { break rep_19; }
-            if !((chars[pos] matches { '_' | '0'..='7' })) { break rep_19; }
+        let rep_saved_20 = pos;
+        rep_20: {
+            if pos >= chars.len() { break rep_20; }
+            if !((chars[pos] matches { '_' | '0'..='7' })) { break rep_20; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_19;
+        pos = rep_saved_20;
         break;
     }
     return pos;
@@ -2266,14 +2291,14 @@ fn try_BinaryIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0' | '1' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_20 = pos;
-        rep_20: {
-            if pos >= chars.len() { break rep_20; }
-            if !((chars[pos] matches { '_' | '0' | '1' })) { break rep_20; }
+        let rep_saved_21 = pos;
+        rep_21: {
+            if pos >= chars.len() { break rep_21; }
+            if !((chars[pos] matches { '_' | '0' | '1' })) { break rep_21; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_20;
+        pos = rep_saved_21;
         break;
     }
     return pos;
@@ -2290,14 +2315,14 @@ fn try_BigHexIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_21 = pos;
-        rep_21: {
-            if pos >= chars.len() { break rep_21; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break rep_21; }
+        let rep_saved_22 = pos;
+        rep_22: {
+            if pos >= chars.len() { break rep_22; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break rep_22; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_21;
+        pos = rep_saved_22;
         break;
     }
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
@@ -2316,14 +2341,14 @@ fn try_BigOctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0'..='7' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_22 = pos;
-        rep_22: {
-            if pos >= chars.len() { break rep_22; }
-            if !((chars[pos] matches { '_' | '0'..='7' })) { break rep_22; }
+        let rep_saved_23 = pos;
+        rep_23: {
+            if pos >= chars.len() { break rep_23; }
+            if !((chars[pos] matches { '_' | '0'..='7' })) { break rep_23; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_22;
+        pos = rep_saved_23;
         break;
     }
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
@@ -2342,14 +2367,14 @@ fn try_BigBinaryIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0' | '1' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_23 = pos;
-        rep_23: {
-            if pos >= chars.len() { break rep_23; }
-            if !((chars[pos] matches { '_' | '0' | '1' })) { break rep_23; }
+        let rep_saved_24 = pos;
+        rep_24: {
+            if pos >= chars.len() { break rep_24; }
+            if !((chars[pos] matches { '_' | '0' | '1' })) { break rep_24; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_23;
+        pos = rep_saved_24;
         break;
     }
     if pos >= chars.len() || chars[pos] != 'n' { return -1; }
@@ -2528,13 +2553,13 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
     pos = frag_IdentifierStart(chars, pos);
     if pos < 0 { return -1; }
     loop {
-        let rep_saved_24 = pos;
-        rep_24: {
+        let rep_saved_25 = pos;
+        rep_25: {
             pos = frag_IdentifierPart(chars, pos);
-            if pos < 0 { break rep_24; }
+            if pos < 0 { break rep_25; }
             continue;
         }
-        pos = rep_saved_24;
+        pos = rep_saved_25;
         break;
     }
     return pos;
@@ -2542,43 +2567,43 @@ fn try_Identifier(chars: &List<char>, start: i32) -> i32 {
 
 fn try_StringLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_25 = pos;
-    alts_done_25: {
-        alts_25_0: {
-            pos = alts_saved_25;
-            if pos >= chars.len() || chars[pos] != '"' { break alts_25_0; }
-            pos += 1;
-            loop {
-                let rep_saved_26 = pos;
-                rep_26: {
-                    pos = frag_DoubleStringCharacter(chars, pos);
-                    if pos < 0 { break rep_26; }
-                    continue;
-                }
-                pos = rep_saved_26;
-                break;
-            }
-            if pos >= chars.len() || chars[pos] != '"' { break alts_25_0; }
-            pos += 1;
-            break alts_done_25;
-        }
-        alts_25_1: {
-            pos = alts_saved_25;
-            if pos >= chars.len() || chars[pos] != '\'' { break alts_25_1; }
+    let alts_saved_26 = pos;
+    alts_done_26: {
+        alts_26_0: {
+            pos = alts_saved_26;
+            if pos >= chars.len() || chars[pos] != '"' { break alts_26_0; }
             pos += 1;
             loop {
                 let rep_saved_27 = pos;
                 rep_27: {
-                    pos = frag_SingleStringCharacter(chars, pos);
+                    pos = frag_DoubleStringCharacter(chars, pos);
                     if pos < 0 { break rep_27; }
                     continue;
                 }
                 pos = rep_saved_27;
                 break;
             }
-            if pos >= chars.len() || chars[pos] != '\'' { break alts_25_1; }
+            if pos >= chars.len() || chars[pos] != '"' { break alts_26_0; }
             pos += 1;
-            break alts_done_25;
+            break alts_done_26;
+        }
+        alts_26_1: {
+            pos = alts_saved_26;
+            if pos >= chars.len() || chars[pos] != '\'' { break alts_26_1; }
+            pos += 1;
+            loop {
+                let rep_saved_28 = pos;
+                rep_28: {
+                    pos = frag_SingleStringCharacter(chars, pos);
+                    if pos < 0 { break rep_28; }
+                    continue;
+                }
+                pos = rep_saved_28;
+                break;
+            }
+            if pos >= chars.len() || chars[pos] != '\'' { break alts_26_1; }
+            pos += 1;
+            break alts_done_26;
         }
         return -1;
     }
@@ -2598,14 +2623,14 @@ fn try_WhiteSpaces(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '\t' | '\u{b}' | '\u{c}' | ' ' | '\u{a0}' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_28 = pos;
-        rep_28: {
-            if pos >= chars.len() { break rep_28; }
-            if !((chars[pos] matches { '\t' | '\u{b}' | '\u{c}' | ' ' | '\u{a0}' })) { break rep_28; }
+        let rep_saved_29 = pos;
+        rep_29: {
+            if pos >= chars.len() { break rep_29; }
+            if !((chars[pos] matches { '\t' | '\u{b}' | '\u{c}' | ' ' | '\u{a0}' })) { break rep_29; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_28;
+        pos = rep_saved_29;
         break;
     }
     return pos;
@@ -2630,21 +2655,21 @@ fn try_HtmlComment(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_30 = pos;
-        let mut ng_exit_30 = false;
-        ng_30: {
-            if pos >= chars.len() || chars[pos] != '-' { break ng_30; }
+        let ng_saved_31 = pos;
+        let mut ng_exit_31 = false;
+        ng_31: {
+            if pos >= chars.len() || chars[pos] != '-' { break ng_31; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '-' { break ng_30; }
+            if pos >= chars.len() || chars[pos] != '-' { break ng_31; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_30; }
+            if pos >= chars.len() || chars[pos] != '>' { break ng_31; }
             pos += 1;
-            ng_exit_30 = true;
+            ng_exit_31 = true;
         }
-        if ng_exit_30 {
+        if ng_exit_31 {
             break;
         }
-        pos = ng_saved_30;
+        pos = ng_saved_31;
         if pos >= chars.len() { return -1; }
         pos += 1;
     }
@@ -2672,21 +2697,21 @@ fn try_CDataComment(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '[' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_31 = pos;
-        let mut ng_exit_31 = false;
-        ng_31: {
-            if pos >= chars.len() || chars[pos] != ']' { break ng_31; }
+        let ng_saved_32 = pos;
+        let mut ng_exit_32 = false;
+        ng_32: {
+            if pos >= chars.len() || chars[pos] != ']' { break ng_32; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != ']' { break ng_31; }
+            if pos >= chars.len() || chars[pos] != ']' { break ng_32; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_31; }
+            if pos >= chars.len() || chars[pos] != '>' { break ng_32; }
             pos += 1;
-            ng_exit_31 = true;
+            ng_exit_32 = true;
         }
-        if ng_exit_31 {
+        if ng_exit_32 {
             break;
         }
-        pos = ng_saved_31;
+        pos = ng_saved_32;
         if pos >= chars.len() { return -1; }
         pos += 1;
     }
@@ -2735,38 +2760,38 @@ fn try_TemplateStringAtom(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_RegularExpressionFirstChar(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_32 = pos;
-    alts_done_32: {
-        alts_32_0: {
-            pos = alts_saved_32;
-            if pos >= chars.len() { break alts_32_0; }
-            if (chars[pos] matches { '*' | '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_32_0; }
+    let alts_saved_33 = pos;
+    alts_done_33: {
+        alts_33_0: {
+            pos = alts_saved_33;
+            if pos >= chars.len() { break alts_33_0; }
+            if (chars[pos] matches { '*' | '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_33_0; }
             pos += 1;
-            break alts_done_32;
+            break alts_done_33;
         }
-        alts_32_1: {
-            pos = alts_saved_32;
+        alts_33_1: {
+            pos = alts_saved_33;
             pos = frag_RegularExpressionBackslashSequence(chars, pos);
-            if pos < 0 { break alts_32_1; }
-            break alts_done_32;
+            if pos < 0 { break alts_33_1; }
+            break alts_done_33;
         }
-        alts_32_2: {
-            pos = alts_saved_32;
-            if pos >= chars.len() || chars[pos] != '[' { break alts_32_2; }
+        alts_33_2: {
+            pos = alts_saved_33;
+            if pos >= chars.len() || chars[pos] != '[' { break alts_33_2; }
             pos += 1;
             loop {
-                let rep_saved_33 = pos;
-                rep_33: {
+                let rep_saved_34 = pos;
+                rep_34: {
                     pos = frag_RegularExpressionClassChar(chars, pos);
-                    if pos < 0 { break rep_33; }
+                    if pos < 0 { break rep_34; }
                     continue;
                 }
-                pos = rep_saved_33;
+                pos = rep_saved_34;
                 break;
             }
-            if pos >= chars.len() || chars[pos] != ']' { break alts_32_2; }
+            if pos >= chars.len() || chars[pos] != ']' { break alts_33_2; }
             pos += 1;
-            break alts_done_32;
+            break alts_done_33;
         }
         return -1;
     }
@@ -2775,38 +2800,38 @@ fn frag_RegularExpressionFirstChar(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_RegularExpressionChar(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_34 = pos;
-    alts_done_34: {
-        alts_34_0: {
-            pos = alts_saved_34;
-            if pos >= chars.len() { break alts_34_0; }
-            if (chars[pos] matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_34_0; }
+    let alts_saved_35 = pos;
+    alts_done_35: {
+        alts_35_0: {
+            pos = alts_saved_35;
+            if pos >= chars.len() { break alts_35_0; }
+            if (chars[pos] matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_35_0; }
             pos += 1;
-            break alts_done_34;
+            break alts_done_35;
         }
-        alts_34_1: {
-            pos = alts_saved_34;
+        alts_35_1: {
+            pos = alts_saved_35;
             pos = frag_RegularExpressionBackslashSequence(chars, pos);
-            if pos < 0 { break alts_34_1; }
-            break alts_done_34;
+            if pos < 0 { break alts_35_1; }
+            break alts_done_35;
         }
-        alts_34_2: {
-            pos = alts_saved_34;
-            if pos >= chars.len() || chars[pos] != '[' { break alts_34_2; }
+        alts_35_2: {
+            pos = alts_saved_35;
+            if pos >= chars.len() || chars[pos] != '[' { break alts_35_2; }
             pos += 1;
             loop {
-                let rep_saved_35 = pos;
-                rep_35: {
+                let rep_saved_36 = pos;
+                rep_36: {
                     pos = frag_RegularExpressionClassChar(chars, pos);
-                    if pos < 0 { break rep_35; }
+                    if pos < 0 { break rep_36; }
                     continue;
                 }
-                pos = rep_saved_35;
+                pos = rep_saved_36;
                 break;
             }
-            if pos >= chars.len() || chars[pos] != ']' { break alts_34_2; }
+            if pos >= chars.len() || chars[pos] != ']' { break alts_35_2; }
             pos += 1;
-            break alts_done_34;
+            break alts_done_35;
         }
         return -1;
     }
@@ -2815,46 +2840,46 @@ fn frag_RegularExpressionChar(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_IdentifierPart(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_36 = pos;
-    alts_done_36: {
-        alts_36_0: {
-            pos = alts_saved_36;
+    let alts_saved_37 = pos;
+    alts_done_37: {
+        alts_37_0: {
+            pos = alts_saved_37;
             pos = frag_IdentifierStart(chars, pos);
-            if pos < 0 { break alts_36_0; }
-            break alts_done_36;
+            if pos < 0 { break alts_37_0; }
+            break alts_done_37;
         }
-        alts_36_1: {
-            pos = alts_saved_36;
-            if pos >= chars.len() { break alts_36_1; }
-            if !(in_char_set_0(chars[pos])) { break alts_36_1; }
+        alts_37_1: {
+            pos = alts_saved_37;
+            if pos >= chars.len() { break alts_37_1; }
+            if !(in_char_set_0(chars[pos])) { break alts_37_1; }
             pos += 1;
-            break alts_done_36;
+            break alts_done_37;
         }
-        alts_36_2: {
-            pos = alts_saved_36;
-            if pos >= chars.len() { break alts_36_2; }
-            if !(in_char_set_1(chars[pos])) { break alts_36_2; }
+        alts_37_2: {
+            pos = alts_saved_37;
+            if pos >= chars.len() { break alts_37_2; }
+            if !(in_char_set_1(chars[pos])) { break alts_37_2; }
             pos += 1;
-            break alts_done_36;
+            break alts_done_37;
         }
-        alts_36_3: {
-            pos = alts_saved_36;
-            if pos >= chars.len() { break alts_36_3; }
-            if !((chars[pos] matches { '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' })) { break alts_36_3; }
+        alts_37_3: {
+            pos = alts_saved_37;
+            if pos >= chars.len() { break alts_37_3; }
+            if !((chars[pos] matches { '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' })) { break alts_37_3; }
             pos += 1;
-            break alts_done_36;
+            break alts_done_37;
         }
-        alts_36_4: {
-            pos = alts_saved_36;
-            if pos >= chars.len() || chars[pos] != '\u{200c}' { break alts_36_4; }
+        alts_37_4: {
+            pos = alts_saved_37;
+            if pos >= chars.len() || chars[pos] != '\u{200c}' { break alts_37_4; }
             pos += 1;
-            break alts_done_36;
+            break alts_done_37;
         }
-        alts_36_5: {
-            pos = alts_saved_36;
-            if pos >= chars.len() || chars[pos] != '\u{200d}' { break alts_36_5; }
+        alts_37_5: {
+            pos = alts_saved_37;
+            if pos >= chars.len() || chars[pos] != '\u{200d}' { break alts_37_5; }
             pos += 1;
-            break alts_done_36;
+            break alts_done_37;
         }
         return -1;
     }
@@ -2863,31 +2888,31 @@ fn frag_IdentifierPart(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_DecimalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_37 = pos;
-    alts_done_37: {
-        alts_37_0: {
-            pos = alts_saved_37;
-            if pos >= chars.len() || chars[pos] != '0' { break alts_37_0; }
+    let alts_saved_38 = pos;
+    alts_done_38: {
+        alts_38_0: {
+            pos = alts_saved_38;
+            if pos >= chars.len() || chars[pos] != '0' { break alts_38_0; }
             pos += 1;
-            break alts_done_37;
+            break alts_done_38;
         }
-        alts_37_1: {
-            pos = alts_saved_37;
-            if pos >= chars.len() { break alts_37_1; }
-            if !((chars[pos] matches { '1'..='9' })) { break alts_37_1; }
+        alts_38_1: {
+            pos = alts_saved_38;
+            if pos >= chars.len() { break alts_38_1; }
+            if !((chars[pos] matches { '1'..='9' })) { break alts_38_1; }
             pos += 1;
             loop {
-                let rep_saved_38 = pos;
-                rep_38: {
-                    if pos >= chars.len() { break rep_38; }
-                    if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_38; }
+                let rep_saved_39 = pos;
+                rep_39: {
+                    if pos >= chars.len() { break rep_39; }
+                    if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_39; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_38;
+                pos = rep_saved_39;
                 break;
             }
-            break alts_done_37;
+            break alts_done_38;
         }
         return -1;
     }
@@ -2899,27 +2924,27 @@ fn frag_ExponentPart(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'e' | 'E' })) { return -1; }
     pos += 1;
-    let opt_saved_39 = pos;
-    let mut opt_ok_39 = false;
-    opt_39: {
-        if pos >= chars.len() { break opt_39; }
-        if !((chars[pos] matches { '+' | '-' })) { break opt_39; }
+    let opt_saved_40 = pos;
+    let mut opt_ok_40 = false;
+    opt_40: {
+        if pos >= chars.len() { break opt_40; }
+        if !((chars[pos] matches { '+' | '-' })) { break opt_40; }
         pos += 1;
-        opt_ok_39 = true;
+        opt_ok_40 = true;
     }
-    if !opt_ok_39 { pos = opt_saved_39; }
+    if !opt_ok_40 { pos = opt_saved_40; }
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { '0'..='9' | '_' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_40 = pos;
-        rep_40: {
-            if pos >= chars.len() { break rep_40; }
-            if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_40; }
+        let rep_saved_41 = pos;
+        rep_41: {
+            if pos >= chars.len() { break rep_41; }
+            if !((chars[pos] matches { '0'..='9' | '_' })) { break rep_41; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_40;
+        pos = rep_saved_41;
         break;
     }
     return pos;
@@ -2927,57 +2952,27 @@ fn frag_ExponentPart(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_IdentifierStart(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_42 = pos;
-    alts_done_42: {
-        alts_42_0: {
-            pos = alts_saved_42;
-            if pos >= chars.len() { break alts_42_0; }
-            if !(in_char_set_2(chars[pos])) { break alts_42_0; }
-            pos += 1;
-            break alts_done_42;
-        }
-        alts_42_1: {
-            pos = alts_saved_42;
-            if pos >= chars.len() { break alts_42_1; }
-            if !((chars[pos] matches { '$' | '_' })) { break alts_42_1; }
-            pos += 1;
-            break alts_done_42;
-        }
-        alts_42_2: {
-            pos = alts_saved_42;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_42_2; }
-            pos += 1;
-            pos = frag_UnicodeEscapeSequence(chars, pos);
-            if pos < 0 { break alts_42_2; }
-            break alts_done_42;
-        }
-        return -1;
-    }
-    return pos;
-}
-
-fn frag_DoubleStringCharacter(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
     let alts_saved_43 = pos;
     alts_done_43: {
         alts_43_0: {
             pos = alts_saved_43;
             if pos >= chars.len() { break alts_43_0; }
-            if (chars[pos] matches { '"' | '\\' | '\r' | '\n' }) { break alts_43_0; }
+            if !(in_char_set_2(chars[pos])) { break alts_43_0; }
             pos += 1;
             break alts_done_43;
         }
         alts_43_1: {
             pos = alts_saved_43;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_43_1; }
+            if pos >= chars.len() { break alts_43_1; }
+            if !((chars[pos] matches { '$' | '_' })) { break alts_43_1; }
             pos += 1;
-            pos = frag_EscapeSequence(chars, pos);
-            if pos < 0 { break alts_43_1; }
             break alts_done_43;
         }
         alts_43_2: {
             pos = alts_saved_43;
-            pos = frag_LineContinuation(chars, pos);
+            if pos >= chars.len() || chars[pos] != '\\' { break alts_43_2; }
+            pos += 1;
+            pos = frag_UnicodeEscapeSequence(chars, pos);
             if pos < 0 { break alts_43_2; }
             break alts_done_43;
         }
@@ -2986,14 +2981,14 @@ fn frag_DoubleStringCharacter(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn frag_SingleStringCharacter(chars: &List<char>, start: i32) -> i32 {
+fn frag_DoubleStringCharacter(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_44 = pos;
     alts_done_44: {
         alts_44_0: {
             pos = alts_saved_44;
             if pos >= chars.len() { break alts_44_0; }
-            if (chars[pos] matches { '\'' | '\\' | '\r' | '\n' }) { break alts_44_0; }
+            if (chars[pos] matches { '"' | '\\' | '\r' | '\n' }) { break alts_44_0; }
             pos += 1;
             break alts_done_44;
         }
@@ -3016,6 +3011,36 @@ fn frag_SingleStringCharacter(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn frag_SingleStringCharacter(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let alts_saved_45 = pos;
+    alts_done_45: {
+        alts_45_0: {
+            pos = alts_saved_45;
+            if pos >= chars.len() { break alts_45_0; }
+            if (chars[pos] matches { '\'' | '\\' | '\r' | '\n' }) { break alts_45_0; }
+            pos += 1;
+            break alts_done_45;
+        }
+        alts_45_1: {
+            pos = alts_saved_45;
+            if pos >= chars.len() || chars[pos] != '\\' { break alts_45_1; }
+            pos += 1;
+            pos = frag_EscapeSequence(chars, pos);
+            if pos < 0 { break alts_45_1; }
+            break alts_done_45;
+        }
+        alts_45_2: {
+            pos = alts_saved_45;
+            pos = frag_LineContinuation(chars, pos);
+            if pos < 0 { break alts_45_2; }
+            break alts_done_45;
+        }
+        return -1;
+    }
+    return pos;
+}
+
 fn frag_RegularExpressionBackslashSequence(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\\' { return -1; }
@@ -3028,20 +3053,20 @@ fn frag_RegularExpressionBackslashSequence(chars: &List<char>, start: i32) -> i3
 
 fn frag_RegularExpressionClassChar(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_45 = pos;
-    alts_done_45: {
-        alts_45_0: {
-            pos = alts_saved_45;
-            if pos >= chars.len() { break alts_45_0; }
-            if (chars[pos] matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | ']' | '\\' }) { break alts_45_0; }
+    let alts_saved_46 = pos;
+    alts_done_46: {
+        alts_46_0: {
+            pos = alts_saved_46;
+            if pos >= chars.len() { break alts_46_0; }
+            if (chars[pos] matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | ']' | '\\' }) { break alts_46_0; }
             pos += 1;
-            break alts_done_45;
+            break alts_done_46;
         }
-        alts_45_1: {
-            pos = alts_saved_45;
+        alts_46_1: {
+            pos = alts_saved_46;
             pos = frag_RegularExpressionBackslashSequence(chars, pos);
-            if pos < 0 { break alts_45_1; }
-            break alts_done_45;
+            if pos < 0 { break alts_46_1; }
+            break alts_done_46;
         }
         return -1;
     }
@@ -3050,52 +3075,52 @@ fn frag_RegularExpressionClassChar(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_UnicodeEscapeSequence(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_46 = pos;
-    alts_done_46: {
-        alts_46_0: {
-            pos = alts_saved_46;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_46_0; }
+    let alts_saved_47 = pos;
+    alts_done_47: {
+        alts_47_0: {
+            pos = alts_saved_47;
+            if pos >= chars.len() || chars[pos] != 'u' { break alts_47_0; }
             pos += 1;
-            if pos >= chars.len() { break alts_46_0; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_46_0; }
+            if pos >= chars.len() { break alts_47_0; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_47_0; }
             pos += 1;
-            if pos >= chars.len() { break alts_46_0; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_46_0; }
+            if pos >= chars.len() { break alts_47_0; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_47_0; }
             pos += 1;
-            if pos >= chars.len() { break alts_46_0; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_46_0; }
+            if pos >= chars.len() { break alts_47_0; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_47_0; }
             pos += 1;
-            if pos >= chars.len() { break alts_46_0; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_46_0; }
+            if pos >= chars.len() { break alts_47_0; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_47_0; }
             pos += 1;
-            break alts_done_46;
+            break alts_done_47;
         }
-        alts_46_1: {
-            pos = alts_saved_46;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_46_1; }
+        alts_47_1: {
+            pos = alts_saved_47;
+            if pos >= chars.len() || chars[pos] != 'u' { break alts_47_1; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '{' { break alts_46_1; }
+            if pos >= chars.len() || chars[pos] != '{' { break alts_47_1; }
             pos += 1;
-            if pos >= chars.len() { break alts_46_1; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_46_1; }
+            if pos >= chars.len() { break alts_47_1; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_47_1; }
             pos += 1;
-            if pos >= chars.len() { break alts_46_1; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_46_1; }
+            if pos >= chars.len() { break alts_47_1; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break alts_47_1; }
             pos += 1;
             loop {
-                let rep_saved_47 = pos;
-                rep_47: {
-                    if pos >= chars.len() { break rep_47; }
-                    if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break rep_47; }
+                let rep_saved_48 = pos;
+                rep_48: {
+                    if pos >= chars.len() { break rep_48; }
+                    if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break rep_48; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_47;
+                pos = rep_saved_48;
                 break;
             }
-            if pos >= chars.len() || chars[pos] != '}' { break alts_46_1; }
+            if pos >= chars.len() || chars[pos] != '}' { break alts_47_1; }
             pos += 1;
-            break alts_done_46;
+            break alts_done_47;
         }
         return -1;
     }
@@ -3104,37 +3129,37 @@ fn frag_UnicodeEscapeSequence(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_EscapeSequence(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_49 = pos;
-    alts_done_49: {
-        alts_49_0: {
-            pos = alts_saved_49;
+    let alts_saved_50 = pos;
+    alts_done_50: {
+        alts_50_0: {
+            pos = alts_saved_50;
             pos = frag_CharacterEscapeSequence(chars, pos);
-            if pos < 0 { break alts_49_0; }
-            break alts_done_49;
+            if pos < 0 { break alts_50_0; }
+            break alts_done_50;
         }
-        alts_49_1: {
-            pos = alts_saved_49;
-            if pos >= chars.len() || chars[pos] != '0' { break alts_49_1; }
+        alts_50_1: {
+            pos = alts_saved_50;
+            if pos >= chars.len() || chars[pos] != '0' { break alts_50_1; }
             pos += 1;
-            break alts_done_49;
+            break alts_done_50;
         }
-        alts_49_2: {
-            pos = alts_saved_49;
+        alts_50_2: {
+            pos = alts_saved_50;
             pos = frag_HexEscapeSequence(chars, pos);
-            if pos < 0 { break alts_49_2; }
-            break alts_done_49;
+            if pos < 0 { break alts_50_2; }
+            break alts_done_50;
         }
-        alts_49_3: {
-            pos = alts_saved_49;
+        alts_50_3: {
+            pos = alts_saved_50;
             pos = frag_UnicodeEscapeSequence(chars, pos);
-            if pos < 0 { break alts_49_3; }
-            break alts_done_49;
+            if pos < 0 { break alts_50_3; }
+            break alts_done_50;
         }
-        alts_49_4: {
-            pos = alts_saved_49;
+        alts_50_4: {
+            pos = alts_saved_50;
             pos = frag_ExtendedUnicodeEscapeSequence(chars, pos);
-            if pos < 0 { break alts_49_4; }
-            break alts_done_49;
+            if pos < 0 { break alts_50_4; }
+            break alts_done_50;
         }
         return -1;
     }
@@ -3149,14 +3174,14 @@ fn frag_LineContinuation(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_50 = pos;
-        rep_50: {
-            if pos >= chars.len() { break rep_50; }
-            if !((chars[pos] matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' })) { break rep_50; }
+        let rep_saved_51 = pos;
+        rep_51: {
+            if pos >= chars.len() { break rep_51; }
+            if !((chars[pos] matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' })) { break rep_51; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_50;
+        pos = rep_saved_51;
         break;
     }
     return pos;
@@ -3164,20 +3189,20 @@ fn frag_LineContinuation(chars: &List<char>, start: i32) -> i32 {
 
 fn frag_CharacterEscapeSequence(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_52 = pos;
-    alts_done_52: {
-        alts_52_0: {
-            pos = alts_saved_52;
-            if pos >= chars.len() { break alts_52_0; }
-            if !((chars[pos] matches { '"' | '\'' | '\\' | 'b' | 'f' | 'n' | 'r' | 't' | 'v' })) { break alts_52_0; }
+    let alts_saved_53 = pos;
+    alts_done_53: {
+        alts_53_0: {
+            pos = alts_saved_53;
+            if pos >= chars.len() { break alts_53_0; }
+            if !((chars[pos] matches { '"' | '\'' | '\\' | 'b' | 'f' | 'n' | 'r' | 't' | 'v' })) { break alts_53_0; }
             pos += 1;
-            break alts_done_52;
+            break alts_done_53;
         }
-        alts_52_1: {
-            pos = alts_saved_52;
+        alts_53_1: {
+            pos = alts_saved_53;
             pos = frag_NonEscapeCharacter(chars, pos);
-            if pos < 0 { break alts_52_1; }
-            break alts_done_52;
+            if pos < 0 { break alts_53_1; }
+            break alts_done_53;
         }
         return -1;
     }
@@ -3207,14 +3232,14 @@ fn frag_ExtendedUnicodeEscapeSequence(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_53 = pos;
-        rep_53: {
-            if pos >= chars.len() { break rep_53; }
-            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break rep_53; }
+        let rep_saved_54 = pos;
+        rep_54: {
+            if pos >= chars.len() { break rep_54; }
+            if !((chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' })) { break rep_54; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_53;
+        pos = rep_saved_54;
         break;
     }
     if pos >= chars.len() || chars[pos] != '}' { return -1; }

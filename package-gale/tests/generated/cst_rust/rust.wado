@@ -8541,8 +8541,38 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     }
     if kind == TK_KW_CONTINUE {
         pos = start + 1;
-        if pos < tokens.len() && tokens[pos] == TK_LIFETIME_OR_LABEL && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_94((if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF })) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
+        if pos < tokens.len() && tokens[pos] == TK_LIFETIME_OR_LABEL {
+            let sp = pos;
+            let sp_gate = *gate;
             pos += 1;
+            if pos < 0 {
+                pos = sp;
+                *gate = sp_gate;
+            } else {
+                let bp = pos;
+                let bp_gate = *gate;
+                let mut opt_ok: bool = false;
+                opt_probe: {
+                    if pos < tokens.len() && _kind_set_34(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = *gate;
+                        pos = scan_expression(tokens, pos, gate, memo, follow, 0);
+                        if pos < 0 {
+                            pos = sp;
+                            *gate = sp_gate;
+                        }
+                    }
+                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if _kind_set_94(probe_kind) { opt_ok = true; }
+                }
+                if opt_ok {
+                    pos = bp;
+                    *gate = bp_gate;
+                } else {
+                    pos = sp;
+                    *gate = sp_gate;
+                }
+            }
         }
         if pos < tokens.len() && _kind_set_34(tokens[pos]) {
             let sp = pos;
@@ -8561,8 +8591,38 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo
     }
     if kind == TK_KW_BREAK {
         pos = start + 1;
-        if pos < tokens.len() && tokens[pos] == TK_LIFETIME_OR_LABEL && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_94((if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF })) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
+        if pos < tokens.len() && tokens[pos] == TK_LIFETIME_OR_LABEL {
+            let sp = pos;
+            let sp_gate = *gate;
             pos += 1;
+            if pos < 0 {
+                pos = sp;
+                *gate = sp_gate;
+            } else {
+                let bp = pos;
+                let bp_gate = *gate;
+                let mut opt_ok: bool = false;
+                opt_probe: {
+                    if pos < tokens.len() && _kind_set_34(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = *gate;
+                        pos = scan_expression(tokens, pos, gate, memo, follow, 0);
+                        if pos < 0 {
+                            pos = sp;
+                            *gate = sp_gate;
+                        }
+                    }
+                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if _kind_set_94(probe_kind) { opt_ok = true; }
+                }
+                if opt_ok {
+                    pos = bp;
+                    *gate = bp_gate;
+                } else {
+                    pos = sp;
+                    *gate = sp_gate;
+                }
+            }
         }
         if pos < tokens.len() && _kind_set_34(tokens[pos]) {
             let sp = pos;
@@ -19245,11 +19305,32 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_KW_CONTINUE {
         p.b.set_alt(30);
         p.take();
-        if p.peek_kind() == TK_LIFETIME_OR_LABEL && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_94((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
-            p.take();
+        let mut opt_enter: bool = false;
+        if p.peek_kind() == TK_LIFETIME_OR_LABEL {
+            opt_enter_scan: {
+                p.scan_gate.no_struct = p.no_struct;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIFETIME_OR_LABEL { break opt_enter_scan; }
+                pos += 1;
+                if pos < tokens.len() && _kind_set_34(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = p.scan_gate;
+                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow, 0);
+                    if pos < 0 {
+                        pos = sp;
+                        p.scan_gate = sp_gate;
+                    }
+                }
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_94(probe_kind) { opt_enter = true; }
+            }
         }
-        let mut opt_enter: bool = _kind_set_34(p.peek_kind());
-        if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_93(p.peek_kind())) {
+        if opt_enter {
+            p.expect(TK_LIFETIME_OR_LABEL, &SYNC_0, true);
+        }
+        let mut opt_enter_2: bool = _kind_set_34(p.peek_kind());
+        if opt_enter_2 && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_93(p.peek_kind())) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
                 p.scan_gate.no_struct = p.no_struct;
@@ -19259,9 +19340,9 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
                 if pos < 0 { break opt_scan; }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_93((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
+            opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_93((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
         }
-        if opt_enter {
+        if opt_enter_2 {
             p.site = 282;
             _parse_expression(p, follow);
         }
@@ -19270,11 +19351,32 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if kind == TK_KW_BREAK {
         p.b.set_alt(31);
         p.take();
-        if p.peek_kind() == TK_LIFETIME_OR_LABEL && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_94((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
-            p.take();
+        let mut opt_enter: bool = false;
+        if p.peek_kind() == TK_LIFETIME_OR_LABEL {
+            opt_enter_scan: {
+                p.scan_gate.no_struct = p.no_struct;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIFETIME_OR_LABEL { break opt_enter_scan; }
+                pos += 1;
+                if pos < tokens.len() && _kind_set_34(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = p.scan_gate;
+                    pos = scan_expression(tokens, pos, &mut p.scan_gate, &mut p.memo, follow, 0);
+                    if pos < 0 {
+                        pos = sp;
+                        p.scan_gate = sp_gate;
+                    }
+                }
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_94(probe_kind) { opt_enter = true; }
+            }
         }
-        let mut opt_enter: bool = _kind_set_34(p.peek_kind());
-        if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_93(p.peek_kind())) {
+        if opt_enter {
+            p.expect(TK_LIFETIME_OR_LABEL, &SYNC_0, true);
+        }
+        let mut opt_enter_2: bool = _kind_set_34(p.peek_kind());
+        if opt_enter_2 && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || _kind_set_93(p.peek_kind())) {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
                 p.scan_gate.no_struct = p.no_struct;
@@ -19284,9 +19386,9 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
                 if pos < 0 { break opt_scan; }
                 opt_scan_pos = pos;
             }
-            opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_93((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
+            opt_enter_2 = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_93((if opt_scan_pos < p.kinds.len() { p.kinds[opt_scan_pos] } else { TK_EOF })) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF)));
         }
-        if opt_enter {
+        if opt_enter_2 {
             p.site = 283;
             _parse_expression(p, follow);
         }
@@ -27922,7 +28024,7 @@ fn _kind_set_93(k: i32) -> bool {
 }
 
 fn _kind_set_94(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_ANDEQ | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CARET | TK_CARETEQ | TK_CHAR_LITERAL | TK_DOT | TK_DOTDOT | TK_DOTDOTEQ | TK_EQ | TK_EQEQ | TK_FLOAT_LITERAL | TK_GE | TK_GT | TK_INTEGER_LITERAL | TK_KW_AS | TK_KW_ASYNC | TK_KW_BREAK | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_FOR | TK_KW_IF | TK_KW_LOOP | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOVE | TK_KW_RAW | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_WHILE | TK_LCURLYBRACE | TK_LE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_MINUSEQ | TK_NE | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OREQ | TK_OROR | TK_PATHSEP | TK_PERCENT | TK_PERCENTEQ | TK_PLUS | TK_PLUSEQ | TK_POUND | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_SHLEQ | TK_SHREQ | TK_SLASH | TK_SLASHEQ | TK_STAR | TK_STAREQ | TK_STRING_LITERAL };
+    return k matches { TK_AND | TK_ANDAND | TK_ANDEQ | TK_CARET | TK_CARETEQ | TK_COMMA | TK_DOT | TK_DOTDOT | TK_DOTDOTEQ | TK_EQ | TK_EQEQ | TK_FATARROW | TK_GE | TK_GT | TK_KW_AS | TK_KW_ELSE | TK_LCURLYBRACE | TK_LE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_MINUSEQ | TK_NE | TK_OR | TK_OREQ | TK_OROR | TK_PERCENT | TK_PERCENTEQ | TK_PLUS | TK_PLUSEQ | TK_QUESTION | TK_RCURLYBRACE | TK_RPAREN | TK_RSQUAREBRACKET | TK_SEMI | TK_SHLEQ | TK_SHREQ | TK_SLASH | TK_SLASHEQ | TK_STAR | TK_STAREQ };
 }
 
 fn _kind_set_95(k: i32) -> bool {

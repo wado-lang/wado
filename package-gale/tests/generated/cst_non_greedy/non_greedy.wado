@@ -1509,7 +1509,19 @@ fn _parse_seg__inner(p: &mut Parser) -> () {
     if kind == TK_LIT_LPAREN {
         p.take();
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
-        while !_kind_set_1(p.peek_kind()) {
+        loop {
+            if p.recovering { break; }
+            let mut ng_exit: bool = false;
+            ng_exit_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break ng_exit_scan; }
+                pos += 1;
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_1(probe_kind) { ng_exit = true; }
+            }
+            if ng_exit { break; }
+            if !(p.peek_kind() != TK_EOF) { break; }
             p.any();
         }
         p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
@@ -1520,7 +1532,19 @@ fn _parse_seg__inner(p: &mut Parser) -> () {
         _first_iter: {
             p.any();
         }
-        while !p.recovering && (!_kind_set_2(p.peek_kind())) {
+        loop {
+            if p.recovering { break; }
+            let mut ng_exit: bool = false;
+            ng_exit_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break ng_exit_scan; }
+                pos += 1;
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if _kind_set_1(probe_kind) { ng_exit = true; }
+            }
+            if ng_exit { break; }
+            if !(p.peek_kind() != TK_EOF) { break; }
             p.any();
         }
         p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
@@ -1602,11 +1626,7 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_EOF | TK_LIT_RPAREN };
-}
-
-fn _kind_set_2(k: i32) -> bool {
-    return k matches { TK_EOF | TK_LIT_RBRACKET };
+    return k matches { TK_EOF | TK_LIT_LBRACKET | TK_LIT_LPAREN };
 }
 
 global EMPTY_SYNC: List<i32> = [];

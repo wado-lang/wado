@@ -28,6 +28,7 @@ Entries state the symptom, how to reproduce it, and anything already measured �
   - `new Map<string, T>()` gives `new (e Map (e (e <typeArguments>) (arguments ( ))))`. The jar gives `new (e Map (e <typeArguments>)) (arguments ( ))`, leaving `()` to the `new`.
   - The jar parses `if (…) {…}`, `try {…}` and `for (…)` statements as `expressionStatement` wherever that also scans, and Gale parses them as `ifStatement`, `tryStatement` and `iterationStatement`.
 - [ ] **A lexer alternation whose arms stop at different lengths can pick an arm the rest of the token cannot follow.** `A : ('q' ('y' | 'yz') | 'w') 'h' ;` lexes `qyzh` as four tokens, and so does `B : 'k' ('y' | 'yz')? 'h' ;` on `kyzh`; the jar gives one token each. A fragment whose body is such an alternation, or a single-alternative group or fragment ending in one, lexes as the jar does (`lexer_alt_suffix_shapes.g4`).
+- [ ] **A non-greedy wildcard in a left-recursive suffix exits where only the next token fits.** With `LR_SUFFIX_LOOPS` in `codegen_test.wado`, `x(a ) [b])` gives an error, and the jar gives `(s (e (e x) ( a ) [ b ] )))`. `x(a ) b)` matches the jar.
 - [ ] **A lexer rule called from a rule that folds case differently takes the first arm of its alternation.** With `A : B 'z' ; B options { caseInsensitive = true; } : 'a' | 'ab' ;`, `abz` lexes as `B:a` and two errors, and `ab` as `B:a` and an error; the jar gives `A:abz` and `B:ab`. The same grammar with the option on both rules, or on neither, lexes as the jar does.
 
 ### Pipeline and tooling correctness

@@ -1828,9 +1828,7 @@ pub fn atn_predict_with_stack(
         if alts.is_empty() {
             return atn_first_enabled_alt(&prev, disabled_alts);
         }
-        if alts.len() == 1
-            || atn_min_alt_covers_rest(&mut arena, &configs, alts[0])
-            || atn_all_at_end(sim, &configs) {
+        if alts.len() == 1 || atn_min_alt_covers_rest(&mut arena, &configs, alts[0]) || atn_all_at_end(sim, &configs) {
             return atn_first_enabled_alt(&alts, disabled_alts);
         }
         prev = alts;

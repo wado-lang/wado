@@ -963,21 +963,46 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 {
     let mut alts_best_0 = -1;
     alts_0_0: {
         pos = alts_saved_0;
+        let mut accept_1: i32 = -1;
         if pos >= chars.len() { break alts_0_0; }
         if !((chars[pos] matches { 'a'..='z' })) { break alts_0_0; }
         pos += 1;
+        let peek_save_2 = pos;
+        let mut peek_ok_2 = false;
+        peek_2: {
+            if !( chars_text(chars, start, pos) == "cat" ) { break peek_2; }
+            peek_ok_2 = true;
+        }
+        pos = peek_save_2;
+        if peek_ok_2 {
+            accept_1 = peek_save_2;
+        }
         loop {
-            let rep_saved_1 = pos;
-            rep_1: {
-                if pos >= chars.len() { break rep_1; }
-                if !((chars[pos] matches { 'a'..='z' })) { break rep_1; }
+            let la_saved_1 = pos;
+            la_rep_1: {
+                if pos >= chars.len() { break la_rep_1; }
+                if !((chars[pos] matches { 'a'..='z' })) { break la_rep_1; }
                 pos += 1;
+                let peek_save_3 = pos;
+                let mut peek_ok_3 = false;
+                peek_3: {
+                    if !( chars_text(chars, start, pos) == "cat" ) { break peek_3; }
+                    peek_ok_3 = true;
+                }
+                pos = peek_save_3;
+                if peek_ok_3 {
+                    accept_1 = peek_save_3;
+                }
                 continue;
             }
-            pos = rep_saved_1;
+            pos = la_saved_1;
             break;
         }
-        if !( chars_text(chars, start, pos) == "cat" ) { break alts_0_0; }
+        if accept_1 < 0 {
+            break alts_0_0;
+        }
+        pos = accept_1;
+        if !( chars_text(chars, start, pos) == "cat" ) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
         if pos > alts_best_0 { alts_best_0 = pos; }
     }
     alts_0_1: {
@@ -1001,14 +1026,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= chars.len() { break rep_3; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_3; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() { break rep_4; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_4;
         break;
     }
     return pos;
