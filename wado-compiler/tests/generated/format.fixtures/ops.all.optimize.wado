@@ -22,22 +22,6 @@ fn grow_memory(end: u64) {
     }
 }
 
-fn bump(align: u32, size: u32) -> u32 {
-    let mask: u64 = (align as u64 - 1);
-    let start: u64 = ((core::allocator::heap_offset as u64 + mask) & ~mask);
-    let end: u64 = (start + size as u64);
-    if (end > 4294967295) {
-        core::builtin::cold_path();
-        core::builtin::unreachable();
-    }
-    if (end > (core::builtin::memory_size() as u64 * 65536)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(end);
-    }
-    core::allocator::heap_offset = end as u32;
-    return start as u32;
-}
-
 pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
         if ((oldptr + oldsize) as u32 == core::allocator::heap_offset) {
@@ -45,7 +29,23 @@ pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) 
         }
         return 0;
     }
-    return core::allocator::bump(align as u32, newsize as u32) as i32;
+    return $unbroken_7: {
+        let align: u32 = align as u32;
+        let size: u32 = newsize as u32;
+        let mask: u64 = (align as u64 - 1);
+        let start: u64 = ((core::allocator::heap_offset as u64 + mask) & ~mask);
+        let end: u64 = (start + size as u64);
+        if (end > 4294967295) {
+            core::builtin::cold_path();
+            core::builtin::unreachable();
+        }
+        if (end > (core::builtin::memory_size() as u64 * 65536)) {
+            core::builtin::cold_path();
+            core::allocator::grow_memory(end);
+        }
+        core::allocator::heap_offset = end as u32;
+        start as u32;
+    } as i32;
 }
 
 pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
@@ -55,7 +55,23 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
         }
         return 0;
     }
-    return core::allocator::bump(align as u32, newsize as u32) as i32;
+    return $unbroken_5: {
+        let align: u32 = align as u32;
+        let size: u32 = newsize as u32;
+        let mask: u64 = (align as u64 - 1);
+        let start: u64 = ((core::allocator::heap_offset as u64 + mask) & ~mask);
+        let end: u64 = (start + size as u64);
+        if (end > 4294967295) {
+            core::builtin::cold_path();
+            core::builtin::unreachable();
+        }
+        if (end > (core::builtin::memory_size() as u64 * 65536)) {
+            core::builtin::cold_path();
+            core::allocator::grow_memory(end);
+        }
+        core::allocator::heap_offset = end as u32;
+        start as u32;
+    } as i32;
 }
 
 fn fl_unlink(block: u32) {
@@ -220,20 +236,18 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         }
         curr = core::builtin::i32_load((curr + 8) as i32) as u32;
     }
-    let block: u32 = $unbroken_127: {
-        let start: u64 = (core::allocator::heap_offset as u64 & 18446744073709551615);
-        let end: u64 = (start + size as u64);
-        if (end > 4294967295) {
-            core::builtin::cold_path();
-            core::builtin::unreachable();
-        }
-        if (end > (core::builtin::memory_size() as u64 * 65536)) {
-            core::builtin::cold_path();
-            core::allocator::grow_memory(end);
-        }
-        core::allocator::heap_offset = end as u32;
-        start as u32;
-    };
+    let start: u64 = (core::allocator::heap_offset as u64 & 18446744073709551615);
+    let end: u64 = (start + size as u64);
+    if (end > 4294967295) {
+        core::builtin::cold_path();
+        core::builtin::unreachable();
+    }
+    if (end > (core::builtin::memory_size() as u64 * 65536)) {
+        core::builtin::cold_path();
+        core::allocator::grow_memory(end);
+    }
+    core::allocator::heap_offset = end as u32;
+    let block: u32 = start as u32;
     let tag: u32 = (size + 1);
     core::builtin::i32_store(block as i32, tag as i32);
     core::builtin::i32_store(((block + size) - 8) as i32, tag as i32);
