@@ -226,20 +226,20 @@ fn no_options() -> Options {
 test "gen prints the parser the Kiln generator builds for the same grammar" {
     let dir = scratch(SUITE, "gen");
     put(&dir, "Expr.g4", EXPR);
-    let run = gale_in(&dir, ["gen", "Expr.g4"]);
-    assert run.result matches { Ok(_) }, run.failure();
+    let outcome = gale_in(&dir, ["gen", "Expr.g4"]);
+    assert outcome.result matches { Ok(_) }, outcome.failure();
     let built = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options());
-    assert run.stdout() == built.source();
-    assert run.console.stderr() == "";
+    assert outcome.stdout() == built.source();
+    assert outcome.console.stderr() == "";
 }
 
 test "gen --output writes the parser into the first grant and prints nothing" {
     let out = scratch(SUITE, "gen-output/out");
     let src = scratch(SUITE, "gen-output/src");
     put(&src, "Expr.g4", EXPR);
-    let run = gale_with([out, src], ["gen", "--output", "expr.wado", "Expr.g4"]);
-    assert run.result matches { Ok(_) }, run.failure();
-    assert run.stdout() == "";
+    let outcome = gale_with([out, src], ["gen", "--output", "expr.wado", "Expr.g4"]);
+    assert outcome.result matches { Ok(_) }, outcome.failure();
+    assert outcome.stdout() == "";
     let printed = gale_in(&src, ["gen", "Expr.g4"]).stdout();
     assert fs::read_to_string(`${out}/expr.wado`).unwrap() == printed;
 }
@@ -281,9 +281,9 @@ test "a grammar read from the second grant is found" {
     let empty = scratch(SUITE, "second-grant/empty");
     let src = scratch(SUITE, "second-grant/src");
     put(&src, "Expr.g4", EXPR);
-    let run = gale_with([empty, src], ["dump", "Expr.g4"]);
-    assert run.result matches { Ok(_) }, run.failure();
-    assert run.stdout().starts_with("grammar Expr\n");
+    let outcome = gale_with([empty, src], ["dump", "Expr.g4"]);
+    assert outcome.result matches { Ok(_) }, outcome.failure();
+    assert outcome.stdout().starts_with("grammar Expr\n");
 }
 
 /// An `Exit` that traps on any use: the run must not end the process.
@@ -318,27 +318,27 @@ test "run prints what a successful command prints, and does not exit" {
 test "dump prints the per-rule prediction report" {
     let dir = scratch(SUITE, "dump");
     put(&dir, "Expr.g4", EXPR);
-    let run = gale_in(&dir, ["dump", "Expr.g4"]);
-    assert run.result matches { Ok(_) }, run.failure();
-    assert run.stdout().starts_with("grammar Expr\n\n"), run.stdout();
-    assert run.stdout().contains("expr"), run.stdout();
+    let outcome = gale_in(&dir, ["dump", "Expr.g4"]);
+    assert outcome.result matches { Ok(_) }, outcome.failure();
+    assert outcome.stdout().starts_with("grammar Expr\n\n"), outcome.stdout();
+    assert outcome.stdout().contains("expr"), outcome.stdout();
 }
 
 test "dump --atn prints the ATN" {
     let dir = scratch(SUITE, "dump-atn");
     put(&dir, "Expr.g4", EXPR);
-    let run = gale_in(&dir, ["dump", "--atn", "Expr.g4"]);
-    assert run.result matches { Ok(_) }, run.failure();
-    assert run.stdout().contains("rule 0 'expr'"), run.stdout();
+    let outcome = gale_in(&dir, ["dump", "--atn", "Expr.g4"]);
+    assert outcome.result matches { Ok(_) }, outcome.failure();
+    assert outcome.stdout().contains("rule 0 'expr'"), outcome.stdout();
 }
 
 test "dump --lexer prints the lexer report" {
     let dir = scratch(SUITE, "dump-lexer");
     put(&dir, "Expr.g4", EXPR);
-    let run = gale_in(&dir, ["dump", "--lexer", "Expr.g4"]);
-    assert run.result matches { Ok(_) }, run.failure();
-    assert run.stdout().contains("grammar Expr (lexer)"), run.stdout();
-    assert run.stdout().contains("rule INT"), run.stdout();
+    let outcome = gale_in(&dir, ["dump", "--lexer", "Expr.g4"]);
+    assert outcome.result matches { Ok(_) }, outcome.failure();
+    assert outcome.stdout().contains("grammar Expr (lexer)"), outcome.stdout();
+    assert outcome.stdout().contains("rule INT"), outcome.stdout();
 }
 
 test "every grammar file given is read and merged" {
@@ -353,8 +353,8 @@ test "every grammar file given is read and merged" {
 test "a reference to a rule no grammar defines is reported" {
     let dir = scratch(SUITE, "dangling");
     put(&dir, "Dangling.g4", DANGLING);
-    let run = gale_in(&dir, ["dump", "Dangling.g4"]);
-    assert run.failure() == "gale: expected defined rule name; reference to undefined rule \"missing\" in \"start\"";
+    let outcome = gale_in(&dir, ["dump", "Dangling.g4"]);
+    assert outcome.failure() == "gale: expected defined rule name; reference to undefined rule \"missing\" in \"start\"";
 }
 
 // ---------------------------------------------------------------------------
@@ -387,37 +387,37 @@ test "a subcommand given no grammar says so" {
 test "--atn and --lexer together are refused" {
     let dir = scratch(SUITE, "atn-lexer");
     put(&dir, "Expr.g4", EXPR);
-    let run = gale_in(&dir, ["dump", "--atn", "--lexer", "Expr.g4"]);
-    assert run.failure() == "gale dump: --atn and --lexer are separate reports; pass one";
+    let outcome = gale_in(&dir, ["dump", "--atn", "--lexer", "Expr.g4"]);
+    assert outcome.failure() == "gale dump: --atn and --lexer are separate reports; pass one";
 }
 
 test "an unknown --log-level is refused" {
     let dir = scratch(SUITE, "bad-level");
     put(&dir, "Expr.g4", EXPR);
-    let run = gale_in(&dir, ["gen", "--log-level", "loud", "Expr.g4"]);
-    assert run.failure() == "gale: unknown --log-level 'loud' (trace, debug, info, warn, error)";
-    assert run.stdout() == "";
+    let outcome = gale_in(&dir, ["gen", "--log-level", "loud", "Expr.g4"]);
+    assert outcome.failure() == "gale: unknown --log-level 'loud' (trace, debug, info, warn, error)";
+    assert outcome.stdout() == "";
 }
 
 test "a grammar that does not parse is reported with its path" {
     let dir = scratch(SUITE, "parse-error");
     put(&dir, "Broken.g4", "grammar Broken;\nr : ;;\n");
-    let run = gale_in(&dir, ["gen", "Broken.g4"]);
-    assert run.failure().starts_with("gale: Broken.g4: parse error: "), run.failure();
+    let outcome = gale_in(&dir, ["gen", "Broken.g4"]);
+    assert outcome.failure().starts_with("gale: Broken.g4: parse error: "), outcome.failure();
 }
 
 test "a highlight query that does not parse is reported with its path and position" {
     let dir = scratch(SUITE, "bad-query");
     put(&dir, "Expr.g4", EXPR);
     put(&dir, "bad.scm", "(INT)\n");
-    let run = gale_in(&dir, ["gen", "Expr.g4", "bad.scm"]);
-    assert run.failure() == "gale: bad.scm: highlight query 2:1: expected '@capture'";
+    let outcome = gale_in(&dir, ["gen", "Expr.g4", "bad.scm"]);
+    assert outcome.failure() == "gale: bad.scm: highlight query 2:1: expected '@capture'";
 }
 
 test "a missing grammar names the grants searched" {
     let dir = scratch(SUITE, "missing");
-    let run = gale_in(&dir, ["gen", "Absent.g4"]);
-    assert run.failure() == `gale: Absent.g4: cannot open file\ngale: not found under ${dir} — check the path, or grant the directory holding it with wado run --dir <dir> ...`;
+    let outcome = gale_in(&dir, ["gen", "Absent.g4"]);
+    assert outcome.failure() == `gale: Absent.g4: cannot open file\ngale: not found under ${dir} — check the path, or grant the directory holding it with wado run --dir <dir> ...`;
 }
 
 global ABSOLUTE: String = "gale: a path opens inside a granted directory, so an absolute path never does";
@@ -438,34 +438,34 @@ test "an absolute path is answered with the grant that would reach it" {
 test "a path the grant holds but cannot open says it is not readable" {
     let dir = scratch(SUITE, "not-readable");
     put(&dir, "Expr.g4", EXPR);
-    let run = gale_in(&dir, ["gen", "Expr.g4/inner.g4"]);
-    assert run.failure() == `gale: Expr.g4/inner.g4: cannot open file\ngale: not readable under ${dir}`;
+    let outcome = gale_in(&dir, ["gen", "Expr.g4/inner.g4"]);
+    assert outcome.failure() == `gale: Expr.g4/inner.g4: cannot open file\ngale: not readable under ${dir}`;
 }
 
 test "with no grant there is nothing to read" {
-    let run = gale_with([], ["gen", "Expr.g4"]);
-    assert run.failure() == "gale: Expr.g4: cannot open file\ngale: no directory was granted to this program (try without --no-dir)";
+    let outcome = gale_with([], ["gen", "Expr.g4"]);
+    assert outcome.failure() == "gale: Expr.g4: cannot open file\ngale: no directory was granted to this program (try without --no-dir)";
 }
 
 test "a grammar that is not UTF-8 is refused" {
     let dir = scratch(SUITE, "not-utf8");
     fs::write(`${dir}/Bad.g4`, &([0xff as u8] as ByteList)).unwrap();
-    let run = gale_in(&dir, ["gen", "Bad.g4"]);
-    assert run.failure() == "gale: Bad.g4: not valid UTF-8: invalid utf-8 sequence of 1 bytes from index 0";
+    let outcome = gale_in(&dir, ["gen", "Bad.g4"]);
+    assert outcome.failure() == "gale: Bad.g4: not valid UTF-8: invalid utf-8 sequence of 1 bytes from index 0";
 }
 
 test "--output into a directory that does not exist names the grant it resolves in" {
     let dir = scratch(SUITE, "output-missing-dir");
     put(&dir, "Expr.g4", EXPR);
-    let run = gale_in(&dir, ["gen", "--output", "absent/expr.wado", "Expr.g4"]);
-    assert run.failure() == `gale: absent/expr.wado: cannot open for writing\ngale: --output resolves inside ${dir}, the first granted directory`;
+    let outcome = gale_in(&dir, ["gen", "--output", "absent/expr.wado", "Expr.g4"]);
+    assert outcome.failure() == `gale: absent/expr.wado: cannot open for writing\ngale: --output resolves inside ${dir}, the first granted directory`;
 }
 
 test "a directory named as a grammar is a read error" {
     let dir = scratch(SUITE, "directory");
     fs::create_dir_all(`${dir}/Sub.g4`).unwrap();
-    let run = gale_in(&dir, ["gen", "Sub.g4"]);
-    assert run.failure() == "gale: Sub.g4: read error";
+    let outcome = gale_in(&dir, ["gen", "Sub.g4"]);
+    assert outcome.failure() == "gale: Sub.g4: read error";
 }
 
 // ---------------------------------------------------------------------------

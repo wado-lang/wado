@@ -1601,8 +1601,8 @@ noise : ~( 'a' | 'b' | 'c' ) ;";
     let elems = &g.parser_rules[0].alternatives[0].elements;
     assert elems.len() == 1;
     if let Not(n) = &elems[0] {
-        if let Group(g) = &n.element {
-            assert g.alternatives.len() == 3;
+        if let Group(group) = &n.element {
+            assert group.alternatives.len() == 3;
         } else {
             panic("expected Group inside Not");
         }
@@ -1838,11 +1838,11 @@ test "group-level options attach to the group" {
 r : (options { assoc=right; } : A | B) ;";
     let g = parse(input).unwrap();
     let elems = &g.parser_rules[0].alternatives[0].elements;
-    if let Group(g) = &elems[0] {
-        assert g.alternatives.len() == 2;
-        assert g.options.len() == 1;
-        assert g.options[0].name == "assoc";
-        assert_option_ident(&g.options[0], "right");
+    if let Group(group) = &elems[0] {
+        assert group.alternatives.len() == 2;
+        assert group.options.len() == 1;
+        assert group.options[0].name == "assoc";
+        assert_option_ident(&group.options[0], "right");
     } else {
         panic("expected Group");
     }
