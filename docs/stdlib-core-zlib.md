@@ -214,14 +214,6 @@ Compresses data in zlib format (RFC 1950).
 Decompresses gzip-wrapped data (RFC 1952), concatenating its members and failing
 with `ZlibError::OutputExceedsMax` once their output would pass `max_output`.
 
-### `pub fn gzip_compress(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> ByteList`
-
-Compresses data in gzip format (RFC 1952) with a minimal header.
-
-`level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
-`Z_DEFAULT_STRATEGY`. Use `gzip_compress_with_header` to set MTIME, file
-name, comment, and other gzip header fields.
-
 ### `pub fn uncompress(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
 Auto-detects the wrapper format (zlib or gzip) and decompresses, failing with
@@ -234,10 +226,10 @@ Compresses data as raw DEFLATE (RFC 1951) with no wrapper header or trailer.
 `level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
 `Z_DEFAULT_STRATEGY`.
 
-### `pub fn gzip_compress_with_header(input: &ByteList, level: i32, header: &GzipHeader) -> ByteList`
+### `pub fn gzip_compress(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY, header: &GzipHeader = &GzipHeader::new()) -> ByteList`
 
-Compresses data in gzip format using the given compression level and a
-caller-supplied header.
+Compresses data as one gzip member (RFC 1952). `header` sets MTIME, the file
+name, the comment and the other optional fields; the default sets none.
 
 ### `pub fn inflate_get_gzip_header(input: &ByteList) -> Result<GzipHeader, ZlibError>`
 
@@ -255,7 +247,7 @@ sync flush.
 
 ### `pub struct GzipHeader`
 
-A gzip header (RFC 1952) used by `gzip_compress_with_header` to set
+A gzip header (RFC 1952) used by `gzip_compress` to set
 optional fields and by `inflate_get_gzip_header` to report them.
 
 _Fields are private._
@@ -331,23 +323,10 @@ without buffering. The output wrapper is selected by `format` (defaults to
 
 _Fields are private._
 
-#### `pub fn new(level: i32) -> DeflateStream`
+#### `pub fn new(level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY, format: i32 = ZLIB_FORMAT) -> DeflateStream`
 
-Creates a stream that emits zlib format at the given compression level
-using `Z_DEFAULT_STRATEGY`.
-
-#### `pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream`
-
-Creates a zlib-format stream with an explicit strategy.
-
-#### `pub fn new_with_format(level: i32, format: i32) -> DeflateStream`
-
-Creates a stream with the given output `format`
-(`ZLIB_FORMAT`, `RAW_FORMAT`, or `GZIP_FORMAT`).
-
-#### `pub fn new_full(level: i32, strategy: i32, format: i32) -> DeflateStream`
-
-Creates a stream with explicit `level`, `strategy`, and `format`.
+Creates a stream emitting `format` (`ZLIB_FORMAT`, `RAW_FORMAT`, or
+`GZIP_FORMAT`).
 
 #### `pub fn set_header(&mut self, header: &GzipHeader)`
 
@@ -414,13 +393,9 @@ the decompressed output. `decompress` is a single-shot variant.
 
 _Fields are private._
 
-#### `pub fn new() -> InflateStream`
+#### `pub fn new(format: i32 = ZLIB_FORMAT) -> InflateStream`
 
-Creates a stream that expects zlib-wrapped input.
-
-#### `pub fn new_with_format(format: i32) -> InflateStream`
-
-Creates a stream for the given input `format`
+Creates a stream for input in `format`
 (`ZLIB_FORMAT`, `RAW_FORMAT`, `GZIP_FORMAT`, or `AUTO_FORMAT`).
 
 #### `pub fn get_total_in(&self) -> i32`

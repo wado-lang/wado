@@ -42,7 +42,8 @@ use {
     deflate_stored,
     inflate_raw,
     gzip_compress,
-    gzip_compress_with_header,
+    BitWriter,
+    bi_reverse,
     inflate_gzip,
     inflate_get_gzip_header,
     GzipHeader,
@@ -55,19 +56,8 @@ use {
     GZIP_FORMAT,
     AUTO_FORMAT,
     zlib_version,
+    inflate_sync_find,
 } from "core:zlib";
-
-fn bytes_equal(a: &ByteList, b: &ByteList) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    for let mut i = 0; i < a.len(); i += 1 {
-        if a[i] != b[i] {
-            return false;
-        }
-    }
-    return true;
-}
 
 fn string_to_bytes(s: String) -> ByteList {
     let mut out = ByteList::with_capacity(s.len());
@@ -232,7 +222,7 @@ test "inflate zlib Hello" {
     let expected: ByteList = [72, 101, 108, 108, 111];
     let compressed: ByteList = [120, 156, 243, 72, 205, 201, 201, 7, 0, 5, 140, 1, 245];
     let result = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&expected, &result), "inflate Hello mismatch";
+    assert result == expected;
 }
 
 test "inflate zlib 1000xA" {
@@ -288,21 +278,21 @@ test "stored block round-trip Hello" {
     let data: ByteList = [72, 101, 108, 108, 111];
     let compressed = zlib_compress_stored(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "stored block round-trip 1000 bytes" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress_stored(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "Huffman round-trip Hello" {
     let data: ByteList = [72, 101, 108, 108, 111];
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "Huffman round-trip empty" {
@@ -317,14 +307,14 @@ test "Huffman round-trip repetitive data" {
     let compressed = zlib_compress(&data);
     assert compressed.len() < data.len(), "repetitive data should compress";
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "Huffman round-trip mixed data" {
     let data = make_pattern_data(500);
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "Huffman round-trip Hello World x20" {
@@ -338,7 +328,7 @@ test "Huffman round-trip Hello World x20" {
     let compressed = zlib_compress(&data);
     assert compressed.len() < data.len(), "repetitive text should compress";
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "compress_bound exceeds source length" {
@@ -350,28 +340,28 @@ test "compression level 0 (stored) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress(&data, Z_NO_COMPRESSION);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "compression level 1 (fastest) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress(&data, Z_BEST_SPEED);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "compression level 6 (default) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress(&data, Z_DEFAULT_COMPRESSION);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "compression level 9 (best) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress(&data, Z_BEST_COMPRESSION);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "stored is larger than compressed" {
@@ -386,8 +376,8 @@ test "stored block round-trip empty" {
     let data: ByteList = [];
     let compressed = deflate_raw(&data, Z_NO_COMPRESSION);
     assert compressed.len() == 5;
-    assert bytes_equal(&data, &inflate_raw(&compressed).unwrap());
-    assert bytes_equal(&data, &inflate_zlib(&zlib_compress(&data, Z_NO_COMPRESSION)).unwrap());
+    assert inflate_raw(&compressed).unwrap() == data;
+    assert inflate_zlib(&zlib_compress(&data, Z_NO_COMPRESSION)).unwrap() == data;
 }
 
 test "a match deep in the hash chain is still found" {
@@ -398,7 +388,7 @@ test "a match deep in the hash chain is still found" {
     let data = make_wordy(60000);
     let compressed = deflate_raw(&data, 6);
     assert compressed.len() < 17000, `hash chain walk degraded: ${compressed.len()} bytes`;
-    assert bytes_equal(&data, &inflate_raw(&compressed).unwrap());
+    assert inflate_raw(&compressed).unwrap() == data;
 }
 
 test "default strategy never loses to fixed or stored" {
@@ -421,7 +411,7 @@ test "default strategy never loses to fixed or stored" {
         let stored = deflate_raw(data, 0);
         assert chosen.len() <= fixed.len();
         assert chosen.len() <= stored.len();
-        assert bytes_equal(data, &inflate_raw(&chosen).unwrap());
+        assert inflate_raw(&chosen).unwrap() == *data;
     }
 }
 
@@ -429,21 +419,21 @@ test "strategy Huffman-only round-trip" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress(&data, 6, Z_HUFFMAN_ONLY);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "strategy RLE round-trip" {
     let data = make_repeated(65, 1000);
     let compressed = zlib_compress(&data, 6, Z_RLE);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "strategy fixed round-trip" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress(&data, 6, Z_FIXED);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "raw deflate round-trip" {
@@ -451,22 +441,22 @@ test "raw deflate round-trip" {
     let compressed = deflate_raw(&data);
     assert compressed[0] != 0x78, "raw should not have zlib header";
     let decompressed = inflate_raw(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "raw deflate levels" {
     let data = string_to_bytes("Hello, raw deflate!");
     let c1 = deflate_raw(&data, Z_BEST_SPEED);
-    assert bytes_equal(&data, &inflate_raw(&c1).unwrap());
+    assert inflate_raw(&c1).unwrap() == data;
     let c9 = deflate_raw(&data, Z_BEST_COMPRESSION);
-    assert bytes_equal(&data, &inflate_raw(&c9).unwrap());
+    assert inflate_raw(&c9).unwrap() == data;
 }
 
 test "raw deflate large data" {
     let data = make_pattern_data(2000);
     let compressed = deflate_raw(&data);
     let decompressed = inflate_raw(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "gzip round-trip" {
@@ -476,29 +466,29 @@ test "gzip round-trip" {
     assert compressed[1] == 0x8B, "gzip magic byte 2";
     assert compressed[2] == 8, "gzip method deflate";
     let decompressed = inflate_gzip(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "gzip compression levels" {
     let data = string_to_bytes("Hello, gzip!");
     let c1 = gzip_compress(&data, Z_BEST_SPEED);
-    assert bytes_equal(&data, &inflate_gzip(&c1).unwrap());
+    assert inflate_gzip(&c1).unwrap() == data;
     let c9 = gzip_compress(&data, Z_BEST_COMPRESSION);
-    assert bytes_equal(&data, &inflate_gzip(&c9).unwrap());
+    assert inflate_gzip(&c9).unwrap() == data;
 }
 
 test "gzip large data" {
     let data = make_pattern_data(5000);
     let compressed = gzip_compress(&data);
     let decompressed = inflate_gzip(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "gzip uncompress auto-detection" {
     let data = make_pattern_data(5000);
     let compressed = gzip_compress(&data);
     let decompressed = uncompress(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "gzip multi-member" {
@@ -530,7 +520,7 @@ test "DeflateStream one-shot" {
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
     let compressed = ds.compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "InflateStream one-shot" {
@@ -539,7 +529,7 @@ test "InflateStream one-shot" {
     let compressed = ds.compress(&data);
     let is = InflateStream::new();
     let decompressed = is.decompress(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "DeflateStream chunked update/finish" {
@@ -558,7 +548,7 @@ test "DeflateStream chunked update/finish" {
     ds.update(&chunk2);
     let compressed = ds.finish();
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "InflateStream chunked update/finish" {
@@ -580,7 +570,7 @@ test "InflateStream chunked update/finish" {
     is.update(&c1);
     is.update(&c2);
     let decompressed = is.finish().unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "DeflateStream with different level" {
@@ -588,30 +578,30 @@ test "DeflateStream with different level" {
     let mut ds = DeflateStream::new(Z_BEST_SPEED);
     let compressed = ds.compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "stream raw format round-trip" {
     let data = make_pattern_data(200);
-    let mut ds = DeflateStream::new_with_format(Z_DEFAULT_COMPRESSION, RAW_FORMAT);
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY, RAW_FORMAT);
     let compressed = ds.compress(&data);
     assert compressed[0] != 0x78, "raw stream should not have zlib header";
 
-    let is = InflateStream::new_with_format(RAW_FORMAT);
+    let is = InflateStream::new(RAW_FORMAT);
     let decompressed = is.decompress(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "stream gzip format round-trip" {
     let data = make_pattern_data(200);
-    let mut ds = DeflateStream::new_with_format(Z_DEFAULT_COMPRESSION, GZIP_FORMAT);
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY, GZIP_FORMAT);
     let compressed = ds.compress(&data);
     assert compressed[0] == 0x1F, "gzip magic 1";
     assert compressed[1] == 0x8B, "gzip magic 2";
 
-    let is = InflateStream::new_with_format(GZIP_FORMAT);
+    let is = InflateStream::new(GZIP_FORMAT);
     let decompressed = is.decompress(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "stream auto-detect zlib" {
@@ -619,19 +609,19 @@ test "stream auto-detect zlib" {
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
     let compressed = ds.compress(&data);
 
-    let is = InflateStream::new_with_format(AUTO_FORMAT);
+    let is = InflateStream::new(AUTO_FORMAT);
     let decompressed = is.decompress(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "stream auto-detect gzip" {
     let data = make_pattern_data(200);
-    let mut ds = DeflateStream::new_with_format(Z_DEFAULT_COMPRESSION, GZIP_FORMAT);
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY, GZIP_FORMAT);
     let compressed = ds.compress(&data);
 
-    let is = InflateStream::new_with_format(AUTO_FORMAT);
+    let is = InflateStream::new(AUTO_FORMAT);
     let decompressed = is.decompress(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "DeflateStream reset" {
@@ -674,14 +664,14 @@ test "uncompress round-trip" {
     let data = make_pattern_data(100);
     let compressed = zlib_compress(&data, Z_DEFAULT_COMPRESSION);
     let decompressed = uncompress(&compressed).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "uncompress with limit" {
     let data = make_pattern_data(100);
     let compressed = zlib_compress(&data, Z_DEFAULT_COMPRESSION);
     let decompressed = uncompress(&compressed, 200).unwrap();
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "uncompress with limit (exceeded)" {
@@ -696,14 +686,14 @@ test "every inflate entry point stops once its output would pass max_output" {
     let raw = deflate_raw(&data);
     let zlib = zlib_compress(&data);
     let gz = gzip_compress(&data);
-    assert inflate_raw(&raw, 4096) matches { Ok(out) && bytes_equal(&out, &data) };
+    assert inflate_raw(&raw, 4096) matches { Ok(out) && out == data };
     assert inflate_raw(&raw, 4095) matches { Err(ZlibError::OutputExceedsMax) };
-    assert inflate_zlib(&zlib, 4096) matches { Ok(out) && bytes_equal(&out, &data) };
+    assert inflate_zlib(&zlib, 4096) matches { Ok(out) && out == data };
     assert inflate_zlib(&zlib, 4095) matches { Err(ZlibError::OutputExceedsMax) };
-    assert inflate_gzip(&gz, 4096) matches { Ok(out) && bytes_equal(&out, &data) };
+    assert inflate_gzip(&gz, 4096) matches { Ok(out) && out == data };
     assert inflate_gzip(&gz, 4095) matches { Err(ZlibError::OutputExceedsMax) };
     assert uncompress(&gz, 4095) matches { Err(ZlibError::OutputExceedsMax) };
-    assert InflateStream::new_with_format(RAW_FORMAT).decompress(&raw, 4095) matches { Err(ZlibError::OutputExceedsMax) };
+    assert InflateStream::new(RAW_FORMAT).decompress(&raw, 4095) matches { Err(ZlibError::OutputExceedsMax) };
     let mut stream = InflateStream::new();
     stream.update(&zlib);
     assert stream.finish(4095) matches { Err(ZlibError::OutputExceedsMax) };
@@ -715,7 +705,7 @@ test "max_output holds stored, literal and match output alike" {
     let data = make_pattern_data(1000);
     let stored = deflate_stored(&data);
     assert inflate_raw(&stored, 999) matches { Err(ZlibError::OutputExceedsMax) };
-    assert inflate_raw(&stored, 1000) matches { Ok(out) && bytes_equal(&out, &data) };
+    assert inflate_raw(&stored, 1000) matches { Ok(out) && out == data };
     let literals_then_match: ByteList = [0x73, 0x74, 0x02, 0x43, 0x00];  // "AB" + <5, 2>
     assert inflate_raw(&literals_then_match, 1) matches { Err(ZlibError::OutputExceedsMax) };
     assert inflate_raw(&literals_then_match, 6) matches { Err(ZlibError::OutputExceedsMax) };
@@ -759,7 +749,7 @@ test "round-trip large data (>32KB window boundary)" {
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed.len() == 34054, "decompressed size mismatch";
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "round-trip 100KB data" {
@@ -767,7 +757,7 @@ test "round-trip 100KB data" {
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed.len() == 100000, "decompressed size mismatch";
-    assert bytes_equal(&data, &decompressed);
+    assert decompressed == data;
 }
 
 test "inflate_zlib error on invalid data" {
@@ -803,7 +793,7 @@ fn gzip_hello_world() -> ByteList {
 // LEN=5 and NLEN=~5, then the five literal bytes of "Hello".
 test "inflate raw stored block (RFC 1951 3.2.4)" {
     let stream: ByteList = [0x01, 0x05, 0x00, 0xFA, 0xFF, 72, 101, 108, 108, 111];
-    assert bytes_equal(&inflate_raw(&stream).unwrap(), &string_to_bytes("Hello"));
+    assert inflate_raw(&stream).unwrap() == string_to_bytes("Hello");
 }
 
 // RFC 1951 section 3.2.4: an empty final stored block (LEN=0, NLEN=0xFFFF).
@@ -819,7 +809,7 @@ test "inflate raw empty stored block (RFC 1951 3.2.4)" {
 test "inflate raw overlapping match (RFC 1951 3.2.3)" {
     let stream: ByteList = [0x73, 0x74, 0x02, 0x43, 0x00];
     let expected: ByteList = [65, 66, 65, 66, 65, 66, 65];  // "ABABABA"
-    assert bytes_equal(&inflate_raw(&stream).unwrap(), &expected);
+    assert inflate_raw(&stream).unwrap() == expected;
 }
 
 // RFC 1951 section 3.2.5: the maximum match length, 258, encoded with length
@@ -848,7 +838,7 @@ test "inflate raw dynamic Huffman block (RFC 1951 3.2.7)" {
     let text = "In the beginning the Universe was created. This has made a lot of people very angry and been widely regarded as a bad move. Many races believe that it was created by some sort of god.";
     let out = inflate_raw(&stream).unwrap();
     assert out.len() == 183;
-    assert bytes_equal(&out, &string_to_bytes(text));
+    assert out == string_to_bytes(text);
 }
 
 // RFC 1951 section 3.2.3: a distance cannot refer past the beginning of the
@@ -878,7 +868,7 @@ test "max_output holds at every limit" {
     for let mut limit = 0; limit < data.len(); limit += 1 {
         assert inflate_raw(&raw, limit) matches { Err(ZlibError::OutputExceedsMax) }, `limit ${limit}`;
     }
-    assert inflate_raw(&raw, data.len()) matches { Ok(out) && bytes_equal(&out, &data) };
+    assert inflate_raw(&raw, data.len()) matches { Ok(out) && out == data };
 }
 
 // The fast loop reads input ahead of the bits it decodes; the next member's
@@ -891,82 +881,55 @@ test "gzip members after a long member decode in place" {
     members.extend(&gzip_compress(&second));
     let out = inflate_gzip(&members).unwrap();
     assert out.len() == first.len() + second.len();
-    assert bytes_equal(&(out[0..<first.len()].to_list() as ByteList), &first);
-    assert bytes_equal(&(out[first.len()..<out.len()].to_list() as ByteList), &second);
+    assert out[0..<first.len()].to_list() as ByteList == first;
+    assert out[first.len()..<out.len()].to_list() as ByteList == second;
 }
 
-// Writes the malformed streams no encoder emits. A header field goes least
-// significant bit first, a Huffman code most significant bit first (RFC 1951
-// section 3.1.1).
-struct BitWriter {
-    out: ByteList,
-    acc: i32,
-    count: i32,
+// The malformed streams below are ones no encoder emits, so they are written
+// field by field with the encoder's own BitWriter.
+
+fn huffman(w: &mut BitWriter, code: i32, n: i32) {
+    w.write_bits(bi_reverse(code as u32, n), n);
 }
 
-impl BitWriter {
-    fn new() -> BitWriter {
-        return BitWriter { out: [], acc: 0, count: 0 };
-    }
+fn open_fixed_block(w: &mut BitWriter) {
+    w.write_bits(1, 1);
+    w.write_bits(1, 2);
+}
 
-    fn bits(&mut self, value: i32, n: i32) {
-        for let mut i = 0; i < n; i += 1 {
-            self.acc = self.acc | (value >> i & 1) << self.count;
-            self.count += 1;
-            if self.count == 8 {
-                self.out.push(self.acc as u8);
-                self.acc = 0;
-                self.count = 0;
-            }
+// A final dynamic block (RFC 1951 section 3.2.7) whose code length code gives
+// `lengths[symbol]` bits to each code length symbol.
+fn open_dynamic_block(w: &mut BitWriter, nlen: i32, ndist: i32, lengths: &List<i32>) {
+    let order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+    let mut ncode = 4;
+    for let mut i = 0; i < 19; i += 1 {
+        if lengths[order[i]] != 0 {
+            ncode = i32::max(ncode, i + 1);
         }
     }
+    w.write_bits(1, 1);
+    w.write_bits(2, 2);
+    w.write_bits((nlen - 257) as u32, 5);
+    w.write_bits((ndist - 1) as u32, 5);
+    w.write_bits((ncode - 4) as u32, 4);
+    for let mut i = 0; i < ncode; i += 1 {
+        w.write_bits(lengths[order[i]] as u32, 3);
+    }
+}
 
-    fn code(&mut self, code: i32, n: i32) {
-        for let mut i = n - 1; i >= 0; i -= 1 {
-            self.bits(code >> i, 1);
-        }
+// The stream so far, its last byte zero-filled, then `padding` zero bytes.
+fn finish(w: &BitWriter, padding: i32) -> ByteList {
+    let mut flushed = *w;
+    flushed.flush();
+    let mut out = flushed.output;
+    for let mut i = 0; i < padding; i += 1 {
+        out.push(0);
     }
-
-    fn fixed_block(&mut self) {
-        self.bits(1, 1);
-        self.bits(1, 2);
-    }
-
-    // A final dynamic block (RFC 1951 section 3.2.7) whose code length code
-    // gives `lengths[symbol]` bits to each code length symbol.
-    fn dynamic_block(&mut self, nlen: i32, ndist: i32, lengths: &List<i32>) {
-        let order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
-        let mut ncode = 4;
-        for let mut i = 0; i < 19; i += 1 {
-            if lengths[order[i]] != 0 {
-                ncode = i32::max(ncode, i + 1);
-            }
-        }
-        self.bits(1, 1);
-        self.bits(2, 2);
-        self.bits(nlen - 257, 5);
-        self.bits(ndist - 1, 5);
-        self.bits(ncode - 4, 4);
-        for let mut i = 0; i < ncode; i += 1 {
-            self.bits(lengths[order[i]], 3);
-        }
-    }
-
-    // The stream so far, its last byte zero-filled, then `padding` zero bytes.
-    fn finish(&self, padding: i32) -> ByteList {
-        let mut out = self.out;
-        if self.count > 0 {
-            out.push(self.acc as u8);
-        }
-        for let mut i = 0; i < padding; i += 1 {
-            out.push(0);
-        }
-        return out;
-    }
+    return out;
 }
 
 fn rejects(w: &BitWriter, padding: i32) -> bool {
-    return inflate_raw(&w.finish(padding)) matches { Err(ZlibError::InvalidDeflateData) };
+    return inflate_raw(&finish(w, padding)) matches { Err(ZlibError::InvalidDeflateData) };
 }
 
 // A code length code giving one bit each to two code length symbols, whose
@@ -985,8 +948,8 @@ test "literal/length codes 286 and 287 are rejected" {
     let symbols: List<i32> = [286, 287];
     for let symbol of symbols {
         let mut w = BitWriter::new();
-        w.fixed_block();
-        w.code(0b11000000 + symbol - 280, 8);
+        open_fixed_block(&mut w);
+        huffman(&mut w, 0b11000000 + symbol - 280, 8);
         assert rejects(&w, 0), `${symbol} unpadded`;
         assert rejects(&w, 8), `${symbol} padded`;
     }
@@ -998,9 +961,9 @@ test "distance codes 30 and 31 are rejected" {
     let symbols: List<i32> = [30, 31];
     for let symbol of symbols {
         let mut w = BitWriter::new();
-        w.fixed_block();
-        w.code(1, 7);
-        w.code(symbol, 5);
+        open_fixed_block(&mut w);
+        huffman(&mut w, 1, 7);
+        huffman(&mut w, symbol, 5);
         assert rejects(&w, 0), `${symbol} unpadded`;
         assert rejects(&w, 8), `${symbol} padded`;
     }
@@ -1025,9 +988,9 @@ test "a stored block whose NLEN is not LEN's complement is rejected" {
 test "a dynamic block counting more codes than the alphabet has is rejected" {
     let lengths = two_symbol_code_lengths(0, 16);
     let mut too_many_lengths = BitWriter::new();
-    too_many_lengths.dynamic_block(287, 1, &lengths);
+    open_dynamic_block(&mut too_many_lengths, 287, 1, &lengths);
     let mut too_many_distances = BitWriter::new();
-    too_many_distances.dynamic_block(257, 31, &lengths);
+    open_dynamic_block(&mut too_many_distances, 257, 31, &lengths);
     assert rejects(&too_many_lengths, 4);
     assert rejects(&too_many_distances, 4);
 }
@@ -1040,7 +1003,7 @@ test "an over-subscribed code length code is rejected" {
     lengths[18] = 1;
     lengths[0] = 1;
     let mut w = BitWriter::new();
-    w.dynamic_block(257, 1, &lengths);
+    open_dynamic_block(&mut w, 257, 1, &lengths);
     assert rejects(&w, 4);
 }
 
@@ -1048,26 +1011,26 @@ test "an over-subscribed code length code is rejected" {
 // first length does not have.
 test "a repeat before any code length is rejected" {
     let mut w = BitWriter::new();
-    w.dynamic_block(257, 1, &two_symbol_code_lengths(0, 16));
-    w.code(1, 1);
-    w.bits(0, 2);
+    open_dynamic_block(&mut w, 257, 1, &two_symbol_code_lengths(0, 16));
+    huffman(&mut w, 1, 1);
+    w.write_bits(0, 2);
     assert rejects(&w, 4);
 }
 
 test "a block without an end-of-block code is rejected" {
     let mut w = BitWriter::new();
-    w.dynamic_block(257, 1, &two_symbol_code_lengths(0, 16));
+    open_dynamic_block(&mut w, 257, 1, &two_symbol_code_lengths(0, 16));
     for let mut i = 0; i < 258; i += 1 {
-        w.code(0, 1);
+        huffman(&mut w, 0, 1);
     }
     assert rejects(&w, 4);
 }
 
 test "an over-subscribed literal/length code is rejected" {
     let mut w = BitWriter::new();
-    w.dynamic_block(257, 1, &two_symbol_code_lengths(0, 1));
+    open_dynamic_block(&mut w, 257, 1, &two_symbol_code_lengths(0, 1));
     for let mut i = 0; i < 258; i += 1 {
-        w.code(1, 1);
+        huffman(&mut w, 1, 1);
     }
     assert rejects(&w, 4);
 }
@@ -1076,15 +1039,44 @@ test "an over-subscribed literal/length code is rejected" {
 // end-of-block, and the distance code gives one bit each to three distances.
 test "an over-subscribed distance code is rejected" {
     let mut w = BitWriter::new();
-    w.dynamic_block(257, 3, &two_symbol_code_lengths(0, 1));
-    w.code(1, 1);
+    open_dynamic_block(&mut w, 257, 3, &two_symbol_code_lengths(0, 1));
+    huffman(&mut w, 1, 1);
     for let mut i = 1; i < 256; i += 1 {
-        w.code(0, 1);
+        huffman(&mut w, 0, 1);
     }
     for let mut i = 0; i < 4; i += 1 {
-        w.code(1, 1);
+        huffman(&mut w, 1, 1);
     }
     assert rejects(&w, 4);
+}
+
+// A lone two-bit code leaves half the code space unused. RFC 1951 section
+// 3.2.7 allows an incomplete code only for a single one-bit distance code.
+test "an incomplete literal/length code is rejected" {
+    let mut w = BitWriter::new();
+    open_dynamic_block(&mut w, 257, 1, &two_symbol_code_lengths(0, 2));
+    for let mut i = 0; i < 256; i += 1 {
+        huffman(&mut w, 0, 1);
+    }
+    huffman(&mut w, 1, 1);
+    huffman(&mut w, 0, 1);
+    assert rejects(&w, 4);
+}
+
+// RFC 1951 section 3.2.7: "One distance code of zero bits means that there are
+// no distance codes used at all (the data is all literals)."
+test "a block of literals may give every distance a zero length" {
+    let mut w = BitWriter::new();
+    open_dynamic_block(&mut w, 257, 1, &two_symbol_code_lengths(0, 1));
+    for let mut symbol = 0; symbol < 257; symbol += 1 {
+        huffman(&mut w, if symbol == 65 || symbol == 256 { 1 } else { 0 }, 1);
+    }
+    huffman(&mut w, 0, 1);
+    huffman(&mut w, 0, 1);
+    huffman(&mut w, 0, 1);
+    huffman(&mut w, 1, 1);
+    let expected: ByteList = [65, 65];
+    assert inflate_raw(&finish(&w, 0)) matches { Ok(out) && out == expected };
 }
 
 // RFC 1950 section 2.2: FCHECK requires CMF*256+FLG to be a multiple of 31.
@@ -1131,7 +1123,7 @@ test "inflate zlib rejects truncated deflate body (RFC 1951 3.2.3)" {
 // RFC 1952: a complete reference gzip member decodes to its original bytes.
 test "inflate gzip reference member (RFC 1952)" {
     let gz = gzip_hello_world();
-    assert bytes_equal(&inflate_gzip(&gz).unwrap(), &string_to_bytes("hello world"));
+    assert inflate_gzip(&gz).unwrap() == string_to_bytes("hello world");
 }
 
 // RFC 1952 section 2.3.1: the CRC32 trailer must match the uncompressed data.
@@ -1164,16 +1156,243 @@ test "gzip header preserves UTF-8 name and comment" {
     header.set_comment("コメント 😀");
 
     let data = string_to_bytes("payload");
-    let compressed = gzip_compress_with_header(&data, Z_DEFAULT_COMPRESSION, &header);
+    let compressed = gzip_compress(&data, Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY, &header);
 
     let parsed = inflate_get_gzip_header(&compressed).unwrap();
     assert parsed.name() == "café_日本語.txt", "FNAME must round-trip as UTF-8";
     assert parsed.comment() == "コメント 😀", "FCOMMENT must round-trip as UTF-8";
 
     // The body still inflates correctly with non-ASCII header fields present.
-    assert bytes_equal(&data, &inflate_gzip(&compressed).unwrap());
+    assert inflate_gzip(&compressed).unwrap() == data;
 }
 
 test "ZlibError renders its reason" {
     assert `${uncompress(&([1 as u8] as ByteList)).unwrap_err()}` == "input is shorter than the smallest valid stream";
+}
+
+test "every ZlibError renders a distinct reason" {
+    let errors: List<ZlibError> = [
+        ZlibError::DataTooShort, ZlibError::InvalidHeader, ZlibError::InvalidMagicNumber,
+        ZlibError::UnsupportedCompressionMethod, ZlibError::PresetDictionaryNotSupported, ZlibError::Adler32Mismatch,
+        ZlibError::Crc32Mismatch, ZlibError::TruncatedExtraField, ZlibError::HeaderExtendsPastEnd,
+        ZlibError::TruncatedTrailer, ZlibError::IsizeMismatch, ZlibError::OutputExceedsMax,
+        ZlibError::InvalidDeflateData,
+    ];
+    let mut reasons: List<String> = [];
+    for let error of errors {
+        let reason = `${error}`;
+        assert reason.len() > 0 && !reasons.contains(&reason), reason;
+        reasons.push(reason);
+    }
+}
+
+test "combined checksums match the whole at every split" {
+    let data = make_incompressible(70000);
+    let whole_adler = adler32(adler32_init(), &data, 0, data.len());
+    let whole_crc = crc32(crc32_init(), &data, 0, data.len());
+    let splits: List<i32> = [0, 1, 2, 3, 100, 4096, 65520, 65521, 65522, 69000, 69998, 69999, 70000];
+    for let split of splits {
+        let rest = data.len() - split;
+        let adler_head = adler32(adler32_init(), &data, 0, split);
+        let adler_tail = adler32(adler32_init(), &data, split, rest);
+        assert adler32_combine(adler_head, adler_tail, rest) == whole_adler, `Adler-32 split at ${split}`;
+        let crc_head = crc32(crc32_init(), &data, 0, split);
+        let crc_tail = crc32(crc32_init(), &data, split, rest);
+        assert crc32_combine(crc_head, crc_tail, rest) == whole_crc, `CRC-32 split at ${split}`;
+    }
+
+    // Bytes summing to 65520 leave Adler-32's low sum at 1 + 65520 = 0 mod 65521.
+    let mut wraps = make_repeated(255, 256);
+    wraps.push(240);
+    let mut twice = wraps;
+    twice.extend(&wraps);
+    let wraps_adler = adler32(adler32_init(), &wraps, 0, wraps.len());
+    assert wraps_adler & 0xFFFF == 0;
+    assert adler32_combine(wraps_adler, wraps_adler, wraps.len()) == adler32(adler32_init(), &twice, 0, twice.len());
+}
+
+test "inflate zlib rejects an Adler-32 mismatch (RFC 1950 2.2)" {
+    let mut stream = zlib_compress(&make_wordy(300));
+    let last = stream.len() - 1;
+    stream[last] = stream[last] ^ 1;
+    assert inflate_zlib(&stream) matches { Err(ZlibError::Adler32Mismatch) };
+}
+
+// Past 32 KiB a match candidate can fall outside the window, and each level
+// walks its hash chains under its own limits.
+test "every level and strategy round-trips input longer than the window" {
+    let data = make_wordy(70000);
+    for let mut level = 0; level <= 9; level += 1 {
+        for let mut strategy = 0; strategy <= 4; strategy += 1 {
+            let raw = deflate_raw(&data, level, strategy);
+            assert inflate_raw(&raw) matches { Ok(out) && out == data }, `level ${level} strategy ${strategy}`;
+        }
+        assert uncompress(&zlib_compress(&data, level)) matches { Ok(out) && out == data }, `zlib level ${level}`;
+    }
+}
+
+// Byte k appears fib(k + 2) times, and the end-of-block code once, so the
+// frequencies are the Fibonacci numbers: the distribution that gives the deepest
+// Huffman tree. Its 23 codes want up to 22 bits, and DEFLATE allows 15.
+test "a Fibonacci-skewed distribution round-trips with codes limited to 15 bits" {
+    let mut data: ByteList = [];
+    let mut count = 1;
+    let mut next = 2;
+    for let mut k = 0; k < 22; k += 1 {
+        for let mut i = 0; i < count; i += 1 {
+            data.push(k as u8);
+        }
+        let sum = count + next;
+        count = next;
+        next = sum;
+    }
+    let raw = deflate_raw(&data, Z_DEFAULT_COMPRESSION, Z_HUFFMAN_ONLY);
+    assert inflate_raw(&raw) matches { Ok(out) && out == data };
+}
+
+test "a default gzip header sets no optional field" {
+    let header = inflate_get_gzip_header(&gzip_compress(&make_wordy(100))).unwrap();
+    assert !header.text() && !header.hcrc();
+    assert header.time() == 0 && header.os() == 0xFF;
+    assert header.extra().len() == 0 && header.name() == "" && header.comment() == "";
+}
+
+test "every gzip header field round-trips" {
+    let mut header = GzipHeader::new();
+    header.set_text(true);
+    header.set_time(1700000000);
+    header.set_os(3);
+    let extra: ByteList = [0x41, 0x70, 2, 0, 7, 9];
+    header.set_extra(&extra);
+    header.set_name("data.json");
+    header.set_comment("fixture");
+    header.set_hcrc(true);
+    let data = make_wordy(800);
+    let levels: List<i32> = [Z_BEST_SPEED, Z_DEFAULT_COMPRESSION, Z_BEST_COMPRESSION];
+    for let level of levels {
+        let member = gzip_compress(&data, level, Z_DEFAULT_STRATEGY, &header);
+        let parsed = inflate_get_gzip_header(&member).unwrap();
+        assert parsed.text() && parsed.hcrc(), `level ${level}`;
+        assert parsed.time() == 1700000000 && parsed.os() == 3, `level ${level}`;
+        assert parsed.extra() == extra, `level ${level}`;
+        assert parsed.name() == "data.json" && parsed.comment() == "fixture", `level ${level}`;
+        assert inflate_gzip(&member) matches { Ok(out) && out == data }, `level ${level}`;
+    }
+
+    let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY, GZIP_FORMAT);
+    stream.set_header(&header);
+    let streamed = stream.compress(&data);
+    assert inflate_get_gzip_header(&streamed) matches { Ok(parsed) && parsed.name() == "data.json" };
+    assert inflate_gzip(&streamed) matches { Ok(out) && out == data };
+}
+
+// RFC 1952 section 2.3.1: ID1, ID2, CM and FLG open the member, and FEXTRA
+// puts a two-byte XLEN after the ten fixed bytes.
+test "a malformed gzip header is rejected" {
+    let too_short: ByteList = [0x1F, 0x8B, 8, 0, 0, 0, 0, 0, 0];
+    let wrong_magic: ByteList = [0x1F, 0x8C, 8, 0, 0, 0, 0, 0, 0, 0xFF, 3, 0];
+    let wrong_method: ByteList = [0x1F, 0x8B, 7, 0, 0, 0, 0, 0, 0, 0xFF, 3, 0];
+    let cut_in_xlen: ByteList = [0x1F, 0x8B, 8, 4, 0, 0, 0, 0, 0, 0xFF, 5];
+    assert inflate_get_gzip_header(&too_short) matches { Err(ZlibError::DataTooShort) };
+    assert inflate_gzip(&too_short) matches { Err(ZlibError::DataTooShort) };
+    assert inflate_get_gzip_header(&wrong_magic) matches { Err(ZlibError::InvalidMagicNumber) };
+    assert inflate_gzip(&wrong_method) matches { Err(ZlibError::UnsupportedCompressionMethod) };
+    assert inflate_get_gzip_header(&cut_in_xlen) matches { Err(ZlibError::TruncatedExtraField) };
+    assert inflate_gzip(&cut_in_xlen) matches { Err(ZlibError::TruncatedExtraField) };
+}
+
+test "a gzip header running past the end of the input is rejected" {
+    let unterminated_name: ByteList = [0x1F, 0x8B, 8, 8, 0, 0, 0, 0, 0, 0xFF, 0x61, 0x62];
+    let extra_past_end: ByteList = [0x1F, 0x8B, 8, 4, 0, 0, 0, 0, 0, 0xFF, 9, 0, 1, 2];
+    let crc_past_end: ByteList = [0x1F, 0x8B, 8, 2, 0, 0, 0, 0, 0, 0xFF, 0x12];
+    assert inflate_gzip(&unterminated_name) matches { Err(ZlibError::HeaderExtendsPastEnd) };
+    assert inflate_gzip(&extra_past_end) matches { Err(ZlibError::HeaderExtendsPastEnd) };
+    assert inflate_gzip(&crc_past_end) matches { Err(ZlibError::HeaderExtendsPastEnd) };
+}
+
+test "bytes after the last gzip member that do not open another are ignored" {
+    let data = make_wordy(300);
+    let mut one_byte_more = gzip_compress(&data);
+    one_byte_more.push(0x1F);
+    let mut zeros_after = gzip_compress(&data);
+    zeros_after.extend(&([0, 0, 0] as ByteList));
+    assert inflate_gzip(&one_byte_more) matches { Ok(out) && out == data };
+    assert inflate_gzip(&zeros_after) matches { Ok(out) && out == data };
+}
+
+test "streams count what they took and gave" {
+    let first = make_wordy(1000);
+    let second = make_pattern_data(2000);
+    let mut expected = first;
+    expected.extend(&second);
+    let mut deflate = DeflateStream::new(Z_BEST_SPEED, Z_FILTERED, RAW_FORMAT);
+    deflate.update(&first);
+    deflate.update(&second);
+    assert deflate.pending() == expected.len();
+    let compressed = deflate.finish();
+    assert deflate.get_total_in() == expected.len();
+    assert deflate.get_total_out() == compressed.len();
+    assert compressed.len() <= deflate.bound(expected.len());
+
+    let mut inflate = InflateStream::new(RAW_FORMAT);
+    inflate.update(&compressed);
+    assert inflate.finish() matches { Ok(out) && out == expected };
+    assert inflate.get_total_in() == compressed.len();
+    assert inflate.get_total_out() == expected.len();
+}
+
+test "DeflateStream params take effect at the next compress" {
+    let data = make_wordy(5000);
+    let mut stream = DeflateStream::new(Z_BEST_COMPRESSION);
+    stream.params(Z_NO_COMPRESSION, Z_DEFAULT_STRATEGY);
+    let stored = stream.compress(&data);
+    assert stored.len() > data.len();
+    assert uncompress(&stored) matches { Ok(out) && out == data };
+}
+
+#[expect_trap]
+test "DeflateStream refuses update after finish" {
+    let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    stream.finish();
+    stream.update(&make_pattern_data(1));
+}
+
+#[expect_trap]
+test "DeflateStream refuses a second finish" {
+    let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    stream.finish();
+    stream.finish();
+}
+
+#[expect_trap]
+test "DeflateStream refuses compress after compress" {
+    let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    stream.compress(&make_pattern_data(1));
+    stream.compress(&make_pattern_data(1));
+}
+
+test "InflateStream reset drops buffered input, and a copy keeps its own" {
+    let data = make_wordy(500);
+    let compressed = zlib_compress(&data);
+    let mut stream = InflateStream::new();
+    stream.update(&compressed);
+    let mut copy = stream.copy();
+    stream.update(&make_pattern_data(3));
+    stream.reset();
+    assert stream.get_total_in() == 0 && stream.get_total_out() == 0;
+    stream.update(&compressed);
+    assert stream.finish() matches { Ok(out) && out == data };
+    assert copy.finish() matches { Ok(out) && out == data };
+}
+
+// A sync flush ends with an empty stored block, whose LEN and NLEN are
+// `00 00 FF FF`; the block opens one byte earlier.
+test "inflate_sync_find locates the block before a sync marker" {
+    let marked: ByteList = [7, 1, 0, 0, 0xFF, 0xFF, 9];
+    let at_start: ByteList = [0, 0, 0xFF, 0xFF];
+    let unmarked: ByteList = [0, 0, 0xFF, 0xFE, 0];
+    assert inflate_sync_find(&marked, 0) == 1;
+    assert inflate_sync_find(&marked, 3) == -1;
+    assert inflate_sync_find(&at_start, 0) == 0;
+    assert inflate_sync_find(&unmarked, 0) == -1;
 }

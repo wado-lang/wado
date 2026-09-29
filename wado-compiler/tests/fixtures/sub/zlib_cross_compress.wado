@@ -37,6 +37,7 @@ use {
     crc32_init,
     crc32_combine,
     DeflateStream,
+    Z_DEFAULT_STRATEGY,
     RAW_FORMAT,
     GZIP_FORMAT,
 } from "core:zlib";
@@ -190,7 +191,7 @@ export fn run() with (Stdout, Stdin) {
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let mut ds = DeflateStream::new_with_format(level, RAW_FORMAT);
+        let mut ds = DeflateStream::new(level, Z_DEFAULT_STRATEGY, RAW_FORMAT);
         let result = ds.compress(&data);
         print_bytes(&result);
     } else if cmd == 14 {
@@ -200,7 +201,7 @@ export fn run() with (Stdout, Stdin) {
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let mut ds = DeflateStream::new_with_format(level, GZIP_FORMAT);
+        let mut ds = DeflateStream::new(level, Z_DEFAULT_STRATEGY, GZIP_FORMAT);
         let result = ds.compress(&data);
         print_bytes(&result);
     } else {
