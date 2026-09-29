@@ -25,10 +25,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
-    TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule,
-    TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
-    TypeId, TypeTable, transpose_tuple_expr,
+    self as tir, CallArg, GlobalInit, LetStorage, LocalFrame, ResolvedType, TirBinaryOp, TirBlock,
+    TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
+    TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp,
+    TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -2499,7 +2499,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     is_reactive: let_stmt.is_reactive,
                     type_id,
                     value: placeholder,
-                    skip_value_copy: false,
+                    storage: LetStorage::Planned,
                 },
                 let_stmt.span,
             );
@@ -2550,7 +2550,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         is_reactive: let_stmt.is_reactive,
                         type_id,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     let_stmt.span,
                 )
@@ -3173,7 +3173,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     is_reactive: false,
                     type_id,
                     value: resolved,
-                    skip_value_copy: false,
+                    storage: LetStorage::Planned,
                 },
                 cap_span,
             );
@@ -3199,7 +3199,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     is_reactive: false,
                     type_id: TypeTable::BOOL,
                     value: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, cap_span),
-                    skip_value_copy: true,
+                    storage: LetStorage::Taken,
                 },
                 cap_span,
             )];
@@ -3323,7 +3323,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 is_reactive: false,
                 type_id: string_type,
                 value: choice,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         )
@@ -3408,7 +3408,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 is_reactive: false,
                 type_id: cond_type,
                 value: cond_tir,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         ));
@@ -3672,7 +3672,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 is_reactive: false,
                 type_id: iter_type,
                 value: into_iter_call,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         );
@@ -3816,7 +3816,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 is_reactive: false,
                 type_id: tuple_type_id,
                 value: iterable,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         );
@@ -3928,7 +3928,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                     is_reactive: false,
                                     type_id: bind_elem_type,
                                     value: bind_value,
-                                    skip_value_copy: false,
+                                    storage: LetStorage::Planned,
                                 },
                                 span,
                             ));
@@ -4209,7 +4209,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     is_reactive: false,
                     type_id: elem_type,
                     value: field_access,
-                    skip_value_copy: false,
+                    storage: LetStorage::Planned,
                 },
                 span,
             ));
@@ -4965,7 +4965,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         is_reactive: false,
                         type_id: hole_ty,
                         value,
-                        skip_value_copy: false,
+                        storage: LetStorage::Planned,
                     },
                     expr.span(),
                 ));
@@ -5384,7 +5384,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     is_reactive: false,
                     type_id,
                     value,
-                    skip_value_copy: false,
+                    storage: LetStorage::Planned,
                 },
                 span,
             ));
@@ -5935,7 +5935,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 is_reactive: false,
                 type_id,
                 value,
-                skip_value_copy: false,
+                storage: LetStorage::Planned,
             },
             span,
         ));
@@ -6081,7 +6081,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         mc.ref_type,
                         span,
                     ),
-                    skip_value_copy: false,
+                    storage: LetStorage::Planned,
                 },
                 span,
             ));
@@ -6439,7 +6439,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             is_mut: false,
                             is_reactive: false,
                             type_id,
-                            skip_value_copy: false,
+                            storage: LetStorage::Planned,
                         },
                         span,
                     )
@@ -6543,7 +6543,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             is_reactive: false,
                             type_id: output_type,
                             value,
-                            skip_value_copy: false,
+                            storage: LetStorage::Planned,
                         },
                         member_span,
                     ));
@@ -10376,7 +10376,7 @@ fn bind_to_local(
             is_mut: false,
             is_reactive: false,
             type_id,
-            skip_value_copy: false,
+            storage: LetStorage::Planned,
         },
         span,
     ));

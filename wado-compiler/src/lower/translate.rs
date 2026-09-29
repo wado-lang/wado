@@ -45,11 +45,12 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
-    CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
-    StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
-    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirMatchArm,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
-    TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
+    CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, LetStorage, MonomorphInfo,
+    ResolvedType, StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind,
+    TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern, TirLocal,
+    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
+    TypeTable, receiver_value,
 };
 use crate::token::Span;
 use crate::{nir, tir};
@@ -400,13 +401,15 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
-        // functions (scalar/reference-only) hit this path.
+        // functions (scalar/reference-only) hit this path. A borrowed local is
+        // already retyped to its box, and the value it holds is what counts.
         let needs_copy_analysis = {
             let tt = base.type_table.borrow();
             func.params
                 .iter()
                 .map(|p| p.type_id)
                 .chain(func.locals.iter().map(|l| l.type_id))
+                .map(|tid| base.box_plan.get_box_inner_type(tid).unwrap_or(tid))
                 .any(|tid| value_copy::needs_value_copy(tid, &tt))
         };
         // One resolver for the body, shared by every question about what an
@@ -1134,7 +1137,7 @@ impl FunctionTranslator<'_, '_> {
                 is_reactive,
                 type_id,
                 value,
-                skip_value_copy,
+                storage,
             } => {
                 // Copy first, then box: a boxed local changes only its
                 // storage cell, not its value semantics.
@@ -1145,7 +1148,7 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     (*type_id, None)
                 };
-                let needs_value_copy_wrap = !*skip_value_copy
+                let needs_value_copy_wrap = !storage.skips_copy()
                     && !self.share_eligible_locals.contains(local_index)
                     && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                     && self.should_wrap_value_copy(value);
@@ -1167,7 +1170,7 @@ impl FunctionTranslator<'_, '_> {
                     is_reactive: *is_reactive,
                     type_id: effective_type,
                     value: value_op,
-                    skip_value_copy: *skip_value_copy,
+                    skip_value_copy: storage.skips_copy(),
                 }
             }
             TirStmtKind::Expr(expr) => StmtKind::Expr(self.convert_operand(expr)),
@@ -1420,7 +1423,7 @@ impl FunctionTranslator<'_, '_> {
                     // `value_copy::analyze`'s seed walker, so any
                     // wrap would look up a helper that was never
                     // registered.
-                    skip_value_copy: true,
+                    storage: LetStorage::Aliased,
                 },
                 scrutinee.span,
             );

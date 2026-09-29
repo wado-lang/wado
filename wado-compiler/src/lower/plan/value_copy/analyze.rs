@@ -9,8 +9,8 @@ use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
 use crate::tir::{
-    BuiltinDeclarations, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -78,7 +78,7 @@ impl TirRefVisitor for SeedWalker<'_> {
     }
 }
 
-/// Shape predicate shared with the fold. Site-specific gating — `skip_value_copy`,
+/// Shape predicate shared with the fold. Site-specific gating — `LetStorage`,
 /// an immutable `Let` source, an `Assign` whose target is a local — is the caller's.
 /// `fresh_locals` are the locals `expr` reads storage nothing else reaches from.
 pub fn should_wrap(
@@ -437,15 +437,17 @@ fn scan_stmt_for_breaks(
     type_table: &TypeTable,
 ) -> bool {
     match &stmt.kind {
-        // A `skip_value_copy` binding takes its source's storage over, so it
-        // owns the value whatever the source expression looks like.
+        // A `Taken` binding owns the value whatever the source expression
+        // looks like.
         TirStmtKind::Let {
             local_index,
             value,
-            skip_value_copy,
+            storage,
             ..
         } => {
-            if *skip_value_copy || is_owned_value(value, fresh_locals, oracle, type_table) {
+            if *storage == LetStorage::Taken
+                || is_owned_value(value, fresh_locals, oracle, type_table)
+            {
                 fresh_locals.insert(*local_index);
             }
             true

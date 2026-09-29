@@ -12,8 +12,8 @@ use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::tir;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
     capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -124,8 +124,9 @@ pub struct MoveEligible {
     /// Field and whole-value materializations that alias a dead aggregate out
     /// at a literal, keyed by the materialized expression's span.
     pub place_spans: IndexSet<Span>,
-    /// Whole-local reads the elaborator found final (`moved_local_spans`), of
-    /// locals no kept borrow pins, keyed by the read's span.
+    /// Whole-local value reads the elaborator found final (`moved_local_spans`),
+    /// of locals no kept borrow pins, and not reaching storage the same call
+    /// mutates, keyed by the read's span.
     pub read_spans: IndexSet<Span>,
 }
 
@@ -192,12 +193,14 @@ pub fn analyze_ownership(
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
         pending_mut_alias: Vec::new(),
+        mut_aliased_reads: IndexSet::default(),
         exits: Vec::new(),
         all_locals,
         place_cands: Vec::new(),
         declared_owned: IndexSet::default(),
         share_sources: IndexMap::default(),
         consumed: IndexMap::default(),
+        value_reads: IndexMap::default(),
         mutations: Vec::new(),
     };
     let mut live = IndexSet::default();
@@ -237,13 +240,16 @@ pub fn analyze_ownership(
         .collect();
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|site| site.base).collect();
     let place_spans: IndexSet<Span> = moved_places.iter().map(|site| site.span).collect();
-    let read_spans = local_reads(body)
-        .filter(|(local, span)| {
-            final_reads.contains(span)
-                && !borrowed_params.contains(local)
-                && !a.place_escaped(*local, None)
+    let read_spans = a
+        .value_reads
+        .iter()
+        .filter(|(span, local)| {
+            final_reads.contains(*span)
+                && !borrowed_params.contains(*local)
+                && !a.place_escaped(**local, None)
+                && !a.mut_aliased_reads.contains(*span)
         })
-        .map(|(_, span)| span)
+        .map(|(span, _)| *span)
         .collect();
 
     Ownership {
@@ -552,7 +558,7 @@ impl Analyzer<'_> {
             }
         }
         // The resolved root reaches where the syntax stops, and covers the
-        // `skip_value_copy` binding `let_sources` leaves out.
+        // `Taken` bindings `let_sources` leaves out.
         for (local, path) in &self.share_sources {
             edge(*local, path.clone());
         }
@@ -821,24 +827,6 @@ fn has_unsupported_form(body: &TirBlock) -> bool {
     s.found
 }
 
-/// Every whole-local read in `body`, as the local and the read's span.
-fn local_reads(body: &TirBlock) -> impl Iterator<Item = (u32, Span)> {
-    struct Scan {
-        reads: Vec<(u32, Span)>,
-    }
-    impl TirRefVisitor for Scan {
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            if let TirExprKind::Local { index, .. } = &expr.kind {
-                self.reads.push((*index, expr.span));
-            }
-            self.walk_expr(expr);
-        }
-    }
-    let mut s = Scan { reads: Vec::new() };
-    s.visit_block(body);
-    s.reads.into_iter()
-}
-
 struct MaxLocal {
     max: u32,
 }
@@ -919,15 +907,17 @@ struct Analyzer<'a> {
     written_through_escape: IndexSet<u32>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
-    /// `(by-value arg root, storage the call mutates)` pairs, resolved once the
-    /// alias chains are complete.
-    pending_mut_alias: Vec<(u32, Vec<u32>)>,
+    /// `(by-value arg root, arg span, storage the call mutates)`, resolved once
+    /// the alias chains are complete.
+    pending_mut_alias: Vec<(u32, Span, Vec<u32>)>,
+    /// The by-value arguments found aliasing storage their own call mutates.
+    mut_aliased_reads: IndexSet<Span>,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
     /// Place-level move sites `(root, top-level field, span)` found at literals,
     /// filtered after the walk. A `None` field is a whole-value materialization.
     place_cands: Vec<PlaceMove>,
-    /// Locals bound by a `skip_value_copy` `let` — storage handed over by the
+    /// Locals bound by a `LetStorage::Taken` `let` — storage handed over by the
     /// binding's producer, so owned without a source to prove it.
     declared_owned: IndexSet<u32>,
     /// The place each `let` reads its value out of, for the share rule.
@@ -935,6 +925,10 @@ struct Analyzer<'a> {
     /// Locals read in a value position, each with the locals live where that
     /// happens. A projection base and a borrow referent consume nothing.
     consumed: IndexMap<u32, IndexSet<u32>>,
+    /// Each of those reads by span, with the local it reads. A final read
+    /// elsewhere — a borrow's referent, a projection base — takes no value, so
+    /// it moves nothing.
+    value_reads: IndexMap<Span, u32>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation>,
 }
@@ -962,10 +956,11 @@ enum FieldEscape {
 impl Analyzer<'_> {
     /// A read in a value position: the whole local is taken, so the value can
     /// leave this binding, and where that happens decides who still sees it.
-    fn read(&mut self, index: u32, live: &mut IndexSet<u32>, record: bool) {
+    fn read(&mut self, index: u32, span: Span, live: &mut IndexSet<u32>, record: bool) {
         if record {
             let at = self.consumed.entry(index).or_default();
             at.extend(live.iter().copied());
+            self.value_reads.insert(span, index);
         }
         self.read_base(index, live, record);
     }
@@ -1462,10 +1457,11 @@ impl Analyzer<'_> {
         paths: &IndexMap<u32, Vec<AccessPath>>,
         released: &IndexSet<(u32, u32)>,
     ) {
-        for (arg, mut_roots) in std::mem::take(&mut self.pending_mut_alias) {
+        for (arg, span, mut_roots) in std::mem::take(&mut self.pending_mut_alias) {
             let targets: IndexSet<u32> = mut_roots.into_iter().collect();
             if storage_shared(paths, released, arg, None, None, &targets) {
                 self.aliases_live.insert(arg);
+                self.mut_aliased_reads.insert(span);
             }
         }
     }
@@ -1498,7 +1494,8 @@ impl Analyzer<'_> {
                 continue;
             }
             if let Some(t) = alias_root(a) {
-                self.pending_mut_alias.push((t, mut_roots.clone()));
+                self.pending_mut_alias
+                    .push((t, strip_casts(a).span, mut_roots.clone()));
             }
         }
     }
@@ -1691,13 +1688,11 @@ impl Analyzer<'_> {
             TirStmtKind::Let {
                 local_index,
                 value,
-                skip_value_copy,
+                storage,
                 ..
             } => {
                 if record {
-                    // A `skip_value_copy` binding takes the storage over, its
-                    // producer having proved the source dead.
-                    if *skip_value_copy {
+                    if *storage == LetStorage::Taken {
                         self.declared_owned.insert(*local_index);
                     } else {
                         self.record_alias(*local_index, value, live);
@@ -1937,7 +1932,7 @@ impl Analyzer<'_> {
 
     fn walk_expr(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
         match &expr.kind {
-            TirExprKind::Local { index, .. } => self.read(*index, live, record),
+            TirExprKind::Local { index, .. } => self.read(*index, expr.span, live, record),
             TirExprKind::Assign { target, value } => {
                 if let TirExprKind::Local { index, .. } = &target.kind {
                     if record {
