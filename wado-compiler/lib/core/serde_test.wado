@@ -402,9 +402,8 @@ test "apply_case heck-parity edge corpus" {
 
 test "report_duplicate_key rejects under Error, naming the key as Inspect does" {
     let role: String = "role";
-    assert report_duplicate_key(DuplicateKeyPolicy::Error, &role) matches {
-        Err(e) && e.kind == DeserializeErrorKind::DuplicateField && e.message == `duplicate key: "role"`
-    };
+    let e = report_duplicate_key(DuplicateKeyPolicy::Error, &role).unwrap_err();
+    assert e.kind == DeserializeErrorKind::DuplicateField && e.message == `duplicate key: "role"`;
     assert report_duplicate_key(DuplicateKeyPolicy::Error, &7) matches { Err(e) && e.message == "duplicate key: 7" };
 }
 

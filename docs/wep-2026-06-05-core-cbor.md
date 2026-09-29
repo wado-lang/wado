@@ -217,7 +217,7 @@ A single dynamic value type serves both formats; see below.
 | `serialize_string`                  | text string, major type 3 (never escaped)                                                                                              |
 | `serialize_bytes`                   | byte string, major type 2                                                                                                              |
 | `begin_seq(n)` / tuple              | array, major type 4, definite length `n`                                                                                               |
-| `begin_map(n)` / `begin_struct(n)`  | map, major type 5, definite length, text-string keys                                                                                   |
+| `begin_map(n)` / `begin_struct(n)`  | map, major type 5, definite length; a struct's keys are text strings, a map's are whatever its key type writes                         |
 | unit variant                        | the variant name as a text string (external tagging)                                                                                   |
 | `begin_variant`                     | single-pair map `{ name: payload }`                                                                                                    |
 
@@ -351,10 +351,13 @@ have one representation and canonical re-encoding is shortest-form:
 
 #### Map keys
 
-`Object` has string keys only. A CBOR map with a non-string key cannot be
-represented and is a `strict`-mode `DeserializeError`; a lenient stringifying
-mode (integer key → decimal string, with the collision caveat of RFC 8949 §6.1)
-is possible future work, not the default.
+`Object` has string keys only. A key of another scalar type is spelled as a text
+format writes it (`1` becomes `"1"`), the rule
+[Serialization](./spec-serialization.md) states for every map key, so a CBOR
+map and its JSON rendering read back as the same `Value`. Two keys that spell
+alike, `1` and `"1"`, are a repeated key, which the default `DuplicateKeyPolicy`
+rejects: that is RFC 8949 §6.1's collision caveat. A compound key is a
+`DeserializeError`.
 
 #### `null`/`undefined` and typed targets
 
