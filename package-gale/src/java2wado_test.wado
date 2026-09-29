@@ -782,7 +782,9 @@ test "java members: a method's receiver follows every way its body can write" {
           boolean checked() { assert this.next() > 0; return true; }
           boolean negated() { return !(this.n > 0); }
           boolean same(int a, int b) { return a == b; }
-          void reset() { this.n = 0; return; }",
+          void reset() { this.n = 0; return; }
+          boolean argued() { return this.same(this.next(), 1); }
+          int widened() { return (int)this.next(); }",
         "T",
     ).unwrap();
     let mut mutating: List<String> = [];
@@ -791,7 +793,7 @@ test "java members: a method's receiver follows every way its body can write" {
             mutating.push(method.name);
         }
     }
-    let want: List<String> = ["bump", "take", "next", "checked", "reset"];
+    let want: List<String> = ["bump", "take", "next", "checked", "reset", "argued", "widened"];
     assert mutating == want, `${mutating:?}`;
     assert m.methods[0].source == "fn bump(&mut self) { self.n = self.n + 1; }", m.methods[0].source;
     assert m.methods[4].source == "fn negated(&self) -> bool { return !(self.n > 0); }", m.methods[4].source;
@@ -865,4 +867,17 @@ test "java: a primitive cast is dropped and its operand kept" {
     // Wado infers the operand's type from the comparison, so the cast adds nothing.
     let out = java_pred("(int)this.n > (long)3", "a : ID ;", false);
     assert out == "p.n > 3", `out: '${out}'`;
+}
+
+test "java: a parenthesized name is a cast only when an operand follows it" {
+    let cases: List<[String, String]> = [
+        ["(int)(this.n) > 2", "(p.n) > 2"],
+        ["(boolean)!this.b", "!p.b"],
+        ["this.b == (true)", "p.b == (true)"],
+        ["(true) == this.b", "(true) == p.b"],
+    ];
+    for let [java, wado] of cases {
+        let out = java_pred(&java, "a : ID ;", false);
+        assert out == wado, `${java}: '${out}'`;
+    }
 }

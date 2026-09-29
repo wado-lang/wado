@@ -190,6 +190,15 @@ fragment END : { true }? 'bc' ;
     assert inside == "abbc => I:abbc\n", inside;
 }
 
+test "an identifier made of another token's chars takes the longest match and the first rule on a tie" {
+    let got = lexes("lexer grammar L;
+ID : (LETTER | '_')+ ;
+LETTER : [a-z] ;
+WS : ' ' -> skip ;
+", ["ab a _"]);
+    assert got == "ab a _ => ID:ab ID:a ID:_\n", got;
+}
+
 test "a keyword declared after the identifier rule never wins" {
     // Both match `if` at the same length, and ANTLR4 gives a tie to the rule
     // declared first.

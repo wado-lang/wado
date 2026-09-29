@@ -95,6 +95,35 @@ ID : [a-zA-Z_$0-9\\u00C0-\\u00D6\\u00D8-\\u00F6]+ ;");
     assert report.contains("repeat [a-zA-Z_$0-9À-Ö…]+ — plain loop: nothing follows the repeat"), report;
 }
 
+test "lexer dump says a predicate kept a construct from peeking what follows it" {
+    let report = lexer_dump("grammar T;
+r : S I J ;
+S : 'a' .+ END ;
+I : ('a' | 'ab') {true}? 'bc' ;
+J : ('a' | 'ab') END ;
+fragment END : {true}? 'z' ;");
+
+    assert report.contains(
+        "repeat .+ then END — plain loop: the suffix carries a semantic predicate, so it cannot be peeked",
+    ), report;
+    assert report.contains(
+        "alternation ('a' | 'ab') then 'bc' — first-match: a semantic predicate follows the alternation",
+    ), report;
+    assert report.contains(
+        "alternation ('a' | 'ab') then END — first-match: the suffix carries a semantic predicate, so it cannot be peeked",
+    ), report;
+}
+
+test "lexer dump escapes a quote and an unprinted char" {
+    let report = lexer_dump("grammar T;
+r : CHR WS ;
+CHR : '\\'' (~['\\\\] | '\\\\' .)+ '\\'' ;
+WS : [ \\t\\f]+ -> skip ;");
+
+    assert report.contains("then '\\'' — "), report;
+    assert report.contains("repeat [ \\t\\u{c}]+"), report;
+}
+
 test "lexer dump reports a keyword whose carrier is built of fragments and ranges" {
     let report = lexer_dump("grammar T;
 r : IF ID ;

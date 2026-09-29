@@ -90,3 +90,8 @@ fn bump(&mut self) {
     assert m.methods.len() == 1 && m.methods[0].name == "bump" && m.methods[0].mutates, `methods: ${m.methods.len()}`;
     assert m.methods[0].source.ends_with("/* } */\n}"), m.methods[0].source;
 }
+
+test "translate_wado_members names a generic method by what precedes its type parameters" {
+    let m = translate_wado_members("fn pick<T>(&mut self, x: T) -> T { return x; }").unwrap();
+    assert m.methods.len() == 1 && m.methods[0].name == "pick" && m.methods[0].mutates, `methods: ${m.methods.len()}`;
+}

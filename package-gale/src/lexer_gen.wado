@@ -2189,11 +2189,8 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
     return match *elem {
         Literal(text) => Option::<i32>::Some(text.chars().count()),
         CharRange(_) | CharClass(_) | AnyChar => Option::<i32>::Some(1),
-        // A complement consumes one char exactly when its inner set does.
-        Not(n) => match lexer_elem_fixed_len(&n.element, all_rules) {
-            Some(1) => Option::<i32>::Some(1),
-            _ => null,
-        },
+        // The g4 parser admits only a set under a `~`, so it takes one char.
+        Not(_) => Option::<i32>::Some(1),
         Group(alts) => {
             let mut common: Option<i32> = null;
             for let alt of alts {
@@ -3145,15 +3142,13 @@ fn lexer_elem_leading_chars(
         AnyChar => any_leading_chars(),
         Not(not_inner) => {
             let inner_casing = if casing matches { Unknown } { Casing::Sensitive } else { casing };
+            // The set under a `~` has leading chars and cannot match empty; only
+            // a negated class inside it (`~('a' | [^b])`) is not read.
             match lexer_elem_leading_chars(&not_inner.element, all_rules, inner_casing, follow_refs, visiting) {
-                Some(inner) => if inner.negated || inner.nullable {
-                    null;
-                } else {
-                    Option::<LeadingChars>::Some(
-                        LeadingChars { ranges: inner.ranges, negated: true, nullable: false },
-                    );
-                },
-                None => null,
+                Some(inner) && !inner.negated => Option::<LeadingChars>::Some(
+                    LeadingChars { ranges: inner.ranges, negated: true, nullable: false },
+                ),
+                _ => null,
             }
         },
         Repeat(rep) => match lexer_elem_leading_chars(&rep.element, all_rules, casing, follow_refs, visiting) {
@@ -3437,9 +3432,6 @@ fn lexer_element_can_consume_simple(elem: &LexerElement) -> bool {
 /// grammar sees it and letting a state-dependent one answer differently in
 /// the two passes.
 fn lexer_suffix_is_peekable(elements: &List<LexerElement>, all_rules: &List<LexerRule>) -> bool {
-    if elements.is_empty() {
-        return false;
-    }
     for let elem of elements {
         let mut visiting: List<String> = [];
         if !lexer_elem_is_peek_safe(elem, all_rules, &mut visiting) {
@@ -4851,7 +4843,9 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
 }
 
 fn lit_try_fn_name(const_name: &String) -> String {
-    let suffix = const_name.strip_prefix("TK_LIT_").expect(`lit_try_fn_name: \`${const_name}\` is not a literal's token name`);
+    let suffix = const_name.strip_prefix("TK_LIT_").expect(
+        `lit_try_fn_name: \`${const_name}\` is not a literal's token name`,
+    );
     return `try_lit_${suffix}`;
 }
 

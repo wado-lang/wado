@@ -37,6 +37,24 @@ test "single-char tokens" {
     assert_token(&tokens[12], G4Token::Eof, "");
 }
 
+test "a fixed-spelling token is named by the text it is lexed from" {
+    // `expect` names the wanted set through `name()`, so the message quotes
+    // what the grammar would have to say there.
+    let kinds: List<G4Token> = [
+        Grammar, Fragment, Arrow, Colon, ColonColon, Semicolon, Pipe, LParen, RParen, LBrace, RBrace, Comma, At, LAngle,
+        RAngle, Star, Plus, PlusAssign, Question, Dot, Range, Tilde, Assign, Hash,
+    ];
+    let mut src = String::new();
+    for let k of &kinds {
+        src.push_str(&k.name());
+        src.push(' ');
+    }
+    let tokens = tokenize(&src);
+    for let mut i = 0; i < kinds.len(); i += 1 {
+        assert_token(&tokens[i], kinds[i], kinds[i].name());
+    }
+}
+
 test "arrow token" {
     let tokens = tokenize("->");
     assert_token(&tokens[0], G4Token::Arrow, "->");

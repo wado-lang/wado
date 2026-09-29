@@ -16,6 +16,7 @@ use {
 use { generate, GenerateOptions, GeneratedOutput } from "./codegen.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
 use { Diagnostic } from "./gir.wado";
+use { parse_highlight_query } from "./highlight_query.wado";
 use { parse, parse_checked, assemble_grammar } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
 use { eval, Output } from "core:eval";
@@ -46,6 +47,16 @@ fn unsupported_count(out: &GeneratedOutput) -> i32 {
 fn parses<S: AsStrSlice>(grammar: S, rule: String, inputs: List<String>) -> String {
     let mut body = String::new();
     for let input of inputs {
+        body.push_str(wado`show("${input}", parse_${rule}("${input}"));\n`);
+    }
+    return printed(grammar, body, SHOW_FN);
+}
+
+/// `parses` for a grammar with several entry rules: each `[rule, input]` pair,
+/// one line each.
+fn parses_each<S: AsStrSlice>(grammar: S, cases: List<[String, String]>) -> String {
+    let mut body = String::new();
+    for let [rule, input] of cases {
         body.push_str(wado`show("${input}", parse_${rule}("${input}"));\n`);
     }
     return printed(grammar, body, SHOW_FN);
@@ -793,6 +804,7 @@ test "metadata comment lists grammar-level options" {
             GrammarOption { name: "superClass", value: OptionValue::Qualified(["my", "pkg", "BaseParser"]) },
             GrammarOption { name: "tokenVocab", value: OptionValue::Ident("TestLexer") },
             GrammarOption { name: "caseInsensitive", value: OptionValue::Ident("true") },
+            GrammarOption { name: "contextSuperClass", value: OptionValue::Qualified(["my", "pkg", "Ctx"]) },
         ],
         named_actions: [],
         pending_refs: [],
@@ -806,6 +818,7 @@ test "metadata comment lists grammar-level options" {
     assert !output.contains("//   option superClass = my.pkg.BaseParser");
     assert output.contains("//   option tokenVocab = TestLexer");
     assert output.contains("//   option caseInsensitive = true");
+    assert output.contains("//   option contextSuperClass = my.pkg.Ctx");
 }
 
 test "metadata comment formats string and int option values" {
@@ -2963,10 +2976,11 @@ s : 'a' (ID)* ID ';'
   | 'c' (ID)+ ';'
   | 'd' (ID)*? ID ';'
   | 'e' (ID)+? ID ';'
+  | 'f' (ID)*? ';'
   ;
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
-", "s", ["a x y z;", "a x;", "b x y z;", "b x;", "c x y;", "d x y z;", "e x y z;", "e x;"]);
+", "s", ["a x y z;", "a x;", "b x y z;", "b x;", "c x y;", "d x y z;", "e x y z;", "e x;", "f x y;", "f;"]);
     assert got == "a x y z; => (s a x y z ;)
 a x; => (s a x ;)
 b x y z; => (s b x y z ;)
@@ -2975,6 +2989,8 @@ c x y; => (s c x y ;)
 d x y z; => (s d x y z ;)
 e x y z; => (s e x y z ;)
 e x; => error
+f x y; => (s f x y ;)
+f; => (s f ;)
 ", got;
 }
 
@@ -3081,15 +3097,16 @@ WS : ' ' -> skip ;
 test "a group in a left-recursive suffix picks the longest of its overlapping alternatives" {
     let got = parses("grammar T;
 s : e EOF ;
-e : e '.' (ID '(' ')' | ID | ID '[' ']')
+e : e '.' (ID '(' ')' | ID | ID '[' ']' | '*')
   | ID ;
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
-", "s", ["a.b()", "a.b", "a.b[]", "a.b.c().d[]"]);
+", "s", ["a.b()", "a.b", "a.b[]", "a.*", "a.b.c().d[].*"]);
     assert got == "a.b() => (s (e (e a) . b ( )))
 a.b => (s (e (e a) . b))
 a.b[] => (s (e (e a) . b [ ]))
-a.b.c().d[] => (s (e (e (e (e a) . b) . c ( )) . d [ ]))
+a.* => (s (e (e a) . *))
+a.b.c().d[].* => (s (e (e (e (e (e a) . b) . c ( )) . d [ ]) . *))
 ", got;
 }
 
@@ -3131,4 +3148,360 @@ ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["a,b+-", "a,b"]);
     assert got == "a,b+- => (s a , b + -)\na,b => error\n", got;
+}
+
+test "left-recursive suffixes sharing an operator split on the token after it" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e ('+' | '-') e | e ('+' '+') | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a + b", "a + +", "a + + - b", "a - b + +"]);
+    assert got == "a + b => (s (e (e a) + (e b)))
+a + + => (s (e (e a) + +))
+a + + - b => (s (e (e (e a) + +) - (e b)))
+a - b + + => (s (e (e (e a) - (e b)) + +))
+", got;
+}
+
+test "a group undecided past the static lookahead depth asks the runtime ATN" {
+    let got = parses("grammar T;
+s : 'k' ( A A A A A A B | A A A A A A C ) EOF ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+WS : [ \\t]+ -> skip ;
+", "s", ["k a a a a a a b", "k a a a a a a c", "k a a a a a a a"]);
+    assert got == "k a a a a a a b => (s k a a a a a a b)
+k a a a a a a c => (s k a a a a a a c)
+k a a a a a a a => error
+", got;
+}
+
+test "prediction follows a loop body back out to the token after the loop" {
+    let got = parses("grammar T;
+s : a EOF ;
+a : ('x' 'y')* 'z' | ('x' 'y')* 'w' ;
+WS : [ \\t]+ -> skip ;
+", "s", ["x y z", "x y x y w", "w", "x y"]);
+    assert got == "x y z => (s (a x y z))\nx y x y w => (s (a x y x y w))\nw => (s (a w))\nx y => error\n", got;
+}
+
+// `xt` and its twins have `'a' 'b'` prefixing `'a' 'b' 'c'`, which the runtime
+// ATN decides; an alt-initial predicate removes its alternative from the seed set.
+test "a predicate at an ATN-routed decision disables its alternative" {
+    let got = parses_each("grammar T;
+options { language = Wado; }
+takes : xt 'c' ;
+xt : 'a' 'b' { p.emit(\"ab\"); }
+   | { true }? 'a' 'b' 'c' { p.emit(\"abc\"); }
+   ;
+rejects : xr 'c' ;
+xr : 'a' 'b' { p.emit(\"ab\"); }
+   | { false }? 'a' 'b' 'c' { p.emit(\"abc\"); }
+   ;
+ctxkeep : ck 'c' ;
+ck returns [i32 mode] @init { $mode = 1; }
+   : 'a' 'b' { p.emit(\"ab\"); }
+   | { $mode == 1 }? 'a' 'b' 'c' { p.emit(\"abc\"); }
+   ;
+ctxdrop : cd 'c' ;
+cd returns [i32 mode] @init { $mode = 1; }
+   : 'a' 'b' { p.emit(\"ab\"); }
+   | { $mode == 0 }? 'a' 'b' 'c' { p.emit(\"abc\"); }
+   ;
+allfalse : af 'c' ;
+af : { false }? 'a' 'b' { p.emit(\"ab\"); }
+   | { false }? 'a' 'b' 'c' { p.emit(\"abc\"); }
+   ;
+scanned : xg 'c'? 'k'* 'x' { p.emit(\"x\"); }
+        | xg 'c'? 'k'* 'y' { p.emit(\"y\"); }
+        ;
+xg : { false }? 'a' 'b' { p.emit(\"ab\"); }
+   | 'a' 'b' 'c' { p.emit(\"abc\"); }
+   ;
+WS : ' ' -> skip ;
+", [
+        ["takes", "abcc"],
+        ["rejects", "abc"],
+        ["ctxkeep", "abcc"],
+        ["ctxdrop", "abc"],
+        ["allfalse", "abcc"],
+        ["scanned", "abckx"],
+        ["scanned", "abcky"],
+    ]);
+    assert got == "abcc => (takes (xt a b c) c) [abc]
+abc => (rejects (xr a b) c) [ab]
+abcc => (ctxkeep (ck a b c) c) [abc]
+abc => (ctxdrop (cd a b) c) [ab]
+abcc => error
+abckx => (scanned (xg a b c) k x) [abcx]
+abcky => (scanned (xg a b c) k y) [abcy]
+", got;
+}
+
+test "a non-greedy loop in a left-recursive suffix stops where the rest of the suffix matches" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e '<' ID*? ID '>' | e '(' ID+? ID ')' | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["x<a b c>", "x<a>", "x(a b)", "x(a)", "x<>"]);
+    assert got == "x<a b c> => (s (e (e x) < a b c >))
+x<a> => (s (e (e x) < a >))
+x(a b) => (s (e (e x) ( a b )))
+x(a) => error
+x<> => error
+", got;
+}
+
+test "a group of rule calls undecided past the static lookahead depth asks the runtime ATN, in the parse and the scan" {
+    let got = parses("grammar T;
+s : r 'x' EOF | r 'y' EOF ;
+r : 'k' ( a | b ) ;
+a : A A A A A A B ;
+b : A A A A A A C ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+WS : [ \\t]+ -> skip ;
+", "s", ["k a a a a a a b x", "k a a a a a a c y", "k a a a a a a a x"]);
+    assert got == "k a a a a a a b x => (s (r k (a a a a a a a b)) x)
+k a a a a a a c y => (s (r k (b a a a a a a c)) y)
+k a a a a a a a x => error
+", got;
+}
+
+// A Java grammar's `this.ok()` is a base call, so the body runs through the
+// base's effect interface wherever it sits — here inside a looped group.
+test "a Java grammar's parser base call gates an alternative inside a loop" {
+    let items = `${SHOW_FN}
+struct Allow {
+    ok: bool,
+}
+
+impl PBase for Allow {
+    fn ok(&self, p: &Parser) -> bool {
+        resume self.ok;
+    }
+}
+
+fn show_with(ok: bool, input: String) with Stdout {
+    let mut base = Allow { ok };
+    with PBase => &mut base do {
+        show(\`\${ok} \${input}\`, parse_s(input));
+    };
+}
+`;
+    let got = printed("grammar T;
+options { superClass = PBase; }
+s : ( {this.ok()}? A | B )* EOF ;
+A : 'a' ; B : 'b' ;
+", "show_with(true, \"ab\");\nshow_with(false, \"ab\");\nshow_with(false, \"b\");\n", items);
+    assert got == "true ab => (s a b)\nfalse ab => error\nfalse b => (s b)\n", got;
+}
+
+test "past a shared first token, the next tokens pick the alternative through groups, loops, labels, optionals, sets and rule calls" {
+    let got = parses_each("grammar T;
+r : A (B|C) D EOF | A (B|C) E EOF ;
+s : A B+ C EOF | A B+ D EOF ;
+t : A x=B C EOF | A y=B D EOF ;
+u : A B? C? D EOF | A B? C? E EOF ;
+v : A ~B C EOF | A ~B D EOF ;
+w : A ~B C EOF | A D E EOF ;
+p : x EOF | y EOF ;
+x : A (B | C) C? ;
+y : A D ;
+q : 'k' A EOF | 'k'* B EOF ;
+m : A B X C EOF | A B X D EOF | A E X C EOF | A E X D EOF ;
+A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ; X : 'x' ;
+", [
+        ["r", "acd"],
+        ["r", "abe"],
+        ["s", "abbc"],
+        ["s", "abd"],
+        ["t", "abc"],
+        ["t", "abd"],
+        ["u", "abce"],
+        ["u", "ace"],
+        ["u", "ad"],
+        ["v", "acc"],
+        ["v", "aad"],
+        ["v", "acd"],
+        ["w", "acc"],
+        ["w", "adc"],
+        ["w", "ade"],
+        ["w", "aac"],
+        ["p", "ab"],
+        ["p", "abc"],
+        ["p", "ad"],
+        ["p", "acc"],
+        ["q", "ka"],
+        ["q", "kkb"],
+        ["q", "b"],
+        ["q", "k"],
+        ["m", "abxd"],
+        ["m", "aexc"],
+    ]);
+    assert got == "acd => (r a c d)
+abe => (r a b e)
+abbc => (s a b b c)
+abd => (s a b d)
+abc => (t a b c)
+abd => (t a b d)
+abce => (u a b c e)
+ace => (u a c e)
+ad => (u a d)
+acc => (v a c c)
+aad => (v a a d)
+acd => (v a c d)
+acc => (w a c c)
+adc => (w a d c)
+ade => (w a d e)
+aac => (w a a c)
+ab => (p (x a b))
+abc => (p (x a b c))
+ad => (p (y a d))
+acc => (p (x a c c))
+ka => (q k a)
+kkb => (q k k b)
+b => (q b)
+k => error
+abxd => (m a b x d)
+aexc => (m a e x c)
+", got;
+}
+
+test "a lexer base predicate gates its alternative inside a group, a loop and a fragment" {
+    let items = `struct Gate {
+    on: bool,
+}
+
+impl B for Gate {
+    fn ok(&self, view: LexerView) -> bool {
+        resume self.on;
+    }
+}
+
+fn lex_with(on: bool, input: String) with Stdout {
+    let mut base = Gate { on };
+    with B => &mut base do {
+        let toks = tokenize(input);
+        let mut line = \`\${on} =>\`;
+        for let mut i = 0; toks.kind_at(i) != TK_EOF; i += 1 {
+            line.push_str(\` \${token_kind_name(toks.kind_at(i))}:\${toks.token_text(i)}\`);
+        }
+        println(line);
+    };
+}
+`;
+    let got = printed("lexer grammar L;
+options { superClass = B; language = Wado; }
+KW : ( { this.ok() }? 'ab' | 'xy' ) ;
+NUM : ( { this.ok() }? '1' )+ ;
+FR : 'q' G ;
+fragment G : { this.ok() }? 'z' ;
+ID : [a-z]+ ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "lex_with(true, \"ab xy 11 qz\");\nlex_with(false, \"ab xy 11 qz\");\n", items);
+    assert got == "true => KW:ab KW:xy NUM:11 FR:qz
+false => ID:ab KW:xy INT:11 ID:qz
+", got;
+}
+
+test "a highlight query on a superClass grammar skips the highlighter and says why" {
+    let options = GenerateOptions { highlight_query: Option::Some(parse_highlight_query("(A) @keyword").unwrap()) };
+    let out = gen_with("grammar T;
+options { superClass = PBase; }
+s : {this.ok()}? A ;
+A : 'a' ;
+", &options);
+    let skipped = out.diagnostics.iter_ref().filter(|d: &Diagnostic| d.message.contains("a highlight query with superClass 'PBase' is not supported")).count();
+    assert skipped == 1, "the skipped highlighter must be reported";
+    assert !out.source.contains("pub fn highlight<"), "no highlighter is emitted for a base it cannot install";
+}
+
+test "a parser base call runs in a grammar whose action language has no translator" {
+    let items = `${SHOW_FN}
+struct Allow {
+    ok: bool,
+}
+
+impl PBase for Allow {
+    fn ok(&self, p: &Parser) -> bool {
+        resume self.ok;
+    }
+}
+
+fn show_with(ok: bool, input: String) with Stdout {
+    let mut base = Allow { ok };
+    with PBase => &mut base do {
+        show(\`\${ok} \${input}\`, parse_s(input));
+    };
+}
+`;
+    let got = printed("grammar T;
+options { superClass = PBase; language = Cpp; }
+s : {this.ok()}? A | B ;
+A : 'a' ; B : 'b' ;
+", "show_with(true, \"a\");\nshow_with(false, \"a\");\nshow_with(false, \"b\");\n", items);
+    assert got == "true a => (s a)\nfalse a => error\nfalse b => (s b)\n", got;
+}
+
+test "a parser base is refused where an untranslatable @init carries host code" {
+    let out = gen("grammar T;
+options { superClass = PBase; language = Cpp; }
+s @init { int n = 0; } : {this.ok()}? A | B ;
+A : 'a' ; B : 'b' ;
+");
+    let refused = out.diagnostics.iter_ref().filter(|d: &Diagnostic| d.message.contains("superClass 'PBase' is called from a body carrying host code the grammar's action language has no translator for")).count();
+    assert refused == 1, "the refused base must be reported";
+    assert !out.source.contains("interface PBase"), "no interface is emitted for a refused base";
+}
+
+test "a caller argument holding a quoted comma is one argument, in Java and in Wado" {
+    let java = parses("grammar T;
+s : e[\"x,y\", 2] EOF ;
+e[String t, int n] : ID { System.out.print($t); System.out.print($n); } ;
+ID : [a-z]+ ;
+", "s", ["a"]);
+    assert java == "a => (s (e a)) [x,y2]\n", java;
+    let wado = parses("grammar T;
+options { language = Wado; }
+s : e[\"x,y\", 2] EOF ;
+e[String t, i32 n] : ID { p.emit(`${$t}${$n}`); } ;
+ID : [a-z]+ ;
+", "s", ["a"]);
+    assert wado == "a => (s (e a)) [x,y2]\n", wado;
+}
+
+// Java's `+` concatenates a String and an int; the translated body applies
+// Wado's `+` to them, which does not compile.
+#[TODO]
+test "a Java action concatenating a string and an int prints both" {
+    let got = parses("grammar T;
+s : e[\"x\", 2] EOF ;
+e[String t, int n] : ID { System.out.print($t + $n); } ;
+ID : [a-z]+ ;
+", "s", ["a"]);
+    assert got == "a => (s (e a)) [x2]\n", got;
+}
+
+test "list labels on left-recursive operands keep each operand's precedence" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e '(' (xs+=e (',' xs+=e)*)? ')'
+  | e '*' ys+=e
+  | ys+=e '+' e
+  | '-' ys+=e
+  | <assoc=right> e '?' ys+=e ':' e
+  | ID
+  ;
+ID : [a-z]+ ;
+", "s", ["f(a,b)", "a+b*c", "-a+b", "a?b:c+d", "f(a+b)", "a?b?c:d:e", "-f(a)"]);
+    assert got == "f(a,b) => (s (e (e f) ( (e a) , (e b) )))
+a+b*c => (s (e (e a) + (e (e b) * (e c))))
+-a+b => (s (e - (e (e a) + (e b))))
+a?b:c+d => (s (e (e a) ? (e b) : (e (e c) + (e d))))
+f(a+b) => (s (e (e f) ( (e (e a) + (e b)) )))
+a?b?c:d:e => (s (e (e a) ? (e (e b) ? (e c) : (e d)) : (e e)))
+-f(a) => (s (e - (e (e f) ( (e a) ))))
+", got;
 }

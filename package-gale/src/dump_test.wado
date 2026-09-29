@@ -501,3 +501,49 @@ ID : [a-z]+ ;";
     assert !p.contains("Leaf(alt 1)"), p;
     assert p.contains("Ambiguous([alt 0, alt 1]) — opaque rule-ref prefix"), p;
 }
+
+test "render_dump names each repeat's kind and the strategy that decides it" {
+    let r = section_of(&dump_source("grammar D;
+r : (A B)? C (A? B)? D (xs+=A)* E+ F .*? G ;
+A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ; F : 'f' ; G : 'g' ;"), "r");
+
+    assert r.contains("  repeats:
+    ? → OptionalLookahead
+    ? → OptionalShapeLookahead
+    ? → Plain
+    * → Plain
+    + → Plain
+    * → NonGreedy
+"), r;
+}
+
+test "render_dump marks a right-associative LR alt" {
+    let e = section_of(&dump_source("grammar D;
+e : <assoc=right> e '^' e | ID ;
+ID : [a-z]+ ;"), "e");
+
+    assert e.contains("alt 0 (Alt0) prec=1 conflict-min=1 right-assoc suffix-first=[TK_LIT_CARET]"), e;
+}
+
+test "render_dump names a shared literal prefix by its token constant" {
+    let k = section_of(&dump_source("grammar D;
+k : 'k' A | 'k' B ;
+A : 'a' ; B : 'b' ;"), "k");
+
+    assert k.contains("Consume(TK_LIT_k)"), k;
+}
+
+test "render_dump says why prediction halted: identical alts, the depth limit, an open-ended alt" {
+    let report = dump_source("grammar D;
+dd : A | A ;
+deep : A (B|C) (B|C) (B|C) (B|C) (B|C) (B|C) D | A (B|C) (B|C) (B|C) (B|C) (B|C) (B|C) E ;
+v : A ~B C | A ~B D ;
+A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ;");
+
+    let dd = section_of(&report, "dd");
+    assert dd.contains("Ambiguous([alt 0, alt 1]) — multiple alts end together: true ambiguity"), dd;
+    let deep = section_of(&report, "deep");
+    assert deep.contains("Ambiguous([alt 0, alt 1]) — branch-depth limit (5) reached: needs unbounded lookahead"), deep;
+    let v = section_of(&report, "v");
+    assert v.contains("Ambiguous([alt 0, alt 1]) — no token named: an alt admits every one (`.` / `~X`)"), v;
+}

@@ -200,3 +200,23 @@ test "expand: rule invocation stack helpers" {
     let expected = "grammar T;\n\na : 'x' {System.out.println(getRuleInvocationStack());} ;";
     assert expand(&g) == expected, `got '${expand(&g)}'`;
 }
+
+test "expand: member (in)equality helpers from the SemPredEvalParser descriptors" {
+    // `ActionHidesPreds` and `ToLeftWithVaryingPredicate`.
+    let g = "a : {<SetMember(\"i\",\"1\")>} ID {<MemberEquals(\"i\",\"1\")>}?\n  | {<ModMemberNotEquals(\"i\",\"2\",\"0\")>}? ID ;";
+    let expected = "a : {this.i = 1;} ID {this.i == 1}?\n  | {this.i % 2 != 0}? ID ;";
+    assert expand(&g) == expected, `got '${expand(&g)}'`;
+}
+
+test "expand: DeclareContextListGettersFunction declares the list-getter probe" {
+    // `ParserErrors/ContextListGetters`: it compiles only if `a()` / `b()` are
+    // the list getters.
+    let g = "@parser::members{\n<DeclareContextListGettersFunction()>\n}";
+    let expected = "@parser::members{\nvoid foo() {\n\tSContext s = null;\n\ts.a();\n\ts.b();\n}\n}";
+    assert expand(&g) == expected, `got '${expand(&g)}'`;
+}
+
+test "expand: a block comment passes through verbatim, template text and all" {
+    let g = "/* see <True()> */ a : {<True()>}? ID ;";
+    assert expand(&g) == "/* see <True()> */ a : {true}? ID ;", `got '${expand(&g)}'`;
+}

@@ -10,3 +10,8 @@ test "literal_const_name keeps the literal's case" {
     assert literal_const_name("Self") == "TK_LIT_Self";
     assert literal_const_name("lt") != literal_const_name("<");
 }
+
+test "literal_const_name spells the quotes and the backslash as words" {
+    assert literal_const_name("\\") == "TK_LIT_BSLASH";
+    assert literal_const_name("\"'") == "TK_LIT_DQUOTESQUOTE";
+}

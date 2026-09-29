@@ -340,6 +340,12 @@ struct SllConfig {
     return_stack: List<SllReturn>,
 }
 
+/// An opaque config is an answer of `sll_advance`, which every caller sets
+/// aside as an opaque alt; only live configs are walked further.
+fn assert_live(c: &SllConfig) {
+    assert c.pos != SLL_POS_OPAQUE, "an opaque config is set aside, never walked";
+}
+
 fn push_return(stack: &List<SllReturn>, elements: &List<Element>, pos: i32) -> List<SllReturn> {
     let mut new_stack = *stack;
     new_stack.push(SllReturn { elements, pos });
@@ -364,11 +370,9 @@ fn pop_return(c: &SllConfig) -> SllConfig {
 
 /// True when what the config has left, through every return frame, can match
 /// nothing — the alt can finish here and a further token may belong to the
-/// calling context. Opaque configs (`pos == SLL_POS_OPAQUE`) cannot.
+/// calling context.
 fn config_is_at_end(c: &SllConfig, ctx: &mut GenContext) -> bool {
-    if c.pos == SLL_POS_OPAQUE {
-        return false;
-    }
+    assert_live(c);
     if !ctx.tail_is_nullable_deep(c.elements, c.pos) {
         return false;
     }
@@ -388,9 +392,7 @@ fn config_is_at_end(c: &SllConfig, ctx: &mut GenContext) -> bool {
 /// Includes tokens from nullable elements that were skipped by closure.
 /// When at end of elements with a return stack, pops and continues from caller.
 fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
-    if c.pos == SLL_POS_OPAQUE {
-        return [];
-    }
+    assert_live(c);
     if c.pos >= c.elements.len() {
         if c.return_stack.is_empty() {
             return [];
@@ -477,9 +479,7 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
     if inline_depth > 2 {
         return sll_step(c, SLL_POS_OPAQUE);
     }
-    if c.pos == SLL_POS_OPAQUE {
-        return [];
-    }
+    assert_live(c);
     // End of current elements: pop return stack if available.
     if c.pos >= c.elements.len() {
         if c.return_stack.is_empty() {
@@ -616,9 +616,7 @@ fn open_terminal_admits(elem: &Element, token: i32, ctx: &mut GenContext) -> boo
 /// Whether the config's position admits a token no first set names: a `.` or
 /// `~X` it can reach there, directly or through what it would return into.
 fn sll_config_open(c: &SllConfig, ctx: &mut GenContext) -> bool {
-    if c.pos == SLL_POS_OPAQUE {
-        return false;
-    }
+    assert_live(c);
     if c.pos >= c.elements.len() {
         if c.return_stack.is_empty() {
             return false;
@@ -665,19 +663,14 @@ fn build_sll_node(
     // (explicit skip logic), so the config set is used as-is.
     let closed = *configs;
 
+    // A token that leaves one alternative is a leaf at its branch, so every
+    // walk — the overlap group's and each deeper one — starts with two or more.
+    let alts = sll_unique_alts(&closed);
+    assert alts.len() >= 2, "a prediction walk starts with two alternatives or more";
+
     // Guard: if too many configs, fall back to Ambiguous (codegen scan-dispatches) to avoid explosion.
     if closed.len() > MAX_CONFIG_SET {
-        let alts = sll_unique_alts(&closed);
         return ambiguous(alts, AmbiguityReason::ConfigExplosion);
-    }
-
-    // Check unique alternatives.
-    let alts = sll_unique_alts(&closed);
-    if alts.len() == 1 {
-        return PredictionNode::Leaf(alts[0]);
-    }
-    if alts.len() == 0 {
-        return ambiguous(alts, AmbiguityReason::NoViableAlt);
     }
     if depth >= max_depth {
         return ambiguous(alts, AmbiguityReason::MaxDepth);
@@ -1034,9 +1027,6 @@ fn try_expand_opaque(
 
 /// Check if all configs are at the same terminal element (for Consume).
 fn sll_find_common_terminal(configs: &List<SllConfig>) -> Option<Element> {
-    if configs.len() < 2 {
-        return null;
-    }
     for let c of configs {
         if c.pos >= c.elements.len() {
             return null;

@@ -311,3 +311,31 @@ test "capture_vocabulary is empty without a highlight query" {
     let out = highlight_output("grammar T; s : KW ; KW : 'if' ;");
     assert out.contains("capture_names: [],"), out;
 }
+
+test "a later rule capture on the same rule replaces the earlier one" {
+    let out = highlight_output_q("grammar T;
+r : name ;
+name : IDENTIFIER ;
+IDENTIFIER : [a-z]+ ;
+", "(name) @variable\n(name) @type");
+    assert count_occurrences(&out, "RuleCapture {") == 1, out;
+    assert out.contains("RuleCapture { rule_id: RK_NAME as i32, capture_id: 0, order: 0 },  // @type"), out;
+}
+
+test "an override on a later token kind leaves an empty row for each kind before it" {
+    let out = highlight_output_q("grammar T;
+r : A B ;
+A : 'a' ;
+B : 'b' ;
+", "(r (B) @string)");
+    assert out.contains("overrides_by_kind: [\n        [],  // TK_A\n        [  // TK_B\n"), out;
+}
+
+test "an unknown literal in a query warns, naming it as a literal" {
+    let run = highlight_run("grammar T;
+r : B ;
+B : 'b' ;
+", "\"zz\" @keyword");
+    assert run.1.len() == 1, `expected one diagnostic, got ${run.1.len()}`;
+    assert run.1[0].message.contains("literal \"zz\""), run.1[0].message;
+}

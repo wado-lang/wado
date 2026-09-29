@@ -4861,10 +4861,8 @@ fn gen_shape_entry_conditions(
 
 /// Shape-lookahead Optional under the op-only walker: one branch per shape,
 /// longest-first, each gated on that shape's own entry condition and emitting
-/// only the positions the shape contains. The op-only analogue of
-/// `gen_op_optional_with_shape_lookahead_transparent`, whose `unwrap_optional_op`
-/// peel it shares — the shape already decided that a present nested optional
-/// fires.
+/// only the positions the shape contains, each peeled by `unwrap_optional_op` —
+/// the shape already decided that a present nested optional fires.
 fn gen_op_optional_shape_lookahead(
     w: &mut CodeWriter,
     r: &RepeatOp,
@@ -5049,12 +5047,10 @@ fn gen_op_dispatch_element(
     }
 }
 
-/// Op-driven `unwrap_optional` analogue. Peels through an Optional
-/// `Op::Repeat` wrapper to its inner op. Used by the Transparent
-/// shape-lookahead walker so each present optional element is
-/// dispatched at its unwrapped op (which carries the actual emit
-/// shape) rather than through `gen_op_repeat`'s optional gate (the
-/// shape already promised the element is present).
+/// Peels an Optional `Op::Repeat` wrapper to its inner op. Used by the
+/// shape-lookahead walkers so each present optional element is
+/// dispatched at its unwrapped op rather than through the optional's
+/// own gate (the shape already promised the element is present).
 fn unwrap_optional_op(op: &Op) -> &Op {
     if let Repeat(rep_op) = op {
         if let Optional = rep_op.kind {
@@ -5307,14 +5303,9 @@ fn gen_op_transparent_optional(
     }
 
     return match &rep_op.strategy {
-        OptionalShapeLookahead(s) => gen_op_optional_with_shape_lookahead_transparent(
-            w,
-            g_op,
-            g_elem,
-            s,
-            ctx,
-            name_counts,
-            rep_op.gate_caller_follow,
+        // A shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`.
+        OptionalShapeLookahead(_) => panic(
+            "gen_op_transparent_optional: a one-element body holding an optional is collapsed before lowering",
         ),
         OptionalLookahead(s) => gen_op_transparent_optional_with_cond(
             w,
@@ -5691,93 +5682,6 @@ fn gen_op_optional_with_shape_lookahead_storable(
             }
             if in_shape {
                 gen_op_dispatch_element(w, &body.ops[i], &elements[i], ctx, &mut nc);
-            }
-        }
-        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
-        leave_group_alt_bindings(&outer, &alt.actions, ctx);
-    }
-    ctx.leave_group_body(outer_choice);
-    if !is_first {
-        w.end();
-    }
-}
-
-/// Op-driven shape-lookahead emit for the Transparent Optional case.
-/// Mirrors `gen_optional_with_lookahead`: each shape branch walks
-/// only the present-positions, peeling Optional Repeats via
-/// `unwrap_optional` / `unwrap_optional_op` so the inner parse is
-/// dispatched directly at the unwrapped op shape (the shape already
-/// promised the optional fires). No struct construction.
-fn gen_op_optional_with_shape_lookahead_transparent(
-    w: &mut CodeWriter,
-    g_op: &GroupOp,
-    g_elem: &GroupElement,
-    s: &OptionalShapeLookaheadStrategy,
-    ctx: &mut GenContext,
-    name_counts: &mut List<[String, i32]>,
-    gate_caller_follow: bool,
-) {
-    let body = &g_op.alts[0];
-    let alt = &g_elem.alternatives[0];
-    let elements = &alt.elements;
-
-    let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
-    // The shape twin of `optional_entry_test`: the alternative is the same one
-    // in every shape, so its gate joins each shape's own condition.
-    let gate = alt_gate_and_suffix(alt, ctx);
-    let outer_choice = ctx.enter_group_body(false);
-    let mut is_first = true;
-    for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
-        let entry = &s.shapes[ei];
-        // K-prefix gate: every shape entry's condition must yield to
-        // the caller when the deterministic K-prefix matches, so wrap
-        // each entry's condition with `!(K_match) && (cond)`.
-        let cond = `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`;
-
-        if is_first {
-            w.begin(`if ${cond}`);
-            is_first = false;
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
-
-        let mut nc: List<[String, i32]> = [];
-        let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
-        // Actions are the alternative's own, so they run in every shape branch;
-        // the positions decide only which elements are parsed.
-        let mut k = 0;
-        for let mut idx = 0; idx < elements.len(); idx += 1 {
-            gen_alt_actions_at(w, &alt.actions, idx, ctx);
-            if k >= entry.positions.len() || entry.positions[k] != idx {
-                continue;
-            }
-            k += 1;
-            let elem = &elements[idx];
-            let body_op = &body.ops[idx];
-            let actual_elem = unwrap_optional(elem);
-            let actual_op = unwrap_optional_op(body_op);
-            if let Group(g) = actual_elem {
-                if g.alternatives.len() == 1 {
-                    if let Group(inner_g_op) = actual_op {
-                        let inner_body = &inner_g_op.alts[0];
-                        let inner_alt = &g.alternatives[0];
-                        let inner_outer = enter_group_alt_bindings(&inner_body.ops, &inner_alt.actions, ctx);
-                        for let mut j = 0; j < inner_alt.elements.len(); j += 1 {
-                            gen_alt_actions_at(w, &inner_alt.actions, j, ctx);
-                            gen_op_dispatch_element(w, &inner_body.ops[j], &inner_alt.elements[j], ctx, &mut nc);
-                        }
-                        gen_alt_actions_at(w, &inner_alt.actions, inner_alt.elements.len(), ctx, true);
-                        leave_group_alt_bindings(&inner_outer, &inner_alt.actions, ctx);
-                    } else {
-                        panic(
-                            "gen_op_optional_with_shape_lookahead_transparent: single-alt Group surface but non-Group op",
-                        );
-                    }
-                } else {
-                    gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
-                }
-            } else {
-                gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
             }
         }
         gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
@@ -7302,14 +7206,6 @@ fn compute_non_greedy_condition(
     let peek0_cond = ctx.first_check_str(raw_first);
     let peek1_cond = ctx.kind_check_str(&second_continue, "p.peek_at(1)");
     return `(${peek0_cond}) && (${peek1_cond})`;
-}
-
-fn unwrap_optional(elem: &Element) -> &Element {
-    return match elem {
-        Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
-        Label(lab) => unwrap_optional(&lab.element),
-        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => elem,
-    };
 }
 
 /// Emit an inline scan guard for an optional's inner element.

@@ -1403,41 +1403,25 @@ pub fn rule_header(rule: &Rule) -> &RuleHeader {
 /// lowered rule. For `Simple` rules `alt_index` is always `0`; for
 /// `MultiAlt` the lookup scans `alts` for the entry whose
 /// `alt_index == alt_index`; for `LeftRecursive` it searches the atom's
-/// alts first and falls back to the matching LR alt's `suffix`. Returns
-/// `null` only when no alt with that index exists on either side.
+/// alts, the only ones a pick names by index — an LR alt's `suffix` is
+/// reached through `lr_alts`. Returns `null` when no alt has that index.
 pub fn rule_alt_body(rule: &Rule, alt_index: i32) -> Option<&AltBody> {
     return match rule {
         Simple(s) => if alt_index == 0 { Option::<&AltBody>::Some(&s.body) } else { null },
         MultiAlt(m) => m.alts.iter_ref().find(|a| a.alt_index == alt_index),
-        LeftRecursive(l) => {
-            if let Some(b) = l.atom.alts.iter_ref().find(|a| a.alt_index == alt_index) {
-                Option::<&AltBody>::Some(b);
-            } else if let Some(lr) = l.lr_alts.iter_ref().find(|lr| lr.alt_index == alt_index) {
-                Option::<&AltBody>::Some(&lr.suffix);
-            } else {
-                null;
-            }
-        },
+        LeftRecursive(l) => l.atom.alts.iter_ref().find(|a| a.alt_index == alt_index),
     };
 }
 
 /// Scan-side counterpart of `rule_alt_body`. Returns the
 /// `ScanBody` for the alt at the given index — `s.scan_body` for
 /// `Simple` (alt_index 0), or the parallel `scan_alts` entry for
-/// `MultiAlt` / LR atom shapes, or `lr.scan_suffix` for LR alts.
+/// `MultiAlt` / LR atom shapes.
 pub fn rule_alt_scan_body(rule: &Rule, alt_index: i32) -> Option<&ScanBody> {
     return match rule {
         Simple(s) => if alt_index == 0 { Option::<&ScanBody>::Some(&s.scan_body) } else { null },
         MultiAlt(m) => find_scan_body_in_array(&m.alts, &m.scan_alts, alt_index),
-        LeftRecursive(l) => {
-            if let Some(b) = find_scan_body_in_array(&l.atom.alts, &l.atom.scan_alts, alt_index) {
-                Option::<&ScanBody>::Some(b);
-            } else if let Some(lr) = l.lr_alts.iter_ref().find(|lr| lr.alt_index == alt_index) {
-                Option::<&ScanBody>::Some(&lr.scan_suffix);
-            } else {
-                null;
-            }
-        },
+        LeftRecursive(l) => find_scan_body_in_array(&l.atom.alts, &l.atom.scan_alts, alt_index),
     };
 }
 

@@ -148,9 +148,7 @@ fn translate_caller_arg<S: AsStrSlice>(expr: S, ctx: &GenContext) -> Option<Stri
         return Option::Some(expr.to_string());
     }
     let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return null;
-    }
+    assert ridx >= 0, "a call's arguments are emitted inside the calling rule";
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
     let lang = ctx.action_language();
@@ -499,9 +497,7 @@ pub fn rule_emits_vals(ctx: &GenContext, rule: &ParserRule) -> bool {
 
 pub fn current_rule_emits_vals(ctx: &GenContext) -> bool {
     let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return false;
-    }
+    assert ridx >= 0, "a rule body is emitted with its rule current";
     return rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
 }
 
@@ -672,9 +668,7 @@ fn warn_unsupported_prediction_predicate(src: &ActionSource, ctx: &mut GenContex
 
 fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
     let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return false;
-    }
+    assert ridx >= 0, "a rule body is emitted with its rule current";
     return ctx.parser_rules()[ridx].alternatives.len() > 1;
 }
 
@@ -705,9 +699,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext, handle: &String = &PARSER
         return Option::Some(`${pred_fn_name(a.source.action_id)}(p)`);
     }
     let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return null;
-    }
+    assert ridx >= 0, "a predicate is gated inside the rule that holds it";
     let rule = &ctx.parser_rules()[ridx];
     let vals_in_scope = rule_emits_vals(ctx, rule);
     let lang = ctx.action_language();
@@ -1155,14 +1147,7 @@ fn translate_action_or_warn(
         return Option::Some(src.text);
     }
     let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        ctx.warn(
-            &action_owner(src.action_id, ctx),
-            DiagnosticKind::UnsupportedAction,
-            `action ${src.action_id} references attributes outside a rule context`,
-        );
-        return null;
-    }
+    assert ridx >= 0, "an action is emitted inside the rule that holds it";
     let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
     let lang = ctx.action_language();
     let translated = if is_predicate {

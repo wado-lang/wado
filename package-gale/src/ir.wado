@@ -229,13 +229,16 @@ pub fn superclass_bases(kind: &GrammarKind, options: &List<GrammarOption>) -> [S
     return [lexer, parser];
 }
 
-/// A `superClass` option's base name. A dotted `a.b.Base` keeps its last
-/// component (the Wado effect name).
+/// A `superClass` option's base name. A dotted `a.b.Base`, bare or quoted,
+/// keeps its last component (the Wado effect name).
 fn option_value_name(v: &OptionValue) -> String {
     return match v {
         Ident(s) => *s,
         Qualified(parts) => if parts.is_empty() { "" } else { parts[parts.len() - 1] },
-        Str(s) => *s,
+        Str(s) => match s.rsplit_once(".") {
+            Some([_, last]) => last.to_string(),
+            None => *s,
+        },
         _ => "",
     };
 }
@@ -249,7 +252,6 @@ pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
     if !grammar.kind matches { Combined } {
         return;
     }
-    let mut synthesized: List<String> = [];
     for let r of &grammar.pending_refs {
         if !r.kind matches { TokenRef } {
             continue;
@@ -264,14 +266,11 @@ pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
                 break;
             }
         }
+        // A name synthesized earlier is in `lexer_rules` now, so this also dedups.
         if defined {
             continue;
         }
-        if synthesized.contains(&r.referenced_name) {
-            continue;
-        }
         grammar.lexer_rules.push(LexerRule::virtual_token(r.referenced_name));
-        synthesized.push(r.referenced_name);
     }
 }
 

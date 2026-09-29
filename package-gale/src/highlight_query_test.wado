@@ -106,9 +106,23 @@ test "reject an unsupported escape rather than corrupting it" {
 }
 
 test "known escapes are still decoded" {
-    let rules = parse_ok("\"\\t\" @string");
-    assert rules.len() == 1;
-    assert is_literal(&rules[0].selector, "\t");
+    let cases: List<[String, String]> = [
+        ["\\t", "\t"],
+        ["\\n", "\n"],
+        ["\\r", "\r"],
+        ["\\\"", "\""],
+        ["\\\\", "\\"],
+    ];
+    for let [written, text] of cases {
+        let rules = parse_ok(`"${written}" @string`);
+        assert rules.len() == 1;
+        assert is_literal(&rules[0].selector, &text), written;
+    }
+}
+
+test "a backslash ending the query leaves the literal unterminated" {
+    let msg = parse_err("\"a\\");
+    assert msg.contains("unterminated"), msg;
 }
 
 test "empty query parses to no rules" {
