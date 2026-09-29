@@ -216,8 +216,7 @@ test {
 ### Import Rules
 
 - Effect operations use `::` syntax: `use {Effect::{op1, op2}} from "..."`
-- Multiple operations can be imported: `Effect::{op1, op2, op3}`
-- Renaming is supported: `use {Effect::{op as renamed}} from "..."`
+- An operation may be renamed as any import may ([Renaming Imports](./spec-modules.md#renaming-imports))
 - Wildcards are prohibited: `use {Effect::{*}}` is not allowed
 - An imported operation demands what `Effect::op()` demands (see [Effect Propagation](#effect-propagation))
 

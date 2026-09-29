@@ -1523,8 +1523,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     let declares_generator = use_decl
                         .attributes
                         .as_ref()
-                        .and_then(ImportAttributes::generator)
-                        .is_some();
+                        .is_some_and(ImportAttributes::is_generated);
                     if declares_generator {
                         // The redirect above did not fire, so no invocation
                         // produced this module. Reading the schema as Wado would

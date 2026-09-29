@@ -1,5 +1,10 @@
 # Control Flow
 
+This chapter covers what decides which code runs next: conditionals, loops,
+`break` and `continue`, labeled blocks, `match` and `matches`, branch hints, and
+error handling. The patterns these statements take apart are in
+[Patterns](./spec-patterns.md).
+
 ## Conditional Statements
 
 <!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
@@ -69,8 +74,8 @@ test {
 }
 ```
 
-An irrefutable pattern is rejected — its `else` could never run; use a plain
-`let`.
+An irrefutable pattern is an error, since its `else` could never run. Write a
+plain `let` instead.
 
 ## While Loop
 
@@ -103,7 +108,7 @@ while let Some(x) = iter.next() {
 assert seen == [1, 2, 3];
 ```
 
-The loop continues as long as the pattern matches. When the pattern fails to match (e.g., `iter.next()` returns `None`), the loop exits.
+The loop runs while the pattern matches, and ends the first time it does not.
 
 ## For Loop
 
@@ -180,7 +185,8 @@ for ; let Some(x) = again.next(); count += 1 {
 assert count == 3;
 ```
 
-The loop continues as long as the pattern matches. This is useful for iterating with additional state (like a counter) alongside pattern matching.
+The loop runs while the pattern matches, as `while let` does, and the update
+runs after each iteration.
 
 ## For-Of Loop
 
@@ -311,13 +317,11 @@ for let mut j = 0; j < 10; j = j + 1 {
 assert kept.len() == 9 && kept[5] == 6;
 ```
 
-Both `break` and `continue` work with `while`, `for`, and `loop`, and a loop
-carries no label. An unlabeled `break` or `continue` acts on the innermost loop,
-and outside a loop both are errors. `continue` never takes a label.
-`break LABEL` is a different statement: it leaves an enclosing labeled block,
-needs no loop of its own, and is how to leave more than the innermost loop. A
-closure body starts its own loop scope, so a loop around a closure binds nothing
-written inside it.
+Both work with `while`, `for`, and `loop`, and are errors outside a loop. A loop
+carries no label, and `continue` never takes one. `break LABEL` is a different
+statement: it leaves an enclosing [labeled block](#labeled-blocks), and is how
+to leave more than the innermost loop. A closure body starts its own loop scope,
+so a loop around a closure binds nothing written inside it.
 
 ## Labeled Blocks
 
@@ -343,8 +347,8 @@ therefore a parse error.
 
 ### Escaping and Early Exit
 
-`break` alone leaves the innermost loop. A labeled block around a nest leaves
-all of it at once, and its tail is the path no `break` took. Inside a block,
+`break LABEL` inside a loop nest leaves all of it at once, and the block's tail
+is the path no `break` took. Inside a block,
 `break LABEL` skips the rest, so a chain of guards stays flat instead of nesting
 one inside the next. A `break` may also leave an effect handler's `do` block
 (see [Handler Scope](./spec-effects.md#handler-scope)).
@@ -417,7 +421,10 @@ assert found == 8;
 
 ## Match Expression
 
-Match expression provides exhaustive pattern matching on variants and other types.
+A `match` tests its scrutinee against each arm's pattern in order and runs the
+first arm that matches. Its arms must be
+[exhaustive](./spec-patterns.md#exhaustiveness). A `match` produces a value, or
+stands as a statement:
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -447,7 +454,8 @@ assert engine.running;
 
 ## Matches Operator
 
-The `matches` infix operator tests if a value matches a pattern, returning `bool`.
+The infix `matches` operator answers whether a value matches a pattern, as a
+`bool`:
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -490,14 +498,13 @@ assert opt matches { Some(x) && x > 0 };
 
 ## Branch Hints
 
-`builtin::cold_path()` marks the code path that contains it as cold (rarely
-executed). It is a statement with no runtime effect. It is a performance hint:
-the compiler and the Wasm engine treat the other side of the branch that
-contains it as the likely one.
+`builtin::cold_path()` marks the path that contains it as rarely run. It is a
+statement with no effect on what the program computes. It hints that the other
+side of the branch containing it is the likely one.
 
-Because it is a plain statement rather than a condition wrapper, `cold_path()`
-works anywhere a branch body does — including an `if let` or `match` arm, where
-no boolean condition is available:
+It is a statement rather than a condition wrapper, so it works anywhere a branch
+body does. That includes an `if let` or `match` arm, where no boolean condition
+is available:
 
 <!-- {"fixture":"spec_control_flow_branch_hints.wado"} -->
 
@@ -531,7 +538,7 @@ test {
 ```
 
 Placed on the fall-through after a guard whose taken branch diverges, it hints
-the guard as likely-taken — the guard-clause idiom:
+that the guard is likely taken:
 
 <!-- {"fixture":"spec_control_flow_branch_hints.wado"} -->
 
@@ -556,7 +563,7 @@ test {
 
 `builtin::black_box(value)` returns `value` unchanged but never as a
 compile-time constant, so the compiler does not fold away a computation reading
-it. It emits no instruction. Use it to keep a test or benchmark measuring the
+it. Use it to keep a test or benchmark measuring the
 work it names:
 
 <!-- {"fixture":"spec_control_flow_branch_hints.wado"} -->
@@ -600,9 +607,19 @@ A trap cannot be caught in Wado. It ends the program.
 
 ### Recoverable Errors (Result Type)
 
+A function that can fail returns a `Result`, and its caller decides what an
+`Err` means:
+
 <!-- {"fixture":"spec_control_flow_errors.wado"} -->
 
 ```wado
+variant ConfigError {
+    Io(FsError),
+    Parse(ParseIntError),
+}
+
+impl From<ParseIntError> for ConfigError;
+
 fn parse_config(text: String) -> Result<Config, ParseIntError> {
     return Ok(Config { port: i32::from_str(text.trim())? });
 }
@@ -624,3 +641,31 @@ test {
     assert message.starts_with("cannot read");
 }
 ```
+
+### Error Propagation
+
+The postfix `?` operator unwraps a `Result` or an `Option`. Where there is
+nothing to unwrap, it returns from the enclosing function:
+
+- On `Ok(v)`, `expr?` is `v`. On `Err(e)`, the function returns
+  `Err(From::from(e))`, so the error converts to the function's own error type.
+  Above, `parse_config(content)?` turns a `ParseIntError` into a `ConfigError`
+  through the `From` impl.
+- On `Some(v)`, `expr?` is `v`. On `None`, the function returns `None`.
+
+`?` on a `Result` needs a function that returns a `Result`, and `?` on an
+`Option` one that returns an `Option`. Any other pairing is an error:
+
+<!-- {"fixture":"try_op_error_option_in_result_fn.wado"} -->
+
+```wado
+fn outer() -> Result<i32, String> {
+    let x = inner()?;
+    return Result::<i32, String>::Ok(x);
+}
+```
+
+Inside a closure, `?` returns from the closure
+([Closures](./spec-functions.md#closures)).
+
+Rationale: [WEP: Conversion Traits](./wep-2026-03-16-conversion-traits.md).

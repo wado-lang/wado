@@ -89,7 +89,8 @@ An uninitialized `let x: T;` declares a single name, or `_`.
 
 ## Exhaustiveness
 
-Match must cover all possible cases. Use `_` wildcard for catch-all:
+A `match` must cover every value of its scrutinee. A `_` arm covers whatever the
+other arms leave:
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -144,7 +145,8 @@ assert n == 1;
 
 ## Guard Expressions
 
-Guards use `&&` to reflect left-to-right evaluation (pattern first, then guard):
+A guard follows the pattern after `&&`, since it runs after the pattern
+matches, and only then:
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -212,6 +214,15 @@ test {
 The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
 type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
 `Option` constant matches at the top of an arm or nested in another pattern.
+
+Only a refutable pattern reads a bare name as a constant: a `match` arm,
+`if let`, `while let`, and `let ... else`. So `let limit = v else { … }` runs
+the `else` block unless `v == limit`. A local, a parameter, or a closure capture
+that takes the name puts the global out of reach, so the name binds there as it
+would anywhere else. What counts is what is in scope where the pattern starts.
+A name the pattern binds itself reaches none of its own sites, so
+`[mut limit, limit]` binds the first element and tests the second against the
+global.
 
 ## Range Patterns
 
@@ -346,7 +357,10 @@ assert doubled == 42;
 
 ## Match Ergonomics
 
-When the scrutinee of `if let`, `match`, or `matches` is a reference type (`&T` or `&mut T`), patterns match against the underlying type. Payload bindings become references — e.g. matching `&Option<T>` with `Some(x)` gives `x: &T`, not `x: T` (Rust-compatible, RFC 2005).
+When the scrutinee of `if let`, `match`, or `matches` is a reference (`&T` or
+`&mut T`), patterns match against the type it points to, and payload bindings
+become references. Matching `&Option<T>` with `Some(x)` gives `x: &T`, not
+`x: T`, as Rust's match ergonomics (RFC 2005) do.
 
 A destructuring `let` or `for` binding follows the same rule, and so does a reference met below the top of a pattern: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.
 
@@ -402,8 +416,6 @@ A refutable ascription in a plain `let` is rejected:
 let input: HtmlInputElement = el;                   // ERROR: refutable pattern in `let`
 ```
 
-A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An unguarded arm whose type is a supertype of a later arm's makes that later arm unreachable, which is an error, as [any unreachable arm](./spec-patterns.md#exhaustiveness) is.
+A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An unguarded arm whose type is a supertype of a later arm's makes that later arm unreachable, which is an error, as [any unreachable arm](#exhaustiveness) is.
 
 A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
-
-A type pattern narrows a value at runtime.

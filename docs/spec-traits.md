@@ -816,10 +816,11 @@ test {
 
 ### One Trait at Two Argument Lists
 
-Wado has no function overloading. Declaring a second one of these under one name
-is an error: a free function, an inherent method of one receiver (see
-[Specific Impls Win](#specific-impls-win)), a method within one trait
-declaration. Arity never tells two apart; default arguments cover optional
+Wado has no function overloading. A module declares a free function name once
+([Calls](./spec-functions.md#calls)), a type an inherent method name once
+([Several Impl Blocks](./spec-functions.md#several-impl-blocks),
+[Specific Impls Win](#specific-impls-win)), and a trait declaration a method
+name once. Arity never tells two apart; default arguments cover optional
 parameters.
 
 The one overload set is one trait implemented for one type at several argument
@@ -1017,8 +1018,8 @@ Each prelude trait follows one policy for when an impl exists:
 | written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                          |
 | explicit  | an impl is written                                                                | every user-defined trait                           |
 
-Two on-demand traits have a condition of their own. `Default` asks that every
-field carry a default expression, not that every member satisfy `Default`
+Two exceptions narrow the on-demand row. `Default` asks that every field carry a
+default expression, not that every member satisfy `Default`
 ([Auto-Derivation](./spec-standard-traits.md#auto-derivation)). A `variant`
 derives `Eq` but never `Ord`
 ([Auto-derived Traits](./spec-types.md#auto-derived-traits)).
