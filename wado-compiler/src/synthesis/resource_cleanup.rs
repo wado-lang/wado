@@ -18,7 +18,7 @@ use crate::synthesis::common::{
     cm_canonical_call, expr_stmt, let_stmt, local_ref, return_stmt, synth_span,
 };
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
+    FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
     TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId,
     TypeTable,
 };
@@ -61,12 +61,7 @@ struct Cx<'a> {
     tt: &'a TypeTable,
     reg: &'a CmInterfaceRegistry,
     struct_fields: &'a StructFieldReg,
-    /// Base dispatch keys (monomorphization-invariant, see
-    /// [`crate::name::LocalMethodName::base_dispatch_key`]) of instance methods
-    /// whose `self` is taken by value. Calling such a method transfers ownership
-    /// of the receiver (e.g. `Result::unwrap`, which moves the wrapped value
-    /// out). A generic method and its instantiations share one key.
-    owned_self: &'a IndexSet<String>,
+    callees: &'a CalleeFacts,
     locals: &'a mut Vec<TirLocal>,
     local_count: &'a mut u32,
     /// The enclosing loops and labeled blocks, innermost last.
@@ -189,26 +184,52 @@ fn carries_resource_rec(
         .any(|t| carries_resource_rec(tt, reg, sfr, t, visited))
 }
 
-/// The mangled name identifying a method for the `owned_self` set, or `None`
-/// if `func` is not an instance method.
-fn instance_method_key(func: &TirFunction) -> Option<String> {
-    let info = func.method_info.as_ref()?;
-    func.takes_self().then(|| info.base_dispatch_key())
+/// What a call reveals about ownership, by callee. Each set holds
+/// [`callee_key`]s, which a generic function shares with its instantiations.
+#[derive(Default)]
+struct CalleeFacts {
+    /// Instance methods whose `self` is taken by value. Calling one transfers
+    /// ownership of the receiver (e.g. `Result::unwrap`, which moves the
+    /// wrapped value out).
+    owned_self: IndexSet<String>,
+    /// Functions that borrow a parameter and return a type parameter, such as
+    /// `List::index_value`. The move check cannot see a generic body return a
+    /// resource out of its borrow, so the result may alias the borrowed
+    /// storage (WEP 2026-05-21, "No move out of a borrow"), and it is no
+    /// temporary of the caller's.
+    alias_returning: IndexSet<String>,
 }
 
-/// Record `func` if it is an instance method whose `self` is taken by value
-/// (no `&`), i.e. a call to it transfers ownership of the receiver.
-fn record_owned_self(func: &TirFunction, tt: &TypeTable, out: &mut IndexSet<String>) {
-    let Some(key) = instance_method_key(func) else {
-        return;
-    };
-    let self_ty = func.params[0].type_id;
-    let by_value = !matches!(
-        tt.get(self_ty),
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-    );
-    if by_value {
-        out.insert(key);
+impl CalleeFacts {
+    fn record(&mut self, func: &TirFunction, tt: &TypeTable) {
+        let is_ref = |type_id| {
+            matches!(
+                tt.get(type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+        };
+        let key = callee_key(&FunctionRef::from_resolved(
+            func,
+            func.module_source.clone(),
+        ));
+        if func.method_info.is_some() && func.takes_self() && !is_ref(func.params[0].type_id) {
+            self.owned_self.insert(key.clone());
+        }
+        if func.params.iter().any(|param| is_ref(param.type_id))
+            && tt.contains_type_param(func.return_type)
+        {
+            self.alias_returning.insert(key);
+        }
+    }
+}
+
+/// The key [`CalleeFacts`] files a callee under: a method's
+/// [`base_dispatch_key`](crate::name::LocalMethodName::base_dispatch_key), or
+/// a free function's full name.
+fn callee_key(func: &FunctionRef) -> String {
+    match &func.method_info {
+        Some(info) => info.base_dispatch_key(),
+        None => func.full_name(),
     }
 }
 
@@ -226,12 +247,10 @@ pub fn elaborate_resource_drops(project: &mut Package) {
     };
     let tt = type_table.borrow();
 
-    // The receiver of a method call is consumed only when the method takes
-    // `self` by value; collect those methods up front.
-    let mut owned_self: IndexSet<String> = IndexSet::default();
+    let mut callees = CalleeFacts::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
-            record_owned_self(&func_rc.borrow(), &tt, &mut owned_self);
+            callees.record(&func_rc.borrow(), &tt);
         }
     }
 
@@ -242,7 +261,7 @@ pub fn elaborate_resource_drops(project: &mut Package) {
                 &tt,
                 reg,
                 &struct_fields,
-                &owned_self,
+                &callees,
             );
         }
     }
@@ -254,7 +273,7 @@ fn elaborate_function(
     tt: &TypeTable,
     reg: &CmInterfaceRegistry,
     struct_fields: &StructFieldReg,
-    owned_self: &IndexSet<String>,
+    callees: &CalleeFacts,
 ) {
     if func.body.is_none() {
         return;
@@ -289,7 +308,7 @@ fn elaborate_function(
             tt,
             reg,
             struct_fields,
-            owned_self,
+            callees,
             locals,
             local_count,
             targets: Vec::new(),
@@ -644,6 +663,8 @@ enum TemporaryScope {
     Enclosing,
 }
 
+/// [`elab_block_entry`], with the temporaries its statements spill dropping
+/// where `temporaries` says.
 fn elab_scope_stmts(
     stmts: Vec<TirStmt>,
     owned: &mut Owned,
@@ -1158,7 +1179,7 @@ fn elab_value_expr(mut expr: TirExpr, owned: &mut Owned, cx: &mut Cx) -> TirExpr
 /// The match is exhaustive so a new `TirExprKind` cannot silently escape
 /// ownership accounting: a missed transfer drops twice, a missed borrow leaks.
 fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx) {
-    if !consuming && is_temporary(&expr.kind) && cx.carries_resource(expr.type_id) {
+    if !consuming && is_temporary(&expr.kind, cx) && cx.carries_resource(expr.type_id) {
         elab_expr(expr, true, owned, cx);
         spill_temporary(expr, owned, cx);
         return;
@@ -1201,10 +1222,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
             // `self` by value. Extraction (`Result::unwrap`) is such a
             // by-value method, so it is covered here with no aggregate-shape
             // guessing.
-            let receiver_consumed = func
-                .method_info
-                .as_ref()
-                .is_some_and(|info| cx.owned_self.contains(&info.base_dispatch_key()));
+            let receiver_consumed = cx.callees.owned_self.contains(&callee_key(func));
             let (receiver, rest) = args.split_mut();
             if let Some(receiver) = receiver {
                 // `&self` methods auto-reference the receiver; look through
@@ -1338,11 +1356,13 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
 
 /// Whether evaluating `kind` produces a fresh value rather than reading a
 /// place. Borrowing such a value leaves it with no owner but the statement.
-fn is_temporary(kind: &TirExprKind) -> bool {
+fn is_temporary(kind: &TirExprKind, cx: &Cx) -> bool {
+    if let TirExprKind::Call { func, .. } = kind {
+        return !cx.callees.alias_returning.contains(&callee_key(func));
+    }
     matches!(
         kind,
-        TirExprKind::Call { .. }
-            | TirExprKind::CmRawCall { .. }
+        TirExprKind::CmRawCall { .. }
             | TirExprKind::IndirectCall { .. }
             | TirExprKind::StructLiteral { .. }
             | TirExprKind::TupleLiteral { .. }
