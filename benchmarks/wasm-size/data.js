@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790639817423,
+  "lastUpdate": 1790641249330,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61721,6 +61721,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288471,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9719237e25f8f5744158eb4e085692e559d6d9d5",
+          "message": "Merge pull request #2214 from wado-lang/claude/beautiful-faraday-ye10df\n\nfeat(gale): parse benchmarks for SQLite, CSS, TypeScript and Rust; Rust and TypeScript at 3+ MB/s",
+          "timestamp": "2026-09-29T08:28:47+09:00",
+          "tree_id": "fe95306b11a6645dc2fee810039c0d32a9e6fc8d",
+          "url": "https://github.com/wado-lang/wado/commit/9719237e25f8f5744158eb4e085692e559d6d9d5"
+        },
+        "date": 1790641248767,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1947,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6796,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20287,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313351,
             "unit": "bytes"
           }
         ]
