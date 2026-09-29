@@ -136,6 +136,8 @@ pub struct ModuleSourceInterner {
     package_roots: hashmap::IndexMap<InternedStr, InternedStr>,
     /// Generated module URI → the package importing it, one for all its importers.
     redirect_packages: hashmap::IndexMap<InternedStr, PackageId>,
+    /// The package of the entry point and its local modules.
+    root_package: PackageId,
 }
 
 impl ModuleSourceInterner {
@@ -145,11 +147,18 @@ impl ModuleSourceInterner {
             dependencies: DependencyIndex::default(),
             package_roots: hashmap::IndexMap::default(),
             redirect_packages: hashmap::IndexMap::default(),
+            root_package: PackageId::Root,
         }
     }
 
     pub fn set_dependencies(&mut self, dependencies: DependencyIndex) {
         self.dependencies = dependencies;
+    }
+
+    /// Put the entry point and its local modules in `core:*`'s package, as a
+    /// stdlib test is.
+    pub fn join_core_package(&mut self) {
+        self.root_package = PackageId::Core;
     }
 
     /// A dependency's entry module: it is its own package root.
@@ -232,6 +241,7 @@ impl ModuleSourceInterner {
     pub fn local(&mut self, path: &str) -> ModuleSource {
         ModuleSource::Local {
             path: self.intern(path),
+            package: self.root_package.clone(),
         }
     }
     /// A remote package's entry module: it is its own package root.
@@ -265,6 +275,7 @@ impl ModuleSourceInterner {
     pub fn entry_point(&mut self, filename: &str) -> ModuleSource {
         ModuleSource::EntryPoint {
             filename: self.intern(filename),
+            package: self.root_package.clone(),
         }
     }
 
@@ -388,6 +399,9 @@ pub enum ModuleSource {
     Local {
         /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
         path: InternedStr,
+        /// The entry's package, which a relative import stays in. Not part of
+        /// identity, which is `path`.
+        package: PackageId,
     },
     /// A module of a dependency package, resolved from a bare-name
     /// `use { … } from "<dep>"` against `[dependencies]`. Identity is `path`,
@@ -411,6 +425,9 @@ pub enum ModuleSource {
     EntryPoint {
         /// Filename of the entry point (e.g., `"hello.wado"`, `"<stdin>"`, `"<entry>"`)
         filename: InternedStr,
+        /// [`PackageId::Root`], or [`PackageId::Core`] for a stdlib test. Not
+        /// part of identity.
+        package: PackageId,
     },
     /// Module loaded through a Kiln invocation redirect, created when an import
     /// matches the [`crate::kiln::InvocationIndex`] and never written by user
@@ -443,7 +460,8 @@ pub enum ModuleSource {
 /// this: `internal` items reach any module with the same `PackageId`; `pub`
 /// items reach across package boundaries. `core` and each bundled CM namespace
 /// are their own independent package; the entry point and its local modules
-/// form the `Root` package being compiled.
+/// form the `Root` package being compiled, unless the host serves the stdlib's
+/// `core` tree ([`CompilerHost::serves_core`]), where they join `Core`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageId {
     Core,
@@ -461,7 +479,8 @@ impl ModuleSource {
         match self {
             Self::Core { .. } => PackageId::Core,
             Self::Binding { namespace, .. } => PackageId::Binding(*namespace),
-            Self::Local { .. } | Self::EntryPoint { .. } | Self::Wasm { .. } => PackageId::Root,
+            Self::Local { package, .. } | Self::EntryPoint { package, .. } => package.clone(),
+            Self::Wasm { .. } => PackageId::Root,
             Self::Redirected { package, .. } => package.clone(),
             Self::Dependency { pkg, .. } => PackageId::Dependency(pkg.clone()),
             Self::Remote { pkg, .. } => PackageId::Remote(pkg.clone()),
@@ -489,7 +508,7 @@ impl PartialEq for ModuleSource {
                     interface: b,
                 },
             ) => ns_a == ns_b && a == b,
-            (Self::Local { path: a }, Self::Local { path: b }) => a == b,
+            (Self::Local { path: a, .. }, Self::Local { path: b, .. }) => a == b,
             (Self::Dependency { path: a, .. }, Self::Dependency { path: b, .. }) => a == b,
             (Self::Remote { url: a, .. }, Self::Remote { url: b, .. }) => a == b,
             (Self::Redirected { uri: a, .. }, Self::Redirected { uri: b, .. }) => a == b,
@@ -525,7 +544,7 @@ impl std::hash::Hash for ModuleSource {
                 namespace.hash(state);
                 interface.hash(state);
             }
-            Self::Local { path } => path.hash(state),
+            Self::Local { path, .. } => path.hash(state),
             Self::Dependency { path, .. } => path.hash(state),
             Self::Remote { url, .. } => url.hash(state),
             Self::Redirected { uri, .. } => uri.hash(state),
@@ -623,11 +642,17 @@ impl ModuleSource {
         pub fn wasi_http() = Binding { interface: WASI_HTTP, namespace: CmNamespace::Wasi },
 
         /// Synthetic `<entry>` placeholder used by `from_path(&[])`.
-        pub fn entry_point_synthetic() = EntryPoint { filename: ENTRY_FILENAME_ENTRY },
+        pub fn entry_point_synthetic() = EntryPoint {
+            filename: ENTRY_FILENAME_ENTRY, package: PackageId::Root
+        },
         /// `<uninitialized>` sentinel for elaborator bootstrap.
-        pub fn entry_point_uninitialized() = EntryPoint { filename: ENTRY_FILENAME_UNINITIALIZED },
+        pub fn entry_point_uninitialized() = EntryPoint {
+            filename: ENTRY_FILENAME_UNINITIALIZED, package: PackageId::Root
+        },
         /// `<stdin>` placeholder.
-        pub fn entry_point_stdin() = EntryPoint { filename: ENTRY_FILENAME_STDIN },
+        pub fn entry_point_stdin() = EntryPoint {
+            filename: ENTRY_FILENAME_STDIN, package: PackageId::Root
+        },
     }
 
     /// The module holding `prim`'s impls. `v128` answers `primitive.wado` even
@@ -667,10 +692,10 @@ impl ModuleSource {
                 namespace,
                 interface,
             } => vec![namespace.prefix().to_string(), interface.to_string()],
-            Self::Local { path } => vec![path.to_string()],
+            Self::Local { path, .. } => vec![path.to_string()],
             Self::Dependency { path, .. } => vec!["dep".to_string(), path.to_string()],
             Self::Remote { url, .. } => vec![url.to_string()],
-            Self::EntryPoint { filename } => vec![entry_basename(filename).to_string()],
+            Self::EntryPoint { filename, .. } => vec![entry_basename(filename).to_string()],
             Self::Redirected { uri, .. } => vec![uri.to_string()],
             Self::Wasm { path, .. } => vec![path.to_string()],
         }
@@ -826,7 +851,7 @@ impl ModuleSource {
     #[must_use]
     pub fn source_path(&self) -> String {
         match self {
-            Self::EntryPoint { filename } => {
+            Self::EntryPoint { filename, .. } => {
                 if filename.starts_with('<') {
                     String::new() // synthetic names like <stdin>, <entry>
                 } else {
@@ -875,7 +900,7 @@ impl fmt::Display for ModuleSource {
                 namespace,
                 interface,
             } => write!(f, "{namespace}:{interface}"),
-            Self::Local { path } => write!(f, "{path}"),
+            Self::Local { path, .. } => write!(f, "{path}"),
             Self::Dependency { path, .. } => write!(f, "dep:{path}"),
             Self::Remote { url, .. } => write!(f, "{url}"),
             // Symbol identity, not a file path: the entry's qualifier is its
@@ -883,7 +908,7 @@ impl fmt::Display for ModuleSource {
             // stay stable across invocations and machines — the compile path is
             // absolute under the test harness, relative on the CLI. The real
             // path for diagnostics comes from `source_path`.
-            Self::EntryPoint { filename } => write!(f, "{}", entry_basename(filename)),
+            Self::EntryPoint { filename, .. } => write!(f, "{}", entry_basename(filename)),
             Self::Redirected { uri, .. } => write!(f, "{uri}"),
             Self::Wasm { path, .. } => write!(f, "{path}"),
         }
@@ -1001,7 +1026,7 @@ mod tests {
     fn test_module_source_from_path_local() {
         let mut interner = ModuleSourceInterner::new();
         let source = interner.from_path(&["./geometry.wado".to_string()]);
-        assert_matches!(source, ModuleSource::Local { ref path } if path == "./geometry.wado");
+        assert_matches!(source, ModuleSource::Local { ref path, .. } if path == "./geometry.wado");
 
         let source = interner.from_path(&["../lib.wado".to_string()]);
         assert!(source.is_local());
@@ -1111,6 +1136,14 @@ mod tests {
         assert!(local_a.same_package(&local_b));
         assert!(local_a.same_package(&entry));
         assert!(!local_a.same_package(&rt), "root and core are separate");
+
+        let mut stdlib_test = ModuleSourceInterner::new();
+        stdlib_test.join_core_package();
+        let test_entry = stdlib_test.entry_point("zlib_test.wado");
+        let test_local = stdlib_test.local("./helper.wado");
+        assert!(test_entry.same_package(&rt), "a stdlib test joins core");
+        assert!(test_local.same_package(&test_entry));
+        assert!(!test_entry.same_package(&entry));
 
         let dep_a = interner.dependency("dep_a/lib.wado");
         let dep_a2 = interner.dependency("dep_a/lib.wado");

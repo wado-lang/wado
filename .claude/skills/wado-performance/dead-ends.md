@@ -18,6 +18,29 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Breaking `adler32`'s dependency chain (2026-09-29)
+
+`adler32` in `core:zlib` adds each byte into `s1` and then `s1` into `s2`, so
+both sums form a serial chain. Rewriting the 16-byte block as
+`s2 += 16 * s1 + Σ (16 - k) * b_k` and `s1 += Σ b_k`, over four independent
+partial sums, shortens that chain. It measured **11% slower** over twitter.json
+(631 KB), four alternating rounds with the order swapped, on a release compiler.
+The arms' ranges do not overlap:
+
+| block body        | best      | ms/iter range |
+| ----------------- | --------- | ------------- |
+| serial (today)    | 1.82 GB/s | 0.347-0.356   |
+| four partial sums | 1.62 GB/s | 0.390-0.399   |
+
+The chain was never the bound. At 1.82 GB/s the loop already costs about as
+much as its 16 gets, and the weighted sums only add multiplies. SIMD does not
+apply either: `v128_load` wants a linear-memory address, and a `ByteList` is a
+GC `Array<u8>`.
+
+Generalizes: the same lesson as reading digits eight at a time. A loop that
+reads one byte and accumulates it is at its floor on a GC array. Measure the
+serial version in isolation before trying to beat it.
+
 ## Reading digits eight at a time in `scan_number_into` (2026-09-12)
 
 The whitespace scan pays by reading several bytes per bounds check, so the

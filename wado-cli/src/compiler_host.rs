@@ -333,6 +333,10 @@ impl CompilerHost for FilesystemCompilerHost {
         }
     }
 
+    fn serves_core(&self) -> bool {
+        self.inner.serves_core()
+    }
+
     fn env_var(&self, name: &str) -> Option<String> {
         std::env::var(name).ok()
     }

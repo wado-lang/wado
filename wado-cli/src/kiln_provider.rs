@@ -684,6 +684,10 @@ impl CompilerHost for SilentHost {
         self.inner.dependency_index()
     }
 
+    fn serves_core(&self) -> bool {
+        self.inner.serves_core()
+    }
+
     fn env_var(&self, name: &str) -> Option<String> {
         self.inner.env_var(name)
     }

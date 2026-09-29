@@ -8,7 +8,7 @@
 //   0: compress2 - stdin[1]=level, stdin[2..]=data → compressed bytes as space-separated decimal
 //   1: deflate_raw2 - stdin[1]=level, stdin[2..]=data → compressed bytes
 //   2: gzip_compress2 - stdin[1]=level, stdin[2..]=data → compressed bytes
-//   3: zlib_compress_stored - stdin[2..]=data → compressed bytes
+//   3: stored zlib - stdin[1..]=data → compressed bytes
 //   4: compress_with_strategy - stdin[1]=level, stdin[2]=strategy, stdin[3..]=data → compressed bytes
 //   5: checksums - stdin[1..]=data → "adler32 crc32" as decimal
 //   6: compress_bound - stdin[1..4]=size as big-endian i32 → bound as decimal
@@ -24,8 +24,8 @@
 use { print, println, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
 use {
-    zlib_compress_stored,
     zlib_compress,
+    Z_NO_COMPRESSION,
     deflate_raw,
     gzip_compress,
     compress_bound,
@@ -37,6 +37,7 @@ use {
     crc32_init,
     crc32_combine,
     DeflateStream,
+    Z_DEFAULT_STRATEGY,
     RAW_FORMAT,
     GZIP_FORMAT,
 } from "core:zlib";
@@ -103,12 +104,12 @@ export fn run() with (Stdout, Stdin) {
         let result = gzip_compress(&data, level);
         print_bytes(&result);
     } else if cmd == 3 {
-        // zlib_compress_stored: data=input[1..]
+        // stored zlib: data=input[1..]
         let mut data: ByteList = [];
         for let mut i = 1; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let result = zlib_compress_stored(&data);
+        let result = zlib_compress(&data, Z_NO_COMPRESSION);
         print_bytes(&result);
     } else if cmd == 4 {
         // compress_with_strategy: level=input[1], strategy=input[2], data=input[3..]
@@ -190,7 +191,7 @@ export fn run() with (Stdout, Stdin) {
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let mut ds = DeflateStream::new_with_format(level, RAW_FORMAT);
+        let mut ds = DeflateStream::new(level, Z_DEFAULT_STRATEGY, RAW_FORMAT);
         let result = ds.compress(&data);
         print_bytes(&result);
     } else if cmd == 14 {
@@ -200,7 +201,7 @@ export fn run() with (Stdout, Stdin) {
         for let mut i = 2; i < input.len(); i += 1 {
             data.push(input[i]);
         }
-        let mut ds = DeflateStream::new_with_format(level, GZIP_FORMAT);
+        let mut ds = DeflateStream::new(level, Z_DEFAULT_STRATEGY, GZIP_FORMAT);
         let result = ds.compress(&data);
         print_bytes(&result);
     } else {

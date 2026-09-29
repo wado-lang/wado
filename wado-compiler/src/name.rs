@@ -1635,7 +1635,7 @@ pub fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
 #[must_use]
 pub fn entry_dir_of(entry_module: Option<&ModuleSource>) -> String {
     match entry_module {
-        Some(ModuleSource::EntryPoint { filename }) => module_parent_dir(filename).to_string(),
+        Some(ModuleSource::EntryPoint { filename, .. }) => module_parent_dir(filename).to_string(),
         _ => String::new(),
     }
 }
@@ -1676,8 +1676,8 @@ pub fn resolve_local_identity(
 #[must_use]
 pub fn decl_file_of(source: &ModuleSource) -> &str {
     match source {
-        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
-        ModuleSource::EntryPoint { filename } => filename.as_str(),
+        ModuleSource::Local { path, .. } | ModuleSource::Dependency { path, .. } => path.as_str(),
+        ModuleSource::EntryPoint { filename, .. } => filename.as_str(),
         ModuleSource::Redirected { uri, .. } => uri.as_str(),
         _ => "",
     }
@@ -1755,14 +1755,18 @@ pub fn resolve_import_with_entry(
         }
     }
 
-    if relative && let ModuleSource::Local { path: from_path } = from_module {
+    if relative
+        && let ModuleSource::Local {
+            path: from_path, ..
+        } = from_module
+    {
         let resolved =
             resolve_local_identity(&entry_dir_of(entry_module), Some(from_path), import_source);
         // If this resolves to the entry module's canonical name, return the
         // entry ModuleSource to maintain a single type identity.
         if let Some(entry) = entry_module {
             let entry_canonical = match entry {
-                ModuleSource::EntryPoint { filename } => canonicalize_entry_point(filename),
+                ModuleSource::EntryPoint { filename, .. } => canonicalize_entry_point(filename),
                 _ => entry.to_string(),
             };
             if resolved == entry_canonical {

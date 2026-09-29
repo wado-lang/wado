@@ -518,6 +518,14 @@ pub trait CompilerHost: Send + Sync {
         DependencyIndex::default()
     }
 
+    /// Whether the sources this host serves are the stdlib's own `core` tree,
+    /// as a stdlib test's are. The entry point and its local modules then
+    /// belong to `core:*`'s package, and reach its `internal` items. Consulted
+    /// once, when the module loader is created; `false` by default.
+    fn serves_core(&self) -> bool {
+        false
+    }
+
     /// Read an environment variable at compile time, for `#[param(from_env =
     /// "...")]` resolution (see `wep-2026-04-26-compile-time-params.md`).
     ///

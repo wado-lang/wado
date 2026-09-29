@@ -562,7 +562,7 @@ pub fn resolve_wasm_asset_path(
             "{namespace}:{}",
             join_namespace_relative_path(interface, import_source)
         )),
-        ModuleSource::Local { path } => {
+        ModuleSource::Local { path, .. } => {
             Ok(resolve_local_identity(entry_dir, Some(path), import_source))
         }
         ModuleSource::Dependency { path, .. } => Ok(resolve_module_path(path, import_source)),
@@ -1262,6 +1262,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     pub fn new(host: &'a H, log_level: LogLevel) -> Self {
         let mut interner = ModuleSourceInterner::new();
         interner.set_dependencies(host.dependency_index());
+        if host.serves_core() {
+            interner.join_core_package();
+        }
         Self {
             host,
             log_level,
@@ -1519,7 +1522,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     self.pending_component_imports.push((resolved, kind));
                     continue;
                 }
-                if matches!(&resolved, ModuleSource::Local { path } if is_non_wado_schema(path)) {
+                if matches!(&resolved, ModuleSource::Local { path, .. } if is_non_wado_schema(path))
+                {
                     let declares_generator = use_decl
                         .attributes
                         .as_ref()
@@ -1912,7 +1916,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         _from_module_source: &ModuleSource,
     ) -> Result<String, LoadError> {
         match module_source {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+            ModuleSource::Local { path, .. } | ModuleSource::Dependency { path, .. } => {
                 let bytes = self.host.load_source(path).await.map_err(LoadError::from)?;
                 String::from_utf8(bytes).map_err(|_| LoadError::IoError {
                     path: path.to_string(),
