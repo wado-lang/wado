@@ -1552,7 +1552,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &args,
                     None,
                 );
-                if self.report_ambiguous_static(&resolved, suffix, call.span) {
+                if self.report_unanswered_static(&resolved, suffix, call.span) {
                     return TypeTable::ERROR;
                 }
                 // No candidate the arguments admitted — the same report the
@@ -1793,7 +1793,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver_args: &impl_type_args_inferred,
                         ..StaticQuery::of(type_name, method_name)
                     });
-                    if self.report_ambiguous_static(&resolved, method_name, call.span) {
+                    if self.report_unanswered_static(&resolved, method_name, call.span) {
                         return TypeTable::ERROR;
                     }
                     if !resolved.resolves() {
@@ -4185,7 +4185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_type: Some(receiver_ty),
             ..StaticQuery::of(type_name, method)
         });
-        if self.report_ambiguous_static(&ranked, method, span) {
+        if self.report_unanswered_static(&ranked, method, span) {
             return Some(TypeTable::ERROR);
         }
         // The blanket would key on the argument-less head, which carries no

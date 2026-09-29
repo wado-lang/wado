@@ -90,6 +90,12 @@ pub(super) enum StaticLookup {
     /// Several traits supply the name, which no argument can separate. The
     /// spelling names none of them and the call site reports it.
     Ambiguous(Vec<String>),
+    /// Only traits the calling module has not imported supply the name. The
+    /// call site reports the import that would enable it.
+    OutOfScope {
+        receiver: String,
+        traits: Vec<String>,
+    },
     NotStatic,
 }
 
@@ -212,8 +218,9 @@ fn prefer<C>(candidates: &mut Vec<C>, preferred: impl Fn(&C) -> bool) {
 }
 
 impl StaticLookup {
-    /// Whether the spelling names a static at all. An ambiguity does: the call
-    /// site reports it, where a `NotStatic` would read as a missing function.
+    /// Whether the spelling names a static at all. An ambiguity does, and so
+    /// does a trait out of scope: the call site reports either, where a
+    /// `NotStatic` would read as a missing function.
     pub(super) fn resolves(&self) -> bool {
         !matches!(self, Self::NotStatic)
     }
@@ -221,7 +228,9 @@ impl StaticLookup {
     pub(super) fn found(&self) -> Option<&StaticCallee> {
         match self {
             Self::Found(callee) => Some(callee),
-            Self::Overloaded { .. } | Self::Ambiguous(_) | Self::NotStatic => None,
+            Self::Overloaded { .. } | Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::NotStatic => {
+                None
+            }
         }
     }
 
@@ -231,7 +240,7 @@ impl StaticLookup {
         match self {
             Self::Found(callee) => callee.return_type,
             Self::Overloaded { return_type } => *return_type,
-            Self::Ambiguous(_) | Self::NotStatic => TypeTable::UNKNOWN,
+            Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::NotStatic => TypeTable::UNKNOWN,
         }
     }
 
@@ -241,7 +250,7 @@ impl StaticLookup {
     pub(super) fn params(self) -> (CalleeParams, bool) {
         match self {
             Self::Found(callee) => (callee.params, true),
-            Self::Overloaded { .. } | Self::Ambiguous(_) | Self::NotStatic => {
+            Self::Overloaded { .. } | Self::Ambiguous(_) | Self::OutOfScope { .. } | Self::NotStatic => {
                 (CalleeParams::default(), false)
             }
         }
@@ -308,8 +317,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &declaring_args,
         ));
         candidates.extend(self.blanket_candidates(method_name, receiver_type));
+        // As a method call's, a trait's declarations answer only where the
+        // trait is in scope (WEP 2026-09-01, "Scope"). A qualified spelling
+        // names its trait, which is what scope asks of a call.
+        let mut out_of_scope = Vec::new();
         if let Some(required) = required_trait {
             candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
+        } else {
+            let frame = self.frame_module().clone();
+            let resolutions = &self.tysys.resolutions;
+            (candidates, out_of_scope) = candidates.into_iter().partition(|c| {
+                c.supply
+                    .as_ref()
+                    .is_none_or(|s| resolutions.decl_in_scope(&frame, s.trait_decl))
+            });
         }
         let resolved = match self.select_candidate(candidates, arg_types) {
             Selection::One(candidate) => self.callee_of_candidate(
@@ -359,7 +380,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 required_trait,
                 ..StaticQuery::of(&base_name, method_name)
             }),
-            None => StaticLookup::NotStatic,
+            None => self.out_of_scope_lookup(receiver_name, &out_of_scope),
+        }
+    }
+
+    /// What a spelling no trait in scope answers says: the traits an import
+    /// would enable, or nothing where no trait the caller can name supplies it.
+    /// A trait private to another module is no import to suggest.
+    fn out_of_scope_lookup(&self, receiver_name: &str, out_of_scope: &[Candidate]) -> StaticLookup {
+        let defs = self.tysys.resolutions.defs();
+        let frame = self.frame_module();
+        let mut traits: Vec<String> = Vec::new();
+        for supply in out_of_scope.iter().filter_map(|c| c.supply.as_ref()) {
+            let trait_ = supply.trait_decl;
+            let reachable = defs
+                .visibility(trait_)
+                .reachable_from(defs.module(trait_).same_package(frame));
+            let name = defs.name(trait_).to_string();
+            if reachable && !traits.contains(&name) {
+                traits.push(name);
+            }
+        }
+        if traits.is_empty() {
+            return StaticLookup::NotStatic;
+        }
+        StaticLookup::OutOfScope {
+            receiver: receiver_name.to_string(),
+            traits,
         }
     }
 
@@ -545,23 +592,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Report a spelling several traits answer, which names none of them.
-    /// Every site that mangles a name has to consume this, or it builds a name
-    /// with no trait segment and WIR resolves it to nothing.
-    pub(super) fn report_ambiguous_static(
+    /// Report a spelling that names a static no trait answers: several traits
+    /// do, or only ones the caller has not imported. Every site that mangles a
+    /// name has to consume this, or it builds a name with no trait segment and
+    /// WIR resolves it to nothing.
+    pub(super) fn report_unanswered_static(
         &mut self,
         lookup: &StaticLookup,
         method_name: &str,
         span: Span,
     ) -> bool {
-        let StaticLookup::Ambiguous(traits) = lookup else {
-            return false;
+        let error = match lookup {
+            StaticLookup::Ambiguous(traits) => TypeError::AmbiguousTraitMethod {
+                method: method_name.to_string(),
+                traits: traits.clone(),
+                span,
+            },
+            StaticLookup::OutOfScope { receiver, traits } => TypeError::TraitNotImported {
+                method: method_name.to_string(),
+                receiver: receiver.clone(),
+                traits: traits.clone(),
+                span,
+            },
+            StaticLookup::Found(_) | StaticLookup::Overloaded { .. } | StaticLookup::NotStatic => {
+                return false;
+            }
         };
-        let _ = self.emit(TypeError::AmbiguousTraitMethod {
-            method: method_name.to_string(),
-            traits: traits.clone(),
-            span,
-        });
+        let _ = self.emit(error);
         true
     }
 

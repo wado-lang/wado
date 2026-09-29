@@ -1643,7 +1643,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => StaticLookup::NotStatic,
         };
-        if self.report_ambiguous_static(&resolved, &static_call.method, static_call.span) {
+        if self.report_unanswered_static(&resolved, &static_call.method, static_call.span) {
             return TypeTable::ERROR;
         }
         let (callee_params, declares_params) = resolved.params();
