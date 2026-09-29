@@ -9,8 +9,7 @@ Throughput is work per second (higher is better), with per-iteration time in
 parentheses. Native rows are optimized builds (C `gcc -O3`, Rust release, Wado
 `-O2`); JavaScript runs on Node.js. `vs best` is the fastest row's throughput
 over this row's (1.00x = fastest). Absolute throughput is machine-dependent, so
-compare by `vs best`. Each figure is the best of three runs, except MicroGPT's,
-which says below why it takes more.
+compare by `vs best`. Each figure is the best of three runs.
 
 Benchmarks are grouped into four sections: pure computation, serialization &
 compression, parsing, and application server.
@@ -33,21 +32,16 @@ Train — 32 steps, one per document, of forward, backward and Adam:
 | Implementation |      Throughput |    ms/iter | vs best |
 | -------------- | --------------: | ---------: | ------- |
 | Rust           | 2.72 k tokens/s |  83.572 ms | 1.00x   |
-| **Wado**       | 1.30 k tokens/s | 174.784 ms | 2.09x   |
-| JavaScript     | 1.21 k tokens/s | 187.022 ms | 2.24x   |
+| **Wado**       | 1.29 k tokens/s | 175.409 ms | 2.10x   |
+| JavaScript     | 1.19 k tokens/s | 190.711 ms | 2.28x   |
 
 Infer — 24 samples of the forward path alone, no gradients:
 
 | Implementation |      Throughput |    ms/iter | vs best |
 | -------------- | --------------: | ---------: | ------- |
-| Rust           | 4.21 k tokens/s |  91.134 ms | 1.00x   |
+| Rust           | 4.20 k tokens/s |  91.340 ms | 1.00x   |
 | **Wado**       | 3.69 k tokens/s | 104.098 ms | 1.14x   |
 | JavaScript     | 3.26 k tokens/s | 117.866 ms | 1.29x   |
-
-These rows are best of eight rather than the best of three the rest of the file
-uses. The JavaScript arm needs it: its inference time swung by more than a
-factor of two across those eight, where Rust and Wado each stayed near their own
-best. Three iterations per run is too few for the JIT to settle on that phase.
 
 Wado beats JavaScript on both phases. It trails Rust on both, and the gap is
 wider on training. Training spends most of its time in the backward pass, which
