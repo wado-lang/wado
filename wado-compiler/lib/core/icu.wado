@@ -5,6 +5,12 @@
 
 pub use { BinaryProperty, Properties } from "./icu.wat" with { type: "wat" };
 
+#[synopsis]
+test {
+    assert has(BinaryProperty::Uppercase, 'À');
+    assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
+}
+
 /// Whether `ch` has the property. Total, and the name costs nothing at run
 /// time: an enum case is a number, and ICU4X bakes each property as a static.
 pub fn has(property: BinaryProperty, ch: char) -> bool {

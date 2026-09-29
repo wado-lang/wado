@@ -1,8 +1,8 @@
 #![stdlib("core:args")]
 //! Command-line argument parsing (WEP `wep-2026-06-22-core-args.md`).
 //!
-//! `core:args` is a non-self-describing, parse-only `Deserializer` over `argv`,
-//! peer to `core:json_nsd`. Argument types are ordinary `struct`s with
+//! `core:args` is a non-self-describing, parse-only `Deserializer` over `argv`.
+//! Argument types are ordinary `struct`s with
 //! `impl Deserialize for T;` — no bespoke derive. Struct fields become `--long`
 //! options; fields marked `#[wire(positional)]` are filled from bare tokens in
 //! declaration order. Scalar tokens are converted with `LenientFromStr`.
@@ -36,7 +36,7 @@
 //!
 //! - Declare required positionals before optional (defaulted) ones. An optional
 //!   positional placed first greedily takes the token, starving a later required
-//!   one. (This footgun is shared by any ordinal format, e.g. `core:json_nsd`.)
+//!   one. (This footgun is shared by any ordinal format.)
 //! - At most one variadic (`List<T>`) positional, and it must be last. The first
 //!   variadic consumes every remaining bare token, leaving later positionals
 //!   empty or unfilled.

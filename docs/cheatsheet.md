@@ -1829,7 +1829,6 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 
 ### Other core modules
 
-- [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
 - [`core:jsonc`](./stdlib-core-jsonc.md) — reads JSON with comments and
   trailing commas, and edits it by JSON Pointer with the comments kept
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde

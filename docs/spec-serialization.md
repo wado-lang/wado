@@ -22,8 +22,8 @@ test {
 
 A format implements `Serializer`, `Deserializer`, or both, and a value's
 `Serialize` / `Deserialize` impl works with any of them. The formats in the
-standard library are `core:json`, `core:json_nsd` and `core:cbor`, which do
-both, and `core:args`, which only deserializes.
+standard library are `core:json` and `core:cbor`, which do both, and
+`core:args`, which only deserializes.
 [`core:serde`](./stdlib-core-serde.md) lists each trait's methods.
 
 `Deserialize::deserialize` has no `self`: it builds a new value from what the
@@ -56,8 +56,11 @@ A format is self-describing (SD) when the input names what it holds, such as
 `core:json` writing a struct as an object keyed by field name. A
 self-describing format resolves each key to a field by its wire name. A
 non-self-describing (NSD) format leaves the reader to know what the input holds,
-as [`core:json_nsd`](#json-nsd-module-corejson_nsd) does. The same
-`Deserialize` impl reads both.
+as [`core:args`](#command-line-arguments-coreargs) does. The same `Deserialize`
+impl reads both. `example/json_nsd.wado` is an NSD JSON format written outside
+the standard library: a struct is an array of its fields in declaration order,
+a unit variant case is its discriminant, and a payload case is
+`[discriminant, payload]`.
 
 Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
@@ -206,33 +209,6 @@ input, a type mismatch, or input with trailing data is an `Err`.
 magnitude is at most 2^53 - 1, the largest integer a JavaScript number holds
 exactly, and as a JSON string of decimal digits beyond it. Reading any integer
 type accepts either form.
-
-## JSON NSD Module (`core:json_nsd`)
-
-`core:json_nsd` is a non-self-describing JSON format. It writes a struct as an
-array of its fields in declaration order, with no field names. It writes a unit
-variant case as its discriminant integer, and a payload case as
-`[discriminant, payload]`.
-
-<!-- {"fixture":"spec_serialization_json_nsd.wado"} -->
-
-```wado
-use { to_string, from_string } from "core:json_nsd";
-
-struct User { name: String, age: i32 }
-
-test {
-    let user = User { name: "Alice", age: 30 };
-
-    // Struct as positional array
-    let json = to_string::<User>(&user);
-    assert json.unwrap() == `["Alice",30]`;
-
-    // Deserialize from positional array
-    let back = from_string::<User>(`["Alice",30]`).unwrap();
-    assert back.name == "Alice" && back.age == 30;
-}
-```
 
 ## Command-Line Arguments (`core:args`)
 

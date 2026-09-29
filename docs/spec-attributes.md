@@ -362,8 +362,8 @@ test {
 `#[wire(positional)]` marks a struct field as ordinal: when deserializing, it is
 filled by position and never matched by name. A format that resolves fields by
 name, such as `core:json`, never fills it, so the field takes its default or is
-reported missing. A sequence-only format such as `core:json_nsd` reads it in
-order like any other field. Serializing is unaffected. `core:args` fills
+reported missing. A sequence-only format reads it in order like any other
+field. Serializing is unaffected. `core:args` fills
 positional fields from bare tokens (see [Command-Line Arguments](./spec-serialization.md#command-line-arguments-coreargs)).
 
 #### Optional Fields
