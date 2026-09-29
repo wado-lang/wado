@@ -24,6 +24,29 @@ fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
     return m;
 }
 
+/// Whether reading `v` as `T` fails with exactly `kind`.
+fn fails_with<T: Deserialize>(v: &Value, kind: DeserializeErrorKind) -> bool {
+    return from_value::<T>(v) matches { Err(e) && e.kind == kind };
+}
+
+fn every_arm() -> List<Value> {
+    let bytes: ByteList = [1, 0xab];
+    let raw: ByteList = [0xf7];
+    return [
+        Value::Null, Value::Bool(true),
+        Value::Int(-3),
+        Value::UInt(u64::MAX),
+        Value::Int128(i128::MIN),
+        Value::UInt128(u128::MAX),
+        Value::Float(1.5),
+        Value::String("s"),
+        Value::Bytes(bytes),
+        Value::List([Value::Int(1)]),
+        { a: 1 },
+        Value::Undefined, Value::Unknown(raw),
+    ];
+}
+
 test "Value::Null serialize" {
     let v = Value::Null;
     let r = to_string(&v);
@@ -188,27 +211,21 @@ test "Value::Object deserialize" {
 
 test "Value nested object with array deserialize" {
     let r: Result<Value, DeserializeError> = from_string("{\"nums\":[1,2],\"flag\":true}");
-    if let Ok(v) = r {
-        let expected = Value::Object(obj([
-            [
-                "nums", Value::List([
-                    Value::Float(1.0),
-                    Value::Float(2.0),
-                ]),
-            ],
-            ["flag", Value::Bool(true)],
-        ]));
-        assert v == expected;
-    }
+    let expected = Value::Object(obj([
+        [
+            "nums", Value::List([
+                Value::Float(1.0),
+                Value::Float(2.0),
+            ]),
+        ],
+        ["flag", Value::Bool(true)],
+    ]));
+    assert r matches { Ok(v) && v == expected };
 }
 
 test "Value round-trip null" {
-    let original = Value::Null;
-    let json_r = to_string(&original);
-    if let Ok(json) = json_r {
-        let parsed_r: Result<Value, DeserializeError> = from_string(json);
-        assert parsed_r matches { Ok(v) && v == Value::Null };
-    }
+    let parsed: Result<Value, DeserializeError> = from_string(to_string(&Value::Null).unwrap());
+    assert parsed matches { Ok(v) && v == Value::Null };
 }
 
 test "Value round-trip nested" {
@@ -224,13 +241,8 @@ test "Value round-trip nested" {
         ["active", Value::Bool(true)],
         ["notes", Value::Null],
     ]));
-    let json_r = to_string(&original);
-    if let Ok(json) = json_r {
-        let parsed_r: Result<Value, DeserializeError> = from_string(json);
-        if let Ok(parsed) = parsed_r {
-            assert parsed == original;
-        }
-    }
+    let parsed: Result<Value, DeserializeError> = from_string(to_string(&original).unwrap());
+    assert parsed matches { Ok(v) && v == original };
 }
 
 test "Value whitespace tolerance" {
@@ -239,6 +251,18 @@ test "Value whitespace tolerance" {
         ["x", Value::Float(1.0)],
     ])) };
 }
+
+test "a Value read from malformed JSON fails at the bad byte inside the container" {
+    let fails_at = |json: String, offset: i64| {
+        let r: Result<Value, DeserializeError> = from_string(json);
+        return r matches { Err(e) && e.offset == offset };
+    };
+    assert fails_at("[1,}", 3);
+    assert fails_at("{1:2}", 1);
+    assert fails_at(`{"a":}`, 5);
+}
+
+// --- inspect ---
 
 test "inspect null" {
     assert `${Value::Null:?}` == "null";
@@ -309,6 +333,56 @@ test "pretty-print nested" {
 }";
 }
 
+test "inspect renders the binary-format arms" {
+    let bytes: ByteList = [1, 0xab];
+    let raw: ByteList = [0xf7];
+    assert `${Value::Int(-3):?}` == "-3";
+    assert `${Value::UInt(7):?}` == "7";
+    assert `${Value::Int128(-5):?}` == "-5";
+    assert `${Value::UInt128(5):?}` == "5";
+    assert `${Value::Bytes(bytes):?}` == "0x01ab";
+    assert `${Value::Undefined:?}` == "undefined";
+    assert `${Value::Unknown(raw):?}` == "unknown(0xf7)";
+}
+
+test "inspect separates object entries with a comma" {
+    let v: Value = { a: 1, b: null };
+    assert `${v:?}` == "{\"a\": 1, \"b\": null}";
+}
+
+test "pretty-print renders scalars as inspect does" {
+    let bytes: ByteList = [1, 0xab];
+    let raw: ByteList = [0xf7];
+    let scalars: List<Value> = [
+        Value::Null, Value::Bool(true),
+        Value::Bool(false),
+        Value::Int(-3),
+        Value::UInt(7),
+        Value::Int128(-5),
+        Value::UInt128(5),
+        Value::Float(1.5),
+        Value::String("s"),
+        Value::Bytes(bytes), Value::Undefined,
+        Value::Unknown(raw),
+    ];
+    for let v of scalars {
+        assert `${v:#?}` == `${v:?}`;
+    }
+}
+
+test "pretty-print keeps empty containers on one line" {
+    let v: Value = {
+        list: Value::List([]),
+        object: Value::Object(obj([])),
+    };
+    assert `${v:#?}` == "{
+  \"list\": [],
+  \"object\": {},
+}";
+}
+
+// --- equality ---
+
 test "Value eq null" {
     assert Value::Null == Value::Null;
     assert !(Value::Null == Value::Bool(false));
@@ -351,6 +425,31 @@ test "Value eq object" {
     ])));
 }
 
+test "Value equality compares each arm by payload" {
+    let arms = every_arm();
+    for let a of 0..<arms.len() {
+        for let b of 0..<arms.len() {
+            assert (arms[a] == arms[b]) == (a == b);
+        }
+    }
+    assert Value::UInt128(1) != Value::UInt128(2);
+    let one: ByteList = [1];
+    assert Value::Unknown(one) != Value::Bytes(one);
+    assert Value::Int(1) != Value::UInt(1);
+}
+
+test "Value equality of objects ignores key order but not keys" {
+    let ab: Value = { a: 1, b: 2 };
+    let ba: Value = { b: 2, a: 1 };
+    let ac: Value = { a: 1, c: 2 };
+    let a: Value = { a: 1 };
+    assert ab == ba;
+    assert ab != ac;
+    assert ab != a;
+}
+
+// --- to_value ---
+
 struct ToValuePoint {
     x: i32,
     y: i32,
@@ -365,12 +464,18 @@ variant ToValueShape {
 
 impl Serialize for ToValueShape;
 
-test "to_value preserves the integer/float distinction" {
+test "to_value keeps each primitive's width" {
     // A text round-trip (JSON) would collapse 42 to a Float; the direct
     // Value-building serializer keeps it an Int.
     assert to_value(&42) matches { Ok(Int(42)) };
+    assert to_value(&(-5 as i64)) matches { Ok(v) && v == Value::Int(-5) };
     assert to_value(&(7 as u64)) matches { Ok(UInt(7)) };
+    assert to_value(&(7 as u32)) matches { Ok(v) && v == Value::UInt(7) };
+    assert to_value(&i128::MIN) matches { Ok(v) && v == Value::Int128(i128::MIN) };
+    assert to_value(&u128::MAX) matches { Ok(v) && v == Value::UInt128(u128::MAX) };
     assert to_value(&3.5) matches { Ok(Float(_)) };
+    assert to_value(&(1.5 as f32)) matches { Ok(v) && v == Value::Float(1.5) };
+    assert to_value(&'é') matches { Ok(v) && v == Value::String("é") };
 }
 
 test "to_value on scalars" {
@@ -401,6 +506,41 @@ test "to_value on a unit variant yields its name" {
 
 test "to_value on a payload variant yields an object" {
     assert to_value(&ToValueShape::Circle(5)) matches { Ok(Object(_)) };
+}
+
+test "Value::from picks the arm of the source type" {
+    assert Value::from(-5 as i64) == Value::Int(-5);
+    assert Value::from(7 as u32) == Value::UInt(7);
+    assert Value::from(u64::MAX) == Value::UInt(u64::MAX);
+}
+
+test "to_value of a Value returns every representable arm unchanged" {
+    for let v of every_arm() {
+        if v matches { Undefined | Unknown(_) } {
+            continue;
+        }
+        assert to_value(&v) matches { Ok(back) && back == v };
+    }
+}
+
+struct ValueHolder {
+    v: Value,
+}
+
+variant ValueCase {
+    Wrap(Value),
+}
+
+test "to_value refuses Undefined and Unknown, however deep" {
+    let raw: ByteList = [0xf7];
+    let unsupported = |r: Result<Value, SerializeError>| r matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    assert unsupported(to_value(&Value::Undefined));
+    assert unsupported(to_value(&Value::Unknown(raw)));
+    assert unsupported(to_value(&Value::List([Value::Undefined])));
+    let in_object: Value = { a: Value::Undefined };
+    assert unsupported(to_value(&in_object));
+    assert unsupported(to_value(&ValueHolder { v: Value::Undefined }));
+    assert unsupported(to_value(&ValueCase::Wrap(Value::Undefined)));
 }
 
 // --- from_value ---
@@ -440,8 +580,7 @@ test "from_value fills field defaults" {
 
 test "from_value reports a missing field" {
     let v: Value = { port: 1 };
-    let r: Result<Endpoint, DeserializeError> = from_value(&v);
-    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MissingField };
+    assert fails_with::<Endpoint>(&v, MissingField);
 }
 
 test "from_value ignores unknown fields" {
@@ -504,18 +643,37 @@ test "from_value reads Value itself" {
     assert r matches { Ok(back) && back == v };
 }
 
+test "from_value into Value returns every arm unchanged" {
+    for let v of every_arm() {
+        assert from_value::<Value>(&v) matches { Ok(back) && back == v };
+    }
+}
+
+test "from_value reads bool" {
+    assert from_value::<bool>(&Value::Bool(true)) matches { Ok(true) };
+}
+
 test "from_value narrows integers with a range check" {
     assert from_value::<u8>(&Value::Int(255)) matches { Ok(255) };
-    assert from_value::<u8>(&Value::Int(256)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
-    assert from_value::<u32>(&Value::Int(-1)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    assert fails_with::<u8>(&Value::Int(256), Overflow);
+    assert fails_with::<u32>(&Value::Int(-1), Overflow);
+    assert fails_with::<u64>(&Value::Int(-1), Overflow);
     assert from_value::<u64>(&Value::UInt(u64::MAX)) matches { Ok(v) && v == u64::MAX };
-    assert from_value::<i64>(&Value::UInt(u64::MAX)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    assert fails_with::<i64>(&Value::UInt(u64::MAX), Overflow);
     assert from_value::<i128>(&Value::Int128(-5)) matches { Ok(-5) };
+    assert from_value::<i32>(&Value::UInt128(5)) matches { Ok(5) };
+}
+
+test "from_value reads u128 from every integer spelling" {
+    assert from_value::<u128>(&Value::UInt128(u128::MAX)) matches { Ok(n) && n == u128::MAX };
+    assert from_value::<u128>(&Value::String("340282366920938463463374607431768211455")) matches { Ok(n) && n == u128::MAX };
+    assert from_value::<u128>(&Value::Int(7)) matches { Ok(7) };
+    assert fails_with::<u128>(&Value::Int(-1), Overflow);
 }
 
 test "from_value reads a whole float as an integer" {
     assert from_value::<i32>(&Value::Float(42.0)) matches { Ok(42) };
-    assert from_value::<i32>(&Value::Float(4.5)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert fails_with::<i32>(&Value::Float(4.5), UnexpectedType);
 }
 
 test "from_value reads a whole float past 64 bits into a wide integer" {
@@ -537,23 +695,112 @@ test "from_value reads a string-encoded integer, as core:json writes one" {
     assert from_value::<i64>(&Value::String("9007199254740993")) matches { Ok(9007199254740993) };
 }
 
-test "from_value widens integers to floats" {
+test "from_value rejects a non-number for an integer" {
+    assert fails_with::<i32>(&Value::Bool(true), UnexpectedType);
+    assert fails_with::<i32>(&Value::String("12x"), InvalidValue);
+}
+
+test "from_value widens every integer arm to a float" {
     assert from_value::<f64>(&Value::Int(3)) matches { Ok(f) && f == 3.0 };
+    assert from_value::<f64>(&Value::UInt(3)) matches { Ok(f) && f == 3.0 };
+    assert from_value::<f64>(&Value::Int128(-2)) matches { Ok(f) && f == -2.0 };
+    assert from_value::<f64>(&Value::UInt128(4)) matches { Ok(f) && f == 4.0 };
+}
+
+test "from_value reads narrow floats" {
+    assert from_value::<f32>(&Value::Float(1.5)) matches { Ok(f) && f == 1.5 };
+    let half: f16 = 0.5;
+    assert from_value::<f16>(&Value::Float(0.5)) matches { Ok(f) && f == half };
+    let brain: bf16 = -2.0;
+    assert from_value::<bf16>(&Value::Int(-2)) matches { Ok(f) && f == brain };
+}
+
+test "from_value rejects a non-number for a float" {
+    assert fails_with::<f64>(&Value::String("1"), UnexpectedType);
+    assert fails_with::<f32>(&Value::Null, UnexpectedType);
+    assert fails_with::<f16>(&Value::Null, UnexpectedType);
+    assert fails_with::<bf16>(&Value::Null, UnexpectedType);
 }
 
 test "from_value rejects a type mismatch" {
-    assert from_value::<String>(&Value::Int(1)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
-    assert from_value::<bool>(&Value::Null) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
-    assert from_value::<List<i32>>(&Value::String("x")) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert fails_with::<String>(&Value::Int(1), UnexpectedType);
+    assert fails_with::<bool>(&Value::Null, UnexpectedType);
+    assert fails_with::<List<i32>>(&Value::String("x"), UnexpectedType);
+    assert fails_with::<Endpoint>(&Value::List([]), UnexpectedType);
+    assert fails_with::<TreeMap<String, i64>>(&Value::Int(1), UnexpectedType);
 }
 
 test "from_value reads a char and bytes" {
     assert from_value::<char>(&Value::String("x")) matches { Ok('x') };
-    assert from_value::<char>(&Value::String("xy")) matches { Err(_) };
     let bytes: ByteList = [1, 2];
     assert from_value::<ByteList>(&Value::Bytes(bytes)) matches { Ok(b) && b.len() == 2 };
     // core:json writes bytes as base64.
     assert from_value::<ByteList>(&Value::String("AQI=")) matches { Ok(b) && b.len() == 2 && b[1] == 2 };
+}
+
+test "from_value rejects a char that is not exactly one character" {
+    assert fails_with::<char>(&Value::String(""), InvalidValue);
+    assert fails_with::<char>(&Value::String("xy"), InvalidValue);
+    assert fails_with::<char>(&Value::Int(120), UnexpectedType);
+}
+
+test "from_value rejects bytes that are neither Bytes nor base64" {
+    assert fails_with::<ByteList>(&Value::String("!!"), InvalidValue);
+    assert fails_with::<ByteList>(&Value::Int(1), UnexpectedType);
+}
+
+test "from_value reads Null and Undefined as an absent Option" {
+    assert from_value::<Option<i32>>(&Value::Null) matches { Ok(None) };
+    assert from_value::<Option<i32>>(&Value::Undefined) matches { Ok(None) };
+    assert from_value::<Option<i32>>(&Value::Int(3)) matches { Ok(Some(3)) };
+}
+
+test "from_value reports a bad list element" {
+    let v = Value::List([
+        Value::Int(1),
+        Value::Bool(true),
+    ]);
+    assert fails_with::<List<i32>>(&v, UnexpectedType);
+}
+
+test "from_value rejects a list longer than the tuple" {
+    let v = Value::List([
+        Value::Int(1),
+        Value::Int(2),
+        Value::Int(3),
+    ]);
+    assert fails_with::<[i32, i32]>(&v, InvalidValue);
+}
+
+test "from_value rejects a payload case named without its payload" {
+    assert from_value::<ToValueShape>(&Value::String("Circle")) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType
+        && e.message == "expected a payload for Circle" };
+}
+
+test "from_value reads a variant only from a name or a one-key object" {
+    let two_keys: Value = { Circle: 1, Dot: null };
+    assert fails_with::<ToValueShape>(&Value::Int(1), UnexpectedType);
+    assert fails_with::<ToValueShape>(&Value::Object(obj([])), UnexpectedType);
+    assert fails_with::<ToValueShape>(&two_keys, UnexpectedType);
+}
+
+/// Records whether the wire's variant case carried a payload.
+struct CaseShape {
+    unit: bool,
+}
+
+impl Deserialize for CaseShape {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<CaseShape, DeserializeError> {
+        let mut va = d.begin_variant("CaseShape", 2)?;
+        return va.is_unit().map(|unit| CaseShape { unit });
+    }
+}
+
+test "a variant read from a Value tells a unit case from a payload case" {
+    let payload: Value = { Circle: 1 };
+    assert from_value::<CaseShape>(&Value::String("Dot")) matches { Ok(c) && c.unit };
+    assert from_value::<CaseShape>(&payload) matches { Ok(c) && !c.unit };
+    assert fails_with::<CaseShape>(&Value::Int(1), UnexpectedType);
 }
 
 // --- merge ---
@@ -583,6 +830,18 @@ test "merge adds keys the base lacks, after its own" {
     assert to_string(&merged) matches { Ok(s) && s == "{\"a\":1,\"b\":2}" };
 }
 
+test "merge takes an object the base lacks whole" {
+    let base: Value = { a: 1 };
+    let overlay: Value = {
+        b: { c: 2 },
+    };
+    let expected: Value = {
+        a: 1,
+        b: { c: 2 },
+    };
+    assert merge(base, overlay) == expected;
+}
+
 test "merge replaces a list rather than concatenating" {
     let base: Value = {
         tags: ["a", "b"],
@@ -604,6 +863,11 @@ test "merge replaces when either side is not an object" {
     let expected: Value = { a: 5 };
     assert merge(base, overlay) == expected;
     assert merge(Value::Int(1), Value::String("x")) == Value::String("x");
+    assert merge(overlay, Value::Int(5)) == Value::Int(5);
+    let nested: Value = {
+        a: { b: 2 },
+    };
+    assert merge(overlay, nested) == nested;
 }
 
 test "merge takes an explicit null from the overlay" {
@@ -613,112 +877,7 @@ test "merge takes an explicit null from the overlay" {
     assert merge(base, overlay) == expected;
 }
 
-test "to_value preserves byte strings as Value::Bytes" {
-    let bytes: ByteList = [1, 2, 3];
-    let v = Value::Bytes(bytes);
-    if let Ok(Bytes(b)) = to_value(&v) {
-        assert b.len() == 3;
-        assert b[0] == 1;
-        assert b[2] == 3;
-    } else {
-        panic("expected Value::Bytes");
-    }
-}
-
-// --- every arm ---
-
-fn every_arm() -> List<Value> {
-    let bytes: ByteList = [1, 0xab];
-    let raw: ByteList = [0xf7];
-    return [
-        Value::Null, Value::Bool(true),
-        Value::Int(-3),
-        Value::UInt(u64::MAX),
-        Value::Int128(i128::MIN),
-        Value::UInt128(u128::MAX),
-        Value::Float(1.5),
-        Value::String("s"),
-        Value::Bytes(bytes),
-        Value::List([Value::Int(1)]),
-        { a: 1 },
-        Value::Undefined, Value::Unknown(raw),
-    ];
-}
-
-test "Value::from picks the arm of the source type" {
-    assert Value::from(-5 as i64) == Value::Int(-5);
-    assert Value::from(7 as u32) == Value::UInt(7);
-    assert Value::from(u64::MAX) == Value::UInt(u64::MAX);
-}
-
-test "Value equality compares each arm by payload" {
-    let arms = every_arm();
-    for let a of 0..<arms.len() {
-        for let b of 0..<arms.len() {
-            assert (arms[a] == arms[b]) == (a == b);
-        }
-    }
-    assert Value::UInt128(1) != Value::UInt128(2);
-    let one: ByteList = [1];
-    assert Value::Unknown(one) != Value::Bytes(one);
-    assert Value::Int(1) != Value::UInt(1);
-}
-
-test "Value equality of objects ignores key order but not keys" {
-    let ab: Value = { a: 1, b: 2 };
-    let ba: Value = { b: 2, a: 1 };
-    let ac: Value = { a: 1, c: 2 };
-    let a: Value = { a: 1 };
-    assert ab == ba;
-    assert ab != ac;
-    assert ab != a;
-}
-
-test "from_value into Value returns every arm unchanged" {
-    for let v of every_arm() {
-        assert from_value::<Value>(&v) matches { Ok(back) && back == v };
-    }
-}
-
-test "to_value of a Value returns every representable arm unchanged" {
-    for let v of every_arm() {
-        if v matches { Undefined | Unknown(_) } {
-            continue;
-        }
-        assert to_value(&v) matches { Ok(back) && back == v };
-    }
-}
-
-// --- to_value ---
-
-struct ValueHolder {
-    v: Value,
-}
-
-variant ValueCase {
-    Wrap(Value),
-}
-
-test "to_value refuses Undefined and Unknown, however deep" {
-    let raw: ByteList = [0xf7];
-    let unsupported = |r: Result<Value, SerializeError>| r matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
-    assert unsupported(to_value(&Value::Undefined));
-    assert unsupported(to_value(&Value::Unknown(raw)));
-    assert unsupported(to_value(&Value::List([Value::Undefined])));
-    let in_object: Value = { a: Value::Undefined };
-    assert unsupported(to_value(&in_object));
-    assert unsupported(to_value(&ValueHolder { v: Value::Undefined }));
-    assert unsupported(to_value(&ValueCase::Wrap(Value::Undefined)));
-}
-
-test "to_value keeps each primitive's width" {
-    assert to_value(&(-5 as i64)) matches { Ok(v) && v == Value::Int(-5) };
-    assert to_value(&(7 as u32)) matches { Ok(v) && v == Value::UInt(7) };
-    assert to_value(&i128::MIN) matches { Ok(v) && v == Value::Int128(i128::MIN) };
-    assert to_value(&u128::MAX) matches { Ok(v) && v == Value::UInt128(u128::MAX) };
-    assert to_value(&(1.5 as f32)) matches { Ok(v) && v == Value::Float(1.5) };
-    assert to_value(&'é') matches { Ok(v) && v == Value::String("é") };
-}
+// --- map keys ---
 
 test "to_value writes a string-keyed map as an object in key order" {
     let mut m = TreeMap::<String, i32>::new();
@@ -756,209 +915,6 @@ test "to_value spells integer and bool map keys as strings" {
     assert to_value(&ScalarKeys {}) matches { Ok(v) && v == expected };
 }
 
-// --- Inspect ---
-
-test "inspect renders the binary-format arms" {
-    let bytes: ByteList = [1, 0xab];
-    let raw: ByteList = [0xf7];
-    assert `${Value::Int(-3):?}` == "-3";
-    assert `${Value::UInt(7):?}` == "7";
-    assert `${Value::Int128(-5):?}` == "-5";
-    assert `${Value::UInt128(5):?}` == "5";
-    assert `${Value::Bytes(bytes):?}` == "0x01ab";
-    assert `${Value::Undefined:?}` == "undefined";
-    assert `${Value::Unknown(raw):?}` == "unknown(0xf7)";
-}
-
-test "inspect separates object entries with a comma" {
-    let v: Value = { a: 1, b: null };
-    assert `${v:?}` == "{\"a\": 1, \"b\": null}";
-}
-
-test "pretty-print renders scalars as inspect does" {
-    let bytes: ByteList = [1, 0xab];
-    let raw: ByteList = [0xf7];
-    let scalars: List<Value> = [
-        Value::Null, Value::Bool(true),
-        Value::Bool(false),
-        Value::Int(-3),
-        Value::UInt(7),
-        Value::Int128(-5),
-        Value::UInt128(5),
-        Value::Float(1.5),
-        Value::String("s"),
-        Value::Bytes(bytes), Value::Undefined,
-        Value::Unknown(raw),
-    ];
-    for let v of scalars {
-        assert `${v:#?}` == `${v:?}`;
-    }
-}
-
-test "pretty-print keeps empty containers on one line" {
-    let v: Value = {
-        list: Value::List([]),
-        object: Value::Object(obj([])),
-    };
-    assert `${v:#?}` == "{
-  \"list\": [],
-  \"object\": {},
-}";
-}
-
-// --- merge ---
-
-test "merge replaces an object with a non-object overlay" {
-    let base: Value = { a: 1 };
-    assert merge(base, Value::Int(5)) == Value::Int(5);
-}
-
-test "merge takes an object the base lacks whole" {
-    let base: Value = { a: 1 };
-    let overlay: Value = {
-        b: { c: 2 },
-    };
-    let expected: Value = {
-        a: 1,
-        b: { c: 2 },
-    };
-    assert merge(base, overlay) == expected;
-}
-
-test "merge replaces a scalar with an object overlay" {
-    let base: Value = { a: 1 };
-    let overlay: Value = {
-        a: { b: 2 },
-    };
-    assert merge(base, overlay) == overlay;
-}
-
-// --- from_value: scalars ---
-
-test "from_value reads bool" {
-    assert from_value::<bool>(&Value::Bool(true)) matches { Ok(true) };
-}
-
-test "from_value reads a small UInt128 into a narrow integer" {
-    assert from_value::<i32>(&Value::UInt128(5)) matches { Ok(5) };
-}
-
-test "from_value rejects a non-number for an integer" {
-    let kind = |r: Result<i32, DeserializeError>| match r {
-        Ok(_) => DeserializeErrorKind::Custom,
-        Err(e) => e.kind,
-    };
-    assert kind(from_value(&Value::Bool(true))) == DeserializeErrorKind::UnexpectedType;
-    assert kind(from_value(&Value::String("12x"))) == DeserializeErrorKind::InvalidValue;
-    assert from_value::<u64>(&Value::Int(-1)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
-}
-
-test "from_value reads u128 from every integer spelling" {
-    assert from_value::<u128>(&Value::UInt128(u128::MAX)) matches { Ok(n) && n == u128::MAX };
-    assert from_value::<u128>(&Value::String("340282366920938463463374607431768211455")) matches { Ok(n) && n == u128::MAX };
-    assert from_value::<u128>(&Value::Int(7)) matches { Ok(7) };
-    assert from_value::<u128>(&Value::Int(-1)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
-}
-
-test "from_value widens every integer arm to a float" {
-    assert from_value::<f64>(&Value::UInt(3)) matches { Ok(f) && f == 3.0 };
-    assert from_value::<f64>(&Value::Int128(-2)) matches { Ok(f) && f == -2.0 };
-    assert from_value::<f64>(&Value::UInt128(4)) matches { Ok(f) && f == 4.0 };
-}
-
-test "from_value reads narrow floats" {
-    assert from_value::<f32>(&Value::Float(1.5)) matches { Ok(f) && f == 1.5 };
-    let half: f16 = 0.5;
-    assert from_value::<f16>(&Value::Float(0.5)) matches { Ok(f) && f == half };
-    let brain: bf16 = -2.0;
-    assert from_value::<bf16>(&Value::Int(-2)) matches { Ok(f) && f == brain };
-}
-
-test "from_value rejects a non-number for a float" {
-    let unexpected = |e: &DeserializeError| e.kind == DeserializeErrorKind::UnexpectedType;
-    assert from_value::<f64>(&Value::String("1")) matches { Err(e) && unexpected(&e) };
-    assert from_value::<f32>(&Value::Null) matches { Err(e) && unexpected(&e) };
-    assert from_value::<f16>(&Value::Null) matches { Err(e) && unexpected(&e) };
-    assert from_value::<bf16>(&Value::Null) matches { Err(e) && unexpected(&e) };
-}
-
-test "from_value rejects a char that is not exactly one character" {
-    let invalid = |e: &DeserializeError| e.kind == DeserializeErrorKind::InvalidValue;
-    assert from_value::<char>(&Value::String("")) matches { Err(e) && invalid(&e) };
-    assert from_value::<char>(&Value::String("xy")) matches { Err(e) && invalid(&e) };
-    assert from_value::<char>(&Value::Int(120)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
-}
-
-test "from_value rejects bytes that are neither Bytes nor base64" {
-    assert from_value::<ByteList>(&Value::String("!!")) matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
-    assert from_value::<ByteList>(&Value::Int(1)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
-}
-
-test "from_value reads Null and Undefined as an absent Option" {
-    assert from_value::<Option<i32>>(&Value::Null) matches { Ok(None) };
-    assert from_value::<Option<i32>>(&Value::Undefined) matches { Ok(None) };
-    assert from_value::<Option<i32>>(&Value::Int(3)) matches { Ok(Some(3)) };
-}
-
-// --- from_value: containers ---
-
-test "from_value rejects a non-object for a struct or map" {
-    let unexpected = |e: &DeserializeError| e.kind == DeserializeErrorKind::UnexpectedType;
-    assert from_value::<Endpoint>(&Value::List([])) matches { Err(e) && unexpected(&e) };
-    assert from_value::<TreeMap<String, i64>>(&Value::Int(1)) matches { Err(e) && unexpected(&e) };
-}
-
-test "from_value reports a bad list element" {
-    let v = Value::List([
-        Value::Int(1),
-        Value::Bool(true),
-    ]);
-    assert from_value::<List<i32>>(&v) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
-}
-
-test "from_value rejects a list longer than the tuple" {
-    let v = Value::List([
-        Value::Int(1),
-        Value::Int(2),
-        Value::Int(3),
-    ]);
-    assert from_value::<[i32, i32]>(&v) matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
-}
-
-test "from_value rejects a payload case named without its payload" {
-    assert from_value::<ToValueShape>(&Value::String("Circle")) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType
-        && e.message == "expected a payload for Circle" };
-}
-
-test "from_value reads a variant only from a name or a one-key object" {
-    let unexpected = |r: Result<ToValueShape, DeserializeError>| r matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
-    let two_keys: Value = { Circle: 1, Dot: null };
-    assert unexpected(from_value(&Value::Int(1)));
-    assert unexpected(from_value(&Value::Object(obj([]))));
-    assert unexpected(from_value(&two_keys));
-}
-
-/// Records whether the wire's variant case carried a payload.
-struct CaseShape {
-    unit: bool,
-}
-
-impl Deserialize for CaseShape {
-    fn deserialize<D: Deserializer>(d: &mut D) -> Result<CaseShape, DeserializeError> {
-        let mut va = d.begin_variant("CaseShape", 2)?;
-        return va.is_unit().map(|unit| CaseShape { unit });
-    }
-}
-
-test "a variant read from a Value tells a unit case from a payload case" {
-    let payload: Value = { Circle: 1 };
-    assert from_value::<CaseShape>(&Value::String("Dot")) matches { Ok(c) && c.unit };
-    assert from_value::<CaseShape>(&payload) matches { Ok(c) && !c.unit };
-    assert from_value::<CaseShape>(&Value::Int(1)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
-}
-
-// --- duplicate keys ---
-
 test "a scalar map key round-trips through its object spelling" {
     let mut wide = TreeMap::<i128, String>::new();
     wide[1] = "one";
@@ -976,11 +932,12 @@ test "a compound map key is refused both ways" {
     let mut lists = TreeMap::<List<i32>, i32>::new();
     lists[[1]] = 1;
     assert to_value(&lists) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
-    let v = to_value(&({ a: 1 } as TreeMap<String, i32>)).unwrap();
-    assert from_value::<TreeMap<List<i32>, i32>>(&v) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
-    let bad = to_value(&({ x: 1 } as TreeMap<String, i32>)).unwrap();
-    assert from_value::<TreeMap<i32, i32>>(&bad) matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+    let v: Value = { a: 1 };
+    assert fails_with::<TreeMap<List<i32>, i32>>(&v, UnexpectedType);
+    assert fails_with::<TreeMap<i32, i32>>(&v, InvalidValue);
 }
+
+// --- duplicate keys ---
 
 test "a Value read from JSON rejects a repeated key" {
     let r: Result<Value, DeserializeError> = from_string(`{"a":1,"a":2}`);
@@ -1102,14 +1059,4 @@ test "a Value read under a last-wins policy keeps the last repeated key" {
     let r: Result<LastWinsValue, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
     let expected: Value = { a: 3.0, b: 2.0 };
     assert r matches { Ok(v) && v.value == expected };
-}
-
-test "a Value read from malformed JSON fails at the bad byte inside the container" {
-    let fails_at = |json: String, offset: i64| {
-        let r: Result<Value, DeserializeError> = from_string(json);
-        return r matches { Err(e) && e.offset == offset };
-    };
-    assert fails_at("[1,}", 3);
-    assert fails_at("{1:2}", 1);
-    assert fails_at(`{"a":}`, 5);
 }

@@ -10,12 +10,8 @@ test "a property named in the source needs no name lookup" {
 
 test "the two paths answer with the same set" {
     assert icu::set(BinaryProperty::WhiteSpace) == icu::ranges("White_Space").unwrap();
+    assert icu::set(BinaryProperty::HexDigit) == icu::ranges("Hex_Digit").unwrap();
     assert icu::has(BinaryProperty::Math, '+') == icu::contains("Math", '+').unwrap();
-}
-
-test "binary properties come back as ranges" {
-    assert icu::ranges("White_Space").unwrap()[0] == [9, 13];
-    assert icu::ranges("Hex_Digit").unwrap()[0] == [48, 57];
 }
 
 test "an enumerated property takes its value" {
@@ -31,8 +27,7 @@ test "a General_Category value may name a group" {
 
 test "a name matches as UAX 44 matches it" {
     assert icu::ranges("white space") == icu::ranges("WSpace");
-    assert icu::value_ranges("General_Category", "uppercase letter")
-        == icu::value_ranges("gc", "Lu");
+    assert icu::value_ranges("General_Category", "uppercase letter") == icu::value_ranges("gc", "Lu");
 }
 
 test "one character is answered without building the ranges" {

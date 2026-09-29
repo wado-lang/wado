@@ -21,12 +21,7 @@ use { TreeMap } from "core:collections";
 use { Uuid } from "core:uuid";
 
 fn enc<T: Serialize>(v: &T) -> String {
-    return match to_bytes::<T>(v) {
-        Ok(bytes) => bytes.to_hex(),
-        Err(_) => {
-            panic("serialize failed");
-        },
-    };
+    return to_bytes::<T>(v).unwrap().to_hex();
 }
 
 /// Parse a hex string into bytes for decode-side fixtures. Spaces separate
@@ -50,26 +45,11 @@ fn hex(s: String) -> ByteList {
 }
 
 fn roundtrips<T: Serialize + Deserialize + Eq>(v: &T) -> bool {
-    let bytes = match to_bytes::<T>(v) {
-        Ok(b) => b,
-        Err(_) => {
-            return false;
-        },
-    };
-    let back = match from_bytes::<T, ByteList>(bytes) {
-        Ok(x) => x,
-        Err(_) => {
-            return false;
-        },
-    };
-    return back == *v;
+    return from_bytes::<T, ByteList>(to_bytes::<T>(v).unwrap()) matches { Ok(back) && back == *v };
 }
 
 fn decodes_err<T: Deserialize>(b: ByteList) -> bool {
-    return match from_bytes::<T, ByteList>(b) {
-        Ok(_) => false,
-        Err(_) => true,
-    };
+    return from_bytes::<T, ByteList>(b) matches { Err(_) };
 }
 
 fn decode_err_kind<T: Deserialize>(b: ByteList) -> Option<DeserializeErrorKind> {
@@ -268,7 +248,7 @@ test "decode: out-of-range integers overflow, not truncate" {
     assert decodes_err::<u32>(hex("1b0000000100000000"));
     assert decodes_err::<u32>(hex("20"));
     // u64 does not overflow, but a bare u64::MAX must round-trip via the fast path.
-    assert from_bytes::<u64, ByteList>(hex("1bffffffffffffffff")).unwrap() == 18446744073709551615;
+    assert dec::<u64>("1bffffffffffffffff") == 18446744073709551615;
 }
 
 test "decode: truncated multi-byte head is EOF" {
@@ -281,31 +261,31 @@ test "decode: truncated multi-byte head is EOF" {
 
 test "decode: non-preferred integer encodings widen correctly" {
     // 0 in 1/2/4/8-byte forms, and -1 in the 1-byte nint form.
-    assert from_bytes::<i32, ByteList>(hex("1800")).unwrap() == 0;
-    assert from_bytes::<i32, ByteList>(hex("190000")).unwrap() == 0;
-    assert from_bytes::<i32, ByteList>(hex("1a00000000")).unwrap() == 0;
-    assert from_bytes::<i64, ByteList>(hex("1b0000000000000000")).unwrap() == 0;
-    assert from_bytes::<i32, ByteList>(hex("3800")).unwrap() == -1;
+    assert dec::<i32>("1800") == 0;
+    assert dec::<i32>("190000") == 0;
+    assert dec::<i32>("1a00000000") == 0;
+    assert dec::<i64>("1b0000000000000000") == 0;
+    assert dec::<i32>("3800") == -1;
     // An integer item decodes into a float target through the fast path.
-    assert from_bytes::<f64, ByteList>(hex("1a000f4240")).unwrap() == 1000000.0;
-    assert from_bytes::<f64, ByteList>(hex("20")).unwrap() == -1.0;
+    assert dec::<f64>("1a000f4240") == 1000000.0;
+    assert dec::<f64>("20") == -1.0;
 }
 
 test "decode: a negative integer item rounds once into a float" {
     // -(2^25 + 3) and -(2^54 + 3): adding the -1 after the cast rounds twice.
-    assert from_bytes::<f32, ByteList>(hex("3a02000002")) matches { Ok(v) && v == -33554436.0 };
-    assert from_bytes::<f64, ByteList>(hex("3b0040000000000002")) matches { Ok(v) && v == -18014398509481988.0 };
-    assert from_bytes::<f64, ByteList>(hex("3bffffffffffffffff")) matches { Ok(v) && v == -18446744073709551616.0 };
+    assert dec::<f32>("3a02000002") == -33554436.0;
+    assert dec::<f64>("3b0040000000000002") == -18014398509481988.0;
+    assert dec::<f64>("3bffffffffffffffff") == -18446744073709551616.0;
 }
 
 test "decode: a half rounds its item once" {
     // Each lands just above a half's midpoint, which f32 holds exactly.
-    assert from_bytes::<f16, ByteList>(hex("fb3ff0020000000001")) matches { Ok(v) && v.to_bits() == 0x3c01 };
-    assert from_bytes::<bf16, ByteList>(hex("fb3ff0100000000001")) matches { Ok(v) && v.to_bits() == 0x3f81 };
-    assert from_bytes::<bf16, ByteList>(hex("1b1010000000000001")) matches { Ok(v) && v.to_bits() == 0x5d81 };
-    assert from_bytes::<bf16, ByteList>(hex("3b1010000000000000")) matches { Ok(v) && v.to_bits() == 0xdd81 };
-    assert from_bytes::<f16, ByteList>(hex("00")) matches { Ok(v) && v.to_bits() == 0 };
-    assert from_bytes::<f16, ByteList>(hex("f93c01")) matches { Ok(v) && v.to_bits() == 0x3c01 };
+    assert dec::<f16>("fb3ff0020000000001").to_bits() == 0x3c01;
+    assert dec::<bf16>("fb3ff0100000000001").to_bits() == 0x3f81;
+    assert dec::<bf16>("1b1010000000000001").to_bits() == 0x5d81;
+    assert dec::<bf16>("3b1010000000000000").to_bits() == 0xdd81;
+    assert dec::<f16>("00").to_bits() == 0;
+    assert dec::<f16>("f93c01").to_bits() == 0x3c01;
 }
 
 test "round-trip: 128-bit integers and bignums" {
@@ -332,19 +312,8 @@ test "round-trip: floats, bool, string, bytes" {
 }
 
 test "round-trip: NaN and infinity (CBOR represents them natively)" {
-    let bytes = match to_bytes::<f64>(&f64::NAN) {
-        Ok(b) => b,
-        Err(_) => {
-            panic("nan serialize failed");
-        },
-    };
-    let back: f64 = match from_bytes::<f64, ByteList>(bytes) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("nan deserialize failed");
-        },
-    };
-    assert back.is_nan();
+    let bytes = to_bytes::<f64>(&f64::NAN).unwrap();
+    assert from_bytes::<f64, ByteList>(bytes) matches { Ok(back) && back.is_nan() };
     assert roundtrips::<f64>(&f64::INFINITY);
     assert roundtrips::<f64>(&-f64::INFINITY);
 }
@@ -367,21 +336,7 @@ test "round-trip: collections" {
     let mut m: TreeMap<String, i32> = TreeMap::new();
     m["one"] = 1;
     m["two"] = 2;
-    let bytes = match to_bytes::<TreeMap<String, i32>>(&m) {
-        Ok(b) => b,
-        Err(_) => {
-            panic("serialize failed");
-        },
-    };
-    let back: TreeMap<String, i32> = match from_bytes::<TreeMap<String, i32>, ByteList>(bytes) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("deserialize failed");
-        },
-    };
-    assert back.len() == 2;
-    assert back["one"] == 1;
-    assert back["two"] == 2;
+    assert roundtrips(&m);
 }
 
 test "round-trip: struct and variant" {
@@ -394,155 +349,63 @@ test "round-trip: struct and variant" {
 
 test "decode: struct from a map" {
     // {"x": 1, "y": 2}
-    let p: Point = match from_bytes::<Point, ByteList>(hex("a2617801617902")) {
-        Ok(v) => v,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert p.x == 1;
-    assert p.y == 2;
+    assert dec::<Point>("a2617801617902") == Point { x: 1, y: 2 };
 }
 
 test "decode: unknown struct fields are skipped" {
     // {"x": 1, "z": [1,2,3], "y": 2}
-    let p: Point = match from_bytes::<Point, ByteList>(hex("a3617801617a83010203617902")) {
-        Ok(v) => v,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert p.x == 1;
-    assert p.y == 2;
+    assert dec::<Point>("a3617801617a83010203617902") == Point { x: 1, y: 2 };
 }
 
 test "decode: variation-tolerant (non-preferred and indefinite)" {
     // 23 encoded with a 1-byte argument (non-preferred): 0x1817 -> 23
-    let n: i32 = match from_bytes::<i32, ByteList>(hex("1817")) {
-        Ok(v) => v,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert n == 23;
+    assert dec::<i32>("1817") == 23;
     // indefinite-length array [_ 1,2,3,4,5]
-    let a: List<i32> = match from_bytes::<List<i32>, ByteList>(hex("9f0102030405ff")) {
-        Ok(v) => v,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert a.len() == 5;
-    assert a[4] == 5;
+    let expected: List<i32> = [1, 2, 3, 4, 5];
+    assert dec::<List<i32>>("9f0102030405ff") == expected;
     // indefinite-length text (_ "strea", "ming") -> "streaming"
-    let s: String = match from_bytes::<String, ByteList>(hex("7f657374726561646d696e67ff")) {
-        Ok(v) => v,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert s == "streaming";
+    assert dec::<String>("7f657374726561646d696e67ff") == "streaming";
 }
 
 test "decode: indefinite-length text struct key" {
     // {(_ "a"): 1}: a struct key encoded as an indefinite-length text string
     // is well-formed and must match the field schema (RFC 8949 §4.1).
-    let p: Point = match from_bytes::<Point, ByteList>(hex("a27f6178ff017f6179ff02")) {
-        Ok(v) => v,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert p.x == 1;
-    assert p.y == 2;
+    assert dec::<Point>("a27f6178ff017f6179ff02") == Point { x: 1, y: 2 };
 }
 
 test "decode: null wrapped in a non-preferred self-described tag" {
     // tag 55799 in 4-byte form (0xda 0x0000d9f7) wrapping null — every other
     // path unwraps non-preferred tag encodings, so Option must too.
-    let n: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("da0000d9f7f6"));
-    assert n matches { Ok(v) && !v matches { Some(_) } };
-    let s: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("da0000d9f701"));
-    assert s matches { Ok(v) && v matches { Some(x) && x == 1 } };
+    assert dec::<Option<i32>>("da0000d9f7f6") matches { None };
+    assert dec::<Option<i32>>("da0000d9f701") matches { Some(1) };
 }
 
 test "decode: tag 0 date/time text unwraps to a string" {
     // tag(0) "2013-03-21T20:04:00Z"
-    let bytes = hex("c074323031332d30332d32315432303a30343a30305a");
-    let s: String = match from_bytes::<String, ByteList>(bytes) {
-        Ok(v) => v,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert s == "2013-03-21T20:04:00Z";
+    assert dec::<String>("c074323031332d30332d32315432303a30343a30305a") == "2013-03-21T20:04:00Z";
 }
 
 test "decode: dynamic Value" {
     // {"a": 1, "b": [2, 3]}
-    let v: Value = match from_bytes::<Value, ByteList>(hex("a26161016162820203")) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
     let mut expected: TreeMap<String, Value> = TreeMap::new();
     expected["a"] = Value::Int(1);
     expected["b"] = Value::List([
         Value::Int(2),
         Value::Int(3),
     ]);
-    assert v == Value::Object(expected);
+    assert dec::<Value>("a26161016162820203") == Value::Object(expected);
 }
 
 test "decode: Value preserves byte strings and undefined" {
-    let by: Value = match from_bytes::<Value, ByteList>(hex("4401020304")) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert by == Value::Bytes([1, 2, 3, 4]);
+    assert dec::<Value>("4401020304") == Value::Bytes([1, 2, 3, 4]);
     // undefined (0xf7) -> Value::Undefined
-    let u: Value = match from_bytes::<Value, ByteList>(hex("f7")) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert u == Value::Undefined;
+    assert dec::<Value>("f7") == Value::Undefined;
 }
 
 test "decode: lenient mode preserves an unknown tag as Value::Unknown" {
     // tag(40000) on 1 -> unknown tag; strict errors, lenient preserves raw bytes
-    let raw = hex("d99c4001");
-    assert decodes_err::<Value>(raw);
-    let v: Value = match from_bytes::<Value, ByteList>(hex("d99c4001"), false) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("lenient decode failed");
-        },
-    };
-    assert v == Value::Unknown(hex("d99c4001"));
-}
-
-test "decode: f16 widens to f32/f64" {
-    // 0xf93e00 = half-precision 1.5
-    let f: f64 = match from_bytes::<f64, ByteList>(hex("f93e00")) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert f == 1.5;
-    // 0xf97e00 = half NaN
-    let n: f64 = match from_bytes::<f64, ByteList>(hex("f97e00")) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert n.is_nan();
+    assert decodes_err::<Value>(hex("d99c4001"));
+    assert dec_lenient("d99c4001") matches { Ok(v) && v == Value::Unknown(hex("d99c4001")) };
 }
 
 test "reject: malformed and invalid inputs (Appendix F)" {
@@ -572,8 +435,7 @@ test "reject: nesting deeper than the recursion bound" {
 
 test "reject: variant map with other than one pair" {
     // External tagging is a single-pair map ({"Circle": 1.0, "Dot": null}).
-    let two = from_bytes::<Shape, ByteList>(hex("a266436972636c65fb3ff000000000000063446f74f6"));
-    assert two matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert fails_with::<Shape>("a266436972636c65fb3ff000000000000063446f74f6", MalformedInput);
     // The extra pair must not desync into the enclosing array:
     // [{Circle:1.0, Dot:"Dot"}] with a 3-element claim used to decode
     // silently as [Circle(1.0), Dot, Dot].
@@ -589,10 +451,8 @@ test "reject: unterminated indefinite variant map" {
 }
 
 test "variant single-pair forms still decode" {
-    let d = from_bytes::<Shape, ByteList>(hex("a166436972636c65fb3ff8000000000000"));
-    assert d matches { Ok(v) && v == Shape::Circle(1.5) };
-    let i = from_bytes::<Shape, ByteList>(hex("bf66436972636c65fb3ff8000000000000ff"));
-    assert i matches { Ok(v) && v == Shape::Circle(1.5) };
+    assert dec::<Shape>("a166436972636c65fb3ff8000000000000") == Shape::Circle(1.5);
+    assert dec::<Shape>("bf66436972636c65fb3ff8000000000000ff") == Shape::Circle(1.5);
 }
 
 test "reject: text-key length wider than the remaining input" {
@@ -611,17 +471,15 @@ test "reject: stray break where an item is expected" {
 test "passthrough tags unwrap for every scalar shape" {
     // Self-described CBOR (tag 55799, §3.4.6) around floats, bool, and null —
     // integers and strings already unwrapped it.
-    assert from_bytes::<f64, ByteList>(hex("d9d9f7fb3ff0000000000000")) matches { Ok(v) && v == 1.0 };
-    assert from_bytes::<f32, ByteList>(hex("d9d9f7fa3fc00000")) matches { Ok(v) && v == 1.5 };
-    assert from_bytes::<bool, ByteList>(hex("d9d9f7f5")) matches { Ok(v) && v };
-    let none: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("d9d9f7f6"));
-    assert none matches { Ok(v) && !v matches { Some(_) } };
-    let some: Result<Option<i32>, DeserializeError> = from_bytes::<Option<i32>, ByteList>(hex("d9d9f701"));
-    assert some matches { Ok(v) && v matches { Some(x) && x == 1 } };
+    assert dec::<f64>("d9d9f7fb3ff0000000000000") == 1.0;
+    assert dec::<f32>("d9d9f7fa3fc00000") == 1.5;
+    assert dec::<bool>("d9d9f7f5");
+    assert dec::<Option<i32>>("d9d9f7f6") matches { None };
+    assert dec::<Option<i32>>("d9d9f701") matches { Some(1) };
     // Epoch time (tag 1, §3.4.2) is content-passthrough for numbers
     // (Appendix A: 1(1363896240) and 1(1363896240.5)).
-    assert from_bytes::<i64, ByteList>(hex("c11a514b67b0")) matches { Ok(v) && v == 1363896240 };
-    assert from_bytes::<f64, ByteList>(hex("c1fb41d452d9ec200000")) matches { Ok(v) && v == 1363896240.5 };
+    assert dec::<i64>("c11a514b67b0") == 1363896240;
+    assert dec::<f64>("c1fb41d452d9ec200000") == 1363896240.5;
 }
 
 test "reject: definite array longer than the target tuple" {
@@ -632,17 +490,12 @@ test "reject: definite array longer than the target tuple" {
 }
 
 test "tuple from an indefinite array consumes the break" {
-    let r = from_bytes::<[i32, i32], ByteList>(hex("9f0102ff"));
-    assert r matches { Ok(t) && t.0 == 1 && t.1 == 2 };
+    let t = dec::<[i32, i32]>("9f0102ff");
+    assert t.0 == 1 && t.1 == 2;
 }
 
 fn enc_canon<T: Serialize>(v: &T) -> String {
-    return match to_bytes_canonical::<T>(v) {
-        Ok(bytes) => bytes.to_hex(),
-        Err(_) => {
-            panic("canonical serialize failed");
-        },
-    };
+    return to_bytes_canonical::<T>(v).unwrap().to_hex();
 }
 
 test "canonical: map keys sorted by encoded bytewise order" {
@@ -704,21 +557,8 @@ test "canonical: round-trips through the variation-tolerant decoder" {
     let mut m: TreeMap<String, List<i32>> = TreeMap::new();
     m["beta"] = [2, 3];
     m["alpha"] = [1];
-    let bytes = match to_bytes_canonical::<TreeMap<String, List<i32>>>(&m) {
-        Ok(b) => b,
-        Err(_) => {
-            panic("canonical serialize failed");
-        },
-    };
-    let back: TreeMap<String, List<i32>> = match from_bytes::<TreeMap<String, List<i32>>, ByteList>(bytes) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("deserialize failed");
-        },
-    };
-    assert back.len() == 2;
-    assert back["alpha"][0] == 1;
-    assert back["beta"][1] == 3;
+    let bytes = to_bytes_canonical(&m).unwrap();
+    assert from_bytes::<TreeMap<String, List<i32>>, ByteList>(bytes) matches { Ok(back) && back == m };
 }
 
 test "reject: indefinite length on a non-string/array/map major type" {
@@ -734,21 +574,10 @@ test "decode: half-float whose bits collide with a simple value" {
     // 0xf90014: half-precision, bits 0x0014 == 20. Must decode as the subnormal
     // ~1.19e-6, NOT as the simple value 20 (false). Regression for gating the
     // simple-value cases on `ai` instead of the float-bit `arg`.
-    let f: f64 = match from_bytes::<f64, ByteList>(hex("f90014")) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
+    let f = dec::<f64>("f90014");
     assert f > 0.0;
     assert f < 0.001;
-    let v: Value = match from_bytes::<Value, ByteList>(hex("f90014")) {
-        Ok(x) => x,
-        Err(_) => {
-            panic("decode failed");
-        },
-    };
-    assert v matches { Float(_) };
+    assert dec::<Value>("f90014") matches { Float(_) };
 }
 
 variant Nest {
@@ -760,24 +589,12 @@ impl Deserialize for Nest;
 /// `levels` nestings of `More`, innermost `Stop`. Each level is
 /// map(1) {"More": <inner>} — six bytes, so a nesting bomb is compact.
 fn nested_more(levels: i32) -> ByteList {
+    let level = hex("a1 64 4d6f7265");
     let mut bytes: ByteList = [];
-    let mut i = 0;
-    while i < levels {
-        // a1 64 4d6f7265 = map(1), text(4) "More"
-        bytes.push(0xa1);
-        bytes.push(0x64);
-        bytes.push(0x4d);
-        bytes.push(0x6f);
-        bytes.push(0x72);
-        bytes.push(0x65);
-        i += 1;
+    for let mut i = 0; i < levels; i += 1 {
+        bytes.extend(&level);
     }
-    // 64 53746f70 = text(4) "Stop"
-    bytes.push(0x64);
-    bytes.push(0x53);
-    bytes.push(0x74);
-    bytes.push(0x6f);
-    bytes.push(0x70);
+    bytes.extend(&hex("64 53746f70"));
     return bytes;
 }
 
@@ -818,22 +635,22 @@ test "an integer map key is a native integer" {
     assert enc(&m) == "a2016161216162";
     let back = dec::<TreeMap<i32, String>>("a2016161216162");
     assert back.len() == 2 && back[1] == "a" && back[-2] == "b";
-    assert fails_with::<TreeMap<i32, String>>("a1616161616161", DeserializeErrorKind::UnexpectedType);
+    assert fails_with::<TreeMap<i32, String>>("a1616161616161", UnexpectedType);
 }
 
 test "a lone break is malformed wherever an item is read" {
-    assert fails_with::<Value>("ff", DeserializeErrorKind::MalformedInput);
-    assert fails_with::<Value>("81 ff", DeserializeErrorKind::MalformedInput);
+    assert fails_with::<Value>("ff", MalformedInput);
+    assert fails_with::<Value>("81 ff", MalformedInput);
     assert dec_lenient("ff") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
     assert dec_lenient("81 ff") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
 test "an unsigned target names the item's type, and overflow only for a negative" {
-    assert fails_with::<u64>("61 61", DeserializeErrorKind::UnexpectedType);
-    assert fails_with::<u32>("f5", DeserializeErrorKind::UnexpectedType);
-    assert fails_with::<u128>("c4 00", DeserializeErrorKind::UnexpectedType);
-    assert fails_with::<u64>("20", DeserializeErrorKind::Overflow);
-    assert fails_with::<u128>("c3 41 01", DeserializeErrorKind::Overflow);
+    assert fails_with::<u64>("61 61", UnexpectedType);
+    assert fails_with::<u32>("f5", UnexpectedType);
+    assert fails_with::<u128>("c4 00", UnexpectedType);
+    assert fails_with::<u64>("20", Overflow);
+    assert fails_with::<u128>("c3 41 01", Overflow);
 }
 
 test "skipping an unknown field is depth-bounded like the typed path" {
@@ -909,6 +726,7 @@ test "Appendix A: half-precision floats decode exactly" {
     assert dec::<f64>("f9 c400") == -4.0;
     assert dec::<f64>("f9 7c00") == f64::INFINITY;
     assert dec::<f64>("f9 fc00") == -f64::INFINITY;
+    assert dec::<f64>("f9 7e00").is_nan();
     assert dec::<f32>("f9 c400") == -4.0;
 }
 
