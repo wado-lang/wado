@@ -49,3 +49,18 @@ Each captured operand is rendered with `Inspect` (`:?`), so a long `String` or
 failure readable. The optional message is an ordinary expression, formatted by
 whatever template specifiers it uses. `Display` is never cut, so formatting a
 value into the message yourself shows all of it.
+
+## Assertions Are Never Removed
+
+No build removes an assertion. At every optimization level the condition is
+evaluated, and a false one traps.
+
+What a build can drop is the failure message. Under `-f bare-asserts` a failed
+assertion traps without printing anything, and nothing that builds the message
+is compiled in. `-Os` turns it on, and `-f no-bare-asserts` turns it back off:
+
+```sh
+wado compile -Os app.wado                     # a failed assert traps silently
+wado compile -Os -f no-bare-asserts app.wado  # the message is kept
+wado compile -O2 -f bare-asserts app.wado     # silent at -O2 too
+```
