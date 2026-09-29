@@ -225,10 +225,11 @@ Never bend source to the inliner's current prices. Collapsing `let`s into one
 expression, choosing an operation width, or splitting a function only to get
 under the threshold are all banned. It is §2's rule applied to the inliner: the
 contortion reaches one call site and hides the gap from every other. zlib's
-`read_u32_le` is the case that set this rule. Written with a `let` per byte, it
-was declined, because each `let` is priced as a `local.set` and a `local.get`
-that Cranelift makes free once the body is spliced. That fix belongs in the
-price.
+`read_u32_le` is the case that set this rule. Widening each byte to `u64`
+priced it one instruction over the threshold, and doing the arithmetic in `u32`
+with one widening at the end got it inlined. But the widening costs nothing:
+Cranelift folds an `i64.extend_i32_u` into the load or arithmetic producing it. The
+price was wrong, and `is_zero_extension` in `optimize/inline.rs` is its fix.
 
 Raising the threshold wholesale is not the lever: it bloats hot loops and
 measured slower. The lever is a price that matches what the spliced code costs.

@@ -836,9 +836,11 @@ impl InflateState {
 global FAST_INPUT_MIN: i32 = 8;
 
 fn read_u32_le(input: &ByteList, pos: i32) -> u64 {
-    return (input.get_byte_unchecked(pos) as u32 | input.get_byte_unchecked(pos + 1) as u32 << 8 | input.get_byte_unchecked(
-        pos + 2,
-    ) as u32 << 16 | input.get_byte_unchecked(pos + 3) as u32 << 24) as u64;
+    let b0 = input.get_byte_unchecked(pos) as u64;
+    let b1 = input.get_byte_unchecked(pos + 1) as u64;
+    let b2 = input.get_byte_unchecked(pos + 2) as u64;
+    let b3 = input.get_byte_unchecked(pos + 3) as u64;
+    return b0 | b1 << 8 | b2 << 16 | b3 << 24;
 }
 
 fn low_bits(hold: u64, n: i32) -> i32 {
@@ -850,17 +852,15 @@ fn low_bits(hold: u64, n: i32) -> i32 {
 fn decode_entry(codes: &List<i32>, table: i32, root_bits: i32, hold: u64) -> [i32, i32] {
     let here = codes[table + low_bits(hold, root_bits)];
     let op = code_op(here);
-    if op == 0 || op & 0xF0 != 0 {
-        return [here, code_bits(here)];
+    if op != 0 && op & 0xF0 == 0 {
+        // A code longer than the root table's bits, which a Huffman code gives
+        // only to rare symbols: under 5% of lookups on twitter.json.
+        builtin::cold_path();
+        let root = code_bits(here);
+        let sub = codes[table + code_val(here) + low_bits(hold >> root as u64, op)];
+        return [sub, root + code_bits(sub)];
     }
-    return decode_sub_entry(codes, table, here, hold);
-}
-
-// `root` points into a sub-table: a code longer than the root table's bits.
-fn decode_sub_entry(codes: &List<i32>, table: i32, root: i32, hold: u64) -> [i32, i32] {
-    let root_bits = code_bits(root);
-    let sub = codes[table + code_val(root) + low_bits(hold >> root_bits as u64, code_op(root))];
-    return [sub, root_bits + code_bits(sub)];
+    return [here, code_bits(here)];
 }
 
 fn push_literal(output: &mut ByteList, literal: i32, max_output: i32) -> Result<(), ZlibError> {
