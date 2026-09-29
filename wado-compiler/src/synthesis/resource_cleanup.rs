@@ -810,7 +810,10 @@ fn elab_stmt(
 
         TirStmtKind::Expr(expr) => {
             let elaborated = elab_value_expr(expr, owned, cx);
-            if !is_tail && cx.carries_resource(elaborated.type_id) {
+            // An assignment is typed as the value it stores, which its target
+            // now owns: nothing is discarded.
+            let discards = !matches!(elaborated.kind, TirExprKind::Assign { .. });
+            if !is_tail && discards && cx.carries_resource(elaborated.type_id) {
                 out.extend(drop_discarded(elaborated, cx));
             } else {
                 out.push(TirStmt {

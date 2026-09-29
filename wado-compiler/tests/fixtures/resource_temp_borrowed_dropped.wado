@@ -13,6 +13,15 @@ fn holder() -> Holder {
     return Holder { headers: Fields::new(), n: 7 };
 }
 
+struct Pair {
+    a: Fields,
+    b: Fields,
+}
+
+fn pair() -> Pair {
+    return Pair { a: Fields::new(), b: Fields::new() };
+}
+
 fn has_greeting(f: &Fields) -> bool {
     return f.has("x-greeting" as FieldName);
 }
@@ -55,6 +64,25 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     for let _ of 0..<3 {
         Fields::new().has("a" as FieldName);
     }
+
+    // A loop condition, on the iteration that leaves by `break` too.
+    let mut i = 0;
+    while Fields::new().get("a" as FieldName).len() == 0 {
+        i += 1;
+        if i == 3 {
+            break;
+        }
+    }
+
+    // A resource bound by a `match` arm that only borrows it.
+    let has = match Fields::from_list([]) {
+        Ok(f) => f.has("a" as FieldName),
+        Err(_) => false,
+    };
+    assert !has;
+
+    // A discarded aggregate, whose drop reads it once per resource field.
+    pair();
 
     // A block's value.
     let b = sum: {

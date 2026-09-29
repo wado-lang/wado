@@ -1507,9 +1507,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<(), LoadError> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                if let Some(attrs) = &use_decl.attributes {
-                    self.check_import_attributes(from_module_source, attrs);
-                }
                 if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
                     wasm_imports_out.push((from_module_source.clone(), kind, use_decl.clone()));
                     continue;
@@ -1814,39 +1811,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Report a `use ... from "./schema.<ext>"` that names no generator. A
     /// non-`.wado` schema is only reachable through one.
-    /// Report each key of a `with` clause that nothing reads, and each value
-    /// of the wrong kind, on its key. A generated import's clause is Kiln's to
-    /// check, before the loader ever sees it.
-    fn check_import_attributes(&self, from_module_source: &ModuleSource, attrs: &ImportAttributes) {
-        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-        if attrs.entries.contains_key(ImportAttributes::GENERATOR) {
-            return;
-        }
-        let file = decl_file_of(from_module_source);
-        for (key, entry) in &attrs.entries {
-            let message = if !ImportAttributes::STRING_KEYS.contains(&key.as_str()) {
-                format!(
-                    "unknown import attribute `{key}`; `with` takes `{}`, or `{}`",
-                    ImportAttributes::STRING_KEYS.join("`, `"),
-                    ImportAttributes::GENERATOR,
-                )
-            } else if entry.value.as_str().is_none() {
-                format!(
-                    "import attribute `{key}` must be a string, got {}",
-                    entry.value.kind(),
-                )
-            } else {
-                continue;
-            };
-            self.host.emit_diagnostic(Diagnostic {
-                severity: Severity::Error,
-                code: Code::ImportAttrInvalid,
-                message,
-                span: Some(DiagnosticSpan::from_span(&entry.key_span, Some(file))),
-            });
-        }
-    }
-
     fn emit_kiln_missing_with(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = decl_file_of(from_module_source);

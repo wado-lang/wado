@@ -6,8 +6,9 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, Function, FunctionSite, GenericParam, Item, Module, UseDecl, UseItem,
-    Visibility, WorldExport, cm_import_of, for_each_function, walk_generic_params, walk_item,
+    AstId, AstVisitor, Function, FunctionSite, GenericParam, ImportAttributes, Item, Module,
+    UseDecl, UseItem, Visibility, WorldExport, cm_import_of, for_each_function,
+    walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -894,6 +895,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
         for (source, module) in modules {
             self.check_attributes(module, source);
+            self.check_import_attributes(module, source);
         }
 
         let _ = self.validate_all_imports(modules);
@@ -926,6 +928,49 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 },
             );
         });
+    }
+
+    /// Report each `with` key nothing reads, and each value of the wrong kind,
+    /// on its key. A generated import's clause is Kiln's to check, before the
+    /// generator runs.
+    fn check_import_attributes(&self, module: &Module, module_source: &ModuleSource) {
+        for item in &module.items {
+            let Item::Use(UseDecl {
+                attributes: Some(attrs),
+                ..
+            }) = item
+            else {
+                continue;
+            };
+            if attrs.entries.contains_key(ImportAttributes::GENERATOR) {
+                continue;
+            }
+            for (key, entry) in &attrs.entries {
+                let message = if !ImportAttributes::STRING_KEYS.contains(&key.as_str()) {
+                    format!(
+                        "unknown import attribute `{key}`; `with` takes `{}`, or `{}`",
+                        ImportAttributes::STRING_KEYS.join("`, `"),
+                        ImportAttributes::GENERATOR,
+                    )
+                } else if entry.value.as_str().is_none() {
+                    format!(
+                        "import attribute `{key}` must be a string, got {}",
+                        entry.value.kind(),
+                    )
+                } else {
+                    continue;
+                };
+                let _ = self.logger.error_in(
+                    module_source,
+                    Diagnostic {
+                        severity: Severity::Error,
+                        code: Code::ImportAttrInvalid,
+                        message,
+                        span: Some(DiagnosticSpan::from_span(&entry.key_span, None)),
+                    },
+                );
+            }
+        }
     }
 
     fn check_function_declarations(&self, module: &Module, module_source: &ModuleSource) {
