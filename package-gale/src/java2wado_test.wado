@@ -890,6 +890,8 @@ test "java action: an increment statement is a compound assignment" {
         ["ids++;", "p.ids += 1;"],
         ["++ids;", "p.ids += 1;"],
         ["this.ids--;", "p.ids -= 1;"],
+        ["(ids)++;", "p.ids += 1;"],
+        ["--(this.ids);", "p.ids -= 1;"],
         ["int n = 0; n++;", "let mut n: i32 = 0; n += 1;"],
     ];
     for let [java, wado] of cases {
@@ -903,6 +905,11 @@ test "java action: an increment inside an expression is refused" {
     // assignment cannot carry.
     let res = java_action_res("System.out.print(this.ids++);", "a : ID ;", false);
     assert res == Result::Err("java2wado: `++` and `--` are supported only as a statement"), `${res:?}`;
+}
+
+test "java action: an increment of anything but a variable or field is refused" {
+    let res = java_action_res("getText()++;", "a : ID ;", false);
+    assert res == Result::Err("java2wado: `++` and `--` step a variable or a field"), `${res:?}`;
 }
 
 test "java members: a field without an initializer takes its type's default" {
@@ -920,10 +927,10 @@ test "java members: a String field without an initializer is refused" {
 }
 
 test "java: `+` with a String-typed operand concatenates" {
-    let members = MemberNames {
-        fields: ["label"],
-        string_fields: ["label"],
-    };
+    let lang = ActionLanguage::Java;
+    let members = member_names(
+        &translate_members(&lang, "String label = \"x\"; String tag() { return label; }", "T").unwrap(),
+    );
     // Types as `translate_attr_types` leaves them.
     let rule = "a[String t, i32 n] returns [String r] locals [String l] : ID ;";
     let cases: List<[String, String]> = [
@@ -935,6 +942,9 @@ test "java: `+` with a String-typed operand concatenates" {
         ["System.out.print(label + $n);", "p.emit(`${p.label}${vals.n}`);"],
         ["System.out.print($ID.text + $n);", "p.emit(`${p.token_text(id)}${vals.n}`);"],
         ["System.out.print($n + $n + $t);", "p.emit(`${vals.n + vals.n}${vals.t}`);"],
+        ["System.out.print(tag() + $n);", "p.emit(`${p.tag()}${vals.n}`);"],
+        ["System.out.print(this.tag() + $n);", "p.emit(`${p.tag()}${vals.n}`);"],
+        ["System.out.print($n + ($t + $n) + $n);", "p.emit(`${vals.n}${vals.t}${vals.n}${vals.n}`);"],
     ];
     for let [java, wado] of cases {
         let out = java_action_m(&java, rule, true, &members);

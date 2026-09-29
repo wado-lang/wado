@@ -173,6 +173,11 @@ fn not_set_code_span(elem: &Element) -> Option<Span> {
             if !alt.actions.is_empty() {
                 return Option::Some(alt.actions[0].source.span);
             }
+            for let e of &alt.elements {
+                if let Some(span) = not_set_code_span(e) {
+                    return Option::Some(span);
+                }
+            }
         }
     }
     return null;

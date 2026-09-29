@@ -91,6 +91,18 @@ fn bump(&mut self) {
     assert m.methods[0].source.ends_with("/* } */\n}"), m.methods[0].source;
 }
 
+test "translate_wado_members keeps a method's doc comment and reads its return type" {
+    let src = "// not a doc
+x: i32 = 0; // trails x
+/// Depth of nesting.
+/// Never negative.
+fn depth(&self) -> i32 { return self.x; }
+fn reset(&mut self) { self.x = 0; }";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.methods[0].source == "/// Depth of nesting.\n/// Never negative.\nfn depth(&self) -> i32 { return self.x; }", m.methods[0].source;
+    assert m.methods[0].returns == "i32" && m.methods[1].returns == "", `${m.methods[0].returns} ${m.methods[1].returns}`;
+}
+
 test "translate_wado_members names a generic method by what precedes its type parameters" {
     let m = translate_wado_members("fn pick<T>(&mut self, x: T) -> T { return x; }").unwrap();
     assert m.methods.len() == 1 && m.methods[0].name == "pick" && m.methods[0].mutates, `methods: ${m.methods.len()}`;

@@ -31,11 +31,11 @@ use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
 /// Emit environment: the recognizer handle (`p` in a parse / predicate body,
 /// `lx` in a lexer action, `self` in a `@members` method body), the grammar name
 /// (for the `<Name>Parser` / `<Name>Lexer` token-constant qualifier), and the
-/// snake_cased `@members` method names a call may resolve to.
+/// `@members` names a body may resolve against.
 pub struct JEnv {
     pub this_bind: String,
     pub grammar: String,
-    pub methods: List<String>,
+    pub members: MemberNames,
     /// The rendered expected-token set at this site — a generation-time
     /// constant in Gale. Empty where codegen cannot answer, which reports.
     pub expected: String = "",
@@ -48,10 +48,6 @@ pub struct JEnv {
     /// span, and a `$`-attribute resolves against the match fn's cursor.
     /// Defaulted so the parser-side construction sites are unchanged.
     pub lexer: bool = false,
-    /// The snake_cased `@members` field names a bare name may resolve to. A
-    /// field is reachable bare in Java, so a body that reads one has to emit the
-    /// same access `this.<x>` does — unqualified, it names nothing.
-    pub fields: List<String> = [],
     /// Whether this body can write to the recognizer's output sink. False in a
     /// lexer predicate: it is evaluated for every candidate rule during the
     /// tournament, including the losers, so printing from one would be wrong
@@ -64,16 +60,10 @@ pub struct JEnv {
     pub locals: List<String> = [],
     /// Those of `locals` whose Java type is `String`.
     pub string_locals: List<String> = [],
-    /// Those of `fields` whose Java type is `String`.
-    pub string_fields: List<String> = [],
     /// The enclosing rule's argument names, in their surface spelling. Java
     /// reaches an argument bare; Gale stores it in the value channel, so the
     /// bare name resolves to `$name` rather than to the generated parameter.
     pub args: List<String> = [],
-    /// The `@members` methods taking `&mut self`. A lexer predicate holds
-    /// `&Lexer` — the tournament must not mutate through a losing candidate —
-    /// so a call to one from there is refused, not emitted.
-    pub mut_methods: List<String> = [],
     /// Whether the recognizer handle here is a shared reference. True only in a
     /// lexer predicate; every other body may write.
     pub read_only: bool = false,
@@ -85,6 +75,44 @@ pub struct JEnv {
     /// stands outside any one match: the cursor locals and the rule's start
     /// token belong to the generated functions, not to the struct.
     pub in_members: bool = false,
+}
+
+/// What an action / predicate body may resolve a bare name against: the
+/// `@members` methods and fields the grammar declares. All snake_cased, as the
+/// declarations are. Filled through `add_field` / `add_method`, so a name never
+/// lands without its type.
+pub struct MemberNames {
+    pub methods: List<String> = [],
+    /// A field is reachable bare in Java, so a body that reads one has to emit
+    /// the same access `this.<x>` does — unqualified, it names nothing.
+    pub fields: List<String> = [],
+    /// The methods taking `&mut self`. A lexer predicate holds `&Lexer` — the
+    /// tournament must not mutate through a losing candidate — so a call to one
+    /// from there is refused, not emitted.
+    pub mutating: List<String> = [],
+    /// The fields of type `String` and the methods returning one, whose `+`
+    /// concatenates in Java.
+    pub string_fields: List<String> = [],
+    pub string_methods: List<String> = [],
+}
+
+impl MemberNames {
+    pub fn add_field<S: AsStrSlice>(&mut self, name: S, is_string: bool) {
+        self.fields.push(name.to_string());
+        if is_string {
+            self.string_fields.push(name.to_string());
+        }
+    }
+
+    pub fn add_method<S: AsStrSlice>(&mut self, name: S, mutates: bool, returns_string: bool) {
+        self.methods.push(name.to_string());
+        if mutates {
+            self.mutating.push(name.to_string());
+        }
+        if returns_string {
+            self.string_methods.push(name.to_string());
+        }
+    }
 }
 
 impl JEnv {
@@ -366,7 +394,7 @@ fn emit_print(
 ) -> Result<String, String> {
     let mut tmpl = String::from("`");
     if !args.is_empty() {
-        append_parts(rule, rules, &args[0], vals_in_scope, bindings, env, &mut tmpl)?;
+        append_part(rule, rules, &args[0], vals_in_scope, bindings, env, &mut tmpl)?;
     }
     if newline {
         tmpl.push_str("\\n");
@@ -438,8 +466,8 @@ pub fn emit_expr(
             Result::Ok(`(${inner})`);
         },
         Binary(b) => {
-            if b.op == "+" && is_java_string(rule, rules, e, bindings, env) {
-                emit_template(rule, rules, e, vals_in_scope, bindings, env);
+            if b.op == "+" {
+                emit_plus(rule, rules, e, vals_in_scope, bindings, env);
             } else if let Some(folded) = fold_ctx_token_null_test(b, bindings, env) {
                 Result::Ok(folded);
             } else {
@@ -693,7 +721,7 @@ fn resolve_name<S: AsStrSlice>(env: &JEnv, name: S) -> NameTarget {
     if env.args.contains_str(name) {
         return NameTarget::RuleArg;
     }
-    if env.fields.contains(&to_snake_case(name)) {
+    if env.members.fields.contains(&to_snake_case(name)) {
         return NameTarget::Field;
     }
     return NameTarget::Unknown;
@@ -702,7 +730,7 @@ fn resolve_name<S: AsStrSlice>(env: &JEnv, name: S) -> NameTarget {
 /// Whether a `@members` method declares `name`. Java's namespaces are separate
 /// — `int depth = 0; int depth() {}` is legal — so a variable never hides one.
 fn method_declared<S: AsStrSlice>(env: &JEnv, name: S) -> bool {
-    return env.methods.contains(&to_snake_case(name));
+    return env.members.methods.contains(&to_snake_case(name));
 }
 
 /// The access a name emits, or a loud error. What a lexer body has left over is
@@ -737,7 +765,7 @@ fn name_expr<S: AsStrSlice>(
 /// is not the one this site may take.
 fn this_field_expr<S: AsStrSlice>(env: &JEnv, name: S) -> Result<String, String> {
     let snake = to_snake_case(name);
-    if env.fields.contains(&snake) || !env.lexer {
+    if env.members.fields.contains(&snake) || !env.lexer {
         return Result::Ok(`${env.this_bind}.${snake}`);
     }
     builtin::cold_path();
@@ -753,7 +781,7 @@ fn check_member_call_reachable<S: AsStrSlice>(env: &JEnv, meth: S) -> Result<(),
     }
     // A lexer predicate holds `&Lexer`: the tournament has no business mutating
     // through a losing candidate.
-    if env.read_only && env.mut_methods.contains(&to_snake_case(meth)) {
+    if env.read_only && env.members.mutating.contains(&to_snake_case(meth)) {
         builtin::cold_path();
         return Result::Err(
             `java2wado: @members method '${meth}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
@@ -843,11 +871,16 @@ fn is_java_string(
         Name(n) => match resolve_name(env, n) {
             Local => env.string_locals.contains_str(n),
             RuleArg => declares_string(&rule.args, n),
-            Field => env.string_fields.contains(&to_snake_case(n)),
+            Field => env.members.string_fields.contains(&to_snake_case(n)),
             Unknown => false,
         },
-        Member(m) => name_is(&m.recv, "this") && env.string_fields.contains(&to_snake_case(&m.name)),
-        Call(c) => callee_named(&c.callee, "getText") || callee_named(&c.callee, "toString"),
+        Member(m) => name_is(&m.recv, "this") && env.members.string_fields.contains(&to_snake_case(&m.name)),
+        Call(c) => match &c.callee {
+            Name(n) => is_string_api(n) || env.members.string_methods.contains(&to_snake_case(n)),
+            Member(m) => is_string_api(&m.name)
+                || name_is(&m.recv, "this") && env.members.string_methods.contains(&to_snake_case(&m.name)),
+            _ => false,
+        },
         Cast(c) => c.ty == "String",
         Binary(b) => b.op == "+"
             && (is_java_string(rule, rules, &b.lhs, bindings, env) || is_java_string(rule, rules, &b.rhs, bindings, env)),
@@ -892,16 +925,53 @@ fn declares_string<S: AsStrSlice>(decls: &List<AttrDecl>, name: S) -> bool {
     return false;
 }
 
-/// Whether `callee` is `name` or `<receiver>.name`.
-fn callee_named<S: AsStrSlice>(callee: &JExpr, name: S) -> bool {
-    return match callee {
-        Member(m) => m.name == name.as_str_slice(),
-        _ => name_is(callee, name),
-    };
+/// The recognizer and `Object` methods returning a `String` on any receiver.
+fn is_string_api<S: AsStrSlice>(name: S) -> bool {
+    return name matches { "getText" | "toString" };
 }
 
-/// Emit a string `+` chain as a Wado template literal.
-fn emit_template(
+/// A left-associative `+` chain: its leftmost operand, then each `+` from the
+/// innermost out, so `links[i].rhs` is operand `i + 1`.
+struct PlusChain {
+    first: &JExpr,
+    links: List<&JBinary>,
+}
+
+fn plus_chain(e: &JExpr) -> PlusChain {
+    let mut links: List<&JBinary> = [];
+    let mut cur = e;
+    while let Binary(b) = cur && b.op == "+" {
+        links.push(b);
+        cur = &b.lhs;
+    }
+    links.reverse();
+    return PlusChain { first: cur, links };
+}
+
+/// Where Java's left-to-right evaluation turns the chain into a concatenation:
+/// the link whose right operand is the first `String`, -1 when the leftmost
+/// operand already is one, null when no operand is.
+fn concat_start(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    chain: &PlusChain,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> Option<i32> {
+    if is_java_string(rule, rules, chain.first, bindings, env) {
+        return Option::Some(-1);
+    }
+    for let i of 0..<chain.links.len() {
+        if is_java_string(rule, rules, &chain.links[i].rhs, bindings, env) {
+            return Option::Some(i);
+        }
+    }
+    return null;
+}
+
+/// Emit a `+` chain: arithmetic until an operand is a `String`, a template
+/// literal from there. Each operand is classified once.
+fn emit_plus(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     e: &JExpr,
@@ -909,13 +979,44 @@ fn emit_template(
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
+    let chain = plus_chain(e);
+    let Some(start) = concat_start(rule, rules, &chain, bindings, env) else {
+        let mut out = emit_expr(rule, rules, chain.first, vals_in_scope, bindings, env)?;
+        for let l of &chain.links {
+            out.push_str(" + ");
+            out.push_str(&emit_expr(rule, rules, &l.rhs, vals_in_scope, bindings, env)?);
+        }
+        return Result::Ok(out);
+    };
     let mut out = String::from("`");
-    append_parts(rule, rules, e, vals_in_scope, bindings, env, &mut out)?;
+    append_concat(rule, rules, &chain, start, vals_in_scope, bindings, env, &mut out)?;
     out.push('`');
     return Result::Ok(out);
 }
 
-fn append_parts(
+/// Append the parts of a chain that concatenates from link `start` on. What
+/// precedes it is arithmetic, and so one interpolated value.
+fn append_concat(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    chain: &PlusChain,
+    start: i32,
+    vals_in_scope: bool,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+    out: &mut String,
+) -> Result<(), String> {
+    let head = if start < 0 { chain.first } else { &chain.links[start].lhs };
+    append_part(rule, rules, head, vals_in_scope, bindings, env, out)?;
+    for let i of i32::max(start, 0)..<chain.links.len() {
+        append_part(rule, rules, &chain.links[i].rhs, vals_in_scope, bindings, env, out)?;
+    }
+    return Result::Ok(());
+}
+
+/// Append `e` as template text: a literal's text, a concatenation's own parts
+/// (parenthesized or not), anything else interpolated.
+fn append_part(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     e: &JExpr,
@@ -929,21 +1030,15 @@ fn append_parts(
             out.push_str(&escape_template(c));
             Result::Ok(());
         },
-        Binary(b) => {
-            if b.op == "+" && is_java_string(rule, rules, e, bindings, env) {
-                append_parts(rule, rules, &b.lhs, vals_in_scope, bindings, env, out)?;
-                append_parts(rule, rules, &b.rhs, vals_in_scope, bindings, env, out)?;
-                Result::Ok(());
-            } else {
-                append_interp(rule, rules, e, vals_in_scope, bindings, env, out);
-            }
+        Binary(b) && b.op == "+" => {
+            let chain = plus_chain(e);
+            match concat_start(rule, rules, &chain, bindings, env) {
+                Some(start) => append_concat(rule, rules, &chain, start, vals_in_scope, bindings, env, out),
+                None => append_interp(rule, rules, e, vals_in_scope, bindings, env, out),
+            };
         },
-        Paren(p) => {
-            if is_java_string(rule, rules, &p.inner, bindings, env) {
-                append_parts(rule, rules, &p.inner, vals_in_scope, bindings, env, out);
-            } else {
-                append_interp(rule, rules, e, vals_in_scope, bindings, env, out);
-            }
+        Paren(p) && is_java_string(rule, rules, &p.inner, bindings, env) => {
+            append_part(rule, rules, &p.inner, vals_in_scope, bindings, env, out);
         },
         _ => append_interp(rule, rules, e, vals_in_scope, bindings, env, out),
     };

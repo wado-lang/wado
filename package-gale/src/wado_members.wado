@@ -6,14 +6,24 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
     let n = chars.len();
     let mut fields: List<MemberField> = [];
     let mut methods: List<MemberMethod> = [];
-    for let mut i = skip_ws_semi(&chars, 0, n); i < n; i = skip_ws_semi(&chars, i, n) {
-        if is_method_start(&chars, i, n) {
-            let [paren, close] = capture_fn(&chars, i, n)?;
-            let head = method_head(&chars, i, paren, n);
-            methods.push(MemberMethod { name: head.0, mutates: head.1, source: collect_range(&chars, i, close) });
-            i = close;
+    let mut i = 0;
+    loop {
+        let [start, doc_start] = skip_ws_semi(&chars, i, n);
+        if start >= n {
+            break;
+        }
+        if is_method_start(&chars, start, n) {
+            let spans = capture_fn(&chars, start, n)?;
+            let head = method_head(&chars, start, spans.paren, n);
+            methods.push(MemberMethod {
+                name: head.0,
+                mutates: head.1,
+                returns: return_type(&chars, &spans),
+                source: collect_range(&chars, doc_start, spans.end),
+            });
+            i = spans.end;
         } else {
-            i = parse_field(&chars, i, n, &mut fields)?;
+            i = parse_field(&chars, start, n, &mut fields)?;
         }
     }
     return Result::Ok(MemberDecls { fields, methods });
@@ -41,19 +51,33 @@ fn method_head(chars: &List<char>, start: i32, paren: i32, n: i32) -> [String, b
     return [name, word_at(chars, r, n, "self")];
 }
 
-/// Past what separates two members: whitespace, `;` and comments.
-fn skip_ws_semi(chars: &List<char>, start: i32, n: i32) -> i32 {
+/// Past what separates two members (whitespace, `;` and comments), and where
+/// the `///` run documenting the next one starts: a method keeps its docs.
+fn skip_ws_semi(chars: &List<char>, start: i32, n: i32) -> [i32, i32] {
     let mut i = start;
+    let mut doc_start = -1;
     while i < n {
         if chars[i].is_ascii_whitespace() || chars[i] == ';' {
             i += 1;
         } else if chars[i] == '/' && i + 1 < n && chars[i + 1] matches { '/' | '*' } {
+            if is_doc_comment(chars, i, n) {
+                if doc_start < 0 {
+                    doc_start = i;
+                }
+            } else {
+                doc_start = -1;
+            }
             i = skip_span(chars, i, n);
         } else {
             break;
         }
     }
-    return i;
+    return [i, if doc_start < 0 { i } else { doc_start }];
+}
+
+/// `///` but not `////`, as Wado's own doc comments are told apart.
+fn is_doc_comment(chars: &List<char>, i: i32, n: i32) -> bool {
+    return i + 2 < n && chars[i + 1] == '/' && chars[i + 2] == '/' && !(i + 3 < n && chars[i + 3] == '/');
 }
 
 fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
@@ -89,8 +113,22 @@ fn is_method_start(chars: &List<char>, i: i32, n: i32) -> bool {
     return false;
 }
 
-/// The index of a method's `(` and the index just past its body's `}`.
-fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<[i32, i32], String> {
+/// Where a method's parts sit: its `(`, just past its `)`, its body's `{`,
+/// and just past that body's `}`.
+struct FnSpans {
+    paren: i32,
+    params_end: i32,
+    brace: i32,
+    end: i32,
+}
+
+/// The type written after `->`, empty when the method returns nothing.
+fn return_type(chars: &List<char>, spans: &FnSpans) -> String {
+    let head = collect_range(chars, spans.params_end, spans.brace).trim();
+    return if head.starts_with("->") { head.substr_bytes(2, head.len()).trim().to_string() } else { "" };
+}
+
+fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<FnSpans, String> {
     let mut paren = start;
     while paren < n && chars[paren] != '(' {
         paren = skip_span(chars, paren, n);
@@ -98,14 +136,15 @@ fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<[i32, i32], Stri
     if paren >= n {
         return Result::Err("gale: Wado @members: method parameter list '(' not found");
     }
-    let mut i = skip_balanced(chars, paren, n, '(', ')')?;
-    while i < n && chars[i] != '{' {
-        i = skip_span(chars, i, n);
+    let params_end = skip_balanced(chars, paren, n, '(', ')')?;
+    let mut brace = params_end;
+    while brace < n && chars[brace] != '{' {
+        brace = skip_span(chars, brace, n);
     }
-    if i >= n {
+    if brace >= n {
         return Result::Err("gale: Wado @members: method body '{' not found");
     }
-    return Result::Ok([paren, skip_balanced(chars, i, n, '{', '}')?]);
+    return Result::Ok(FnSpans { paren, params_end, brace, end: skip_balanced(chars, brace, n, '{', '}')? });
 }
 
 fn skip_balanced(chars: &List<char>, open_idx: i32, n: i32, open: char, close: char) -> Result<i32, String> {

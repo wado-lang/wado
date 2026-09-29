@@ -134,18 +134,13 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
         *pos += 1;
         let target = parse_primary(tokens, pos)?;
         expect_semi(tokens, pos)?;
-        return Result::Ok(step_assign(target, op));
+        return step_assign(target, op);
     }
     let e = parse_or(tokens, pos)?;
     if let Some(op) = step_assign_op(tokens, *pos) {
-        // Any operator around the operand would have made `e` a Binary or a
-        // Unary, so a place here is exactly `place++`.
-        if !e matches { Name(_) | Member(_) | Attr(_) } {
-            return Result::Err(STEP_ONLY_AS_STATEMENT);
-        }
         *pos += 1;
         expect_semi(tokens, pos)?;
-        return Result::Ok(step_assign(e, op));
+        return step_assign(e, op);
     }
     if is_assign_op(tokens, *pos) {
         let op = punct_at(tokens, *pos);
@@ -193,8 +188,27 @@ fn step_assign_op(tokens: &List<JToken>, pos: i32) -> Option<String> {
     return null;
 }
 
-fn step_assign(target: JExpr, op: String) -> JStmt {
-    return JStmt::Assign(JAssign { target, op, value: JExpr::Int("1") });
+/// `e` with any parentheses around it removed: `(x)++` steps `x`, as Java has it.
+fn unparenthesized(e: JExpr) -> JExpr {
+    let mut cur = e;
+    while let Paren(p) = cur {
+        cur = p.inner;
+    }
+    return cur;
+}
+
+/// The statement `++` / `--` on `target` stands for. An operator around the
+/// place would have made `target` a Binary or a Unary, which steps an operand
+/// inside an expression.
+fn step_assign(target: JExpr, op: String) -> Result<JStmt, String> {
+    let place = unparenthesized(target);
+    return match place {
+        Name(_) | Member(_) | Attr(_) => Result::Ok(
+            JStmt::Assign(JAssign { target: place, op, value: JExpr::Int("1") }),
+        ),
+        Binary(_) | Unary(_) => Result::Err(STEP_ONLY_AS_STATEMENT),
+        _ => Result::Err("java2wado: `++` and `--` step a variable or a field"),
+    };
 }
 
 fn expect_semi(tokens: &List<JToken>, pos: &mut i32) -> Result<(), String> {

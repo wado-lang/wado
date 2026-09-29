@@ -7,6 +7,7 @@ use { JToken } from "./jlexer.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_stmts, parse_java_expr, punct_is, ident_at, JExpr, JStmt } from "./jparser.wado";
 use { emit_java_stmts, emit_expr, map_java_type, with_locals, name_is, JEnv } from "./jemit.wado";
+pub use { MemberNames } from "./jemit.wado";
 use { to_snake_case, escape_ident } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
 
@@ -18,11 +19,14 @@ pub struct MemberField {
 }
 
 /// One method a `@members` block contributes: its snake_cased name, whether it
-/// takes `&mut self`, and the ready-to-splice `fn ... { ... }` source.
+/// takes `&mut self`, its Wado return type, and the ready-to-splice
+/// `fn ... { ... }` source.
 pub struct MemberMethod {
     pub name: String,
     /// Takes `&mut self`, so a body holding a shared handle cannot call it.
     pub mutates: bool,
+    /// Empty when the method returns nothing.
+    pub returns: String,
     pub source: String,
 }
 
@@ -30,18 +34,6 @@ pub struct MemberMethod {
 pub struct MemberDecls {
     pub fields: List<MemberField>,
     pub methods: List<MemberMethod>,
-}
-
-/// What an action / predicate body may resolve a bare name against: the
-/// `@members` methods and fields the grammar declares, plus which of the methods
-/// write through the recognizer. All snake_cased, as the declarations are.
-pub struct MemberNames {
-    pub methods: List<String> = [],
-    pub fields: List<String> = [],
-    /// Only consulted where the handle is a shared reference (a lexer predicate).
-    pub mutating: List<String> = [],
-    /// The fields of type `String`, whose `+` concatenates in Java.
-    pub string_fields: List<String> = [],
 }
 
 /// Whether the block declared anything at all.
@@ -53,16 +45,10 @@ pub fn members_present(members: &MemberDecls) -> bool {
 pub fn member_names(members: &MemberDecls) -> MemberNames {
     let mut out = MemberNames {};
     for let m of &members.methods {
-        out.methods.push(m.name);
-        if m.mutates {
-            out.mutating.push(m.name);
-        }
+        out.add_method(&m.name, m.mutates, m.returns == "String");
     }
     for let f of &members.fields {
-        out.fields.push(f.name);
-        if f.ty == "String" {
-            out.string_fields.push(f.name);
-        }
+        out.add_field(&f.name, f.ty == "String");
     }
     return out;
 }
@@ -92,9 +78,7 @@ pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(
     let env = JEnv {
         this_bind: "self",
         grammar: grammar_name.to_string(),
-        methods: scanned.methods,
-        fields: scanned.fields,
-        string_fields: scanned.string_fields,
+        members: scanned,
         lexer,
         in_members: true,
     };
@@ -132,8 +116,9 @@ pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(
         let body_wado = emit_java_stmts(&dummy, &no_rules, &m.stmts, false, &no_bindings, &scoped)?;
         let name = to_snake_case(&m.name);
         let mutates = mut_methods.contains(&name);
-        let source = build_method(&name, &m.params, &m.ret_java, &body_wado, mutates)?;
-        methods.push(MemberMethod { name, mutates, source });
+        let returns = wado_return_type(&m.ret_java)?;
+        let source = build_method(&name, &m.params, &returns, &body_wado, mutates);
+        methods.push(MemberMethod { name, mutates, returns, source });
     }
     return Result::Ok(MemberDecls { fields, methods });
 }
@@ -291,7 +276,7 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
         };
         pos += 2;
         if punct_is(tokens, pos, "(") {
-            out.methods.push(to_snake_case(&name));
+            out.add_method(to_snake_case(&name), false, ty == "String");
             pos = skip_parens(tokens, pos);
             if !punct_is(tokens, pos, "{") {
                 break;
@@ -302,11 +287,7 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
             }
             pos = close.unwrap() + 1;
         } else {
-            let field = to_snake_case(&name);
-            out.fields.push(field);
-            if ty == "String" {
-                out.string_fields.push(field);
-            }
+            out.add_field(to_snake_case(&name), ty == "String");
             while pos < tokens.len() && !punct_is(tokens, pos, ";") {
                 pos += 1;
             }
@@ -412,29 +393,31 @@ fn emit_member_expr(e: &JExpr, env: &JEnv) -> Result<String, String> {
 
 /// `&self` unless the body writes: the narrower receiver is what lets a lexer
 /// predicate, which holds `&Lexer`, reach a read-only member method at all.
+/// The Wado type a method declared to return `ret_java` returns, empty for `void`.
+fn wado_return_type<S: AsStrSlice>(ret_java: S) -> Result<String, String> {
+    if ret_java == "void" {
+        return Result::Ok("");
+    }
+    return map_java_type(&ret_java).ok_or(`java2wado: @members: unsupported return type '${ret_java}'`);
+}
+
 fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     name: S,
     params: &List<[String, String]>,
-    ret_java: S1,
+    returns: S1,
     body_wado: S2,
     mutates: bool,
-) -> Result<String, String> {
+) -> String {
     let recv = if mutates { "&mut self" } else { "&self" };
     let mut sig = `fn ${name}(${recv}`;
     for let p of params {
         sig.push_str(`, ${escape_ident(&p.0)}: ${p.1}`);
     }
     sig.push(')');
-    if ret_java != "void" {
-        let rty = match map_java_type(ret_java) {
-            Some(t) => t,
-            None => {
-                return Result::Err(`java2wado: @members: unsupported return type '${ret_java}'`);
-            },
-        };
-        sig.push_str(` -> ${rty}`);
+    if !returns.is_empty() {
+        sig.push_str(` -> ${returns}`);
     }
-    return Result::Ok(`${sig} { ${body_wado} }`);
+    return `${sig} { ${body_wado} }`;
 }
 
 /// Parse a Java parameter list `( Type name (, Type name)* )`; `pos` at `(`,

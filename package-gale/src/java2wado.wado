@@ -54,9 +54,7 @@ pub fn translate_action<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>(
             let env = JEnv {
                 this_bind: PARSER_HANDLE,
                 grammar: grammar_name.to_string(),
-                methods: members.methods,
-                fields: members.fields,
-                string_fields: members.string_fields,
+                members: *members,
                 args: arg_names(rule),
                 expected: expected.to_string(),
                 at_alt_end,
@@ -106,9 +104,7 @@ pub fn translate_predicate<S: AsStrSlice, S1: AsStrSlice>(
             let env = JEnv {
                 this_bind: *handle,
                 grammar: grammar_name.to_string(),
-                methods: members.methods,
-                fields: members.fields,
-                string_fields: members.string_fields,
+                members: *members,
                 args: arg_names(rule),
                 at_alt_end,
             };
@@ -197,11 +193,8 @@ fn lexer_env<S: AsStrSlice>(grammar_name: S, members: &MemberNames, uses_modes: 
     return JEnv {
         this_bind: LEXER_HANDLE,
         grammar: grammar_name.to_string(),
-        methods: members.methods,
+        members: *members,
         lexer: true,
-        fields: members.fields,
-        string_fields: members.string_fields,
-        mut_methods: members.mutating,
         uses_modes,
     };
 }
