@@ -231,6 +231,9 @@ C : [\\u0041\\b\\f] ;";
 test "multi-char range endpoint is rejected, not silently truncated" {
     assert parse("grammar Test;\nR : 'a' .. 'bc' ;") matches { Err(_) }, "multi-char range end should be rejected";
     assert parse("grammar Test;\nR : 'a' .. '' ;") matches { Err(_) }, "empty range end should be rejected, not panic";
+    // ANTLR4 error(144) names the start endpoint the same way.
+    let start = parse("grammar Test;\nR : 'ab' .. 'c' ;");
+    assert start matches { Err(e) && e.message == "range endpoint must be a single character" && e.span.start == 18 }, `${start:?}`;
 }
 
 test "char class \\uXXXX range endpoint" {
@@ -565,6 +568,23 @@ ESC : '\\\\' . ;";
     }
 }
 
+test "spaced dots in a lexer rule are two wildcards, not a range" {
+    // `..` is one token in ANTLR4, so the jar matches `axyb` as one `A` here.
+    let g = parse("lexer grammar L;
+A : 'a' . . 'b' ;
+B : . . 'x' ;").unwrap();
+    let a = &g.lexer_rules[0].body[0].elements;
+    assert a.len() == 4 && a[1] matches { AnyChar } && a[2] matches { AnyChar }, `${a:?}`;
+    let b = &g.lexer_rules[1].body[0].elements;
+    assert b.len() == 3 && b[0] matches { AnyChar } && b[1] matches { AnyChar }, `${b:?}`;
+}
+
+test "a token range in a parser rule is rejected" {
+    // ANTLR4 error(181): token ranges not allowed in parser.
+    let res = parse("grammar T;\nr : 'a'..'z' ;");
+    assert res matches { Err(e) && e.message == "got \"..\"" }, `${res:?}`;
+}
+
 test "grammar with import single" {
     let input = "grammar Test;
 import Common;
@@ -650,6 +670,16 @@ WS : ' ' -> channel(CHAN_A) ;";
     assert g.channels.len() == 2;
     assert g.channels[0] == "CHAN_A";
     assert g.channels[1] == "CHAN_B";
+}
+
+test "a channel declared twice is one channel" {
+    // ANTLR4 accepts the repeat; the name still means one channel id.
+    let input = "lexer grammar Test;
+channels { X, X, Y }
+A : 'a' -> channel(Y) ;";
+    let g = parse(input).unwrap();
+    assert g.channels.len() == 2, `${g.channels:?}`;
+    assert g.lexer_rules[0].channel == 3, `A channel ${g.lexer_rules[0].channel}`;
 }
 
 test "lexer rule with undeclared channel name is rejected" {
@@ -890,6 +920,18 @@ TOK : 'a' {more();} 'b' ;";
     assert alt.actions.len() == 1, `actions: ${alt.actions.len()}`;
     assert alt.actions[0].before_index == 1, `pos: ${alt.actions[0].before_index}`;
     assert alt.actions[0].source.text == "more();", `body: '${alt.actions[0].source.text}'`;
+}
+
+test "a lexer predicate's option block is skipped, the predicate kept" {
+    // The jar accepts `<fail=...>` here and warns on `<assoc=...>`; neither
+    // changes what the rule matches.
+    let g = parse("lexer grammar L;
+A : 'a' {true}?<fail={\"a<b>\"}> ;
+B : 'b' <assoc=right> 'c' ;").unwrap();
+    let a = &g.lexer_rules[0].body[0];
+    assert a.elements.len() == 1 && a.actions.len() == 1, `${a:?}`;
+    assert a.actions[0].kind matches { Predicate } && a.actions[0].source.text == "true", `${a.actions[0]:?}`;
+    assert g.lexer_rules[1].body[0].elements.len() == 2, `${g.lexer_rules[1].body[0]:?}`;
 }
 
 test "named action bodies retained" {
@@ -1276,6 +1318,14 @@ WS : [ \\t]+ -> channel(HIDDEN) ;";
     assert g.lexer_rules[0].skip == false;
 }
 
+test "lexer command channel with DEFAULT_TOKEN_CHANNEL" {
+    let input = "lexer grammar Test;
+A : 'a' -> channel(HIDDEN) ;
+B : 'b' -> channel(DEFAULT_TOKEN_CHANNEL) ;";
+    let g = parse(input).unwrap();
+    assert g.lexer_rules[1].channel == 0, `B channel ${g.lexer_rules[1].channel}`;
+}
+
 test "lexer command type override" {
     let input = "lexer grammar SetType;
 DOUBLE : '\"' .*? '\"' -> type(STRING) ;
@@ -1593,6 +1643,44 @@ test "lexer rule tilde applied to wildcard is rejected" {
     assert parse("lexer grammar Test;\nB : ~. ;") matches { Err(_) }, "~. (not wildcard) in a lexer rule should be rejected";
 }
 
+test "lexer rule tilde over a set holding a multi-char literal is rejected" {
+    // ANTLR4 error(144): multi-character literals are not allowed in lexer sets.
+    assert parse("lexer grammar Test;\nB : ~('a' | 'bc') ;") matches { Err(_) };
+}
+
+test "a missing structural token names what was wanted" {
+    let cases: List<[String, String]> = [
+        ["lexer T;", "grammar"],
+        ["grammar ;", "identifier"],
+        ["grammar T\nr : A ;", ";"],
+        ["grammar T;\nr A ;", ":"],
+        ["grammar T;\nr : (A ;", ")"],
+    ];
+    for let [src, wanted] of cases {
+        let res = parse(src);
+        assert res matches { Err(e) && e.expected.len() == 1 && e.expected[0] == wanted }, `${src}: ${res:?}`;
+    }
+}
+
+test "a token the lexer could not form is reported by its problem" {
+    let cases: List<[String, String]> = [
+        ["grammar T;\nr : 'abc ;", "unterminated string literal"],
+        ["grammar T;\nA : [a-z ;", "unterminated character set in a lexer rule"],
+        ["grammar T;\nA : '\\a' ;", "invalid escape sequence \\a in a lexer rule"],
+        ["grammar T;\nr : % ;", "unexpected character \"%\""],
+    ];
+    for let [src, message] of cases {
+        let res = parse(src);
+        assert res matches { Err(e) && e.message == message }, `${src}: ${res:?}`;
+    }
+}
+
+test "a prequel keyword cannot name a rule" {
+    // ANTLR4 lexes `tokens {` as one keyword, so `tokens :` is a syntax error.
+    let res = parse("grammar T;\ntokens : A ;\nA : 'a' ;");
+    assert res matches { Err(e) && e.message == "expected `{` after `tokens`" }, `${res:?}`;
+}
+
 test "block label single-value" {
     let input = "grammar Test;
 expr : op = ( '+' | '-' ) ;";
@@ -1705,6 +1793,18 @@ r : ID<assoc=right> ;";
         assert t.options.len() == 1;
         assert t.options[0].name == "assoc";
         assert_option_ident(&t.options[0], "right");
+    } else {
+        panic("expected TokenRef");
+    }
+}
+
+test "a bare angle option names no value and is not kept" {
+    // `ID<Foo>` is ANTLR4's node-type option, which a Wado tree has no use
+    // for; the jar accepts it beside a valued one.
+    let g = parse("grammar Test;
+r : ID<Foo, assoc=right> ;").unwrap();
+    if let TokenRef(t) = &g.parser_rules[0].alternatives[0].elements[0] {
+        assert t.options.len() == 1 && t.options[0].name == "assoc", `${t.options:?}`;
     } else {
         panic("expected TokenRef");
     }

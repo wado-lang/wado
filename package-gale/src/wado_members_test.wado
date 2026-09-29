@@ -68,3 +68,25 @@ test "bare @members is the parser's in a combined grammar, the lexer's in a lexe
     assert is_lexer_members(&act, &GrammarKind::Lexer);
     assert !is_parser_members(&act, &GrammarKind::Lexer);
 }
+
+test "translate_wado_members reads `pub` members and each method's receiver" {
+    let m = translate_wado_members("pub count: i32 = 0; pub fn get(&self) -> i32 { return self.count; }").unwrap();
+    assert m.fields.len() == 1 && m.fields[0].name == "count", `fields: ${m.fields.len()}`;
+    assert m.methods.len() == 1 && m.methods[0].name == "get" && !m.methods[0].mutates, `methods: ${m.methods.len()}`;
+    assert m.methods[0].source == "pub fn get(&self) -> i32 { return self.count; }", m.methods[0].source;
+}
+
+test "translate_wado_members steps over comments and strings holding delimiters" {
+    let src = "// a `}` in a comment is not code
+calls: i32 = 0;
+/* \"a;b\" */ tag: String = \"a;\\\"}\";
+fn bump(&mut self) {
+    // }
+    self.calls += 1; /* } */
+}";
+    let m = translate_wado_members(&src).unwrap();
+    assert m.fields.len() == 2, `fields: ${m.fields.len()}`;
+    assert m.fields[1].name == "tag" && m.fields[1].init == "\"a;\\\"}\"", `tag init: '${m.fields[1].init}'`;
+    assert m.methods.len() == 1 && m.methods[0].name == "bump" && m.methods[0].mutates, `methods: ${m.methods.len()}`;
+    assert m.methods[0].source.ends_with("/* } */\n}"), m.methods[0].source;
+}

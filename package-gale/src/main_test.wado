@@ -1,0 +1,509 @@
+//! The two ways a grammar reaches Gale from outside: the `gale` command line,
+//! and the Kiln generator a `use ... with { generator: ... }` site runs.
+//!
+//! The command line runs under handlers: its arguments come from `CommandLine`,
+//! its console is captured by `Console`, and `Grants` preopens real directories
+//! under the gitignored `target/`, as `wado run --dir` would. Each test empties
+//! its own directory first. The Kiln generator runs under `Inputs`, which
+//! serves the input files' streams, and `Host`, which keeps its diagnostics.
+//!
+//! This file reaches `generate`, so it compiles the whole generator.
+
+use { gale } from "./main.wado";
+use { generate as kiln_generate, Options } from "./generator.wado";
+use { Console } from "../tests/support/console.wado";
+use { Environment } from "core:cli";
+use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use fs from "core:fs";
+use {
+    Request,
+    Response,
+    Error as KilnError,
+    InputFile,
+    KilnHost,
+    Diagnostic as KilnDiagnostic,
+    DiagnosticLevel,
+} from "core:kiln";
+
+global EXPR: String = "grammar Expr;
+expr : expr '*' expr | expr '+' expr | INT ;
+INT : [0-9]+ ;
+WS : [ ]+ -> skip ;
+";
+
+global EXPR_QUERY: String = "(INT) @number\n";
+
+// `ID` leads both alternatives, so a scan tournament decides between them.
+global OVERLAP: String = "grammar Pick;
+r : ID INT | ID STR ;
+ID : [a-z]+ ;
+INT : [0-9]+ ;
+STR : '\"' ~'\"'* '\"' ;
+";
+
+global SPLIT_LEXER: String = "lexer grammar SplitLexer;
+NUM : [0-9]+ ;
+";
+
+global SPLIT_PARSER: String = "parser grammar SplitParser;
+options { tokenVocab = SplitLexer; }
+start : NUM ;
+";
+
+global DANGLING: String = "grammar Dangling;\nstart : missing ;\n";
+
+/// The program's arguments after its name.
+struct CommandLine {
+    argv: List<String>,
+}
+
+impl Environment for CommandLine {
+    fn get_arguments(&self) -> List<String> {
+        let mut all: List<String> = ["gale"];
+        all.extend(&self.argv);
+        resume all;
+    }
+
+    ..forward
+}
+
+/// Preopens `dirs`, each under the working directory `wado test` grants and
+/// named as written, so the program reaches those and no other.
+struct Grants {
+    dirs: List<String>,
+}
+
+impl Preopens for Grants {
+    fn get_directories(&self) -> List<[Descriptor, String]> {
+        let cwd = Preopens::get_directories()[0].0;
+        let mut granted: List<[Descriptor, String]> = [];
+        for let dir of &self.dirs {
+            let opened = cwd.open_at(
+                PathFlags::none(),
+                *dir,
+                OpenFlags::Directory,
+                DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
+            ).wait();
+            granted.push([opened.unwrap(), *dir]);
+        }
+        resume granted;
+    }
+}
+
+fn scratch<S: AsStrSlice>(case: S) -> String with Preopens {
+    let dir = `target/gale-main-test/${case}`;
+    fs::remove_dir_all(&dir).unwrap();
+    fs::create_dir_all(&dir).unwrap();
+    return dir;
+}
+
+fn put(dir: &String, name: String, text: String) with Preopens {
+    let path = `${*dir}/${name}`;
+    fs::write(&path, &text).unwrap();
+}
+
+/// What one `gale` run returned, printed and logged.
+struct Run {
+    result: Result<(), String>,
+    console: Console,
+}
+
+impl Run {
+    fn stdout(&self) -> String {
+        return self.console.stdout();
+    }
+
+    /// The report `run` prints on a failure, or `""` on success.
+    fn failure(&self) -> String {
+        return match &self.result {
+            Ok(_) => "",
+            Err(report) => *report,
+        };
+    }
+}
+
+/// Run `gale argv` with `grants` preopened.
+fn gale_with(grants: List<String>, argv: List<String>) -> Run with Preopens {
+    let line = CommandLine { argv };
+    let dirs = Grants { dirs: grants };
+    let mut console = Console {};
+    let result = with &mut console, Environment => &line, Preopens => &dirs do {
+        gale()
+    };
+    return Run { result, console };
+}
+
+/// Run `gale argv` with `dir` as the only grant.
+fn gale_in<S: AsStrSlice>(dir: S, argv: List<String>) -> Run with Preopens {
+    return gale_with([dir.to_string()], argv);
+}
+
+/// Serves each input file's content from its stream handle, an index into
+/// `contents`.
+struct Inputs {
+    contents: List<ByteList>,
+}
+
+impl Stream<u8> for Inputs {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
+        let _ = max;
+        resume StreamChunk { items: self.contents[*this as i32] as List<u8>, result: CopyResult::Dropped };
+    }
+
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+    }
+
+    ..trap
+}
+
+struct Host {
+    diagnostics: List<String>,
+}
+
+impl KilnHost for Host {
+    fn emit_diagnostic(&mut self, diagnostic: KilnDiagnostic) {
+        assert diagnostic.span matches { None };
+        self.diagnostics.push(`${diagnostic.level}: ${diagnostic.message}`);
+    }
+}
+
+/// What one Kiln generator run returned, and the diagnostics it emitted.
+struct KilnRun {
+    result: Result<Response, KilnError>,
+    diagnostics: List<String>,
+}
+
+impl KilnRun {
+    /// The entry module's source; the run must have succeeded.
+    fn source(&self) -> String {
+        let Ok(response) = self.result else {
+            panic(`generation failed: ${self.result:?}`);
+        };
+        assert response.files.len() == 1;
+        return response.files[0].content;
+    }
+
+    fn error(&self) -> String {
+        return match self.result {
+            Ok(_) => "",
+            Err(e) => `${e}`,
+        };
+    }
+}
+
+/// Run the Kiln generator on `primary` and `supplementary`, each `[path, content]`.
+fn kiln(primary: [String, ByteList], supplementary: List<[String, ByteList]>, options: Options) -> KilnRun {
+    let mut inputs = Inputs { contents: [primary.1] };
+    let mut files: List<InputFile> = [];
+    for let [path, content] of supplementary {
+        files.push(InputFile { path, content: inputs.contents.len() as Stream<u8> });
+        inputs.contents.push(content);
+    }
+    let request = Request {
+        primary: InputFile { path: primary.0, content: 0 as Stream<u8> },
+        inputs: files,
+        module: "lib:gale",
+        options,
+    };
+    let mut host = Host { diagnostics: [] };
+    let result = with &mut inputs, &mut host do {
+        kiln_generate(request)
+    };
+    return KilnRun { result, diagnostics: host.diagnostics };
+}
+
+fn bytes_of(s: String) -> ByteList {
+    return s.bytes().collect();
+}
+
+fn no_options() -> Options {
+    return Options { fragment_entries: [] };
+}
+
+// ---------------------------------------------------------------------------
+// gale gen
+// ---------------------------------------------------------------------------
+
+test "gen prints the parser the Kiln generator builds for the same grammar" {
+    let dir = scratch("gen");
+    put(&dir, "Expr.g4", EXPR);
+    let run = gale_in(&dir, ["gen", "Expr.g4"]);
+    assert run.result matches { Ok(_) }, run.failure();
+    let built = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options());
+    assert run.stdout() == built.source();
+    assert run.console.stderr() == "";
+}
+
+test "gen --output writes the parser into the first grant and prints nothing" {
+    let out = scratch("gen-output/out");
+    let src = scratch("gen-output/src");
+    put(&src, "Expr.g4", EXPR);
+    let run = gale_with([out, src], ["gen", "--output", "expr.wado", "Expr.g4"]);
+    assert run.result matches { Ok(_) }, run.failure();
+    assert run.stdout() == "";
+    let printed = gale_in(&src, ["gen", "Expr.g4"]).stdout();
+    assert fs::read_to_string(`${out}/expr.wado`).unwrap() == printed;
+}
+
+test "gen with a .scm query adds the highlighter" {
+    let dir = scratch("gen-highlight");
+    put(&dir, "Expr.g4", EXPR);
+    put(&dir, "expr.scm", EXPR_QUERY);
+    let plain = gale_in(&dir, ["gen", "Expr.g4"]);
+    let highlighted = gale_in(&dir, ["gen", "Expr.g4", "expr.scm"]);
+    assert highlighted.result matches { Ok(_) }, highlighted.failure();
+    assert !plain.stdout().contains("pub fn highlight<");
+    assert highlighted.stdout().contains("pub fn highlight<");
+}
+
+test "gen --trace builds a parser that can log its decisions" {
+    let dir = scratch("gen-trace");
+    put(&dir, "Expr.g4", EXPR);
+    let plain = gale_in(&dir, ["gen", "Expr.g4"]);
+    let traced = gale_in(&dir, ["gen", "--trace", "Expr.g4"]);
+    assert !plain.stdout().contains("trace_to_stderr");
+    assert traced.stdout().contains("trace_to_stderr");
+}
+
+// A query naming a token the grammar lacks is a `Warn` diagnostic: the parser
+// is built without that rule.
+test "a warning is logged by default and silenced by --log-level error" {
+    let dir = scratch("gen-log-level");
+    put(&dir, "Expr.g4", EXPR);
+    put(&dir, "bad.scm", "(FLOAT) @number\n");
+    let default_level = gale_in(&dir, ["gen", "Expr.g4", "bad.scm"]);
+    assert default_level.result matches { Ok(_) }, default_level.failure();
+    assert default_level.console.events == ["Warn: highlight query: unknown token 'FLOAT'"];
+    let quiet = gale_in(&dir, ["gen", "--log-level", "error", "Expr.g4", "bad.scm"]);
+    assert quiet.console.events == [];
+}
+
+test "a grammar read from the second grant is found" {
+    let empty = scratch("second-grant/empty");
+    let src = scratch("second-grant/src");
+    put(&src, "Expr.g4", EXPR);
+    let run = gale_with([empty, src], ["dump", "Expr.g4"]);
+    assert run.result matches { Ok(_) }, run.failure();
+    assert run.stdout().starts_with("grammar Expr\n");
+}
+
+// ---------------------------------------------------------------------------
+// gale dump
+// ---------------------------------------------------------------------------
+
+test "dump prints the per-rule prediction report" {
+    let dir = scratch("dump");
+    put(&dir, "Expr.g4", EXPR);
+    let run = gale_in(&dir, ["dump", "Expr.g4"]);
+    assert run.result matches { Ok(_) }, run.failure();
+    assert run.stdout().starts_with("grammar Expr\n\n"), run.stdout();
+    assert run.stdout().contains("expr"), run.stdout();
+}
+
+test "dump --atn prints the ATN" {
+    let dir = scratch("dump-atn");
+    put(&dir, "Expr.g4", EXPR);
+    let run = gale_in(&dir, ["dump", "--atn", "Expr.g4"]);
+    assert run.result matches { Ok(_) }, run.failure();
+    assert run.stdout().contains("rule 0 'expr'"), run.stdout();
+}
+
+test "dump --lexer prints the lexer report" {
+    let dir = scratch("dump-lexer");
+    put(&dir, "Expr.g4", EXPR);
+    let run = gale_in(&dir, ["dump", "--lexer", "Expr.g4"]);
+    assert run.result matches { Ok(_) }, run.failure();
+    assert run.stdout().contains("grammar Expr (lexer)"), run.stdout();
+    assert run.stdout().contains("rule INT"), run.stdout();
+}
+
+test "every grammar file given is read and merged" {
+    let dir = scratch("dump-split");
+    put(&dir, "SplitLexer.g4", SPLIT_LEXER);
+    put(&dir, "SplitParser.g4", SPLIT_PARSER);
+    let both = gale_in(&dir, ["dump", "--lexer", "SplitParser.g4", "SplitLexer.g4"]);
+    assert both.result matches { Ok(_) }, both.failure();
+    assert both.stdout().contains("rule NUM"), both.stdout();
+}
+
+test "a reference to a rule no grammar defines is reported" {
+    let dir = scratch("dangling");
+    put(&dir, "Dangling.g4", DANGLING);
+    let run = gale_in(&dir, ["dump", "Dangling.g4"]);
+    assert run.failure() == "gale: expected defined rule name; reference to undefined rule \"missing\" in \"start\"";
+}
+
+// ---------------------------------------------------------------------------
+// What a failed run reports
+// ---------------------------------------------------------------------------
+
+global USAGE: String = "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]
+       gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]
+       <level> is trace, debug, info, warn or error (default warn)";
+
+test "an argument error names the subcommand and shows the usage" {
+    let dir = scratch("usage");
+    let unknown = gale_in(&dir, ["gen", "--frobnicate", "Expr.g4"]);
+    assert unknown.failure().starts_with("gale gen: "), unknown.failure();
+    assert unknown.failure().ends_with(`\n${USAGE}`), unknown.failure();
+    let dump = gale_in(&dir, ["dump", "--frobnicate"]);
+    assert dump.failure().starts_with("gale dump: "), dump.failure();
+    let none = gale_in(&dir, []);
+    assert none.failure().starts_with("gale: "), none.failure();
+    assert none.failure().ends_with(`\n${USAGE}`), none.failure();
+}
+
+test "a subcommand given no grammar says so" {
+    let dir = scratch("no-grammar");
+    put(&dir, "expr.scm", EXPR_QUERY);
+    assert gale_in(&dir, ["gen", "expr.scm"]).failure() == "gale gen: no grammar files given";
+    assert gale_in(&dir, ["dump"]).failure() == "gale dump: no grammar files given";
+}
+
+test "--atn and --lexer together are refused" {
+    let dir = scratch("atn-lexer");
+    put(&dir, "Expr.g4", EXPR);
+    let run = gale_in(&dir, ["dump", "--atn", "--lexer", "Expr.g4"]);
+    assert run.failure() == "gale dump: --atn and --lexer are separate reports; pass one";
+}
+
+test "an unknown --log-level is refused" {
+    let dir = scratch("bad-level");
+    put(&dir, "Expr.g4", EXPR);
+    let run = gale_in(&dir, ["gen", "--log-level", "loud", "Expr.g4"]);
+    assert run.failure() == "gale: unknown --log-level 'loud' (trace, debug, info, warn, error)";
+    assert run.stdout() == "";
+}
+
+test "a grammar that does not parse is reported with its path" {
+    let dir = scratch("parse-error");
+    put(&dir, "Broken.g4", "grammar Broken;\nr : ;;\n");
+    let run = gale_in(&dir, ["gen", "Broken.g4"]);
+    assert run.failure().starts_with("gale: Broken.g4: parse error: "), run.failure();
+}
+
+test "a highlight query that does not parse is reported with its path and position" {
+    let dir = scratch("bad-query");
+    put(&dir, "Expr.g4", EXPR);
+    put(&dir, "bad.scm", "(INT)\n");
+    let run = gale_in(&dir, ["gen", "Expr.g4", "bad.scm"]);
+    assert run.failure() == "gale: bad.scm: highlight query 2:1: expected '@capture'";
+}
+
+test "a missing grammar names the grants searched" {
+    let dir = scratch("missing");
+    let run = gale_in(&dir, ["gen", "Absent.g4"]);
+    assert run.failure() == `gale: Absent.g4: cannot open file\ngale: not found under ${dir} — check the path, or grant the directory holding it with wado run --dir <dir> ...`;
+}
+
+global ABSOLUTE: String = "gale: a path opens inside a granted directory, so an absolute path never does";
+
+test "an absolute path is answered with the grant that would reach it" {
+    let dir = scratch("absolute");
+    put(&dir, "Expr.g4", EXPR);
+    let nested = gale_in(&dir, ["gen", "/grammars/Expr.g4"]);
+    assert nested.failure() == `gale: /grammars/Expr.g4: cannot open file\n${ABSOLUTE}: wado run --dir /grammars ... Expr.g4`;
+    let at_root = gale_in(&dir, ["gen", "/Expr.g4"]);
+    assert at_root.failure() == `gale: /Expr.g4: cannot open file\n${ABSOLUTE}: wado run --dir / ... Expr.g4`;
+    let unnamed = gale_in(&dir, ["gen", "/grammars/.."]);
+    assert unnamed.failure() == `gale: /grammars/..: cannot open file\n${ABSOLUTE}: wado run --dir /grammars/.. ...`;
+    let output = gale_in(&dir, ["gen", "--output", "/out/expr.wado", "Expr.g4"]);
+    assert output.failure() == `gale: /out/expr.wado: cannot open for writing\n${ABSOLUTE}: wado run --dir /out ... expr.wado`;
+}
+
+test "a path the grant holds but cannot open says it is not readable" {
+    let dir = scratch("not-readable");
+    put(&dir, "Expr.g4", EXPR);
+    let run = gale_in(&dir, ["gen", "Expr.g4/inner.g4"]);
+    assert run.failure() == `gale: Expr.g4/inner.g4: cannot open file\ngale: not readable under ${dir}`;
+}
+
+test "with no grant there is nothing to read" {
+    let run = gale_with([], ["gen", "Expr.g4"]);
+    assert run.failure() == "gale: Expr.g4: cannot open file\ngale: no directory was granted to this program (try without --no-dir)";
+}
+
+test "a grammar that is not UTF-8 is refused" {
+    let dir = scratch("not-utf8");
+    fs::write(`${dir}/Bad.g4`, &([0xff as u8] as ByteList)).unwrap();
+    let run = gale_in(&dir, ["gen", "Bad.g4"]);
+    assert run.failure() == "gale: Bad.g4: not valid UTF-8: invalid utf-8 sequence of 1 bytes from index 0";
+}
+
+test "--output into a directory that does not exist names the grant it resolves in" {
+    let dir = scratch("output-missing-dir");
+    put(&dir, "Expr.g4", EXPR);
+    let run = gale_in(&dir, ["gen", "--output", "absent/expr.wado", "Expr.g4"]);
+    assert run.failure() == `gale: absent/expr.wado: cannot open for writing\ngale: --output resolves inside ${dir}, the first granted directory`;
+}
+
+test "a directory named as a grammar is a read error" {
+    let dir = scratch("directory");
+    fs::create_dir_all(`${dir}/Sub.g4`).unwrap();
+    let run = gale_in(&dir, ["gen", "Sub.g4"]);
+    assert run.failure() == "gale: Sub.g4: read error";
+}
+
+// ---------------------------------------------------------------------------
+// The Kiln generator
+// ---------------------------------------------------------------------------
+
+test "the Kiln generator emits one entry module named after the grammar" {
+    let built = kiln(["grammars/Expr.g4", bytes_of(EXPR)], [], no_options());
+    let Ok(response) = built.result else {
+        panic(built.error());
+    };
+    assert response.files.len() == 1;
+    assert response.files[0].path == "expr.wado";
+    assert response.files[0].is_entry;
+    assert built.diagnostics == [];
+}
+
+test "a .scm input to the Kiln generator adds the highlighter" {
+    let built = kiln(["Expr.g4", bytes_of(EXPR)], [["expr.scm", bytes_of(EXPR_QUERY)]], no_options());
+    assert built.source().contains("pub fn highlight<");
+}
+
+test "the trace option builds a parser that can log its decisions" {
+    let built = kiln(["Expr.g4", bytes_of(EXPR)], [], Options { trace: true, fragment_entries: [] });
+    assert built.source().contains("trace_to_stderr");
+}
+
+test "Gale's diagnostics reach the Kiln host at their own level" {
+    let warned = kiln(["Expr.g4", bytes_of(EXPR)], [["bad.scm", bytes_of("(FLOAT) @number\n")]], no_options());
+    assert warned.diagnostics == ["Warning: gale: highlight: highlight query: unknown token 'FLOAT'"];
+    let informed = kiln(["Pick.g4", bytes_of(OVERLAP)], [], no_options());
+    assert informed.diagnostics.len() > 0;
+    for let d of &informed.diagnostics {
+        assert d.starts_with("Info: gale: "), d;
+    }
+}
+
+test "an unknown fragment entry reaches the Kiln host as a warning" {
+    let built = kiln(["Expr.g4", bytes_of(EXPR)], [], Options { fragment_entries: ["nope"] });
+    assert built.diagnostics == ["Warning: gale: fragment_entries: fragment_entries: unknown parser rule 'nope'"];
+}
+
+test "a Kiln input that is not UTF-8 is an invalid schema" {
+    let built = kiln(["Bad.g4", [0xff as u8] as ByteList], [], no_options());
+    assert built.error() == "invalid schema: gale: 'Bad.g4' is not UTF-8: invalid utf-8 sequence of 1 bytes from index 0";
+}
+
+test "a Kiln parse error says which input it is in" {
+    let broken = bytes_of("grammar Broken;\nr : ;;\n");
+    let primary = kiln(["Broken.g4", broken], [], no_options());
+    assert primary.error().starts_with("invalid schema: gale: failed to parse primary grammar 'Broken.g4': "), primary.error();
+    let supplementary = kiln(["Expr.g4", bytes_of(EXPR)], [["Broken.g4", broken]], no_options());
+    assert supplementary.error().starts_with("invalid schema: gale: failed to parse supplementary grammar 'Broken.g4': "), supplementary.error();
+}
+
+test "a Kiln grammar with unresolved references names the primary input" {
+    let built = kiln(["Dangling.g4", bytes_of(DANGLING)], [], no_options());
+    assert built.error() == "invalid schema: gale: unresolved rule references in 'Dangling.g4': expected defined rule name; reference to undefined rule \"missing\" in \"start\"";
+}
+
+test "a Kiln highlight query that does not parse names the query and position" {
+    let built = kiln(["Expr.g4", bytes_of(EXPR)], [["bad.scm", bytes_of("(INT)\n")]], no_options());
+    assert built.error() == "invalid schema: gale: invalid highlight query 'bad.scm' at 2:1: expected '@capture'";
+}

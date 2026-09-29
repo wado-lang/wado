@@ -267,9 +267,9 @@ test "gen_lexer: alternation followed by a suffix keeps the first-match emit" {
 test "gen_lexer: tail alternation with a predicate is still scored by length" {
     // ANTLR4's lexer takes the longest arm, and a predicate says whether its
     // own arm matches — never how the arms compare on length. The carve-out in
-    // `lexer_alts_scan` answers the *routing* question, where a predicate is
+    // `lexer_alts_contested` answers the *routing* question, where a predicate is
     // disqualifying because `latn_match` cannot run one; the emit runs it while
-    // scoring and so reads `lexer_alts_lengths`.
+    // scoring.
     let out = lexer_source("lexer grammar L; options { language = Wado; } I : ('a' | 'ab' { false }?) ;");
     assert out.contains("alts_best_"), out;
 }

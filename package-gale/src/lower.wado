@@ -4720,9 +4720,8 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
 /// element, then overriding the inner op's field name with the
 /// label's name (deduped against the surrounding alt's name table).
 ///
-/// Mirrors `parser_gen::gen_element`'s scalar-Label arm: the inner
-/// emission would have produced its own field name, but the label
-/// rebinds the value under `lab.field_name`. A list label (`+=`) needs a
+/// The inner emission would have produced its own field name, but the
+/// label rebinds the value under `lab.field_name`. A list label (`+=`) needs a
 /// `List<...>`-typed wrapper field, which the CST `FieldDecl` enumeration adds.
 fn lower_label_op<S: AsStrSlice>(
     lab: &LabelElement,
@@ -4791,10 +4790,9 @@ fn lower_label_op<S: AsStrSlice>(
 /// the lowered op list. Transparent `Group` ops contribute their
 /// inner op's field instead (the group itself has no struct slot).
 ///
-/// Mirrors what `gen_util::element_field_info` computed at emit
-/// time, but consumes the lowered IR so the field name and type
-/// agree with whatever shape the lowering chose. emit reads this
-/// list directly to lay out the struct.
+/// It reads the lowered IR, so the field name and type agree with
+/// whatever shape the lowering chose. emit reads this list directly to
+/// lay out the struct.
 fn enumerate_alt_field_decls(ops: &List<Op>) -> List<FieldDecl> {
     let mut fields: List<FieldDecl> = [
         FieldDecl {

@@ -76,13 +76,8 @@ fn read_baseline(path: &String) -> Option<TreeMap<String, i32>> with (Stderr, Pr
 }
 
 fn write_baseline(path: &String, counts: &TreeMap<String, i32>) -> bool with (Stderr, Preopens) {
-    let text = match to_string_pretty(counts, Option::Some('\n')) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln(`error: cannot serialize the baseline: ${e:?}`);
-            return false;
-        },
-    };
+    // A map of strings to integers always serializes.
+    let text = to_string_pretty(counts, Option::Some('\n')).unwrap();
     if let Err(e) = fs::write(path, &text) {
         eprintln(`error: ${e}`);
         return false;

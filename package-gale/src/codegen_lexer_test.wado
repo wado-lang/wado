@@ -1,0 +1,318 @@
+use { generate, GenerateOptions, GeneratedOutput } from "./codegen.wado";
+use { parse_checked } from "./g4/parser.wado";
+use { eval, Output } from "core:eval";
+use { wado } from "lib:wadopoet";
+
+global DEFAULT_OPTIONS: GenerateOptions = GenerateOptions {};
+
+fn gen_with<S: AsStrSlice>(src: S, options: &GenerateOptions) -> GeneratedOutput {
+    let mut g = parse_checked(src).unwrap();
+    return generate(&mut g, options);
+}
+
+fn gen<S: AsStrSlice>(src: S) -> GeneratedOutput {
+    return gen_with(src, &DEFAULT_OPTIONS);
+}
+
+fn gen_source<S: AsStrSlice>(src: S) -> String {
+    return gen(src).source;
+}
+
+/// What the parser generated from `grammar` makes of each input to `rule`, one
+/// line each: `input => tree`, or `error`, then any action output. The error's
+/// wording is left out: compatibility covers what is rejected, not how it reads.
+fn parses<S: AsStrSlice>(grammar: S, rule: String, inputs: List<String>) -> String {
+    let mut body = String::new();
+    for let input of inputs {
+        body.push_str(wado`show("${input}", parse_${rule}("${input}"));\n`);
+    }
+    return printed(grammar, body, SHOW_FN);
+}
+
+/// The tokens the lexer generated from `grammar` makes of each input, one line
+/// each: `input => NAME:text ...`, with `error` naming what no rule matched,
+/// then any action output.
+fn lexes<S: AsStrSlice>(grammar: S, inputs: List<String>) -> String {
+    let mut body = String::new();
+    for let input of inputs {
+        body.push_str(wado`lex("${input}");\n`);
+    }
+    return printed(grammar, body, LEX_FN);
+}
+
+/// Runs `body` beside the parser generated from `grammar` and the `items`
+/// declared with it, and returns what it printed.
+fn printed<S: AsStrSlice>(grammar: S, body: String, items: String = "") -> String {
+    return run_beside(gen_source(grammar), body, items).stdout;
+}
+
+/// Runs `body` beside the parser `source` and the `items` declared with it.
+fn run_beside(source: String, body: String, items: String = "") -> Output {
+    // The generated source opens with inner attributes, which come first.
+    let out = eval(`${source}
+use { println, Stdout } from "core:cli";
+${items}
+export fn run() with Stdout {
+${body}}
+`).unwrap();
+    assert out.status matches { Exited(0) }, `${out.status}\n${out.stderr}`;
+    return out;
+}
+
+// `SHOW_FN` and `LEX_FN` are `"..."` literals, so their holes are the generated
+// program's own.
+
+global SHOW_FN: String = "fn show(input: String, r: ParseResult) with Stdout {
+    let shown = if r.ok() { to_string_tree(&r) } else { \"error\" };
+    let output = if r.output.is_empty() { \"\" } else { ` [${r.output}]` };
+    println(`${input} => ${shown}${output}`);
+}";
+
+global LEX_FN: String = "fn lex(input: String) with Stdout {
+    let toks = tokenize(input);
+    let mut line = `${input} =>`;
+    for let mut i = 0; toks.kind_at(i) != TK_EOF; i += 1 {
+        let name = if toks.is_lex_error(i) { \"error\" } else { token_kind_name(toks.kind_at(i)) };
+        line.push_str(` ${name}:${toks.token_text(i)}`);
+    }
+    if !toks.output.is_empty() {
+        line.push_str(` [${toks.output}]`);
+    }
+    println(line);
+}";
+
+test "a fragment two rules share matches in each" {
+    let got = lexes("lexer grammar L;
+FLOAT : DIGITS '.' DIGITS? ;
+INT : DIGITS ;
+fragment DIGITS : [0-9]+ ;
+WS : ' ' -> skip ;
+", ["3.14 42 7.", "1.2.3"]);
+    assert got == "3.14 42 7. => FLOAT:3.14 INT:42 FLOAT:7.\n1.2.3 => FLOAT:1.2 error:. INT:3\n", got;
+}
+
+test "a fragment ending a rule takes its longest arm there and its first arm before a suffix" {
+    // `X` calls `AB` in tail position, where its arms are scanned for the
+    // longest; `Y` scores them against the `'c'` it still owes.
+    let got = lexes("lexer grammar L;
+X : AB ;
+Y : AB 'c' { System.out.println(\"y\"); } ;
+fragment AB : 'a' | 'ab' ;
+", ["ab", "abc", "ac", "a"]);
+    assert got == "ab => X:ab\nabc => Y:abc [y\n]\nac => Y:ac [y\n]\na => X:a\n", got;
+}
+
+test "a number's radix prefix is matched before its digits" {
+    let got = lexes("lexer grammar L;
+HEX : ('0x' | '0X') [0-9a-fA-F]+ ;
+BIN : ('0b') [01]+ ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", ["0x1F 0b101 0X2 0 0b2"]);
+    assert got == "0x1F 0b101 0X2 0 0b2 => HEX:0x1F BIN:0b101 HEX:0X2 INT:0 INT:0 error:b INT:2\n", got;
+}
+
+test "an exponent's empty sign arm lets the digits follow the e" {
+    let got = lexes("lexer grammar L;
+NUM : [0-9]+ ('e' ('+' | '-' | ) [0-9]+)? ;
+WS : ' ' -> skip ;
+", ["1e5 2e-3 4e"]);
+    assert got == "1e5 2e-3 4e => NUM:1e5 NUM:2e-3 NUM:4 error:e\n", got;
+}
+
+test "an alternation before an optional suffix takes the arm that reaches furthest" {
+    let got = lexes("lexer grammar L;
+INT : ('0' | [0-9]+) 'L'? ;
+WS : ' ' -> skip ;
+", ["0L 007 12L 0"]);
+    assert got == "0L 007 12L 0 => INT:0L INT:007 INT:12L INT:0\n", got;
+}
+
+test "text up to a tag is one token, and a tag's names another mode's" {
+    let got = lexes("lexer grammar L;
+OPEN : '<' -> pushMode(TAG) ;
+TEXT : ~[<]+ ;
+mode TAG;
+NAME : [a-z]+ ;
+CLOSE : '>' -> popMode ;
+", ["a<b>c d", "<x>"]);
+    assert got == "a<b>c d => TEXT:a OPEN:< NAME:b CLOSE:> TEXT:c d\n<x> => OPEN:< NAME:x CLOSE:>\n", got;
+}
+
+test "a lexer member keeps its state across the parser's literal tokens" {
+    let got = lexes("grammar T;
+@lexer::members { int ids = 0; }
+r : '(' ID+ ')' ;
+ID : [a-z]+ { ids = ids + 1; System.out.println(ids); } ;
+WS : ' ' -> skip ;
+", ["(a b)"]);
+    assert got == "(a b) => '(':( ID:a ID:b ')':) [1\n2\n]\n", got;
+}
+
+test "a caseInsensitive keyword is told apart from an identifier of ranges" {
+    let got = lexes("lexer grammar L;
+options { caseInsensitive = true; }
+SELECT : 'select' ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+", ["Select FOO selects"]);
+    assert got == "Select FOO selects => SELECT:Select ID:FOO ID:selects\n", got;
+}
+
+#[TODO]
+test "a greedy loop hands back the chars a predicate-carrying suffix needs" {
+    // ANTLR4 takes the longest match, whose `.+` stops short of the `z` the
+    // fragment needs. Gale peeks no suffix carrying a predicate, so the plain
+    // loop eats the `z` and the rule fails.
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+S : 'a' .+ END ;
+fragment END : { true }? 'z' ;
+", ["abz"]);
+    assert got == "abz => S:abz\n", got;
+}
+
+#[TODO]
+test "an alternation before a predicate takes the arm the rest of the rule needs" {
+    // ANTLR4 takes `ab` so that `bc` can follow. Gale scores no alternation
+    // that a predicate follows or whose suffix carries one, so the first arm to
+    // match wins and the rule fails.
+    let after = lexes("lexer grammar L;
+options { language = Wado; }
+I : ('a' | 'ab') { true }? 'bc' ;
+", ["abbc"]);
+    let inside = lexes("lexer grammar L;
+options { language = Wado; }
+I : ('a' | 'ab') END ;
+fragment END : { true }? 'bc' ;
+", ["abbc"]);
+    assert after == "abbc => I:abbc\n", after;
+    assert inside == "abbc => I:abbc\n", inside;
+}
+
+test "a keyword declared after the identifier rule never wins" {
+    // Both match `if` at the same length, and ANTLR4 gives a tie to the rule
+    // declared first.
+    let got = lexes("lexer grammar L;
+ID : [a-z]+ ;
+IF : 'if' ;
+WS : ' ' -> skip ;
+", ["if x"]);
+    assert got == "if x => ID:if ID:x\n", got;
+}
+
+test "a mode whose only rule starts with any char still lexes" {
+    let got = lexes("lexer grammar L;
+HASH : '#' -> pushMode(LINE) ;
+ID : [a-z]+ ;
+mode LINE;
+REST : ~[;]+ -> popMode ;
+", ["#include foo", "ab#x"]);
+    assert got == "#include foo => HASH:# REST:include foo\nab#x => ID:ab HASH:# REST:x\n", got;
+}
+
+test "a greedy star hands back the chars its suffix needs" {
+    let got = lexes("lexer grammar L;
+S : 'a' .* 'c' ;
+", ["abcbc", "ac", "abcb"]);
+    assert got == "abcbc => S:abcbc\nac => S:ac\nabcb => S:abc error:b\n", got;
+}
+
+test "a greedy plus stops where a fragment suffix can still match" {
+    let got = lexes("lexer grammar L;
+S : 'a' .+ END ;
+fragment END : 'z' 'z' ;
+", ["abzzczz", "azzz", "azz"]);
+    assert got == "abzzczz => S:abzzczz\nazzz => S:azzz\nazz => error:a error:z error:z\n", got;
+}
+
+test "a greedy star before an alternation ending in EOF runs to the last match" {
+    let got = lexes("lexer grammar L;
+LINE : '#' .* (';' | EOF) ;
+", ["#a;b;#c", "#a;"]);
+    assert got == "#a;b;#c => LINE:#a;b;#c\n#a; => LINE:#a;\n", got;
+}
+
+test "a non-greedy plus consumes one char before it tries to exit" {
+    let got = lexes("lexer grammar L;
+CMT : '/*' .+? '*/' ;
+SL : '/' ;
+ST : '*' ;
+", ["/**/", "/***/", "/*a*/*/"]);
+    assert got == "/**/ => SL:/ ST:* ST:* SL:/\n/***/ => CMT:/***/\n/*a*/*/ => CMT:/*a*/ ST:* SL:/\n", got;
+}
+
+test "a scored alternation runs only the winning arm's action" {
+    let got = lexes("lexer grammar L;
+I : ('a' { System.out.println(\"short\"); } | 'ab' { System.out.println(\"long\"); }) 'bc' ;
+", ["abc", "abbc"]);
+    assert got == "abc => I:abc [short\n]\nabbc => I:abbc [long\n]\n", got;
+}
+
+test "a keyword is told apart from an identifier built of fragments and ranges" {
+    let got = lexes("lexer grammar L;
+IF : 'if' ;
+ID : LETTER (LETTER | '0'..'9')* ;
+fragment LETTER : 'a'..'z' | '_' ;
+WS : ' ' -> skip ;
+", ["if iff x_1 if1 _if"]);
+    assert got == "if iff x_1 if1 _if => IF:if ID:iff ID:x_1 ID:if1 ID:_if\n", got;
+}
+
+test "a keyword is recognized only in the default mode" {
+    // In `TAG`, `ATTR` retypes its match to `ID`, the kind `END` is classified
+    // out of in the default mode; the mode, not the kind, keeps it an `ID` there.
+    let got = lexes("lexer grammar L;
+END : 'end' ;
+NIL : 'NIL' ;
+ID : [a-z]+ ;
+CONST : [A-Z]+ ;
+LT : '<' -> pushMode(TAG) ;
+WS : ' ' -> skip ;
+mode TAG;
+ATTR : [a-z]+ -> type(ID) ;
+GT : '>' -> popMode ;
+TAG_WS : ' ' -> skip ;
+", ["end ends NIL NILS <end x> end"]);
+    assert got == "end ends NIL NILS <end x> end => END:end ID:ends NIL:NIL CONST:NILS LT:< ID:end ID:x GT:> END:end\n", got;
+}
+
+test "a keyword reclassified out of its carrier does not run the carrier's action" {
+    let got = lexes("lexer grammar L;
+IF : 'if' ;
+ID : [a-z]+ { System.out.println(\"id\"); } ;
+NUM : [0-9]+ { System.out.println(\"num\"); } ;
+WS : ' ' -> skip ;
+", ["if x 1"]);
+    assert got == "if x 1 => IF:if ID:x NUM:1 [id\nnum\n]\n", got;
+}
+
+test "a hidden-channel token between two tokens does not reach the parser" {
+    let got = parses("grammar T;
+r : ID+ EOF ;
+ID : [a-z]+ ;
+CMT : '#' [a-z]* -> channel(HIDDEN) ;
+WS : ' ' -> skip ;
+", "r", ["a #bc d", "a#b"]);
+    assert got == "a #bc d => (r a d)\na#b => (r a)\n", got;
+}
+
+test "a more rule's text joins the token its mode switch leads to" {
+    let got = lexes("lexer grammar L;
+TEXT : [a-z]+ ;
+HASH : '#' -> more, mode(NUM) ;
+DOT : '.' -> channel(HIDDEN) ;
+WS : ' ' -> skip ;
+mode NUM;
+NUMBER : [0-9]+ -> mode(DEFAULT_MODE) ;
+", ["ab #12 cd", "ab.cd"]);
+    assert got == "ab #12 cd => TEXT:ab NUMBER:#12 TEXT:cd\nab.cd => TEXT:ab TEXT:cd\n", got;
+}
+
+test "a string whose escapes share a lead char is lexed by the lexer ATN" {
+    let got = lexes("lexer grammar L;
+STR : '\"' (~('\\\\' | '\"') | '\\\\' . | '\\\\x' HEX HEX? | '\\\\u{' HEX+ '}')* '\"' ;
+fragment HEX : '0'..'9' | 'a'..'f' ;
+", ["\"a\\x41\"", "\"\\\"\"", "\"\\x\"", "\"\\u{1f600}\""]);
+    assert got == "\"a\\x41\" => STR:\"a\\x41\"\n\"\\\"\" => STR:\"\\\"\"\n\"\\x\" => STR:\"\\x\"\n\"\\u{1f600}\" => STR:\"\\u{1f600}\"\n", got;
+}

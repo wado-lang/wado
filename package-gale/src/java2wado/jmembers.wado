@@ -234,9 +234,10 @@ fn expr_mutates(e: &JExpr, scope: &List<String>, mutators: &List<String>) -> boo
             }
             false;
         },
-        // `x++` / `--x` write their operand.
-        Unary(u) => (u.op == "++" || u.op == "--") && assigns_field(&u.operand, scope)
-            || expr_mutates(&u.operand, scope, mutators),
+        Unary(u) => {
+            assert u.op == "!" || u.op == "-", "the Java lexer has no `++` / `--`, so no unary writes its operand";
+            expr_mutates(&u.operand, scope, mutators);
+        },
         Member(m) => expr_mutates(&m.recv, scope, mutators),
         Cast(c) => expr_mutates(&c.operand, scope, mutators),
         Binary(b) => expr_mutates(&b.lhs, scope, mutators) || expr_mutates(&b.rhs, scope, mutators),

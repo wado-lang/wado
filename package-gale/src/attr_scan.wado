@@ -36,7 +36,7 @@ pub struct AttrRef {
 /// Locate every `$ident(.ident)?` reference in `body`, in source order.
 /// String literals and comments are skipped so their contents never yield
 /// a reference. Backtick template strings are skipped too, EXCEPT their
-/// `{ ... }` interpolation regions, where `$refs` are Wado expressions to
+/// `${ ... }` interpolation regions, where `$refs` are Wado expressions to
 /// substitute — a literal `$` in template text is not a reference. A lone
 /// `$` not followed by an identifier is host text.
 pub fn find_attr_refs<S: AsStrSlice>(body: S) -> List<AttrRef> {
@@ -91,7 +91,7 @@ fn scan_refs(chars: &List<char>, start: i32, end: i32, out: &mut List<AttrRef>) 
     }
 }
 
-/// Skip a backtick template, scanning only its `{ ... }` interpolation regions
+/// Skip a backtick template, scanning only its `${ ... }` interpolation regions
 /// for references. `pos` points at the opening backtick; returns the index
 /// just past the closing backtick.
 fn scan_template(chars: &List<char>, pos: i32, end: i32, out: &mut List<AttrRef>) -> i32 {
@@ -105,14 +105,14 @@ fn scan_template(chars: &List<char>, pos: i32, end: i32, out: &mut List<AttrRef>
         if c == '`' {
             return i + 1;
         }
-        if c == '{' {
-            match scan_balanced(chars, i, '{', '}') {
+        if c == '$' && i + 1 < end && chars[i + 1] == '{' {
+            match scan_balanced(chars, i + 1, '{', '}') {
                 Some(e) => {
-                    scan_refs(chars, i + 1, e - 1, out);
+                    scan_refs(chars, i + 2, e - 1, out);
                     i = e;
                 },
                 None => {
-                    i += 1;
+                    i += 2;
                 },
             }
             continue;

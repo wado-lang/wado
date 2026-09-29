@@ -52,63 +52,60 @@ variant Command {
 impl Deserialize for Command;
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
-    let argv = args();
-    match parse::<Command>(argv) {
-        Ok(Command::Gen(g)) => {
-            apply_log_level(&g.log_level);
-            cmd_gen(g.grammars, &g.output, g.trace);
-        },
-        Ok(Command::Dump(d)) => {
-            apply_log_level(&d.log_level);
-            cmd_dump(d.grammars, d.atn, d.lexer);
-        },
-        Err(e) => {
-            // Prefix with the subcommand (`core:args` reports only kind/message;
-            // the program name and `gen`/`dump` context are gale's to add).
-            let ctx = if argv.len() == 0 {
-                "gale";
-            } else if argv[0] == "gen" {
-                "gale gen";
-            } else if argv[0] == "dump" {
-                "gale dump";
-            } else {
-                "gale";
-            };
-            eprintln(`${ctx}: ${e.message}`);
-            usage();
-            exit(1);
-        },
+    if let Err(report) = gale() {
+        eprintln(report);
+        exit(1);
     }
 }
 
-fn usage() with Stderr {
-    eprintln(
-        "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]",
-    );
-    eprintln("       gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]");
-    eprintln("       <level> is trace, debug, info, warn or error (default warn)");
+/// Run the subcommand the arguments name. A failure is the report for stderr,
+/// returned rather than printed so `run` is the one place that ends the process.
+internal fn gale() -> Result<(), String> with (Stdout, Environment, Preopens) {
+    let argv = args();
+    return match parse::<Command>(argv) {
+        Ok(Command::Gen(g)) => {
+            apply_log_level(&g.log_level)?;
+            cmd_gen(g.grammars, &g.output, g.trace);
+        },
+        Ok(Command::Dump(d)) => {
+            apply_log_level(&d.log_level)?;
+            cmd_dump(d.grammars, d.atn, d.lexer);
+        },
+        // `core:args` reports only what is wrong; the program name and the
+        // subcommand are gale's to add.
+        Err(e) => Result::Err(`${command_name(&argv)}: ${e.message}\n${USAGE}`),
+    };
 }
+
+fn command_name(argv: &List<String>) -> String {
+    if argv.len() > 0 && (argv[0] == "gen" || argv[0] == "dump") {
+        return `gale ${argv[0]}`;
+    }
+    return "gale";
+}
+
+global USAGE: String = "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]
+       gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]
+       <level> is trace, debug, info, warn or error (default warn)";
 
 /// Set the process-wide threshold (`core:log` tier 2) from `--log-level`,
 /// defaulting to `Warn` so a hand-run build reports what a Kiln build reports.
 ///
 /// Tier 1 is a ceiling this cannot raise; `wado compile -D log.level=trace`
 /// moves that one.
-fn apply_log_level(spec: &Option<String>) with (Stderr, Exit) {
+fn apply_log_level(spec: &Option<String>) -> Result<(), String> {
     let Some(name) = *spec else {
         set_log_level(Level::Warn);
-        return;
+        return Result::Ok(());
     };
-    match Level::from_str_lenient(&name) {
-        Ok(level) => set_log_level(level),
-        Err(_) => {
-            eprintln(`gale: unknown --log-level '${name}' (trace, debug, info, warn, error)`);
-            exit(1);
-        },
-    }
+    let Ok(level) = Level::from_str_lenient(&name) else {
+        return Result::Err(`gale: unknown --log-level '${name}' (trace, debug, info, warn, error)`);
+    };
+    set_log_level(level);
+    return Result::Ok(());
 }
 
-fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdout, Stderr, Preopens, Exit) {
+fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) -> Result<(), String> with (Stdout, Preopens) {
     // Route inputs by extension: `.scm` is a highlight query, everything else
     // is a `.g4` grammar half.
     let mut g4_paths: List<String> = [];
@@ -121,17 +118,16 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdo
         }
     }
     if g4_paths.len() == 0 {
-        eprintln("gale gen: no grammar files given");
-        exit(1);
+        return Result::Err("gale gen: no grammar files given");
     }
-    let mut merged = load_and_merge(&g4_paths);
+    let mut merged = load_and_merge(&g4_paths)?;
 
     // Parse each `.scm` separately so an error names the file it came from.
     let mut highlight_query: Option<List<HighlightRule>> = null;
     if scm_paths.len() > 0 {
         let mut all_rules: List<HighlightRule> = [];
         for let p of &scm_paths {
-            let src = read_source_file(p);
+            let src = read_source_file(p)?;
             match parse_highlight_query(&src) {
                 Ok(rules) => {
                     for let r of rules {
@@ -139,8 +135,7 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdo
                     }
                 },
                 Err(e) => {
-                    eprintln(`gale: ${*p}: highlight query ${e.line}:${e.col}: ${e.message}`);
-                    exit(1);
+                    return Result::Err(`gale: ${*p}: highlight query ${e.line}:${e.col}: ${e.message}`);
                 },
             }
         }
@@ -162,15 +157,16 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdo
     }
 
     match *output {
-        Some(path) => write_output(&path, &generated.source),
+        Some(path) => write_output(&path, &generated.source)?,
         None => print(generated.source),
     }
+    return Result::Ok(());
 }
 
 /// Write the generated parser source to `path`, inside the first granted
 /// directory.
-fn write_output<S: AsStrSlice, S1: AsStrSlice>(path: S, source: S1) with (Stderr, Preopens, Exit) {
-    let file = create_granted(path);
+fn write_output<S: AsStrSlice, S1: AsStrSlice>(path: S, source: S1) -> Result<(), String> with Preopens {
+    let file = create_granted(path)?;
     let bytes: List<u8> = source.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
     let sub = file.write_via_stream(rx, 0 as Filesize);
@@ -179,29 +175,27 @@ fn write_output<S: AsStrSlice, S1: AsStrSlice>(path: S, source: S1) with (Stderr
     // Await the completion future so a partial or failed write is reported
     // rather than silently treated as success.
     if let Some(Err(_)) = sub.read() {
-        eprintln(`gale: ${path}: write failed`);
-        exit(1);
+        return Result::Err(`gale: ${path}: write failed`);
     }
     sub.drop();
+    return Result::Ok(());
 }
 
-fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with (Stdout, Stderr, Preopens, Exit) {
+fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) -> Result<(), String> with (Stdout, Preopens) {
     if paths.len() == 0 {
-        eprintln("gale dump: no grammar files given");
-        exit(1);
+        return Result::Err("gale dump: no grammar files given");
     }
     if atn && lexer {
-        eprintln("gale dump: --atn and --lexer are separate reports; pass one");
-        exit(1);
+        return Result::Err("gale dump: --atn and --lexer are separate reports; pass one");
     }
-    let mut merged = load_and_merge(&paths);
+    let mut merged = load_and_merge(&paths)?;
 
     // `--lexer` reports the lexer emit instead of the GIR dump: the GIR dump
     // covers the parser only, and lexer strategies are decided at emit time
     // from the surface IR, so it needs no lowering.
     if lexer {
         print(render_lexer_dump(&merged));
-        return;
+        return Result::Ok(());
     }
 
     // `dump` reports what the emitter sees, so it canonicalizes and stamps the
@@ -225,76 +219,47 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with (Stdout, Stderr, P
     // `--atn` reports the ATN off that same lowering rather than the GIR.
     if atn {
         print(render_atn_dump(&merged, &lowered));
-        return;
+        return Result::Ok(());
     }
     print(render_dump(&merged, &lowered, &mut ctx));
+    return Result::Ok(());
 }
 
 /// Shared CLI front end for `gen` and `dump`: read every grammar file,
 /// parse, merge the split halves, synthesize implicit tokens, and run the
 /// rule-reference check (deferred until post-merge so cross-grammar refs
-/// resolve). Any failure prints a message and exits with code 1.
-fn load_and_merge(paths: &List<String>) -> Grammar with (Stdout, Stderr, Preopens, Exit) {
+/// resolve).
+fn load_and_merge(paths: &List<String>) -> Result<Grammar, String> with Preopens {
     let mut inputs: List<[String, String]> = [];
     for let path of paths {
-        let file = open_granted(path);
-        let bytes = match read_all(&file) {
-            Ok(b) => b,
-            Err(_) => {
-                eprintln(`gale: ${*path}: read error`);
-                exit(1);
-            },
-        };
-        let content = match String::from_utf8(bytes) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln(`gale: ${*path}: not valid UTF-8: ${e}`);
-                exit(1);
-            },
-        };
-        inputs.push([*path, content]);
+        inputs.push([*path, read_source_file(path)?]);
     }
-
     return match assemble_grammar(&inputs) {
-        Ok(g) => g,
-        Err(Parse(pe)) => {
-            eprintln(`gale: ${pe.0}: parse error: ${pe.1}`);
-            exit(1);
-        },
-        Err(Check(msg)) => {
-            eprintln(`gale: ${msg}`);
-            exit(1);
-        },
+        Ok(g) => Result::Ok(g),
+        Err(Parse(pe)) => Result::Err(`gale: ${pe.0}: parse error: ${pe.1}`),
+        Err(Check(msg)) => Result::Err(`gale: ${msg}`),
     };
 }
 
-/// Read one source file to a UTF-8 string. Any failure prints a message and
-/// exits with code 1.
-fn read_source_file<S: AsStrSlice>(path: S) -> String with (Stderr, Preopens, Exit) {
-    let file = open_granted(path);
-    let bytes = match read_all(&file) {
-        Ok(b) => b,
-        Err(_) => {
-            eprintln(`gale: ${path}: read error`);
-            exit(1);
-        },
+/// Read one source file to a UTF-8 string.
+fn read_source_file<S: AsStrSlice>(path: S) -> Result<String, String> with Preopens {
+    let file = open_granted(path)?;
+    let Ok(bytes) = read_all(&file) else {
+        return Result::Err(`gale: ${path}: read error`);
     };
     return match String::from_utf8(bytes) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln(`gale: ${path}: not valid UTF-8: ${e}`);
-            exit(1);
-        },
+        Ok(s) => Result::Ok(s),
+        Err(e) => Result::Err(`gale: ${path}: not valid UTF-8: ${e}`),
     };
 }
 
-/// Open `path` for reading under a granted directory, or report why no grant
-/// reaches it and exit with code 1.
+/// Open `path` for reading under a granted directory, or say why no grant
+/// reaches it.
 ///
 /// A path resolves inside a preopened directory, so `--dir` bounds what the
 /// program can reach. Reading searches every grant — the file sits under one or
 /// under none — and names why nothing matched instead of "no such file".
-fn open_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Exit) {
+fn open_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preopens {
     let dirs = Preopens::get_directories();
     let mut grants: List<String> = [];
     let mut denied = false;
@@ -302,7 +267,7 @@ fn open_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Ex
         let root = dirs[i].0;
         match root.open_at(PathFlags::none(), path.to_string(), OpenFlags::none(), DescriptorFlags::Read).wait() {
             Ok(file) => {
-                return file;
+                return Result::Ok(file);
             },
             Err(e) => {
                 if !e matches { NoEntry } {
@@ -312,34 +277,25 @@ fn open_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Ex
         }
         grants.push(dirs[i].1);
     }
-    eprintln(`gale: ${path}: cannot open file`);
-    if grants.is_empty() {
-        eprintln("gale: no directory was granted to this program (try without --no-dir)");
+    let why = if grants.is_empty() {
+        "gale: no directory was granted to this program (try without --no-dir)";
     } else if path.starts_with("/") {
-        eprintln(
-            `gale: a path opens inside a granted directory, so an absolute path never does: ${grant_hint(path)}`,
-        );
+        absolute_path_hint(path);
     } else if denied {
-        eprintln(`gale: not readable under ${grants.join(", ")}`);
+        `gale: not readable under ${grants.join(", ")}`;
     } else {
-        eprintln(
-            `gale: not found under ${grants.join(", ")} — check the path, or grant the directory holding it with wado run --dir <dir> ...`,
-        );
-    }
-    exit(1);
+        `gale: not found under ${grants.join(", ")} — check the path, or grant the directory holding it with wado run --dir <dir> ...`;
+    };
+    return Result::Err(`gale: ${path}: cannot open file\n${why}`);
 }
 
 /// Create `path` for writing under the first granted directory.
 ///
 /// Reading may search every grant, but creating cannot: the file does not exist
 /// yet, so a search would let grant order pick the output directory.
-fn create_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Exit) {
+fn create_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preopens {
     let dirs = Preopens::get_directories();
-    if dirs.is_empty() {
-        eprintln(`gale: ${path}: cannot open for writing`);
-        eprintln("gale: no directory was granted to this program (try without --no-dir)");
-        exit(1);
-    }
+    assert !dirs.is_empty(), "the grammars were read through a grant";
     let root = dirs[0].0;
     let opened = root.open_at(
         PathFlags::none(),
@@ -348,32 +304,28 @@ fn create_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, 
         DescriptorFlags::Read | DescriptorFlags::Write,
     ).wait();
     if let Ok(file) = opened {
-        return file;
+        return Result::Ok(file);
     }
-    eprintln(`gale: ${path}: cannot open for writing`);
-    if path.starts_with("/") {
-        eprintln(
-            `gale: a path opens inside a granted directory, so an absolute path never does: ${grant_hint(path)}`,
-        );
+    let why = if path.starts_with("/") {
+        absolute_path_hint(path);
     } else {
-        eprintln(`gale: --output resolves inside ${dirs[0].1}, the first granted directory`);
-    }
-    exit(1);
+        `gale: --output resolves inside ${dirs[0].1}, the first granted directory`;
+    };
+    return Result::Err(`gale: ${path}: cannot open for writing\n${why}`);
 }
 
-/// The `wado run` invocation that would grant `path`'s own directory and name
-/// the file relative to it.
-fn grant_hint<S: AsStrSlice>(path: S) -> String {
+/// Why absolute `path` opens nowhere, and the `wado run` invocation that
+/// would grant its own directory and name the file relative to it.
+fn absolute_path_hint<S: AsStrSlice>(path: S) -> String {
+    assert path.starts_with("/");
+    let because = "gale: a path opens inside a granted directory, so an absolute path never does";
     let Some(name) = fs::file_name(path) else {
-        return `wado run --dir ${path} ...`;
+        return `${because}: wado run --dir ${path} ...`;
     };
-    // A path with one component has no directory part, so the grant is the one
-    // it resolves against: the filesystem root, or where the command runs.
-    let holder = match fs::parent(path) {
-        Some(dir) && !dir.is_empty() => dir.to_string(),
-        _ => if path.starts_with("/") { "/" } else { "." },
-    };
-    return `wado run --dir ${holder} ... ${name}`;
+    // A file at the filesystem root has an empty directory part.
+    let dir = fs::parent(path).unwrap();
+    let holder = if dir.is_empty() { "/" } else { dir.to_string() };
+    return `${because}: wado run --dir ${holder} ... ${name}`;
 }
 
 /// Read a file to EOF. The stream's completion future is consumed so a

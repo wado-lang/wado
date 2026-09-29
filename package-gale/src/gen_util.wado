@@ -587,54 +587,6 @@ pub fn dedup_name<S: AsStrSlice>(base: S, counts: &mut List<[String, i32]>) -> S
     return base.to_string();
 }
 
-/// Predict what `dedup_name(base, counts)` would return without
-/// advancing the counter. Used at scan-guard / lookahead sites where
-/// the inner emission performs the actual `dedup_name` (which both
-/// returns the name and advances the counter).
-pub fn peek_dedup_name<S: AsStrSlice>(base: S, counts: &List<[String, i32]>) -> String {
-    let count = get_count(counts, base);
-    if count > 0 {
-        return `${base}_${count + 1}`;
-    }
-    return base.to_string();
-}
-
-pub fn element_field_info(elem: &Element) -> [String, String] {
-    return match elem {
-        TokenRef(t) => [t.field_name, "Token"],
-        Literal(l) => [literal_field_name(&l.text), "Token"],
-        RuleRef(r) => [r.field_name, rule_type_name(&r.name)],
-        Wildcard(_) => ["wildcard", "Token"],
-        Not(ne) => [not_element_field_name(&ne.element), "Token"],
-        Label(lab) => if lab.list {
-            let inner = element_field_info(&lab.element);
-            [lab.field_name, `List<${inner.1}>`];
-        } else {
-            element_field_info(&lab.element);
-        },
-        Group(g) => match classify_group(&g.alternatives) {
-            SimpleCst => [
-                group_field_base_name(&g.alternatives),
-                group_variant_type_name(&g.alternatives),
-            ],
-            TokenOnly => [token_group_field_name(&g.alternatives), "Token"],
-            SingleAlt => [
-                single_alt_group_field_name(&g.alternatives[0]),
-                single_alt_group_type_name(&g.alternatives[0]),
-            ],
-            General => panic(
-                "element_field_info: general Group reached the surface helper — route through `gen_op_group`/`gen_general_group_store*` instead",
-            ),
-            Transparent => panic(
-                "element_field_info: transparent Group has no storable field shape — caller routed a non-storable element into the field-info helper",
-            ),
-        },
-        Repeat(_) => panic(
-            "element_field_info: Repeat has no storable field shape — caller routed a non-storable element into the field-info helper",
-        ),
-    };
-}
-
 /// A continuation is one `i64`: `FOLLOW_CONT_SLOTS` positions of
 /// `FOLLOW_SLOT_BITS`, each holding a 1-based `FOLLOW_SETS` index and a bit
 /// saying it opens a fresh reading. Composition is a shift, so a call site

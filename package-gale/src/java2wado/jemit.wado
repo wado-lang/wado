@@ -457,11 +457,11 @@ fn emit_member(
     if name_is(&m.recv, "this") {
         return this_field_expr(env, &m.name);
     }
-    if is_upper_ident(&m.name) && is_name(&m.recv) {
-        if recv_is_grammar_class(env, &m.recv) {
+    if let Name(qualifier) = &m.recv && is_upper_ident(&m.name) {
+        if is_grammar_class(env, qualifier) {
             return Result::Ok(`TK_${m.name}`);
         }
-        return Result::Err(`java2wado: unknown constant '${name_text(&m.recv)}.${m.name}'`);
+        return Result::Err(`java2wado: unknown constant '${*qualifier}.${m.name}'`);
     }
     let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
     return Result::Ok(`${r}.${m.name}`);
@@ -761,20 +761,10 @@ fn unknown_method_err<S: AsStrSlice>(name: S) -> String {
     return `java2wado: unsupported method '${name}': not a @members method or a recognizer API method`;
 }
 
-/// Whether `e` names the grammar's own parser / lexer class (`<Name>Parser` /
+/// Whether `name` is the grammar's own parser / lexer class (`<Name>Parser` /
 /// `<Name>Lexer`), the qualifier of a token constant `TParser.ELSE`.
-fn recv_is_grammar_class(env: &JEnv, e: &JExpr) -> bool {
-    return match e {
-        Name(q) => *q == `${env.grammar}Parser` || *q == `${env.grammar}Lexer`,
-        _ => false,
-    };
-}
-
-fn name_text(e: &JExpr) -> String {
-    return match e {
-        Name(n) => *n,
-        _ => "",
-    };
+fn is_grammar_class<S: AsStrSlice>(env: &JEnv, name: S) -> bool {
+    return name == `${env.grammar}Parser` || name == `${env.grammar}Lexer`;
 }
 
 fn emit_args(
@@ -808,10 +798,6 @@ fn name_is<S: AsStrSlice>(e: &JExpr, s: S) -> bool {
         Name(n) => *n == s.as_str_slice(),
         _ => false,
     };
-}
-
-fn is_name(e: &JExpr) -> bool {
-    return e matches { Name(_) };
 }
 
 fn is_system_out(e: &JExpr) -> bool {

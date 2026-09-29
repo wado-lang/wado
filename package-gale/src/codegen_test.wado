@@ -2888,3 +2888,247 @@ ID : [a-z]+ ;
     assert out.source.contains("p.good()"), "an action resolves a member the struct got";
     assert unsupported_count(&out) == 0, "a well-formed block is not reported";
 }
+
+test "each call site passes its own rule arguments, and a return value reaches the next call" {
+    let got = parses("grammar T;
+s : a=e[1, 2] e[$a.v, (10)] EOF ;
+e[int x, int y] returns [int v] : ID { $v = $x + $y; System.out.print($v + \" \"); } ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a b"]);
+    assert got == "a b => (s (e a) (e b)) [3 13 ]\n", got;
+}
+
+// `args` scopes the gate for its own extent (`locals` + `@init` / `@after`), so
+// the ban on the braced form resumes after the `)`; the scan has to restore it
+// the same way or it disagrees with the parse about the head's tail.
+test "a rule scoping a gate restores it for the rest of the enclosing head" {
+    let got = parses("grammar T;
+@parser::members {
+    int noBrace = 0;
+}
+start : stmt+ EOF ;
+stmt : IF {noBrace = 1;} expr {noBrace = 0;} block | expr SEMI ;
+block : LB ID RB ;
+args
+locals [int sv]
+@init { $sv = noBrace; noBrace = 0; }
+@after { noBrace = $sv; }
+    : expr
+    ;
+expr : expr OR expr | ID LP args RP | {noBrace == 0}? ID LB ID RB | ID ;
+IF : 'if' ; OR : '||' ; LP : '(' ; RP : ')' ; LB : '{' ; RB : '}' ; SEMI : ';' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "start", ["if f(x) || a { b }", "if f(a { b }) { c }", "a { b } ;"]);
+    assert got == "if f(x) || a { b } => (start (stmt if (expr (expr f ( (args (expr x)) )) || (expr a)) (block { b })))
+if f(a { b }) { c } => (start (stmt if (expr f ( (args (expr a { b })) )) (block { c })))
+a { b } ; => (start (stmt (expr a { b }) ;))
+", got;
+}
+
+global LR_SUFFIX_LOOPS: String = "grammar T;
+s : e EOF ;
+e : e '(' .*? ')'
+  | e '[' ID+ ']'
+  | e '{' (ID ',')+ '}'
+  | e '<' ID*? '>'
+  | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+";
+
+test "a left-recursive suffix runs its own loops, greedy and non-greedy" {
+    let got = parses(LR_SUFFIX_LOOPS, "s", ["x[a b][c]", "x{a,b,}", "x<a b>", "x<>", "x(y)[z]{w,}<>"]);
+    assert got == "x[a b][c] => (s (e (e (e x) [ a b ]) [ c ]))
+x{a,b,} => (s (e (e x) { a , b , }))
+x<a b> => (s (e (e x) < a b >))
+x<> => (s (e (e x) < >))
+x(y)[z]{w,}<> => (s (e (e (e (e (e x) ( y )) [ z ]) { w , }) < >))
+", got;
+}
+
+// The jar keeps looping past the first `)`, since only the last one leaves a
+// token `s` can take; Gale's static exit takes the first and then fails.
+#[TODO]
+test "a non-greedy wildcard in a left-recursive suffix exits only where the rest can match" {
+    let got = parses(LR_SUFFIX_LOOPS, "s", ["x(a ) b)"]);
+    assert got == "x(a ) b) => (s (e (e x) ( a ) b )))\n", got;
+}
+
+test "a redundant group around a loop body keeps the loop's decision" {
+    let got = parses("grammar T;
+s : 'a' (ID)* ID ';'
+  | 'b' (ID)+ ID ';'
+  | 'c' (ID)+ ';'
+  | 'd' (ID)*? ID ';'
+  | 'e' (ID)+? ID ';'
+  ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a x y z;", "a x;", "b x y z;", "b x;", "c x y;", "d x y z;", "e x y z;", "e x;"]);
+    assert got == "a x y z; => (s a x y z ;)
+a x; => (s a x ;)
+b x y z; => (s b x y z ;)
+b x; => error
+c x y; => (s c x y ;)
+d x y z; => (s d x y z ;)
+e x y z; => (s e x y z ;)
+e x; => error
+", got;
+}
+
+test "a loop in a left-recursive suffix scans where its body overlaps what follows" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e '[' (ID ',')* ID ']'
+  | e '{' (ID ',')+ ID '}'
+  | e '(' (ID ID | ID ',')* ')'
+  | e '<' ID+? '>'
+  | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["x[a]", "x[a,b,c]", "x{a,b}", "x{a,b,c}", "x{a}", "x(a b c,)", "x()", "x<a b>", "x<>"]);
+    assert got == "x[a] => (s (e (e x) [ a ]))
+x[a,b,c] => (s (e (e x) [ a , b , c ]))
+x{a,b} => (s (e (e x) { a , b }))
+x{a,b,c} => (s (e (e x) { a , b , c }))
+x{a} => error
+x(a b c,) => (s (e (e x) ( a b c , )))
+x() => (s (e (e x) ( )))
+x<a b> => (s (e (e x) < a b >))
+x<> => error
+", got;
+}
+
+test "a shape-lookahead optional in a left-recursive suffix is decided per shape" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : ID | e 'in' ( 'a'? 'b' )? 'a' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["x in a", "x in a b a", "x in b a", "x in a a"]);
+    assert got == "x in a => (s (e (e x) in a))
+x in a b a => (s (e (e x) in a b a))
+x in b a => (s (e (e x) in b a))
+x in a a => error
+", got;
+}
+
+test "a non-greedy optional in a left-recursive suffix leaves the else to its caller" {
+    let got = parses("grammar T;
+s : e 'else' ID EOF ;
+e : ID | e 'if' e ('else' e)?? ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a else c", "a if b else c", "a if b else c else d"]);
+    assert got == "a else c => (s (e a) else c)
+a if b else c => (s (e (e a) if (e b)) else c)
+a if b else c else d => (s (e (e a) if (e b) else (e c)) else d)
+", got;
+}
+
+test "interchangeable alternatives are picked by their predicates in grammar order" {
+    let got = parses("grammar T;
+s : a EOF ;
+a : {false}? ID ID {System.out.print(\"one\");}
+  | {true}? ID ID {System.out.print(\"two\");}
+  | ID ID {System.out.print(\"three\");} ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a b"]);
+    assert got == "a b => (s (a a b)) [two]\n", got;
+}
+
+test "interchangeable alternatives whose predicates all fail have no viable alternative" {
+    let got = parses("grammar T;
+s : a EOF ;
+a : {false}? ID ID | {false}? ID ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a b"]);
+    assert got == "a b => error\n", got;
+}
+
+test "a left-recursive rule runs @after once per invocation, after its whole climb" {
+    let got = parses("grammar T;
+s : e EOF ;
+e
+@after { System.out.print(\"done;\"); }
+  : e '+' e | INT ;
+INT : [0-9]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["1", "1+2+3"]);
+    assert got == "1 => (s (e 1)) [done;]\n1+2+3 => (s (e (e (e 1) + (e 2)) + (e 3))) [done;done;done;]\n", got;
+}
+
+test "a left-recursive rule's @after reads the value its whole climb computed" {
+    let got = parses("grammar T;
+options { language = Wado; }
+s : x=e { p.emit(`v=${$x.v} `); } ;
+e returns [i32 v]
+    @init { $v = 1000; }
+    @after { p.emit(`[after=${$v}]`); }
+    : l=e '+' r=e { $v = $l.v + $r.v; }
+    | n=INT { $v = $n.int + $v; }
+    ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+", "s", ["5", "5 + 3"]);
+    assert got == "5 => (s (e 5)) [[after=1005]v=1005 ]\n5 + 3 => (s (e (e 5) + (e 3))) [[after=1003][after=2008]v=2008 ]\n", got;
+}
+
+test "a group in a left-recursive suffix picks the longest of its overlapping alternatives" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e '.' (ID '(' ')' | ID | ID '[' ']')
+  | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a.b()", "a.b", "a.b[]", "a.b.c().d[]"]);
+    assert got == "a.b() => (s (e (e a) . b ( )))
+a.b => (s (e (e a) . b))
+a.b[] => (s (e (e a) . b [ ]))
+a.b.c().d[] => (s (e (e (e (e a) . b) . c ( )) . d [ ]))
+", got;
+}
+
+test "a decided group loop leaves its rule the tail it needs" {
+    let got = parses("grammar T;
+start : body EOF ;
+body : (A Z | B Y)* A Z ;
+A : 'a' ; B : 'b' ; X : 'x' ; Y : 'y' ; Z : 'z' ;
+WS : [ \\t]+ -> skip ;
+", "start", ["a z a z", "b y a z", "a z a z a z", "a z"]);
+    assert got == "a z a z => (start (body a z a z))
+b y a z => (start (body b y a z))
+a z a z a z => (start (body a z a z a z))
+a z => (start (body a z))
+", got;
+}
+
+test "a scanned loop over a complement stops at the excluded tokens" {
+    let got = parses("grammar T;
+s : (a | b) EOF ;
+a : '(' (~')')* ')' 'x' ;
+b : '(' (~(')' | ';'))* ')' 'y' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["(a b)x", "(a;b)x", "(a b)y", "()y", "(a;b)y"]);
+    assert got == "(a b)x => (s (a ( a b ) x))
+(a;b)x => (s (a ( a ; b ) x))
+(a b)y => (s (b ( a b ) y))
+()y => (s (b ( ) y))
+(a;b)y => error
+", got;
+}
+
+test "a list label outside a loop collects a token and a set" {
+    let got = parses("grammar T;
+s : xs+=ID ',' xs+=ID ys+=(A | B) ys+=(A | B) EOF ;
+A : '+' ; B : '-' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a,b+-", "a,b"]);
+    assert got == "a,b+- => (s a , b + -)\na,b => error\n", got;
+}

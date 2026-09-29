@@ -627,6 +627,25 @@ test "pipeline: assemble_grammar rejects an import naming no supplied input" {
     assert result matches { Err(Check(m)) && m.contains("not among the supplied inputs") }, "an unresolved import must be reported, not silently omitted";
 }
 
+test "pipeline: assemble_grammar names the input that failed to parse" {
+    let inputs: List<[String, String]> = [
+        ["M.g4", "grammar M;\nimport S;\ns : a ;"],
+        ["S.g4", "parser grammar S;\na : B"],
+    ];
+    let result = assemble_grammar(&inputs);
+    assert result matches { Err(Parse([file, m])) && file == "S.g4" && m.starts_with("expected ;") }, `${result:?}`;
+}
+
+test "pipeline: assemble_grammar checks references across the composite" {
+    // `a` is defined by neither grammar, so the check runs on the merge.
+    let inputs: List<[String, String]> = [
+        ["M.g4", "grammar M;\nimport S;\ns : b ;\nB : 'b' ;"],
+        ["S.g4", "parser grammar S;\nb : a ;"],
+    ];
+    let result = assemble_grammar(&inputs);
+    assert result matches { Err(Check(m)) && m.contains("reference to undefined rule \"a\" in \"b\"") }, `${result:?}`;
+}
+
 // LL(*) regression-suite grammars (`tests/grammars/ll_*.g4`). Each is a
 // hand-crafted minimal fixture targeting one LL prediction gap. Per the
 // e2e-grammar steps in AGENTS.md the parse leg lives here so

@@ -15,9 +15,6 @@ use {
     ActionSource,
 } from "./ir.wado";
 use {
-    literal_field_name,
-    not_element_field_name,
-    is_token_only_group,
     group_field_base_name,
     single_alt_group_type_name,
     single_alt_group_field_name,
@@ -28,8 +25,6 @@ use {
     dedup_append_arr,
     subtract_sets,
     dedup_name,
-    peek_dedup_name,
-    element_field_info,
     all_alts_are_single_token,
     single_token_first,
     rule_alts_labeled,
@@ -3185,13 +3180,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     ctx: &mut GenContext,
     fn_name: S,
 ) {
-    // Single-alt rules are handled by the dedicated
-    // \`gen_parse_fn_simple_named\` so the heavy multi-alt + LR setup
-    // below doesn't run for the trivial shape.
-    if rule.alternatives.len() == 1 {
-        gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, fn_name);
-        return;
-    }
+    assert rule.alternatives.len() > 1, "a single-alternative rule lowers to `Simple`";
 
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
     // `keyword`) use a compact `{ span, token }` struct (see
@@ -3289,9 +3278,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         }
     }
 
-    let has_lr = lowered_rule matches { LeftRecursive(_) };
-
-    if has_lr {
+    if let LeftRecursive(l) = lowered_rule {
         let atom_name = `${fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
         add_parser_super_effect(&mut f, ctx);
@@ -3330,27 +3317,15 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         w.blank();
         ctx.set_lr_cont_in_atom(was_in_atom);
 
-        let lr_data = if let LeftRecursive(l) = lowered_rule {
-            [&l.lr_alts, &l.lr_dispatch];
-        } else {
-            panic("gen_parse_fn_named: has_lr but lowered_rule is not LeftRecursive");
-        };
-        let lr_alts = lr_data.0;
-        let lr_dispatch = lr_data.1;
-        let h_atn_class = if let LeftRecursive(l) = lowered_rule {
-            l.atn_class;
-        } else {
-            false;
-        };
-        let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
+        let h_loop_dec = if l.atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
         gen_lr_fn(
             w,
             rule,
-            lr_alts,
-            lr_dispatch,
+            &l.lr_alts,
+            &l.lr_dispatch,
             ctx,
             fn_name,
-            h_atn_class,
+            l.atn_class,
             h_loop_dec,
             lr_mid_operand_gated(lowered_rule),
         );
@@ -3983,19 +3958,13 @@ fn gen_op_leaf_taken(w: &mut CodeWriter, op: &Op, ctx: &GenContext, name_counts:
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
 /// already baked in dedup, the per-call-site `FollowArg`, and the
 /// LR-prefix `min_prec` argument — emit does not re-derive any of
-/// it. Counterpart of the leaf arms of `gen_element` for the surface
-/// IR walker; that walker is still in use inside group bodies and
-/// Label / Not cases, but the top-level alt walker (`gen_alt_elements`)
-/// dispatches leaves here instead.
+/// it.
 ///
 /// The mirror `dedup_name(&op.dedup_base, name_counts)` keeps
-/// `name_counts` in sync with what `gen_element`'s leaf arms would
-/// have produced, so siblings that still walk surface IR (e.g.
-/// `gen_lr_fn`'s inline `dedup_name(&rr.field_name, ...)`
-/// paths and `gen_element` fallbacks) read a consistent count. The
-/// emitted field name comes from `op.field` exclusively — `dedup_base`
-/// is consulted only for the sync. The sync goes away entirely once
-/// every emit path consumes `Op`.
+/// `name_counts` in sync with lower's, so siblings that still walk
+/// surface IR (e.g. `gen_lr_fn`'s inline `dedup_name(&rr.field_name, ...)`
+/// paths) read a consistent count. The emitted field name comes from
+/// `op.field` exclusively — `dedup_base` is consulted only for the sync.
 fn gen_op_leaf(
     w: &mut CodeWriter,
     op: &Op,
@@ -5055,9 +5024,8 @@ fn gen_op_storable_group_inner(
 
 /// Op-driven single-element dispatch. Routes a single `Op` + matching
 /// surface `Element` to the right `gen_op_*` helper based on op kind.
-/// Used by `gen_op_optional_with_shape_lookahead_*` so each shape's
-/// per-element parse routes through op-driven helpers instead of the
-/// surface `gen_element` graph.
+/// Used by `gen_op_optional_with_shape_lookahead_*` for each shape's
+/// per-element parse.
 fn gen_op_dispatch_element(
     w: &mut CodeWriter,
     op: &Op,
@@ -5821,8 +5789,8 @@ fn gen_op_optional_with_shape_lookahead_transparent(
     }
 }
 
-/// Bump `name_counts` for a leaf `Op` exactly the way `gen_element`
-/// would have, by reading the lower-baked `dedup_base`. Used by
+/// Bump `name_counts` for a leaf `Op` exactly the way lower did, by
+/// reading the lower-baked `dedup_base`. Used by
 /// `gen_op_leaf` so siblings that still route through the surface
 /// walker see lower-consistent dedup state.
 ///
@@ -5867,9 +5835,7 @@ fn op_leaf_dedup_base(op: &Op) -> String {
 ///
 /// `elem` is the matching `Element::Group(g_surface)`; the surface
 /// reference flows into `gen_elements_with_non_greedy` and surface
-/// dedup so siblings continue to see lower-consistent state. The
-/// surface fallback in `gen_element`'s Group arm remains until every
-/// caller routes through `gen_op_group` (Phase 2-B follow-ups).
+/// dedup so siblings continue to see lower-consistent state.
 fn gen_op_group(
     w: &mut CodeWriter,
     g_op: &GroupOp,
@@ -6041,18 +6007,17 @@ fn gen_op_list_label(
     } else {
         panic("gen_op_list_label: ListLabel op mapped to non-Label element");
     };
-    if !op_is_leaf(&ll.inner) && !ll.inner matches { Group(_) } {
-        // Inner of shape `Op::Repeat` / nested `Op::ListLabel`: the surface
-        // walker reserves the label's name itself, so return before the
-        // reservation below.
-        gen_element(w, elem, ctx, name_counts);
-        return;
-    }
     // The label itself binds nothing here (the builder holds the matched
     // values), but reserve its name so a sibling on the surface walker sees
     // lower-consistent dedup state. The inner's own name was deduped against
     // this same scope by `lower_label_op`, so it needs no repair here.
     let _ = dedup_name(&ll.dedup_base, name_counts);
+    // A label's operand is an atom, so its op is a leaf, a group, or — for
+    // `a+=b+=X`, which the g4 parser accepts — another list label.
+    if let ListLabel(inner) = &ll.inner {
+        gen_op_list_label(w, inner, &lab.element, ctx, name_counts);
+        return;
+    }
     if let Group(g_op) = &ll.inner {
         // Non-leaf inner of shape `Op::Group` (e.g. `items += (a | b)`
         // outside a Repeat): the inner Group appends to the builder, so
@@ -6066,74 +6031,6 @@ fn gen_op_list_label(
 
 fn gen_op_excluded_call(e: &ExcludedOp, ctx: &mut GenContext) -> String {
     return `p.expect_not(${sync_set_ref(ctx, &e.kinds)})`;
-}
-
-fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    match elem {
-        TokenRef(t) => {
-            let field_name = dedup_name(&t.field_name, name_counts);
-            w.line(
-                `${leaf_binding(ctx, &t.field_name, &field_name)}${expect_call(`TK_${t.name}`, t.atn_leaf_site, ctx)};`,
-            );
-        },
-        Literal(l) => {
-            let const_name = l.const_name;
-            let base = literal_field_name(&l.text);
-            let field_name = dedup_name(&base, name_counts);
-            w.line(`${leaf_binding(ctx, &base, &field_name)}${expect_call(&const_name, l.atn_leaf_site, ctx)};`);
-        },
-        // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
-        // by lower and consumed by the op-driven walkers; this surface arm
-        // only fires for legacy paths (Label inner / LR-suffix fallback /
-        // Consume node) where the call needs no follow argument and so
-        // passes the defaulted `&EMPTY_FOLLOW`. Prefix LR alts' trailing
-        // self-ref is reached via `gen_op_leaf` on `RuleCallOp.min_prec_arg`,
-        // so precedence is never threaded here either.
-        RuleRef(r) => {
-            let field_name = dedup_name(&r.field_name, name_counts);
-            gen_call_site_stamps(w, ctx, r.atn_call_site);
-            w.line(`${leaf_binding(ctx, &r.field_name, &field_name)}_parse_${r.snake_name}(p);`);
-        },
-        Wildcard(_) => {
-            let field_name = dedup_name("wildcard", name_counts);
-            w.line(`${leaf_binding(ctx, "wildcard", &field_name)}p.any();`);
-        },
-        Not(ne) => {
-            let base = not_element_field_name(&ne.element);
-            let field_name = dedup_name(&base, name_counts);
-            let check = not_match_call(&ne.element, ctx);
-            w.line(`${leaf_binding(ctx, &base, &field_name)}${check};`);
-        },
-        // After the Phase 2-G op-driven migration, only token-only groups
-        // reach this surface walker — every other Group classification
-        // (SimpleCst, SingleAlt, General) is handled by op-driven walkers
-        // before `gen_element` is invoked.
-        Group(g) => {
-            assert is_token_only_group(&g.alternatives), "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
-            gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
-        },
-        Label(lab) => {
-            // The inner parse appends its match to the builder, so a label
-            // accumulates nothing. The inner shares `name_counts` so that
-            // `a=e ... b=e` cannot emit one shared binding.
-            let lab_name = dedup_name(&lab.field_name, name_counts);
-            let inner_info = element_field_info(&lab.element);
-            let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-            gen_element(w, &lab.element, ctx, name_counts);
-            if !lab.list && ctx.emit_actions() {
-                w.line(`let ${lab_name} = ${predicted_inner};`);
-            }
-        },
-        // Every op-driven Repeat dispatch flows through
-        // `gen_op_repeat_with_follow_override` against the lowered
-        // `RepeatOp` directly. The remaining surface callers (Label /
-        // scan-side fallbacks) never see a Repeat here because lower
-        // replaces them with op-driven walkers before this point. Probe
-        // with a panic so a future regression is surfaced.
-        Repeat(_) => panic(
-            "gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`",
-        ),
-    }
 }
 
 /// Op-driven top-level Repeat dispatcher. Walkers reach this with
@@ -7548,43 +7445,6 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
     return scan_pos_var;
 }
 
-/// Parser-side `~`. The excluded set is interned, so nothing is rebuilt here.
-fn not_match_call(inner: &Element, ctx: &mut GenContext) -> String {
-    let unsupported = "not_match_call: unsupported inner element for parser-side ~";
-    let kinds = match inner {
-        TokenRef(t) => [`TK_${t.name}`] as List<String>,
-        Literal(l) => [l.const_name] as List<String>,
-        Group(g) => {
-            let mut ks: List<String> = [];
-            if !collect_not_set_tokens(&g.alternatives, &mut ks) {
-                panic(unsupported);
-            }
-            ks;
-        },
-        RuleRef(_) | Label(_) | Repeat(_) | Wildcard(_) | Not(_) => panic(unsupported),
-    };
-    return `p.expect_not(${sync_set_ref(ctx, &kinds)})`;
-}
-
-/// Collect terminal token constants from a `~ ( ... )` group's alternatives.
-/// Returns false if any alternative is not a simple terminal (unsupported).
-fn collect_not_set_tokens(alts: &List<Alternative>, out: &mut List<String>) -> bool {
-    for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        let e = &alt.elements[0];
-        if let TokenRef(t) = e {
-            out.push(`TK_${t.name}`);
-        } else if let Literal(l) = e {
-            out.push(l.const_name);
-        } else {
-            return false;
-        }
-    }
-    return true;
-}
-
 fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     if sorted_group.len() < 2 {
         return false;
@@ -8290,18 +8150,6 @@ fn group_all_scannable(
         RuleRef => rule_ref_group_all_scannable(sorted_group, alts, ctx),
         General => general_group_all_scannable(sorted_group, alts, ctx),
     };
-}
-
-fn gen_consume_token_group(
-    w: &mut CodeWriter,
-    alts: &List<Alternative>,
-    ctx: &mut GenContext,
-    name_counts: &mut List<[String, i32]>,
-) {
-    let base = token_group_field_name(alts);
-    let var_name = dedup_name(&base, name_counts);
-    let kinds = collect_token_only_kinds(alts);
-    w.line(`${leaf_binding(ctx, &base, &var_name)}${expect_set_call(ctx, &kinds)};`);
 }
 
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the

@@ -289,9 +289,6 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
                 if n < 1 {
                     continue;
                 }
-                if rule_name_exists(lexer_rules, `${n}`) {
-                    continue;
-                }
                 if emitted_numeric.contains(&n) {
                     continue;
                 }
@@ -303,25 +300,14 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
     w.blank();
 }
 
-/// Returns `Some(n)` when `s` is a non-negative base-10 integer that fits in
-/// `i32` (the runtime token-kind type). Anything else — a token name, an
-/// overflowing value, an empty string — returns `None` so the caller can
-/// defer to the regular `TK_<name>` path.
+/// Returns `Some(n)` when `s` is a base-10 integer that fits in `i32` (the
+/// runtime token-kind type). A token name, or a value that overflows, returns
+/// `None` so the caller can defer to the regular `TK_<name>` path.
 fn parse_token_type_numeric<S: AsStrSlice>(s: S) -> Option<i32> {
-    if s.is_empty() {
-        return null;
-    }
-    let mut acc: i64 = 0;
-    for let c of s.chars() {
-        if c < '0' || c > '9' {
-            return null;
-        }
-        acc = acc * 10 + (c as i32 - '0' as i32) as i64;
-        if acc > i32::MAX as i64 {
-            return null;
-        }
-    }
-    return Option::<i32>::Some(acc as i32);
+    return match i32::from_str(s) {
+        Ok(n) => Option::Some(n),
+        Err(_) => null,
+    };
 }
 
 fn rule_name_exists<S: AsStrSlice>(lexer_rules: &List<LexerRule>, name: S) -> bool {
@@ -721,9 +707,7 @@ fn gen_lexer_fragment_fn<S: AsStrSlice>(
     hm: bool,
     sc_name: S,
 ) {
-    let Some(rule) = find_fragment(all_rules, &frag.key.name) else {
-        panic("a fragment matcher names no fragment");
-    };
+    let rule = find_fragment(all_rules, &frag.key.name).expect("a fragment matcher names no fragment");
     begin_lexer_matcher(w, &frag.key.fn_name(), rule, all_rules, hm, sc_name);
     end_lexer_matcher(w, rule, &frag.plan, all_rules, frag.key.ci, ea, hm);
 }
@@ -877,9 +861,7 @@ fn statically_called_rules(
     }
     let mut called: List<String> = [];
     for let mut k = 0; k < emitted.len(); k += 1 {
-        let Some(rule) = find_lexer_rule(lexer_rules, &emitted[k]) else {
-            panic("an emitted matcher names no rule");
-        };
+        let rule = find_lexer_rule(lexer_rules, &emitted[k]).expect("an emitted matcher names no rule");
         for let name of &lexer_rule_calls(rule, lexer_rules) {
             if called.contains(name) {
                 continue;
@@ -1303,10 +1285,13 @@ fn seq_ends_contested(seq: &LexerAlternative, scope: &SpliceScope) -> bool {
     return spliced_elements(last, scope) matches { Some(_) };
 }
 
-/// Whether an alternation takes the longest arm and two arms can match the same text.
+/// Whether an alternation takes the longest arm and two arms can match the same
+/// text. An arm carrying a predicate rules it out: `latn_match` refuses one, so
+/// such an alternation is never the undecidable-arms case routed to the lexer ATN.
 pub fn lexer_alts_contested(arms: &List<LexerAlternative>, rules: &List<LexerRule>, casing: Casing) -> bool {
     return arms.len() >= 2
-        && lexer_alts_scan(arms, rules) matches { Longest }
+        && !arms.iter_ref().any(|a| lexer_alt_has_predicate_below(a, rules))
+        && !lexer_arms_share_fixed_len(arms, rules)
         && lexer_alts_can_collide(arms, rules, casing);
 }
 
@@ -2032,70 +2017,32 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
     w.end();
 }
 
-/// How an alternation is emitted once it is in tail position, and — when the
-/// cheap first-match emit already gives ANTLR4's answer — why.
-pub enum LexerAltsScan {
-    /// Maximal munch: every arm is scanned from the same start, longest wins.
-    Longest,
-    /// Fewer than two arms — no choice to make.
-    SingleArm,
-    /// Every arm consumes the same fixed number of chars, so longest and
-    /// first-match coincide and the cheaper emit stays byte-identical.
-    FixedLenArms,
-    /// An arm carries a semantic predicate anywhere below it, which the lexer
-    /// ATN cannot run. Only the routing question reads this; the emit measures
-    /// such an arm like any other (`lexer_alts_lengths`).
-    ArmPredicate,
-}
-
-/// How the arms compare on length, which is the whole of what the emit needs:
-/// it runs a predicate while scoring, so an arm carrying one is still an arm to
-/// measure. A predicate says whether its own arm matches, never how the lengths
-/// compare, so it is orthogonal to this question.
-pub fn lexer_alts_lengths(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
-    if alts.len() < 2 {
-        return LexerAltsScan::SingleArm;
-    }
+/// Whether every arm consumes the same fixed number of chars, so longest and
+/// first-match coincide and the cheaper emit stays byte-identical. A predicate
+/// says whether its own arm matches, never how the lengths compare, so an arm
+/// carrying one is measured like any other.
+fn lexer_arms_share_fixed_len(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
     let mut common = -1;
     for let alt of alts {
-        let len = lexer_alt_fixed_len(alt, all_rules);
-        if let Some(n) = len {
-            if common < 0 {
-                common = n;
-            } else if common != n {
-                return LexerAltsScan::Longest;
-            }
-        } else {
-            return LexerAltsScan::Longest;
+        let Some(n) = lexer_alt_fixed_len(alt, all_rules) else {
+            return false;
+        };
+        if common < 0 {
+            common = n;
+        } else if common != n {
+            return false;
         }
     }
-    return LexerAltsScan::FixedLenArms;
+    return true;
 }
 
-/// `lexer_alts_lengths` for the routing question, where a predicate is
-/// disqualifying: `latn_match` refuses one, so a predicate-carrying alternation
-/// is never the undecidable-arms case that routes to the lexer ATN.
-pub fn lexer_alts_scan(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
-    if alts.len() < 2 {
-        return LexerAltsScan::SingleArm;
-    }
-    for let alt of alts {
-        if lexer_alt_has_predicate_below(alt, all_rules) {
-            return LexerAltsScan::ArmPredicate;
-        }
-    }
-    return lexer_alts_lengths(alts, all_rules);
-}
-
-/// Whether a tail-position alternation needs the maximal-munch emit.
-/// The emit an alternation takes, tail position included: the whole
-/// `gen_lexer_alts` decision as one value.
+/// The emit an alternation of two or more arms takes, tail position included:
+/// the whole `gen_lexer_alts` decision as one value.
 pub enum LexerAltsEmit {
     MaximalMunch,
     /// Something after the alternation still has to be consumed, so a longer
     /// arm could strand it.
     FirstMatchNotTail,
-    FirstMatchSingleArm,
     FirstMatchFixedLenArms,
     /// No two arms can match at the same position, so the first to match is
     /// the only one.
@@ -2111,15 +2058,13 @@ pub fn lexer_alts_emit(
     if !tail {
         return LexerAltsEmit::FirstMatchNotTail;
     }
-    return match lexer_alts_lengths(alts, all_rules) {
-        Longest => if lexer_alts_can_collide(alts, all_rules, casing_of(ci)) {
-            LexerAltsEmit::MaximalMunch;
-        } else {
-            LexerAltsEmit::FirstMatchArmsDisjoint;
-        },
-        SingleArm => LexerAltsEmit::FirstMatchSingleArm,
-        FixedLenArms => LexerAltsEmit::FirstMatchFixedLenArms,
-        ArmPredicate => panic("lexer_alts_lengths never reports the routing question's predicate carve-out"),
+    if lexer_arms_share_fixed_len(alts, all_rules) {
+        return LexerAltsEmit::FirstMatchFixedLenArms;
+    }
+    return if lexer_alts_can_collide(alts, all_rules, casing_of(ci)) {
+        LexerAltsEmit::MaximalMunch;
+    } else {
+        LexerAltsEmit::FirstMatchArmsDisjoint;
     };
 }
 
@@ -2406,23 +2351,11 @@ pub fn lexer_group_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Lex
     if index + 1 >= alt.elements.len() {
         return LexerGroupEmit::FirstMatchNoSuffix;
     }
-    // `lexer_alts_lengths`, not `lexer_alts_scan`: this is an emit decision, and
-    // the emit runs a predicate while scoring, so an arm carrying one is still
-    // an arm to measure. The carve-out in `lexer_alts_scan` answers the routing
-    // question, where a predicate is disqualifying because `latn_match` cannot
-    // run one.
-    match lexer_alts_lengths(g_alts, all_rules) {
-        SingleArm => {
-            return LexerGroupEmit::FirstMatchSingleArm;
-        },
-        FixedLenArms => {
-            return LexerGroupEmit::FirstMatchFixedLenArms;
-        },
-        ArmPredicate => {
-            panic("lexer_alts_lengths never reports the routing question's predicate carve-out");
-        },
-        Longest => {
-        },
+    // An arm carrying a predicate is measured here, unlike in
+    // `lexer_alts_contested`: this is an emit decision, and the emit runs the
+    // predicate while scoring.
+    if lexer_arms_share_fixed_len(g_alts, all_rules) {
+        return LexerGroupEmit::FirstMatchFixedLenArms;
     }
     if !lexer_alts_can_collide(g_alts, all_rules, casing_of(ci)) {
         return LexerGroupEmit::FirstMatchArmsDisjoint;
@@ -2540,9 +2473,6 @@ pub struct LexerCutPlan {
 pub variant LexerElemPlan {
     /// A group, or a fragment inlined at this reference.
     Body(LexerBodyPlan),
-    /// A repeat inside a `~` or another repeat: no alternative around it to
-    /// strand, so no suffix decision.
-    PlainRepeat(LexerNestedPlan),
     Not(LexerNestedPlan),
     /// A group, `~` or inlined fragment that consumes one char out of a set:
     /// one class test (`lexer_elem_char_set`).
@@ -2606,9 +2536,7 @@ pub fn lexer_matcher_plans(
     let mut out: List<LexerFragmentFn> = [];
     for let mut i = 0; i < keys.len(); i += 1 {
         let key = keys[i];
-        let Some(f) = find_fragment(lexer_rules, &key.name) else {
-            panic("a fragment call names no fragment");
-        };
+        let f = find_fragment(lexer_rules, &key.name).expect("a fragment call names no fragment");
         let plan = plan_body(&f.body, lexer_rules, key.ci, key.tail);
         collect_body_calls(&plan, &mut keys);
         out.push(LexerFragmentFn { key, plan });
@@ -2652,7 +2580,7 @@ fn collect_seq_calls(plan: &LexerSeqPlan, out: &mut List<LexerFragmentKey>) {
 fn collect_elem_calls(plan: &LexerElemPlan, out: &mut List<LexerFragmentKey>) {
     match plan {
         Body(body) => collect_body_calls(body, out),
-        PlainRepeat(nested) | Not(nested) => collect_elem_calls(&nested.inner, out),
+        Not(nested) => collect_elem_calls(&nested.inner, out),
         Call(key) => {
             if !out.contains(key) {
                 out.push(*key);
@@ -2755,9 +2683,7 @@ fn plan_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool, tail: b
     }
     return match *elem {
         Group(alts) => LexerElemPlan::Body(plan_body(&alts, all_rules, ci, tail)),
-        Repeat(rep) => LexerElemPlan::PlainRepeat(LexerNestedPlan {
-            inner: plan_elem(&rep.element, all_rules, ci, false),
-        }),
+        Repeat(_) => panic("a repeat is always a sequence step: the g4 parser nests none under a repeat or a `~`"),
         Not(n) => LexerElemPlan::Not(LexerNestedPlan { inner: plan_elem(&n.element, all_rules, ci, false) }),
         // A recursive fragment keeps its own matcher and is reached by call, as
         // `EOF` and a non-fragment rule are.
@@ -3892,12 +3818,6 @@ fn gen_lexer_elem<S: AsStrSlice>(
             let alts = elem_inlined_body(elem, all_rules);
             gen_lexer_body(w, &alts, body, all_rules, fail_action, ci, ea, hm, replay);
         },
-        PlainRepeat(nested) => {
-            let Repeat(rep) = elem else {
-                panic("a repeat plan against something other than a repeat");
-            };
-            gen_lexer_repeat(w, rep, &nested.inner, all_rules, fail_action, ci, ea, hm, replay);
-        },
         Not(nested) => {
             let Not(not_elem) = elem else {
                 panic("a negation plan against something other than a `~`");
@@ -3925,10 +3845,7 @@ fn elem_inlined_body(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<L
     let RuleRef(name) = elem else {
         panic("a body plan against neither a group nor a rule reference");
     };
-    let Some(f) = find_fragment(all_rules, name) else {
-        panic("a body plan against a rule reference with no fragment");
-    };
-    return f.body;
+    return find_fragment(all_rules, name).expect("a body plan against a rule reference with no fragment").body;
 }
 
 /// An element the emit consumes without descending into it: a literal, a char
@@ -4934,9 +4851,7 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
 }
 
 fn lit_try_fn_name(const_name: &String) -> String {
-    let Some(suffix) = const_name.strip_prefix("TK_LIT_") else {
-        panic(`lit_try_fn_name: \`${const_name}\` is not a literal's token name`);
-    };
+    let suffix = const_name.strip_prefix("TK_LIT_").expect(`lit_try_fn_name: \`${const_name}\` is not a literal's token name`);
     return `try_lit_${suffix}`;
 }
 

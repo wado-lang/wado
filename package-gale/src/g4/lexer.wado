@@ -35,12 +35,6 @@ impl G4Lexer {
         return Option::<char>::Some(self.chars[i]);
     }
 
-    fn advance(&mut self) -> char {
-        let c = self.chars[self.pos];
-        self.pos += 1;
-        return c;
-    }
-
     fn skip_whitespace(&mut self) {
         while !self.at_end() {
             if self.chars[self.pos].is_ascii_whitespace() {
@@ -186,6 +180,11 @@ impl G4Lexer {
         if c == ':' && self.peek_at(1) matches { Some(':') } {
             self.pos += 2;
             return self.owned_token(G4Token::ColonColon, start, self.pos);
+        }
+        // One token, as in ANTLR4: `. .` is two wildcards, never a range.
+        if c == '.' && self.peek_at(1) matches { Some('.') } {
+            self.pos += 2;
+            return self.owned_token(G4Token::Range, start, self.pos);
         }
         self.pos += 1;
         let kind = match c {

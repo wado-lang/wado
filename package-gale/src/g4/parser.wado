@@ -108,16 +108,16 @@ global LEXER_COMMAND_NAMES: List<String> = ["skip", "more", "channel", "type", "
 /// fragment and say nothing about why the lexer stopped.
 fn found_desc(tok: &Token) -> String {
     if tok.kind == G4Token::UnterminatedString as i32 {
-        return String::from("unterminated string literal");
+        return G4Token::UnterminatedString.name();
     }
     if tok.kind == G4Token::UnterminatedCharClass as i32 {
-        return String::from("unterminated character set");
+        return G4Token::UnterminatedCharClass.name();
     }
     if tok.kind == G4Token::InvalidEscape as i32 {
-        return `invalid escape sequence ${tok.text}`;
+        return `${G4Token::InvalidEscape.name()} ${tok.text}`;
     }
     if tok.kind == G4Token::UnexpectedChar as i32 {
-        return `unexpected character "${tok.text}"`;
+        return `${G4Token::UnexpectedChar.name()} "${tok.text}"`;
     }
     assert tok.kind < G4Token::UnterminatedString as i32, `kind ${tok.kind} is one the lexer could not form, and those are the trailing kinds — it must name its problem above rather than reach the raw text`;
     return `got "${tok.text}"`;
@@ -146,10 +146,7 @@ fn first_char<S: AsStrSlice>(s: S) -> Option<char> {
 }
 
 fn is_lexer_rule_name<S: AsStrSlice>(name: S) -> bool {
-    let Some(c) = first_char(name) else {
-        return false;
-    };
-    return is_rule_name_upper(c);
+    return first_char(name) matches { Some(c) && is_rule_name_upper(c) };
 }
 
 fn is_valid_not_set_element(elem: &Element) -> bool {
@@ -595,11 +592,11 @@ impl G4Parser {
         if self.is_kind(G4Token::Identifier) {
             let head = self.peek().text;
             self.advance();
-            if !(self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32) {
+            if !(self.is_kind(G4Token::Dot) && self.next_kind() == G4Token::Identifier as i32) {
                 return OptionValue::Ident(head);
             }
             let mut parts: List<String> = [head];
-            while self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32 {
+            while self.is_kind(G4Token::Dot) && self.next_kind() == G4Token::Identifier as i32 {
                 self.advance();
                 parts.push(self.peek().text);
                 self.advance();
@@ -679,10 +676,7 @@ impl G4Parser {
 
     fn parse_angle_options(&mut self) -> Result<List<GrammarOption>, ParseError> {
         let mut out: List<GrammarOption> = [];
-        if !self.is_kind(G4Token::LAngle) {
-            return Result::<List<GrammarOption>, ParseError>::Ok(out);
-        }
-        self.advance();
+        self.expect(G4Token::LAngle).unwrap();
         let mut depth = 1;
         while !self.at_eof() && depth > 0 {
             if self.is_kind(G4Token::RAngle) {
@@ -822,7 +816,7 @@ impl G4Parser {
             }
             let mut qid = self.peek().text;
             self.advance();
-            while self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Identifier as i32 {
+            while self.is_kind(G4Token::Dot) && self.next_kind() == G4Token::Identifier as i32 {
                 self.advance();
                 qid.push('.');
                 qid.push_str(&self.peek().text);
@@ -1301,12 +1295,9 @@ impl G4Parser {
         return Result::<LexerElement, ParseError>::Ok(elem);
     }
 
-    fn peek_kind_at(&self, offset: i32) -> i32 {
-        let i = self.pos + offset;
-        if i >= self.tokens.len() {
-            return G4Token::Eof as i32;
-        }
-        return self.tokens[i].kind;
+    fn next_kind(&self) -> i32 {
+        assert !self.at_eof(), "a lookahead is taken past a real token, so the trailing Eof bounds it";
+        return self.tokens[self.pos + 1].kind;
     }
 
     fn parse_lexer_atom(&mut self) -> Result<LexerElement, ParseError> {
@@ -1314,21 +1305,19 @@ impl G4Parser {
             let tok = self.advance();
             let text = tok.text;
             let start_span = tok.span;
-            let is_dot_dot = self.is_kind(G4Token::Dot) && self.peek_kind_at(1) == G4Token::Dot as i32;
-            if is_dot_dot && text.chars().count() == 1 {
-                self.advance();
+            if self.is_kind(G4Token::Range) {
                 self.advance();
                 let end_tok = self.expect(G4Token::StringLit)?;
-                let end_text = end_tok.text;
-                if end_text.chars().count() != 1 {
-                    let expected: List<String> = ["single-char string literal"];
-                    return Result::<LexerElement, ParseError>::Err(
-                        ParseError::new(
-                            "range endpoint must be a single character",
-                            end_tok.span,
-                            expected,
-                        ),
-                    );
+                for let endpoint of [
+                    [text, start_span],
+                    [end_tok.text, end_tok.span],
+                ] {
+                    if endpoint.0.chars().count() != 1 {
+                        let expected: List<String> = ["single-char string literal"];
+                        return Result::<LexerElement, ParseError>::Err(
+                            ParseError::new("range endpoint must be a single character", endpoint.1, expected),
+                        );
+                    }
                 }
                 // From source, not the token text: that already collapsed an
                 // unpaired surrogate escape to U+FFFD.
@@ -1345,13 +1334,6 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::Dot) {
             self.advance();
-            if self.is_kind(G4Token::Dot) {
-                let tok = self.peek();
-                let expected: List<String> = ["element"];
-                return Result::<LexerElement, ParseError>::Err(
-                    ParseError::new("unexpected '..' without preceding char literal", tok.span, expected),
-                );
-            }
             return Result::<LexerElement, ParseError>::Ok(LexerElement::AnyChar);
         }
         if self.is_kind(G4Token::Identifier) {

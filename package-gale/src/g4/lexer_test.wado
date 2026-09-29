@@ -42,6 +42,14 @@ test "arrow token" {
     assert_token(&tokens[0], G4Token::Arrow, "->");
 }
 
+test "adjacent dots are one range token; spaced dots stay two" {
+    let tokens = tokenize("'a'..'z' . .");
+    assert_token(&tokens[1], G4Token::Range, "..");
+    assert_token(&tokens[2], G4Token::StringLit, "z");
+    assert_token(&tokens[3], G4Token::Dot, ".");
+    assert_token(&tokens[4], G4Token::Dot, ".");
+}
+
 test "keywords" {
     // Only `grammar` and `fragment` are hard keywords; everything else
     // (including soft lexer-command keywords like `skip` and `channel`) is
@@ -243,12 +251,12 @@ test "char class with literal left bracket inside" {
 }
 
 test "a token the lexer cannot form carries its source text, not a message" {
-    // The reason lives in the token's kind, so `unterminated string` is a
+    // The reason lives in the token's kind, so `unterminated string literal` is a
     // name the diagnostic reads off `G4Token`, never text a caller would
     // quote back as if the source said it.
     let unterminated = tokenize("'abc");
     assert_token(&unterminated[0], G4Token::UnterminatedString, "'abc");
-    assert G4Token::UnterminatedString.name() == "unterminated string";
+    assert G4Token::UnterminatedString.name() == "unterminated string literal";
 
     let open_set = tokenize("[a-z");
     assert_token(&open_set[0], G4Token::UnterminatedCharClass, "[a-z");
