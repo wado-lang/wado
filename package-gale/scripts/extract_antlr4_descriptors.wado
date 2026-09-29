@@ -975,7 +975,9 @@ fn emit_stage_sub_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3
     slave_count: i32,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [
-        triage_doc_line("stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${sub_rule}' subtree,`,
+        triage_doc_line("stage_b"),
+        "//",
+        `// Stage B sub-tree: [output] is the labelled child '${sub_rule}' subtree,`,
         "// not the start rule's full tree. Navigate via find_first_child_node.",
     ];
     for let line of &strip_doc_lines(strip) {
@@ -1024,7 +1026,9 @@ fn emit_stage_a_parse_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, 
         category: category.to_string(),
         name: name.to_string(),
         doc_lines: [
-            triage_doc_line("stage_a"), "//", "// Stage A claim (b): the generated parser must accept the descriptor's",
+            triage_doc_line("stage_a"),
+            "//",
+            "// Stage A claim (b): the generated parser must accept the descriptor's",
             "// [input] without returning an error. No parse-tree shape comparison.",
         ],
         output_subdir: "antlr4_compat_a",
@@ -1094,7 +1098,9 @@ fn emit_stage_c_output_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
     slave_count: i32,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [
-        triage_doc_line("stage_c"), "//", "// Stage C claim: the generated parser's action-print output",
+        triage_doc_line("stage_c"),
+        "//",
+        "// Stage C claim: the generated parser's action-print output",
         "// (result.output, the p.emit buffer) equals the descriptor's [output].",
     ];
     for let line of &strip_doc_lines(strip) {
@@ -1283,7 +1289,8 @@ fn emit_stage_a_err_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3
         category: category.to_string(),
         name: name.to_string(),
         doc_lines: [
-            triage_doc_line("stage_a"), "//",
+            triage_doc_line("stage_a"),
+            "//",
             "// Stage A claim (c): the generated parser/lexer must report an error for [input].",
             "//   - Parser-type: parse(&input) must return Err.",
             "//   - Lexer-type:  tokenize(&input) must produce at least one TK_ERROR.",
@@ -1335,7 +1342,9 @@ fn emit_stage_a_tokens_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
         category: category.to_string(),
         name: name.to_string(),
         doc_lines: [
-            triage_doc_line("stage_a"), "//", "// Stage A claim (d): tokenize(&input) renders to the same ANTLR4-format",
+            triage_doc_line("stage_a"),
+            "//",
+            "// Stage A claim (d): tokenize(&input) renders to the same ANTLR4-format",
             "// dump as the descriptor's [output] block.",
         ],
         output_subdir: "antlr4_compat_a",

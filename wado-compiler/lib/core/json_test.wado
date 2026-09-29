@@ -1512,7 +1512,8 @@ test "a Value reads every JSON value kind" {
     let r: Result<Value, DeserializeError> = from_string(`[null,true,false,"s",-1.5,{"k":[]}]`);
     let object = { k: Value::List([]) } as TreeMap<String, Value>;
     assert r == Result::Ok(Value::List([
-        Value::Null, Value::Bool(true),
+        Value::Null,
+        Value::Bool(true),
         Value::Bool(false),
         Value::String("s"),
         Value::Float(-1.5),

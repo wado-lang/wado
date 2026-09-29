@@ -35,7 +35,8 @@ fn every_arm() -> List<Value> {
     let bytes: ByteList = [1, 0xab];
     let raw: ByteList = [0xf7];
     return [
-        Value::Null, Value::Bool(true),
+        Value::Null,
+        Value::Bool(true),
         Value::Int(-3),
         Value::UInt(u64::MAX),
         Value::Int128(i128::MIN),
@@ -45,7 +46,8 @@ fn every_arm() -> List<Value> {
         Value::Bytes(bytes),
         Value::List([Value::Int(1)]),
         { a: 1 },
-        Value::Undefined, Value::Unknown(raw),
+        Value::Undefined,
+        Value::Unknown(raw),
     ];
 }
 
@@ -115,7 +117,8 @@ test "Value::List serialize" {
 
 test "Value::List mixed serialize" {
     let v = Value::List([
-        Value::Null, Value::Bool(true),
+        Value::Null,
+        Value::Bool(true),
         Value::String("x"),
     ]);
     let r = to_string(&v);
@@ -215,7 +218,8 @@ test "Value nested object with array deserialize" {
     let r: Result<Value, DeserializeError> = from_string("{\"nums\":[1,2],\"flag\":true}");
     let expected = Value::Object(obj([
         [
-            "nums", Value::List([
+            "nums",
+            Value::List([
                 Value::Float(1.0),
                 Value::Float(2.0),
             ]),
@@ -235,7 +239,8 @@ test "Value round-trip nested" {
         ["name", Value::String("Alice")],
         ["age", Value::Float(30.0)],
         [
-            "tags", Value::List([
+            "tags",
+            Value::List([
                 Value::String("admin"),
                 Value::String("user"),
             ]),
@@ -287,7 +292,8 @@ test "inspect string" {
 test "inspect array" {
     let v = Value::List([
         Value::Float(1.0),
-        Value::Bool(true), Value::Null,
+        Value::Bool(true),
+        Value::Null,
     ]);
     assert `${v:?}` == "[1.0, true, null]";
 }
@@ -321,7 +327,8 @@ test "pretty-print object" {
 test "pretty-print nested" {
     let v = Value::Object(obj([
         [
-            "items", Value::List([
+            "items",
+            Value::List([
                 Value::Float(1.0),
                 Value::Float(2.0),
             ]),
@@ -356,7 +363,8 @@ test "pretty-print renders scalars as inspect does" {
     let bytes: ByteList = [1, 0xab];
     let raw: ByteList = [0xf7];
     let scalars: List<Value> = [
-        Value::Null, Value::Bool(true),
+        Value::Null,
+        Value::Bool(true),
         Value::Bool(false),
         Value::Int(-3),
         Value::UInt(7),
@@ -364,7 +372,8 @@ test "pretty-print renders scalars as inspect does" {
         Value::UInt128(5),
         Value::Float(1.5),
         Value::String("s"),
-        Value::Bytes(bytes), Value::Undefined,
+        Value::Bytes(bytes),
+        Value::Undefined,
         Value::Unknown(raw),
     ];
     for let v of scalars {
