@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790679039882,
+  "lastUpdate": 1790688089116,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61965,6 +61965,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bb69ca747744629a006cd0e49d22b0e9e035cfdd"
         },
         "date": 1790679038906,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22798,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2f47588ea93a127200866ba7da9ded4bd7a4f1dc",
+          "message": "Merge pull request #2222 from wado-lang/ccr-9f6e88e2-jccs7m\n\nchore(harness): keep every edit in the main session, where it can be watched",
+          "timestamp": "2026-09-29T21:57:48+09:00",
+          "tree_id": "cce3d7fdc1ff1892c3d730a58b898ad5390b0a2e",
+          "url": "https://github.com/wado-lang/wado/commit/2f47588ea93a127200866ba7da9ded4bd7a4f1dc"
+        },
+        "date": 1790688088527,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
