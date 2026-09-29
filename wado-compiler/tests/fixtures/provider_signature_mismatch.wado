@@ -1,9 +1,10 @@
 // A provider's operation must take and return exactly what the dependency
 // imports. One whose signature differs is reported against the provider.
+use { println, Stdout } from "core:cli";
 use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_wrong_signature.wado" };
 
-test "unreachable — compile fails" {
-    let _ = Hlc::wrap("x", "wado");
+export fn run() with Stdout {
+    println(Hlc::wrap("x", "wado").text);
 }
 
 __DATA__

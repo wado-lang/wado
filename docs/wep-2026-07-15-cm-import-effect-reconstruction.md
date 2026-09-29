@@ -121,6 +121,9 @@ Not covered yet:
 - [ ] A single provider file spanning several of a dependency's imported
       interfaces (bind by operation name across all).
 - [ ] Async import/export surface (`stream<T>` / `future<T>`).
+- [ ] A provider that does not fit its dependency is reported where composition
+      connects the two, so a dependency the program never calls, which is not
+      composed, leaves its provider unchecked.
 
 Resources ride the same rule with no special path: a host-provided resource
 (`wasi:*`, `Stream` / `Future`) bottoms out at the host and stays an effect; a

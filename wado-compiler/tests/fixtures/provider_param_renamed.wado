@@ -1,10 +1,11 @@
 // A Component Model function type includes its parameter names, so a provider
 // must spell them as the dependency imports them. The report names the one that
 // differs.
+use { println, Stdout } from "core:cli";
 use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_renamed_param.wado" };
 
-test "unreachable — compile fails" {
-    let _ = Hlc::wrap("x", "wado");
+export fn run() with Stdout {
+    println(Hlc::wrap("x", "wado").text);
 }
 
 __DATA__

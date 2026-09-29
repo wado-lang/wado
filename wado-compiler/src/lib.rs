@@ -67,7 +67,7 @@ use crate::ast::UseDecl;
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use crate::codegen::provider_mismatch;
+use crate::codegen::EmitFailure;
 use crate::component_model::{
     CmInterfaceRegistry, bind_type_names, cm_bound_defs, try_for_each_operation_type,
     try_for_each_signed_type, wado_primitive_name_to_cm,
@@ -308,6 +308,8 @@ pub struct DumpResult {
 /// wires `provider.export[import_fq] -> dependency.import[import_fq]`.
 #[derive(Debug, Clone)]
 pub struct ProviderComponent {
+    /// The provider as a diagnostic names it: its path as the source wrote it.
+    pub source: String,
     /// The interface FQ the provider exports and the dependency imports.
     pub import_fq: String,
     /// The provider component bytes.
@@ -1113,9 +1115,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             Some(&entry_source),
             &load_result.invocations,
         );
-        let Some((dep_source, dep_module)) =
-            dep_source.and_then(|s| load_result.modules.get(&s).map(|m| (s, m)))
-        else {
+        let Some(dep_module) = dep_source.and_then(|s| load_result.modules.get(&s)) else {
             return Err(bail(format!(
                 "`provider` on `{}` names an import that is not a component",
                 use_decl.source
@@ -1172,21 +1172,8 @@ async fn resolve_inline_providers<H: CompilerHost>(
         ))
         .await
         .map_err(|e| bail(format!("provider `{prov_path}` failed to compile: {e}")))?;
-        let namespace = dep_source
-            .wasm_canonical_namespace()
-            .expect("a module importing a guest effect is a component");
-        if let Some(why) = provider_mismatch(
-            &load_result.wasm_assets[&namespace].bytes,
-            &result.wasm,
-            &fq,
-        ) {
-            return Err(bail_with(
-                logger,
-                Code::EffectHandlerInvalid,
-                format!("provider `{prov_path}` does not implement `{fq}`: {why}"),
-            ));
-        }
         providers.push(ProviderComponent {
+            source: prov_path,
             import_fq: fq,
             bytes: result.wasm,
         });
@@ -1964,7 +1951,19 @@ fn compile_after_load<H: CompilerHost>(
         let _span = logger.span("codegen");
         match codegen::emit_wasm(&nir, &wir_package, &options.providers) {
             Ok(wasm) => wasm,
-            Err(invalid) => panic_on_invalid_artifact(logger.host(), &invalid),
+            Err(EmitFailure::Invalid(invalid)) => {
+                panic_on_invalid_artifact(logger.host(), &invalid)
+            }
+            Err(EmitFailure::Provider(mismatch)) => {
+                return Err(bail_with(
+                    logger,
+                    Code::EffectHandlerInvalid,
+                    format!(
+                        "provider `{}` does not implement `{}`: {}",
+                        mismatch.provider, mismatch.import_fq, mismatch.reason
+                    ),
+                ));
+            }
         }
     };
 
