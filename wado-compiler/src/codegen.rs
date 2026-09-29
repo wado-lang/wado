@@ -14,6 +14,8 @@ mod component;
 mod component_context;
 mod emit;
 
+pub(crate) use component::provider_mismatch;
+
 /// A binary the WIR pipeline produced that does not validate, with the
 /// diagnosis and the bytes themselves. Saving it is the host's to do.
 pub struct InvalidArtifact {

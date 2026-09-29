@@ -1,0 +1,14 @@
+// A Component Model function type includes its parameter names, so a provider
+// must spell them as the dependency imports them. The report names the one that
+// differs.
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_renamed_param.wado" };
+
+test "unreachable — compile fails" {
+    let _ = Hlc::wrap("x", "wado");
+}
+
+__DATA__
+{
+    "compile_error": "provider `./sub/hl_renamed_param.wado` does not implement `test:hlc/highlight@0.1.0`: type mismatch in instance export `highlight`: expected parameter named `code`, found `src`",
+    "compile_error_codes": ["EFFECT_HANDLER_INVALID"]
+}

@@ -4006,6 +4006,59 @@ fn compose_dependency_components(
     }
 }
 
+/// Why `provider` cannot satisfy the interface `fq` that `dependency` imports,
+/// or `None` where it can. It asks the connection check composition makes, so
+/// a provider it passes composes. That check answers yes or no, so the reason
+/// comes from wasmparser's subtype check, which names the export and what
+/// differs.
+pub(crate) fn provider_mismatch(dependency: &[u8], provider: &[u8], fq: &str) -> Option<String> {
+    use wasm_compose::graph::{Component, CompositionGraph};
+    use wasmparser::Validator;
+    use wasmparser::component_types::SubtypeCx;
+
+    let mut validator = Validator::new_with_features(wasmparser::WasmFeatures::all());
+    let mut load = |name: &str, bytes: &[u8]| {
+        Component::from_bytes(&mut validator, name, bytes.to_vec())
+            .unwrap_or_else(|e| panic!("the {name} component validated when compiled: {e:?}"))
+    };
+    let dep = load("dependency", dependency);
+    let prov = load("provider", provider);
+    let (import_idx, _) = dep
+        .import_by_name(fq)
+        .unwrap_or_else(|| panic!("`{fq}` comes from the dependency's own imports"));
+    let Some((export_idx, _, _)) = prov.export_by_name(fq) else {
+        return Some(format!("it exports no `{fq}`"));
+    };
+    let import_ty = dep
+        .types()
+        .component_item_for_import(fq)
+        .expect("found by name above")
+        .ty;
+    let export_ty = prov
+        .types()
+        .component_item_for_export(fq)
+        .expect("found by name above")
+        .ty;
+    let reason = SubtypeCx::new_with_refs(prov.types(), dep.types())
+        .component_entity_type(&export_ty, &import_ty, 0)
+        .err()
+        .map(|e| e.message().replace('\n', ": "));
+
+    let mut graph = CompositionGraph::new();
+    let dep_inst = graph
+        .add_component(dep)
+        .and_then(|id| graph.instantiate(id))
+        .expect("a fresh graph takes the dependency");
+    let prov_inst = graph
+        .add_component(prov)
+        .and_then(|id| graph.instantiate(id))
+        .expect("a fresh graph takes the provider");
+    let refused = graph
+        .validate_connection(prov_inst, Some(export_idx), dep_inst, import_idx)
+        .err()?;
+    Some(reason.unwrap_or_else(|| format!("{refused:#}")))
+}
+
 /// A bare top-level `func` import per world-level function in the plan, matching
 /// the dependency's world-level export. Value types go through the export side's
 /// engine, so `stream<T>` and `future<T>` are defined before the func type

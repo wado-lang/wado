@@ -67,13 +67,14 @@ use crate::ast::UseDecl;
 use std::convert::Infallible;
 use std::sync::Arc;
 
+use crate::codegen::provider_mismatch;
 use crate::component_model::{
     CmInterfaceRegistry, bind_type_names, cm_bound_defs, try_for_each_operation_type,
     try_for_each_signed_type, wado_primitive_name_to_cm,
 };
 use crate::defs::DefId;
 use crate::name::entry_dir_of;
-use crate::wit_consume::{module_host_leaf_imports, provider_mismatch};
+use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
 pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
