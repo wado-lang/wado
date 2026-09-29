@@ -23,7 +23,7 @@ Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 
 ## Importing a Generated Module
 
-### The `generator` fields
+### The `generator` Fields
 
 The literal after `from` is the primary input. It is a `./` or `../` path
 resolved against the declaring file, like a local module import. The
@@ -79,7 +79,7 @@ Every file a generator sees is named literally at the use site. There is no
 glob and no directory listing, so the whole input set is known before any
 generator runs.
 
-### Binding the import
+### Binding the Import
 
 A generator emits exactly one entry module and zero or more supplementary
 modules. The `use` binds against the entry module, under the ordinary
@@ -100,7 +100,7 @@ that emits invalid Wado fails with an ordinary error against the generated file
 on disk. Only the diagnostics a generator reports itself point into its input
 files.
 
-### Import errors
+### Import Errors
 
 A `use` of a file that is neither `.wado` nor a Wasm asset is
 `KILN_MISSING_WITH` when the importing file declares no `with { generator }`
@@ -230,9 +230,9 @@ supply it.
 
 ## Manifest
 
-Generators are declared in `[build-dependencies]` of `wado.toml`. It is a
-build-only graph that does not enter the consuming project's runtime dependency
-graph:
+A generator named by a coordinate or a `lib:` alias is declared in
+`[build-dependencies]` of `wado.toml`. Those entries form a graph of their own,
+used only at build time and apart from the program's `[dependencies]`:
 
 ```toml
 [build-dependencies]
@@ -247,7 +247,7 @@ the package under `[dependencies]` ([Runtime Libraries](#runtime-libraries)).
 
 ## Authoring a Generator
 
-### The generator world
+### The Generator World
 
 A generator targets the `core:kiln/generator` world. It imports one interface,
 `KilnHost`, and nothing else:
@@ -341,7 +341,7 @@ export generate: func(
 ) -> result<response, error>;
 ```
 
-### The request
+### The Request
 
 <!-- {"source": "wado-compiler/lib/core/kiln.wado"} -->
 
@@ -408,7 +408,7 @@ fn read_header(content: Stream<u8>) -> ByteList {
 }
 ```
 
-### The response
+### The Response
 
 A successful run returns the generated files:
 
@@ -445,7 +445,7 @@ let files: List<OutputFile> = [
 return Result::Ok(Response { files });
 ```
 
-### Output directory
+### Output Directory
 
 Outputs are written to the invocation's output directory, each stamped with a
 `#![generated(by = "...", sources = [...])]` header
@@ -473,7 +473,7 @@ A file in the output directory that carries the header belongs to the
 invocation, and a later run may overwrite or remove it. A file without it is
 left alone.
 
-### Generator errors
+### Generator Errors
 
 A generator that cannot produce output returns an `Error`:
 
@@ -560,7 +560,7 @@ KilnHost::emit_diagnostic(KilnDiagnostic {
 });
 ```
 
-### The probe
+### The Probe
 
 A generator may export `probe` beside `generate`. It reports how many leading
 bytes of an input determine the output. The host calls it once per input file,
@@ -610,7 +610,7 @@ hands it: the input files, the name it was invoked under, and the options.
 - A generator that imports a `wasi:*` interface, directly or through a
   `core:*` module, is a compile error (`KILN_GENERATOR_FORBIDDEN_IMPORT`).
 
-### Running again
+### Running Again
 
 A generator runs again only when something it depends on changes:
 

@@ -103,8 +103,7 @@ lib = "src/lib.wado"
 "wasi:http/service" = "src/server.wado"
 ```
 
-A hosted world's entry module exports the entry point that world requires. The
-library world requires none.
+The library world's entry module needs no [entry point](#entry-points).
 [The Library World](./spec-packages.md#the-library-world) says what it offers
 other packages, and what building it produces.
 
@@ -498,9 +497,9 @@ export fn run() with Stdout {
 ## `task return` Statement
 
 `task return expr;` delivers the result of an `export async fn` without ending
-the function. It calls the Component Model `task.return` instruction. Execution
-continues after it, so the function can fulfill outstanding futures (such as a
-response's trailers) or clean up.
+the function. It is the Component Model's `task.return`. Execution continues
+after it, so the function can fulfill outstanding futures (such as a response's
+trailers) or clean up.
 
 <!-- {"fixture":"spec_components_task_return.wado"} -->
 
@@ -523,8 +522,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
   one could never deliver its result. A body whose every path provably exits
   first (`panic`, an endless loop) has no result to deliver and is exempt.
 - Whether a `task return` under a branch is reached is not checked. A path that
-  misses it traps at the boundary, the same as a declared result the body never
-  binds.
+  misses it traps.
 - A plain `return` is forbidden in an `async fn` body. It would exit the Wasm
   function without telling the Component Model runtime.
 - The `task return` expression is type-checked against the declared return type

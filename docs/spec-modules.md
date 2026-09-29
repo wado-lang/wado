@@ -89,7 +89,7 @@ test {
 [The Modules of a Package](./spec-packages.md#the-modules-of-a-package) lists
 them.
 
-### Signature reach
+### Signature Reach
 
 An item's signature may not name a declaration that reaches less far than the
 item itself. Naming one is a compile error at the reference. A caller that
@@ -137,7 +137,7 @@ error. Rust's sealed-trait pattern seals a trait by giving it a supertrait that
 implementors cannot reach, and that is exactly what this forbids. Wado has no
 equivalent. If sealing is wanted, it gets a keyword that says so.
 
-### Re-export visibility
+### Re-export Visibility
 
 A `use` declaration carrying a visibility modifier re-exports the imported names
 as members of the importing module, at the modifier's reach:
@@ -182,22 +182,14 @@ Relative paths in Wado follow the gitignore / shell convention: a path that refe
 
 A module path resolves by its form:
 
-1. Bundled namespaces `core:` / `wasi:`: resolved from the embedded stdlib.
-
-2. Open coordinates `<ns>:<pkg>` (any other namespace): resolved as a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
-
-3. Library aliases `lib:<nick>`: resolved as a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
-
-4. Local modules (`./` or `../`): Resolved relative to importing module.
-
-5. Invalid paths: Paths not matching any pattern are rejected.
-   - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
+1. A bundled namespace, `core:` or `wasi:`, resolves to the standard library the compiler carries.
+2. An open coordinate `<ns>:<pkg>`, in any other namespace, resolves to a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
+3. A library alias `lib:<nick>` resolves to a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
+4. A local path, starting `./` or `../`, resolves relative to the importing module.
+5. Any other path is an error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`. A bare name (`"router"`) is one, except a deprecated bare `[dependencies]` key ([Package Specifiers](./spec-packages.md#package-specifiers)).
 
 The reserved namespaces are `core`, `wasi`, and `lib`. `core` and `wasi` are
 bundled; `lib` is not. Every other namespace is open.
-
-Bare names (`"router"`) are rejected, except a deprecated bare `[dependencies]`
-key ([Package Specifiers](./spec-packages.md#package-specifiers)).
 
 Rationale: [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 
@@ -315,7 +307,8 @@ test {
 
 ## Import Attributes (`with`)
 
-Use `with { ... }` to specify import metadata:
+A `with { ... }` clause after the specifier gives an import its attributes.
+`type` says what kind of file the import reads:
 
 <!-- {"fixture":"spec_modules_type_attribute.wado"} -->
 
@@ -386,7 +379,7 @@ test {
 }
 ```
 
-### Core modules
+### Core Modules
 
 Each function export becomes a free function of the same name. A call to it
 calls that export, whatever the name: an export named like a `core:builtin`
@@ -458,7 +451,7 @@ Rationale: [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md),
 
 ## Namespace Import
 
-Use `use name from "..."` (without curly braces) to import an entire module as a namespace:
+`use name from "..."`, without braces, imports a whole module as a namespace:
 
 <!-- {"fixture":"spec_modules_namespace_import.wado"} -->
 
@@ -524,7 +517,7 @@ by name instead.
 - Wildcards prohibited: `use {*} from "..."` is not allowed
 - No `use * as name` and no default imports
 - All imports must be explicit (except the prelude)
-- `Effect::{op1, op2}` imports an effect's operations
+- `Effect::{op1, op2}` imports an effect's operations ([Importing Effect Operations](./spec-effects.md#importing-effect-operations))
 
 <!-- {"fixture":"spec_modules_import_rules.wado"} -->
 
@@ -554,16 +547,6 @@ use {*} from "core:cli";         // Wildcard not allowed
 ```
 
 Without braces, `use println from "core:cli"` is a namespace import named `println`, so the function is `println::println`.
-
-## Calling Effect Operations
-
-An effect operation is called as `Effect::op()`, or by its bare name once
-imported. [Importing Effect Operations](./spec-effects.md#importing-effect-operations)
-holds the rules.
-
-- `.` reaches struct fields and methods (`user.name`, `stream.read()`).
-- `::` reaches effect operations and namespace members
-  (`Stdout::write_via_stream()`, `utils::helper()`).
 
 ## Renaming Imports
 
@@ -630,7 +613,7 @@ Re-export rules:
   same type, and a re-exported effect the same effect
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
-- Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a wildcard (`pub use _ from "..."`) are compile errors.
+- Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a nameless import (`pub use _ from "..."`) are compile errors.
 - A re-export stays at module level, so `export use` is a compile error
 
 Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).

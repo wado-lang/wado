@@ -1538,7 +1538,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
 
 ```sh
-wado test                            # walk the project for every *.wado file
+wado test                            # walk the current directory for every *.wado file
 wado test file.wado                  # run a specific file
 wado test --filter '*pattern*'       # keep files whose path matches the wildcard
 wado test --test-name 'addition'     # run only test blocks whose name contains "addition"
@@ -1550,7 +1550,7 @@ wado test --coverage                 # also report the lines, branches and funct
 `#[coverage(off)]` on a `fn` or an `impl` (`#![coverage(off)]` on a module)
 leaves code no test can reach out of the report.
 
-Discovery walks the project root for every `*.wado` file, honouring
+Discovery walks the current directory for every `*.wado` file, honouring
 `.gitignore`, `.gitmodules`, dot-prefixed entries, and nested `wado.toml`
 boundaries (each sub-package is run in its own context). Add
 `[test].exclude = ["..."]` to `wado.toml` to skip extra paths. Files without
@@ -1826,7 +1826,7 @@ let dec = from_bytes::<Point>(enc);          // variation-tolerant decode
 let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 ```
 
-### Other core modules
+### Other Core Modules
 
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
 - [`core:jsonc`](./stdlib-core-jsonc.md) — reads JSON with comments and

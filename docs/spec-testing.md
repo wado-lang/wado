@@ -104,18 +104,6 @@ test {
 }
 ```
 
-A TODO test marks a test for an unimplemented feature. It is reported on a
-separate axis from pass and fail (see [Test Outcome Model](#test-outcome-model)):
-
-<!-- {"fixture": "test_todo.wado"} -->
-
-```wado
-#[TODO]
-test "not yet implemented feature" {
-    panic("TODO: this feature is not yet implemented");
-}
-```
-
 #### Syntax Rules
 
 - `test` is a contextual keyword (functions named `test` are still allowed)
@@ -130,20 +118,16 @@ test "not yet implemented feature" {
 
 - Each test runs in isolation with fresh state: every global starts from its initializer
 - Tests are independent, so they may run in any order, and concurrently
-- A test passes if it completes without panicking or trapping
-- A test fails if `assert` fails, `panic` is called, or a trap occurs
+- A test passes or fails as the [Test Outcome Model](#test-outcome-model) states
 - Test blocks belong to the `test` world. Compiling for any other world leaves them out
 - [`core:eval`](./stdlib-core-eval.md) belongs to the `test` world too. A program for any other world that reaches it does not compile
 - Only the test blocks of the file being tested run. A test block in a module it imports is compiled but not run, so each test runs once, from the file that declares it
 
 #### `#[expect_trap]` Attribute
 
-The `#[expect_trap]` attribute inverts the pass/fail condition for a test:
-
-- The test passes if the body traps (calls `panic`, `unreachable`, or fails an `assert`)
-- The test fails if the body completes normally without trapping
-
-This is useful for verifying that invalid operations are correctly rejected at runtime:
+The `#[expect_trap]` attribute inverts a test's pass/fail condition: the test
+passes only if its body traps, by a `panic`, an `unreachable`, a failed `assert`
+or any other trap ([Regular Tests](#regular-tests)):
 
 <!-- {"fixture":"spec_testing_declaration.wado"} -->
 
@@ -157,11 +141,25 @@ test "panics on null dereference" {
 
 #### `#[TODO]` Attribute
 
-The `#[TODO]` attribute marks a test as a placeholder for a feature not yet implemented. Its outcome is reported on a separate axis from regular pass/fail results (see [TODO Tests](#todo-tests)).
+The `#[TODO]` attribute marks a test for a feature not yet implemented. Its
+outcome is reported on a separate axis from pass and fail
+([TODO Tests](#todo-tests)):
+
+<!-- {"fixture": "test_todo.wado"} -->
+
+```wado
+#[TODO]
+test "not yet implemented feature" {
+    panic("TODO: this feature is not yet implemented");
+}
+```
 
 #### `#[timeout_ms(N)]` Attribute
 
-The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and fails. Time spent inside `core:eval`'s `eval` does not count against it. This is useful for tests that involve expensive computation or I/O:
+The `#[timeout_ms(N)]` attribute overrides the default test timeout of 5000ms
+for one test. `N` is an integer literal, in milliseconds. A test that runs
+longer is interrupted and fails. Time spent inside `core:eval`'s `eval` does not
+count against it:
 
 <!-- {"fixture":"spec_testing_declaration.wado"} -->
 

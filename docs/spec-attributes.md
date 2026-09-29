@@ -403,7 +403,7 @@ test {
 
 Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). It does not change how the module compiles. Tools read it; Kiln's use is in [Authoring a generator](./spec-kiln.md#authoring-a-generator).
 
-The attribute accepts optional metadata so that generators can attach provenance information directly to the attribute instead of as free-form comments. Two argument shapes are supported inside the parentheses:
+The attribute may carry metadata, so a generator records where a file came from in the attribute rather than in a comment. Two argument shapes are accepted inside the parentheses:
 
 - Scalar `key = "value"` pairs (e.g. `by = "wado-from-idl"`).
 - List `key = ["v1", "v2", ...]` pairs whose values are a comma-separated list of string literals (e.g. `sources = ["a.wit", "b.wit"]`).
@@ -606,7 +606,8 @@ called.
 
 ### `#[trap(...)]`
 
-When a call to a declaration with no body traps. Silence means it may trap.
+States when a call to a declaration with no body traps. Silence means it may
+trap.
 `#[trap(never)]` says it never traps, and a check names the one condition it
 traps on:
 
@@ -653,8 +654,8 @@ is.
 
 ### `#[linear_memory(...)]`
 
-How a call to a declaration with no body touches linear memory: `read` or
-`write`. Silence means it touches none. A linear-memory address is a plain
+States how a call to a declaration with no body touches linear memory: `read`
+or `write`. Silence means it touches none. A linear-memory address is a plain
 `i32`, so no parameter type says this, and the attribute is the only source.
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->

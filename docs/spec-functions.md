@@ -343,8 +343,9 @@ assert c.n == 1;
 ### `Self`
 
 Inside an `impl`, `Self` names the impl's type. It stands for that type in a
-signature or a body, and it prefixes the type's static methods. A call may
-follow another on the value the first one returns:
+signature or a body, and it prefixes the type's static methods and, on a
+variant, its cases ([Variants](./spec-types.md#variants)). A call may follow
+another on the value the first one returns:
 
 <!-- {"fixture":"spec_functions_methods.wado"} -->
 
@@ -366,36 +367,6 @@ impl Point {
 test "Self and chained calls" {
     assert Point::origin().sum() == 0;
     assert Point::origin().moved(1, 2).moved(3, 4).doubled_sum() == 20;
-}
-```
-
-On a variant, `Self` also prefixes a case:
-
-<!-- {"fixture":"spec_functions_methods.wado"} -->
-
-```wado
-variant Shape {
-    Circle(i32),
-    Square(i32),
-}
-
-impl Shape {
-    fn unit_circle() -> Self {
-        return Self::Circle(1);
-    }
-
-    fn same_kind(&self, other: &Self) -> bool {
-        return match [*self, *other] {
-            [Circle(_), Circle(_)] => true,
-            [Square(_), Square(_)] => true,
-            _ => false,
-        };
-    }
-}
-
-test "Self names the impl's type" {
-    let c = Shape::unit_circle();
-    assert c.same_kind(&Shape::Circle(5)) && !c.same_kind(&Shape::Square(1));
 }
 ```
 
@@ -650,9 +621,8 @@ test "a generic method" {
 
 ## Closures
 
-Closures are anonymous function expressions with `|params| body` syntax.
-
-An expression body returns its value implicitly:
+A closure is an anonymous function expression, written `|params| body`. An
+expression body returns its value implicitly:
 
 <!-- {"fixture":"spec_functions_closures.wado"} -->
 
@@ -710,9 +680,9 @@ numeric-literal sibling does not: `fold(0, |acc, x| acc + x)` over a `List<i64>`
 takes `i64` from the body, not `i32` from the `0`. A parameter nothing supplies
 is reported at the call, not inside the closure.
 
-A closure declares no effects; they are inferred from the body.
-`with` after the parameter list, or after `-> Type`, would be that declaration,
-and is a compile error. A handler body therefore needs a block or parentheses:
+A closure cannot declare effects. Its effects are inferred from its body, and a
+`with` after the parameter list or after `-> Type` is a compile error. So a
+closure whose body is a `with … do` handler writes it in parentheses or a block:
 
 <!-- {"fixture":"spec_functions_closure_handler.wado"} -->
 
@@ -1092,7 +1062,7 @@ site (see
 - A function type carries no defaults. A function with defaults assigned to a `fn(...)` type loses them, and every call through that value supplies every argument.
 - A closure cannot declare defaults, since its arity must match its `fn(...)` type. `= expr` on a closure parameter is a compile error.
 - An `export fn` cannot declare defaults, since the component's WIT signature requires every parameter. A private helper can declare them behind a thin `export fn` wrapper.
-- An import may declare defaults: a `#[cm]` resource method, or an `interface` operation (see [Default Implementations](./spec-effects.md#default-implementations)). The call fills the default in, and the import receives every argument.
+- An `interface` operation or a `#[cm]` resource method may declare defaults. The call fills them in, so the handler or the host receives every argument.
 - A trait method declares its defaults in the trait only, including in a default body there. An implementation receives every parameter, and one that writes a default is a compile error. Every spelling of a call fills the trait's defaults: `x.m()`, `Type::m(..)`, and `T::m(..)` through a bound. A method of an inherent `impl Type { ... }` may declare defaults freely.
 
 ### Type Parameter Defaults
@@ -1313,8 +1283,7 @@ let ba: [..B, ..A] = [..a, ..b];   // ERROR: the order is part of the type
 let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
 ```
 
-A turbofish spells each pack as its own tuple. A flat list carries no boundary
-either:
+A turbofish spells each pack as its own tuple:
 
 <!-- {"fixture":"spec_functions_type_packs.wado"} -->
 
@@ -1322,15 +1291,18 @@ either:
 assert concat::<[i32], [bool, String]>([1], [true, "x"]) == [1, true, "x"];
 ```
 
+A flat list of types carries no boundary, so it is refused, even with one type
+per pack. `<i32, String>` could mean `<[i32], [String]>` or
+`<[i32, String], []>`, and nothing says which:
+
 <!-- {"fixture":"spec_functions_type_packs_flat_turbofish.wado"} -->
 
 ```wado
 concat::<i32, String>([1], ["x"]);  // ERROR: spell each type pack as a tuple
 ```
 
-Writing one argument per pack is refused as well: `<i32, String>` and
-`<[i32, String], []>` split the same list, and nothing says which was meant. The
-flat form stays available where a single pack absorbs the surplus on its own
+A function with a single pack still takes the flat form, since that pack
+takes every type the scalar parameters leave over
 (`make_defaults::<i32, String>()`).
 
 `zip` transposes its operands position by position, so its rows must be equally

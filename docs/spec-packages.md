@@ -7,15 +7,15 @@ depend on it.
 
 ## The Modules of a Package
 
-A package bounds how far
-`internal` reaches ([Visibility](./spec-modules.md#visibility)) and which impls
-it may write ([Package Boundary](./spec-traits.md#package-boundary)). The
-packages are:
+A package bounds how far `internal` reaches
+([Visibility](./spec-modules.md#visibility)) and which impls it may write
+([Package Boundary](./spec-traits.md#package-boundary)). A program's modules
+fall into packages this way:
 
 - The entry module, every local module it reaches through `./` / `../`
-  imports, and the Wasm assets those modules import.
-- Each dependency. A relative import inside a dependency stays in that
-  dependency's package.
+  imports, and the Wasm assets those modules import form one package.
+- Each dependency is a package. A relative import inside a dependency stays in
+  that dependency's package.
 - `core:*`, which is one package, and `wasi:*`, which is another.
 - A [generated module](./spec-kiln.md) belongs to the package of the
   module that imports it.
@@ -575,18 +575,18 @@ A path dependency has no entry.
 
 A workspace is a set of packages developed together. Its root `wado.toml` has a
 `[workspace]` table, whose `members` lists the member directories as glob
-patterns. This is the root `wado.toml` of the Wado repository:
+patterns:
 
 ```toml
 [workspace]
-members = ["package-cm-catalog", "package-gale", "package-gale-highlight-wado", "package-grog", "package-jade", "package-loam", "package-marl", "package-wadopoet", "package-web"]
+members = ["packages/*"]
 
 [workspace.package]
-version = "0.0.32"
-repository = "https://github.com/wado-lang/wado"
-namespace = "wado-lang"
+version = "1.2.0"
+repository = "https://github.com/example/tools"
+namespace = "example"
 license = "MIT"
-authors = ["FUJI Goro <g.psy.va@gmail.com>"]
+authors = ["Alice <alice@example.com>"]
 ```
 
 `[workspace.package]` holds metadata every member inherits, with no marker in

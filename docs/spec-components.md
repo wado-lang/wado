@@ -8,7 +8,7 @@ component targets, and what its entry point is, is in
 
 ## Type Mapping at Component Boundaries
 
-Wado types lift and lower to Component Model types when they cross a component boundary (the Canonical ABI). The compiler performs this conversion automatically.
+A Wado value that crosses a component boundary is lowered to a Component Model value, and lifted back on the other side, by the Canonical ABI.
 
 The table below is the Wado↔CM correspondence, read in both directions: Wado→CM when generating a component's exported interface, and CM→Wado when importing an external component (`use { Iface } from "./c.wasm" with { type: "wasm" }`, see [Wasm Module and Component Imports](./spec-modules.md#wasm-module-and-component-imports)). CM types are written in their WIT spelling.
 
@@ -103,8 +103,9 @@ may wait without saying so in its signature.
 ### Async Imports
 
 A Component Model `async func` import is an interface operation declared
-`async fn op(...) -> AsyncCall<T>`. Calling it starts the call and returns an
-`AsyncCall<T>` at once. The caller decides when to wait:
+`async fn op(...) -> AsyncCall<T>`
+([Async Operations](./spec-effects.md#async-operations)). Calling it starts the
+call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 
 - `.wait()` blocks until the call returns, then yields its `T`.
 - `.cancel()` abandons the call.
@@ -135,11 +136,10 @@ again. `join` only registers the call with the set, so the caller still owes the
 
 #### Handling an Async Operation
 
-A [handler](./spec-effects.md#handlers) implements an async operation that a
-Component Model import declares as a plain `fn` that returns `T` and resumes
-with a `T`. The caller still receives an
-`AsyncCall<T>`, one that has already completed, so its `.wait()` returns the
-value at once.
+A [handler](./spec-effects.md#handlers) method for an async operation is a
+plain `fn` that returns `T`, and it resumes with a `T`. The caller still
+receives an `AsyncCall<T>`, one that has already completed, so its `.wait()`
+returns the value at once.
 
 <!-- {"fixture":"spec_components_async_import.wado"} -->
 
@@ -177,7 +177,7 @@ must be driven by different tasks.
 
 ### Attribute Syntax for Component Model Linking
 
-Use `#[cm(...)]` attributes to link Wado definitions to Component Model interfaces:
+`#[cm(...)]` links a Wado definition to the Component Model definition it stands for:
 
 <!-- {"fixture":"spec_components_cm_attributes.wado"} -->
 
@@ -211,7 +211,7 @@ test {
 
 `#[cm_params("name", ...)]` on an operation gives the CM-side names of its parameters. Without it, each parameter's CM name is its Wado name in kebab-case.
 
-#### Resource linearity
+#### Resource Linearity
 
 A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine.
 
