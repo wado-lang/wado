@@ -15,11 +15,40 @@ use super::trait_query::SelfBinding;
 use super::types::FunctionContext;
 use crate::ast::{self, GenericParam};
 
+/// The kind of declaration an [`Instantiation`] instantiates.
+#[derive(Clone, Copy)]
+pub(super) enum InstanceKind {
+    Builtin,
+    Function,
+    Method,
+    Struct,
+    Variant,
+}
+
+impl InstanceKind {
+    fn noun(self) -> &'static str {
+        match self {
+            Self::Builtin => "builtin",
+            Self::Function => "function",
+            Self::Method => "method",
+            Self::Struct => "struct",
+            Self::Variant => "variant",
+        }
+    }
+
+    /// How a use site writes its turbofish after the name.
+    fn turbofish_tail(self) -> &'static str {
+        match self {
+            Self::Struct => " { … }",
+            Self::Builtin | Self::Function | Self::Method | Self::Variant => "()",
+        }
+    }
+}
+
 /// What is being instantiated, for the "cannot infer" diagnostic raised if a
 /// slot is never solved.
 pub(super) struct Instantiation<'a> {
-    /// The declaration's kind, e.g. `"function"` or `"method"`.
-    pub(super) kind: &'a str,
+    pub(super) kind: InstanceKind,
     /// The declaration's name.
     pub(super) name: &'a str,
     /// Where the use site is.
@@ -95,8 +124,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 of.span,
                 name,
                 format!(
-                    "of {} `{}`; add a turbofish (`{}::<...>()`) or a type annotation",
-                    of.kind, of.name, of.name
+                    "of {} `{}`; add a turbofish (`{}::<...>{}`) or a type annotation",
+                    of.kind.noun(),
+                    of.name,
+                    of.name,
+                    of.kind.turbofish_tail(),
                 ),
             )));
         }
@@ -160,7 +192,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots`, carry their bounds, resolve the arguments against
     /// them, and settle the answers back. One call, so no path can take part of
     /// the sequence and hand a closure a rigid slot nothing can construct.
-    /// `expected_return` is in the frame `param_types` is.
+    /// `ret` declares its return type in the slots' frame.
     pub(super) fn resolve_args_through_slots(
         &mut self,
         ctx: &mut FunctionContext,
@@ -169,7 +201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slots: &[TypeId],
         own_params: &[GenericParam],
         of: &Instantiation<'_>,
-        expected_return: Option<ExpectedReturn>,
+        ret: Option<ExpectedReturn>,
     ) -> Vec<TypeId> {
         if slots.is_empty() {
             return self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
@@ -177,32 +209,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(slots, of);
         self.record_slot_bounds(&inst, own_params, of.self_binding, of.span);
         let param_types = self.instantiate_types(param_types, &inst);
-        let expected_return = expected_return.map(|r| ExpectedReturn {
-            declared: self.instantiate_type(r.declared, &inst),
-            ..r
+        let ret = ret.map(|ret| ExpectedReturn {
+            declared: self.instantiate_type(ret.declared, &inst),
+            ..ret
         });
-        let mut args = self.resolve_args_against_params(
-            args_ast,
-            ctx,
-            &param_types,
-            Some(&inst),
-            expected_return,
-        );
-        self.settle_onto_slots(&inst, slots, &mut args);
+        let mut args =
+            self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst), ret);
+        self.settle_onto_slots(&inst, slots, &mut args, ret);
         args
     }
 
     /// Settle the walk's variables back onto their slots, substituting through
-    /// `args`. [`Self::solve_infer_var`] keeps the first answer, so a slot the
-    /// arguments pinned stays pinned and one they left open goes back rigid.
+    /// `args`. A slot no argument answered is answered by `ret`, the type the
+    /// call's site expects. [`Self::solve_infer_var`] keeps the first answer,
+    /// so a slot pinned so far stays pinned and one left open goes back rigid,
+    /// unless an enclosing collection took it over to answer later.
     pub(super) fn settle_onto_slots(
         &mut self,
         inst: &Instantiated,
         slots: &[TypeId],
         args: &mut [TypeId],
+        ret: Option<ExpectedReturn>,
     ) {
+        if let Some(ret) = ret {
+            let declared = self.apply_infer_holes(ret.declared);
+            let expected = self.apply_infer_holes(ret.expected);
+            self.solve_own_infer_holes_against(declared, expected, &inst.vars);
+        }
         for (&var, &slot) in inst.vars.iter().zip(slots.iter()) {
-            self.solve_infer_var(var, slot);
+            if !self.awaits_pending_call(var) {
+                self.solve_infer_var(var, slot);
+            }
         }
         for arg in args {
             *arg = self.apply_infer_holes(*arg);

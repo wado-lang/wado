@@ -259,6 +259,46 @@ binding prepended to each arm body. `match f(x) { … }` is first normalized int
 A candidate reached from a global initializer is dropped: an initializer body
 has no locals list to mint the binding in.
 
+#### Phase 4 — variant locals
+
+A local holds the same tuple a return does. `let mut s: Option<i64> = null; …
+s = Some(v); … match s { … }` is the derived deserializer's slot per scalar
+field, and each `Some(v)` was a heap object. The local qualifies when every
+write builds a case (`null` included) and every read is a tag test, a payload
+read or a one-level `match`. A local read whole, passed or returned, stays a
+variant. Each write becomes the case's tuple literal, the reads go through the
+Phase 3 call-site rewrite, and `sroa` splits the tuple into scalars: a
+whole-literal assign `t = [tag, v]` becomes one write per field. The writes
+come after every field is evaluated, each but a constant into a temp. Written
+as it went, the tag landed before a payload that reads `t` or leaves the
+statement: `s = Some(if c { break done; } else { 1 })` read as `Some(0)`
+after the break.
+
+Four shapes are declined, each for a reason of its own:
+
+- A local two `Let`s bind. `sroa` leaves it whole, so the tuple would allocate
+  at every write, `null` included, where the variant's `None` did not.
+- A local a guard of a `match` over it writes. The Phase 3 rewrite reads the
+  payload slot again at each guard and arm body. That is one read only for a
+  call's temp, which nothing reassigns. After such a guard, a later arm would
+  read the pad.
+- A local a promoted operand reads. The rewrite rebuilds a read it has a node
+  for, and a promoted read has none, so it would go on naming the variant.
+- A layout whose slot is itself a variant with a layout. Once `sroa` splits the
+  tuple, that slot is a variant local of its own, and for `Option<Option<i32>>`
+  it is the very same type, so taking it never terminates.
+
+On json-catalog this removes all 18 `Option<i64>` constructions. Against the
+commit before it, best of three alternating rounds on 2026-09-28:
+
+| row              | change |
+| ---------------- | -----: |
+| cbor-catalog de  |  +6.5% |
+| cbor-twitter ser |  +3.6% |
+| json-twitter de  |  +2.8% |
+| cbor-twitter de  |  +2.1% |
+| json-catalog de  |   flat |
+
 #### Every copy of a type has to move together
 
 A rewrite that changes what a function returns has to retype four things that
@@ -615,29 +655,29 @@ diverge. A diverging node produces no value to declare. This is the hazard
 `all_returns_decompose` documents from the other side: the validator's coverage
 and the rewriter's have to move together.
 
-### The trade is priced against the caller, not the allocation
+### The slot is split whatever the caller holds
 
 Splicing the slot buys one fewer heap object and costs `layout.len()` more values
-live across the call, so it answers to the same rule SROA width does: past the
+live across the call. That reads like the rule SROA width answers to: past the
 register file, a value live across a call is a spill slot reloaded at every call
-boundary, and the allocation removed does not price it.
+boundary.
 
-`MAX_CALLER_LOCALS` declines the callee when any call site sits in a function
-already holding more locals than that — all of them or none, since the slot is
-part of the result signature. The benchmarks separate cleanly on it:
+The first measurements agreed. A cap declined the callee when any call site sat in
+a function declaring more than 128 locals, and cbor-twitter, whose `User` and
+`Status` decoders declared 307 and 186, lost 6.3% without it.
 
-| row             | caller locals | flattened |
-| --------------- | ------------: | --------: |
-| cbor-canada de  |            40 |    +20.1% |
-| cbor-catalog de |            93 |    +19.5% |
-| json-catalog de |            93 |     +9.9% |
-| cbor-twitter de |      307, 186 |     -6.3% |
+The cap is gone. A declared local is not a live one: by the time this pass runs,
+inlining has left `Area`'s two-field decoder declaring 200 locals and reading 70
+of them, so the cap declined `next_field` on json-catalog's hottest struct. And
+flattening everything no longer loses anywhere. Against the cap counted on the
+locals a caller reads, best of four alternating rounds on 2026-09-28:
 
-Every row that gains decodes through callers of at most 93 locals. cbor-twitter
-decodes `User` and `Status` at 307 and 186, so declining those two leaves that
-row flat and every gain intact. What keeps the all-or-nothing from being blunt is
-monomorphization: `next_field<S>` is a distinct callee per struct, so a rule that
-has to answer per callee still lands per decoded type.
+| row             | no cap |
+| --------------- | -----: |
+| json-catalog de |  +1.5% |
+| cbor-catalog de |  +3.1% |
+| cbor-twitter de |  +4.6% |
+| json-twitter de |  +1.0% |
 
 ### A settled binding is not a `mut` binding
 

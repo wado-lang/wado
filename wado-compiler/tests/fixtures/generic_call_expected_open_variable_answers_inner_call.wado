@@ -1,0 +1,45 @@
+// A call whose site expects an enclosing call's open variable leaves its own
+// slot on that variable, however deep it nests: in `o.map(|v| ident(mk(v)))`
+// `mk`'s `C` is `ident`'s `T`, which is `map`'s `U`, which the return type
+// answers as `List<P>`. A slot a `let` carries to the sink does the same.
+
+struct P {
+    c: i64,
+}
+
+fn mk<C: Default>(v: List<i64>) -> C {
+    return C::default();
+}
+
+fn ident<T>(t: T) -> T {
+    return t;
+}
+
+fn apply<A, B>(a: A, f: fn(A) -> B) -> B {
+    return f(a);
+}
+
+fn mapped() -> Option<List<P>> {
+    let l: List<i64> = [1, 2];
+    let o = Option::Some(l);
+    return o.map(|v| ident(mk(v)));
+}
+
+fn applied() -> List<P> {
+    let l: List<i64> = [1, 2];
+    return apply(l, |v| ident(ident(mk(v))));
+}
+
+fn bound() -> List<P> {
+    let l: List<i64> = [1, 2];
+    return apply(l, |v| {
+        let r = mk(v);
+        return r;
+    });
+}
+
+test {
+    assert mapped().unwrap().len() == 0;
+    assert applied().len() == 0;
+    assert bound().len() == 0;
+}

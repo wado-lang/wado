@@ -14,7 +14,7 @@
 
 use { ParserRule, Element } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
-use { bits_set, bits_union_into } from "./token_kinds.wado";
+use { bits_ids, bits_set, bits_union_into } from "./token_kinds.wado";
 use { TreeMap, TreeSet } from "core:collections";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
@@ -318,16 +318,8 @@ fn accumulate_first_bits(ctx: &mut GenContext, elem: &Element, bits: &mut List<u
 /// hot path.
 fn bits_to_follow_set(fb: &FollowBits, ctx: &GenContext) -> FollowSet {
     let mut kinds = TreeSet::<String>::new();
-    for let mut w = 0; w < fb.bits.len(); w += 1 {
-        let word = fb.bits[w];
-        if word == 0 as u64 {
-            continue;
-        }
-        for let mut b = 0; b < 64; b += 1 {
-            if word & 1 as u64 << b as u64 != 0 as u64 {
-                kinds.insert(ctx.token_name(w * 64 + b));
-            }
-        }
+    for let id of &bits_ids(&fb.bits) {
+        kinds.insert(ctx.token_name(*id));
     }
     return FollowSet { kinds, closed: fb.closed };
 }

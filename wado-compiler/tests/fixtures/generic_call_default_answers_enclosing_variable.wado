@@ -1,0 +1,30 @@
+// A declared type default fills a slot that stands as an enclosing call's
+// open variable, and so answers that variable in turn: `collect`'s
+// `C = List<Self::Item>` answers `ident`'s `T`, and `map`'s `U` through a
+// closure.
+
+struct P {
+    c: i64,
+}
+
+fn ident<T>(t: T) -> T {
+    return t;
+}
+
+fn wrapped() -> Option<List<P>> {
+    let v: List<i64> = [1, 2];
+    return Option::Some(v).map(|w| w.into_iter().map(|c| P { c }).collect());
+}
+
+test "through a call" {
+    let v: List<i64> = [1, 2];
+    let x = ident(v.into_iter().map(|c| P { c }).collect());
+    let y: List<P> = ident(v.into_iter().map(|c| P { c }).collect());
+    assert x[1].c == 2 && y.len() == 2;
+}
+
+test "through a closure" {
+    let v: List<i64> = [1, 2];
+    let got = Option::Some(v).map(|w| w.into_iter().map(|c| P { c }).collect());
+    assert got.unwrap()[1].c == 2 && wrapped().unwrap()[0].c == 1;
+}

@@ -34,6 +34,7 @@ use crate::tir::{
 use super::coercion::{
     NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,
     is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
+    unary_passes_expected_type,
 };
 use super::expr::UnionSource;
 use super::sem::{ModuleSemantics, TypeAnnotations};
@@ -43,6 +44,7 @@ use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
+use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
@@ -461,6 +463,14 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Local newtype declarations (`Stmt::Item`) — same reasoning as
     /// `pending_local_structs`.
     pub(crate) pending_local_newtypes: IndexMap<DefId, TirNewtype>,
+    /// The coverage plan whose probes reify puts in, under
+    /// `wado test --coverage`. See `probe.rs`.
+    pub(crate) coverage: Option<&'a CoverageMap>,
+    /// The probe ids reify has put in so far.
+    pub(crate) probes_emitted: IndexSet<u32>,
+    /// The probe ids of code reify emits no instance of: a tuple `for-of` body
+    /// over no elements.
+    pub(crate) probes_without_instance: IndexSet<u32>,
 }
 
 /// Call site captured for location literals in defaults.
@@ -519,6 +529,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             call_site_location: None,
             pending_local_structs: IndexMap::default(),
             pending_local_newtypes: IndexMap::default(),
+            coverage: None,
+            probes_emitted: IndexSet::default(),
+            probes_without_instance: IndexSet::default(),
         }
     }
 
@@ -815,6 +828,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         tir_module.wasm_module = module.wasm_module().map(String::from);
 
+        self.assert_probes_complete();
         self.logger.ok_or_bail(tir_module)
     }
 
@@ -2125,7 +2139,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             expected_type,
             tail_value,
         );
-        TirBlock::new(stmts, block.span)
+        self.probe_block(
+            ProbeSite::BlockStart,
+            block.id,
+            TirBlock::new(stmts, block.span),
+        )
     }
 
     /// Reify a statement slice at block position. `block_span` is the enclosing
@@ -2143,6 +2161,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let len = slice.len();
         let mut stmts = Vec::new();
         for (i, s) in slice.iter().enumerate() {
+            if let Some(probe) = self.probe(ProbeSite::BeforeStmt, s.id(), s.span()) {
+                stmts.push(probe);
+            }
             // `reify_let_else` consumes the rest of the block as its then-arm,
             // so stop here after emitting it.
             if let ast::Stmt::Let(l) = s
@@ -2724,19 +2745,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return self.reify_expr(&unary.expr, ctx, expected_type);
                 }
                 let op = ast_unary_op_to_tir(unary.op);
-                // A `-` or `~` operand built from literals shares the unary's
-                // type: propagate the recorded type so the inner literal takes
-                // the right width (e.g. `-1.0` in an `f32` const body must be
-                // `f32`, not the default `f64`). Other unary operands are typed
-                // on their own.
-                let inner_expected = if matches!(unary.op, ast::UnaryOp::Neg | ast::UnaryOp::BitNot)
-                    && is_literal_arithmetic(&unary.expr)
-                    && recorded_type != TypeTable::UNKNOWN
-                {
-                    Some(recorded_type)
-                } else {
-                    None
-                };
+                let inner_expected = Some(recorded_type)
+                    .filter(|&t| t != TypeTable::UNKNOWN && unary_passes_expected_type(unary));
                 let inner = self.reify_expr(&unary.expr, ctx, inner_expected);
                 if let Some(dispatch) = self.ann_operator_dispatch(unary.id) {
                     // Operator-trait dispatch path for `-x` / `~x` on a
@@ -3792,6 +3802,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .borrow()
             .as_tuple_through_ref(tuple_type_id)
             .unwrap_or_default();
+        if elems.is_empty() {
+            self.skip_for_of_body(for_of.id);
+        }
 
         let temp_name = format!("$tuple_{unique_id}");
         let temp_local = ctx.add_local(temp_name.clone(), tuple_type_id, false, None);
@@ -4493,10 +4506,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Vec<TirStmt> {
         match &if_stmt.condition {
             ast::Condition::LetChain { elements, .. } => {
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block_with_position(b, ctx, expected_type, tail_value));
+                let else_block = self.else_branch(
+                    if_stmt.else_block.as_ref(),
+                    if_stmt.id,
+                    if_stmt.span,
+                    |r, b| r.reify_block_with_position(b, ctx, expected_type, tail_value),
+                );
                 self.reify_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
@@ -4515,10 +4530,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     expected_type,
                     tail_value,
                 );
-                let else_branch = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block_with_position(b, ctx, expected_type, tail_value));
+                let else_branch = self.else_branch(
+                    if_stmt.else_block.as_ref(),
+                    if_stmt.id,
+                    if_stmt.span,
+                    |r, b| r.reify_block_with_position(b, ctx, expected_type, tail_value),
+                );
                 let tt = self.tysys.type_table.borrow();
                 let then_type = tir::block_result_type(&tt, &then_branch);
                 let else_type = else_branch
@@ -4552,10 +4569,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Condition::Expr(cond_expr) => {
                 let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block(b, ctx, None));
+                let else_block = self.else_branch(
+                    if_stmt.else_block.as_ref(),
+                    if_stmt.id,
+                    if_stmt.span,
+                    |r, b| r.reify_block(b, ctx, None),
+                );
                 vec![TirStmt::new(
                     TirStmtKind::If {
                         condition,
@@ -4573,10 +4592,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Else-branch resolves in the outer scope (chain
                 // bindings aren't visible there); the chain body
                 // gets its own scope.
-                let else_block = if_stmt
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block(b, ctx, None));
+                let else_block = self.else_branch(
+                    if_stmt.else_block.as_ref(),
+                    if_stmt.id,
+                    if_stmt.span,
+                    |r, b| r.reify_block(b, ctx, None),
+                );
                 self.reify_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
@@ -4616,10 +4637,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // overall block's result type is the recorded
                 // `expected_type` (or `recorded_type` as a
                 // fallback when no expectation propagated).
-                let else_block = if_expr
-                    .else_block
-                    .as_ref()
-                    .map(|b| self.reify_block_value(b, ctx, branch_expected));
+                let else_block = self.else_branch(
+                    if_expr.else_block.as_ref(),
+                    if_expr.id,
+                    if_expr.span,
+                    |r, b| r.reify_block_value(b, ctx, branch_expected),
+                );
                 let stmts = self.reify_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
@@ -4635,10 +4658,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let condition = self.reify_condition_expr(cond_expr, ctx);
         let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
-        let else_branch = if_expr
-            .else_block
-            .as_ref()
-            .map(|b| self.reify_block_value(b, ctx, branch_expected));
+        let else_branch = self.else_branch(
+            if_expr.else_block.as_ref(),
+            if_expr.id,
+            if_expr.span,
+            |r, b| r.reify_block_value(b, ctx, branch_expected),
+        );
         TirExpr::new(
             TirExprKind::If {
                 condition: Box::new(condition),
@@ -4753,6 +4778,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right = self.reify_expr(&binary.right, ctx, None);
             (left, right)
         };
+        let right = self.probe_expr(ProbeSite::Around, binary.right.id(), right);
         self.reify_binary_op(
             binary.id,
             binary.op,
@@ -5234,12 +5260,47 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let provided: hashmap::IndexSet<String> =
             struct_lit.fields.iter().map(|f| f.name.clone()).collect();
 
-        // Fill omitted fields from `base.field` (not defaults), evaluating a
-        // non-trivial `base` once via a `$base_N` temporary.
+        // The members evaluate in source order, `base` first, but the literal
+        // holds its fields by declaration index. A constant observes no order,
+        // so only the other fields count: those up to the last one out of
+        // declaration order are bound ahead of the literal, a local read like
+        // any other, since a later field may write the local. So is `base`,
+        // which the literal reads at each omitted field's index, once any
+        // field could write it.
+        let constant = |this: &Self, e: &TirExpr| {
+            tir::is_constant_initializer(e, &this.tysys.type_table.borrow())
+        };
         let mut base_binding = Vec::new();
-        if let Some(spread) = struct_lit.spreads.first() {
+        let base_ref = struct_lit.spreads.first().map(|spread| {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
-            let base_ref = Self::hoist_once(ctx, base_expr, "base", &mut base_binding);
+            if fields.iter().all(|f| constant(self, &f.value)) {
+                return Self::hoist_once(ctx, base_expr, "base", &mut base_binding);
+            }
+            let name = minted_name("base", ctx.fresh_serial());
+            bind_to_local(ctx, name, base_expr, &mut base_binding)
+        });
+        let ordered: Vec<usize> = (0..fields.len())
+            .filter(|&i| !constant(self, &fields[i].value))
+            .collect();
+        let in_order_from = (1..ordered.len())
+            .rev()
+            .find(|&k| fields[ordered[k - 1]].field_index > fields[ordered[k]].field_index)
+            .map_or(0, |k| ordered[k]);
+        fields = fields
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| {
+                if i >= in_order_from || constant(self, &f.value) {
+                    return f;
+                }
+                let name = minted_name("field", ctx.fresh_serial());
+                TirStructField {
+                    value: bind_to_local(ctx, name, f.value, &mut base_binding),
+                    ..f
+                }
+            })
+            .collect();
+        if let Some(base_ref) = base_ref {
             for (name, field_index, raw_ty, _default) in &decl_fields {
                 if provided.contains(name) {
                     continue;
@@ -5539,7 +5600,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         };
 
-        if is_option {
+        let mut desugared = if is_option {
             self.reify_question_mark_option(inner, ctx, qm.span)
         } else if is_result {
             self.reify_question_mark_result(inner, ctx, qm.span, qm.id)
@@ -5547,8 +5608,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Annotate already diagnosed; produce a Unit-typed
             // placeholder of `ERROR` so downstream phases see the
             // same shape annotate's recovery path produced.
-            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span)
+            return TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+        };
+        // The early return is the desugared match's last arm.
+        if let TirExprKind::Match { arms, .. } = &mut desugared.kind
+            && let Some(exit) = arms.last_mut()
+        {
+            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
+            let body = std::mem::replace(&mut exit.body, placeholder);
+            exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
         }
+        desugared
     }
 
     /// `Option<T>`'s `?`-op desugar — mirrors
@@ -6113,6 +6183,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .or(block_return_type)
             .or_else(|| tir_block_return_type(&body))
             .unwrap_or(body.type_id);
+        let body = self.probe_expr(ProbeSite::Around, closure.body.id(), body);
 
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
@@ -6131,12 +6202,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let address_taken_locals = closure_ctx.address_taken_locals;
 
         let declared_effects =
-            expected_type.and_then(|t| match self.tysys.type_table.borrow().get(t) {
-                ResolvedType::Function { effects, .. } if !effects.is_empty() => {
-                    Some(effects.clone())
-                }
-                _ => None,
-            });
+            Some(cap_info.declared_effects.clone()).filter(|effects| !effects.is_empty());
 
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {
@@ -6945,6 +7011,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .as_ref()
                     .map(|g| self.reify_expr(g, ctx, Some(TypeTable::BOOL)));
                 let body = self.reify_expr(&arm.body, ctx, branch_expected);
+                let body = self.probe_expr(ProbeSite::Around, arm.body.id(), body);
                 TirMatchArm {
                     pattern,
                     guard,

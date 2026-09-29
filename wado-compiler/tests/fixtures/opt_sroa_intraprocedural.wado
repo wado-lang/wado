@@ -31,9 +31,35 @@ fn basic_sroa() -> i32 {
 #[inline("never")]
 fn mutable_field_write(seed: i32) -> i32 {
     let mut p = Point { x: seed, y: 0 };
-    p.x = 42;
-    p.y = 58;
+    p.x = p.x + 42;
+    p.y = p.x * 2;
     return p.x + p.y;
+}
+
+// Pattern 2b: Whole write of a literal reading the struct itself. Every field
+// is read before any is written, so the swap sees the old values.
+
+
+#[inline("never")]
+fn whole_write_reads_self(n: i32) -> i32 {
+    let mut p = Point { x: n, y: 1 };
+    for let _ of 0..<n {
+        p = Point { x: p.y, y: p.x + p.y };
+    }
+    return p.x;
+}
+
+// Pattern 2c: Whole write whose later field leaves the statement. No field is
+// written, the earlier one included.
+
+
+#[inline("never")]
+fn whole_write_continues(n: i32) -> i32 {
+    let mut p = Point { x: 0, y: 0 };
+    for let i of 0..<n {
+        p = Point { x: i + 10, y: if i == n - 1 { continue; } else { i } };
+    }
+    return p.x * 100 + p.y;
 }
 
 // Pattern 3: Struct where only some fields escape (currently all-or-nothing)
@@ -96,7 +122,9 @@ fn build_and_return(x: i32, y: i32) -> Point {
 
 export fn run() {
     assert basic_sroa() == 30;
-    assert mutable_field_write(builtin::black_box(7)) == 100;
+    assert mutable_field_write(builtin::black_box(7)) == 147;
+    assert whole_write_reads_self(builtin::black_box(3)) == 5;
+    assert whole_write_continues(builtin::black_box(3)) == 1101;
     assert partial_escape(50) == 150;
     assert nested_struct() == 33;
     assert multiple_structs() == 10;
@@ -109,6 +137,7 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O2": [
-        "return 100"
+        "fn \"opt_sroa_intraprocedural.wado/mutable_field_write\"(seed) {\n    let $sroa_p_x_",
+        "fn \"opt_sroa_intraprocedural.wado/whole_write_reads_self\"(n) {\n    let $sroa_p_x_"
     ]
 }

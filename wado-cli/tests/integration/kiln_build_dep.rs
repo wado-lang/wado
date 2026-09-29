@@ -99,6 +99,26 @@ export fn run() with Stdout {
         .args(["check", "src/main.wado"])
         .assert()
         .success();
+
+    // Run from below the package, whose own directory holds no `wado.toml`:
+    // the package is found above the working directory, and the recorded
+    // paths stay package-relative, as they are from the package root.
+    fs::remove_dir_all(app.join("build")).unwrap();
+    wado_in(&app.join("src"))
+        .args(["check", "main.wado"])
+        .assert()
+        .success();
+    let kiln_dir = app.join("build/kiln");
+    let metadata = fs::read_dir(&kiln_dir)
+        .unwrap()
+        .map(|e| e.unwrap().path().join("schema.idl.kiln.json"))
+        .find(|p| p.is_file())
+        .expect("the invocation's metadata is written under the package root");
+    let metadata = fs::read_to_string(metadata).unwrap();
+    assert!(
+        metadata.contains("\"path\": \"src/schema.idl\""),
+        "primary is recorded package-relative:\n{metadata}"
+    );
 }
 
 /// A path `[build-dependencies]` generator whose package is a **workspace

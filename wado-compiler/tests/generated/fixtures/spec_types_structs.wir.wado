@@ -132,6 +132,7 @@ global global:core:prelude/primitive.wado::$const_obj_49: ref null "core:prelude
 fn "spec_types_structs.wado/$test_2_anonymous_structs"() {
     let $v2_25: ref "core:prelude/string.wado//String";
     let $v3_27: bool;
+    let $cond_29: bool;
     let $local_42: ref "core:prelude/string.wado//String";
     let $local_43: ref "core:prelude/format.wado//Formatter";
     let $local_44: ref "core:prelude/string.wado//String";
@@ -149,8 +150,7 @@ fn "spec_types_structs.wado/$test_2_anonymous_structs"() {
     let a: ref Array<u8>;
     let b: ref Array<u8>;
     let i: i32;
-    $v2_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 114, 110), used: 4 };
-    $v3_27 = $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+    $cond_29 = local.tee $v3_27($v2_25 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 114, 110), used: 4 }; $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
         a = $v2_25.repr;
         b = global:spec_types_structs.wado::$const_obj_2;
         i = 0;
@@ -165,8 +165,8 @@ fn "spec_types_structs.wado/$test_2_anonymous_structs"() {
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
-    };
-    if @unlikely($v3_27 == 0) {
+    });
+    if @unlikely($cond_29 == 0) {
         cold_path;
         $local_42 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16);
         $local_43 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_42);
@@ -1243,10 +1243,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_49.repr, start_63, prefix.repr, 0, n_57);
             };
         }
-        return self_65 = self.buf, new_used_67 = self_65.used + digit_count, if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
+        self_65 = self.buf;
+        new_used_67 = self_65.used + digit_count;
+        if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
-        }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
+        }
+        start_68 = self_65.used;
+        self_65.used = new_used_67;
+        return start_68;
     }
     padding = $load_2 - content_len;
     if self.zero_pad {
@@ -1303,10 +1308,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 continue l125;
             };
         };
-        return self_120 = self.buf, new_used_122 = self_120.used + digit_count, if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
+        self_120 = self.buf;
+        new_used_122 = self_120.used + digit_count;
+        if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_120, new_used_122);
-        }, start_123 = self_120.used, self_120.used = new_used_122, start_123;
+        }
+        start_123 = self_120.used;
+        self_120.used = new_used_122;
+        return start_123;
     }
     align = self.align;
     if align == 0 {
@@ -1484,10 +1494,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_273.repr, start_287, prefix.repr, 0, n_281);
             };
         }
-        return self_289 = self.buf, new_used_291 = self_289.used + digit_count, if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
+        self_289 = self.buf;
+        new_used_291 = self_289.used + digit_count;
+        if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_289, new_used_291);
-        }, start_292 = self_289.used, self_289.used = new_used_291, start_292;
+        }
+        start_292 = self_289.used;
+        self_289.used = new_used_291;
+        return start_292;
     }
 }
 

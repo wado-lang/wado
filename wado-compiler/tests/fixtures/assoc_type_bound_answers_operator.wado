@@ -1,0 +1,40 @@
+// A bound the trait declares on an associated type answers an operator on the
+// projection, as it answers a method: `H::Item: Eq` gives `==`,
+// `H::Key: Ord` gives `<`, and `H::Size: Add` gives `+`.
+
+trait Holder with () {
+    type Item: Eq;
+    type Key: Ord;
+    type Size: Add<Output = Self::Size>;
+}
+
+struct Text {}
+
+impl Holder for Text {
+    type Item = String;
+    type Key = i32;
+    type Size = i64;
+}
+
+fn total<H: Holder>(a: H::Size, b: H::Size) -> H::Size {
+    return a + b;
+}
+
+fn same<H: Holder>(a: H::Item, b: H::Item) -> bool {
+    return a == b;
+}
+
+fn differ<H: Holder>(a: H::Item, b: H::Item) -> bool {
+    return a != b;
+}
+
+fn before<H: Holder>(a: H::Key, b: H::Key) -> bool {
+    return a < b;
+}
+
+test {
+    assert same::<Text>("a", "a") && !same::<Text>("a", "b");
+    assert differ::<Text>("a", "b");
+    assert before::<Text>(1, 2) && !before::<Text>(2, 1);
+    assert total::<Text>(2, 3) == 5;
+}

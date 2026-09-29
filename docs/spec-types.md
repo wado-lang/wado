@@ -656,6 +656,10 @@ let carol: User = { name: "Carol", age: 30, active: true };
 assert carol.age == user.age;
 ```
 
+A literal's field values are evaluated once each, in the order the source
+writes them, not the order the struct declares them.
+`P { y: f(), x: g() }` calls `f` before `g`.
+
 Functional update (`..base`): a leading `..base` fills every field the literal
 does not list explicitly from the struct value `base` (same type). The listed
 fields override; `base` is evaluated once and left unchanged (value semantics).
@@ -908,12 +912,66 @@ assert none == null && ok.unwrap() == 42;
 When both mechanisms apply, they must agree. An untyped literal takes its type from the expected type, so `let x: Option<i64> = Option::Some(42)` is an `Option<i64>`. A value whose type is already fixed must match it: with `y: i32`, `let b: Box<i64> = Box { value: y }` is a type mismatch. Backward inference fills in any parameter the values do not mention.
 
 In a generic call, a numeric literal answers last wherever it stands in an
-argument. It takes the type the call's other arguments settle, so with
-`fn pick<T>(b: Box<T>, fallback: T)` and `x: u64`, `pick(Box { value: 1 }, x)`
-is `pick::<u64>`, as it would be with `&Box { value: 1 }` or with the arguments
-swapped. Only a parameter nothing else settles takes a default from its
+argument, a nested generic call or constructor included. It takes the type the
+call's other arguments settle, so with `fn pick<T>(b: Box<T>, fallback: T)` and
+`x: u64`, `pick(Box { value: 1 }, x)` is `pick::<u64>`, as it would be with
+`&Box { value: 1 }`, with `wrap(1)` for a generic `wrap` returning `Box<U>`, or
+with the arguments swapped. Where no argument settles a parameter, the type
+expected of the call does: `let y: u64 = pick(Box { value: 1 }, 2)` is
+`pick::<u64>`. Only a parameter neither settles takes a default from its
 literals: `f64` if one of them is a float, else `i32`, else `u8` when every one
 is a byte literal.
+
+Arithmetic on literals answers as a literal does (`Box { value: 1 << 32 }`), and
+so does a literal behind a field, method or subscript of a generic call's or
+constructor's result: in `pick(Box { value: x }, wrap(1).value)` the `1` is a
+`u64`, as it is with `Box { value: 1 }.value`, `wrap(1).get()` or `one(1)[0]`
+there. It waits the same way behind a reference, a tuple, a call that hands its
+argument back, or a constant tuple subscript. An operator on such a value is
+checked against the type the literal settles to, so with `big: i128`,
+`pick(Box { value: big }, -wrap(1).value)` negates an `i128`. A default that
+reads the parameter is walked once it is settled, so `pick(Box { value: x }, f(1))` for
+`fn f<T: Default>(a: T, b: T = T::default())` is `u64` throughout, and a field
+default of a struct literal waits the same way. A `..base` settles its struct's
+parameters as an annotation does. A struct literal waits only where the fields
+it writes mention every parameter of its struct. Where they leave one out, the
+literal settles where it stands, as it would outside a call.
+
+A method's receiver waits as Rust's does. The method is found on the receiver's
+head, and an impl's bounds are checked on the type the literal settles to,
+wherever its target nests the parameter they bound. Where only one impl could
+answer the method, it settles the literal: with `impl Tag for Box<u64>` alone,
+`wrap(1).tag()` reads a `Box<u64>`. An impl could answer only where one type
+for each literal makes its target the receiver, so `Pair<T, T>` answers
+`mk(1, x)` at `x`'s type and `Pair<u64, i32>` never answers `dup(1)`. Inherent
+impls are asked first, and the impls of the traits in scope only where no
+inherent impl could answer. Where several could, the literal takes its default
+first and the impl for that type answers. A subscript asks the impls that take
+its key.
+
+<!-- {"fixture":"spec_types_receiver_literal.wado"} -->
+
+```wado
+assert wrap(1).tag() == "u64";    // only `Box<u64>` could answer
+assert wrap(1).name() == "i32";   // both could: the default answers
+assert wrap(1 as u64).name() == "u64";
+```
+
+An impl is counted by its target's shape, not by whether a literal could become
+its type. This is where Wado departs from Rust. Rust's integer literal becomes
+one of a closed set of primitives, so it can rule out `Box<String>`. A Wado
+literal also becomes a numeric newtype, a wide integer or a half-precision
+float, and that set grows with the language. Counting by shape keeps method
+lookup independent of the coercion rules. So with `impl Tag for Box<String>`
+and `impl Tag for Box<u64>`, two impls could answer, the literal settles to
+`i32`, and no impl takes `Box<i32>`. Writing the type the literal means
+settles it before any impl is asked, as `wrap(1 as u64)` does above.
+
+<!-- {"fixture":"spec_types_receiver_literal_counts_shape.wado"} -->
+
+```wado
+let t = wrap(1).tag();
+```
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says

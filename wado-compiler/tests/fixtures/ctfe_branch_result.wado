@@ -1,0 +1,41 @@
+// A pure callee whose body branches folds to its result as one whose body
+// loops does (`ctfe_struct_result`). Inlined, the branches sit in a value
+// block that `let_block_flatten` hoists into the caller, and the value still
+// has to fold there.
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    width: i32,
+    name: String,
+}
+
+fn pick(n: i32) -> i32 {
+    if n % 3 == 0 {
+        return n / 3;
+    }
+    return n * 2;
+}
+
+fn config() -> Config {
+    let mut width = pick(9);
+    match width {
+        3 => { width += 100; },
+        _ => { width -= 1; },
+    }
+    let label = if width > 50 { "wide" } else { "narrow" };
+    return Config { width, name: label };
+}
+
+export fn run() with Stdout {
+    // Opaque, so the struct itself has to reach the IR rather than its fields.
+    let c = builtin::black_box(config());
+    println(`${c.width} ${c.name}`);
+}
+
+__DATA__
+{
+  "stdout": "103 wide\n",
+  "wir_expect:O2": [
+    "struct.new \"ctfe_branch_result.wado//Config\" { width: 103, name: struct.new \"core:prelude/string.wado//String\" { repr: array.new_fixed<u8>(119, 105, 100, 101), used: 4 } }"
+  ]
+}

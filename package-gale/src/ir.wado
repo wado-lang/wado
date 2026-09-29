@@ -1668,15 +1668,17 @@ pub fn canonicalize_empty_alt_groups(grammar: &mut Grammar) {
 ///
 /// ANTLR4 aliases a parser literal only to a rule whose entire body is that
 /// one string literal: `K : 'k' 'w' ;` and `K : ('kw') ;` do not alias
-/// `'kw'`. An action does not block it: aliasing settles token identity, and
-/// which matcher covers the text is `lexer_rule_route`'s question — it keeps a
-/// body-carrying rule out of the shared literal matcher on its own.
+/// `'kw'`. An action or predicate after the literal does not block it:
+/// aliasing settles token identity, and which matcher covers the text is
+/// `lexer_rule_route`'s question — it keeps a body-carrying rule out of the
+/// shared literal matcher on its own. One ahead of the literal does block it,
+/// as the jar has it.
 pub fn lexer_alias_text(rule: &LexerRule) -> Option<String> {
     if rule.is_fragment || rule.is_virtual || rule.mode != DEFAULT_MODE || rule.body.len() != 1 {
         return null;
     }
     let alt = &rule.body[0];
-    if alt.elements.len() != 1 {
+    if alt.elements.len() != 1 || alt.actions.iter_ref().any(|a| a.before_index == 0) {
         return null;
     }
     if let Literal(text) = &alt.elements[0] {

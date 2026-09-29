@@ -11,6 +11,7 @@ use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibilit
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
+use crate::coverage::{CoverageMap, CoverageScope};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
@@ -94,6 +95,9 @@ pub struct Semantics {
     /// the CLI before WIT emission so `wado wit` and the `wado compile` embed
     /// path derive them identically. `None` until set.
     pub(crate) wit_contract: Option<WitContract>,
+    /// The coverage plan reify instrumented this compile with, under
+    /// `wado test --coverage`.
+    pub(crate) coverage: Option<CoverageMap>,
 }
 
 /// A definition location, assembled from a symbol.
@@ -243,6 +247,7 @@ impl Semantics {
             liveness: Liveness::default(),
             is_complete: false,
             wit_contract: None,
+            coverage: None,
         }
     }
 
@@ -1045,7 +1050,7 @@ pub fn semantics_of<H: CompilerHost>(
     build_tir: bool,
 ) -> Semantics {
     let logger = Logger::new(host, log_level);
-    semantics_with_logger(loaded, &logger, build_tir)
+    semantics_with_logger(loaded, &logger, build_tir, None)
 }
 
 /// Logger-sharing variant. Internal: lets callers that already maintain a
@@ -1055,6 +1060,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
     build_tir: bool,
+    coverage: Option<CoverageScope>,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1093,7 +1099,9 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // itself (re-entry guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
+        // A measured stdlib takes probes the plain snapshot lacks.
         get_or_init_snapshot()
+            .filter(|_| !coverage.is_some_and(|scope| scope.stdlib))
             .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
     };
 
@@ -1156,6 +1164,14 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // recorded, with no second lexical scan to drift out of sync. On Bail the
     // partial facts are still routed so cursor queries work against whatever
     // bodies were reached. `build_tir == false` stops after `annotate_bodies`.
+    let coverage = coverage.map(|scope| {
+        CoverageMap::build(
+            load_result
+                .modules
+                .iter()
+                .filter(|(source, _)| scope.measures(source)),
+        )
+    });
     let (tir_modules, lower_ok) = {
         let _span = logger.span("elaborate/build_tir");
         match Elaborator::build_tir_from_state(
@@ -1166,6 +1182,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             logger,
             snapshot.as_deref(),
             build_tir,
+            coverage.as_ref(),
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),
@@ -1219,6 +1236,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         liveness,
         is_complete: cm_bound && no_syntax_errors,
         wit_contract: None,
+        coverage,
     }
 }
 

@@ -19,6 +19,7 @@ use crate::component_model::{
     cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
     wado_primitive_name_to_cm,
 };
+use crate::coverage;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::import_check::KILN_TYPES_INTERFACE;
@@ -415,6 +416,23 @@ pub fn build_component(
         builder.custom_section(&wasm_encoder::CustomSection {
             name: SECTION_NAME.into(),
             data: payload.into(),
+        });
+    }
+
+    if let Some(plan) = &project.coverage_section {
+        // A probe calls the host, which traps where the Canonical ABI clears
+        // `may_leave`: in `realloc`, which the unmeasured allocator is, and in
+        // `post-return`, which only a sync-lifted world export carries.
+        assert!(
+            component_plan
+                .world_exports
+                .iter()
+                .all(|export| export.post_return_core_name.is_none()),
+            "a measured component lifts an export with `post-return`"
+        );
+        builder.custom_section(&wasm_encoder::CustomSection {
+            name: coverage::SECTION_NAME.into(),
+            data: plan.into(),
         });
     }
 

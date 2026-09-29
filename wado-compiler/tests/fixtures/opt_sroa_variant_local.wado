@@ -1,0 +1,108 @@
+// A variant local whose every write builds a case and every read destructures
+// it holds `[tag, payload]` in scalars, so no write allocates. `Option<i64>`
+// boxes its payload, so each `found = Some(x)` was a heap object.
+//
+// The shape is the derived deserializer's slot per scalar field.
+
+#[inline("never")]
+fn last_even(xs: &List<i64>) -> i64 {
+    let mut found: Option<i64> = null;
+    for let x of xs {
+        if *x % 2 == 0 {
+            found = Option::Some(*x);
+        }
+    }
+    let seen = found matches { Some(_) };
+    return match found {
+        Some(v) => if seen { v } else { -2 },
+        None => -1,
+    };
+}
+
+// Read whole, the variant is what the callee needs, so the local stays one.
+#[inline("never")]
+fn describe(v: Option<i64>) -> i64 {
+    return match v {
+        Some(x) => x,
+        None => 0,
+    };
+}
+
+#[inline("never")]
+fn passed_whole(n: i64) -> i64 {
+    let mut kept: Option<i64> = null;
+    if n > 0 {
+        kept = Option::Some(n);
+    }
+    return describe(kept);
+}
+
+// A slot that is a variant local in its own right would be taken again once
+// split, here as the very same type, so the rewrite has to stop at it.
+#[inline("never")]
+fn nested(n: i32) -> i32 {
+    let mut o: Option<Option<i32>> = null;
+    if n > 0 {
+        o = Option::Some(Option::Some(n));
+    }
+    return match o {
+        Some(Some(v)) => v,
+        Some(None) => -1,
+        None => 0,
+    };
+}
+
+// The scrutinee is read once, before any guard runs. Split, the payload is a
+// slot each arm reads again, so a guard that writes the local keeps it whole.
+#[inline("never")]
+fn guard_resets(n: i64, reset: bool) -> i64 {
+    let mut s: Option<i64> = null;
+    if n > 0 {
+        s = Option::Some(n);
+    }
+    return match s {
+        Some(v) && if reset { s = null; false } else { false } => v,
+        Some(v) => v + 1,
+        None => 0,
+    };
+}
+
+// A write whose payload leaves the block writes nothing: split, the tag must
+// not land before the payload is evaluated.
+#[inline("never")]
+fn payload_breaks(c: bool) -> i32 {
+    let mut s: Option<i32> = null;
+    done: {
+        s = Option::Some(if c { break done; } else { 1 });
+    }
+    return match s {
+        Some(v) => v,
+        None => -1,
+    };
+}
+
+export fn run() {
+    assert payload_breaks(builtin::black_box(true)) == -1;
+    assert payload_breaks(builtin::black_box(false)) == 1;
+    assert guard_resets(builtin::black_box(5), builtin::black_box(true)) == 6;
+    assert guard_resets(builtin::black_box(5), builtin::black_box(false)) == 6;
+    assert nested(builtin::black_box(5)) == 5;
+    assert nested(builtin::black_box(-5)) == 0;
+    let xs: List<i64> = [3, 8, 5, 6, 7];
+    assert last_even(&builtin::black_box(xs)) == 6;
+    let odd: List<i64> = [1, 3];
+    assert last_even(&builtin::black_box(odd)) == -1;
+    assert passed_whole(builtin::black_box(4)) == 4;
+    assert passed_whole(builtin::black_box(-4)) == 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "fn \"opt_sroa_variant_local.wado/passed_whole\"(n) {\n    let kept: ref \"core:prelude/types.wado//Option<i64>\";"
+    ],
+    "wir_not_expect:O2": [
+        "last_even\"(xs) {\n    let found: ref"
+    ]
+}

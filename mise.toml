@@ -284,6 +284,36 @@ fi
 ./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test "-${level}" wado-compiler "${extra_args[@]}"
 """
 
+[tasks.test-stdlib-coverage]
+description = "Run the stdlib tests under coverage and fail on any difference from scripts/stdlib-coverage.json"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+export MIMALLOC_PURGE_DELAY=-1
+extra_args=()
+if [ -n "${CI:-}" ]; then
+    extra_args+=(--format tap)
+fi
+./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test -O2 wado-compiler \
+    --coverage --coverage-include=stdlib --coverage-baseline scripts/stdlib-coverage.json \
+    "${extra_args[@]}"
+"""
+
+[tasks.check-coverage-levels]
+description = "Fail unless the stdlib tests report identical coverage at -O0 and -O3"
+run = "./scripts/exclusive.sh test-stdlib scripts/check-coverage-levels.sh"
+
+[tasks.update-stdlib-coverage-baseline]
+description = "Rewrite scripts/stdlib-coverage.json from what the stdlib tests leave unrun"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+export MIMALLOC_PURGE_DELAY=-1
+./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test -O2 wado-compiler \
+    --coverage=lcov,baseline --coverage-include=stdlib
+cp build/coverage/baseline.json scripts/stdlib-coverage.json
+"""
+
 [tasks.test-log-levels]
 description = "Run the core:log tier tests at one optimization level, each file at the tier-1 level it needs"
 run = """
@@ -613,12 +643,12 @@ cargo run -p wado-from-idl -- \
 """
 
 [tasks.update-stdlib-core-wit]
-description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval; facades are hand-written)"
+description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage; facades are hand-written)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # Submodules only — each facade `lib/core/<package>.wado` is hand-written.
-for package in kiln eval; do
+for package in kiln eval coverage; do
     rm -f "wado-compiler/lib/core/$package/"*.wado
     cargo run -p wado-from-idl -- \
         --wit-dir "wado-compiler/lib/core/$package" \

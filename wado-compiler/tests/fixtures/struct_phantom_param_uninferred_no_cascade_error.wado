@@ -1,0 +1,32 @@
+//! A phantom parameter nothing settles is reported once per literal, wherever
+//! the literal stands: bound by a `let`, as a generic call's argument, or as
+//! the receiver of a field access. The literal then carries `error` in that
+//! slot, so a later use against a settled instance raises no second mismatch
+//! naming the declaration's own `T`.
+
+struct Phantom<T> {
+    n: i32,
+}
+
+fn id<T>(a: T) -> T {
+    return a;
+}
+
+fn same<T>(a: T, b: T) -> T {
+    return a;
+}
+
+export fn run() {
+    let p: Phantom<u8> = Phantom { n: 2 };
+    let o = Phantom { n: 1 };
+    let q = same(o, p);
+    let r = id(Phantom { n: 1 });
+    let s = Phantom { n: 1 }.n;
+}
+
+__DATA__
+{
+    "compile_error": "cannot infer type parameter `T` of struct `Phantom`",
+    "compile_error_count": 3,
+    "compile_errors_not_contains": ["type mismatch"]
+}

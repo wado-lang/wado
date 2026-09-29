@@ -239,7 +239,8 @@ fn "cm_component_import_unit_result_arms.wado/$test_0_a_result_with_a_payload_le
     let a_end_134: i32;
     let b_135: ref Array<u8>;
     let i_139: i32;
-    $v1_1 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_ok"($v0_0 = struct.new "core:prelude/types.wado//Result<u32,()>::Ok" { discriminant: 0, payload_0: 7 }; $v0_0);
+    $v0_0 = struct.new "core:prelude/types.wado//Result<u32,()>::Ok" { discriminant: 0, payload_0: 7 };
+    $v1_1 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_ok"($v0_0);
     $cond_3 = (if ref.test "core:prelude/types.wado//Result<u32,()>::Ok"($v1_1) -> bool {
         local.tee a_62(ref.cast "core:prelude/types.wado//Result<u32,()>::Ok"($v1_1).payload_0) == 7;
     } else {
@@ -279,7 +280,8 @@ condition: CmCatalog::id_result_ok(Result::Ok(7)) == Result::Ok(7)
         "core:rt/panic"($local_24.repr, $local_24.used);
         unreachable;
     }
-    $v1_5 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_ok"($v0_4 = struct.new "core:prelude/types.wado//Result<u32,()>" { 1, nop }; $v0_4);
+    $v0_4 = struct.new "core:prelude/types.wado//Result<u32,()>" { 1, nop };
+    $v1_5 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_ok"($v0_4);
     $cond_7 = (if ref.test "core:prelude/types.wado//Result<u32,()>::Ok"($v1_5) -> bool {
         drop(ref.cast "core:prelude/types.wado//Result<u32,()>::Ok"($v1_5).payload_0);
         0;
@@ -361,7 +363,8 @@ condition: CmCatalog::id_result_err(Result::Ok(())) == Result::Ok(())
         "core:rt/panic"($local_28.repr, $local_28.used);
         unreachable;
     }
-    $v1_13 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_err"($v0_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 }; $v0_12);
+    $v0_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 };
+    $v1_13 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_err"($v0_12);
     $v2_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 112, 101), used: 4 };
     $cond_15 = (if ref.is_null($v1_13) -> bool {
         0;
@@ -423,7 +426,8 @@ condition: CmCatalog::id_result_err(Result::Err(\"nope\")) == Result::Err(\"nope
         "core:rt/panic"($local_30.repr, $local_30.used);
         unreachable;
     }
-    $v1_17 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_unit"($v0_16 = struct.new "core:prelude/types.wado//Result<(),()>" { 0, nop }; $v0_16);
+    $v0_16 = struct.new "core:prelude/types.wado//Result<(),()>" { 0, nop };
+    $v1_17 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_unit"($v0_16);
     $cond_19 = $v1_17.discriminant == 0;
     if @unlikely($cond_19 == 0) {
         cold_path;
@@ -459,7 +463,8 @@ condition: CmCatalog::id_result_unit(Result::Ok(())) == Result::Ok(())
         "core:rt/panic"($local_32.repr, $local_32.used);
         unreachable;
     }
-    $v1_21 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_unit"($v0_20 = struct.new "core:prelude/types.wado//Result<(),()>" { 1, nop }; $v0_20);
+    $v0_20 = struct.new "core:prelude/types.wado//Result<(),()>" { 1, nop };
+    $v1_21 = "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_unit"($v0_20);
     $cond_23 = (if $v1_21.discriminant == 0 -> bool {
         0;
     } else {
@@ -1746,10 +1751,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_49.repr, start_63, prefix.repr, 0, n_57);
             };
         }
-        return self_65 = self.buf, new_used_67 = self_65.used + digit_count, if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
+        self_65 = self.buf;
+        new_used_67 = self_65.used + digit_count;
+        if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
-        }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
+        }
+        start_68 = self_65.used;
+        self_65.used = new_used_67;
+        return start_68;
     }
     padding = $load_2 - content_len;
     if self.zero_pad {
@@ -1806,10 +1816,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 continue l156;
             };
         };
-        return self_120 = self.buf, new_used_122 = self_120.used + digit_count, if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
+        self_120 = self.buf;
+        new_used_122 = self_120.used + digit_count;
+        if @unlikely(new_used_122 > builtin::array_len(self_120.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_120, new_used_122);
-        }, start_123 = self_120.used, self_120.used = new_used_122, start_123;
+        }
+        start_123 = self_120.used;
+        self_120.used = new_used_122;
+        return start_123;
     }
     align = self.align;
     if align == 0 {
@@ -1987,10 +2002,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_copy<u8>(self_273.repr, start_287, prefix.repr, 0, n_281);
             };
         }
-        return self_289 = self.buf, new_used_291 = self_289.used + digit_count, if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
+        self_289 = self.buf;
+        new_used_291 = self_289.used + digit_count;
+        if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_289, new_used_291);
-        }, start_292 = self_289.used, self_289.used = new_used_291, start_292;
+        }
+        start_292 = self_289.used;
+        self_289.used = new_used_291;
+        return start_292;
     }
 }
 
@@ -2176,9 +2196,11 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),core:prelude/stri
         start_111 = self_98.used;
         self_98.used = new_used_110;
         builtin::array_copy<u8>(self_98.repr, start_111, global:core:prelude/traits.wado::$const_obj_24, 0, 3);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"(v_115 = self.value; if @unlikely((ref.is_null(v_115) == 0) != 1) {
+        v_115 = self.value;
+        if @unlikely((ref.is_null(v_115) == 0) != 1) {
             unreachable;
-        }; ref.as_non_null(v_115), f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"(ref.as_non_null(v_115), f);
     }
 }
 
@@ -2234,9 +2256,11 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<u32,()>^core:prelude
         start_56 = self_43.used;
         self_43.used = new_used_55;
         builtin::array_copy<u8>(self_43.repr, start_56, global:core:prelude/traits.wado::$const_obj_25, 0, 2);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<u32>$scalar"(v_60 = self.value; if @unlikely(v_60.discriminant != 0) {
+        v_60 = self.value;
+        if @unlikely(v_60.discriminant != 0) {
             unreachable;
-        }; ref.cast "core:prelude/types.wado//Result<u32,()>::Ok"(v_60).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<u32>$scalar"(ref.cast "core:prelude/types.wado//Result<u32,()>::Ok"(v_60).payload_0, f);
     }
     v_62 = self.value;
     if v_62.discriminant == 1 {

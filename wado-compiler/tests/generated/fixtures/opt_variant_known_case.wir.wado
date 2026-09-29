@@ -175,7 +175,7 @@ fn "opt_variant_known_case.wado/run"() with Stdout {
     let rx_161: i32;
     let tx_162: i32;
     let $sroa_user_name_173: ref "core:prelude/string.wado//String";
-    let $av_211: i32;
+    let $av_214: i32;
     v_1 = black_box(7);
     $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     new_used_34 = 0 + 4;
@@ -227,8 +227,8 @@ fn "opt_variant_known_case.wado/run"() with Stdout {
     $sroa_user_name_173 = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
     elements = array.new_fixed<ref "opt_variant_known_case.wado//Param">();
     params = struct.new "core:prelude//List<opt_variant_known_case.wado/Param>" { repr: elements, used: 0 };
-    $av_211 = $sroa_user_name_173.used;
-    value_113 = struct.new "opt_variant_known_case.wado//Param::Text" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_7: ref Array<u8>; $array_clone_src_7 = $sroa_user_name_173.repr; let $array_clone_dst_8: ref Array<u8>; $array_clone_dst_8 = builtin::array_new<u8>($av_211); builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_src_7, 0, $av_211); $array_clone_dst_8), used: $av_211 } };
+    $av_214 = $sroa_user_name_173.used;
+    value_113 = struct.new "opt_variant_known_case.wado//Param::Text" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_7: ref Array<u8>; $array_clone_src_7 = $sroa_user_name_173.repr; let $array_clone_dst_8: ref Array<u8>; $array_clone_dst_8 = builtin::array_new<u8>($av_214); builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_src_7, 0, $av_214); $array_clone_dst_8), used: $av_214 } };
     if @unlikely(0 >= builtin::array_len(params.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<opt_variant_known_case.wado/Param>::grow"(params);
@@ -985,9 +985,11 @@ fn "core:prelude/traits.wado/opt_variant_known_case.wado/Param^core:prelude/trai
         start_56 = f.used;
         f.used = new_used_55;
         builtin::array_copy<u8>(f.repr, start_56, global:core:prelude/traits.wado::$const_obj_75, 0, 3);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar$spec0$scalar"(v_60 = self.value; if @unlikely(v_60.discriminant != 0) {
+        v_60 = self.value;
+        if @unlikely(v_60.discriminant != 0) {
             unreachable;
-        }; ref.cast "opt_variant_known_case.wado//Param::Int"(v_60).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar$spec0$scalar"(ref.cast "opt_variant_known_case.wado//Param::Int"(v_60).payload_0, f);
     }
     if self.value.discriminant == 1 {
         new_used_77 = f.used + 5;
@@ -1014,9 +1016,11 @@ fn "core:prelude/traits.wado/opt_variant_known_case.wado/Param^core:prelude/trai
         start_111 = f.used;
         f.used = new_used_110;
         builtin::array_copy<u8>(f.repr, start_111, global:core:prelude/traits.wado::$const_obj_74, 0, 4);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>$spec0$scalar"(v_115 = self.value; if @unlikely(v_115.discriminant != 1) {
+        v_115 = self.value;
+        if @unlikely(v_115.discriminant != 1) {
             unreachable;
-        }; ref.cast "opt_variant_known_case.wado//Param::Text"(v_115).payload_0, f);
+        }
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>$spec0$scalar"(ref.cast "opt_variant_known_case.wado//Param::Text"(v_115).payload_0, f);
     }
 }
 
@@ -1036,10 +1040,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+    new_used_66 = self.used + digit_count;
+    if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
-    }, start_67 = self.used, self.used = new_used_66, start_67;
+    }
+    start_67 = self.used;
+    self.used = new_used_66;
+    return start_67;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {

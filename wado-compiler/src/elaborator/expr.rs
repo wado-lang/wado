@@ -21,12 +21,13 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{CaseSite, DefaultTypeBinding, slot_type_bindings};
+use super::call::{CaseSite, DefaultTypeBinding, DefaultWalk, WalkedDefault, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
-use super::instantiate::Instantiation;
+use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
+use super::synth::ArgClass;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -53,7 +54,20 @@ use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::primitive::PrimitiveType;
 use crate::tir::{AnonStructId, StructDef};
+use std::cell::OnceCell;
+use std::cmp::Ordering;
 use std::rc::Rc;
+
+/// How far a branch's type is decided, least first: two branches join on the
+/// more decided.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Decidedness {
+    /// Still unresolved.
+    Indefinite,
+    /// Carrying an inference variable the branches are to answer.
+    Holey,
+    Decided,
+}
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
@@ -642,14 +656,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::StaticMethodCall(static_call) => {
                 self.resolve_static_method_call(static_call, ctx, expected_type)
             }
-            Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
+            Expr::FieldAccess(field_access) => {
+                self.resolve_field_access(field_access, ctx, expected_type)
+            }
             Expr::Index(index) => {
                 let access = if ctx.mut_place_subscripts.contains(&index.id) {
                     IndexAccess::Mutable
                 } else {
                     IndexAccess::Value
                 };
-                self.resolve_index(index, ctx, access)
+                self.resolve_index(index, ctx, access, expected_type)
             }
             Expr::Block(block) => {
                 // Walk the block for its facts; reify rebuilds the `Block`
@@ -711,7 +727,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether a branch's type waits on its siblings: one still unresolved,
     /// or one carrying an inference variable the branches are to answer.
     fn is_undecided_branch(&self, branch: TypeId) -> bool {
-        self.tysys.type_table.borrow().is_indefinite(branch) || self.type_has_infer_hole(branch)
+        self.branch_decidedness(branch) != Decidedness::Decided
     }
 
     /// The type of a labeled block expression: its `break` values and its
@@ -1587,14 +1603,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         FuncRefInference::Ok(inferred)
     }
 
-    /// Resolve a binary expression
-    pub(super) fn resolve_field_access(
+    fn resolve_field_access(
         &mut self,
         field_access: &ast::FieldAccessExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
-        let expr_type = self.resolve_expr(&field_access.expr, ctx, None);
+        // A field is looked up on a type whose head is known (`wrap(1).v.x`).
+        self.resolve_projection(
+            &field_access.expr,
+            ctx,
+            expected_type,
+            |this, receiver, _| !this.tysys.type_table.borrow().is_infer_var(receiver),
+            |this, receiver, _| this.resolve_field_of(field_access, receiver),
+        )
+    }
 
+    /// Resolve the field `field_access` names on a receiver of `expr_type`.
+    fn resolve_field_of(
+        &mut self,
+        field_access: &ast::FieldAccessExpr,
+        expr_type: TypeId,
+    ) -> TypeId {
         // Record use→def reference for the field name, pointing at the field
         // definition's AstId in the struct declaration.
         self.record_field_reference(expr_type, &field_access.field, field_access.field_id);
@@ -1723,8 +1753,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return self.field_not_found(&name, field_name, span);
                 }
             }
-            _ => {}
+            // An unsolved variable is reported where it stays unsolved, and the
+            // rest are either reported already or accepted anywhere.
+            ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error
+            | ResolvedType::Never => return (0, TypeTable::UNKNOWN),
+            // Read on each instance the body is monomorphized at.
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. } => return (0, TypeTable::UNKNOWN),
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Function { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::BuiltinArray(_) => {}
         }
+        let type_name = self.tysys.type_table.borrow().type_name(struct_type);
+        let _ = self.emit(TypeError::FieldOfFieldless {
+            type_name,
+            field_name: field_name.to_string(),
+            span,
+        });
         (0, TypeTable::UNKNOWN)
     }
 
@@ -1841,7 +1896,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve an index expression
     /// [`Self::resolve_index`] for a subscript reached outside
     /// [`Self::resolve_expr`], which is otherwise the only place a visited
     /// [`AstId`] is annotated. `&xs[i]` and `&mut xs[i]` resolve the subscript
@@ -1852,19 +1906,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         access: IndexAccess,
     ) -> TypeId {
-        let type_id = self.resolve_index(index, ctx, access);
+        let type_id = self.resolve_index(index, ctx, access, None);
         self.record_expression_type(index.id, type_id);
         type_id
     }
 
+    /// Resolve an index expression. A by-value subscript projects as a method
+    /// does: `same(one(1)[0], x)` gives the literal `x`'s type where one
+    /// `IndexValue` impl takes the key.
     pub(super) fn resolve_index(
         &mut self,
         index: &ast::IndexExpr,
         ctx: &mut FunctionContext,
         access: IndexAccess,
+        expected: Option<TypeId>,
     ) -> TypeId {
-        let expr_type = self.resolve_expr(&index.expr, ctx, None);
+        // A subscript selects its impl by key type, so the key is synthesized
+        // before the impl is chosen — the ordering an overloaded method call
+        // has, answered the same way. Only a struct receiver selects one.
+        let key_class = OnceCell::new();
+        self.resolve_projection(
+            &index.expr,
+            ctx,
+            expected,
+            |this, receiver, ctx| {
+                // A constant subscript reads a tuple's element as `.N` does.
+                let base = this.tysys.through_ref(receiver);
+                if this.tysys.type_table.borrow().is_tuple(base) {
+                    return true;
+                }
+                if access != IndexAccess::Value {
+                    return false;
+                }
+                let class = key_class.get_or_init(|| this.synthesize_arg_class(&index.index, ctx));
+                this.index_key_type(class).is_some_and(|key| {
+                    this.receiver_waits(receiver, "index_value", index.span, |this, def| {
+                        this.impl_takes_key(def, key)
+                    })
+                })
+            },
+            |this, receiver, ctx| this.resolve_index_of(index, receiver, ctx, access, &key_class),
+        )
+    }
 
+    /// Index a receiver of `expr_type` by `index`'s key, whose class
+    /// `key_class` holds once synthesized.
+    fn resolve_index_of(
+        &mut self,
+        index: &ast::IndexExpr,
+        expr_type: TypeId,
+        ctx: &mut FunctionContext,
+        access: IndexAccess,
+        key_class: &OnceCell<ArgClass>,
+    ) -> TypeId {
         let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
@@ -1920,13 +2014,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
         if !struct_name.is_empty() {
-            // A subscript selects its impl by key type, so the key is
-            // synthesized before the impl is chosen — the ordering an overloaded
-            // method call has, answered the same way. Only a key synthesis
-            // cannot type (a compound literal, whose type the impl supplies)
-            // still falls back to pre-selecting an impl for its expected type.
-            let key_class = self.synthesize_arg_class(&index.index, ctx);
-            let expected_key = self.index_key_type(&key_class).or_else(|| {
+            // Only a key synthesis cannot type (a compound literal, whose type
+            // the impl supplies) falls back to pre-selecting an impl for its
+            // expected type.
+            let key_class = key_class.get_or_init(|| self.synthesize_arg_class(&index.index, ctx));
+            let expected_key = self.index_key_type(key_class).or_else(|| {
                 self.index_lookup_or_newtype_base(
                     &struct_name,
                     base_type_id,
@@ -2618,14 +2710,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if b == TypeTable::NEVER {
             return Some(a);
         }
-        let (a_undecided, b_undecided) = (self.is_undecided_branch(a), self.is_undecided_branch(b));
-        if a_undecided && !b_undecided {
-            return Some(b);
+        // An indefinite branch defers to one carrying an inference variable,
+        // which defers to a decided one: `if c { null } else { Some(1) }`
+        // with the literal still pending is an `Option` of its variable.
+        match self.branch_decidedness(a).cmp(&self.branch_decidedness(b)) {
+            Ordering::Less => Some(b),
+            Ordering::Greater => Some(a),
+            Ordering::Equal => self.tysys.type_table.borrow().resource_join(a, b),
         }
-        if b_undecided && !a_undecided {
-            return Some(a);
+    }
+
+    /// How far a branch's type is decided.
+    fn branch_decidedness(&self, branch: TypeId) -> Decidedness {
+        if self.tysys.type_table.borrow().is_indefinite(branch) {
+            Decidedness::Indefinite
+        } else if self.type_has_infer_hole(branch) {
+            Decidedness::Holey
+        } else {
+            Decidedness::Decided
         }
-        self.tysys.type_table.borrow().resource_join(a, b)
     }
 
     pub(super) fn resolve_match_expr(
@@ -3630,12 +3733,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The instance a named literal of a generic struct builds over fresh
+    /// variables, one per parameter, where the literal names none of them and
+    /// a field it writes mentions each. A literal taking its fields from a
+    /// `..base` has none: the base answers them. Nor does one leaving a
+    /// parameter to the declaration (`Phantom { n: 1 }`), which the plain
+    /// path answers or reports.
+    pub(super) fn open_struct_literal_instance(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+    ) -> Option<(TypeId, Instantiated)> {
+        let written = struct_lit.name.as_deref()?;
+        if !struct_lit.type_args.is_empty() || !struct_lit.spreads.is_empty() {
+            return None;
+        }
+        let def = self.tysys.resolutions.declared(struct_lit.name_id?)?;
+        let info = self.lookup_struct_fields_of_decl(def)?;
+        let slots = info.type_param_type_ids.clone();
+        let every_slot_written = {
+            let tt = self.tysys.type_table.borrow();
+            slots.iter().all(|&slot| {
+                let index = tt
+                    .param_slot(slot)
+                    .expect("a struct slot is a type parameter");
+                info.fields.iter().any(|(name, declared, _)| {
+                    struct_lit.fields.iter().any(|f| &f.name == name)
+                        && tt.contains_type_param_index(*declared, index)
+                })
+            })
+        };
+        if slots.is_empty() || !every_slot_written {
+            return None;
+        }
+        let inst = self.instantiate(
+            &slots,
+            &Instantiation {
+                kind: InstanceKind::Struct,
+                name: written,
+                span: struct_lit.span,
+                type_args: &[],
+                self_binding: None,
+            },
+        );
+        let open = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_generic_instance(def, inst.vars.clone());
+        Some((open, inst))
+    }
+
     pub(super) fn resolve_struct_literal(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        if let Some(resolved) = self.resolve_open_struct_literal(struct_lit, ctx, expected_type) {
+            return resolved;
+        }
         // A literal with no name is a shape — unless the target declares a
         // struct, in which case `{ x: 1 }` *is* `Point { x: 1 }`. One body
         // decides that; how the declaration was reached is the only difference.
@@ -3715,19 +3871,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(self.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span))
         };
 
+        let named_spread = struct_lit.spreads.first();
+        let spread_base_type: Option<TypeId> =
+            named_spread.map(|spread| self.resolve_expr(&spread.expr, ctx, expected_type));
+
         // Get expected field types using (name, module_source) lookup.
         //
         // An annotation naming this struct's instantiation pins the declared
         // parameters, so substitute them: `let c: P<u32> = P { left: 8, … }`
         // must expect `u32` for `left`, not the bare `T` a literal cannot be
         // typed by — it would settle on the default `i32` and then mismatch.
-        let expected_args =
-            expected_type.and_then(|ty| match self.tysys.type_table.borrow().get(ty) {
-                ResolvedType::GenericInstance { def, type_args } if Some(*def) == struct_decl => {
-                    Some(type_args.clone())
-                }
-                _ => None,
-            });
+        // A `..base` is a complete instance, so it pins them as well.
+        let instance_args = |ty: TypeId| match self.tysys.type_table.borrow().get(ty) {
+            ResolvedType::GenericInstance { def, type_args } if Some(*def) == struct_decl => {
+                Some(type_args.clone())
+            }
+            _ => None,
+        };
+        let expected_args = expected_type
+            .and_then(instance_args)
+            .or_else(|| spread_base_type.and_then(instance_args));
         let annotated_args = expected_args.clone();
         let resolved_struct_fields: Option<Vec<(String, TypeId)>> =
             self.struct_fields_of_written_decl(struct_decl).map(|info| {
@@ -3761,7 +3924,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A named struct base is a complete `S`, so any field before the spread
         // (or a second spread) is fully overwritten and unused.
-        let named_spread = struct_lit.spreads.first();
         if let Some(second) = struct_lit.spreads.get(1) {
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: "a named struct literal allows at most one `..base` spread".to_string(),
@@ -3789,9 +3951,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: spread.span,
             });
         }
-        let spread_base_type: Option<TypeId> =
-            named_spread.map(|spread| self.resolve_expr(&spread.expr, ctx, expected_type));
-
         // Record use→def references for each field name, pointing at the
         // field definition's AstId in the struct declaration.
         let field_refs: Vec<(AstId, AstId)> = self
@@ -3927,68 +4086,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let mut omitted_hidden: Vec<String> = Vec::new();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
-            // A literal that omits no defaulted field walks no default, and
-            // the loop below then only reports the required fields it left
-            // out. Settling the struct's parameters and keeping a walk of its
-            // own is for the walk, so neither runs without one.
-            let walks_a_default = struct_field_types
-                .iter()
-                .enumerate()
-                .any(|(idx, (name, _))| {
-                    !provided_names.contains(name)
-                        && struct_field_defaults.get(idx).is_some_and(Option::is_some)
-                });
-            let (field_default_bindings, settled_params) = if walks_a_default {
-                self.field_default_type_bindings(struct_decl, annotated_args.as_deref(), &fields)
-            } else {
-                (Vec::new(), SubstitutionContext::new())
-            };
-            // The default is the struct module's AST, and its scope, its import
-            // aliases and the vantage its visibility is judged from are all
-            // that module's.
-            self.resolving_defaults_at(
-                walks_a_default.then_some(struct_lit.id),
-                walks_a_default.then(|| struct_module_source.clone()),
-                &field_default_bindings,
-                |s| {
-                    for (idx, (expected_name, expected_type_id)) in
-                        struct_field_types.iter().enumerate()
-                    {
-                        if provided_names.contains(expected_name) {
-                            continue;
-                        }
-                        let Some(default_expr) =
-                            struct_field_defaults.get(idx).and_then(Option::clone)
-                        else {
-                            if hidden_fields.contains_key(expected_name) {
-                                omitted_hidden.push(expected_name.clone());
-                            } else {
-                                let _ = s.emit(TypeError::MissingField {
-                                    struct_name: display_name.clone(),
-                                    field_name: expected_name.clone(),
-                                    span: struct_lit.span,
-                                });
-                            }
-                            continue;
-                        };
-                        // The declared type still names the struct's own
-                        // parameters where no annotation pinned them, and the
-                        // default answers in the settled ones.
-                        let expected_type_id = settled_params
-                            .substitute(*expected_type_id, &mut s.tysys.type_table.borrow_mut());
-                        let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-                            s.resolve_expr(&default_expr, ctx, Some(expected_type_id))
-                        });
-                        s.typecheck(resolved, expected_type_id, struct_lit.span);
-                        fields.push(ResolvedField {
-                            name: expected_name.clone(),
-                            type_id: resolved,
-                            field_index: idx as u32,
-                            span: default_expr.span(),
-                        });
-                    }
-                },
-            );
+            let mut omitted_defaults: Vec<(usize, ast::Expr)> = Vec::new();
+            for (idx, (expected_name, _)) in struct_field_types.iter().enumerate() {
+                if provided_names.contains(expected_name) {
+                    continue;
+                }
+                if let Some(default_expr) = struct_field_defaults.get(idx).and_then(Option::clone) {
+                    omitted_defaults.push((idx, default_expr));
+                } else if hidden_fields.contains_key(expected_name) {
+                    omitted_hidden.push(expected_name.clone());
+                } else {
+                    let _ = self.emit(TypeError::MissingField {
+                        struct_name: display_name.clone(),
+                        field_name: expected_name.clone(),
+                        span: struct_lit.span,
+                    });
+                }
+            }
+            if !omitted_defaults.is_empty() {
+                let (bindings, settled_params) = self.field_default_type_bindings(
+                    struct_decl,
+                    annotated_args.as_deref(),
+                    &fields,
+                );
+                // The declared type still names the struct's own parameters
+                // where no annotation pinned them, and the default answers in
+                // the settled ones.
+                let defaults = omitted_defaults
+                    .iter()
+                    .map(|(idx, expr)| WalkedDefault {
+                        binds: None,
+                        expr: expr.clone(),
+                        expected: settled_params.substitute(
+                            struct_field_types[*idx].1,
+                            &mut self.tysys.type_table.borrow_mut(),
+                        ),
+                        check_at: Some(struct_lit.span),
+                    })
+                    .collect();
+                // The default is the struct module's AST, and its scope, its
+                // import aliases and the vantage its visibility is judged from
+                // are all that module's.
+                let walk = DefaultWalk {
+                    site: Some(struct_lit.id),
+                    home: Some(struct_module_source),
+                    bindings,
+                    written: Vec::new(),
+                    defaults,
+                };
+                let resolved = self.walk_defaults(walk, ctx);
+                for ((idx, expr), type_id) in omitted_defaults.into_iter().zip(resolved) {
+                    fields.push(ResolvedField {
+                        name: struct_field_types[idx].0.clone(),
+                        type_id,
+                        field_index: idx as u32,
+                        span: expr.span(),
+                    });
+                }
+            }
             fields.sort_by_key(|f| f.field_index);
         }
         if !omitted_hidden.is_empty() {
@@ -4566,7 +4721,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inst = self.instantiate(
             &struct_info.type_param_type_ids,
             &Instantiation {
-                kind: "struct",
+                kind: InstanceKind::Struct,
                 name: &struct_info.name,
                 span,
                 // A struct literal has no turbofish; its fields name the slots.
@@ -4678,38 +4833,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|def| self.declared_default_type_arg(def, slot, &inferred[..slot]))
                 .unwrap_or(decl_param);
         }
-        self.report_uninferred_struct_type_args(&struct_info, &inferred, span);
+        self.report_uninferred_struct_type_args(&struct_info, &mut inferred, span);
         self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
         inferred
     }
 
     /// Report a struct literal's type parameter that nothing settled, as a call
-    /// site reports its own.
+    /// site reports its own, and answer it with `error` so no later use
+    /// reports the declaration's own parameter a second time.
     fn report_uninferred_struct_type_args(
         &mut self,
         struct_info: &StructFieldInfo,
-        inferred: &[TypeId],
+        inferred: &mut [TypeId],
         span: Span,
     ) {
         // A body that declares the same parameter is forwarding its own, not
         // leaving one unanswered: `List { … }` inside `impl<T> List<T>`.
         let scope_params = self.scope_type_param_ids();
-        let names: Vec<String> = struct_info
+        let mut names: Vec<String> = Vec::new();
+        for (&decl_param, answer) in struct_info
             .type_param_type_ids
             .iter()
-            .zip(inferred.iter())
+            .zip(inferred.iter_mut())
+        {
             // The declaration's own parameter standing as its own answer is what
             // marks a slot unsettled. An answer that is some *other* variable is
             // still open, and a later constraint fills it (`Paired { v: null, k:
             // 1 }` settles `T` from `k` after `v` left a hole).
-            .filter(|&(&decl_param, &answer)| {
-                answer == decl_param && !scope_params.contains(&answer)
-            })
-            .filter_map(|(&decl_param, _)| {
-                util::bound_param_name(self.tysys.type_table.borrow().get(decl_param)).cloned()
-            })
-            .collect();
+            if *answer != decl_param || scope_params.contains(answer) {
+                continue;
+            }
+            *answer = TypeTable::ERROR;
+            let tt = self.tysys.type_table.borrow();
+            let name = util::bound_param_name(tt.get(decl_param))
+                .expect("a struct slot is a type parameter");
+            names.push(name.clone());
+        }
         if names.is_empty() {
             return;
         }
@@ -4824,8 +4984,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if has_spread {
                 return None;
             }
+            let arity = tuple_lit.elements.len();
+            if let Some(elems) =
+                self.open_shape_at_pending_var(Some(ty), arity, TypeTable::make_tuple)
+            {
+                return Some(elems);
+            }
             let elems = self.tysys.type_table.borrow().as_tuple(ty)?;
-            if elems.len() != tuple_lit.elements.len() {
+            if elems.len() != arity {
                 return None;
             }
             Some(elems)
@@ -5420,9 +5586,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let element = expected_type.and_then(|t| {
             let tt = self.tysys.type_table.borrow();
-            tt.range_element(t, range.kind).filter(|&e| {
-                is_numeric_literal_target(&tt, e) || matches!(tt.get(e), ResolvedType::InferVar(_))
-            })
+            tt.range_element(t, range.kind)
+                .filter(|&e| is_numeric_literal_target(&tt, e) || tt.is_infer_var(e))
         });
         if let Some(element) = element {
             self.sem.types.range_element_hints.insert(range.id, element);
@@ -5463,10 +5628,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ord = self.tysys.compiler_trait(CompilerItem::Ord);
         assert!(ord.is_some(), "core:prelude declares Ord");
         // Literal bounds pending at a variable settle to a number, which is `Ord`.
-        let pending = matches!(
-            self.tysys.type_table.borrow().get(element_type),
-            ResolvedType::InferVar(_)
-        );
+        let pending = self.tysys.type_table.borrow().is_infer_var(element_type);
         if element_type != TypeTable::ERROR
             && !pending
             && !self.enforce_single_bound_args(

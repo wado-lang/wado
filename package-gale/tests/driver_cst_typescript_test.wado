@@ -1,8 +1,5 @@
-/// Driver test for the TypeScript grammar parser.
-///
-/// The TypeScript grammar uses semantic predicates extensively, so full
-/// parsing is not supported without predicate evaluation. These tests
-/// verify tokenization of various TypeScript constructs.
+//! Driver test for the TypeScript grammar: tokenization and parse trees, with
+//! the base ports `tools/typescript_recognizer.wado` installs.
 use ts from "./grammars/TypeScriptLexer.g4"
     with {
         generator: {
@@ -19,173 +16,15 @@ use {
     TK_Let,
     TK_Divide,
     TK_RegularExpressionLiteral,
-    TK_Identifier,
-    TK_NullLiteral,
-    TK_BooleanLiteral,
-    TK_This,
-    TK_CloseBracket,
-    TK_CloseParen,
-    TK_OctalIntegerLiteral,
-    TK_DecimalLiteral,
-    TK_HexIntegerLiteral,
-    TK_StringLiteral,
-    TK_PlusPlus,
-    TK_MinusMinus,
 } from "./grammars/TypeScriptLexer.g4";
-use { TypeScriptLexerBase, LexerView, Lexer } from "./grammars/TypeScriptLexer.g4";
-use {
-    TypeScriptParserBase,
-    Parser,
-    TK_OpenBrace,
-    TK_CloseBrace,
-    TK_Function_,
-    TK_Interface,
-} from "./grammars/TypeScriptLexer.g4";
-
-struct TsParserBase {
-}
-
-impl TypeScriptParserBase for TsParserBase {
-    /// No line break between the token just consumed and the next one — what
-    /// JavaScript's automatic semicolon insertion turns on.
-    fn not_line_terminator(&self, p: &Parser) -> bool {
-        resume p.token_line(p.lt(1)) == p.token_line(p.lt(0));
-    }
-
-    fn line_terminator_ahead(&self, p: &Parser) -> bool {
-        resume p.token_line(p.lt(1)) != p.token_line(p.lt(0));
-    }
-
-    fn close_brace(&self, p: &Parser) -> bool {
-        resume p.la(1) == TK_CloseBrace;
-    }
-
-    /// An expression statement may not start with `{`, `function` or
-    /// `interface` — those open a block, a declaration and a type instead.
-    fn not_open_brace_and_not_function_and_not_interface(&self, p: &Parser) -> bool {
-        resume !p.la(1) matches { TK_OpenBrace | TK_Function_ | TK_Interface };
-    }
-
-    /// The token just consumed is `a0` — `for (x of xs)` asks it of `of`.
-    fn p(&self, p: &Parser, a0: String) -> bool {
-        resume p.token_text(p.lt(0)) == a0;
-    }
-
-    /// The next token is `a0` — a getter / setter asks it of `get` / `set`.
-    fn n(&self, p: &Parser, a0: String) -> bool {
-        resume p.token_text(p.lt(1)) == a0;
-    }
-}
-
-// A hand-written TypeScriptLexerBase port, installed around every recognizer
-// call: the action ops carry the brace / template state the predicate ops read,
-// and the `emit` hook carries the last default-channel token.
-//
-// `IsStrictMode` still sees only the `'use strict'` literal the lexer passes,
-// not the parser's notion of scope (see TODO.md, Stage C).
-struct TsBase {
-    // One entry per `${` interpolation still open: how many plain `{` are open
-    // inside it. A `}` ends the interpolation only at count 0.
-    interp_braces: List<i32>,
-    // Where each open template's interpolation entries start, so a closing
-    // backtick drops what its interpolations left behind.
-    template_marks: List<i32>,
-    strict: bool,
-    /// `-1` before the first token. Upstream tracks this by overriding
-    /// `nextToken`.
-    last_token: i32 = -1,
-}
-
-/// Whether a token ends an operand, so a following `/` is a division rather
-/// than the start of a regular expression.
-fn ends_operand(kind: i32) -> bool {
-    return kind matches { TK_Identifier | TK_NullLiteral | TK_BooleanLiteral | TK_This | TK_CloseBracket | TK_CloseParen | TK_OctalIntegerLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_StringLiteral | TK_PlusPlus | TK_MinusMinus };
-}
-
-impl TypeScriptLexerBase for TsBase {
-    fn emit(&mut self, view: LexerView, ty: i32, channel: i32) -> i32 {
-        if channel == 0 {
-            self.last_token = ty;
-        }
-        resume ty;
-    }
-
-    fn is_regex_possible(&self, view: LexerView) -> bool {
-        resume !ends_operand(self.last_token);
-    }
-
-    fn is_in_template_string(&self, view: LexerView) -> bool {
-        if self.template_marks.is_empty() {
-            resume false;
-        }
-        resume self.interp_braces.last() matches { Some(n) && n == 0 };
-    }
-
-    fn is_strict_mode(&self, view: LexerView) -> bool {
-        resume self.strict;
-    }
-
-    fn process_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
-        let n = self.interp_braces.len();
-        if n > 0 {
-            self.interp_braces[n - 1] += 1;
-        }
-        resume ();
-    }
-
-    fn process_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
-        let n = self.interp_braces.len();
-        if n > 0 && self.interp_braces[n - 1] > 0 {
-            self.interp_braces[n - 1] -= 1;
-        }
-        resume ();
-    }
-
-    fn process_string_literal(&mut self, view: LexerView, lx: &mut Lexer) {
-        let text = view.text();
-        if text == "'use strict'" || text == "\"use strict\"" {
-            self.strict = true;
-        }
-        resume ();
-    }
-
-    fn increase_template_depth(&mut self, view: LexerView, lx: &mut Lexer) {
-        self.template_marks.push(self.interp_braces.len());
-        resume ();
-    }
-
-    fn decrease_template_depth(&mut self, view: LexerView, lx: &mut Lexer) {
-        if let Some(mark) = self.template_marks.pop() {
-            self.interp_braces.truncate(mark);
-        }
-        resume ();
-    }
-
-    fn start_template_string(&mut self, view: LexerView, lx: &mut Lexer) {
-        self.interp_braces.push(0);
-        resume ();
-    }
-}
-
-fn new_ts_base() -> TsBase {
-    return TsBase { interp_braces: [], template_marks: [], strict: false };
-}
+use { with_typescript_bases } from "../tools/typescript_recognizer.wado";
 
 fn ts_tokenize<S: AsStrSlice>(input: S) -> ts::TokenStream {
-    let mut base = new_ts_base();
-    with TypeScriptLexerBase => &mut base do {
-        return ts::tokenize(input);
-    };
+    return with_typescript_bases(|| ts::tokenize(input));
 }
 
 fn ts_parse<S: AsStrSlice>(input: S) -> ts::ParseResult {
-    let mut base = new_ts_base();
-    let mut pbase = TsParserBase {};
-    with TypeScriptLexerBase => &mut base do {
-        with TypeScriptParserBase => &mut pbase do {
-            return ts::parse(input);
-        };
-    };
+    return with_typescript_bases(|| ts::parse(input));
 }
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {

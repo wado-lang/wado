@@ -587,7 +587,11 @@ impl String {
     /// `internal_reserve_uninit`, so a writer emitting several pieces pays one
     /// capacity check for all of them. `n` is the caller's because `s` may be
     /// `self`, whose length the reservation has already advanced.
+    ///
+    /// Only the optimizer's append fusion calls it, so whether it runs says
+    /// what `-O` did, not what a test reached.
     #[compiler_item("string_write_str_at")]
+    #[coverage(off)]
     internal fn internal_write_str_at(&mut self, offset: i32, s: &String, n: i32) {
         builtin::array_copy(&mut self.repr as &mut Array<u8>, offset, &s.repr as &Array<u8>, 0, n);
     }
