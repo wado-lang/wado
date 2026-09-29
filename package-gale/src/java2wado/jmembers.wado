@@ -40,6 +40,8 @@ pub struct MemberNames {
     pub fields: List<String> = [],
     /// Only consulted where the handle is a shared reference (a lexer predicate).
     pub mutating: List<String> = [],
+    /// The fields of type `String`, whose `+` concatenates in Java.
+    pub string_fields: List<String> = [],
 }
 
 /// Whether the block declared anything at all.
@@ -58,6 +60,9 @@ pub fn member_names(members: &MemberDecls) -> MemberNames {
     }
     for let f of &members.fields {
         out.fields.push(f.name);
+        if f.ty == "String" {
+            out.string_fields.push(f.name);
+        }
     }
     return out;
 }
@@ -89,6 +94,7 @@ pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(
         grammar: grammar_name.to_string(),
         methods: scanned.methods,
         fields: scanned.fields,
+        string_fields: scanned.string_fields,
         lexer,
         in_members: true,
     };
@@ -120,7 +126,7 @@ pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(
         // and so do the body's own locals.
         let mut menv = env;
         for let p of &m.params {
-            menv.locals.push(p.0);
+            menv.add_local(&p.0, p.1 == "String");
         }
         let scoped = with_locals(&menv, &m.stmts);
         let body_wado = emit_java_stmts(&dummy, &no_rules, &m.stmts, false, &no_bindings, &scoped)?;
@@ -284,16 +290,15 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
         if pos + 1 >= tokens.len() {
             break;
         }
-        if ident_at(tokens, pos) matches { None } {
+        let Some(ty) = ident_at(tokens, pos) else {
             break;
-        }
-        let name_opt = ident_at(tokens, pos + 1);
-        if name_opt matches { None } {
+        };
+        let Some(name) = ident_at(tokens, pos + 1) else {
             break;
-        }
+        };
         pos += 2;
         if punct_is(tokens, pos, "(") {
-            out.methods.push(to_snake_case(&name_opt.unwrap()));
+            out.methods.push(to_snake_case(&name));
             pos = skip_parens(tokens, pos);
             if !punct_is(tokens, pos, "{") {
                 break;
@@ -304,7 +309,11 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
             }
             pos = close.unwrap() + 1;
         } else {
-            out.fields.push(to_snake_case(&name_opt.unwrap()));
+            let field = to_snake_case(&name);
+            out.fields.push(field);
+            if ty == "String" {
+                out.string_fields.push(field);
+            }
             while pos < tokens.len() && !punct_is(tokens, pos, ";") {
                 pos += 1;
             }
@@ -349,8 +358,12 @@ fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
         let slice = collect_until_semi(tokens, pos);
         let e = parse_java_expr(&slice)?;
         emit_member_expr(&e, env)?;
+    } else if let Some(default) = java_field_default(&ty) {
+        default;
     } else {
-        return Result::Err(`java2wado: @members: field '${name}' needs an initializer`);
+        return Result::Err(
+            `java2wado: @members: field '${name}' needs an initializer: Java's default for a ${ty_java} is null`,
+        );
     };
     if !punct_is(tokens, *pos, ";") {
         return Result::Err(`java2wado: @members: expected ';' after field '${name}'`);
@@ -382,6 +395,18 @@ fn parse_method<S: AsStrSlice, S1: AsStrSlice>(
         ret_java: ret_java.to_string(),
         stmts,
     });
+}
+
+/// The value Java gives a field of Wado type `ty` that declares no initializer,
+/// or null for a reference type, whose default is `null`.
+fn java_field_default<S: AsStrSlice>(ty: S) -> Option<String> {
+    return match ty {
+        "i8" | "i16" | "i32" | "i64" => Option::Some("0"),
+        "f32" | "f64" => Option::Some("0.0"),
+        "bool" => Option::Some("false"),
+        "String" => null,
+        _ => panic(`java_field_default: '${ty}' is not a type map_java_type yields`),
+    };
 }
 
 /// Emit a field initializer, which has no rule / value-channel context.

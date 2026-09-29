@@ -1967,7 +1967,7 @@ options { superClass = PBase; }
     int n = 0;
 }
 r : A { this.ok() }? A ;
-s : A { n++; } ;
+s : A { System.out.print(n++); } ;
 A : 'a' ;
 ";
     let out = gen(src);
@@ -3457,9 +3457,6 @@ ID : [a-z]+ ;
     assert in_wado == "a => (s (e a)) [x,y2]\n", in_wado;
 }
 
-// Java's `+` concatenates a String and an int; the translated body applies
-// Wado's `+` to them, which does not compile.
-#[TODO]
 test "a Java action concatenating a string and an int prints both" {
     let got = parses("grammar T;
 s : e[\"x\", 2] EOF ;
@@ -3467,6 +3464,16 @@ e[String t, int n] : ID { System.out.print($t + $n); } ;
 ID : [a-z]+ ;
 ", "s", ["a"]);
     assert got == "a => (s (e a)) [x2]\n", got;
+}
+
+test "a Java action steps a member field declared without an initializer" {
+    let got = parses("grammar T;
+@members { int n; }
+s : (ID { n++; })+ EOF { System.out.print(n); } ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["a b c"]);
+    assert got == "a b c => (s a b c) [3]\n", got;
 }
 
 test "list labels on left-recursive operands keep each operand's precedence" {

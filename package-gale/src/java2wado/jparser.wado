@@ -130,7 +130,23 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
         expect_semi(tokens, pos)?;
         return Result::Ok(JStmt::Local(JLocal { ty, name, init }));
     }
+    if let Some(op) = step_assign_op(tokens, *pos) {
+        *pos += 1;
+        let target = parse_primary(tokens, pos)?;
+        expect_semi(tokens, pos)?;
+        return Result::Ok(step_assign(target, op));
+    }
     let e = parse_or(tokens, pos)?;
+    if let Some(op) = step_assign_op(tokens, *pos) {
+        // Any operator around the operand would have made `e` a Binary or a
+        // Unary, so a place here is exactly `place++`.
+        if !e matches { Name(_) | Member(_) | Attr(_) } {
+            return Result::Err(STEP_ONLY_AS_STATEMENT);
+        }
+        *pos += 1;
+        expect_semi(tokens, pos)?;
+        return Result::Ok(step_assign(e, op));
+    }
     if is_assign_op(tokens, *pos) {
         let op = punct_at(tokens, *pos);
         *pos += 1;
@@ -162,7 +178,29 @@ fn is_assign_op(tokens: &List<JToken>, pos: i32) -> bool {
         || punct_is(tokens, pos, "/=");
 }
 
+// Java's `++` / `--` yield a value as well as writing, and Wado has no
+// expression that does both, so only the statement form translates.
+global STEP_ONLY_AS_STATEMENT: String = "java2wado: `++` and `--` are supported only as a statement";
+
+/// The compound assignment a `++` / `--` at `pos` stands for.
+fn step_assign_op(tokens: &List<JToken>, pos: i32) -> Option<String> {
+    if punct_is(tokens, pos, "++") {
+        return Option::Some("+=");
+    }
+    if punct_is(tokens, pos, "--") {
+        return Option::Some("-=");
+    }
+    return null;
+}
+
+fn step_assign(target: JExpr, op: String) -> JStmt {
+    return JStmt::Assign(JAssign { target, op, value: JExpr::Int("1") });
+}
+
 fn expect_semi(tokens: &List<JToken>, pos: &mut i32) -> Result<(), String> {
+    if step_assign_op(tokens, *pos) matches { Some(_) } {
+        return Result::Err(STEP_ONLY_AS_STATEMENT);
+    }
     if !punct_is(tokens, *pos, ";") {
         return Result::Err("java2wado: expected ';'");
     }
@@ -279,6 +317,8 @@ fn parse_primary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> 
         } else if punct_is(tokens, *pos, "(") {
             let args = parse_args(tokens, pos)?;
             atom = JExpr::Call(JCall { callee: atom, args });
+        } else if step_assign_op(tokens, *pos) matches { Some(_) } && !punct_is(tokens, *pos + 1, ";") {
+            return Result::Err(STEP_ONLY_AS_STATEMENT);
         } else {
             return Result::Ok(atom);
         }
@@ -328,6 +368,8 @@ fn parse_atom(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
                     *pos += 1;
                     Result::Ok(JExpr::Paren(JParen { inner }));
                 }
+            } else if step_assign_op(tokens, *pos) matches { Some(_) } {
+                Result::Err(STEP_ONLY_AS_STATEMENT);
             } else {
                 Result::Err(`java2wado: unexpected '${*p}' in expression`);
             }

@@ -10,7 +10,7 @@ use { grammar_has_superclass } from "./superclass.wado";
 use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
 use { AltBinding } from "./attr_resolve.wado";
-use { MemberNames, member_names } from "./java2wado/jmembers.wado";
+use { MemberNames, MemberField, member_names } from "./java2wado/jmembers.wado";
 
 global NO_BINDINGS: List<AltBinding> = [];
 global NO_MEMBERS: MemberNames = MemberNames {};
@@ -880,4 +880,75 @@ test "java: a parenthesized name is a cast only when an operand follows it" {
         let out = java_pred(&java, "a : ID ;", false);
         assert out == wado, `${java}: '${out}'`;
     }
+}
+
+test "java action: an increment statement is a compound assignment" {
+    let members = MemberNames {
+        fields: ["ids"],
+    };
+    let cases: List<[String, String]> = [
+        ["ids++;", "p.ids += 1;"],
+        ["++ids;", "p.ids += 1;"],
+        ["this.ids--;", "p.ids -= 1;"],
+        ["int n = 0; n++;", "let mut n: i32 = 0; n += 1;"],
+    ];
+    for let [java, wado] of cases {
+        let out = java_action_m(&java, "a : ID ;", false, &members);
+        assert out == wado, `${java}: '${out}'`;
+    }
+}
+
+test "java action: an increment inside an expression is refused" {
+    // Its value differs between the prefix and postfix forms, which a compound
+    // assignment cannot carry.
+    let res = java_action_res("System.out.print(this.ids++);", "a : ID ;", false);
+    assert res == Result::Err("java2wado: `++` and `--` are supported only as a statement"), `${res:?}`;
+}
+
+test "java members: a field without an initializer takes its type's default" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, "int n; boolean b; double d; long l;", "T").unwrap();
+    let inits: List<String> = m.fields.iter_ref().map(|f: &MemberField| f.init).collect();
+    assert inits == ["0", "false", "0.0", "0"], `${inits:?}`;
+}
+
+test "java members: a String field without an initializer is refused" {
+    // Java's default is null, which a Wado String cannot hold.
+    let lang = ActionLanguage::Java;
+    let res = translate_members(&lang, "String name;", "T");
+    assert res matches { Err(_) }, "a String field needs an initializer";
+}
+
+test "java: `+` with a String-typed operand concatenates" {
+    let members = MemberNames {
+        fields: ["label"],
+        string_fields: ["label"],
+    };
+    // Types as `translate_attr_types` leaves them.
+    let rule = "a[String t, i32 n] returns [String r] locals [String l] : ID ;";
+    let cases: List<[String, String]> = [
+        ["System.out.print($t + $n);", "p.emit(`${vals.t}${vals.n}`);"],
+        ["System.out.print(t + n);", "p.emit(`${vals.t}${vals.n}`);"],
+        ["System.out.print($n + $r);", "p.emit(`${vals.n}${vals.r}`);"],
+        ["System.out.print($l + 1);", "p.emit(`${vals.l}${1}`);"],
+        ["String s = \"x\"; System.out.print(s + $n);", "let mut s: String = \"x\"; p.emit(`${s}${vals.n}`);"],
+        ["System.out.print(label + $n);", "p.emit(`${p.label}${vals.n}`);"],
+        ["System.out.print($ID.text + $n);", "p.emit(`${p.token_text(id)}${vals.n}`);"],
+        ["System.out.print($n + $n + $t);", "p.emit(`${vals.n + vals.n}${vals.t}`);"],
+    ];
+    for let [java, wado] of cases {
+        let out = java_action_m(&java, rule, true, &members);
+        assert out == wado, `${java}: '${out}'`;
+    }
+}
+
+test "java members: a String field or parameter makes `+` concatenate in a method" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        "String label = \"x\"; void show(int n) { System.out.print(label + n); } void tag(String s, int n) { System.out.print(s + n); }",
+        "T",
+    ).unwrap();
+    assert m.methods[0].source == "fn show(&mut self, n: i32) { self.emit(`${self.label}${n}`); }", m.methods[0].source;
+    assert m.methods[1].source == "fn tag(&mut self, s: String, n: i32) { self.emit(`${s}${n}`); }", m.methods[1].source;
 }

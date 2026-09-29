@@ -4,7 +4,7 @@
 //! `@members` methods (see `action.md`). A method call or constant that
 //! resolves to nothing real is a loud error, not a silently broken emit.
 
-use { ParserRule, Alternative, GrammarOption, Visibility } from "../ir.wado";
+use { ParserRule, Alternative, AttrDecl, GrammarOption, Visibility } from "../ir.wado";
 use {
     lexer_matched_text_expr,
     lexer_cursor_column_expr,
@@ -62,6 +62,10 @@ pub struct JEnv {
     /// statement can read them. Collected up front because the emitter walks
     /// statements without carrying a scope.
     pub locals: List<String> = [],
+    /// Those of `locals` whose Java type is `String`.
+    pub string_locals: List<String> = [],
+    /// Those of `fields` whose Java type is `String`.
+    pub string_fields: List<String> = [],
     /// The enclosing rule's argument names, in their surface spelling. Java
     /// reaches an argument bare; Gale stores it in the value channel, so the
     /// bare name resolves to `$name` rather than to the generated parameter.
@@ -81,6 +85,16 @@ pub struct JEnv {
     /// stands outside any one match: the cursor locals and the rule's start
     /// token belong to the generated functions, not to the struct.
     pub in_members: bool = false,
+}
+
+impl JEnv {
+    /// Bring `name` into scope as a local, of Java type `String` or not.
+    pub fn add_local<S: AsStrSlice>(&mut self, name: S, is_string: bool) {
+        self.locals.push(name.to_string());
+        if is_string {
+            self.string_locals.push(name.to_string());
+        }
+    }
 }
 
 /// The ANTLR recognizer API this translator answers for. A variant added here
@@ -177,18 +191,6 @@ pub fn translate_java_lexer_stmts<S: AsStrSlice>(body: S, env: &JEnv) -> Result<
     return emit_java_stmts(&rule, &rules, &stmts, false, &bindings, &with_locals(env, &stmts));
 }
 
-/// The names a statement list declares as locals. `emit_local` emits them as
-/// real Wado locals, so a later statement naming one is resolvable — and names
-/// the enclosing recognizer's own field, which the local shadows.
-pub fn declared_local_names(stmts: &List<JStmt>) -> List<String> {
-    let mut out: List<String> = [];
-    for let st of stmts {
-        if let Local(l) = st {
-            out.push(l.name);
-        }
-    }
-    return out;
-}
 
 /// Translate a lexer `{ ... }?` predicate body to a Wado boolean expression.
 pub fn translate_java_lexer_expr<S: AsStrSlice>(body: S, env: &JEnv) -> Result<String, String> {
@@ -235,13 +237,17 @@ pub fn translate_java_stmts<S: AsStrSlice>(
     return emit_java_stmts(rule, rules, &stmts, vals_in_scope, bindings, &with_locals(env, &stmts));
 }
 
-/// `env` plus the locals a statement list declares. Appended, not assigned: the
-/// caller may already have seeded a scope the body's own declarations join
-/// (a rule's arguments, a member method's parameters).
+/// `env` plus the locals a statement list declares. `emit_local` emits them as
+/// real Wado locals, so a later statement naming one is resolvable — and names
+/// the enclosing recognizer's own field, which the local shadows. Appended, not
+/// assigned: the caller may already have seeded a scope the body's own
+/// declarations join (a rule's arguments, a member method's parameters).
 pub fn with_locals(env: &JEnv, stmts: &List<JStmt>) -> JEnv {
     let mut scoped = *env;
-    for let n of &declared_local_names(stmts) {
-        scoped.locals.push(*n);
+    for let st of stmts {
+        if let Local(l) = st {
+            scoped.add_local(&l.name, l.ty == "String");
+        }
     }
     return scoped;
 }
@@ -433,7 +439,7 @@ pub fn emit_expr(
             Result::Ok(`(${inner})`);
         },
         Binary(b) => {
-            if b.op == "+" && is_string_concat(e) {
+            if b.op == "+" && is_java_string(rule, rules, e, bindings, env) {
                 emit_template(rule, rules, e, vals_in_scope, bindings, env);
             } else if let Some(folded) = fold_ctx_token_null_test(b, bindings, env) {
                 Result::Ok(folded);
@@ -821,12 +827,76 @@ fn is_upper_ident<S: AsStrSlice>(name: S) -> bool {
     return has_alpha;
 }
 
-/// Whether a `+` chain is string concatenation: some leaf is a string literal.
-fn is_string_concat(e: &JExpr) -> bool {
+/// Whether `e` has Java type `String`, which makes a `+` it is an operand of a
+/// concatenation. Java decides by the operands' static types, so this answers
+/// from the declarations the body can see.
+fn is_java_string(
+    rule: &ParserRule,
+    rules: &List<ParserRule>,
+    e: &JExpr,
+    bindings: &List<AltBinding>,
+    env: &JEnv,
+) -> bool {
     return match e {
         Str(_) => true,
-        Binary(b) => b.op == "+" && (is_string_concat(&b.lhs) || is_string_concat(&b.rhs)),
-        Paren(p) => is_string_concat(&p.inner),
+        Attr(text) => attr_is_string(rule, rules, text, bindings),
+        Name(n) => match resolve_name(env, n) {
+            Local => env.string_locals.contains_str(n),
+            RuleArg => declares_string(&rule.args, n),
+            Field => env.string_fields.contains(&to_snake_case(n)),
+            Unknown => false,
+        },
+        Member(m) => name_is(&m.recv, "this") && env.string_fields.contains(&to_snake_case(&m.name)),
+        Call(c) => callee_named(&c.callee, "getText") || callee_named(&c.callee, "toString"),
+        Cast(c) => c.ty == "String",
+        Binary(b) => b.op == "+"
+            && (is_java_string(rule, rules, &b.lhs, bindings, env) || is_java_string(rule, rules, &b.rhs, bindings, env)),
+        Paren(p) => is_java_string(rule, rules, &p.inner, bindings, env),
+        Int(_) | Bool(_) | Unary(_) => false,
+    };
+}
+
+/// Whether `$name` or `$name.member` reads a `String`: a `.text`, or an
+/// attribute its rule declares `String`.
+fn attr_is_string(rule: &ParserRule, rules: &List<ParserRule>, text: &String, bindings: &List<AltBinding>) -> bool {
+    let body = text.substr_bytes(1, text.len());
+    let Some(dot) = body.find(".") else {
+        return body == "text"
+            || declares_string(&rule.args, &body)
+            || declares_string(&rule.returns_decls, &body)
+            || declares_string(&rule.locals_decls, &body);
+    };
+    let label = body.substr_bytes(0, dot);
+    let member = body.substr_bytes(dot + 1, body.len());
+    if member == "text" {
+        return true;
+    }
+    for let b of bindings {
+        if !b.is_token && b.base == label {
+            for let r of rules {
+                if r.name == b.ref_name {
+                    return declares_string(&r.returns_decls, &member);
+                }
+            }
+        }
+    }
+    return false;
+}
+
+fn declares_string<S: AsStrSlice>(decls: &List<AttrDecl>, name: S) -> bool {
+    for let d of decls {
+        if d.name == name.as_str_slice() {
+            return d.type_text.trim() == "String";
+        }
+    }
+    return false;
+}
+
+/// Whether `callee` is `name` or `<receiver>.name`.
+fn callee_named<S: AsStrSlice>(callee: &JExpr, name: S) -> bool {
+    return match callee {
+        Name(n) => *n == name.as_str_slice(),
+        Member(m) => m.name == name.as_str_slice(),
         _ => false,
     };
 }
@@ -861,7 +931,7 @@ fn append_parts(
             Result::Ok(());
         },
         Binary(b) => {
-            if b.op == "+" && is_string_concat(e) {
+            if b.op == "+" && is_java_string(rule, rules, e, bindings, env) {
                 append_parts(rule, rules, &b.lhs, vals_in_scope, bindings, env, out)?;
                 append_parts(rule, rules, &b.rhs, vals_in_scope, bindings, env, out)?;
                 Result::Ok(());
@@ -870,7 +940,7 @@ fn append_parts(
             }
         },
         Paren(p) => {
-            if is_string_concat(&p.inner) {
+            if is_java_string(rule, rules, &p.inner, bindings, env) {
                 append_parts(rule, rules, &p.inner, vals_in_scope, bindings, env, out);
             } else {
                 append_interp(rule, rules, e, vals_in_scope, bindings, env, out);
