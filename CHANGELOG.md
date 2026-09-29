@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.0.33](https://github.com/wado-lang/wado/compare/v0.0.32...v0.0.33) - 2026-09-29
+
+- fix(loam): hf2loam names a malformed header, and next_token asserts its input by @gfx in https://github.com/wado-lang/wado/pull/2209
+- perf(elaborator): 30–40% lower peak RSS by sharing the stdlib snapshot's facts by @gfx in https://github.com/wado-lang/wado/pull/2210
+- feat(elaborator): a numeric literal nested anywhere in a generic call takes the type the call settles by @gfx in https://github.com/wado-lang/wado/pull/2213
+- perf!: faster derived deserializers by @gfx in https://github.com/wado-lang/wado/pull/2216
+- feat(test): `wado test --coverage` reports lines, branches and functions; stdlib gated at 80.4% lines by @gfx in https://github.com/wado-lang/wado/pull/2217
+- feat(gale): parse benchmarks for SQLite, CSS, TypeScript and Rust; Rust and TypeScript at 3+ MB/s by @gfx in https://github.com/wado-lang/wado/pull/2214
+- fix(elaborator): a resource satisfies a trait bound through its impl by @gfx in https://github.com/wado-lang/wado/pull/2218
+- fix(lower): move a `&mut` write-back into its place instead of deep-copying it by @gfx in https://github.com/wado-lang/wado/pull/2219
+- perf(zlib)!: decode DEFLATE 30% faster with an inflate_fast loop by @gfx in https://github.com/wado-lang/wado/pull/2220
+- docs(spec): a specification that reads front to back, one rule in one place by @gfx in https://github.com/wado-lang/wado/pull/2221
+
 ## [v0.0.32](https://github.com/wado-lang/wado/compare/v0.0.31...v0.0.32) - 2026-09-28
 
 - refactor(loam): GPT-2 as a library a browser page can build, with hf2loam's convert as a function by @gfx in https://github.com/wado-lang/wado/pull/2206
