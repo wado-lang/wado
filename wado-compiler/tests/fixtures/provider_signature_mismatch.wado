@@ -1,0 +1,13 @@
+// A provider's operation must take and return exactly what the dependency
+// imports. One whose signature differs is reported against the provider.
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_wrong_signature.wado" };
+
+test "unreachable — compile fails" {
+    let _ = Hlc::wrap("x", "wado");
+}
+
+__DATA__
+{
+    "compile_error": "provider `./sub/hl_wrong_signature.wado` does not implement `test:hlc/highlight@0.1.0`: its `highlight` does not match the imported signature",
+    "compile_error_codes": ["EFFECT_HANDLER_INVALID"]
+}

@@ -433,7 +433,10 @@ interface no host provides (a guest effect) makes that interface an effect its
 caller must handle. `with { provider: "./impl.wado" }` supplies it instead: the
 named Wado file is compiled into a component that exports the interface, bound
 by operation name, and composed in, so the caller needs no handler. A `provider`
-on a component that imports no guest effect is an error.
+on a component that imports no guest effect is an error. So is one that does not
+export every operation of the interface with the signature the component
+imports. An operation's default body does not fill a gap here, because the
+interface the component imports carries none.
 
 <!-- {"fixture":"spec_modules_provider.wado"} -->
 

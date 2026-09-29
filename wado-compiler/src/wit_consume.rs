@@ -21,7 +21,11 @@ use crate::name::wado_identifier;
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
-use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem};
+use wit_component::DecodedWasm;
+use wit_parser::{
+    Function as WitFunction, Handle, InterfaceId, Resolve, Type as WitType, TypeDefKind, TypeId,
+    TypeOwner, WorldId, WorldItem,
+};
 
 /// The Wado bindings synthesized from one decoded imported component.
 pub struct ComponentBindings {
@@ -252,7 +256,7 @@ impl Builder {
         }
     }
 
-    fn emit_interface(&mut self, resolve: &Resolve, iface_id: wit_parser::InterfaceId, fq: &str) {
+    fn emit_interface(&mut self, resolve: &Resolve, iface_id: InterfaceId, fq: &str) {
         let iface = &resolve.interfaces[iface_id];
 
         // Named types first, so signatures can reference them.
@@ -714,8 +718,201 @@ fn type_source_fq(resolve: &Resolve, type_id: TypeId, current_fq: &str) -> Strin
     }
 }
 
+/// Why `provider` does not implement the interface `fq` that `dependency`
+/// imports, or `None` where it does. Composition requires every imported
+/// function to be exported under its name with the same signature; an
+/// interface default cannot fill a gap, since WIT carries none.
+pub fn provider_mismatch(dependency: &[u8], provider: &[u8], fq: &str) -> Option<String> {
+    let (dep, dep_world) = decode_component(dependency);
+    let (prov, prov_world) = decode_component(provider);
+    let imported = world_interface(&dep, dep.worlds[dep_world].imports.values(), fq)
+        .unwrap_or_else(|| panic!("`{fq}` comes from the dependency's own imports"));
+    let exported = world_interface(&prov, prov.worlds[prov_world].exports.values(), fq);
+    for (name, wanted) in &dep.interfaces[imported].functions {
+        let Some(given) = exported.and_then(|id| prov.interfaces[id].functions.get(name)) else {
+            return Some(format!("it exports no `{name}`"));
+        };
+        if !same_signature(&dep, wanted, &prov, given) {
+            return Some(format!(
+                "its `{name}` does not match the imported signature"
+            ));
+        }
+    }
+    None
+}
+
+/// A component this compilation already holds, validated, as its WIT.
+fn decode_component(bytes: &[u8]) -> (Resolve, WorldId) {
+    match wit_component::decode(bytes) {
+        Ok(DecodedWasm::Component(resolve, world)) => (resolve, world),
+        Ok(DecodedWasm::WitPackage(..)) => panic!("expected a component, found a WIT package"),
+        Err(e) => panic!("a component this compilation holds fails to decode: {e}"),
+    }
+}
+
+fn world_interface<'a>(
+    resolve: &Resolve,
+    items: impl IntoIterator<Item = &'a WorldItem>,
+    fq: &str,
+) -> Option<InterfaceId> {
+    items.into_iter().find_map(|item| match item {
+        WorldItem::Interface { id, .. } => (interface_fq(resolve, *id) == fq).then_some(*id),
+        WorldItem::Function(_) | WorldItem::Type { .. } => None,
+    })
+}
+
+fn same_signature(a: &Resolve, fa: &WitFunction, b: &Resolve, fb: &WitFunction) -> bool {
+    fa.params.len() == fb.params.len()
+        && fa
+            .params
+            .iter()
+            .zip(&fb.params)
+            .all(|(pa, pb)| pa.name == pb.name && same_type(a, pa.ty, b, pb.ty))
+        && same_optional_type(a, fa.result, b, fb.result)
+}
+
+fn same_optional_type(a: &Resolve, ta: Option<WitType>, b: &Resolve, tb: Option<WitType>) -> bool {
+    match (ta, tb) {
+        (Some(ta), Some(tb)) => same_type(a, ta, b, tb),
+        (None, None) => true,
+        (Some(_), None) | (None, Some(_)) => false,
+    }
+}
+
+/// Structural equality of two types from different `Resolve`s, where a
+/// `TypeId` means nothing across the two. Aliases are looked through.
+fn same_type(a: &Resolve, ta: WitType, b: &Resolve, tb: WitType) -> bool {
+    match (unalias(a, ta), unalias(b, tb)) {
+        (WitType::Id(ia), WitType::Id(ib)) => same_type_def(a, ia, b, ib),
+        (WitType::Id(_), _) | (_, WitType::Id(_)) => false,
+        (ta, tb) => ta == tb,
+    }
+}
+
+fn unalias(resolve: &Resolve, ty: WitType) -> WitType {
+    let mut ty = ty;
+    while let WitType::Id(id) = ty
+        && let TypeDefKind::Type(inner) = resolve.types[id].kind
+    {
+        ty = inner;
+    }
+    ty
+}
+
+fn same_type_def(a: &Resolve, ia: TypeId, b: &Resolve, ib: TypeId) -> bool {
+    let (da, db) = (&a.types[ia], &b.types[ib]);
+    let same = |ta: WitType, tb: WitType| same_type(a, ta, b, tb);
+    let same_opt = |ta: Option<WitType>, tb: Option<WitType>| same_optional_type(a, ta, b, tb);
+    match &da.kind {
+        TypeDefKind::Record(ra) => {
+            let TypeDefKind::Record(rb) = &db.kind else {
+                return false;
+            };
+            ra.fields.len() == rb.fields.len()
+                && ra
+                    .fields
+                    .iter()
+                    .zip(&rb.fields)
+                    .all(|(fa, fb)| fa.name == fb.name && same(fa.ty, fb.ty))
+        }
+        TypeDefKind::Resource => matches!(db.kind, TypeDefKind::Resource) && da.name == db.name,
+        TypeDefKind::Handle(Handle::Own(ra)) => {
+            let TypeDefKind::Handle(Handle::Own(rb)) = &db.kind else {
+                return false;
+            };
+            same_type_def(a, *ra, b, *rb)
+        }
+        TypeDefKind::Handle(Handle::Borrow(ra)) => {
+            let TypeDefKind::Handle(Handle::Borrow(rb)) = &db.kind else {
+                return false;
+            };
+            same_type_def(a, *ra, b, *rb)
+        }
+        TypeDefKind::Flags(fa) => {
+            let TypeDefKind::Flags(fb) = &db.kind else {
+                return false;
+            };
+            fa.flags
+                .iter()
+                .map(|f| &f.name)
+                .eq(fb.flags.iter().map(|f| &f.name))
+        }
+        TypeDefKind::Tuple(ta) => {
+            let TypeDefKind::Tuple(tb) = &db.kind else {
+                return false;
+            };
+            ta.types.len() == tb.types.len()
+                && ta.types.iter().zip(&tb.types).all(|(x, y)| same(*x, *y))
+        }
+        TypeDefKind::Variant(va) => {
+            let TypeDefKind::Variant(vb) = &db.kind else {
+                return false;
+            };
+            va.cases.len() == vb.cases.len()
+                && va
+                    .cases
+                    .iter()
+                    .zip(&vb.cases)
+                    .all(|(ca, cb)| ca.name == cb.name && same_opt(ca.ty, cb.ty))
+        }
+        TypeDefKind::Enum(ea) => {
+            let TypeDefKind::Enum(eb) = &db.kind else {
+                return false;
+            };
+            ea.cases
+                .iter()
+                .map(|c| &c.name)
+                .eq(eb.cases.iter().map(|c| &c.name))
+        }
+        TypeDefKind::Option(ta) => {
+            let TypeDefKind::Option(tb) = &db.kind else {
+                return false;
+            };
+            same(*ta, *tb)
+        }
+        TypeDefKind::Result(ra) => {
+            let TypeDefKind::Result(rb) = &db.kind else {
+                return false;
+            };
+            same_opt(ra.ok, rb.ok) && same_opt(ra.err, rb.err)
+        }
+        TypeDefKind::List(ta) => {
+            let TypeDefKind::List(tb) = &db.kind else {
+                return false;
+            };
+            same(*ta, *tb)
+        }
+        TypeDefKind::Map(ka, va) => {
+            let TypeDefKind::Map(kb, vb) = &db.kind else {
+                return false;
+            };
+            same(*ka, *kb) && same(*va, *vb)
+        }
+        TypeDefKind::FixedLengthList(ta, na) => {
+            let TypeDefKind::FixedLengthList(tb, nb) = &db.kind else {
+                return false;
+            };
+            na == nb && same(*ta, *tb)
+        }
+        TypeDefKind::Future(ta) => {
+            let TypeDefKind::Future(tb) = &db.kind else {
+                return false;
+            };
+            same_opt(*ta, *tb)
+        }
+        TypeDefKind::Stream(ta) => {
+            let TypeDefKind::Stream(tb) = &db.kind else {
+                return false;
+            };
+            same_opt(*ta, *tb)
+        }
+        TypeDefKind::Type(_) => unreachable!("`same_type` looks through aliases"),
+        TypeDefKind::Unknown => unreachable!("a resolved `Resolve` holds no unknown type"),
+    }
+}
+
 /// `namespace:package/interface@version` for an interface.
-fn interface_fq(resolve: &Resolve, iface_id: wit_parser::InterfaceId) -> String {
+fn interface_fq(resolve: &Resolve, iface_id: InterfaceId) -> String {
     let iface = &resolve.interfaces[iface_id];
     let name = iface.name.clone().unwrap_or_default();
     let Some(pkg_id) = iface.package else {
@@ -739,11 +936,7 @@ mod tests {
     use crate::component_model::CmInterfaceRegistry;
 
     fn decode_fixture() -> (Resolve, WorldId) {
-        let bytes = std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap();
-        match wit_component::decode(&bytes).unwrap() {
-            wit_component::DecodedWasm::Component(r, w) => (r, w),
-            wit_component::DecodedWasm::WitPackage(..) => panic!("expected component"),
-        }
+        decode_component(&std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap())
     }
 
     /// The fixture's own interface FQ, read from the component. The binary is

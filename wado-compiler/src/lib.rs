@@ -73,7 +73,7 @@ use crate::component_model::{
 };
 use crate::defs::DefId;
 use crate::name::entry_dir_of;
-use crate::wit_consume::module_host_leaf_imports;
+use crate::wit_consume::{module_host_leaf_imports, provider_mismatch};
 use crate::world_registry::WorldInfo;
 pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
@@ -1112,7 +1112,9 @@ async fn resolve_inline_providers<H: CompilerHost>(
             Some(&entry_source),
             &load_result.invocations,
         );
-        let Some(dep_module) = dep_source.and_then(|s| load_result.modules.get(&s)) else {
+        let Some((dep_source, dep_module)) =
+            dep_source.and_then(|s| load_result.modules.get(&s).map(|m| (s, m)))
+        else {
             return Err(bail(format!(
                 "`provider` on `{}` names an import that is not a component",
                 use_decl.source
@@ -1169,6 +1171,20 @@ async fn resolve_inline_providers<H: CompilerHost>(
         ))
         .await
         .map_err(|e| bail(format!("provider `{prov_path}` failed to compile: {e}")))?;
+        let namespace = dep_source
+            .wasm_canonical_namespace()
+            .expect("a module importing a guest effect is a component");
+        if let Some(why) = provider_mismatch(
+            &load_result.wasm_assets[&namespace].bytes,
+            &result.wasm,
+            &fq,
+        ) {
+            return Err(bail_with(
+                logger,
+                Code::EffectHandlerInvalid,
+                format!("provider `{prov_path}` does not implement `{fq}`: {why}"),
+            ));
+        }
         providers.push(ProviderComponent {
             import_fq: fq,
             bytes: result.wasm,
