@@ -325,9 +325,11 @@ fn an_undeclared_alias_names_the_manifest() {
         .assert()
         .failure()
         .stderr(
-            predicate::str::contains("dependency 'lib:nothere' is not declared in [dependencies] of ")
-                .and(predicate::str::contains("app/wado.toml"))
-                .and(predicate::str::contains("unknown module namespace").not()),
+            predicate::str::contains(
+                "dependency 'lib:nothere' is not declared in [dependencies] of ",
+            )
+            .and(predicate::str::contains("app/wado.toml"))
+            .and(predicate::str::contains("unknown module namespace").not()),
         );
 }
 

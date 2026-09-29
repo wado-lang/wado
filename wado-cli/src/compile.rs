@@ -663,8 +663,7 @@ pub(crate) async fn prepare_kiln(
     let manifest = project.map_or_else(empty_manifest, |p| p.manifest);
     rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root)
         .map_err(PipelineError::Manifest)?;
-    rewrite_local_dir_modules(&mut invocations, &manifest_root)
-        .map_err(PipelineError::Manifest)?;
+    rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(PipelineError::Manifest)?;
     // A generator's outputs are products of this run, not a tree moving under
     // it. Declared here but applied when the watch is asked, so the order
     // fixtures compile in does not matter.
@@ -848,7 +847,8 @@ fn build_dep_generator_local_path(
         return Ok(None);
     };
     let entry = package_generator_entry(&manifest_root.join(path))?;
-    Ok(entry.map(|entry| wado_compiler::kiln::InvocationPath::normalize(&format!("{path}/{entry}"))))
+    Ok(entry
+        .map(|entry| wado_compiler::kiln::InvocationPath::normalize(&format!("{path}/{entry}"))))
 }
 
 /// `path` as an absolute, lexically normalized path, so two paths spelled
@@ -1135,7 +1135,8 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
             Some(&default_interface_name(&opts.input, nearest.as_ref())),
         ));
     }
-    let result = try_compile(&opts.input, &flags)
+    // Boxed so the manifest held across it keeps every caller's future small.
+    let result = Box::pin(try_compile(&opts.input, &flags))
         .await
         .map_err(|_| CliExit::silent_failure(1))?;
     let wasm = result.wasm;
