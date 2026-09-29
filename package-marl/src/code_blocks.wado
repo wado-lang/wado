@@ -13,9 +13,9 @@ pub struct FencedCode {
     pub code: String,
     /// The 1-based source line of the opening fence.
     pub line: i32,
-    /// The raw HTML block directly preceding the fence in the same container,
-    /// blank lines between allowed.
-    pub html_before: Option<String>,
+    /// The text of the comment block directly preceding the fence in the same
+    /// container, blank lines between allowed.
+    pub comment_before: Option<String>,
 }
 
 /// Every fenced code block of `source`, in source order, including those
@@ -30,11 +30,11 @@ pub fn fenced_code_blocks<S: AsStrSlice>(source: S) -> List<FencedCode> {
 }
 
 fn collect(nodes: &List<Node>, out: &mut List<FencedCode>) {
-    let mut html_before: Option<String> = null;
+    let mut comment_before: Option<String> = null;
     for let node of nodes {
         match node {
             Node::CodeBlock(cb) && cb.fenced => {
-                out.push(FencedCode { tag: cb.tag, code: cb.code, line: cb.line, html_before });
+                out.push(FencedCode { tag: cb.tag, code: cb.code, line: cb.line, comment_before });
             },
             Node::BlockQuote(inner) => collect(inner, out),
             Node::List(list) => {
@@ -45,8 +45,8 @@ fn collect(nodes: &List<Node>, out: &mut List<FencedCode>) {
             _ => {
             },
         }
-        html_before = match node {
-            Node::Html(html) => Option::Some(*html),
+        comment_before = match node {
+            Node::Comment(text) => Option::Some(*text),
             _ => null,
         };
     }

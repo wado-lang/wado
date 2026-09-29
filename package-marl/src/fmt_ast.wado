@@ -12,6 +12,9 @@
 //! dispatches on the concrete container type directly rather than walking a
 //! single homogeneous tree.
 
+internal global COMMENT_OPEN: String = "<!--";
+internal global COMMENT_CLOSE: String = "-->";
+
 internal enum FrontMatterKind {
     Yaml,
     Toml,
@@ -144,6 +147,8 @@ internal variant Node {
     Table(MdTable),
     ThematicBreak,
     Html(String),
+    /// The text between `<!--` and `-->`, alone in its block or inline.
+    Comment(String),
     LinkReferenceDef(LinkReferenceDef),
 
     // Inline

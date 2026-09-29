@@ -169,10 +169,10 @@ test "parse_inline reads a raw inline HTML span" {
 
 test "parse_inline reads an HTML comment span" {
     let nodes = parse_inline("a <!-- note --> b", &no_refs());
-    if let Some(Node::Html(s)) = nodes.get(1) {
-        assert s == "<!-- note -->";
+    if let Some(Node::Comment(s)) = nodes.get(1) {
+        assert s == " note ";
     } else {
-        panic("expected an Html node");
+        panic("expected a Comment node");
     }
 }
 

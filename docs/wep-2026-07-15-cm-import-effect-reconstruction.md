@@ -74,7 +74,7 @@ has nothing to substitute.
 A library may declare its own `interface` effect and leave it unhandled at the
 boundary. Compiled as a component, that effect lowers to a CM **import** of a
 synthesized interface — the mirror of reconstruction. marl can thus perform a
-`Highlight` effect it does not implement, leaving the choice to consumers. An
+`RenderHook` effect it does not implement, leaving the choice to consumers. An
 effect handled inside the library stays internal and imports nothing.
 
 ### Satisfying — hold the capability, or compose a provider

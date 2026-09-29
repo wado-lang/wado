@@ -22,6 +22,8 @@ use {
     MdTableRow,
     ColumnAlign,
     LinkReferenceDef,
+    COMMENT_OPEN,
+    COMMENT_CLOSE,
 } from "./fmt_ast.wado";
 use { RefTable, new_ref_table, ref_table_insert, parse_dest_and_title } from "./fmt_links.wado";
 use { parse_inline } from "./fmt_parse_inline.wado";
@@ -194,7 +196,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &
         if is_html_block_start(&chars) && (para.is_empty() || html_block_interrupts_paragraph(&chars)) {
             flush_paragraph(&mut out, &mut para, refs);
             let block_end = html_block_bounds(lines, &chars, i, end);
-            out.push(Node::Html(lines_slice(lines, i, block_end).join("\n").trim_end().to_string()));
+            out.push(html_block_node(lines_slice(lines, i, block_end).join("\n").trim_end().to_string()));
             i = block_end;
             continue;
         }
@@ -261,6 +263,19 @@ fn lines_slice(lines: &List<String>, s: i32, e: i32) -> List<String> {
 }
 
 // --- raw HTML blocks ---
+
+/// A block that is one comment and nothing more is a `Comment`; any other is
+/// `Html`.
+fn html_block_node(block: String) -> Node {
+    let Some(rest) = block.strip_prefix(&COMMENT_OPEN) else {
+        return Node::Html(block);
+    };
+    let inner = rest.to_string();
+    return match inner.find(&COMMENT_CLOSE) {
+        Some(close) && close + COMMENT_CLOSE.len() == inner.len() => Node::Comment(inner.substr_bytes(0, close)),
+        _ => Node::Html(block),
+    };
+}
 
 /// A line starting (after up to 3 spaces of indent) with a syntactically
 /// plausible HTML tag open/close, comment, or processing instruction. A
@@ -343,10 +358,10 @@ fn html_block_end_markers(chars: &List<char>) -> Option<[List<String>, i32]> {
             return Option::Some([RAW_TEXT_END_TAGS, after]);
         }
     }
-    if rest.starts_with("<!--") {
+    if rest.starts_with(&COMMENT_OPEN) {
         return Option::Some([
-            ["-->"],
-            p + 4,
+            [COMMENT_CLOSE],
+            p + COMMENT_OPEN.len(),
         ]);
     }
     if rest.starts_with("<?") {

@@ -304,6 +304,16 @@ test "render escapes a raw HTML block as literal text" {
     assert render("<div>x</div>").html == "&lt;div&gt;x&lt;/div&gt;";
 }
 
+test "render omits an HTML comment, block or inline" {
+    assert render("<!-- {\"fixture\": \"a.wado\"} -->\n\ntext").html == "<p>text</p>";
+    assert render("- a\n\n  <!-- c -->\n\n- b").html == "<ul>\n<li>\n<p>a</p>\n</li>\n<li>\n<p>b</p>\n</li>\n</ul>";
+    assert render("a <!-- note --> b").html == "<p>a  b</p>";
+}
+
+test "render escapes a comment block that holds other HTML" {
+    assert render("<!-- c --> <b>").html == "&lt;!-- c --&gt; &lt;b&gt;";
+}
+
 // --- front matter ---
 
 test "render skips leading front matter" {
@@ -414,22 +424,49 @@ test "render reports no headings for a heading-free document" {
     assert result.headings.is_empty();
 }
 
-// --- highlight extension point ---
+// --- render hooks ---
 
-use { render_highlighted, Highlight } from "./fmt_html.wado";
+use { render_highlighted, RenderHook } from "./fmt_html.wado";
 
 struct MarkHl {
 }
 
-impl Highlight for MarkHl {
+impl RenderHook for MarkHl {
     fn highlight(&mut self, code: String, lang: String) -> String {
         resume `<mark data-lang="${lang}">${code}</mark>`;
     }
 
-    ..trap
+    fn comment(&mut self, text: String) -> String {
+        resume `<!--${text}-->`;
+    }
 }
 
-test "render_highlighted delegates each code block to the Highlight handler, unescaped" {
+struct HighlightOnly {
+}
+
+impl RenderHook for HighlightOnly {
+    fn highlight(&mut self, code: String, _lang: String) -> String {
+        resume code;
+    }
+}
+
+test "render_highlighted hands each comment's text to the hook, unescaped" {
+    let mut h = MarkHl {};
+    let out = with &mut h do {
+        render_highlighted("<!-- a -->\n\nx <!--b--> y");
+    };
+    assert out.html == "<!-- a -->\n<p>x <!--b--> y</p>";
+}
+
+test "a hook that leaves comment out omits comments" {
+    let mut h = HighlightOnly {};
+    let out = with &mut h do {
+        render_highlighted("<!-- a -->\n\nx");
+    };
+    assert out.html == "<p>x</p>";
+}
+
+test "render_highlighted delegates each code block to the hook, unescaped" {
     let mut h = MarkHl {};
     let out = with &mut h do {
         render_highlighted("```wado
