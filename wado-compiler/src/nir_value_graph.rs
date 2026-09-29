@@ -1035,6 +1035,32 @@ impl ValuePool {
         &self.values[id.0 as usize]
     }
 
+    /// Whether running the value tree at `v` can trap. A promoted value is pure
+    /// but not necessarily total: `let _ = 1 / 0` freezes a trapping division
+    /// into one. Recursive because a value tree has no skeleton nodes for a
+    /// walker to descend through.
+    pub fn may_trap(&self, v: ValueId) -> bool {
+        match self.kind(v) {
+            ValueKind::Binary { op, lhs, rhs, .. } => {
+                op.may_trap() || self.may_trap(*lhs) || self.may_trap(*rhs)
+            }
+            ValueKind::Unary { op, operand, .. } => op.may_trap() || self.may_trap(*operand),
+            ValueKind::Cast { operand, .. } => self.may_trap(*operand),
+            ValueKind::Select { cond, then, else_ } => {
+                self.may_trap(*cond) || self.may_trap(*then) || self.may_trap(*else_)
+            }
+            ValueKind::FieldAccess { .. } | ValueKind::LoopPhi { .. } => true,
+            ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Const(..)
+            | ValueKind::Opaque(_) => false,
+        }
+    }
+
     /// Intern an integer constant `value` of type `type_id`. The type is part
     /// of the hash-cons key (see [`ValueKind::Int`]), so two same-valued ints of
     /// different width are distinct values.

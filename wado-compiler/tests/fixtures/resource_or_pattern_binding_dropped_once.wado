@@ -1,0 +1,22 @@
+// A resource an or-pattern binds is one value, whichever alternative matched:
+// every alternative binds the same local, so it is dropped once.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers, FieldName } from "wasi:http";
+
+fn has_a(r: Result<Fields, Fields>) -> bool {
+    return match r {
+        Ok(f) | Err(f) => f.has("a" as FieldName),
+    };
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    assert !has_a(Ok(Fields::new()));
+    assert !has_a(Err(Fields::new()));
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

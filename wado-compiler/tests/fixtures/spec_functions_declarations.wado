@@ -1,0 +1,82 @@
+// Function declarations: parameters, return types, the unit return, argument
+// order, and calls that reach a function declared later in the module.
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test "a declaration and a call" {
+    assert add(2, 3) == 5;
+}
+
+fn sign(n: i32) -> i32 {
+    if n < 0 {
+        return -1;
+    } else if n > 0 {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+fn check_positive(n: i32) -> i32 {
+    if n > 0 {
+        return n;
+    }
+    panic("not positive");
+}
+
+test "every path returns" {
+    assert sign(-5) == -1 && sign(0) == 0 && sign(9) == 1;
+    assert check_positive(3) == 3;
+}
+
+fn record(log: &mut List<String>, line: String) {
+    if line.is_empty() {
+        return;              // an early exit from a unit function
+    }
+    log.push(line);
+}
+
+fn clear(log: &mut List<String>) -> () {
+    log.truncate(0);
+}
+
+test "a unit function" {
+    let mut log: List<String> = [];
+    record(&mut log, "");
+    record(&mut log, "a");
+    assert log == ["a"];
+    assert record(&mut log, "b") == ();
+    clear(&mut log);
+    assert log.is_empty();
+}
+
+fn next(log: &mut List<i32>, v: i32) -> i32 {
+    log.push(v);
+    return v;
+}
+
+fn digits(a: i32, b: i32, c: i32) -> i32 {
+    return a * 100 + b * 10 + c;
+}
+
+test "arguments are evaluated left to right" {
+    let mut order: List<i32> = [];
+    let n = digits(next(&mut order, 1), next(&mut order, 2), next(&mut order, 3));
+    assert n == 123 && order == [1, 2, 3];
+}
+
+test "a function declared later" {
+    assert is_even(10) && !is_even(7);
+}
+
+fn is_even(n: i32) -> bool {
+    if n == 0 { return true; }
+    return is_odd(n - 1);
+}
+
+fn is_odd(n: i32) -> bool {
+    if n == 0 { return false; }
+    return is_even(n - 1);
+}

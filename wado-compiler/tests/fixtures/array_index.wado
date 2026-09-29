@@ -37,7 +37,7 @@ struct Entries<K, V> {
     deleted: List<bool>,
 }
 
-impl<K, V> Entries<K, V> {
+impl<K: Ord, V> Entries<K, V> {
     fn find_key_index(&self, key: &K) -> i32 {
         let mut i = 0;
         while i < self.keys.len() && self.keys[i] < *key {
@@ -63,7 +63,7 @@ struct Keys<K> {
     deleted: List<bool>,
 }
 
-impl<K> Keys<K> {
+impl<K: Ord> Keys<K> {
     fn count_active(&self) -> i32 {
         let mut count = 0;
         for let mut i = 0; i < self.keys.len(); i += 1 {
@@ -98,7 +98,7 @@ struct Tree<K> {
     max_keys: i32,
 }
 
-impl<K> Tree<K> {
+impl<K: Ord> Tree<K> {
     // `key` is a parameter rather than a literal: inside this body `K` is
     // opaque, so no concrete key could satisfy `find_index(&K)`.
     fn check(&self, key: &K) -> i32 {

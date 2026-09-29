@@ -1,0 +1,84 @@
+// Signed `MIN / -1` overflows, so it traps at every width, as division by
+// zero does. `MIN % -1` is 0 at every width. The `black_box` cases reach the
+// runtime; the others go through the constant folder, which must agree.
+
+#[expect_trap]
+test "i8 MIN / -1 traps" {
+    let _ = builtin::black_box(i8::MIN) / builtin::black_box(-1 as i8);
+}
+
+#[expect_trap]
+test "i16 MIN / -1 traps" {
+    let _ = builtin::black_box(i16::MIN) / builtin::black_box(-1 as i16);
+}
+
+#[expect_trap]
+test "i32 MIN / -1 traps" {
+    let _ = builtin::black_box(i32::MIN) / builtin::black_box(-1);
+}
+
+#[expect_trap]
+test "i64 MIN / -1 traps" {
+    let _ = builtin::black_box(i64::MIN) / builtin::black_box(-1 as i64);
+}
+
+#[expect_trap]
+test "i128 MIN / -1 traps" {
+    let _ = builtin::black_box(i128::MIN) / builtin::black_box(-1 as i128);
+}
+
+#[expect_trap]
+test "folded i8 MIN / -1 traps" {
+    let min: i8 = i8::MIN;
+    let _ = min / -1;
+}
+
+#[expect_trap]
+test "folded i16 MIN / -1 traps" {
+    let min: i16 = i16::MIN;
+    let _ = min / -1;
+}
+
+#[expect_trap]
+test "folded i32 MIN / -1 traps" {
+    let min: i32 = i32::MIN;
+    let _ = min / -1;
+}
+
+#[expect_trap]
+test "folded i64 MIN / -1 traps" {
+    let min: i64 = i64::MIN;
+    let _ = min / -1;
+}
+
+#[expect_trap]
+test "folded i128 MIN / -1 traps" {
+    let min: i128 = i128::MIN;
+    let _ = min / -1;
+}
+
+test "MIN / -1 is the only overflow" {
+    assert builtin::black_box(i8::MIN + 1) / builtin::black_box(-1 as i8) == i8::MAX;
+    assert builtin::black_box(i8::MIN) / builtin::black_box(1 as i8) == i8::MIN;
+    assert builtin::black_box(-7 as i8) / builtin::black_box(2 as i8) == -3;
+    assert builtin::black_box(i16::MIN) / builtin::black_box(2 as i16) == -16384;
+    assert builtin::black_box(-7 as i16) / builtin::black_box(-2 as i16) == 3;
+    assert builtin::black_box(i128::MIN) / builtin::black_box(1 as i128) == i128::MIN;
+    assert builtin::black_box(i128::MIN + 1) / builtin::black_box(-1 as i128) == i128::MAX;
+}
+
+test "MIN % -1 is 0" {
+    assert builtin::black_box(i8::MIN) % builtin::black_box(-1 as i8) == 0;
+    assert builtin::black_box(i16::MIN) % builtin::black_box(-1 as i16) == 0;
+    assert builtin::black_box(i32::MIN) % builtin::black_box(-1) == 0;
+    assert builtin::black_box(i64::MIN) % builtin::black_box(-1 as i64) == 0;
+    assert builtin::black_box(i128::MIN) % builtin::black_box(-1 as i128) == 0;
+}
+
+test "folded MIN % -1 is 0" {
+    assert i8::MIN % -1 == 0;
+    assert i16::MIN % -1 == 0;
+    assert i32::MIN % -1 == 0;
+    assert i64::MIN % -1 == 0;
+    assert i128::MIN % -1 == 0;
+}

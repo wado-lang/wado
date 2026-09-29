@@ -1374,13 +1374,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(dispatch) = self.reflect_dispatch_of(head.site, &static_call.method)
         {
             let [self_ty_ast] = head.args else {
-                let _ = self.emit(TypeError::UnknownFunction {
-                    name: format!(
-                        "{}::<…>::{} (one subject type argument, found {})",
-                        unalias_namespace_member(&head.name),
-                        static_call.method,
-                        head.args.len()
-                    ),
+                let _ = self.emit(TypeError::TypeArgumentCount {
+                    name: head.name.clone(),
+                    expected: 1,
+                    found: head.args.len(),
                     span: static_call.span,
                 });
                 return TypeTable::ERROR;

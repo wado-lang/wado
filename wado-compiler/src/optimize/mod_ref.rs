@@ -8,13 +8,13 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir;
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::{
-    expr_node_may_trap_typed, field_receiver_nonnull, unary_may_trap,
+    expr_node_may_trap_typed, field_receiver_nonnull, operand_values_may_trap, unary_may_trap,
 };
 use crate::optimize::bounds::{self, Builtin, Proofs};
 use crate::optimize::inline::recursive_scc_members;
@@ -207,7 +207,7 @@ impl ModRef {
     fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope<'_>) {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
-            Operand::Value(_) => {}
+            Operand::Value(v) => self.may_trap |= body.values.may_trap(v),
         }
     }
 
@@ -311,9 +311,7 @@ impl ModRef {
 
             // === Trapping arithmetic / unary ===
             ExprKind::Binary { left, op, right } => {
-                if matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod) {
-                    self.may_trap = true;
-                }
+                self.may_trap |= op.may_trap();
                 let (left, right) = (*left, *right);
                 self.accumulate_operand(body, left, scope);
                 self.accumulate_operand(body, right, scope);
@@ -654,7 +652,8 @@ pub(super) struct FnEffect {
     /// see through (an indirect call, a bodyless non-builtin).
     pub opaque: bool,
     /// Some execution may trap: a body's own nodes
-    /// ([`super::arena_query::expr_node_may_trap_typed`]), a builtin call
+    /// ([`super::arena_query::expr_node_may_trap_typed`]) and the promoted
+    /// values they hold ([`operand_values_may_trap`]), a builtin call
     /// whose `#[trap(...)]` checks [`bounds`] cannot prove, or a callee's.
     pub may_trap: bool,
     /// Some execution may never return: a loop [`bounds`] cannot count out, or
@@ -859,6 +858,7 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<Builti
         stack.clear();
         stack.push(NodeRef::Block(body.root));
         while let Some(node) = stack.pop() {
+            own.may_trap |= operand_values_may_trap(body, node);
             match node {
                 NodeRef::Stmt(s) => {
                     if matches!(body.stmts[s].kind, StmtKind::Loop { .. })

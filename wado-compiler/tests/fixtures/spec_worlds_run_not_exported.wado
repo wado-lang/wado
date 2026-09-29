@@ -1,0 +1,9 @@
+// The entry point is an `export fn`. A plain `fn run` is not one.
+use { println, Stdout } from "core:cli";
+
+fn run() with Stdout {
+    println("unreachable from the host");
+}
+
+__DATA__
+{"compile_error": "function `run` exists but is not marked with `export` keyword"}

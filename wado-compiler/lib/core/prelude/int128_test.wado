@@ -571,6 +571,19 @@ test "i128 division by zero traps" {
     let _ = a / b;
 }
 
+#[expect_trap]
+test "i128 MIN / -1 traps" {
+    let a = builtin::black_box(i128::MIN);
+    let b: i128 = -1;
+    let _ = a / b;
+}
+
+test "i128 MIN % -1 is 0" {
+    let a = builtin::black_box(i128::MIN);
+    let b: i128 = -1;
+    assert a % b == 0;
+}
+
 test "u128 shift by zero" {
     let a: u128 = 12345678;
     assert a << 0 == a;

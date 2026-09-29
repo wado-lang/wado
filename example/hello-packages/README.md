@@ -4,18 +4,19 @@ A hello-world for package dependencies. `src/main.wado` uses two kinds of
 dependency:
 
 - [`wado-lang:cm-catalog`](../../package-cm-catalog) — a Component Model
-  **library** pulled from an OCI registry by `wado fetch`, imported as a local
-  wasm asset and exercised through its `CmCatalog::id_*` identity functions.
+  **library** pulled from an OCI registry by `wado fetch`, imported by its
+  coordinate and exercised through its `CmCatalog::id_*` identity functions.
 - [`gale`](../../package-gale) — a Kiln **generator** that turns `src/Calc.g4`
   into a calculator parser at compile time; `main.wado` parses `1 + 2 * 3`
   through it.
 
-## Registry vs local, today
+## Where the dependencies come from
 
 Both dependencies are consumed from the OCI registry:
 
-- cm-catalog is a `[dependencies]` **library**, pulled by `wado fetch` and
-  imported as a local wasm asset.
+- cm-catalog is a `[dependencies]` **library**, pulled by `wado fetch`.
+  `use { CmCatalog } from "wado-lang:cm-catalog"` imports it across the
+  Component Model boundary, as a prebuilt component.
 - gale is a `[build-dependencies]` **generator** (`module: "wado-lang:gale"`).
   `wado compile` resolves the coordinate against the registry, pulls the
   `core:kiln/generator` component at its world sub-path, and reads its options
@@ -25,23 +26,14 @@ Both dependencies are consumed from the OCI registry:
 
 ```sh
 wado update                     # resolve wado-lang:cm-catalog → wado.lock
-wado fetch                      # download the component into ./build (gitignored)
+wado fetch                      # download the components into the shared cache
 wado run example/hello-packages # compile + run
 ```
 
-`build/` is gitignored — the fetched component is not committed. `wado fetch`
-pulls it from `ghcr.io/wado-lang/cm-catalog` into `build/cm-catalog.wasm`, which
-`src/main.wado` imports as a local wasm asset. (Once import resolution for
-registry dependencies lands, `use { CmCatalog } from "wado-lang:cm-catalog"`
-will resolve directly and the `build/` bridge goes away.)
-
-To build the component locally instead of pulling it, build `package-cm-catalog`'s
-library world into place:
-
-```sh
-( cd package-cm-catalog && wado build --lib -o ../example/hello-packages/build/cm-catalog.wasm )
-wado run example/hello-packages
-```
+`wado fetch` pulls the component from `ghcr.io/wado-lang/cm-catalog` into the
+shared dependency cache, `~/wado/ghcr.io/wado-lang/cm-catalog/0.1.0/component.wasm`
+(`WADO_ROOT` moves the `~/wado` root). Every project reads that one copy, and
+nothing is written into this directory.
 
 ## Publishing the component (one-time)
 
@@ -64,7 +56,7 @@ wkg oci push ghcr.io/wado-lang/cm-catalog:0.1.0 cm-catalog.wasm \
 Make the package public (GitHub → wado-lang → Packages → cm-catalog) for
 unauthenticated pulls. After publishing, `wado update` resolves
 `wado-lang:cm-catalog` against the OCI registry and `wado fetch` downloads the
-component into `build/`.
+component into the shared cache.
 
 ## Consuming a registry generator
 
@@ -84,25 +76,19 @@ use calc from "./Calc.g4"
 `wado update` resolves the coordinate, picks the highest published version
 matching the requirement, and records it in `wado.lock` as a `[[build-dependency]]`
 with the generator artifact's integrity digest. `wado fetch` then pre-pulls the
-component from the generator world sub-path into `build/kiln/generators/`. On
+component from the generator world sub-path into the shared cache, under
+`~/wado/ghcr.io/wado-lang/gale/core-kiln-generator/`. On
 compile, `GeneratorModule::Spec("wado-lang:gale")` resolves to the locked version,
-reuses the fetched component (a published version is immutable, so the cache is
-sound), and recovers its options descriptor from the component WIT. The generator
+reuses the fetched component without checking it against the lock's digest
+([Package Manifest](../../docs/wep-2026-02-14-package-manifest.md#known-gaps)),
+and recovers its options descriptor from the component WIT. The generator
 then runs as a prebuilt component through the same driver path as a source
 generator. Without a lock the compiler resolves and pulls lazily.
 
 ### Options and defaults
 
 A registry generator's options shape comes from its component WIT, and a WIT
-`record` has no notion of a field default — so **every non-`option<T>` field is
-required** at the consuming site (`{ highlight: false, trace: false }` above,
-even though `trace` defaults to `false` in gale's source). Source-level defaults
-do not cross the registry boundary; supply each field explicitly.
-
-### Remaining follow-ups
-
-- Carrying source-level option defaults across the boundary (so an omitted field
-  falls back to the generator's default) needs the component to encode them; see
-  the Kiln WEP's "Source vs registry options descriptor" note.
-- `wado.lock`'s recorded integrity is not yet enforced on fetch/compile (a
-  `--locked` / `--offline` mode is a separate dependency-management phase).
+`record` has no field defaults. So every field is required at the use site
+unless its type is an `Option`, a `List` or a `TreeMap`
+([Options](../../docs/spec-kiln.md#options)). That is why the clause above
+writes `trace: false`, although `trace` defaults to `false` in gale's source.

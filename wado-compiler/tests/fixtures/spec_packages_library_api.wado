@@ -1,0 +1,14 @@
+// app/src/main.wado - `"lib:geo" = { path = "../geo" }` in app/wado.toml
+use { Square, area, grown, map_sides, unit_side } from "lib:geo";
+
+test {
+    let s = Square { side: 3 };
+    assert area(s) == 9 && grown(s).side == 6;
+    assert map_sides([s, Square { side: unit_side() }], |n| n * 10) == [30, 10];
+}
+
+__DATA__
+{
+  "test": {},
+  "dependencies": { "lib:geo": "sub/spec_packages_geo/lib.wado" }
+}

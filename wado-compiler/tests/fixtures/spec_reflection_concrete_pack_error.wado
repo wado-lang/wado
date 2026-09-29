@@ -1,0 +1,20 @@
+// A walk in a generic body needs the field types bound as a pack.
+
+fn count<T: ReflectStruct<FieldTypes = [i32]>>(v: &T) -> i32 {
+    let mut n = 0;
+    for let f of ReflectStruct::<T>::members() {  // ERROR: `T` needs `FieldTypes = [..F]`
+        n += 1;
+    }
+    return n;
+}
+
+struct One {
+    a: i32,
+}
+
+test {
+    assert count(&One { a: 1 }) == 1;
+}
+
+__DATA__
+{"compile_error": ":5:18: analysis error: `ReflectStruct::<T>::members()` needs `T` bound as `ReflectStruct<FieldTypes = [..F]>`"}

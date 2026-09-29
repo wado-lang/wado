@@ -36,7 +36,7 @@ fn same<T>(a: T, b: T) -> T {
     return a;
 }
 
-fn unbox<T>(b: Box<T>, fallback: T) -> T {
+fn unbox<T: Eq>(b: Box<T>, fallback: T) -> T {
     return if b.v == fallback { fallback } else { b.v };
 }
 

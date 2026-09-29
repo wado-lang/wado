@@ -1,0 +1,13 @@
+// A bare `return;` hands back `()`, so a function declaring any other return
+// type rejects it rather than returning nothing.
+
+fn f() -> i32 {
+    return;
+}
+
+export fn run() {
+    assert f() == 0;
+}
+
+__DATA__
+{ "compile_error": ":5:5: analysis error: type mismatch: expected 'i32', found '()'" }

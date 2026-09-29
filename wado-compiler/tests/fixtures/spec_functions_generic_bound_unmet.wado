@@ -1,0 +1,17 @@
+// A call's type arguments must satisfy the callee's bounds: `i32` does not
+// implement `Named`.
+
+trait Named {
+    fn name(&self) -> String;
+}
+
+fn greet<T: Named>(x: &T) -> String {
+    return `Hello, ${x.name()}`;
+}
+
+test {
+    assert greet(&1) == "Hello, 1";
+}
+
+__DATA__
+{"compile_error": ":13:12: analysis error: type 'i32' does not implement trait 'Named' required by bound on 'T'"}

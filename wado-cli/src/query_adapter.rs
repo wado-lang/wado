@@ -46,7 +46,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let manifest_pair = load_nearest_manifest(&canonical);
+    let manifest_pair = load_nearest_manifest(&canonical).map_err(CliExit::error)?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair.as_ref(),
@@ -221,7 +221,7 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     // come from the notation, not source text, so there are no inline component
     // deps — pass empty source; manifest `[dependencies]` still resolve.
     let entry_path = base_dir.join(QUERY_ENTRY);
-    let manifest_pair = load_nearest_manifest(&entry_path);
+    let manifest_pair = load_nearest_manifest(&entry_path).map_err(CliExit::error)?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base_dir.clone()),
         manifest_pair.as_ref(),
@@ -274,8 +274,8 @@ fn open_entry(
 ///
 /// `None` when the module is not a local on-disk file (e.g. `core:` / `wasi:`
 /// / a dependency name) or the pipeline could not run, so the query degrades
-/// to consume-only.
-async fn symbol_invocations(env: &SymbolEnv) -> Option<InvocationIndex> {
+/// to consume-only. An invalid manifest governing the module is an error.
+async fn symbol_invocations(env: &SymbolEnv) -> Result<Option<InvocationIndex>, CliExit> {
     // `module_key` is the loader's `decl_file` for the target when the
     // synthetic entry imports it (same `normalize_module_path` the loader
     // applies to the import string). `target_abs` is the clean on-disk path
@@ -284,14 +284,18 @@ async fn symbol_invocations(env: &SymbolEnv) -> Option<InvocationIndex> {
     // `canonicalize` failing also rules out non-file modules (`core:` /
     // `wasi:` / a dependency name), so the query stays consume-only for them.
     let module_key = wado_compiler::name::normalize_module_path(&env.parsed.module);
-    let target_abs = env.base_dir.join(&module_key).canonicalize().ok()?;
+    let Ok(target_abs) = env.base_dir.join(&module_key).canonicalize() else {
+        return Ok(None);
+    };
     // The generator's relative inputs resolve against its declaring file's
     // directory, so run it with a host based there — not `env.host`, which is
     // based at `base_dir` to resolve the synthetic entry's imports. Host and
     // pipeline share one manifest load, anchored at the target.
-    let manifest_pair = load_nearest_manifest(&target_abs);
+    let manifest_pair = load_nearest_manifest(&target_abs).map_err(CliExit::error)?;
     let pipeline_host = entry_host(&target_abs, manifest_pair.as_ref());
-    let raw = run_generators_for(&target_abs, &pipeline_host, manifest_pair).await?;
+    let Some(raw) = run_generators_for(&target_abs, &pipeline_host, manifest_pair).await else {
+        return Ok(None);
+    };
     let target_decl = target_abs.to_string_lossy();
     let mut translated = InvocationIndex::new();
     for (decl, from, uri) in raw.entries() {
@@ -302,14 +306,14 @@ async fn symbol_invocations(env: &SymbolEnv) -> Option<InvocationIndex> {
         };
         translated.insert(decl, from, uri);
     }
-    Some(translated)
+    Ok(Some(translated))
 }
 
 /// Build a single-module query context (the notation's module only). Used by
 /// `definition` / `hover` / `document-highlight`.
 async fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
     let env = symbol_env(notation, base).await?;
-    let invocations = symbol_invocations(&env).await;
+    let invocations = symbol_invocations(&env).await?;
     let engine = open_entry(
         &env.uri,
         std::slice::from_ref(&env.parsed.module),
@@ -331,7 +335,7 @@ async fn prepare_symbol_query(notation: &str, base: &str) -> Result<SymbolQuery,
 /// on their own, dropping the offender.
 async fn prepare_references_query(notation: &str, base: &str) -> Result<SymbolQuery, CliExit> {
     let env = symbol_env(notation, base).await?;
-    let invocations = symbol_invocations(&env).await;
+    let invocations = symbol_invocations(&env).await?;
     let target = env.parsed.module.clone();
     let workspace = workspace_module_specs(&env.base_dir)?;
 

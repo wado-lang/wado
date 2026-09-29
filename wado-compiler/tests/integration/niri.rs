@@ -377,6 +377,32 @@ fn i32_div_min_by_neg_one_is_unreducible() {
     );
 }
 
+#[test]
+fn i8_div_min_by_neg_one_is_unreducible() {
+    let e = binary(
+        NirBinaryOp::Div,
+        int_lit(i64::from(i8::MIN) as u64, TypeTable::I8, "-128"),
+        int_lit(i64::from(-1_i8) as u64, TypeTable::I8, "-1"),
+        TypeTable::I8,
+    );
+    assert_eq!(
+        eval(&e),
+        None,
+        "i8::MIN / -1 must preserve the runtime trap"
+    );
+}
+
+#[test]
+fn i32_rem_min_by_neg_one_is_zero() {
+    let e = binary(
+        NirBinaryOp::Mod,
+        int_lit(u64::from(i32::MIN as u32), TypeTable::I32, "-2147483648"),
+        int_lit((-1_i32) as u64, TypeTable::I32, "-1"),
+        TypeTable::I32,
+    );
+    expect_int(&e, 0, PrimitiveType::I32);
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // i64
 // ──────────────────────────────────────────────────────────────────────────────

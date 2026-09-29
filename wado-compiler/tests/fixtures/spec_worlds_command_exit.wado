@@ -1,0 +1,20 @@
+// `exit` ends a command at once with the status it names. The code after it
+// never runs.
+use { println, eprintln, exit, Stdout, Stderr, Exit } from "core:cli";
+
+export fn run() with (Stdout, Stderr, Exit) {
+    let port = i32::from_str("eighty");
+    assert port matches { Err(_) };
+    println("checking the port");
+    eprintln("error: the port is not a number");
+    exit(2);
+    println("never printed");
+}
+
+__DATA__
+{
+    "stdout": "checking the port\n",
+    "stderr": "error: the port is not a number\n",
+    "exit_code": 2,
+    "trapped": false
+}

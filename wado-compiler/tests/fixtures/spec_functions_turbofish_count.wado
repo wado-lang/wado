@@ -1,0 +1,12 @@
+// A turbofish may not name more type arguments than the function declares.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+test {
+    assert identity::<i32, i32>(1) == 1;
+}
+
+__DATA__
+{"compile_error": ":8:12: analysis error: `identity` takes 1 type argument, but 2 were supplied"}

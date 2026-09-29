@@ -105,10 +105,10 @@ pub use bind::{BindError, Binder};
 pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
-    Code, CompilerHost, DependencyIndex, Diagnostic, DiagnosticSpan, GeneratorDiagnostic,
-    GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile, GeneratorOutputFile,
-    GeneratorRequest, GeneratorResponse, GeneratorRunnerError, GeneratorSourceSpan,
-    KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
+    Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
+    GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile,
+    GeneratorOutputFile, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
+    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{

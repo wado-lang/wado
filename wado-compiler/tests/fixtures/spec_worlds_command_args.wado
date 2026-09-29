@@ -1,0 +1,20 @@
+// A command reads its arguments and environment through `core:cli`, which
+// requires `Environment`. The harness names the program and passes no
+// arguments.
+use { println, args, program_name, env, Stdout, Environment } from "core:cli";
+
+export fn run() with (Stdout, Environment) {
+    let name = program_name().unwrap_or("greet");
+    let words = args();                          // the program name is not among them
+    assert env("SPEC_WORLDS_UNSET") == null;     // an unset variable reads as `null`
+    if words.is_empty() {
+        println(`usage: ${name} <name>...`);
+        return;
+    }
+    for let word of words {
+        println(`hello, ${word}`);
+    }
+}
+
+__DATA__
+{"stdout": "usage: fixture.wasm <name>...\n"}

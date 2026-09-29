@@ -1,0 +1,16 @@
+// A `lib:` alias the dependencies do not declare, beside one they do.
+
+use { sin } from "lib:math";
+use { x } from "lib:nothere";
+
+export fn run() {
+    let _ = sin(1.0);
+    x();
+}
+
+__DATA__
+{
+  "compile_error": "dependency 'lib:nothere' is not declared: no wado.toml governs this module, and the `use` gives no inline source",
+  "compile_error_codes": ["MODULE_NOT_FOUND"],
+  "dependencies": { "lib:math": "sub/spec_modules_math.wado" }
+}

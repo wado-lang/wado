@@ -75,8 +75,9 @@ trust already placed in effect checking elsewhere.
   never folded.
 - `v128` and relaxed-SIMD have implementation-defined corner cases; SIMD CTFE is
   deferred to a later WEP.
-- Integer wrapping and signed `MIN / -1` match Wasm. Division by zero and signed
-  `MIN / -1` are left unfolded so the runtime trap survives.
+- Integer wrapping matches Wasm. Division by zero and a signed `MIN / -1` trap
+  at every width, so they are left unfolded and the runtime trap survives. A
+  signed `MIN % -1` folds to 0.
 - Float zero carries no sign through a fold: `-0.0` and `+0.0` are equal, so
   `if cond { -0.0 } else { 0.0 }` collapses to one of the two. A caller needing
   bit-precise zeros should get a per-operation equality predicate rather than a

@@ -1,0 +1,23 @@
+// The test world keeps a file's `test` blocks and drops its entry point. A
+// test may call the entry point like any other function.
+use { println, Stdout } from "core:cli";
+
+fn shout(text: String) -> String {
+    return text.to_ascii_uppercase();
+}
+
+export fn run() with Stdout {
+    println(shout("hello"));
+}
+
+test "shout upper-cases its argument" {
+    assert shout("hi") == "HI";
+}
+
+test "run prints without declaring Stdout" {
+    run();
+    assert shout("") == "";
+}
+
+__DATA__
+{"test": {}}

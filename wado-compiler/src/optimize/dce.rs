@@ -26,7 +26,9 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
-use crate::optimize::arena_query::{expr_node_may_trap, promoted_local_reads};
+use crate::optimize::arena_query::{
+    expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
+};
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
 use crate::{hashmap, nir, tir};
 
@@ -1900,6 +1902,7 @@ pub(super) fn deletable_value(
         return false;
     };
     body.find_in_live_node_under(NodeRef::Expr(root), |node| match node {
+        _ if operand_values_may_trap(body, node) => Some(()),
         NodeRef::Expr(id) => match &body.exprs[id].kind {
             ExprKind::Call { func_id, .. } => {
                 (!calls.call(id, *func_id).is_deletable()).then_some(())

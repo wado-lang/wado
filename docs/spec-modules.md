@@ -1,6 +1,9 @@
 # Module System
 
-Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
+A module is one Wado file. This chapter covers how far a declaration reaches,
+how a module names another, and how it imports and re-exports names. The import
+syntax follows ES modules (`use { x } from "module"`), since JavaScript is a
+primary host for Wado.
 
 ## Visibility
 
@@ -52,8 +55,11 @@ test {
 | `pub fn foo()`      | Yes       | Yes          | Yes                 | No          |
 | `export fn foo()`   | Yes       | Yes          | Yes                 | Yes         |
 
-A `pub`-only item reaches Wado consumers only (source dependency or
-provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
+A `pub`-only item reaches a Wado consumer of the package's source. It does not
+reach a consumer of a registry package, which is a prebuilt component, and
+whether it will is undecided
+([Registries](./spec-packages.md#registries)). A non-Wado CM consumer sees
+`export` items only.
 
 `pub` is absolute. A module has no privacy of its own beyond its file, so there
 is no `pub(crate)` / `pub(super)` family, and no enclosing module can narrow a
@@ -79,22 +85,11 @@ test {
 }
 ```
 
-### Packages
+`internal` reaches the files of one package, as
+[The Modules of a Package](./spec-packages.md#the-modules-of-a-package) lists
+them.
 
-`internal` reaches the files of one package. The packages are:
-
-- The entry module, every local module it reaches through `./` / `../`
-  imports, and the Wasm assets those modules import.
-- Each dependency. A relative import inside a dependency stays in that
-  dependency's package.
-- `core:*`, which is one package, and `wasi:*`, which is another. A test of
-  the standard library is an entry module in its `core` directory, and it
-  joins `core:*`'s package together with its local modules, so it reaches
-  their `internal` items.
-- A [generated module](#generated-imports-kiln) belongs to the package of the
-  module that imports it.
-
-### Signature reach
+### Signature Reach
 
 An item's signature may not name a declaration that reaches less far than the
 item itself. Naming one is a compile error at the reference. A caller that
@@ -142,7 +137,7 @@ error. Rust's sealed-trait pattern seals a trait by giving it a supertrait that
 implementors cannot reach, and that is exactly what this forbids. Wado has no
 equivalent. If sealing is wanted, it gets a keyword that says so.
 
-### Re-export visibility
+### Re-export Visibility
 
 A `use` declaration carrying a visibility modifier re-exports the imported names
 as members of the importing module, at the modifier's reach:
@@ -168,13 +163,13 @@ Rationale: [WEP: Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-
 
 ## Module Source Types
 
-| Source Type   | Syntax                        | Example                              |
-| ------------- | ----------------------------- | ------------------------------------ |
-| WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
-| Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
-| CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
-| Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
-| Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
+| Source Type                                            | Syntax                        | Example                              |
+| ------------------------------------------------------ | ----------------------------- | ------------------------------------ |
+| WASI standard                                          | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
+| Core library                                           | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
+| [CM coordinate](./spec-packages.md#package-specifiers) | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
+| [Library alias](./spec-packages.md#package-specifiers) | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
+| Local file                                             | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
 A specifier names a package or a local file. It never carries an interface segment: interfaces and their members
 are selected in the `use { ... }` list (`Iface`, `Iface::{op}`). `core:` and
@@ -187,26 +182,14 @@ Relative paths in Wado follow the gitignore / shell convention: a path that refe
 
 A module path resolves by its form:
 
-1. Bundled namespaces `core:` / `wasi:`: resolved from the embedded stdlib.
-
-2. Open coordinates `<ns>:<pkg>` (any other namespace): resolved from a `[dependencies]` entry in `wado.toml` or an inline `with` source. An undeclared coordinate is an error.
-
-3. Library aliases `lib:<nick>`: resolved via `wado.toml` or an inline `with`. An alias renames a dependency, shortens its name, tells two major versions apart, or names a dependency with no public coordinate.
-
-4. Local modules (`./` or `../`): Resolved relative to importing module.
-
-5. Invalid paths: Paths not matching any pattern are rejected.
-   - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
+1. A bundled namespace, `core:` or `wasi:`, resolves to the standard library the compiler carries.
+2. An open coordinate `<ns>:<pkg>`, in any other namespace, resolves to a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
+3. A library alias `lib:<nick>` resolves to a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
+4. A local path, starting `./` or `../`, resolves relative to the importing module.
+5. Any other path is an error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`. A bare name (`"router"`) is one, except a deprecated bare `[dependencies]` key ([Package Specifiers](./spec-packages.md#package-specifiers)).
 
 The reserved namespaces are `core`, `wasi`, and `lib`. `core` and `wasi` are
 bundled; `lib` is not. Every other namespace is open.
-
-`lib` is the one place an alias lives: a `[dependencies]` key under any other namespace is the
-dependency's own coordinate, and a `lib:` key names the real coordinate it
-stands for with its `package` field. A `[dependencies]` key is byte-identical to
-the specifier that uses it.
-
-Bare names (`"router"`) are rejected. The one exception is a bare key in `[dependencies]`, which is deprecated and draws a warning.
 
 Rationale: [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 
@@ -324,16 +307,8 @@ test {
 
 ## Import Attributes (`with`)
 
-Use `with { ... }` to specify import metadata. An inline dependency source lets
-a single-file script name a dependency with no `wado.toml`:
-
-<!-- {"source": "wado-cli/tests/fixtures/inline_dependencies.wado"} -->
-
-```wado
-use { Regexp } from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
-use { Router } from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
-use { Parse } from "lib:rx" with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };
-```
+A `with { ... }` clause after the specifier gives an import its attributes.
+`type` says what kind of file the import reads:
 
 <!-- {"fixture":"spec_modules_type_attribute.wado"} -->
 
@@ -346,14 +321,20 @@ test {
 }
 ```
 
-An inline source takes the same keys as a `[dependencies]` value: `git`, `ref`,
-`directory`, `registry`, `package`, `path`, and an exact `version`. An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive.
-
-Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them. The specifier's `@ver` and an inline `with` take an exact version, and a range there is an error.
-
-Two other keys have sections of their own: `generator` makes the import a
-[generated import](#generated-imports-kiln), and `provider` satisfies a
+The other keys have sections of their own. The dependency source keys give a
+dependency its source with no `wado.toml`
+([Inline Sources](./spec-packages.md#inline-sources)). `generator` makes the
+import a [generated import](./spec-kiln.md), and `provider` satisfies a
 component's guest effect ([Wasm Module and Component Imports](#wasm-module-and-component-imports)).
+
+Any other key is an error, and so is a value of the wrong kind. Every key but
+`generator` takes a string:
+
+<!-- {"fixture":"import_attr_unknown_key_error.wado"} -->
+
+```wado
+use { println, Stdout } from "core:cli" with { tpye: "wasm", provider: 1 };
+```
 
 ### Type Attribute Requirement
 
@@ -371,212 +352,6 @@ generator.
 
 Rationale: an explicit `type` keeps a Wasm import unambiguous and its
 dependency visible, as Wado's imports are explicit elsewhere.
-
-## Generated Imports (Kiln)
-
-A `use` clause whose source is neither a `.wado` module nor a Wasm asset (`.wasm` / `.wat`) goes through Kiln, Wado's code generation step. A generator turns the input into ordinary Wado source, which is then compiled like any hand-written module. `.g4`, `.proto`, `.graphql`, `.wit`, and a Wado dialect's own extension all take this path. The `with { generator: { ... } }` clause names the generator.
-
-The examples use Gale, a generator that builds a parser from an ANTLR4 grammar
-([WEP: Gale](./wep-2026-03-02-gale.md)):
-
-<!-- {"source": "example/hello-packages/src/main.wado"} -->
-
-```wado
-use calc from "./Calc.g4"
-    with {
-        generator: {
-            module: "wado-lang:gale",
-            options: { highlight: false, trace: false },
-        },
-    };
-```
-
-This one also hands the generator a supplementary input:
-
-<!-- {"source": "package-gale-highlight-wado/src/lib.wado"} -->
-
-```wado
-use { highlight as highlight_impl } from "../grammar/Wado.g4"
-    with {
-        generator: {
-            module: "lib:gale",
-            inputs: ["../grammar/Wado.highlights.scm"],
-            options: {
-                fragment_entries: ["statement"],
-            },
-        },
-    };
-```
-
-The literal after `from` is the primary input. It is a `./` or `../` path
-resolved against the declaring file, like a local module import.
-
-### `with { generator: { ... } }` fields
-
-Each field has one type, and any other key or type is an error at the use site.
-
-| Field        | Required | Meaning                                                                                                                                                                                           |
-| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.        |
-| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                             |
-| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                            |
-| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. See [Options](#options).                                                                                        |
-| `inputs`     | no       | Supplementary input paths (`./` / `../`) the generator cannot discover from the primary alone, such as a sibling lexer grammar. A schema that refers to other files lists every one of them here. |
-| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                  |
-
-Every file a generator sees is named literally at the use site. There is no
-glob and no directory listing, so the whole input set is known before any
-generator runs.
-
-### Binding the import
-
-A generator emits exactly one entry module and zero or more supplementary
-modules. The `use` binds against the entry module, under the ordinary
-visibility rules; supplementary modules are ordinary Wado files that the entry
-reaches with ordinary `use` statements. The entry module does not need to
-exist before the first compile, because the generator runs before the import
-is resolved.
-
-A clause applies in the file that declares it. Another `use` of the same schema
-in that file, with no `with` of its own, binds against the same entry. Another
-file gets no binding from it.
-
-Clauses are collected from every module the program reaches, so a module deep
-in the graph can import a generated module of its own. A generator is an
-ordinary Wado package, so its own source may import a generated module too. An
-invocation whose generator is built from its own output, directly or through
-other invocations, is a cycle, and the cycle is an error naming the invocations
-in it.
-
-Generated files are compiled exactly like hand-written source, so a generator
-that emits invalid Wado fails with an ordinary error against the generated file
-on disk. Only the diagnostics a generator reports itself point
-into its input files.
-
-### Errors
-
-- A `use` of a file that is neither `.wado` nor a Wasm asset is
-  `KILN_MISSING_WITH` when the importing file declares no `with { generator }`
-  clause for it.
-- A `use` whose generator produced no module for that schema is
-  `KILN_NO_GENERATED_MODULE`. The compiler never falls back to parsing the
-  schema as Wado.
-- Two clauses that agree on `module`, `version`, `registry`, the primary input,
-  `inputs`, `options`, and `output_dir` are one invocation, wherever in the
-  program they appear.
-  Two clauses that share a primary input but disagree on any of those are an
-  error naming both.
-
-### Options
-
-A generator declares its options as `pub struct Options`, and every use site's
-`options` is checked against it before the generator runs, so a typo or type
-mismatch is reported on the offending key.
-
-- Omitting `options` means every field takes its default. A field with a
-  default may be omitted on its own.
-- A field of type `Option<T>`, `List<T>`, or `TreeMap<String, V>` may always
-  be omitted. It is then `None`, the empty list, or the empty map.
-- Any other field without a default must be supplied. An unknown key is an
-  error.
-- An `enum` option is written as its case name in a string.
-- A `TreeMap<String, V>` option is written as an object whose keys are the
-  author's own. The generator receives it sorted by key.
-- A generator resolved as a prebuilt component carries no field defaults, so
-  at its use sites every field is required unless its type is an `Option`, a
-  `List`, or a `TreeMap`.
-
-### Manifest
-
-Generators are declared in `[build-dependencies]` of `wado.toml` (a build-only graph that does not enter the consuming project's runtime dependency graph):
-
-```toml
-[build-dependencies]
-"wado-lang:gale" = { version = "^0.0.9" }
-```
-
-Generated code that calls a runtime library the generator's package ships
-imports it like any other dependency, so the consumer also lists that package
-under `[dependencies]`.
-
-### Authoring a generator
-
-A generator is a normal Wado package whose `wado.toml` maps the `core:kiln/generator` world to a module under `[world]`:
-
-```toml
-[world]
-"core:kiln/generator" = "src/generator.wado"
-```
-
-That module exports the world's `generate` function:
-
-<!-- {"fixture":"spec_modules_kiln_generator.wado"} -->
-
-```wado
-use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
-
-pub struct Options {
-    namespace: String,
-    emit_comments: bool = true,
-}
-
-export fn generate(req: Request<Options>) -> Result<Response, Error> {
-    let Ok(schema) = read_text(req.primary.content) else {
-        return Result::Err(Error::InvalidSchema("not UTF-8"));
-    };
-    let source = emit(&schema, &req.options);   // the generator's own work
-    return Result::Ok(Response {
-        files: [OutputFile { path: `${req.options.namespace}.wado`, content: source, is_entry: true }],
-    });
-}
-
-test {
-    let options = Options { namespace: "calc" };
-    assert options.emit_comments && emit(&"x", &options) == "// calc\nx";
-}
-```
-
-A generator with no configuration declares no `Options` and writes
-`fn generate(req: Request)`.
-
-What a generator receives and returns:
-
-- `req.primary` and `req.inputs` are `InputFile`s: the path as the use site
-  wrote it, and the content as a `Stream<u8>`. `read_all` and `read_text`
-  collect a whole file.
-- `req.module` is how the use site named the generator: the `module:`
-  specifier as written, or for a relative path, that path from the project
-  root. Output that imports a library the generator's package also ships names
-  it through this, since only the use site knows what the consumer calls that
-  package.
-- `req.options` is the use site's options, with defaults filled in.
-- It returns a `Response` whose `files` are `OutputFile`s: a path relative to
-  the output directory, the Wado source, and whether this file is the entry
-  module. Or it returns an `Error`: `InvalidSchema`, `Unsupported`, or
-  `Other`, each with a message.
-- It may report diagnostics through the `KilnHost` effect, each optionally
-  spanning a byte range of one of the files it received. They surface as
-  ordinary compile diagnostics.
-
-An `Options` field is one of `bool`, a fixed-width integer, `f32`, `f64`,
-`String`, a payload-less `enum`, a non-recursive `struct` of such fields,
-`Option<T>`, `List<T>`, or `TreeMap<String, V>`. A field default is a literal.
-Any other field fails the generator's own compile, since no use site could
-supply it.
-
-A generator runs in a deterministic sandbox: no clocks, randomness, network,
-environment, or filesystem. Every input arrives by value, listed at the use site,
-and every output is returned in the response. A generator that imports a
-`wasi:*` interface, directly or through a `core:*` module, is a compile error
-(`KILN_GENERATOR_FORBIDDEN_IMPORT`).
-
-Outputs are written to the invocation's output directory, each stamped with a
-`#![generated(by = "...", sources = [...])]` header naming the generator and
-its inputs. A file in that directory that carries the header belongs to the
-invocation, and a later run may overwrite or remove it. A file without it is
-left alone.
-
-Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 
 ## Wasm Module and Component Imports
 
@@ -604,7 +379,7 @@ test {
 }
 ```
 
-### Core modules
+### Core Modules
 
 Each function export becomes a free function of the same name. A call to it
 calls that export, whatever the name: an export named like a `core:builtin`
@@ -676,7 +451,7 @@ Rationale: [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md),
 
 ## Namespace Import
 
-Use `use name from "..."` (without curly braces) to import an entire module as a namespace:
+`use name from "..."`, without braces, imports a whole module as a namespace:
 
 <!-- {"fixture":"spec_modules_namespace_import.wado"} -->
 
@@ -742,7 +517,7 @@ by name instead.
 - Wildcards prohibited: `use {*} from "..."` is not allowed
 - No `use * as name` and no default imports
 - All imports must be explicit (except the prelude)
-- `Effect::{op1, op2}` imports an effect's operations
+- `Effect::{op1, op2}` imports an effect's operations ([Importing Effect Operations](./spec-effects.md#importing-effect-operations))
 
 <!-- {"fixture":"spec_modules_import_rules.wado"} -->
 
@@ -772,16 +547,6 @@ use {*} from "core:cli";         // Wildcard not allowed
 ```
 
 Without braces, `use println from "core:cli"` is a namespace import named `println`, so the function is `println::println`.
-
-## Calling Effect Operations
-
-An effect operation is called as `Effect::op()`, or by its bare name once
-imported. [Importing Effect Operations](./spec-effects.md#importing-effect-operations)
-holds the rules.
-
-- `.` reaches struct fields and methods (`user.name`, `stream.read()`).
-- `::` reaches effect operations and namespace members
-  (`Stdout::write_via_stream()`, `utils::helper()`).
 
 ## Renaming Imports
 
@@ -848,15 +613,18 @@ Re-export rules:
   same type, and a re-exported effect the same effect
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
-- Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a wildcard (`pub use _ from "..."`) are compile errors.
+- Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a nameless import (`pub use _ from "..."`) are compile errors.
 - A re-export stays at module level, so `export use` is a compile error
 
 Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 
-## Exception: The Prelude
+## The Prelude
 
-The prelude is imported into every module automatically, so its names need no
-`use`. [The Prelude](./spec-types.md#the-prelude) lists the types it provides.
+The prelude (`core:prelude`) is imported into every module automatically, so
+its names need no `use`. It is the one exception to explicit imports.
+[Prelude Types](./spec-types.md#prelude-types) lists the types it provides, and
+[`#![no_prelude]`](./spec-attributes.md#no_prelude) turns the import off for one
+module.
 
 The prelude's names are what `core:prelude` exports: its own `pub`
 declarations and its `pub use` re-exports. A name that one of its
@@ -866,39 +634,3 @@ prelude name and needs an import.
 A module may not declare a type with a prelude type's name (`struct Option` is
 an error). The builtin type names (`i32`, `bool`, ...) stay reserved under
 `#![no_prelude]` too.
-
-## Standard Library
-
-```
-core            # core: namespace for the core library
-├── prelude     # Automatically imported (String, List, Option, Result, Stream, Future)
-├── cli         # CLI helpers (println, eprintln, args, env, exit, ...)
-├── serde       # Serialization traits (Serialize, Deserialize, Serializer, Deserializer)
-├── json        # JSON format implementation (to_string, from_string)
-├── collections # TreeMap, TreeSet
-├── base64      # Base64 encoding/decoding
-├── zlib        # Compression
-├── ...
-wasi            # wasi: namespace for system interfaces
-├── cli
-├── filesystem
-├── ...
-```
-
-The [cheatsheet's Standard Library section](./cheatsheet.md#standard-library) links the API reference for every module.
-
-## Global Functions defined in `core:prelude`
-
-<!-- {"fixture":"spec_modules_prelude_functions.wado"} -->
-
-```wado
-fn half(n: i32) -> i32 {
-    if n % 2 != 0 { panic("odd"); } // traps with a message
-    if n < 0 { unreachable(); }     // traps with no message
-    return n / 2;
-}
-
-test {
-    assert half(4) == 2;
-}
-```

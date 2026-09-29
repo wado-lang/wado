@@ -38,12 +38,12 @@ use wado_compiler::kiln::{
     has_generated_marker, hex_digest, validate_options,
 };
 use wado_compiler::{Code, Diagnostic, Severity};
-use wado_manifest::Manifest;
 
 use crate::cache::{is_staging_file, write_atomic};
 use crate::kiln_metadata::{
     self, FileHash as MetaFileHash, METADATA_VERSION, Metadata, OutputEntry as MetaOutputEntry,
 };
+use crate::manifest::DiscoveryError;
 
 /// Outcome of plan construction.
 #[derive(Debug)]
@@ -835,6 +835,8 @@ pub enum PipelineError {
     /// per-conflict diagnostics have already been emitted through the host;
     /// this carries the count for the summary.
     RedirectConflict(usize),
+    /// A generator package's `wado.toml` cannot be read or parsed.
+    Manifest(DiscoveryError),
 }
 
 impl std::fmt::Display for PipelineError {
@@ -859,6 +861,7 @@ impl std::fmt::Display for PipelineError {
             PipelineError::RedirectConflict(n) => {
                 write!(f, "kiln: {n} conflicting generator redirect(s)")
             }
+            PipelineError::Manifest(e) => write!(f, "kiln: {e}"),
         }
     }
 }
@@ -934,7 +937,6 @@ impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
 /// # Errors
 /// See [`PipelineError`].
 pub async fn run_pipeline<H, P>(
-    manifest: &Manifest,
     manifest_root: &Path,
     host: &H,
     provider: &P,
@@ -958,9 +960,12 @@ where
 
     let resolved = resolve_modules(&planned.plan.order, provider, host).await;
 
-    {
+    let invalid_options = {
         let _s = KilnSpan::new(host, "kiln/typed_encode_options");
-        typed_encode_options(manifest, &mut planned.plan.order, &resolved, host);
+        typed_encode_options(&mut planned.plan.order, &resolved, host)
+    };
+    if invalid_options > 0 {
+        return Err(PipelineError::InlineClause(invalid_options));
     }
 
     let mut outcome = PipelineOutcome::default();
@@ -1240,20 +1245,17 @@ fn lookup_resolved(
 /// stale-cache warning or pipeline error).
 ///
 /// Validation failures (unknown / missing / type-mismatched fields)
-/// surface as error diagnostics on `host`; the provisional bytes stay
-/// in place so downstream phases still see a consistent invocation
-/// and the generator-side trap surfaces in the same run as the
-/// compiler-side complaint.
+/// surface as error diagnostics on `host`, and their count is returned: the
+/// generator must not run on options its use site did not write.
 fn typed_encode_options<H: CompilerHost>(
-    manifest: &Manifest,
     invocations: &mut [Invocation],
     resolved: &[(
         GeneratorModule,
         Result<Arc<ResolvedGenerator>, ProviderError>,
     )],
     host: &H,
-) {
-    let _ = manifest;
+) -> usize {
+    let mut invalid = 0;
     for inv in invocations.iter_mut() {
         let descriptor = match lookup_resolved(resolved, &inv.module) {
             Ok(arc) => match &arc.descriptor {
@@ -1276,12 +1278,14 @@ fn typed_encode_options<H: CompilerHost>(
                 inv.options = canonical;
             }
             Err(diagnostics) => {
+                invalid += diagnostics.len();
                 for d in diagnostics {
                     host.emit_diagnostic(d);
                 }
             }
         }
     }
+    invalid
 }
 
 async fn run_and_build_metadata<H>(

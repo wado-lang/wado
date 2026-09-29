@@ -13,7 +13,6 @@ use crate::nir_engine::Engine;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::trace::filter;
 
-use super::arena_query::value_may_trap;
 use super::census;
 use crate::const_eval::{Value, prim_of};
 use crate::hashmap;
@@ -778,7 +777,7 @@ fn apply_value_freeze(
     let shareable = ids.len() > 1 && worth_materialising(&engine.body.values, rep);
     let point = shareable.then(|| materialise_point(engine, ids)).flatten();
     let anchorable = !leaves.is_empty()
-        && !value_may_trap(&engine.body.values, rep)
+        && !engine.body.values.may_trap(rep)
         && point.is_some_and(|(s, _)| {
             leaves
                 .iter()

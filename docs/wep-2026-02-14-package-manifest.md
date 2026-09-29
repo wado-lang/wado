@@ -218,7 +218,7 @@ use { parse, render } from "lib:markdown"; // OK: pub / export
 
 When published as a `.wasm` component (e.g., to an OCI registry), only `export` items appear in the component's CM interface; `pub`-only items reach Wado consumers via the provider-metadata path below (see [Provider Metadata](./wep-2026-07-26-provider-metadata.md)).
 
-Crossing the package boundary requires `pub` (or `export`): a consumer may import only the `pub` / `export` items of a dependency's `lib`, never its `internal` or private items. This is a settled rule; enforcing it for wado-to-wado source dependencies is not yet implemented.
+Crossing the package boundary requires `pub` (or `export`): a consumer may import only the `pub` / `export` items of a dependency's `lib`, never its `internal` or private items.
 
 ### Wado-to-Wado Optimization
 
@@ -270,6 +270,8 @@ Each key is the specifier used in Wado source code, byte-for-byte (`"docs:regex"
 ### Dependency Source Types
 
 Each dependency must have exactly one primary source type (`git`, `registry`, or `path`). The exception is `path`, which can be combined with `registry` or `git` for publishing (see Publishing).
+
+There is no `url` source type. A remote module import (`use ... from "https://..."`) stays a source-level feature, not a `wado.toml` dependency, until a use case appears that git or a registry cannot serve.
 
 #### Git
 
@@ -358,7 +360,7 @@ use { Router }  from "lib:router";       // nickname → wado.toml
 
 A dependency specifier binds to the dependency's library world — its
 `[package].lib` entry module — and resolves the imported symbols against that
-module's `export` items. Only the consuming project resolves its own
+module's `pub` and `export` items. Only the consuming project resolves its own
 `[dependencies]`: a dependency specifier from within a dependency module does
 not bind to the consumer's dependencies.
 
@@ -957,12 +959,37 @@ This enables seamless local development while ensuring published packages are se
 - `[package]` over `[project]`: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
 - `path` + `registry` dual source: adds complexity to the dependency spec but eliminates the "path deps can't be published" problem. The alternative (Cargo's separate `[patch]` section) is more complex and harder to maintain.
 
-### Not Included
-
-- URL dependencies (`url = "..."`): Not included in this WEP. Remote module imports via `use ... from "https://..."` remain a source-level feature (not a `wado.toml` dependency). A `url` dependency source type may be added in a future WEP if a compelling use case emerges that cannot be served by git or registry dependencies.
-
 ## Known gaps
 
 - `[dev-dependencies]` resolve into the lock file and reach nothing else. The
   compiler host indexes `[dependencies]` only, so a `use` of a dev-dependency
   under `wado test` is an unknown module.
+- A dependency cannot import its own dependencies. The compiler host builds one
+  index, from the consuming project's `wado.toml`, and a `use` inside a
+  dependency does not consult it. Nothing reads the dependency's own
+  `[dependencies]`, so a library whose `lib` reaches a `use` of `lib:x` or
+  `ns:x` fails to compile as anyone's dependency. The error reports the
+  dependency as undeclared. `wado update` does resolve and lock those
+  transitive dependencies.
+- Semver-incompatible versions of one package cannot coexist. The resolver
+  gives each package one version, so two requirements from different
+  compatibility ranges conflict instead of resolving to two instances. The same
+  holds for two `lib:` aliases whose `package` names one coordinate at two
+  major versions.
+- `workspace = true` and `[workspace.dependencies]` /
+  `[workspace.dev-dependencies]` are parsed but not resolved. The resolver
+  reports "workspace resolution is not yet supported", and the compiler host
+  skips such an entry, so a `use` of it is an unknown module. Whether members
+  share one `wado.lock` at the workspace root is unchecked.
+- The lock file is not checked for freshness. `deps-hash` is written and never
+  compared, so a changed `wado.toml` is not re-resolved on its own, and there is
+  no `--locked`. The lock also records no `lib` for a package, so it is not
+  self-sufficient: a build still reads each dependency's `wado.toml` to find its
+  entry module.
+- The lock's `integrity` is recorded and never verified. `wado fetch` and a
+  build pull a registry package or generator by its version tag, and nothing
+  compares what arrives with the lock, so a tag moved to other content installs
+  without an error. A component already in the shared cache is used unchecked.
+  What the lock records is the digest of the artifact's OCI manifest, not a hash
+  of the downloaded bytes as [Integrity Verification](#integrity-verification)
+  decides.

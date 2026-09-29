@@ -1,0 +1,13 @@
+// An unread global whose initializer calls a function that traps: the call
+// must survive, as the division in `global_unread_trapping_init.wado` does.
+
+fn divide_by_zero() -> i32 {
+    return 1 / 0;
+}
+
+global Z: i32 = divide_by_zero();
+
+#[expect_trap]
+test "an unread global's trapping initializer call still runs" {
+    assert builtin::black_box(1) == 1;
+}

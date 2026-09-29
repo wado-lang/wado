@@ -137,6 +137,8 @@ pub enum Code {
     /// Import of a symbol that is not visible at the import site
     /// (file-private, or `internal` reached from another package).
     PrivateSymbol,
+    /// A `use ... with { ... }` key nothing reads, or a value of the wrong kind.
+    ImportAttrInvalid,
 
     // I/O errors
     /// File read error
@@ -293,6 +295,7 @@ impl std::fmt::Display for Code {
             Code::CircularDependency => "CIRCULAR_DEPENDENCY",
             Code::StdlibAttr => "STDLIB_ATTR",
             Code::PrivateSymbol => "PRIVATE_SYMBOL",
+            Code::ImportAttrInvalid => "IMPORT_ATTR_INVALID",
             Code::FileReadError => "FILE_READ_ERROR",
             Code::OrphanRule => "ORPHAN_RULE",
             Code::CodegenError => "CODEGEN_ERROR",
@@ -552,6 +555,20 @@ pub struct DependencyIndex {
     /// resolved (e.g. its package declares no `[package].lib`). Surfaced at
     /// the `use` site instead of a generic "invalid module path".
     pub unresolved: hashmap::IndexMap<String, String>,
+    /// The `wado.toml` these entries were read from, named where an import
+    /// finds no entry. `None` when no manifest governs the entry module.
+    pub manifest: Option<DependencyManifest>,
+}
+
+/// The `wado.toml` a [`DependencyIndex`] was read from.
+#[derive(Debug, Clone)]
+pub struct DependencyManifest {
+    /// The manifest's path, as diagnostics name it.
+    pub path: String,
+    /// Why it could not be read, for a host that degrades on an invalid
+    /// manifest rather than failing (the language server): the index is then
+    /// empty, and each import that needed an entry reports this.
+    pub error: Option<String>,
 }
 
 /// Request handed to a Kiln generator by the compiler.

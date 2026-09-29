@@ -1,0 +1,21 @@
+// A `&mut self` method needs a mutable receiver: an immutable binding is
+// rejected.
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) {
+        self.n += 1;
+    }
+}
+
+test {
+    let c = Counter { n: 0 };
+    c.bump();
+    assert c.n == 1;
+}
+
+__DATA__
+{"compile_error": ":16:5: analysis error: cannot call `&mut self` method `bump` on immutable 'c'"}

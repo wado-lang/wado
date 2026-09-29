@@ -1,4 +1,5 @@
-// An import naming a module nothing resolves to.
+// A namespaced import no dependency declares. Every namespace but `core` and
+// `wasi` is a dependency's, so the error names the dependency.
 
 use { foo } from "unknown:module";
 
@@ -7,4 +8,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "unknown module namespace 'unknown'; expected 'core' or 'wasi'", "compile_error_codes": ["MODULE_NOT_FOUND"]}
+{"compile_error": "dependency 'unknown:module' is not declared: no wado.toml governs this module, and the `use` gives no inline source", "compile_error_codes": ["MODULE_NOT_FOUND"]}

@@ -46,10 +46,7 @@ impl std::error::Error for DiscoveryError {}
 pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryError> {
     let mut dir = start_dir.to_path_buf();
     loop {
-        let candidate = dir.join(MANIFEST_FILENAME);
-        if candidate.is_file() {
-            let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
-            let manifest = resolve_manifest(&dir, &content)?;
+        if let Some(manifest) = manifest_in(&dir)? {
             return Ok(Some(ProjectManifest {
                 manifest,
                 root: openable_dir(&dir).to_path_buf(),
@@ -60,6 +57,17 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
             None => return Ok(None),
         }
     }
+}
+
+/// The `wado.toml` in `dir` itself, parsed: `None` when `dir` has none, an
+/// error when the one there cannot be read or parsed.
+pub(crate) fn manifest_in(dir: &Path) -> Result<Option<Manifest>, DiscoveryError> {
+    let candidate = dir.join(MANIFEST_FILENAME);
+    if !candidate.is_file() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
+    resolve_manifest(dir, &content).map(Some)
 }
 
 /// The directory above `dir`, spelled the way `dir` is: a relative path stays

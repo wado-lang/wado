@@ -1,0 +1,12 @@
+// `==` on a type parameter needs `T: Eq`.
+
+fn same<T>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+test {
+    assert same(1, 1);
+}
+
+__DATA__
+{"compile_error":":4:12: analysis error: type 'T' does not implement trait 'Eq' required by bound on 'T'","compile_error_codes":["TRAIT_BOUND_NOT_SATISFIED"]}

@@ -1,0 +1,18 @@
+// The member-visibility gate applies to the kind traits alone. Identity and
+// the impls derived at the declaration reach a type whose fields are private.
+
+use { make_opaque, Opaque } from "./sub/reflect_visibility_dep.wado";
+
+fn name_of<T: Reflect>(v: &T) -> String {
+    return Reflect::<T>::type_name();
+}
+
+test "a type with private fields still names itself" {
+    let o = make_opaque();              // `Opaque { root: i32, size: i32 }`, both private
+    assert name_of(&o) == "Opaque";
+    assert Reflect::<Opaque>::type_name() == "Opaque";
+    assert `${o:?}` == "Opaque { root: 0, size: 0 }";
+}
+
+__DATA__
+{"test": {}}

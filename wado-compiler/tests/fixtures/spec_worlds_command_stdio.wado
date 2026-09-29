@@ -1,0 +1,21 @@
+// A command reads standard input with `Stdin` and writes its two output
+// streams with `Stdout` and `Stderr`.
+use { print, eprintln, Stdout, Stderr } from "core:cli";
+use { Stdin } from "wasi:cli";
+
+export fn run() with (Stdin, Stdout, Stderr) {
+    let [input, _done] = Stdin::read_via_stream();
+    let bytes = input.read_to_end();
+    input.drop();
+    let text = String::from_utf8_lossy(bytes);
+    assert text.lines().count() == 2;
+    print(text.to_ascii_uppercase());
+    eprintln(`read ${bytes.len()} bytes`);
+}
+
+__DATA__
+{
+    "stdin": "one\ntwo\n",
+    "stdout": "ONE\nTWO\n",
+    "stderr": "read 8 bytes\n"
+}

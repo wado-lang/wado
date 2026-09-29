@@ -1,0 +1,28 @@
+// A Wado call of an `export async fn` returns what its `task return`
+// delivered, so a test can check a service's answer directly.
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    if request.get_path_with_query() != Some("/") {
+        task return Result::<Response, ErrorCode>::Err(ErrorCode::HttpRequestDenied);
+    } else {
+        let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [response, _sent] = Response::new(Headers::new(), null, trailers);
+        task return Result::<Response, ErrorCode>::Ok(response);
+        trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+    }
+}
+
+fn request_for(path: String) -> Request {
+    let [trailers, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [request, _sent] = Request::new(Headers::new(), null, trailers, null);
+    let _ = request.set_path_with_query(Some(path));
+    return request;
+}
+
+test "only the root is served" {
+    assert handle(request_for("/admin")) matches { Err(HttpRequestDenied) };
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,96 @@
+// Methods: receivers, static methods, `Self`, calls through references, and
+// several impl blocks for one type.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn new(x: i32, y: i32) -> Point {
+        return Point { x, y };
+    }
+
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+
+    fn scale(&mut self, k: i32) {
+        self.x *= k;
+        self.y *= k;
+    }
+}
+
+test "instance and static methods" {
+    let mut p = Point::new(1, 2);
+    assert p.sum() == 3;
+    p.scale(10);
+    assert p.x == 10 && p.y == 20;
+}
+
+impl Point {
+    fn origin() -> Self {
+        return Self::new(0, 0);
+    }
+
+    fn moved(&self, dx: i32, dy: i32) -> Self {
+        return Self::new(self.x + dx, self.y + dy);
+    }
+
+    fn doubled_sum(&self) -> i32 {
+        return self.sum() * 2;     // another method, through `self`
+    }
+}
+
+test "Self and chained calls" {
+    assert Point::origin().sum() == 0;
+    assert Point::origin().moved(1, 2).moved(3, 4).doubled_sum() == 20;
+}
+
+test "a call through a reference" {
+    let mut p = Point::new(1, 2);
+    let r = &p;
+    assert r.sum() == 3;           // `&self` through `&Point`
+    let m = &mut p;
+    m.scale(2);                    // `&mut self` through `&mut Point`
+    assert p.sum() == 6;
+}
+
+variant Shape {
+    Circle(i32),
+    Square(i32),
+}
+
+impl Shape {
+    fn unit_circle() -> Self {
+        return Self::Circle(1);
+    }
+
+    fn same_kind(&self, other: &Self) -> bool {
+        return match [*self, *other] {
+            [Circle(_), Circle(_)] => true,
+            [Square(_), Square(_)] => true,
+            _ => false,
+        };
+    }
+}
+
+test "Self names the impl's type" {
+    let c = Shape::unit_circle();
+    assert c.same_kind(&Shape::Circle(5)) && !c.same_kind(&Shape::Square(1));
+}
+
+struct Counter {
+    count: i32,
+}
+
+impl Counter {
+    fn count(&self) -> i32 {
+        return self.count * 10;
+    }
+}
+
+test "a field and a method may share a name" {
+    let c = Counter { count: 4 };
+    assert c.count == 4 && c.count() == 40;
+}

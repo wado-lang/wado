@@ -2612,17 +2612,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         false
     }
 
-    /// Report that type parameter `param` carries no bound supplying
-    /// `trait_name`, which is how an operator reaches one.
+    /// Report that type parameter `param` carries no bound supplying the
+    /// operator trait `item`, which is how an operator reaches one.
     pub(super) fn report_operator_bound_missing(
         &mut self,
         param: &str,
-        trait_name: &str,
+        item: CompilerItem,
         span: Span,
     ) {
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_trait_name(item)
+            .to_string();
         let _ = self.emit(TypeError::TraitBoundNotSatisfied {
             type_name: param.to_string(),
-            trait_name: trait_name.to_string(),
+            trait_name,
             param_name: param.to_string(),
             reason: Vec::new(),
             span,

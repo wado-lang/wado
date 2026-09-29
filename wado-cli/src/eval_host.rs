@@ -192,19 +192,22 @@ impl EvalHost {
         source: String,
         fuel: u64,
     ) -> Outcome {
-        let path = cache_dir(caller).join(format!("{}.json", hex32(&key)));
+        let path = cache_dir(caller).map(|dir| dir.join(format!("{}.json", hex32(&key))));
         if !self.knobs.no_cache
-            && let Some(outcome) = std::fs::read(&path)
+            && let Some(path) = &path
+            && let Some(outcome) = std::fs::read(path)
                 .ok()
                 .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         {
             return outcome;
         }
         let outcome = self.evaluate(source, fuel).await;
-        if !matches!(outcome, Outcome::CompileTimedOut) {
+        if !matches!(outcome, Outcome::CompileTimedOut)
+            && let Some(path) = &path
+        {
             let bytes = serde_json::to_vec(&outcome).expect("an outcome serializes");
             // Losing the cache is never an error: the next run evaluates again.
-            let _ = write_atomic(&path, &bytes);
+            let _ = write_atomic(path, &bytes);
         }
         outcome
     }
@@ -331,18 +334,17 @@ fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
 }
 
 /// Outcomes live in `build/eval/` under the calling file's package root, or
-/// under its directory when it is in no package.
-fn cache_dir(caller: &Path) -> PathBuf {
-    let root = load_nearest_manifest(caller).map_or_else(
-        || {
-            caller
-                .parent()
-                .expect("the caller is a file, so it has a parent")
-                .to_path_buf()
-        },
-        |project| project.root,
-    );
-    build_dir(&root).join("eval")
+/// under its directory when it is in no package. `None`, and so no cache, when
+/// the package's manifest is invalid: the caller's own compile reports that.
+fn cache_dir(caller: &Path) -> Option<PathBuf> {
+    let root = match load_nearest_manifest(caller).ok()? {
+        Some(project) => project.root,
+        None => caller
+            .parent()
+            .expect("the caller is a file, so it has a parent")
+            .to_path_buf(),
+    };
+    Some(build_dir(&root).join("eval"))
 }
 
 fn current_thread_runtime() -> tokio::runtime::Runtime {

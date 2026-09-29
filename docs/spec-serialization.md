@@ -1,7 +1,8 @@
 # Serialization
 
-`core:serde` is a format-agnostic serialization framework. One pair of traits
-serves every format:
+`core:serde` is a format-agnostic serialization framework. This chapter covers
+its traits, the shape a derived impl writes each type in, and the formats the
+standard library provides. One pair of traits serves every format:
 
 <!-- {"fixture":"spec_serialization_traits.wado"} -->
 

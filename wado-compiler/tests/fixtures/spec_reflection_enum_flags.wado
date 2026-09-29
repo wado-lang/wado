@@ -1,0 +1,49 @@
+// `ReflectEnum` and `ReflectFlags` expose cases and bits that carry no payload:
+// each handle holds its value, and the raw tag or bits build one back.
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+test "an enum reads and builds a value by its discriminant" {
+    assert ReflectEnum::<Color>::discriminant(&Color::Blue) == 2;
+    assert ReflectEnum::<Color>::from_discriminant(1) == Option::Some(Color::Green);
+    assert ReflectEnum::<Color>::from_discriminant(7) matches { None };
+}
+
+test "an enum case handle holds its value" {
+    let cs = ReflectEnum::<Color>::members();
+    assert cs.1.name() == "Green" && cs.1.discriminant() == 1;
+    assert cs.1.holds(&Color::Green) && !cs.1.holds(&Color::Red);
+    assert cs.1.make() == Color::Green;
+}
+
+flags Perm {
+    Read,
+    Write,
+    Exec,
+}
+
+test "a flags value reads and builds its bits as a u64" {
+    let p = Perm::Read | Perm::Exec;
+    assert ReflectFlags::<Perm>::bits(&p) == 5;
+    assert ReflectFlags::<Perm>::from_bits(3) == Option::Some(Perm::Read | Perm::Write);
+    assert ReflectFlags::<Perm>::from_bits(8) matches { None };
+}
+
+test "a flags bit handle holds its single-bit value" {
+    let p = Perm::Read | Perm::Exec;
+    let mut set = "";
+    for let b of ReflectFlags::<Perm>::members() {
+        if b.is_set(&p) {
+            set.push_str(`${b.name()}=${b.bit()} `);
+        }
+    }
+    assert set == "Read=1 Exec=4 ";
+    assert ReflectFlags::<Perm>::members().1.set() == Perm::Write;
+}
+
+__DATA__
+{"test": {}}
