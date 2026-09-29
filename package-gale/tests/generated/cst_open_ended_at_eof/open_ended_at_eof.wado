@@ -1442,8 +1442,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                 if pos < 0 { break opt_enter_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
                 pos += 1;
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if probe_kind == TK_EOF { opt_enter = true; }
+                opt_enter = true;
             }
         }
         if opt_enter {
@@ -1464,8 +1463,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_EOF { break opt_enter_scan; }
                 pos += 1;
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if probe_kind == TK_EOF { opt_enter = true; }
+                opt_enter = true;
             }
         }
         if opt_enter {

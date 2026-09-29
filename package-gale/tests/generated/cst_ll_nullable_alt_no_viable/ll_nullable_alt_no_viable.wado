@@ -1702,7 +1702,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_0(decline_kind)) {
+            if !(decline_kind == TK_COMMA) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -1729,8 +1729,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     } else {
                         pos = gp_6;
                     }
-                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if probe_kind == TK_RBRACE && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                    if follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
                 }
                 if decline_dead { break; }
             }
@@ -1910,10 +1909,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
     return String::new();
-}
-
-fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_COMMA | TK_RBRACE };
 }
 
 global EMPTY_SYNC: List<i32> = [];

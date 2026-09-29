@@ -1781,8 +1781,7 @@ fn scan_e_atom_alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> 
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break opt_probe; }
                 pos += 1;
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_2(probe_kind) { opt_ok = true; }
+                opt_ok = true;
             }
             if opt_ok {
                 cont_done_0 = true;
@@ -1850,7 +1849,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
             if try_2_end > best { best = try_2_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
-        } else if _kind_set_3(kind) {
+        } else if _kind_set_2(kind) {
             return scan_e_atom_alt_2(tokens, start, memo);
         }
     }
@@ -1982,8 +1981,7 @@ fn _parse_e__inner_alt_1(p: &mut Parser) -> () {
             }
             if pos >= tokens.len() || tokens[pos] != TK_LIT_end { break opt_enter_scan; }
             pos += 1;
-            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if _kind_set_2(probe_kind) { opt_enter = true; }
+            opt_enter = true;
         }
     }
     if opt_enter {
@@ -2030,7 +2028,7 @@ fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
             }
             p.site = 7;
             return _parse_name(p);
-        } else if _kind_set_3(kind) {
+        } else if _kind_set_2(kind) {
             p.site = 7;
             return _parse_name(p);
         }
@@ -2172,10 +2170,6 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 fn _kind_set_2(k: i32) -> bool {
-    return k matches { TK_LIT_PLUS | TK_LIT_RPAREN | TK_LIT_end | TK_LIT_then | TK_LIT_when };
-}
-
-fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_ID | TK_LIT_end | TK_LIT_then | TK_LIT_when };
 }
 

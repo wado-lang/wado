@@ -1462,8 +1462,7 @@ fn scan_r_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_C { break opt_probe; }
                 pos += 1;
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if probe_kind == TK_EOF { opt_ok = true; }
+                opt_ok = true;
             }
             if opt_ok {
                 cont_done_0 = true;
@@ -1551,8 +1550,7 @@ fn _parse_r__inner_alt_0(p: &mut Parser) -> () {
             pos += 1;
             if pos >= tokens.len() || tokens[pos] != TK_C { break opt_enter_scan; }
             pos += 1;
-            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if probe_kind == TK_EOF { opt_enter = true; }
+            opt_enter = true;
         }
     }
     if opt_enter {
