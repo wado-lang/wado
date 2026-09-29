@@ -658,8 +658,13 @@ fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
     return alts;
 }
 
-fn atn_min_alt(sorted_alts: &List<i32>) -> i32 {
-    return if sorted_alts.is_empty() { -1 } else { sorted_alts[0] };
+fn atn_first_enabled_alt(sorted_alts: &List<i32>, disabled_alts: &List<i32>) -> i32 {
+    for let alt of sorted_alts {
+        if !disabled_alts.contains(alt) {
+            return *alt;
+        }
+    }
+    return -1;
 }
 
 fn atn_min_alt_covers_rest(arena: &mut CtxArena, configs: &List<AtnConfig>, min_alt: i32) -> bool {
@@ -733,9 +738,6 @@ pub fn atn_predict_with_stack(
         if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
             continue;
         }
-        if !disabled_alts.is_empty() && disabled_alts.contains(&j) {
-            continue;
-        }
         seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: caller, pr: min_prec });
     }
     let mut scratch = ClosureScratch::new();
@@ -747,20 +749,16 @@ pub fn atn_predict_with_stack(
     loop {
         guard += 1;
         if guard > limit {
-            return atn_min_alt(&prev);
+            return atn_first_enabled_alt(&prev, disabled_alts);
         }
         let alts = atn_unique_alts(&configs);
         if alts.is_empty() {
-            return atn_min_alt(&prev);
+            return atn_first_enabled_alt(&prev, disabled_alts);
         }
-        if alts.len() == 1 {
-            return alts[0];
-        }
-        if atn_min_alt_covers_rest(&mut arena, &configs, alts[0]) {
-            return alts[0];
-        }
-        if atn_all_at_end(sim, &configs) {
-            return alts[0];
+        if alts.len() == 1
+            || atn_min_alt_covers_rest(&mut arena, &configs, alts[0])
+            || atn_all_at_end(sim, &configs) {
+            return atn_first_enabled_alt(&alts, disabled_alts);
         }
         prev = alts;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };

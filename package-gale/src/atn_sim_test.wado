@@ -144,7 +144,10 @@ test "predict resolves a two-token shared-prefix decision" {
     assert adaptive_predict(&sim, d, &to_kinds(&brack), 0, eof) == 1, "ID '[' ']' should pick alt 1";
 }
 
-test "predict excludes a disabled alternative" {
+// ANTLR4 finds the viable alternatives first and only then drops the ones a
+// false predicate gates (`doc/predicates.md`), so disabling the only viable alt
+// leaves none rather than handing the decision to one the input cannot take.
+test "predict drops a disabled alternative from the viable ones" {
     let g = parse(K2_G4).unwrap();
     let atn = build_atn(&g);
     let sim = decode(&atn);
@@ -156,15 +159,12 @@ test "predict excludes a disabled alternative" {
         mk(0),
         mk(4),
         mk(5),
-    ];  // ID '(' ')' — normally alt 0
-    // Baseline: the shared-prefix decision picks alt 0.
-    assert atn_predict_with_stack(&sim, d, &empty, &to_kinds(&paren), 0, eof) == 0, "baseline picks alt 0";
-    // A false context-free semantic predicate on alt 0 excludes it from the
-    // seed set (the `disabled_alts` argument), so the predictor cannot return
-    // it — only alt 1 remains.
-    let disabled: List<i32> = [0];
-    let alt = atn_predict_with_stack(&sim, d, &empty, &to_kinds(&paren), 0, eof, 0, &disabled);
-    assert alt == 1, `disabling alt 0 must leave alt 1 (got ${alt})`;
+    ];  // ID '(' ')' — only alt 0 is viable
+    let kinds = to_kinds(&paren);
+    let pick = |disabled: List<i32>| atn_predict_with_stack(&sim, d, &empty, &kinds, 0, eof, 0, &disabled);
+    assert pick([]) == 0;
+    assert pick([1]) == 0;
+    assert pick([0]) == -1;
 }
 
 test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
