@@ -778,8 +778,8 @@ fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
 fn lower_simple_rule(rule: &ParserRule, ctx: &mut GenContext) -> SimpleRule {
     let case_names = case_names_for_rule(&rule.alternatives);
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
-    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts, AltEnd::Rule);
-    let scan_body = lower_scan_body(&rule.alternatives[0], ctx, &rule.name, AltEnd::Rule);
+    let body = lower_alt_body(&rule.alternatives[0], 0, rule, ctx, &case_names, &alt_gc_starts, true);
+    let scan_body = lower_scan_body(&rule.alternatives[0], ctx, &rule.name, true);
     return SimpleRule {
         header: lower_header(rule),
         body,
@@ -808,8 +808,8 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut GenContext) -> MultiAltRule
     let mut scan_alts: List<ScanBody> = [];
     let mut all_indices: List<i32> = [];
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
-        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, &case_names, &alt_gc_starts, AltEnd::Rule));
-        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx, &rule.name, AltEnd::Rule));
+        alts.push(lower_alt_body(&rule.alternatives[i], i, rule, ctx, &case_names, &alt_gc_starts, true));
+        scan_alts.push(lower_scan_body(&rule.alternatives[i], ctx, &rule.name, true));
         all_indices.push(i);
     }
 
@@ -1472,17 +1472,11 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     let alt_gc_starts = compute_alt_gc_starts(&rule.alternatives);
     let mut alts: List<AltBody> = [];
     let mut scan_alts: List<ScanBody> = [];
+    // An atom alt ends where the LR suffix loop begins, not at the rule's
+    // tail, so no probe here may ask the caller's FOLLOW.
     for let idx of non_lr_indices {
-        let body = lower_alt_body(
-            &rule.alternatives[*idx],
-            *idx,
-            rule,
-            ctx,
-            &case_names,
-            &alt_gc_starts,
-            AltEnd::PrecedenceLoop,
-        );
-        let mut scan = lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, AltEnd::PrecedenceLoop);
+        let body = lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts, false);
+        let mut scan = lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false);
         if body.prefix_self_ref_min_prec > 0 {
             let last = scan.elements.len() - 1;
             let RuleCall(mut operand) = scan.elements[last] else {
@@ -1621,7 +1615,7 @@ fn lower_lr_alt_suffix<S: AsStrSlice, S1: AsStrSlice>(
                 &alt.elements,
                 i,
                 ctx,
-                AltEnd::PrecedenceLoop,
+                false,
                 &rule.name,
             ));
             op = rewrap_op_repeat(op, patched);
@@ -1650,7 +1644,12 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_index: i32, ctx: &mut GenCont
     // would extend the runtime-FOLLOW repair to LR rules, which no
     // committed grammar yet exercises.
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        elements.push(lower_alt_scan_element(&alt.elements, i, ctx, AltEnd::PrecedenceLoop, true, &rule.name));
+        elements.push(lower_alt_scan_element(
+            &alt.elements,
+            i,
+            ctx,
+            false,
+        ));
     }
     return ScanBody { elements, gates: scan_gates_for(alt, ctx, 1) };
 }
@@ -1973,11 +1972,23 @@ pub fn element_is_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool 
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
-fn lower_scan_body<S: AsStrSlice>(alt: &Alternative, ctx: &mut GenContext, rule_name: S, end: AltEnd) -> ScanBody {
+fn lower_scan_body<S: AsStrSlice>(
+    alt: &Alternative,
+    ctx: &mut GenContext,
+    rule_name: S,
+    reaches_rule_tail: bool,
+) -> ScanBody {
     let probe_rule = rule_name.to_string();
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
-        elements.push(lower_alt_scan_element(&alt.elements, i, ctx, end, true, &probe_rule));
+        elements.push(lower_alt_scan_element(
+            &alt.elements,
+            i,
+            ctx,
+            reaches_rule_tail,
+            true,
+            &probe_rule,
+        ));
     }
     return ScanBody {
         elements,
@@ -2105,7 +2116,7 @@ fn lower_scan_group(
                     &alt.elements,
                     i,
                     ctx,
-                    AltEnd::Inner,
+                    false,
                     enclosing_at_tail,
                     &NO_PROBE_RULE,
                     outer_suffix,
@@ -2204,7 +2215,7 @@ fn lower_general_scan_group(
                 &alt.elements,
                 i,
                 ctx,
-                AltEnd::Inner,
+                false,
                 enclosing_at_tail,
                 &NO_PROBE_RULE,
                 outer_suffix,
@@ -2388,20 +2399,6 @@ fn lower_scan_repeat(
     let mut inner_visiting: List<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
 
-    // Scan-side ignores `rep.non_greedy` because the existing surface
-    // emit (`gen_scan_repeat_body`) also ignores it — both greedy and
-    // non-greedy Repeats lower to the same `while peek ∈ inner_first`
-    // loop with `pos = sp; break` on 0-advance / failure. The scan
-    // result has been correct in practice on every committed grammar:
-    // when the loop overshoots, the parse side's longest-match scan
-    // tournament picks a shorter prefix instead. If we ever encounter
-    // a grammar where the scan-side fixed-point really needs 2-token
-    // disambiguation to distinguish `(',' a)*?` from `(',' b)*`, the
-    // `NonGreedyStrategy` infrastructure on the parse side (carrying
-    // `exit_second`) is the natural foundation to restore here.
-    // The scan side has no mask-driven strategies (the caller-FOLLOW
-    // repair is the runtime `gate_caller_follow` gate).
-
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
     let mut body = lower_scan_element(
@@ -2434,6 +2431,7 @@ fn lower_scan_repeat(
         gate_caller_follow: effective_gate,
         non_greedy: rep.non_greedy,
         body_scannable: ctx.is_element_scannable(&rep.element, &mut body_visiting),
+        atn_decision: rep.atn_decision,
     });
 }
 
@@ -2449,7 +2447,7 @@ fn rebind_scan_repeat_caller_follow(
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
-    end: AltEnd,
+    reaches_rule_tail: bool,
     rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     if let Repeat(re) = se {
@@ -2463,23 +2461,18 @@ fn rebind_scan_repeat_caller_follow(
             alt_elements,
             index,
             ctx,
-            end,
+            reaches_rule_tail,
             rule_name,
         );
         return ScanElement::Repeat(ScanRepeatElement {
-            kind: re.kind,
-            body: re.body,
-            inner_admits: re.inner_admits,
-            caller_follow_first: caller_follow_first,
-            gate_caller_follow: re.gate_caller_follow,
-            non_greedy: re.non_greedy,
+            ..re,
+            caller_follow_first,
             continuation_scan: stamps.probe.scan,
             continuation_scannable: stamps.probe.scannable,
             probe_asks_caller: stamps.probe.asks_caller,
             probe_contested: stamps.probe_contested,
             static_exit_undecided: stamps.static_exit_undecided,
             probe_viable: stamps.probe.viable,
-            body_scannable: re.body_scannable,
             duties: stamps.duties,
         });
     }
@@ -2487,8 +2480,8 @@ fn rebind_scan_repeat_caller_follow(
 }
 
 /// Default for scan walks with no enclosing rule to stamp from — group
-/// bodies and continuation walks, which end `AltEnd::Inner` and so never read
-/// the probe set.
+/// bodies and continuation walks, where `reaches_rule_tail` is false and
+/// the probe set is never read.
 global NO_PROBE_RULE: String = "";
 
 /// `body_second_position_first` for the Repeat at `elem`, matching what
@@ -2515,7 +2508,7 @@ fn lower_scan_continuation_elements(
         if !ctx.is_element_scannable(&alt_elements[k], &mut visiting) {
             return null;
         }
-        out.push(lower_alt_scan_element(alt_elements, k, ctx, AltEnd::Inner, false));
+        out.push(lower_alt_scan_element(alt_elements, k, ctx, false, false));
     }
     return Option::Some(out);
 }
@@ -2531,15 +2524,16 @@ fn lower_scan_continuation_elements(
 /// `lower_general_group`) inline the post-pass so they can share
 /// `basic_follow` with the parse-side rebind.
 ///
-/// `end` and `enclosing_at_tail` are different questions and must stay
-/// separate: the FOLLOW gate only needs the enclosing alt to be at its tail,
-/// while the probe asks what follows the walk's end and is sound only for the
-/// end the walk really reaches.
+/// `reaches_rule_tail` and `enclosing_at_tail` are different questions and
+/// must stay separate: the FOLLOW gate only needs the enclosing alt to be at
+/// its tail, while the probe ends by asking the caller's FOLLOW and is sound
+/// only where the walk really reaches the rule's tail. An LR atom alt and an
+/// LR suffix both end at the loop, not at the rule, so they answer `false`.
 fn lower_alt_scan_element(
     alt_elements: &List<Element>,
     i: i32,
     ctx: &mut GenContext,
-    end: AltEnd,
+    reaches_rule_tail: bool,
     enclosing_at_tail: bool = true,
     rule_name: &String = &NO_PROBE_RULE,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
@@ -2564,7 +2558,7 @@ fn lower_alt_scan_element(
     );
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
-        se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, end, rule_name);
+        se = rebind_scan_repeat_caller_follow(se, basic_follow, alt_elements, i, ctx, reaches_rule_tail, rule_name);
     }
     return se;
 }
@@ -2875,7 +2869,7 @@ fn lower_alt_body(
     ctx: &mut GenContext,
     case_names: &List<String>,
     alt_gc_starts: &List<i32>,
-    end: AltEnd,
+    reaches_rule_tail: bool,
 ) -> AltBody {
     let type_name = rule.type_name;
     let mut case_name: String = "";
@@ -2934,7 +2928,7 @@ fn lower_alt_body(
                 &alt.elements,
                 i,
                 ctx,
-                end,
+                reaches_rule_tail,
                 &rule.name,
             ));
             op = rewrap_op_repeat(op, patched);
@@ -3257,13 +3251,13 @@ fn lower_group_alt<S: AsStrSlice, S1: AsStrSlice>(
                     &alt.elements,
                     i,
                     ctx,
-                    AltEnd::Inner,
+                    false,
                     rule_name,
                 ));
                 op = rewrap_op_repeat(op, patched);
             }
             if se_is_repeat {
-                se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, AltEnd::Inner);
+                se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, false);
             }
         }
         ops.push(op);
@@ -3926,7 +3920,7 @@ fn lower_repeat_op<S: AsStrSlice>(
 }
 
 /// Inner second-position first set for the non-greedy 2-token
-/// disambiguation `compute_non_greedy_condition` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
+/// disambiguation `non_greedy_loop_cond` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> List<String> {
     if let Group(g) = peel_repeat_body_label(elem) {
@@ -3968,7 +3962,7 @@ fn classify_repeat_body_shape(body: &Op) -> RepeatBodyShape {
 /// second sub-position when the next element (at `start`) is itself a
 /// Repeat over a single-alt Group of ≥ 2 elements (the common
 /// `(',' x)*?` followed by `(',' y)*` disambiguation pattern). Returns
-/// `[]` otherwise — emit's `compute_non_greedy_condition` mirror
+/// `[]` otherwise — emit's `non_greedy_loop_cond` mirror
 /// already handles the empty case.
 fn compute_caller_follow_second(elements: &List<Element>, start: i32, ctx: &mut GenContext) -> List<String> {
     if start >= elements.len() {
@@ -4313,13 +4307,12 @@ fn compute_non_greedy_strategy(inner: &Element, outer_follow: &List<String>, ctx
 pub global BROAD_FIRST_SET_THRESHOLD: i32 = 20;
 
 /// True when no lookahead separates a non-greedy loop's body from its
-/// continuation, so the static exit condition collapses to the minimum
-/// match. Stamped on the op and its scan mirror, and consumed by emit's
-/// `compute_non_greedy_condition`, so all three decide on one answer.
+/// continuation, so only the runtime simulator can say where the loop exits.
+/// Stamped on the op and its scan mirror, so both decide on one answer.
 ///
 /// A body taking every token (`.*?`) is undecided at any depth: exiting at the
-/// first token the continuation starts with is viable only if the rest of it
-/// matches too, and ANTLR4 predicts on the whole.
+/// first token the continuation starts with is viable only if the rest of the
+/// input matches too, and ANTLR4 predicts on the whole.
 pub fn non_greedy_static_undecided(
     body: &Admits,
     follow_first: &List<String>,
@@ -4355,7 +4348,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
-    end: AltEnd,
+    reaches_rule_tail: bool,
     rule_name: S,
 ) -> RepeatOp {
     let stamps = lower_repeat_exit_stamps(
@@ -4368,7 +4361,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         alt_elements,
         index,
         ctx,
-        end,
+        reaches_rule_tail,
         rule_name,
     );
     return RepeatOp {
@@ -4404,11 +4397,17 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
-    end: AltEnd,
+    reaches_rule_tail: bool,
     rule_name: S,
 ) -> RepeatExitStamps {
+    let static_exit_undecided = non_greedy
+        && kind matches { Star | Plus }
+        && non_greedy_static_undecided(body_admits, caller_follow_first, body_second, caller_follow_second);
+    if static_exit_undecided {
+        ctx.mark_needs_scan_atn();
+    }
     return RepeatExitStamps {
-        probe: lower_continuation_probe(non_greedy, kind, alt_elements, index, ctx, end, rule_name),
+        probe: lower_continuation_probe(non_greedy, kind, alt_elements, index, ctx, reaches_rule_tail, rule_name),
         probe_contested: optional_probe_contested(
             non_greedy,
             kind,
@@ -4418,12 +4417,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             index,
             ctx,
         ),
-        static_exit_undecided: non_greedy_static_undecided(
-            body_admits,
-            caller_follow_first,
-            body_second,
-            caller_follow_second,
-        ),
+        static_exit_undecided,
         duties: lower_iteration_duties(
             non_greedy,
             kind,
@@ -4431,7 +4425,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             alt_elements,
             index,
             ctx,
-            end matches { Rule },
+            reaches_rule_tail,
             rule_name,
         ),
     };
@@ -4570,18 +4564,6 @@ struct ContinuationProbe {
     viable: List<String> = [],
 }
 
-/// Where the walk of an alternative ends, which is what a probe reaching that
-/// end has left to ask.
-enum AltEnd {
-    /// Short of the rule: a group's walk ends at the group.
-    Inner,
-    /// At the rule's end, where the caller continues.
-    Rule,
-    /// At a left-recursive rule's precedence loop, which may take another
-    /// suffix before the caller continues.
-    PrecedenceLoop,
-}
-
 /// The continuation for emit's probe, built only for the Repeat kinds whose
 /// decision can need it, and only where the scan's end settles the exit.
 fn lower_continuation_probe<S: AsStrSlice>(
@@ -4590,32 +4572,24 @@ fn lower_continuation_probe<S: AsStrSlice>(
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
-    end: AltEnd,
+    reaches_rule_tail: bool,
     rule_name: S,
 ) -> ContinuationProbe {
-    let wants_probe = non_greedy || kind matches { Optional };
-    // Only a tail walk may ask what follows the rule (invariant 10: a group's
-    // walk ends at the group, `use foo::*`); elsewhere the continuation must
-    // consume.
-    if !wants_probe || end matches { Inner } && ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+    let wants_probe = !non_greedy && kind matches { Optional };
+    // Only a tail walk may ask the caller's FOLLOW (invariant 10: a group's walk
+    // ends at the group, `use foo::*`); elsewhere the continuation must consume.
+    if !wants_probe || !reaches_rule_tail && ctx.tail_is_nullable_deep(alt_elements, index + 1) {
         return ContinuationProbe {};
     }
     let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) else {
         return ContinuationProbe {};
     };
-    return match end {
-        Inner => ContinuationProbe { scan, scannable: true },
-        Rule => {
-            let viable = ctx.rule_follow_for_probe(rule_name);
-            ctx.mark_rule_reads_follow();
-            ContinuationProbe { scan, scannable: true, asks_caller: true, viable };
-        },
-        // The caller's runtime FOLLOW is not threaded through the precedence
-        // climb, and would refuse a suffix the loop takes. The rule's classical
-        // FOLLOW holds every suffix's first token and everything a caller
-        // continues with.
-        PrecedenceLoop => ContinuationProbe { scan, scannable: true, viable: ctx.rule_follow_for_probe(rule_name) },
-    };
+    if !reaches_rule_tail {
+        return ContinuationProbe { scan, scannable: true };
+    }
+    let viable = ctx.rule_follow_for_probe(rule_name);
+    ctx.mark_rule_reads_follow();
+    return ContinuationProbe { scan, scannable: true, asks_caller: true, viable };
 }
 
 /// Whether a greedy `?`'s body and what follows it can start on one token, so

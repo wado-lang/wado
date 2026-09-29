@@ -988,15 +988,15 @@ pub struct RepeatOp {
     pub probe_contested: bool = false,
     /// What each iteration owes before it commits. See `IterationDuties`.
     pub duties: IterationDuties = IterationDuties {},
-    /// `non_greedy_static_undecided` for this Repeat — no lookahead
-    /// separates the loop body from the continuation. Stamped rather than
-    /// recomputed so the two emit walkers and the scan side cannot answer
-    /// it differently.
+    /// A non-greedy `*?` / `+?` no lookahead separates from its continuation,
+    /// so the runtime simulator decides each exit (`non_greedy_static_undecided`).
+    /// Stamped rather than recomputed so the two emit walkers and the scan side
+    /// cannot answer it differently.
     pub static_exit_undecided: bool = false,
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
-    /// verdict: its continuation scan ends at the rule's tail or its
-    /// precedence loop, and a token outside this set can continue neither a
-    /// caller nor the loop from there. Empty leaves the verdict as it was.
+    /// verdict: its continuation scan ends at the rule's tail, and a token
+    /// outside this set cannot continue any caller from there. Empty leaves
+    /// the verdict as it was.
     pub probe_viable: List<String> = [],
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
@@ -1306,6 +1306,8 @@ pub struct ScanRepeatElement {
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
     pub body_scannable: bool = false,
+    /// Mirrors `RepeatOp.atn_decision`, for the exit the simulator decides.
+    pub atn_decision: i32 = -1,
     /// The same `IterationDuties` value `RepeatOp` carries, from the same
     /// `lower_iteration_duties` call shape. A scan that counts an iteration the
     /// parse refuses measures a length the tournament then commits to.

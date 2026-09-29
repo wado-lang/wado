@@ -2234,7 +2234,7 @@ test "lower non-greedy single-element Group Repeat lowers body to TransparentGro
     // `r : (.)*? '=' ;` — `(.)` is a single-alt single-element Group
     // that `lower_transparent_group` collapses to `Op::Group(Transparent)`
     // wrapping `Op::Wildcard`. This is the regression case fixed in
-    // PR #1064: emit's `compute_non_greedy_condition` keys on
+    // PR #1064: emit's `non_greedy_loop_cond` keys on
     // `body_first_set.is_empty()` so the wildcard non-greedy condition
     // (`while !EOF && peek not in follow`) fires for the wrapped
     // shape just as it does for bare `.*?`. Without an empty
@@ -2371,7 +2371,7 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
             }
             // body_second_position_first = first of inner-Group's
             // elements from index 1 = { TK_INT }. Consumed by emit's
-            // `compute_non_greedy_condition` 2-token disambiguation arm.
+            // `non_greedy_loop_cond` 2-token disambiguation arm.
             assert rep.body_second_position_first.len() == 1, `expected 1, got ${rep.body_second_position_first.len()}`;
             assert rep.body_second_position_first[0] == "TK_INT", rep.body_second_position_first[0];
             // body_shape classifies the body op for emit's exhaustive

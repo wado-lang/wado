@@ -2969,20 +2969,39 @@ x(y)[z]{w,}<> => (s (e (e (e (e (e x) ( y )) [ z ]) { w , }) < >))
 ", got;
 }
 
-// The jar keeps looping past the first `)` wherever the token after it can
-// neither start another suffix nor end `e`.
 test "a non-greedy wildcard in a left-recursive suffix exits only where the rest can match" {
-    let got = parses(LR_SUFFIX_LOOPS, "s", ["x(a ) b)", "x(a)(b)"]);
-    assert got == "x(a ) b) => (s (e (e x) ( a ) b )))\nx(a)(b) => (s (e (e (e x) ( a )) ( b )))\n", got;
+    let got = parses(LR_SUFFIX_LOOPS, "s", ["x(a ) b)", "x(a)(b)", "x(a ) [b])"]);
+    assert got == "x(a ) b) => (s (e (e x) ( a ) b )))
+x(a)(b) => (s (e (e (e x) ( a )) ( b )))
+x(a ) [b]) => (s (e (e x) ( a ) [ b ] )))
+", got;
 }
 
-test "a non-greedy wildcard exits only where the rest of the rule can match" {
-    let got = parses("grammar T;
+test "a non-greedy wildcard exits only where the whole rest of the input can match" {
+    let rule = parses("grammar T;
 s : '(' .*? ')' ';' ;
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
-", "s", ["(a ) b ) ;", "(a) ;"]);
-    assert got == "(a ) b ) ; => (s ( a ) b ) ;)\n(a) ; => (s ( a ) ;)\n", got;
+", "s", ["( a ) b ) ;", "( a ) ;"]);
+    let group = parses("grammar T;
+s : ( '(' .*? ')' | 'x' ) ';' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["( a ) b ) ;", "x ;"]);
+    let caller = parses("grammar T;
+s : e 'b' 'c' EOF ;
+e : '(' .*? ')' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["( a ) b ) b c", "( a ) b c"]);
+    let got = `${rule}${group}${caller}`;
+    assert got == "( a ) b ) ; => (s ( a ) b ) ;)
+( a ) ; => (s ( a ) ;)
+( a ) b ) ; => (s ( a ) b ) ;)
+x ; => (s x ;)
+( a ) b ) b c => (s (e ( a ) b )) b c)
+( a ) b c => (s (e ( a )) b c)
+", got;
 }
 
 test "a redundant group around a loop body keeps the loop's decision" {

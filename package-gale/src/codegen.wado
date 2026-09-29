@@ -2,6 +2,8 @@ use {
     Grammar,
     OptionValue,
     LexerRule,
+    ParserRule,
+    Element,
     normalize_caches,
     assert_canonical_shape,
     canonicalize_empty_alt_groups,
@@ -546,16 +548,48 @@ fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
     let mut follow_kinds = TreeMap::<String, List<String>>::new();
     for let rule of &grammar.parser_rules {
         let fs = fenv.rule_follow(&rule.name);
-        if fs.open {
-            continue;
-        }
         let mut kinds: List<String> = [];
         for let k of &fs.kinds {
             kinds.push(k);
         }
         follow_kinds[rule.name] = kinds;
     }
-    ctx.set_rule_follow(follow_kinds);
+    ctx.set_rule_follow(follow_kinds, !grammar_has_open_first_element(&grammar.parser_rules));
+}
+
+fn grammar_has_open_first_element(parser_rules: &List<ParserRule>) -> bool {
+    for let rule of parser_rules {
+        for let alt of &rule.alternatives {
+            for let e of &alt.elements {
+                if element_has_open_first(e) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+fn element_has_open_first(e: &Element) -> bool {
+    return match *e {
+        Wildcard(_) => true,
+        Not(_) => true,
+        Label(l) => element_has_open_first(&l.element),
+        Repeat(r) => element_has_open_first(&r.element),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                for let inner of &alt.elements {
+                    if element_has_open_first(inner) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        },
+        RuleRef(_) => false,
+        TokenRef(_) => false,
+        Literal(_) => false,
+    };
 }
 
 /// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
