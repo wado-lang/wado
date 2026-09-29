@@ -37,10 +37,21 @@ use { parse } from "./g4/parser.wado";
 /// by re-deriving them per query, which on `RustParser.g4` cost three orders
 /// of magnitude over generating the whole parser.
 fn dump_pipeline<S: AsStrSlice>(input: S) -> [String, GenContext] {
-    let mut merged = merge_grammars([parse(input.to_string()).unwrap()]);
-    synthesize_implicit_tokens(&mut merged);
+    let mut merged = merged_source(input);
     let [lowered, mut ctx] = lower_pipeline(&mut merged);
     return [render_dump(&merged, &lowered, &mut ctx), ctx];
+}
+
+fn merged_source<S: AsStrSlice>(input: S) -> Grammar {
+    let mut merged = merge_grammars([parse(input.to_string()).unwrap()]);
+    synthesize_implicit_tokens(&mut merged);
+    return merged;
+}
+
+fn atn_dump_source<S: AsStrSlice>(input: S) -> String {
+    let mut merged = merged_source(input);
+    let [lowered, _] = lower_pipeline(&mut merged);
+    return render_atn_dump(&merged, &lowered);
 }
 
 /// `cmd_dump`'s prologue, whole. The step this used to leave out —
@@ -67,10 +78,7 @@ test "the dump lowers through the emitter's primed context" {
 // lowering. Re-lowering it through `build_atn`'s fresh context instead reaches
 // a table that knows none of the stamped ids.
 test "the ATN dump builds off the lowering the dump already has" {
-    let mut merged = merge_grammars([parse("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;").unwrap()]);
-    synthesize_implicit_tokens(&mut merged);
-    let [lowered, _] = lower_pipeline(&mut merged);
-    let report = render_atn_dump(&merged, &lowered);
+    let report = atn_dump_source("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
     assert report.contains("rule 0 'a'"), report;
     assert report.contains("rule 1 'c'"), report;
 }
@@ -549,14 +557,9 @@ A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ;");
 }
 
 test "the ATN dump names every state and transition kind a grammar builds" {
-    let mut merged = merge_grammars([
-        parse("grammar G;
+    let report = atn_dump_source("grammar G;
 e : e '+' e | A* B+ ~C . ;
-A : 'a' ; B : 'b' ; C : 'c' ;").unwrap(),
-    ]);
-    synthesize_implicit_tokens(&mut merged);
-    let [lowered, _] = lower_pipeline(&mut merged);
-    let report = render_atn_dump(&merged, &lowered);
+A : 'a' ; B : 'b' ; C : 'c' ;");
     for let kind of ["StarLoopEntry", "StarLoopBack", "PlusLoopBack", "LoopEnd", "BlockStart", "BlockEnd"] {
         assert report.contains(` ${kind} rule=0`), report;
     }

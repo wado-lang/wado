@@ -509,9 +509,7 @@ fn build_element(b: &mut LatnBuilder, elem: &LexerElement) -> [i32, i32] {
         ]),
         Not(n) => {
             let pos = positive_ranges(&n.element, b.ci);
-            // An empty set (`~[]`) would complement to match-anything — reject
-            // loudly instead.
-            assert !pos.is_empty(), "gale: `~(...)` over an empty set is unsupported";
+            assert !pos.is_empty(), "gale: `~(...)` over an empty set would match anything, so it is unsupported";
             ranges_segment(b, &complement_ranges(&pos));
         },
         RuleRef(name) => rule_segment(b, &name),
@@ -634,13 +632,13 @@ fn build_repeat(b: &mut LatnBuilder, kind: RepeatKind, non_greedy: bool, inner: 
 
 /// Positive (non-negated) Unicode-scalar ranges of the set under a `~`, which
 /// the g4 parser admits only as a single char, a range, a class, or a block of
-/// those.
+/// those (`is_valid_lexer_not_element`).
 fn positive_ranges(elem: &LexerElement, ci: bool) -> List<[i32, i32]> {
     return match *elem {
         CharRange(r) => ci_ranges(ci, r.0, r.1),
         CharClass(cc) => class_ranges(&cc, ci),
         Literal(s) => {
-            let c = s.chars().next().unwrap();
+            let c = s.chars().next().expect("the g4 parser admits only a one-char literal under `~`");
             ci_ranges(ci, c, c);
         },
         Group(alts) => {
