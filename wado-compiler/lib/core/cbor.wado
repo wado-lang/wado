@@ -1232,6 +1232,10 @@ impl CborDeserializer {
                 MAJOR_UINT => {
                     return Result::Ok(u128::from_u64(arg));
                 },
+                MAJOR_NINT => {
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::overflow("negative integer for an unsigned type", self.pos as i64));
+                },
                 MAJOR_TAG => {
                     if is_passthrough_tag(arg) {
                         continue;
@@ -1239,31 +1243,29 @@ impl CborDeserializer {
                     if arg == TAG_BIGNUM_POS {
                         return self.read_bignum_mag();
                     }
+                    if arg == TAG_BIGNUM_NEG {
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::overflow("negative bignum for an unsigned type", self.pos as i64));
+                    }
                     builtin::cold_path();
-                    return Result::Err(DeserializeError::overflow("expected unsigned integer", self.pos as i64));
+                    return Result::Err(DeserializeError::unexpected_type("expected unsigned integer", self.pos as i64));
                 },
                 _ => {
                     builtin::cold_path();
-                    return Result::Err(DeserializeError::overflow("expected unsigned integer", self.pos as i64));
+                    return Result::Err(DeserializeError::unexpected_type("expected unsigned integer", self.pos as i64));
                 },
             }
         }
     }
 
-    /// Read a definite-length text-string map key, returning its `[start, len]`
-    /// byte range in `input` and advancing past it. Kept non-generic so the
-    /// generic `next_field` only does the schema lookup.
-    fn read_text_key_range(&mut self) -> Result<[i32, i32], DeserializeError> {
-        // Definite-length text head only; `next_field` pre-filters the rest.
-        let head = self.next_byte()?;
+    /// Read a definite-length text-string map key, whose `head` byte the caller
+    /// peeked, returning its `[start, len]` byte range in `input` and advancing
+    /// past it. Kept non-generic so the generic `next_field` only does the
+    /// schema lookup.
+    fn read_text_key_range(&mut self, head: u8) -> Result<[i32, i32], DeserializeError> {
         let ai = head & 0x1f;
-        if head >> 5 != MAJOR_TEXT || ai > AI_8BYTE {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type(
-                "expected text-string map key",
-                self.pos as i64,
-            ));
-        }
+        assert head >> 5 == MAJOR_TEXT && ai <= AI_8BYTE;
+        self.pos += 1;
         let arg = self.read_arg(ai)?;
         // Range-check the full u64 length before narrowing: a huge declared
         // length must be EOF, not a truncated-to-i32 read.
@@ -1301,6 +1303,12 @@ impl CborDeserializer {
     /// Skip one well-formed item (RFC 8949 §4.1), for unknown struct fields and
     /// for capturing the raw bytes of an unrepresentable item. Skipping checks
     /// only well-formedness, never validity (so it does not UTF-8-validate).
+    /// The error for a break (0xff) just read where an item belongs: a break
+    /// only terminates an indefinite-length item (RFC 8949 §3.2.1).
+    fn unexpected_break(&self) -> DeserializeError {
+        return DeserializeError::malformed("unexpected break", (self.pos - 1) as i64);
+    }
+
     fn skip_item(&mut self, depth: i32) -> Result<(), DeserializeError> {
         let [major, ai, arg, indef] = self.read_head()?;
         match major {
@@ -1309,13 +1317,8 @@ impl CborDeserializer {
             },
             MAJOR_SIMPLE => {
                 if indef {
-                    // A lone break (0xff) is a terminator, not an item
-                    // (RFC 8949 §3.2.1).
                     builtin::cold_path();
-                    return Result::Err(DeserializeError::malformed(
-                        "unexpected break",
-                        (self.pos - 1) as i64,
-                    ));
+                    return Result::Err(self.unexpected_break());
                 }
                 return Result::Ok(());
             },
@@ -1346,7 +1349,8 @@ impl CborDeserializer {
                 }
                 return Result::Ok(());
             },
-            MAJOR_MAP => {
+            _ => {
+                assert major == MAJOR_MAP;
                 let inner = deeper(depth, self.max_depth, self.pos as i64)?;
                 if indef {
                     loop {
@@ -1366,10 +1370,6 @@ impl CborDeserializer {
                     }
                 }
                 return Result::Ok(());
-            },
-            _ => {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::malformed("unskippable item", self.pos as i64));
             },
         }
     }
@@ -1515,7 +1515,7 @@ impl DeserializeStruct for CborStructAccess {
         // precise malformed-head diagnostic.
         let head = self.de.peek_byte()?;
         if head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE {
-            let key_range = self.de.read_text_key_range()?;
+            let key_range = self.de.read_text_key_range(head)?;
             let idx = match S::lookup(self.de.input.slice(key_range.0, key_range.0 + key_range.1)) {
                 Some(i) => i,
                 None => -1,
@@ -2015,6 +2015,10 @@ impl Deserializer for CborDeserializer {
                 _ => {
                     let start = self.pos;
                     let [smajor, ai, arg, indef] = self.read_head()?;
+                    if indef {
+                        builtin::cold_path();
+                        return Result::Err(self.unexpected_break());
+                    }
                     // Gate the false/true/null/undefined cases on `ai` (a simple
                     // value < 24 has `arg == ai`); for a float head (ai 25/26/27)
                     // `arg` holds the float bits, which must not be mistaken for a

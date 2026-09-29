@@ -3,9 +3,22 @@
 //! value and its canonical diagnostic/hex form from that table.
 
 use { to_bytes, to_bytes_canonical, from_bytes } from "core:cbor";
-use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind, DEFAULT_MAX_DEPTH } from "core:serde";
+use {
+    Serialize,
+    Deserialize,
+    Serializer,
+    Deserializer,
+    SerializeMap,
+    DeserializeVariant,
+    SerializeError,
+    SerializeErrorKind,
+    DeserializeError,
+    DeserializeErrorKind,
+    DEFAULT_MAX_DEPTH,
+} from "core:serde";
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
+use { Uuid } from "core:uuid";
 
 fn enc<T: Serialize>(v: &T) -> String {
     return match to_bytes::<T>(v) {
@@ -16,11 +29,15 @@ fn enc<T: Serialize>(v: &T) -> String {
     };
 }
 
-/// Parse a hex string into bytes for decode-side fixtures.
+/// Parse a hex string into bytes for decode-side fixtures. Spaces separate
+/// the items of a longer input and are ignored.
 fn hex(s: String) -> ByteList {
     let mut out: ByteList = [];
     let mut hi = -1;
     for let c of s.chars() {
+        if c == ' ' {
+            continue;
+        }
         let d = c.hex_digit_value();
         if hi < 0 {
             hi = d;
@@ -60,6 +77,26 @@ fn decode_err_kind<T: Deserialize>(b: ByteList) -> Option<DeserializeErrorKind> 
         Ok(_) => Option::None,
         Err(e) => Option::Some(e.kind),
     };
+}
+
+/// Whether decoding `input` (hex) as `T` fails with exactly `kind`.
+fn fails_with<T: Deserialize>(input: String, kind: DeserializeErrorKind) -> bool {
+    return decode_err_kind::<T>(hex(input)) matches { Some(k) && k == kind };
+}
+
+/// Decode `input` (hex) as `T`, which must succeed.
+fn dec<T: Deserialize>(input: String) -> T {
+    return match from_bytes::<T, ByteList>(hex(input)) {
+        Ok(v) => v,
+        Err(e) => {
+            panic(`decode failed: ${e}`);
+        },
+    };
+}
+
+/// Decode `input` (hex) as a `Value` without `strict`.
+fn dec_lenient(input: String) -> Result<Value, DeserializeError> {
+    return from_bytes::<Value, ByteList>(hex(input), false);
 }
 
 struct Point {
@@ -129,7 +166,7 @@ test "Appendix A: bignums (tag 2/3)" {
 }
 
 test "Appendix A: floats" {
-    // Wado has no f16; f32/f64 always emit their native head.
+    // The encoder never emits binary16; f32/f64 always emit their native head.
     let f1: f32 = 100000.0;
     let f2 = f32::MAX;
     assert enc(&f1) == "fa47c35000";
@@ -757,4 +794,514 @@ test "max_depth is caller-tunable" {
     let deep = nested_more(150);
     assert from_bytes::<Nest, ByteList>(deep, true, 200) matches { Ok(_) };
     assert from_bytes::<Nest, ByteList>(deep) matches { Err(_) };
+}
+
+struct Small {
+    a: i32 = 0,
+}
+impl Deserialize for Small;
+
+/// map(1) { "z": <levels of array(1) head> 0 } — one byte per level.
+fn nested_skip(levels: i32) -> ByteList {
+    let mut b = hex("a1 617a");
+    for let mut i = 0; i < levels; i += 1 {
+        b.push(0x81);
+    }
+    b.push(0x00);
+    return b;
+}
+
+test "a lone break is malformed wherever an item is read" {
+    assert fails_with::<Value>("ff", DeserializeErrorKind::MalformedInput);
+    assert fails_with::<Value>("81 ff", DeserializeErrorKind::MalformedInput);
+    assert dec_lenient("ff") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert dec_lenient("81 ff") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+test "an unsigned target names the item's type, and overflow only for a negative" {
+    assert fails_with::<u64>("61 61", DeserializeErrorKind::UnexpectedType);
+    assert fails_with::<u32>("f5", DeserializeErrorKind::UnexpectedType);
+    assert fails_with::<u128>("c4 00",DeserializeErrorKind::UnexpectedType);
+    assert fails_with::<u64>("20", DeserializeErrorKind::Overflow);
+    assert fails_with::<u128>("c3 41 01", DeserializeErrorKind::Overflow);
+}
+
+test "skipping an unknown field is depth-bounded like the typed path" {
+    // Skipping does not move the deserializer's level, so the skip threads
+    // its own depth; reading the deserializer's leaves it unbounded.
+    assert decode_err_kind::<Small>(nested_skip(200000)) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
+    assert decode_err_kind::<Small>(nested_skip(3000)) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
+    assert from_bytes::<Small, ByteList>(nested_skip(5)) matches { Ok(_) };
+}
+
+test "skipping nested maps is depth-bounded" {
+    // { "z": {0: {0: ... }} }, definite and indefinite.
+    let mut definite = hex("a1 617a");
+    let mut indefinite = hex("a1 617a");
+    for let mut i = 0; i < 300; i += 1 {
+        definite.push(0xa1);
+        definite.push(0x00);
+        indefinite.push(0xbf);
+        indefinite.push(0x00);
+    }
+    assert decode_err_kind::<Small>(definite) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
+    assert decode_err_kind::<Small>(indefinite) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
+}
+
+test "decode: unknown fields of every major type are skipped" {
+    // {"z": <value>, "x": 1, "y": 2}
+    let values: List<String> = [
+        "20",  // -1
+        "fb 3ff8000000000000",  // 1.5
+        "f5",  // true
+        "f0",  // simple(16)
+        "43 010203",  // h'010203'
+        "63 616263",  // "abc"
+        "5f 4101 4102 ff",  // (_ h'01', h'02')
+        "7f 6161 6162 ff",  // (_ "a", "b")
+        "c1 01",  // 1(1)
+        "82 01 02",  // [1, 2]
+        "9f 01 02 ff",  // [_ 1, 2]
+        "a1 01 02",  // {1: 2}
+        "bf 01 02 03 04 ff",  // {_ 1: 2, 3: 4}
+    ];
+    for let v of values {
+        assert dec::<Point>(`a3 617a ${v} 6178 01 6179 02`) == Point { x: 1, y: 2 };
+    }
+}
+
+test "reject: malformed item in a skipped field" {
+    // A chunk of the wrong major type inside an indefinite string.
+    assert fails_with::<Small>("a1 617a 7f 4161 ff", MalformedInput);
+    assert fails_with::<Small>("a1 617a 5f 6161 ff", MalformedInput);
+    // Indefinite chunks cannot nest (RFC 8949 §3.2.3).
+    assert fails_with::<Small>("a1 617a 7f 7fff ff", MalformedInput);
+    // Reserved additional info.
+    assert fails_with::<Small>("a1 617a 1c", MalformedInput);
+    // Every container and string cut short.
+    let truncated: List<String> = [
+        "62 61", "7f", "7f 78", "7f 6261", "5f 4201", "82 01", "9f 01", "9f 18", "a1 01", "a1 18", "bf 01 02", "bf 18",
+        "c1",
+    ];
+    for let v of truncated {
+        assert fails_with::<Small>(`a1 617a ${v}`, Eof);
+    }
+}
+
+test "Appendix A: half-precision floats decode exactly" {
+    assert dec::<f64>("f9 0000") == 0.0;
+    assert dec::<f64>("f9 8000").to_bits() == (-0.0).to_bits();
+    assert dec::<f64>("f9 3c00") == 1.0;
+    assert dec::<f64>("f9 3e00") == 1.5;
+    assert dec::<f64>("f9 7bff") == 65504.0;
+    assert dec::<f64>("f9 0001") == 5.960464477539063e-8;
+    assert dec::<f64>("f9 0400") == 0.00006103515625;
+    assert dec::<f64>("f9 c400") == -4.0;
+    assert dec::<f64>("f9 7c00") == f64::INFINITY;
+    assert dec::<f64>("f9 fc00") == -f64::INFINITY;
+    assert dec::<f32>("f9 c400") == -4.0;
+}
+
+test "decode: an integer rounds once into bf16 when its low bits are zero" {
+    // 2^24: the bits f32 drops are all zero, so no sticky bit is folded in.
+    assert dec::<bf16>("1a 01000000").to_bits() == 0x4b80;
+}
+
+test "decode: a tag-wrapped integer decodes into a float" {
+    // Appendix A: 1(1363896240), an epoch time as an integer.
+    assert dec::<f64>("c1 1a514b67b0") == 1363896240.0;
+}
+
+test "reject: non-number items into a float" {
+    assert fails_with::<f64>("f5", UnexpectedType);
+    assert fails_with::<f64>("c1 f5", UnexpectedType);
+    assert fails_with::<f64>("6161", UnexpectedType);
+    assert fails_with::<f64>("d8 28 fb3ff8000000000000", UnexpectedType);
+}
+
+test "reject: truncated float and integer heads into a float" {
+    assert fails_with::<f64>("fa 0000", Eof);
+    assert fails_with::<f64>("f9 00", Eof);
+    assert fails_with::<f64>("18", Eof);
+    assert fails_with::<f64>("d9", Eof);
+    assert fails_with::<f64>("", Eof);
+}
+
+test "decode: integer targets read tag-wrapped and bignum items" {
+    assert dec::<i32>("c2 4105") == 5;
+    assert dec::<i64>("c3 4100") == -1;
+    assert dec::<u32>("c1 1affffffff") == 4294967295;
+    assert dec::<u64>("c1 01") == 1;
+    assert dec::<u64>("c2 48 ffffffffffffffff") == 18446744073709551615;
+    assert dec::<u128>("c1 01") == 1;
+    let u128_max: u128 = 340282366920938463463374607431768211455;
+    assert dec::<u128>("c2 50 ffffffffffffffff ffffffffffffffff") == u128_max;
+    // A bignum magnitude may itself be an indefinite byte string.
+    assert dec::<i128>("c2 5f 4101 4102 ff") == 258;
+}
+
+test "decode: i128 reads native heads at both signs" {
+    assert dec::<i128>("20") == -1;
+    assert dec::<i128>("1b ffffffffffffffff") == 18446744073709551615;
+    assert dec::<i128>("3b ffffffffffffffff") == -18446744073709551616;
+    // -1 - (2^127 - 1) is i128::MIN, the last negative bignum that fits.
+    let min: i128 = -170141183460469231731687303715884105728;
+    assert dec::<i128>("c3 50 7fffffffffffffff ffffffffffffffff") == min;
+}
+
+test "encode: an i128 or u128 that fits 64 bits takes a native head" {
+    let small: i128 = 5;
+    let neg: i128 = -1;
+    let u: u128 = 24;
+    assert enc(&small) == "05";
+    assert enc(&neg) == "20";
+    assert enc(&u) == "1818";
+    let max: i128 = 18446744073709551615;
+    assert enc(&max) == "1bffffffffffffffff";
+}
+
+test "reject: integers out of range for the target" {
+    // Past the target through the slow (tag-wrapped / bignum) path.
+    assert fails_with::<i32>("c1 1a80000000", Overflow);
+    assert fails_with::<i64>("1b 8000000000000000", Overflow);
+    assert fails_with::<i64>("3b 8000000000000000", Overflow);
+    assert fails_with::<i64>("c2 49 010000000000000000", Overflow);
+    assert fails_with::<u32>("c2 45 0100000000", Overflow);
+    assert fails_with::<u64>("c2 49 010000000000000000", Overflow);
+    // 2^127 is one past i128::MAX, and -1 - 2^127 one past i128::MIN.
+    assert fails_with::<i128>("c2 50 8000000000000000 0000000000000000", Overflow);
+    assert fails_with::<i128>("c3 50 8000000000000000 0000000000000000", Overflow);
+    // A bignum is at most 128 bits.
+    assert fails_with::<u128>("c2 51 01 0000000000000000 0000000000000000", Overflow);
+    // A negative bignum has no unsigned value.
+    assert fails_with::<u128>("c3 41 01", Overflow);
+}
+
+test "reject: malformed integer items" {
+    // A bignum tag must wrap a byte string.
+    assert fails_with::<i128>("c2 01", MalformedInput);
+    assert fails_with::<i128>("c3 01", MalformedInput);
+    assert fails_with::<u128>("c2 01", MalformedInput);
+    assert fails_with::<i128>("c2", Eof);
+    assert fails_with::<i128>("c2 42 01", Eof);
+    // A tag other than a bignum or a passthrough.
+    assert fails_with::<i128>("d8 28 01", UnexpectedType);
+    assert fails_with::<i64>("6161", UnexpectedType);
+    assert fails_with::<i64>("", Eof);
+    assert fails_with::<i64>("1b 00", Eof);
+    assert fails_with::<i64>("c1", Eof);
+    assert fails_with::<u32>("", Eof);
+    assert fails_with::<u32>("1a 00", Eof);
+    assert fails_with::<u64>("", Eof);
+    assert fails_with::<u64>("c1", Eof);
+}
+
+test "round-trip: char as a one-character text string" {
+    assert enc::<char>(&'a') == "6161";
+    assert enc::<char>(&'水') == "63e6b0b4";
+    assert roundtrips::<char>(&'水');
+    assert roundtrips::<char>(&'\u{1F600}');
+    assert fails_with::<char>("62 6162", InvalidValue);
+    assert fails_with::<char>("60", InvalidValue);
+    assert fails_with::<char>("01", UnexpectedType);
+}
+
+test "decode: bool through its tolerant path" {
+    assert !dec::<bool>("c1 f4");
+    assert dec::<bool>("d9d9f7 f5");
+    assert fails_with::<bool>("c1 f6", UnexpectedType);
+    assert fails_with::<bool>("01", UnexpectedType);
+    assert fails_with::<bool>("", Eof);
+    assert fails_with::<bool>("d9", Eof);
+}
+
+test "reject: malformed text strings" {
+    assert fails_with::<String>("", Eof);
+    assert fails_with::<String>("78", Eof);
+    assert fails_with::<String>("62 61", Eof);
+    assert fails_with::<String>("d9", Eof);
+    assert fails_with::<String>("01", UnexpectedType);
+    // Indefinite text: every chunk a definite text string, then the break.
+    assert fails_with::<String>("7f 01 ff", MalformedInput);
+    assert fails_with::<String>("7f 7fff ff", MalformedInput);
+    assert fails_with::<String>("7f", Eof);
+    assert fails_with::<String>("7f 78", Eof);
+    assert fails_with::<String>("7f 6261", Eof);
+}
+
+test "decode: byte strings, indefinite and tag-wrapped" {
+    // Appendix A: (_ h'0102', h'030405')
+    let expected: ByteList = [1, 2, 3, 4, 5];
+    assert dec::<ByteList>("5f 420102 43030405 ff") == expected;
+    // An unknown tag around a byte string passes its content through.
+    let two: ByteList = [1, 2];
+    assert dec::<ByteList>("d8 40 420102") == two;
+}
+
+test "reject: malformed byte strings" {
+    assert fails_with::<ByteList>("", Eof);
+    assert fails_with::<ByteList>("42 01", Eof);
+    assert fails_with::<ByteList>("01", UnexpectedType);
+    assert fails_with::<ByteList>("5f 6161 ff", MalformedInput);
+    assert fails_with::<ByteList>("5f 5fff ff", MalformedInput);
+    assert fails_with::<ByteList>("5f", Eof);
+    assert fails_with::<ByteList>("5f 58", Eof);
+    assert fails_with::<ByteList>("5f 4201", Eof);
+}
+
+test "decode: Option looks past passthrough tags only" {
+    // Tag 2 is not a passthrough, so the item is a present bignum.
+    assert dec::<Option<u128>>("c2 4101") matches { Some(v) && v == 1 };
+    assert fails_with::<Option<i32>>("", Eof);
+    assert fails_with::<Option<i32>>("d9", Eof);
+}
+
+test "decode: containers after a self-described prefix" {
+    let list: List<i32> = [1, 2];
+    assert dec::<List<i32>>("d9d9f7 82 01 02") == list;
+    assert dec::<Shape>("d9d9f7 63 446f74") == Shape::Dot;
+}
+
+test "reject: an item of the wrong major type for a container" {
+    assert fails_with::<List<i32>>("01", UnexpectedType);
+    assert fails_with::<TreeMap<String, i32>>("01", UnexpectedType);
+    assert fails_with::<Point>("01", UnexpectedType);
+    assert fails_with::<Shape>("01", UnexpectedType);
+    assert fails_with::<List<i32>>("", Eof);
+    assert fails_with::<Shape>("", Eof);
+}
+
+test "decode: indefinite maps into a map and a struct" {
+    let mut m: TreeMap<String, i32> = TreeMap::new();
+    m["a"] = 1;
+    assert dec::<TreeMap<String, i32>>("bf 6161 01 ff") == m;
+    assert dec::<Point>("bf 6178 01 6179 02 ff") == Point { x: 1, y: 2 };
+}
+
+test "reject: truncated or ill-keyed maps" {
+    assert fails_with::<List<i32>>("9f 01", Eof);
+    assert fails_with::<TreeMap<String, i32>>("bf 6161 01", Eof);
+    assert fails_with::<TreeMap<String, i32>>("a1 01 01", UnexpectedType);
+    assert fails_with::<Point>("bf 6178 01", Eof);
+    assert fails_with::<Point>("a1", Eof);
+    assert fails_with::<Point>("a1 78", Eof);
+    assert fails_with::<Point>("a1 01 01", UnexpectedType);
+}
+
+test "decode: an indefinite struct key that names no field is skipped" {
+    assert dec::<Point>("a3 7f617aff 01 6178 01 6179 02") == Point { x: 1, y: 2 };
+}
+
+test "reject: indefinite array longer than the target tuple" {
+    assert fails_with::<[i32, i32]>("9f 01 02 03 ff", InvalidValue);
+    assert fails_with::<[i32, i32]>("9f 01 02", Eof);
+}
+
+test "reject: malformed variants" {
+    assert fails_with::<Shape>("63 446f", Eof);
+    assert fails_with::<Shape>("a1 01 01", UnexpectedType);
+    // An indefinite variant map cut off before its break.
+    assert fails_with::<Shape>("bf 66436972636c65 fb3ff8000000000000", Eof);
+}
+
+/// A variant read by hand, asking `is_unit` which external-tagging form
+/// arrived: a bare name, or a single-pair map around a payload.
+struct Tagged {
+    name: String,
+    payload: Option<i32>,
+}
+
+impl Deserialize for Tagged {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Tagged, DeserializeError> {
+        let mut va = d.begin_variant("Tagged", 2)?;
+        let name = va.variant_name()?;
+        let payload: Option<i32> = if va.is_unit()? { null } else { Option::Some(va.payload::<i32>()?) };
+        va.end()?;
+        return Result::Ok(Tagged { name, payload });
+    }
+}
+
+test "decode: a hand-written variant tells a unit case from a payload" {
+    assert dec::<Tagged>("63 446f74") == Tagged { name: "Dot", payload: null };
+    assert dec::<Tagged>("a1 63416765 07") == Tagged { name: "Age", payload: Option::Some(7) };
+}
+
+test "decode: Value picks the narrowest integer case" {
+    assert dec::<Value>("20") == Value::Int(-1);
+    assert dec::<Value>("3b 7fffffffffffffff") == Value::Int(-9223372036854775808);
+    assert dec::<Value>("3b ffffffffffffffff") == Value::Int128(-18446744073709551616);
+    assert dec::<Value>("1b 7fffffffffffffff") == Value::Int(9223372036854775807);
+    assert dec::<Value>("1b ffffffffffffffff") == Value::UInt(18446744073709551615);
+    // A passthrough tag is dropped.
+    assert dec::<Value>("c1 01") == Value::Int(1);
+    assert dec::<Value>("6161") == Value::String("a");
+}
+
+test "decode: Value reads bignums by magnitude" {
+    assert dec::<Value>("c2 4101") == Value::Int(1);
+    assert dec::<Value>("c2 48 ffffffffffffffff") == Value::UInt(18446744073709551615);
+    assert dec::<Value>("c2 49 010000000000000000") == Value::Int128(18446744073709551616);
+    let u128_max: u128 = 340282366920938463463374607431768211455;
+    assert dec::<Value>("c2 50 ffffffffffffffff ffffffffffffffff") == Value::UInt128(u128_max);
+    assert dec::<Value>("c3 4101") == Value::Int(-2);
+    assert dec::<Value>("c3 48 ffffffffffffffff") == Value::Int128(-18446744073709551616);
+    assert dec::<Value>("c3 49 010000000000000000") == Value::Int128(-18446744073709551617);
+    assert fails_with::<Value>("c3 50 8000000000000000 0000000000000000", Overflow);
+    assert fails_with::<Value>("c2 01", MalformedInput);
+    assert fails_with::<Value>("c3 01", MalformedInput);
+}
+
+test "decode: Value reads simple values and every float width" {
+    assert dec::<Value>("f4") == Value::Bool(false);
+    assert dec::<Value>("f5") == Value::Bool(true);
+    assert dec::<Value>("f6") == Value::Null;
+    assert dec::<Value>("f9 3e00") == Value::Float(1.5);
+    assert dec::<Value>("fa 3fc00000") == Value::Float(1.5);
+    assert dec::<Value>("fb 3ff8000000000000") == Value::Float(1.5);
+}
+
+test "decode: Value keeps an unassigned simple value only when lenient" {
+    // Appendix A: simple(16) and simple(255).
+    assert fails_with::<Value>("f0", UnexpectedType);
+    assert fails_with::<Value>("f8ff", UnexpectedType);
+    assert dec_lenient("f0") matches { Ok(v) && v == Value::Unknown(hex("f0")) };
+    assert dec_lenient("f8ff") matches { Ok(v) && v == Value::Unknown(hex("f8ff")) };
+}
+
+test "reject: truncated items into Value" {
+    let truncated: List<String> = ["", "18", "38", "42 01", "78", "b8", "d9", "f9 00"];
+    for let v of truncated {
+        assert fails_with::<Value>(v, Eof);
+    }
+    // A lenient unknown tag still needs its content.
+    assert dec_lenient("d8 28") matches { Err(e) && e.kind == DeserializeErrorKind::Eof };
+}
+
+test "canonical: NaN collapses to the one quiet binary32 NaN" {
+    // A payload-carrying NaN keeps its bits in preferred encoding but not in
+    // the deterministic profile.
+    let signalling = f32::from_bits(0x7f800001);
+    assert enc(&signalling) == "fa7f800001";
+    assert enc_canon(&signalling) == "fa7fc00000";
+    assert enc_canon::<f64>(&f64::NAN) == "fa7fc00000";
+    assert enc_canon::<f32>(&f32::NAN) == "fa7fc00000";
+}
+
+test "canonical: floats shrink to binary32 when exact" {
+    let f: f32 = 1.5;
+    assert enc_canon(&f) == "fa3fc00000";
+    assert enc_canon::<f64>(&f64::INFINITY) == "fa7f800000";
+    assert enc_canon::<f64>(&-f64::INFINITY) == "faff800000";
+}
+
+test "canonical: scalars encode as in preferred serialization" {
+    let i: i64 = -1000000000000;
+    let u: u32 = 4000000000;
+    let big: i128 = -18446744073709551617;
+    let ubig: u128 = 18446744073709551616;
+    let bytes: ByteList = [1, 2, 3, 4];
+    let none: Option<i32> = null;
+    assert enc_canon(&i) == "3b000000e8d4a50fff";
+    assert enc_canon(&u) == "1aee6b2800";
+    assert enc_canon(&big) == "c349010000000000000000";
+    assert enc_canon(&ubig) == "c249010000000000000000";
+    assert enc_canon::<bool>(&true) == "f5";
+    assert enc_canon::<char>(&'水') == "63e6b0b4";
+    assert enc_canon(&bytes) == "4401020304";
+    assert enc_canon(&none) == "f6";
+}
+
+test "canonical: variants use external tagging with canonical payloads" {
+    assert enc_canon(&Shape::Dot) == "63446f74";
+    // The payload's float shrinks to binary32.
+    assert enc_canon(&Shape::Circle(1.5)) == "a166436972636c65fa3fc00000";
+    assert enc_canon(&Shape::Pair([3, 4])) == "a16450616972820304";
+}
+
+struct Unsorted {
+    b: i32,
+    a: i32,
+}
+impl Serialize for Unsorted;
+
+test "canonical: struct fields sorted even when declared out of order" {
+    let v = Unsorted { b: 2, a: 1 };
+    assert enc(&v) == "a2616202616101";
+    assert enc_canon(&v) == "a2616101616202";
+}
+
+/// The map {-1: 3, 100: 2, 10: 1}, written in that order.
+struct IntKeyed {
+}
+
+impl Serialize for IntKeyed {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(3)?;
+        m.key(&-1)?;
+        m.value(&3)?;
+        m.key(&100)?;
+        m.value(&2)?;
+        m.key(&10)?;
+        m.value(&1)?;
+        return m.end();
+    }
+}
+
+test "canonical: integer map keys sort by encoded bytes" {
+    // RFC 8949 §4.2.1: 10 (0x0a) < 100 (0x1864) < -1 (0x20).
+    assert enc(&IntKeyed {}) == "a320031864020a01";
+    assert enc_canon(&IntKeyed {}) == "a30a011864022003";
+}
+
+test "encode: a UUID is tag 37 around its 16 bytes" {
+    let id = Uuid::from_bytes(&hex("000102030405060708090a0b0c0d0e0f")).unwrap();
+    assert enc(&id) == "d82550000102030405060708090a0b0c0d0e0f";
+    assert enc_canon(&id) == "d82550000102030405060708090a0b0c0d0e0f";
+}
+
+/// A value whose serialization always fails.
+struct Unencodable {
+}
+
+impl Serialize for Unencodable {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return Result::Err(SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: "unencodable" });
+    }
+}
+
+/// A one-entry map whose key or value fails to serialize.
+struct BadEntry {
+    bad_key: bool,
+}
+
+impl Serialize for BadEntry {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(1)?;
+        if self.bad_key {
+            m.key(&Unencodable {})?;
+            m.value(&1)?;
+        } else {
+            m.key(&1)?;
+            m.value(&Unencodable {})?;
+        }
+        return m.end();
+    }
+}
+
+struct HoldsUnencodable {
+    inner: Unencodable,
+}
+impl Serialize for HoldsUnencodable;
+
+fn fails_to_encode<T: Serialize>(v: &T) -> bool {
+    let compact = to_bytes(v) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    let canonical = to_bytes_canonical(v) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    return compact && canonical;
+}
+
+test "encode: a serialize error propagates out of every container" {
+    assert fails_to_encode(&Unencodable {});
+    assert fails_to_encode(&BadEntry { bad_key: true });
+    assert fails_to_encode(&BadEntry { bad_key: false });
+    assert fails_to_encode(&HoldsUnencodable { inner: Unencodable {} });
 }
