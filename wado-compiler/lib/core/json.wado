@@ -71,8 +71,9 @@ fn write_base64_string(buf: &mut String, v: ByteSlice) {
     buf.push('"');
 }
 
-/// Whether `b` passes through a JSON string body as itself. The one statement
-/// of what JSON escapes, which the scan, the writer, and the fold all ask.
+/// Whether `b` passes through a JSON string body as itself. The statement of
+/// what JSON escapes, which the writer and the fold ask; `scan_string_run`
+/// tests the same set split by the branch each byte takes.
 fn json_plain_byte(b: u8) -> bool {
     return b >= 0x20 && b != 0x22 && b != 0x5C;
 }
@@ -929,6 +930,15 @@ fn checked_int_f64<S: AsStrSlice>(
     return Result::Ok(v);
 }
 
+/// The error for a number token that ends at `pos`, where a digit must be, in
+/// an input of `len` bytes.
+fn number_digit_error<S: AsStrSlice>(pos: i32, len: i32, message: S) -> DeserializeError {
+    if pos >= len {
+        return DeserializeError::eof(pos as i64);
+    }
+    return DeserializeError::malformed(message, pos as i64);
+}
+
 /// Maps an integer `from_str` failure onto a deserialize error.
 fn int_from_str_error<S: AsStrSlice>(e: ParseIntError, range_msg: S, start: i64) -> DeserializeError {
     return match e.kind() {
@@ -992,11 +1002,11 @@ fn parse_u64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<u64, DeserializeE
     };
 }
 
-/// Result of scanning a JSON string run. `at_escape` distinguishes stopping on
-/// a `\` from stopping on a `"` or EOF.
+/// Result of scanning a JSON string run. `stop` is the byte at `end`: a `"`, a
+/// `\`, an unescaped control byte, or -1 at end of input.
 struct StringRunScan {
     end: i32,
-    at_escape: bool,
+    stop: i32,
     valid: bool,
 }
 
@@ -1165,20 +1175,31 @@ impl JsonDeserializer {
         return DeserializeError::malformed("invalid UTF-8 in string", start as i64);
     }
 
-    /// Scan `input` from `from` up to the next `"` or `\` (or EOF), validating
-    /// UTF-8 in the same pass. Does not move `self.pos`; the caller advances.
+    /// Scan `input` from `from` up to the next byte a string body cannot hold
+    /// as itself (or EOF), validating UTF-8 in the same pass. Does not move
+    /// `self.pos`; the caller advances.
     fn scan_string_run(&self, from: i32) -> StringRunScan {
         let len = self.input.len();
         let mut pos = from;
         let mut valid = true;
+        let mut stop = -1;
         while pos < len {
             let b = self.input.get_unchecked(pos) as i32;
-            if b < 0x80 {
+            // Printable ASCII in one unsigned compare, so a plain byte pays one
+            // subtract for the control check and controls take the rarer
+            // branch below. Testing `json_plain_byte` here instead measured 3%
+            // slower on json-twitter deserialize, whose strings are long.
+            if ((b - 0x20) as u32) < 0x60 {
                 if b == b'"' || b == b'\\' {
+                    stop = b;
                     break;
                 }
                 pos += 1;
                 continue;
+            }
+            if b < 0x20 {
+                stop = b;
+                break;
             }
             let advance = String::utf8_sequence_len(&self.input, pos, len);
             // The document ends at `len`, so a sequence short there is as
@@ -1191,8 +1212,16 @@ impl JsonDeserializer {
             }
             pos += advance;
         }
-        let at_escape = pos < len && self.input.get_unchecked(pos) as i32 == b'\\';
-        return StringRunScan { end: pos, at_escape, valid };
+        return StringRunScan { end: pos, stop, valid };
+    }
+
+    /// The error for `stop`, a byte `scan_string_run` stopped on at `pos` that
+    /// neither closes the string nor starts an escape.
+    fn string_stop_error(&self, pos: i32, stop: i32) -> DeserializeError {
+        if stop < 0 {
+            return DeserializeError::eof(pos as i64);
+        }
+        return DeserializeError::malformed("unescaped control character in string", pos as i64);
     }
 
     /// Append `input[start..end)` to `dst` in a single copy. `valid` must come
@@ -1215,7 +1244,6 @@ impl JsonDeserializer {
 
     pub fn read_json_string(&mut self) -> Result<String, DeserializeError> {
         let quote = self.peek_after_whitespace();
-        let input_len = self.input.len();
         if quote < 0 {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
@@ -1234,13 +1262,13 @@ impl JsonDeserializer {
 
         // Fast path: no escapes. The token is `input[prefix_start..<prefix.end]`;
         // only string *content* can be multi-byte — JSON structure is ASCII.
-        if prefix.end < input_len && !prefix.at_escape {
+        if prefix.stop == b'"' {
             let result = self.take_scanned_run(prefix_start, prefix.end, prefix.valid)?;
             self.pos = prefix.end + 1;
             return Result::Ok(result);
         }
 
-        // Slow path: has escape sequences (or hit EOF). Escapes are rare in
+        // Slow path: has escape sequences (or is malformed). Escapes are rare in
         // typical JSON (citm_catalog: 1 of ~26k string tokens), so the whole
         // tail is cold — the marker hints the fast-path dispatch above
         // likely-taken and lets the engine lay this path out of line. Build the
@@ -1248,58 +1276,55 @@ impl JsonDeserializer {
         builtin::cold_path();
         let mut result = self.take_scanned_run(prefix_start, prefix.end, prefix.valid)?;
         self.pos = prefix.end;
-
-        loop {
-            // Each run between escapes is appended in a single copy; the `"` / `\`
-            // delimiters are ASCII, so a multi-byte sequence never straddles a
-            // chunk boundary.
+        let mut stop = prefix.stop;
+        while stop == b'\\' {
+            result.push(self.read_escape()?);
+            // Each run between escapes is appended in a single copy; every stop
+            // byte is ASCII, so a multi-byte sequence never straddles a chunk
+            // boundary.
             let chunk_start = self.pos;
             let chunk = self.scan_string_run(chunk_start);
             self.pos = chunk.end;
             self.append_scanned_run(&mut result, chunk_start, chunk.end, chunk.valid)?;
-
-            if self.pos >= self.input.len() {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
-            }
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if b == b'"' {
-                self.pos += 1;
-                return Result::Ok(result);
-            }
-            // b == '\\'
-            self.pos += 1;
-            if self.pos >= self.input.len() {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
-            }
-            let esc = self.input.get_unchecked(self.pos) as u8 as char;
-            match esc {
-                '"' => result.push('"'),
-                '\\' => result.push('\\'),
-                '/' => result.push('/'),
-                'n' => result.push('\n'),
-                'r' => result.push('\r'),
-                't' => result.push('\t'),
-                'b' => result.push('\u0008'),
-                'f' => result.push('\u000C'),
-                'u' => {
-                    // read_unicode_escape consumes through the last hex digit
-                    // (including a trailing low-surrogate escape), so skip the
-                    // shared `pos += 1` below.
-                    result.push(self.read_unicode_escape()?);
-                    continue;
-                },
-                _ => {
-                    builtin::cold_path();
-                    return Result::Err(DeserializeError::malformed(
-                        `invalid escape '\\${esc}'`,
-                        self.pos as i64,
-                    ));
-                },
-            }
-            self.pos += 1;
+            stop = chunk.stop;
         }
+        if stop != b'"' {
+            builtin::cold_path();
+            return Result::Err(self.string_stop_error(self.pos, stop));
+        }
+        self.pos += 1;
+        return Result::Ok(result);
+    }
+
+    /// Reads the escape whose `\` is at `pos`, leaving `pos` past it. The one
+    /// decoder of escapes, so a skipped string is held to a read one's rules.
+    fn read_escape(&mut self) -> Result<char, DeserializeError> {
+        self.pos += 1;
+        if self.pos >= self.input.len() {
+            builtin::cold_path();
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let esc = self.input.get_unchecked(self.pos);
+        let decoded: u8 = match esc {
+            b'"' | b'\\' | b'/' => esc,
+            b'n' => b'\n',
+            b'r' => b'\r',
+            b't' => b'\t',
+            b'b' => 0x08,
+            b'f' => 0x0C,
+            b'u' => {
+                return self.read_unicode_escape();
+            },
+            _ => {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::malformed(
+                    `invalid escape '\\${esc as char}'`,
+                    self.pos as i64,
+                ));
+            },
+        };
+        self.pos += 1;
+        return Result::Ok(decoded as char);
     }
 
     /// Reads exactly four hex digits at `pos`, advancing past them.
@@ -1363,78 +1388,23 @@ impl JsonDeserializer {
         );
     }
 
-    /// Reads a JSON number token as a String. Validates the token's prefix
-    /// (optional '-' followed by a digit), then delegates the scan to
-    /// `skip_number`.
+    /// Reads a JSON number token as a String, held to the grammar every
+    /// number read is.
     pub fn read_number_raw(&mut self) -> Result<String, DeserializeError> {
         let lead = self.peek_after_whitespace();
         let start = self.pos;
-        let mut probe = self.pos;
-        if lead == b'-' {
-            probe += 1;
-        }
-        if probe >= self.input.len() {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(probe as i64));
-        }
-        let first = self.input.get_unchecked(probe) as i32;
-        if digit_value(first) > 9 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type(
-                "expected number",
-                probe as i64,
-            ));
-        }
-        self.skip_number();
+        let n = &mut self.scratch;
+        self.scan_number_into(lead, n)?;
         // A number token is ASCII (digits, sign, '.', 'e'/'E'), so it is valid
         // UTF-8 by construction — copy it in one pass, no validation.
         return self.take_scanned_run(start, self.pos, true);
     }
 
-    /// Advances past a JSON number in `self.input` without allocating a String.
-    pub fn skip_number(&mut self) {
-        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == b'-' {
-            self.pos += 1;
-        }
-        while self.pos < self.input.len() {
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if digit_value(b) <= 9 {
-                self.pos += 1;
-            } else {
-                break;
-            }
-        }
-        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == b'.' {
-            self.pos += 1;
-            while self.pos < self.input.len() {
-                let b = self.input.get_unchecked(self.pos) as i32;
-                if digit_value(b) <= 9 {
-                    self.pos += 1;
-                } else {
-                    break;
-                }
-            }
-        }
-        if self.pos < self.input.len() {
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if b == b'e' || b == b'E' {
-                self.pos += 1;
-                if self.pos < self.input.len() {
-                    let sign = self.input.get_unchecked(self.pos) as i32;
-                    if sign == b'+' || sign == b'-' {
-                        self.pos += 1;
-                    }
-                }
-                while self.pos < self.input.len() {
-                    let b2 = self.input.get_unchecked(self.pos) as i32;
-                    if digit_value(b2) <= 9 {
-                        self.pos += 1;
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
+    /// Advances past the JSON number at `pos` without allocating a String,
+    /// held to the grammar every number read is.
+    pub fn skip_number(&mut self) -> Result<(), DeserializeError> {
+        let n = &mut self.scratch;
+        return self.scan_number_into(self.peek(), n);
     }
 
     /// Scans the number token at `pos`, whose byte `peek_after_whitespace` gave
@@ -1467,17 +1437,19 @@ impl JsonDeserializer {
                 pos as i64,
             ));
         }
-        // Integer part, in three runs so the accumulating loop carries neither
-        // a significance test nor a budget test per digit: leading zeros, the
-        // digits that fit the mantissa budget, then the ones past it.
-        let zeros_start = pos;
+        // Integer part: a lone `0`, or digits led by a nonzero one. They are read
+        // in two runs so the accumulating loop carries no budget test per digit:
+        // the digits that fit the mantissa budget, then the ones past it.
+        let int_start = pos;
         let mut inexact = false;
         if first == b'0' {
-            while pos < len && input.get_unchecked(pos) as i32 == b'0' {
-                pos += 1;
+            pos += 1;
+            if pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
+                builtin::cold_path();
+                self.pos = int_start;
+                return Result::Err(DeserializeError::malformed("leading zero in number", int_start as i64));
             }
         }
-        let mut int_digits = pos - zeros_start;
         let sig_start = pos;
         let mut cap = pos + FPFMT_DIGITS_MAX;
         if cap > len {
@@ -1499,13 +1471,14 @@ impl JsonDeserializer {
                 pos += 1;
             }
         }
-        int_digits += pos - sig_start;
+        let int_digits = pos - int_start;
         let mut frac_digits = 0;
         let mut frac_lead_zeros = 0;
         let mut has_frac_or_exp = false;
         if pos < len && input.get_unchecked(pos) as i32 == b'.' {
             has_frac_or_exp = true;
             pos += 1;
+            let point_end = pos;
             if digits == 0 {
                 // Leading fraction zeros shift the scale, not the mantissa.
                 let lead_start = pos;
@@ -1535,6 +1508,11 @@ impl JsonDeserializer {
                     pos += 1;
                 }
             }
+            if pos == point_end {
+                builtin::cold_path();
+                self.pos = pos;
+                return Result::Err(number_digit_error(pos, len, "expected digit after '.'"));
+            }
         }
         let mantissa_end = pos;
         let mut exp: i64 = 0;
@@ -1557,6 +1535,7 @@ impl JsonDeserializer {
                         },
                     }
                 }
+                let exp_start = pos;
                 while pos < len {
                     let d = digit_value(input.get_unchecked(pos) as i32);
                     if d > 9 {
@@ -1564,6 +1543,11 @@ impl JsonDeserializer {
                     }
                     exp = push_exponent_digit(exp, d as i32);
                     pos += 1;
+                }
+                if pos == exp_start {
+                    builtin::cold_path();
+                    self.pos = pos;
+                    return Result::Err(number_digit_error(pos, len, "expected digit in exponent"));
                 }
                 if exp_neg {
                     exp = -exp;
@@ -1579,7 +1563,7 @@ impl JsonDeserializer {
         out.exp = exp;
         out.has_frac_or_exp = has_frac_or_exp;
         out.inexact = inexact;
-        out.mantissa_start = zeros_start;
+        out.mantissa_start = int_start;
         out.mantissa_end = mantissa_end;
         return Result::Ok(());
     }
@@ -1773,9 +1757,9 @@ impl JsonDeserializer {
         return Result::Ok(scanned_to_bits(n, &self.input, format));
     }
 
-    /// Skips a string token without allocating. Shares `scan_string_run` with
-    /// the reading path, so a skipped string is held to the same UTF-8 rule as
-    /// a materialized one.
+    /// Skips a string token without allocating. Shares `scan_string_run` and
+    /// `read_escape` with the reading path, so a skipped string is held to the
+    /// same rules as a materialized one.
     pub fn skip_string(&mut self) -> Result<(), DeserializeError> {
         // Assumes pos is at the opening '"'
         self.pos += 1;
@@ -1787,24 +1771,15 @@ impl JsonDeserializer {
                 return Result::Err(self.invalid_utf8_string(start));
             }
             self.pos = scan.end;
-            if self.pos >= self.input.len() {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
-            }
-            if !scan.at_escape {
+            if scan.stop == b'"' {
                 self.pos += 1;
                 return Result::Ok(());
             }
-            self.pos += 1;
-            if self.pos >= self.input.len() {
+            if scan.stop != b'\\' {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
+                return Result::Err(self.string_stop_error(self.pos, scan.stop));
             }
-            if self.input.get_unchecked(self.pos) as u8 as char == 'u' {
-                // \uXXXX — skip 4 hex digits
-                self.pos += 4;
-            }
-            self.pos += 1;
+            self.read_escape()?;
         }
     }
 
@@ -1946,13 +1921,8 @@ impl JsonDeserializer {
                 let inner = deeper(depth, self.max_depth, self.pos as i64)?;
                 return self.skip_object_body(inner);
             },
-            '-' => {
-                self.skip_number();
-                return Result::Ok(());
-            },
-            c && '0' <= c <= '9' => {
-                self.skip_number();
-                return Result::Ok(());
+            '-' | '0'..='9' => {
+                return self.skip_number();
             },
             _ => {
                 builtin::cold_path();
@@ -2067,7 +2037,7 @@ impl DeserializeStruct for JsonStructAccess {
         let scan = self.de.scan_string_run(key_start);
         self.de.pos = scan.end;
 
-        if !scan.at_escape {
+        if scan.stop == b'"' {
             // Fast path: key has no escapes, compare directly from input buffer
             if !scan.valid {
                 builtin::cold_path();
@@ -2084,7 +2054,7 @@ impl DeserializeStruct for JsonStructAccess {
         }
         builtin::cold_path();
 
-        // Slow path: key has escape sequences, must parse fully.
+        // Slow path: key has escape sequences or is malformed, must parse fully.
         // Reset position to before the key and use read_json_string.
         self.de.pos = key_start - 1;
         let key = self.de.read_json_string()?;

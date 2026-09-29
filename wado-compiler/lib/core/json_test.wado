@@ -1393,3 +1393,100 @@ test "JsonDeserializer reads a token stream by hand" {
     assert de.expect_char(b']') matches { Ok };
     assert de.peek() == -1;
 }
+
+test "an integer part is a lone zero or starts with a nonzero digit" {
+    let at_start = DeserializeError::malformed("leading zero in number", 0);
+    assert de_err::<i32>("007") == at_start;
+    assert de_err::<i64>("007") == at_start;
+    assert de_err::<u32>("007") == at_start;
+    assert de_err::<u64>("007") == at_start;
+    assert de_err::<i128>("00") == at_start;
+    assert de_err::<f64>("01.5") == at_start;
+    assert de_err::<i64>("-01") == DeserializeError::malformed("leading zero in number", 1);
+
+    assert from_string::<i64>("0") == Result::Ok(0);
+    assert from_string::<i32>("0e0") == Result::Ok(0);
+    assert from_string::<f64>("-0.5") == Result::Ok(-0.5);
+    assert from_string::<List<i64>>("[0,10,-0]") == Result::Ok([0, 10, 0]);
+}
+
+test "a point or an exponent needs a digit after it" {
+    assert de_err::<f64>("1.") == DeserializeError::eof(2);
+    assert de_err::<f64>("1e") == DeserializeError::eof(2);
+    assert de_err::<f64>("1e+") == DeserializeError::eof(3);
+
+    let point = DeserializeError::malformed("expected digit after '.'", 3);
+    let exponent = DeserializeError::malformed("expected digit in exponent", 3);
+    assert de_err::<List<f64>>("[1.e5]") == point;
+    assert de_err::<List<i32>>("[1.]") == point;
+    assert de_err::<List<i64>>("[1.]") == point;
+    assert de_err::<List<u64>>("[1.]") == point;
+    assert de_err::<List<i128>>("[1.]") == point;
+    assert de_err::<List<i64>>("[1e]") == exponent;
+    assert de_err::<List<u32>>("[2E]") == exponent;
+    assert de_err::<List<f64>>("[1E-]") == DeserializeError::malformed("expected digit in exponent", 4);
+}
+
+test "a string rejects an unescaped control character" {
+    let unescaped = "unescaped control character in string";
+    assert de_err::<String>("\"a\tb\"") == DeserializeError::malformed(unescaped, 2);
+    assert de_err::<String>("\"\\n\nb\"") == DeserializeError::malformed(unescaped, 3);
+    let nul: ByteList = [0x22, 0x61, 0x00, 0x22];
+    assert from_bytes::<String, ByteList>(nul).unwrap_err() == DeserializeError::malformed(unescaped, 2);
+    let unit_separator: ByteList = [0x22, 0x1f, 0x22];
+    assert from_bytes::<String, ByteList>(unit_separator).unwrap_err() == DeserializeError::malformed(unescaped, 1);
+
+    assert de_err::<Utf8Rec>("{\"a\tb\":1}") == DeserializeError::malformed(unescaped, 3);
+    assert de_err::<TreeMap<String, i32>>("{\"a\tb\":1}") == DeserializeError::malformed(unescaped, 3);
+    assert de_err::<Utf8Rec>("{\"skip\":\"a\tb\",\"a\":\"x\"}") == DeserializeError::malformed(unescaped, 10);
+    assert de_err::<Utf8Rec>("{\"skip\":{\"k\t\":1},\"a\":\"x\"}") == DeserializeError::malformed(unescaped, 11);
+
+    // A space and DEL are not controls JSON must escape.
+    let printable: ByteList = [0x22, 0x20, 0x7f, 0x22];
+    assert from_bytes::<String, ByteList>(printable) matches { Ok(s) && s.len() == 2 };
+}
+
+test "an unterminated key ends where the input does" {
+    assert de_err::<Utf8Rec>(`{"a`) == DeserializeError::eof(3);
+    assert de_err::<Utf8Rec>(`{"a\\`) == DeserializeError::eof(4);
+}
+
+test "a skipped string is held to the read path's escape rules" {
+    assert de_err::<Utf8Rec>(`{"skip":"\\x","a":"x"}`) == DeserializeError::malformed("invalid escape '\\x'", 10);
+    assert de_err::<Utf8Rec>(`{"skip":"\\uZZZZ","a":"x"}`) == DeserializeError::malformed(
+        "invalid unicode escape",
+        11,
+    );
+    assert de_err::<Utf8Rec>(`{"skip":"\\uDC00","a":"x"}`) == DeserializeError::malformed("unpaired low surrogate", 11);
+    assert de_err::<Utf8Rec>(`{"skip":"\\uD800","a":"x"}`) == DeserializeError::malformed(
+        "unpaired high surrogate",
+        11,
+    );
+    assert de_err::<Utf8Rec>(`{"skip":"\\u12`) == DeserializeError::eof(11);
+    assert de_err::<Utf8Rec>(`{"skip":{"\\q":1},"a":"x"}`) == DeserializeError::malformed("invalid escape '\\q'", 11);
+
+    let paired = `{"skip":"\\uD83D\\uDE00\\t","a":"x"}`;
+    assert from_string::<Utf8Rec>(paired) == Result::Ok(Utf8Rec { a: "x" });
+}
+
+test "a skipped number is held to the read path's grammar" {
+    assert de_err::<Utf8Rec>(`{"skip":007,"a":"x"}`) == DeserializeError::malformed("leading zero in number", 8);
+    assert de_err::<Utf8Rec>(`{"skip":1.,"a":"x"}`) == DeserializeError::malformed("expected digit after '.'", 10);
+    assert de_err::<Utf8Rec>(`{"skip":[1e],"a":"x"}`) == DeserializeError::malformed(
+        "expected digit in exponent",
+        11,
+    );
+    assert de_err::<Utf8Rec>(`{"skip":-,"a":"x"}`) == DeserializeError::unexpected_type("expected number", 9);
+
+    let mut number = JsonDeserializer { input: "-1.5e+3,".as_bytes(), pos: 0 };
+    assert number.skip_number() matches { Ok };
+    assert number.pos == 7;
+    let mut zeros = JsonDeserializer { input: "00".as_bytes(), pos: 0 };
+    assert zeros.skip_number().unwrap_err() == DeserializeError::malformed("leading zero in number", 0);
+    let mut point = JsonDeserializer { input: " 1.e5".as_bytes(), pos: 0 };
+    assert point.skip_value(0).unwrap_err() == DeserializeError::malformed("expected digit after '.'", 3);
+    let mut raw = JsonDeserializer { input: "[1e+]".as_bytes(), pos: 1 };
+    assert raw.read_number_raw().unwrap_err() == DeserializeError::malformed("expected digit in exponent", 4);
+    let mut raw_zeros = JsonDeserializer { input: "012".as_bytes(), pos: 0 };
+    assert raw_zeros.read_number_raw().unwrap_err() == DeserializeError::malformed("leading zero in number", 0);
+}
