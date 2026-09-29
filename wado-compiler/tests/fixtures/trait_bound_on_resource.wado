@@ -1,0 +1,45 @@
+// A resource answers a trait bound through the impl written for it, as a
+// struct does: a generic function and a type pack both accept it.
+#[cm("wasi:demo/dom@0.1.0#node", linearity = "unrestricted", classes = "0..=0")]
+resource Node {}
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for Node {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Tag for String {
+    fn tag(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn tag_of<T: Tag>(x: T) -> i32 {
+    return x.tag();
+}
+
+fn tags<..T: Tag>(xs: [..T]) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let x of xs {
+        out.push(x.tag());
+    }
+    return out;
+}
+
+test "a generic bound accepts a resource" {
+    let node = builtin::black_box(0.0) as Node;
+    assert tag_of(node) == 1;
+}
+
+test "a type pack mixes a resource with other types" {
+    let node = builtin::black_box(0.0) as Node;
+    assert tags([node, "text", node]) == [1, 2, 1];
+}
+
+__DATA__
+{"test": {}}
