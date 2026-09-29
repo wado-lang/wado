@@ -34,11 +34,6 @@ use {
 use { write_escaped_string, JsonDeserializer } from "core:json";
 use { TreeMap } from "core:collections";
 
-test "a struct is a positional array" {
-    assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == "[1,2]" };
-    assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
-}
-
 // Sub-serializers hold `&mut String` so writes flow back to the outer buffer
 // the caller owns: a `String` field would be a copy of it.
 pub struct NsdSeqSerializer {
@@ -613,7 +608,6 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
     return Result::Ok(v);
 }
 
-
 // --- Primitive serialization (same as JSON) ---
 
 test "serialize i32" {
@@ -834,98 +828,47 @@ test "deserialize string" {
 // --- Struct deserialization (NSD: from positional array) ---
 
 test "deserialize struct from array" {
-    let r: Result<Point, DeserializeError> = from_string("[10,20]");
-    if let Ok(p) = r {
-        assert p.x == 10;
-        assert p.y == 20;
-    } else {
-        panic("expected Ok");
-    }
+    assert from_string::<Point>("[10,20]") == Result::Ok(Point { x: 10, y: 20 });
 }
 
 test "deserialize struct with mixed types" {
-    let r: Result<Person, DeserializeError> = from_string(`["Alice",30,true]`);
-    if let Ok(p) = r {
-        assert p.name == "Alice";
-        assert p.age == 30;
-        assert p.active == true;
-    } else {
-        panic("expected Ok");
-    }
+    let alice = Person { name: "Alice", age: 30, active: true };
+    assert from_string::<Person>(`["Alice",30,true]`) == Result::Ok(alice);
 }
 
 test "deserialize nested struct" {
-    let r: Result<Line, DeserializeError> = from_string("[[1,2],[3,4]]");
-    if let Ok(l) = r {
-        assert l.start.x == 1;
-        assert l.start.y == 2;
-        assert l.end.x == 3;
-        assert l.end.y == 4;
-    } else {
-        panic("expected Ok");
-    }
+    let line = Line {
+        start: Point { x: 1, y: 2 },
+        end: Point { x: 3, y: 4 },
+    };
+    assert from_string::<Line>("[[1,2],[3,4]]") == Result::Ok(line);
 }
 
 // --- Enum deserialization ---
 
 test "deserialize unit variant Red" {
-    let r: Result<Color, DeserializeError> = from_string("0");
-    if let Ok(c) = r {
-        assert c == Color::Red;
-    } else {
-        panic("expected Ok");
-    }
+    assert from_string::<Color>("0") == Result::Ok(Color::Red);
 }
 
 test "deserialize unit variant Blue" {
-    let r: Result<Color, DeserializeError> = from_string("2");
-    if let Ok(c) = r {
-        assert c == Color::Blue;
-    } else {
-        panic("expected Ok");
-    }
+    assert from_string::<Color>("2") == Result::Ok(Color::Blue);
 }
 
 // --- Variant deserialization ---
 
 test "deserialize payload variant" {
-    let r: Result<Shape, DeserializeError> = from_string("[0,5.0]");
-    if let Ok(s) = r {
-        if let Circle(radius) = s {
-            assert radius == 5.0;
-        } else {
-            panic("expected Circle");
-        }
-    } else {
-        panic("expected Ok");
-    }
+    assert from_string::<Shape>("[0,5.0]") == Result::Ok(Shape::Circle(5.0));
 }
 
 test "deserialize unit variant in variant type" {
-    let r: Result<Shape, DeserializeError> = from_string("2");
-    if let Ok(s) = r {
-        assert s matches { Point };
-    } else {
-        panic("expected Ok");
-    }
+    assert from_string::<Shape>("2") == Result::Ok(Shape::Point);
 }
 
 // --- Round-trip tests ---
 
 test "round-trip struct" {
     let orig = Point { x: 42, y: -7 };
-    let json_r = to_string(&orig);
-    if let Ok(json) = json_r {
-        let parsed_r: Result<Point, DeserializeError> = from_string(json);
-        if let Ok(parsed) = parsed_r {
-            assert parsed.x == 42;
-            assert parsed.y == -7;
-        } else {
-            panic("round-trip parse failed");
-        }
-    } else {
-        panic("round-trip serialize failed");
-    }
+    assert from_string::<Point>(to_string(&orig).unwrap()) == Result::Ok(orig);
 }
 
 test "round-trip nested struct" {
@@ -933,20 +876,7 @@ test "round-trip nested struct" {
         start: Point { x: 1, y: 2 },
         end: Point { x: 3, y: 4 },
     };
-    let json_r = to_string(&orig);
-    if let Ok(json) = json_r {
-        let parsed_r: Result<Line, DeserializeError> = from_string(json);
-        if let Ok(parsed) = parsed_r {
-            assert parsed.start.x == 1;
-            assert parsed.start.y == 2;
-            assert parsed.end.x == 3;
-            assert parsed.end.y == 4;
-        } else {
-            panic("round-trip parse failed");
-        }
-    } else {
-        panic("round-trip serialize failed");
-    }
+    assert from_string::<Line>(to_string(&orig).unwrap()) == Result::Ok(orig);
 }
 
 test "round-trip a map with scalar keys" {
@@ -964,18 +894,7 @@ test "round-trip a map with scalar keys" {
 }
 
 test "round-trip enum" {
-    let orig = Color::Green;
-    let json_r = to_string(&orig);
-    if let Ok(json) = json_r {
-        let parsed_r: Result<Color, DeserializeError> = from_string(json);
-        if let Ok(parsed) = parsed_r {
-            assert parsed == Color::Green;
-        } else {
-            panic("round-trip parse failed");
-        }
-    } else {
-        panic("round-trip serialize failed");
-    }
+    assert from_string::<Color>(to_string(&Color::Green).unwrap()) == Result::Ok(Color::Green);
 }
 
 // --- Error cases ---
