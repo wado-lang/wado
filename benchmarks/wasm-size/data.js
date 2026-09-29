@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790641249330,
+  "lastUpdate": 1790647220138,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61745,6 +61745,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9719237e25f8f5744158eb4e085692e559d6d9d5"
         },
         "date": 1790641248767,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1947,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6796,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20287,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313351,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c08806ebdd0fb0542e3fe990b1479f4465416bc3",
+          "message": "Merge pull request #2218 from wado-lang/claude/project-thread-f9uotd\n\nfix(elaborator): a resource satisfies a trait bound through its impl",
+          "timestamp": "2026-09-29T10:30:54+09:00",
+          "tree_id": "6189f86d7ca73d458d96df867ad803ab7cf38506",
+          "url": "https://github.com/wado-lang/wado/commit/c08806ebdd0fb0542e3fe990b1479f4465416bc3"
+        },
+        "date": 1790647219059,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
