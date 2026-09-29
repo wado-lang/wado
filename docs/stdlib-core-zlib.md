@@ -186,17 +186,13 @@ failing with `ZlibError::OutputExceedsMax` once the output would pass `max_outpu
 
 Compresses data into raw DEFLATE stored blocks (no actual compression).
 
-### `pub fn zlib_compress_stored(input: &ByteList) -> ByteList`
-
-Wraps data in zlib format using stored blocks (no actual compression).
-
 ### `pub fn deflate_huffman(input: &ByteList) -> ByteList`
 
 Compresses data using DEFLATE with fixed Huffman codes and LZ77 matching.
 
-### `pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteList`
+### `pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> ByteList`
 
-Compresses data using DEFLATE with the given compression level and strategy.
+Compresses data as raw DEFLATE (RFC 1951) with no wrapper header or trailer.
 
 `level` is 0-9 (0 = stored, 1 = fastest, 9 = best compression).
 `strategy` is one of `Z_DEFAULT_STRATEGY`, `Z_FILTERED`, `Z_HUFFMAN_ONLY`,
@@ -218,13 +214,6 @@ with `ZlibError::OutputExceedsMax` once their output would pass `max_output`.
 
 Auto-detects the wrapper format (zlib or gzip) and decompresses, failing with
 `ZlibError::OutputExceedsMax` once the output would pass `max_output`.
-
-### `pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> ByteList`
-
-Compresses data as raw DEFLATE (RFC 1951) with no wrapper header or trailer.
-
-`level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
-`Z_DEFAULT_STRATEGY`.
 
 ### `pub fn gzip_compress(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY, header: &GzipHeader = &GzipHeader::new()) -> ByteList`
 

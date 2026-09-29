@@ -80,16 +80,16 @@ fn make_wordy(size: i32) -> ByteList {
     let mut data = ByteList::with_capacity(size);
     let mut state: u32 = 0x2468ace;
     while data.len() < size {
-        state = state ^ state << 13;
-        state = state ^ state >> 17;
-        state = state ^ state << 5;
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
         let word = words[(state % 10) as i32];
         data.extend_from_slice(word.as_bytes() as Slice<u8>);
         let digits = (state >> 8 & 7) as i32;
         for let mut i = 0; i < digits; i += 1 {
-            state = state ^ state << 13;
-            state = state ^ state >> 17;
-            state = state ^ state << 5;
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
             data.push((48 + state % 10) as u8);
         }
     }
@@ -100,9 +100,9 @@ fn make_incompressible(size: i32) -> ByteList {
     let mut data = ByteList::with_capacity(size);
     let mut state: u32 = 0x12345678;
     for let mut i = 0; i < size; i += 1 {
-        state = state ^ state << 13;
-        state = state ^ state >> 17;
-        state = state ^ state << 5;
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
         data.push((state & 0xFF) as u8);
     }
     return data;
@@ -1055,7 +1055,7 @@ test "inflate gzip reference member (RFC 1952)" {
 // RFC 1952 section 2.3.1: the CRC32 trailer must match the uncompressed data.
 test "inflate gzip rejects CRC mismatch (RFC 1952 2.3.1)" {
     let mut gz = gzip_hello_world();
-    gz[23] = gz[23] ^ 0xFF;  // corrupt the first CRC32 byte
+    gz[23] ^= 0xFF;  // corrupt the first CRC32 byte
     assert inflate_gzip(&gz) matches { Err(ZlibError::Crc32Mismatch) };
 }
 
@@ -1140,7 +1140,7 @@ test "combined checksums match the whole at every split" {
 test "inflate zlib rejects an Adler-32 mismatch (RFC 1950 2.2)" {
     let mut stream = zlib_compress(&make_wordy(300));
     let last = stream.len() - 1;
-    stream[last] = stream[last] ^ 1;
+    stream[last] ^= 1;
     assert inflate_zlib(&stream) matches { Err(ZlibError::Adler32Mismatch) };
 }
 

@@ -238,8 +238,7 @@ pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
     let mut sum2 = rem * sum1_a % base;
     // sum1 = sum1_a + sum1_b + BASE - 1
     let mut sum1 = sum1_a + sum1_b + base - 1;
-    // sum2 += sum2_a + sum2_b + BASE - rem
-    sum2 = sum2 + sum2_a + sum2_b + base - rem;
+    sum2 += sum2_a + sum2_b + base - rem;
 
     if sum1 >= base {
         sum1 -= base;
@@ -268,7 +267,7 @@ fn build_crc_table() -> List<u32> {
             if c & 1 != 0 {
                 c = 0xEDB88320 ^ c >> 1;
             } else {
-                c = c >> 1;
+                c >>= 1;
             }
         }
         table[i] = c;
@@ -299,9 +298,9 @@ fn gf2_matrix_times(mat: &List<u32>, vec: u32) -> u32 {
     let mut i = 0;
     while v != 0 {
         if v & 1 != 0 {
-            result = result ^ mat[i];
+            result ^= mat[i];
         }
-        v = v >> 1;
+        v >>= 1;
         i += 1;
     }
     return result;
@@ -330,7 +329,7 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
     let mut row: u32 = 1;
     for let mut n = 1; n < 32; n += 1 {
         odd[n] = row;
-        row = row << 1;
+        row <<= 1;
     }
 
     // Put operator for two zero bits in even
@@ -346,7 +345,7 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
         if len & 1 != 0 {
             c1 = gf2_matrix_times(&even, c1);
         }
-        len = len >> 1;
+        len >>= 1;
         if len == 0 {
             break;
         }
@@ -354,7 +353,7 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
         if len & 1 != 0 {
             c1 = gf2_matrix_times(&odd, c1);
         }
-        len = len >> 1;
+        len >>= 1;
         if len == 0 {
             break;
         }
@@ -474,7 +473,7 @@ fn inflate_table(
     // accumulate lengths for codes
     for let mut sym = 0; sym < codes_count; sym += 1 {
         let l = lens[lens_offset + sym] as i32;
-        count[l] = count[l] + 1;
+        count[l] += 1;
     }
 
     // bound code lengths, force root to be within code lengths
@@ -510,7 +509,7 @@ fn inflate_table(
     // the unused coding space (Kraft sum) at each bit length.
     let mut left = 1;
     for let mut clen = 1; clen <= MAXBITS; clen += 1 {
-        left = left << 1;
+        left <<= 1;
         left -= count[clen] as i32;
         if left < 0 {
             builtin::cold_path();
@@ -537,7 +536,7 @@ fn inflate_table(
         if l != 0 {
             let off = offs[l as i32] as i32;
             work[off] = sym as u16;
-            offs[l as i32] = offs[l as i32] + 1;
+            offs[l as i32] += 1;
         }
     }
 
@@ -617,10 +616,10 @@ fn inflate_table(
         // backwards increment the len-bit code huff
         let mut incr = 1 as u32 << (len - 1) as u32;
         while huff & incr != 0 {
-            incr = incr >> 1;
+            incr >>= 1;
         }
         if incr != 0 {
-            huff = huff & incr - 1;
+            huff &= incr - 1;
             huff += incr;
         } else {
             huff = 0;
@@ -628,7 +627,7 @@ fn inflate_table(
 
         // go to next symbol, update count, len
         sym += 1;
-        count[len] = count[len] - 1;
+        count[len] -= 1;
         if count[len] == 0 {
             if len == max_len {
                 done = true;
@@ -654,7 +653,7 @@ fn inflate_table(
                     break;
                 }
                 curr += 1;
-                left_sub = left_sub << 1;
+                left_sub <<= 1;
             }
 
             used += 1 << curr;
@@ -675,31 +674,12 @@ fn inflate_table(
 }
 
 
-enum InflateMode {
-    TypeDo,
-    Stored,
-    Copy,
-    Table,
-    LenLens,
-    CodeLens,
-    Len,
-    LenExt,
-    Dist,
-    DistExt,
-    Match,
-    Done,
-    Bad,
-}
-
 // Order in which the code-length code lengths are stored in a dynamic block
 // (RFC 1951 section 3.2.7): "(HCLEN + 4) x 3 bits: code lengths for the code
 // length alphabet given just above, in the order: 16, 17, 18, 0, 8, 7, ...".
 global INFLATE_ORDER: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
 struct InflateState {
-    mode: InflateMode,
-    last_block: bool,
-
     // input position, and where the input ends
     next: i32,
     end: i32,
@@ -708,11 +688,6 @@ struct InflateState {
     hold: u64,
     bits: i32,
 
-    // for codes
-    length: i32,
-    offset: i32,
-    extra: i32,
-
     // code tables
     codes: List<i32>,
     lencode_off: i32,  // offset into codes for len/lit table
@@ -720,11 +695,7 @@ struct InflateState {
     lenbits: i32,
     distbits: i32,
 
-    // dynamic table building
-    ncode: i32,
-    nlen: i32,
-    ndist: i32,
-    have_count: i32,
+    // code lengths, and inflate_table's scratch
     lens: List<u16>,
     work: List<u16>,
 }
@@ -732,24 +703,15 @@ struct InflateState {
 impl InflateState {
     fn new(next: i32, end: i32) -> InflateState {
         return InflateState {
-            mode: InflateMode::TypeDo,
-            last_block: false,
             next,
             end,
             hold: 0,
             bits: 0,
-            length: 0,
-            offset: 0,
-            extra: 0,
             codes: List::filled(ENOUGH, 0),
             lencode_off: 0,
             distcode_off: 0,
             lenbits: 0,
             distbits: 0,
-            ncode: 0,
-            nlen: 0,
-            ndist: 0,
-            have_count: 0,
             lens: List::filled(320, 0),
             work: List::filled(288, 0),
         };
@@ -793,24 +755,25 @@ impl InflateState {
         self.distbits = result2.1;
     }
 
-    // Pulls input bytes until at least `n` bits are held; false when the input
-    // ends first. The buffer holds 64 bits, and a pull adds up to 7 past `n`.
-    fn need_bits(&mut self, input: &ByteList, n: i32) -> bool {
+    // Pulls input bytes until at least `n` bits are held. The whole stream is at
+    // hand, so input that ends first is a stream cut short. The buffer holds 64
+    // bits, and a pull adds up to 7 past `n`.
+    fn need_bits(&mut self, input: &ByteList, n: i32) -> Result<(), ZlibError> {
         assert n <= 57;
         while self.bits < n {
             if self.next == self.end {
                 builtin::cold_path();
-                return false;
+                return Result::Err(ZlibError::InvalidDeflateData);
             }
-            self.hold = self.hold | input[self.next] as u64 << self.bits as u64;
+            self.hold |= input[self.next] as u64 << self.bits as u64;
             self.bits += 8;
             self.next += 1;
         }
-        return true;
+        return Result::Ok(());
     }
 
     fn drop_bits(&mut self, n: i32) {
-        self.hold = self.hold >> n as u64;
+        self.hold >>= n as u64;
         self.bits -= n;
     }
 
@@ -825,20 +788,17 @@ impl InflateState {
     }
 
     // Decodes one code from the table at `table`, pulling input a byte at a
-    // time until the code's bits are all held; None when the input ends first.
-    // A lookup short of bits may land on another code's entry, but only on one
-    // longer than the bits held, since the code is prefix-free.
-    fn decode(&mut self, input: &ByteList, table: i32, root_bits: i32) -> Option<i32> {
+    // time until the code's bits are all held. A lookup short of bits may land
+    // on another code's entry, but only on one longer than the bits held, since
+    // the code is prefix-free.
+    fn decode(&mut self, input: &ByteList, table: i32, root_bits: i32) -> Result<i32, ZlibError> {
         loop {
             let [here, n] = decode_entry(&self.codes, table, root_bits, self.hold);
             if n <= self.bits {
                 self.drop_bits(n);
-                return Option::Some(here);
+                return Result::Ok(here);
             }
-            if !self.need_bits(input, self.bits + 1) {
-                builtin::cold_path();
-                return null;
-            }
+            self.need_bits(input, self.bits + 1)?;
         }
     }
 }
@@ -884,36 +844,35 @@ fn push_literal(output: &mut ByteList, literal: i32, max_output: i32) -> Result<
 }
 
 // Appends the back-reference <length, dist> (RFC 1951 section 3.2.5). The
-// output holds the whole decoded stream, so no separate window is needed.
-// Ok(false) for a distance before the start of the output (RFC 1951 section
-// 3.2.3: "a distance cannot refer past the beginning of the output stream").
-fn copy_match(output: &mut ByteList, length: i32, dist: i32, max_output: i32) -> Result<bool, ZlibError> {
+// output holds the whole decoded stream, so no separate window is needed. A
+// distance before the start of the output is invalid (RFC 1951 section 3.2.3:
+// "a distance cannot refer past the beginning of the output stream").
+fn copy_match(output: &mut ByteList, length: i32, dist: i32, max_output: i32) -> Result<(), ZlibError> {
     let out_pos = output.len();
     if dist > out_pos {
         builtin::cold_path();
-        return Result::Ok(false);
+        return Result::Err(ZlibError::InvalidDeflateData);
     }
     if length > max_output - out_pos {
         builtin::cold_path();
         return Result::Err(ZlibError::OutputExceedsMax);
     }
     output.copy_within_append(out_pos - dist, length);
-    return Result::Ok(true);
+    return Result::Ok(());
 }
 
 // zlib's inflate_fast: decodes whole length/distance pairs and literals in one
 // iteration, with no mode dispatch and no per-byte refill, while at least
 // FAST_INPUT_MIN input bytes remain. A 4-byte refill whenever fewer than 32 bits
 // are held covers a literal/length code with its extra bits (15 + 5), and a
-// second covers a distance code with its extra bits (15 + 13). Leaves
-// `state.mode` at Len to have the caller finish the block, or at TypeDo or Bad
-// where the block ended.
+// second covers a distance code with its extra bits (15 + 13). True where the
+// block ended, false where the input ran low with the block still open.
 fn inflate_fast(
     state: &mut InflateState,
     input: &ByteList,
     output: &mut ByteList,
     max_output: i32,
-) -> Result<(), ZlibError> {
+) -> Result<bool, ZlibError> {
     let codes = &state.codes;
     let lencode_off = state.lencode_off;
     let distcode_off = state.distcode_off;
@@ -923,15 +882,16 @@ fn inflate_fast(
     let mut hold = state.hold;
     let mut bits = state.bits;
     let mut inp = state.next;
+    let mut block_ended = false;
 
     while end - inp >= FAST_INPUT_MIN {
         if bits < 32 {
-            hold = hold | read_u32_le(input, inp) << bits as u64;
+            hold |= read_u32_le(input, inp) << bits as u64;
             inp += 4;
             bits += 32;
         }
         let [here, here_bits] = decode_entry(codes, lencode_off, lenbits, hold);
-        hold = hold >> here_bits as u64;
+        hold >>= here_bits as u64;
         bits -= here_bits;
         let op = code_op(here);
 
@@ -940,43 +900,37 @@ fn inflate_fast(
             continue;
         }
         if op & 16 == 0 {
-            if op & 32 != 0 {
-                state.mode = InflateMode::TypeDo;
-            } else {
+            if op & 32 == 0 {
                 builtin::cold_path();
-                state.mode = InflateMode::Bad;
+                return Result::Err(ZlibError::InvalidDeflateData);
             }
+            block_ended = true;
             break;
         }
         let length_extra = op & 15;
         let length = code_val(here) + low_bits(hold, length_extra);
-        hold = hold >> length_extra as u64;
+        hold >>= length_extra as u64;
         bits -= length_extra;
 
         if bits < 32 {
-            hold = hold | read_u32_le(input, inp) << bits as u64;
+            hold |= read_u32_le(input, inp) << bits as u64;
             inp += 4;
             bits += 32;
         }
         let [dist_here, dist_bits] = decode_entry(codes, distcode_off, distbits, hold);
-        hold = hold >> dist_bits as u64;
+        hold >>= dist_bits as u64;
         bits -= dist_bits;
         let dist_op = code_op(dist_here);
         if dist_op & 64 != 0 {
             builtin::cold_path();
-            state.mode = InflateMode::Bad;
-            break;
+            return Result::Err(ZlibError::InvalidDeflateData);
         }
         let dist_extra = dist_op & 15;
         let dist = code_val(dist_here) + low_bits(hold, dist_extra);
-        hold = hold >> dist_extra as u64;
+        hold >>= dist_extra as u64;
         bits -= dist_extra;
 
-        if !copy_match(output, length, dist, max_output)? {
-            builtin::cold_path();
-            state.mode = InflateMode::Bad;
-            break;
-        }
+        copy_match(output, length, dist, max_output)?;
     }
 
     // Hand back the whole bytes read ahead: the caller reports the input it
@@ -985,7 +939,7 @@ fn inflate_fast(
     state.next = inp - unread;
     state.bits = bits - (unread << 3);
     state.hold = hold & (1 as u64 << state.bits as u64) - 1;
-    return Result::Ok(());
+    return Result::Ok(block_ended);
 }
 
 /// Raw DEFLATE (RFC 1951 3.2.3) decoded from a slice of `input`, and the input bytes
@@ -1000,272 +954,197 @@ fn inflate_raw_ex(
     let mut state = InflateState::new(input_offset, input_offset + input_length);
     let mut output: ByteList = [];
 
-    // The whole stream is at hand, so input running out before the final
-    // block ends leaves the loop with the stream rejected below.
     loop {
-        match state.mode {
-            TypeDo => {
-                if state.last_block {
-                    state.drop_to_byte_boundary();
-                    state.mode = InflateMode::Done;
-                } else {
-                    if !state.need_bits(input, 3) {
-                        break;
-                    }
-                    state.last_block = state.take_bits(1) != 0;
+        state.need_bits(input, 3)?;
+        let last_block = state.take_bits(1) != 0;
 
-                    // BTYPE (RFC 1951 section 3.2.3): 00 stored, 01 fixed
-                    // Huffman, 10 dynamic Huffman, 11 reserved (error).
-                    let block_type = state.take_bits(2);
-
-                    if block_type == 0 {
-                        state.mode = InflateMode::Stored;
-                    } else if block_type == 1 {
-                        state.load_fixed_tables();
-                        state.mode = InflateMode::Len;
-                    } else if block_type == 2 {
-                        state.mode = InflateMode::Table;
-                    } else {
-                        // BTYPE=11 is reserved and must be rejected.
-                        builtin::cold_path();
-                        state.mode = InflateMode::Bad;
-                    }
-                }
-            },
-            Stored => {
-                state.drop_to_byte_boundary();
-                if !state.need_bits(input, 32) {
-                    break;
-                }
-
-                // Stored block (RFC 1951 section 3.2.4): LEN then NLEN, where
-                // NLEN is the one's complement of LEN. Reject any mismatch.
-                let stored_len = state.take_bits(16);
-                let stored_nlen = state.take_bits(16);
-                // Copy reads the block from the input, past the bit buffer.
-                assert state.bits == 0;
-                if stored_len != stored_nlen ^ 0xFFFF {
-                    builtin::cold_path();
-                    state.mode = InflateMode::Bad;
-                } else {
-                    state.length = stored_len;
-                    state.mode = InflateMode::Copy;
-                }
-            },
-            Copy => {
-                let copy = i32::min(state.length, state.end - state.next);
-                if copy > max_output - output.len() {
-                    builtin::cold_path();
-                    return Result::Err(ZlibError::OutputExceedsMax);
-                }
-                output.extend_from_slice(input[state.next..<state.next + copy]);
-                state.next += copy;
-                state.length -= copy;
-                if state.length != 0 {
-                    builtin::cold_path();
-                    break;
-                }
-                state.mode = InflateMode::TypeDo;
-            },
-            Table => {
-                if !state.need_bits(input, 14) {
-                    break;
-                }
-
-                // Dynamic block header (RFC 1951 section 3.2.7): HLIT+257
-                // literal/length codes, HDIST+1 distance codes, HCLEN+4 code
-                // length codes.
-                state.nlen = state.take_bits(5) + 257;
-                state.ndist = state.take_bits(5) + 1;
-                state.ncode = state.take_bits(4) + 4;
-
-                // 286/30 are the largest valid counts; 286-287 and 30-31 are
-                // reserved (RFC 1951 sections 3.2.5 and 3.2.7).
-                if state.nlen > 286 || state.ndist > 30 {
-                    builtin::cold_path();
-                    state.mode = InflateMode::Bad;
-                } else {
-                    state.mode = InflateMode::LenLens;
-                }
-            },
-            LenLens => {
-                if !state.need_bits(input, state.ncode * 3) {
-                    break;
-                }
-                for let mut i = 0; i < 19; i += 1 {
-                    state.lens[INFLATE_ORDER[i]] = if i < state.ncode { state.take_bits(3) as u16 } else { 0 };
-                }
-
-                let result = inflate_table(CODES_TYPE, &state.lens, 0, 19, &mut state.codes, 0, 7, &mut state.work);
-                if result.0 != 0 {
-                    builtin::cold_path();
-                    state.mode = InflateMode::Bad;
-                } else {
-                    state.lencode_off = 0;
-                    state.lenbits = result.1;
-                    state.have_count = 0;
-                    state.mode = InflateMode::CodeLens;
-                }
-            },
-            CodeLens => {
-                let Some(here) = state.decode(input, state.lencode_off, state.lenbits) else {
-                    break;
-                };
-                // RFC 1951 section 3.2.7: symbols 0-15 are code lengths; 16
-                // repeats the previous length 3-6 times, 17 repeats zero 3-10
-                // times, and 18 repeats zero 11-138 times.
-                let symbol = code_val(here);
-                let total = state.nlen + state.ndist;
-                if symbol < 16 {
-                    state.lens[state.have_count] = symbol as u16;
-                    state.have_count += 1;
-                } else {
-                    let extra = if symbol == 16 {
-                        2;
-                    } else if symbol == 17 {
-                        3;
-                    } else {
-                        7;
-                    };
-                    if !state.need_bits(input, extra) {
-                        break;
-                    }
-                    let min_repeat = if symbol == 18 { 11 } else { 3 };
-                    let copy_len = min_repeat + state.take_bits(extra);
-                    if symbol == 16 && state.have_count == 0 || state.have_count + copy_len > total {
-                        builtin::cold_path();
-                        state.mode = InflateMode::Bad;
-                        continue;
-                    }
-                    let copy_val: u16 = if symbol == 16 { state.lens[state.have_count - 1] } else { 0 };
-                    for let mut i = 0; i < copy_len; i += 1 {
-                        state.lens[state.have_count] = copy_val;
-                        state.have_count += 1;
-                    }
-                }
-                if state.have_count < total {
-                    continue;
-                }
-
-                if state.lens[256] == 0 {
-                    // Symbol 256 ends the block, so a block without a code for it
-                    // could never end.
-                    builtin::cold_path();
-                    state.mode = InflateMode::Bad;
-                } else {
-                    let result1 = inflate_table(
-                        LENS_TYPE,
-                        &state.lens,
-                        0,
-                        state.nlen,
-                        &mut state.codes,
-                        0,
-                        9,
-                        &mut state.work,
-                    );
-                    if result1.0 != 0 {
-                        builtin::cold_path();
-                        state.mode = InflateMode::Bad;
-                    } else {
-                        state.lencode_off = 0;
-                        state.lenbits = result1.1;
-                        let dist_start = result1.2;
-                        let result2 = inflate_table(
-                            DISTS_TYPE,
-                            &state.lens,
-                            state.nlen,
-                            state.ndist,
-                            &mut state.codes,
-                            dist_start,
-                            6,
-                            &mut state.work,
-                        );
-                        if result2.0 != 0 {
-                            builtin::cold_path();
-                            state.mode = InflateMode::Bad;
-                        } else {
-                            state.distcode_off = dist_start;
-                            state.distbits = result2.1;
-                            state.mode = InflateMode::Len;
-                        }
-                    }
-                }
-            },
-            Len => {
-                if state.end - state.next >= FAST_INPUT_MIN {
-                    inflate_fast(&mut state, input, &mut output, max_output)?;
-                    if !state.mode matches { Len } {
-                        continue;
-                    }
-                }
-                let Some(here) = state.decode(input, state.lencode_off, state.lenbits) else {
-                    break;
-                };
-                let here_op = code_op(here);
-                state.length = code_val(here);
-
-                if here_op == 0 {
-                    push_literal(&mut output, state.length, max_output)?;
-                } else if here_op & 32 != 0 {
-                    // end of block
-                    state.mode = InflateMode::TypeDo;
-                } else if here_op & 64 != 0 {
-                    builtin::cold_path();
-                    state.mode = InflateMode::Bad;
-                } else {
-                    state.extra = here_op & 15;
-                    state.mode = InflateMode::LenExt;
-                }
-            },
-            LenExt => {
-                if !state.need_bits(input, state.extra) {
-                    break;
-                }
-                state.length += state.take_bits(state.extra);
-                state.mode = InflateMode::Dist;
-            },
-            Dist => {
-                let Some(here) = state.decode(input, state.distcode_off, state.distbits) else {
-                    break;
-                };
-                let here_op = code_op(here);
-                if here_op & 64 != 0 {
-                    builtin::cold_path();
-                    state.mode = InflateMode::Bad;
-                } else {
-                    state.offset = code_val(here);
-                    state.extra = here_op & 15;
-                    state.mode = InflateMode::DistExt;
-                }
-            },
-            DistExt => {
-                if !state.need_bits(input, state.extra) {
-                    break;
-                }
-                state.offset += state.take_bits(state.extra);
-                state.mode = InflateMode::Match;
-            },
-            Match => {
-                if copy_match(&mut output, state.length, state.offset, max_output)? {
-                    state.mode = InflateMode::Len;
-                } else {
-                    builtin::cold_path();
-                    state.mode = InflateMode::Bad;
-                }
-            },
-            Done | Bad => {
-                break;
-            },
+        // BTYPE (RFC 1951 section 3.2.3): 00 stored, 01 fixed Huffman, 10
+        // dynamic Huffman, 11 reserved (error).
+        let block_type = state.take_bits(2);
+        if block_type == 0 {
+            inflate_stored(&mut state, input, &mut output, max_output)?;
+        } else {
+            if block_type == 1 {
+                state.load_fixed_tables();
+            } else if block_type == 2 {
+                read_dynamic_tables(&mut state, input)?;
+            } else {
+                builtin::cold_path();
+                return Result::Err(ZlibError::InvalidDeflateData);
+            }
+            inflate_codes(&mut state, input, &mut output, max_output)?;
+        }
+        if last_block {
+            break;
         }
     }
+    state.drop_to_byte_boundary();
+    return Result::Ok([output, state.next - input_offset]);
+}
 
-    // The decode succeeded only if it ran to the end of the final block (RFC
-    // 1951 section 3.2.3): a Bad mode or an input cut short both stop before Done.
-    if !state.mode matches { Done } {
+// A stored block (RFC 1951 section 3.2.4): LEN then NLEN, the one's complement
+// of LEN, then LEN bytes copied from the input.
+fn inflate_stored(
+    state: &mut InflateState,
+    input: &ByteList,
+    output: &mut ByteList,
+    max_output: i32,
+) -> Result<(), ZlibError> {
+    state.drop_to_byte_boundary();
+    state.need_bits(input, 32)?;
+    let stored_len = state.take_bits(16);
+    let stored_nlen = state.take_bits(16);
+    // The copy reads the block from the input, past the bit buffer.
+    assert state.bits == 0;
+    if stored_len != stored_nlen ^ 0xFFFF {
         builtin::cold_path();
         return Result::Err(ZlibError::InvalidDeflateData);
     }
-    return Result::Ok([output, state.next - input_offset]);
+    let copy = i32::min(stored_len, state.end - state.next);
+    if copy > max_output - output.len() {
+        builtin::cold_path();
+        return Result::Err(ZlibError::OutputExceedsMax);
+    }
+    if copy < stored_len {
+        builtin::cold_path();
+        return Result::Err(ZlibError::InvalidDeflateData);
+    }
+    output.extend_from_slice(input[state.next..<state.next + copy]);
+    state.next += copy;
+    return Result::Ok(());
+}
+
+// A dynamic block's header (RFC 1951 section 3.2.7), built into the
+// literal/length and distance tables.
+fn read_dynamic_tables(state: &mut InflateState, input: &ByteList) -> Result<(), ZlibError> {
+    // HLIT+257 literal/length codes, HDIST+1 distance codes, HCLEN+4 code
+    // length codes. 286/30 are the largest valid counts; 286-287 and 30-31
+    // are reserved (RFC 1951 sections 3.2.5 and 3.2.7).
+    state.need_bits(input, 14)?;
+    let nlen = state.take_bits(5) + 257;
+    let ndist = state.take_bits(5) + 1;
+    let ncode = state.take_bits(4) + 4;
+    if nlen > 286 || ndist > 30 {
+        builtin::cold_path();
+        return Result::Err(ZlibError::InvalidDeflateData);
+    }
+
+    state.need_bits(input, ncode * 3)?;
+    for let mut i = 0; i < 19; i += 1 {
+        state.lens[INFLATE_ORDER[i]] = if i < ncode { state.take_bits(3) as u16 } else { 0 };
+    }
+    let code_lengths = inflate_table(CODES_TYPE, &state.lens, 0, 19, &mut state.codes, 0, 7, &mut state.work);
+    if code_lengths.0 != 0 {
+        builtin::cold_path();
+        return Result::Err(ZlibError::InvalidDeflateData);
+    }
+
+    // Symbols 0-15 are code lengths; 16 repeats the previous length 3-6 times,
+    // 17 repeats zero 3-10 times, and 18 repeats zero 11-138 times.
+    let total = nlen + ndist;
+    let mut have = 0;
+    while have < total {
+        let symbol = code_val(state.decode(input, 0, code_lengths.1)?);
+        if symbol < 16 {
+            state.lens[have] = symbol as u16;
+            have += 1;
+            continue;
+        }
+        let extra = if symbol == 16 {
+            2;
+        } else if symbol == 17 {
+            3;
+        } else {
+            7;
+        };
+        state.need_bits(input, extra)?;
+        let min_repeat = if symbol == 18 { 11 } else { 3 };
+        let repeat = min_repeat + state.take_bits(extra);
+        if symbol == 16 && have == 0 || have + repeat > total {
+            builtin::cold_path();
+            return Result::Err(ZlibError::InvalidDeflateData);
+        }
+        let value: u16 = if symbol == 16 { state.lens[have - 1] } else { 0 };
+        for let mut i = 0; i < repeat; i += 1 {
+            state.lens[have] = value;
+            have += 1;
+        }
+    }
+
+    // Symbol 256 ends the block, so a block without a code for it could never
+    // end.
+    if state.lens[256] == 0 {
+        builtin::cold_path();
+        return Result::Err(ZlibError::InvalidDeflateData);
+    }
+    let lens_table = inflate_table(LENS_TYPE, &state.lens, 0, nlen, &mut state.codes, 0, 9, &mut state.work);
+    if lens_table.0 != 0 {
+        builtin::cold_path();
+        return Result::Err(ZlibError::InvalidDeflateData);
+    }
+    let dist_start = lens_table.2;
+    let dists_table = inflate_table(
+        DISTS_TYPE,
+        &state.lens,
+        nlen,
+        ndist,
+        &mut state.codes,
+        dist_start,
+        6,
+        &mut state.work,
+    );
+    if dists_table.0 != 0 {
+        builtin::cold_path();
+        return Result::Err(ZlibError::InvalidDeflateData);
+    }
+    state.lencode_off = 0;
+    state.lenbits = lens_table.1;
+    state.distcode_off = dist_start;
+    state.distbits = dists_table.1;
+    return Result::Ok(());
+}
+
+// A Huffman-coded block's literals and length/distance pairs, up to its
+// end-of-block code: `inflate_fast` while the input allows, then one code at a
+// time.
+fn inflate_codes(
+    state: &mut InflateState,
+    input: &ByteList,
+    output: &mut ByteList,
+    max_output: i32,
+) -> Result<(), ZlibError> {
+    loop {
+        if state.end - state.next >= FAST_INPUT_MIN && inflate_fast(state, input, output, max_output)? {
+            return Result::Ok(());
+        }
+        let here = state.decode(input, state.lencode_off, state.lenbits)?;
+        let op = code_op(here);
+        if op == 0 {
+            push_literal(output, code_val(here), max_output)?;
+            continue;
+        }
+        if op & 32 != 0 {
+            return Result::Ok(());
+        }
+        if op & 64 != 0 {
+            builtin::cold_path();
+            return Result::Err(ZlibError::InvalidDeflateData);
+        }
+        let length_extra = op & 15;
+        state.need_bits(input, length_extra)?;
+        let length = code_val(here) + state.take_bits(length_extra);
+
+        let dist_here = state.decode(input, state.distcode_off, state.distbits)?;
+        let dist_op = code_op(dist_here);
+        if dist_op & 64 != 0 {
+            builtin::cold_path();
+            return Result::Err(ZlibError::InvalidDeflateData);
+        }
+        let dist_extra = dist_op & 15;
+        state.need_bits(input, dist_extra)?;
+        let dist = code_val(dist_here) + state.take_bits(dist_extra);
+        copy_match(output, length, dist, max_output)?;
+    }
 }
 
 /// Decompresses raw DEFLATE data (no header/checksum), failing with
@@ -1368,13 +1247,13 @@ internal fn bi_reverse(code: u32, len: i32) -> u32 {
     let mut c = code;
     let mut l = len;
     loop {
-        res = res | c & 1;
-        c = c >> 1;
+        res |= c & 1;
+        c >>= 1;
         l -= 1;
         if l <= 0 {
             break;
         }
-        res = res << 1;
+        res <<= 1;
     }
     return res;
 }
@@ -1393,14 +1272,14 @@ impl BitWriter {
     }
 
     internal fn write_bits(&mut self, value: u32, count: i32) {
-        self.buf = self.buf | value as u64 << self.bits as u64;
+        self.buf |= value as u64 << self.bits as u64;
         self.bits += count;
         while self.bits >= 32 {
             self.output.push((self.buf & 0xFF) as u8);
             self.output.push((self.buf >> 8 & 0xFF) as u8);
             self.output.push((self.buf >> 16 & 0xFF) as u8);
             self.output.push((self.buf >> 24 & 0xFF) as u8);
-            self.buf = self.buf >> 32;
+            self.buf >>= 32;
             self.bits -= 32;
         }
     }
@@ -1412,7 +1291,7 @@ impl BitWriter {
     internal fn flush(&mut self) {
         while self.bits >= 8 {
             self.output.push((self.buf & 0xFF) as u8);
-            self.buf = self.buf >> 8;
+            self.buf >>= 8;
             self.bits -= 8;
         }
         if self.bits > 0 {
@@ -1487,7 +1366,7 @@ fn build_dist_codes(extra_dbits: &List<i32>) -> ByteList {
         }
     }
     // Remaining codes 16..=29: shifted entries (covers dist 257..=32768)
-    dist = dist >> 7;
+    dist >>= 7;
     for let mut code = 16; code < 30; code += 1 {
         let count = 1 << extra_dbits[code] - 7;
         for let mut n = 0; n < count; n += 1 {
@@ -1960,7 +1839,7 @@ fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<i3
         let len = lengths[i] as i32;
         if len != 0 {
             tree[i] = enc_pack(bi_reverse(next_code[len], len) as i32, len);
-            next_code[len] = next_code[len] + 1;
+            next_code[len] += 1;
         }
     }
     return tree;
@@ -2966,19 +2845,19 @@ pub fn gzip_compress(
 
     let mut flags: u8 = 0;
     if header.text {
-        flags = flags | GZIP_FTEXT;
+        flags |= GZIP_FTEXT;
     }
     if header.hcrc {
-        flags = flags | GZIP_FHCRC;
+        flags |= GZIP_FHCRC;
     }
     if header.extra.len() > 0 {
-        flags = flags | GZIP_FEXTRA;
+        flags |= GZIP_FEXTRA;
     }
     if header.name.len() > 0 {
-        flags = flags | GZIP_FNAME;
+        flags |= GZIP_FNAME;
     }
     if header.comment.len() > 0 {
-        flags = flags | GZIP_FCOMMENT;
+        flags |= GZIP_FCOMMENT;
     }
     output.push(flags);
     push_u32_le(&mut output, header.time);
