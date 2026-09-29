@@ -8,6 +8,7 @@ use {
     RepeatKind,
     GroupElement,
     Visibility,
+    WildcardElement,
 } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
 use { LitToken } from "./lexer_gen.wado";
@@ -353,4 +354,28 @@ test "rule_follow: a star's callee does receive the inner's own FIRST" {
     let fs_a = env.rule_follow(&a);
     assert fs_a.kinds.contains("TK_B");
     assert fs_a.kinds.contains("TK_X"), "a star iteration follows itself";
+}
+
+test "rule_follow: a wildcard opens the FOLLOW of the rules it can follow, and only theirs" {
+    // r : a . b B ;  // `.` can follow `a`, so FOLLOW(a) has a token no kind
+    // a : X ;        // names; FOLLOW(b) = {B} is still the whole set.
+    // b : Y ;
+    let rules: List<ParserRule> = [
+        mk_rule("r", [
+            alt([
+                rr("a"),
+                Element::Wildcard(WildcardElement::new()),
+                rr("b"),
+                tk("B"),
+            ]),
+        ]),
+        mk_rule("a", [alt([tk("X")])]),
+        mk_rule("b", [alt([tk("Y")])]),
+    ];
+    let mut ctx = mk_ctx(&rules);
+    let start = "r";
+    let env = build(&rules, &mut ctx, &start);
+    assert env.rule_follow("a").open;
+    assert !env.rule_follow("b").open;
+    assert !env.rule_follow("r").open;
 }

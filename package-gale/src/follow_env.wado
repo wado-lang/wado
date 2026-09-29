@@ -25,14 +25,18 @@ use { TreeMap, TreeSet } from "core:collections";
 /// `closed` tracks whether the set is "closed under EOF": i.e. whether
 /// the start rule (or any rule reachable from it through a strictly
 /// nullable suffix chain) is known to be terminated by EOF.
+///
+/// `open` says a `.` or `~X` can follow the rule, which takes a token no
+/// kind names, so `kinds` falls short of the real set.
 pub struct FollowSet {
     pub kinds: TreeSet<String>,
     pub closed: bool,
+    pub open: bool,
 }
 
 impl FollowSet {
     pub fn empty() -> FollowSet {
-        return FollowSet { kinds: TreeSet::<String>::new(), closed: false };
+        return FollowSet { kinds: TreeSet::<String>::new(), closed: false, open: false };
     }
 }
 
@@ -150,7 +154,7 @@ fn compute_rule_follow<S: AsStrSlice>(
     let mut plans: List<List<Contribution>> = [];
     for let rule of parser_rules {
         let mut plan: List<Contribution> = [];
-        let outer = PlanFollow { bits: [], inherits: true };
+        let outer = PlanFollow { bits: [], inherits: true, open: false };
         for let alt of &rule.alternatives {
             plan_elements(&alt.elements, ctx, &outer, &mut plan);
         }
@@ -159,14 +163,14 @@ fn compute_rule_follow<S: AsStrSlice>(
 
     let mut env: List<FollowBits> = [];
     for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
-        env.push(FollowBits { bits: [], closed: false });
+        env.push(FollowBits { bits: [], closed: false, open: false });
     }
     if !start_rule.is_empty() {
         let si = ctx.rule_index_of(start_rule);
         if si >= 0 {
             let mut seed: List<u64> = [];
             bits_set(&mut seed, ctx.eof_kind_id());
-            env[si] = FollowBits { bits: seed, closed: true };
+            env[si] = FollowBits { bits: seed, closed: true, open: false };
         }
     }
 
@@ -174,6 +178,7 @@ fn compute_rule_follow<S: AsStrSlice>(
         for let c of &plans[ri] {
             let callee = &mut env[c.callee];
             let _ = bits_union_into(&mut callee.bits, &c.bits);
+            callee.open = callee.open || c.open;
         }
     }
 
@@ -189,9 +194,11 @@ fn compute_rule_follow<S: AsStrSlice>(
                 }
                 let callee = &mut env[c.callee];
                 let new_closed = callee.closed || caller_follow.closed;
+                let new_open = callee.open || caller_follow.open;
                 let bits_changed = bits_union_into(&mut callee.bits, &caller_follow.bits);
-                if bits_changed || new_closed != callee.closed {
+                if bits_changed || new_closed != callee.closed || new_open != callee.open {
                     callee.closed = new_closed;
+                    callee.open = new_open;
                     changed = true;
                 }
             }
@@ -217,6 +224,7 @@ struct Contribution {
     callee: i32,
     bits: List<u64>,
     inherits_outer: bool,
+    open: bool,
 }
 
 /// Static effective-follow during plan building: FIRST-derived bits plus the
@@ -224,6 +232,7 @@ struct Contribution {
 struct PlanFollow {
     bits: List<u64>,
     inherits: bool,
+    open: bool,
 }
 
 /// Walk an element list, computing the static per-position effective follow
@@ -244,7 +253,7 @@ fn plan_element(elem: &Element, ctx: &mut GenContext, local: &PlanFollow, plan: 
         RuleRef(r) => {
             let callee = ctx.rule_index_of(&r.name);
             if callee >= 0 {
-                plan.push(Contribution { callee, bits: local.bits, inherits_outer: local.inherits });
+                plan.push(Contribution { callee, bits: local.bits, inherits_outer: local.inherits, open: local.open });
             }
         },
         Group(g) => {
@@ -258,6 +267,8 @@ fn plan_element(elem: &Element, ctx: &mut GenContext, local: &PlanFollow, plan: 
             // inner also sees its own FIRST. An `?` cannot iterate.
             if !rep.kind matches { Optional } {
                 accumulate_first_bits(ctx, &rep.element, &mut inner_outer.bits);
+                let mut visiting: List<String> = [];
+                inner_outer.open = inner_outer.open || ctx.element_reaches_open_end(&rep.element, &mut visiting);
             }
             plan_element(&rep.element, ctx, &inner_outer, plan);
         },
@@ -275,11 +286,13 @@ fn plan_local_follow(elements: &List<Element>, i: i32, ctx: &mut GenContext, out
     let mut bits: List<u64> = [];
     suffix_first_bits(ctx, elements, i + 1, &mut bits);
     let mut inherits = false;
+    let mut open = ctx.elements_reach_open_end(elements, i + 1);
     if ctx.tail_is_nullable_deep(elements, i + 1) {
         bits_union_into(&mut bits, &outer.bits);
         inherits = outer.inherits;
+        open = open || outer.open;
     }
-    return PlanFollow { bits, inherits };
+    return PlanFollow { bits, inherits, open };
 }
 
 /// Internal FOLLOW set: a u64 bitset over token-kind ids plus the
@@ -288,6 +301,7 @@ fn plan_local_follow(elements: &List<Element>, i: i32, ctx: &mut GenContext, out
 struct FollowBits {
     bits: List<u64>,
     closed: bool,
+    open: bool,
 }
 
 /// Set into `bits` the FIRST set of `elements[start..]`, computed directly as
@@ -321,5 +335,5 @@ fn bits_to_follow_set(fb: &FollowBits, ctx: &GenContext) -> FollowSet {
     for let id of &bits_ids(&fb.bits) {
         kinds.insert(ctx.token_name(*id));
     }
-    return FollowSet { kinds, closed: fb.closed };
+    return FollowSet { kinds, closed: fb.closed, open: fb.open };
 }

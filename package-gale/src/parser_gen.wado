@@ -1982,7 +1982,6 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
 fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
     return re.non_greedy
         && re.static_exit_undecided
-        && !admits_kinds(&re.inner_admits).is_empty()
         && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
 }
 
@@ -2158,14 +2157,14 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     if re.kind matches { Plus } {
         gen_scan_op_element(w, &re.body, ctx, fail_stmt, known);
     }
+    if scan_non_greedy_probe_decides(re, ctx) {
+        gen_scan_non_greedy_probe_loop(w, re, ctx);
+        return;
+    }
     // `.*?` / `.+?` stop at the exit set: every token passes a kind guard, so
     // the loop below would run to EOF. Mirrors `compute_non_greedy_condition`.
     if re.non_greedy && loop_admits matches { Everything } {
         gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
-        return;
-    }
-    if scan_non_greedy_probe_decides(re, ctx) {
-        gen_scan_non_greedy_probe_loop(w, re, ctx);
         return;
     }
     w.begin(`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
@@ -4537,12 +4536,11 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
 }
 
 /// Whether the exit probe should decide this loop. Unlike the Optional the
-/// competing readings are the loop's own, so `body_admits` stands in for
-/// the overlap; it also gates each iteration, hence non-empty.
+/// competing readings are the loop's own, so `static_exit_undecided` stands in
+/// for the overlap.
 fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
     return r.static_exit_undecided
         && r.kind matches { Star | Plus }
-        && !admits_kinds(&r.body_admits).is_empty()
         && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
 
@@ -4599,8 +4597,8 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     w.end();
 }
 
-/// The probe's verdict once its scan has matched: the match itself short of the
-/// rule's tail; at the tail, the threaded mask and any stamped FOLLOW admitting the position.
+/// The probe's verdict once its scan has matched: any stamped FOLLOW admitting
+/// the position, and at the rule's tail (`asks_caller`) the threaded mask too.
 ///
 /// `definite` asks the mask for the caller's whole known continuation rather
 /// than its first token. A loop ending its rule has nothing of its own left to
@@ -4615,12 +4613,7 @@ fn emit_probe_verdict<S: AsStrSlice>(
     ctx: &mut GenContext,
     definite: bool = false,
 ) {
-    if !asks_caller {
-        assert probe_viable.is_empty(), "a FOLLOW is stamped only on a probe reaching the rule's tail";
-        w.line(`${verdict} = true;`);
-        return;
-    }
-    let mask = if !ctx.current_rule_reads_follow() {
+    let mask = if !asks_caller || !ctx.current_rule_reads_follow() {
         "true";
     } else if definite {
         follow_exit_viable_call("tokens", "pos");
@@ -5382,7 +5375,7 @@ fn gen_prequel_action<S: AsStrSlice>(
 }
 
 fn prequel_expected_names<S: AsStrSlice>(rule_name: S, at_entry: bool, ctx: &mut GenContext) -> String {
-    if !ctx.rule_follow_is_exact() {
+    if !ctx.rule_follow_is_exact(&rule_name) {
         return String::new();
     }
     let follow = ctx.rule_follow_for_probe(rule_name);
@@ -7168,7 +7161,7 @@ fn compute_non_greedy_condition(
     let raw_first = &admits_kinds(&rep_op.body_admits);
 
     let inner_second_first = &rep_op.body_second_position_first;
-    if non_greedy_static_undecided(raw_first, follow_first, inner_second_first, follow_second) {
+    if non_greedy_static_undecided(&rep_op.body_admits, follow_first, inner_second_first, follow_second) {
         return "false";
     }
 

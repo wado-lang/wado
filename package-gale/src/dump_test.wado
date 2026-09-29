@@ -70,7 +70,7 @@ fn dump_source<S: AsStrSlice>(input: S) -> String {
 
 test "the dump lowers through the emitter's primed context" {
     let [_, ctx] = dump_pipeline("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
-    assert ctx.rule_follow_is_exact(), "the dump must install FOLLOW before lowering, as `generate` does";
+    assert ctx.rule_follow_is_exact("c"), "the dump must install FOLLOW before lowering, as `generate` does";
 }
 
 // `--atn` reports the same grammar the GIR dump does, so it reports the same

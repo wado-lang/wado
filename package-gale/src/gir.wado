@@ -994,9 +994,9 @@ pub struct RepeatOp {
     /// it differently.
     pub static_exit_undecided: bool = false,
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
-    /// verdict: its continuation scan ends at the rule's tail, and a token
-    /// outside this set cannot continue any caller from there. Empty leaves
-    /// the verdict as it was.
+    /// verdict: its continuation scan ends at the rule's tail or its
+    /// precedence loop, and a token outside this set can continue neither a
+    /// caller nor the loop from there. Empty leaves the verdict as it was.
     pub probe_viable: List<String> = [],
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
