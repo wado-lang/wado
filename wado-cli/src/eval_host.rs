@@ -75,7 +75,7 @@ const LINKED_INTERFACES: &[&str] = &[
 /// compiler by default. Hashing its contents costs seconds for a dev build,
 /// and every rebuild changes both anyway.
 static COMPILER_DIGEST: LazyLock<[u8; 32]> = LazyLock::new(|| {
-    let exe = std::env::current_exe().expect("locating the running `wado` binary");
+    let exe = running_exe();
     let stat = std::fs::metadata(&exe)
         .unwrap_or_else(|e| panic!("reading the running `wado` binary {}: {e}", exe.display()));
     let modified = stat
@@ -92,6 +92,19 @@ static COMPILER_DIGEST: LazyLock<[u8; 32]> = LazyLock::new(|| {
     hash_dev_stdlib(&mut hasher);
     hasher.finalize().into()
 });
+
+/// Linux reaches the running binary through `/proc/self/exe` even after a
+/// rebuild replaced the file at its path, as `cargo build` does beneath a long
+/// `wado test`; `current_exe` then names a path that no longer exists.
+#[cfg(target_os = "linux")]
+fn running_exe() -> PathBuf {
+    PathBuf::from("/proc/self/exe")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn running_exe() -> PathBuf {
+    std::env::current_exe().expect("locating the running `wado` binary")
+}
 
 #[cfg(debug_assertions)]
 fn hash_dev_stdlib(hasher: &mut Sha256) {
