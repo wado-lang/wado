@@ -410,12 +410,17 @@ It has no `**` power operator: call `f64::pow(x, y)` or `f32::pow(x, y)`.
 
 ### Overflow and Division by Zero
 
-Integer `+`, `-`, `*` and unary `-` wrap in two's complement at every width,
-signed and unsigned alike, so their overflow never traps. An integer `/` or `%`
-whose divisor is zero traps. A signed `MIN / -1` traps too, at every width from
-`i8` to `i128`, because the quotient is one past `MAX`. A signed `MIN % -1` is
-0. A float operation follows IEEE 754: dividing by zero gives an infinity, or
-NaN for `0.0 / 0.0`.
+An arithmetic operator behaves as the Wasm instruction for it does. A width Wasm
+has no instruction for (`i8`, `i16`, `u8`, `u16`, `i128`, `u128`) behaves as
+that instruction would at its width. Arithmetic that behaves otherwise, such as
+checked or saturating arithmetic, is a method rather than an operator.
+
+So integer `+`, `-`, `*` and unary `-` wrap in two's complement at every width,
+signed and unsigned alike, and their overflow never traps. An integer `/` or `%`
+whose divisor is zero traps. A signed `MIN / -1` traps, as `div_s` does, because
+the quotient is one past `MAX`. A signed `MIN % -1` is 0, as `rem_s` gives. A
+float operation follows IEEE 754: dividing by zero gives an infinity, or NaN for
+`0.0 / 0.0`.
 
 <!-- {"fixture":"spec_lexical_arithmetic.wado"} -->
 
