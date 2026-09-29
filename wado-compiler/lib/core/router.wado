@@ -901,21 +901,17 @@ impl Deserializer for PathParamsDeserializer {
 }
 
 impl PathParamsDeserializer {
-    /// Byte range of the path parameter currently being deserialized.
-    /// Contract: callers must arrive here through `begin_struct → next_field
-    /// → value`, which advances `cursor` past the active param. Use
-    /// `require_active_param` first to enforce this; raw access yields a
-    /// negative index for `cursor == 0` and would trap on the array read.
+    /// Byte range of the path parameter currently being deserialized. A caller
+    /// passes `require_active_param` first.
     fn current_range(&self) -> [i32, i32] {
+        assert self.cursor > 0;
         let i = self.cursor - 1;
         return [self.src.ranges[i * 2], self.src.ranges[i * 2 + 1]];
     }
 
-    /// Reject a scalar `deserialize_*` call that has not been preceded by
-    /// `begin_struct → next_field`. `PathParams::deserialize::<T>()` only
-    /// supports struct roots; a `u64`-rooted call would bypass `next_field`
-    /// and underflow `cursor` here. Returning `UnexpectedType` keeps the
-    /// API total instead of trapping on `ranges[-2]`.
+    /// Rejects a scalar read that no `next_field` preceded: the root of
+    /// `PathParams::deserialize::<T>()` must be a struct, and a scalar root
+    /// such as `u64` reaches here with no active param.
     fn require_active_param(&self) -> Result<(), DeserializeError> {
         if self.cursor == 0 {
             return Result::Err(DeserializeError::unexpected_type(

@@ -1306,15 +1306,15 @@ impl CborDeserializer {
         return Result::Ok(remaining <= 0);
     }
 
-    /// Skip one well-formed item (RFC 8949 §4.1), for unknown struct fields and
-    /// for capturing the raw bytes of an unrepresentable item. Skipping checks
-    /// only well-formedness, never validity (so it does not UTF-8-validate).
     /// The error for a break (0xff) just read where an item belongs: a break
     /// only terminates an indefinite-length item (RFC 8949 §3.2.1).
     fn unexpected_break(&self) -> DeserializeError {
         return DeserializeError::malformed("unexpected break", (self.pos - 1) as i64);
     }
 
+    /// Skip one well-formed item (RFC 8949 §4.1), for unknown struct fields and
+    /// for capturing the raw bytes of an unrepresentable item. Skipping checks
+    /// only well-formedness, never validity (so it does not UTF-8-validate).
     fn skip_item(&mut self, depth: i32) -> Result<(), DeserializeError> {
         let [major, ai, arg, indef] = self.read_head()?;
         match major {

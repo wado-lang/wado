@@ -23,13 +23,11 @@ use {
     DeserializeVariant,
     FieldSchema,
     SerializeError,
-    SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
     NoCompound,
     TextKeyDeserializer,
-    compound_key_error,
     deeper,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
@@ -160,18 +158,23 @@ fn write_json_i32(buf: &mut String, v: i32) -> Result<(), SerializeError> {
     return Result::Ok(());
 }
 
+/// Writes `v` as a JSON string of its display form, which for a number or a
+/// `bool` holds no byte JSON escapes.
+fn write_quoted_display<T: Display>(buf: &mut String, v: &T) -> Result<(), SerializeError> {
+    buf.push('"');
+    buf.push_display(v);
+    buf.push('"');
+    return Result::Ok(());
+}
+
 fn write_json_i64(buf: &mut String, v: i64) -> Result<(), SerializeError> {
     // Values outside the f64 safe-integer range are serialized as strings
-    // so JS consumers don't lose precision. The decimal form of an integer
-    // needs no JSON escaping, so the digits are quoted verbatim.
+    // so JS consumers don't lose precision.
     if f64::MIN_SAFE_INTEGER as i64 <= v <= f64::MAX_SAFE_INTEGER as i64 {
         buf.push_display(&v);
-    } else {
-        buf.push('"');
-        buf.push_display(&v);
-        buf.push('"');
+        return Result::Ok(());
     }
-    return Result::Ok(());
+    return write_quoted_display(buf, &v);
 }
 
 fn write_json_u32(buf: &mut String, v: u32) -> Result<(), SerializeError> {
@@ -181,45 +184,29 @@ fn write_json_u32(buf: &mut String, v: u32) -> Result<(), SerializeError> {
 
 fn write_json_u64(buf: &mut String, v: u64) -> Result<(), SerializeError> {
     // Values above the f64 safe-integer range are serialized as strings
-    // so JS consumers don't lose precision. The decimal form of an integer
-    // needs no JSON escaping, so the digits are quoted verbatim.
+    // so JS consumers don't lose precision.
     if v <= f64::MAX_SAFE_INTEGER as u64 {
         buf.push_display(&v);
-    } else {
-        buf.push('"');
-        buf.push_display(&v);
-        buf.push('"');
+        return Result::Ok(());
     }
-    return Result::Ok(());
+    return write_quoted_display(buf, &v);
 }
 
 fn write_json_i128(buf: &mut String, v: i128) -> Result<(), SerializeError> {
     // 128-bit values always exceed the f64 safe-integer range: always a string.
-    buf.push('"');
-    buf.push_display(&v);
-    buf.push('"');
-    return Result::Ok(());
+    return write_quoted_display(buf, &v);
 }
 
 fn write_json_u128(buf: &mut String, v: u128) -> Result<(), SerializeError> {
-    buf.push('"');
-    buf.push_display(&v);
-    buf.push('"');
-    return Result::Ok(());
+    return write_quoted_display(buf, &v);
 }
 
 fn write_json_f64(buf: &mut String, v: f64) -> Result<(), SerializeError> {
     if v.is_nan() {
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::UnsupportedValue,
-            message: "NaN is not allowed in JSON",
-        });
+        return Result::Err(SerializeError::unsupported_value("NaN is not allowed in JSON"));
     }
     if !v.is_finite() {
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::UnsupportedValue,
-            message: "Infinity is not allowed in JSON",
-        });
+        return Result::Err(SerializeError::unsupported_value("Infinity is not allowed in JSON"));
     }
     buf.push_display(&v);
     return Result::Ok(());
@@ -260,26 +247,10 @@ fn write_json_null(buf: &mut String) -> Result<(), SerializeError> {
     return Result::Ok(());
 }
 
-/// An object key's error when its type is not a scalar: JSON spells a key as a
-/// string, and only a scalar has one spelling to read back.
-fn unsupported_key() -> SerializeError {
-    builtin::cold_path();
-    return SerializeError::unsupported_value("a JSON object key must be a scalar");
-}
-
 /// Writes an object key: a string as itself, any other scalar as the string of
 /// its JSON spelling, which `JsonKeyDeserializer` parses back.
 pub struct JsonKeySerializer {
     buf: &mut String,
-}
-
-impl JsonKeySerializer {
-    fn quoted_display<T: Display>(&mut self, v: &T) -> Result<(), SerializeError> {
-        self.buf.push('"');
-        self.buf.push_display(v);
-        self.buf.push('"');
-        return Result::Ok(());
-    }
 }
 
 impl Serializer for JsonKeySerializer {
@@ -289,27 +260,27 @@ impl Serializer for JsonKeySerializer {
     type VariantSerializer = NoCompound;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        return self.quoted_display(&v);
+        return write_quoted_display(self.buf, &v);
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        return self.quoted_display(&v);
+        return write_quoted_display(self.buf, &v);
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        return self.quoted_display(&v);
+        return write_quoted_display(self.buf, &v);
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        return self.quoted_display(&v);
+        return write_quoted_display(self.buf, &v);
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
-        return self.quoted_display(&v);
+        return write_quoted_display(self.buf, &v);
     }
 
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
-        return self.quoted_display(&v);
+        return write_quoted_display(self.buf, &v);
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
@@ -324,7 +295,7 @@ impl Serializer for JsonKeySerializer {
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
-        return self.quoted_display(&v);
+        return write_quoted_display(self.buf, &v);
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
@@ -336,19 +307,19 @@ impl Serializer for JsonKeySerializer {
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        return Result::Err(unsupported_key());
+        return Result::Err(SerializeError::non_scalar_key());
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
-        return Result::Err(unsupported_key());
+        return Result::Err(SerializeError::non_scalar_key());
     }
 
     fn begin_map(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
-        return Result::Err(unsupported_key());
+        return Result::Err(SerializeError::non_scalar_key());
     }
 
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<NoCompound, SerializeError> {
-        return Result::Err(unsupported_key());
+        return Result::Err(SerializeError::non_scalar_key());
     }
 
     fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
@@ -357,7 +328,7 @@ impl Serializer for JsonKeySerializer {
         variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
-        return Result::Err(unsupported_key());
+        return Result::Err(SerializeError::non_scalar_key());
     }
 
     fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
@@ -366,7 +337,7 @@ impl Serializer for JsonKeySerializer {
         variant_name: S1,
         disc: i32,
     ) -> Result<NoCompound, SerializeError> {
-        return Result::Err(unsupported_key());
+        return Result::Err(SerializeError::non_scalar_key());
     }
 }
 
@@ -378,7 +349,6 @@ pub struct JsonSeqSerializer {
 pub struct JsonMapSerializer {
     buf: &mut String,
     count: i32,
-    need_value: bool,
 }
 
 pub struct JsonStructSerializer {
@@ -439,14 +409,12 @@ impl SerializeMap for JsonMapSerializer {
         }
         let r = serialize_key_into(self.buf, key);
         self.buf.push_str(":");
-        self.need_value = true;
         return r;
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let r = serialize_into(self.buf, value);
         self.count += 1;
-        self.need_value = false;
         return r;
     }
 
@@ -606,7 +574,6 @@ impl Serializer for JsonSerializer {
         return Result::Ok(JsonMapSerializer {
             buf: self.buf,
             count: 0,
-            need_value: false,
         });
     }
 
@@ -653,7 +620,6 @@ pub struct PrettyJsonSeqSerializer {
 pub struct PrettyJsonMapSerializer {
     buf: &mut String,
     count: i32,
-    need_value: bool,
     indent: &String,
     depth: i32,
 }
@@ -711,7 +677,6 @@ impl SerializeMap for PrettyJsonMapSerializer {
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth);
         let r = serialize_key_into(self.buf, key);
         self.buf.push_str(": ");
-        self.need_value = true;
         return r;
     }
 
@@ -724,7 +689,6 @@ impl SerializeMap for PrettyJsonMapSerializer {
         let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         self.count += 1;
-        self.need_value = false;
         return r;
     }
 
@@ -856,7 +820,6 @@ impl Serializer for PrettyJsonSerializer {
         return Result::Ok(PrettyJsonMapSerializer {
             buf: self.buf,
             count: 0,
-            need_value: false,
             indent: self.indent,
             depth: self.depth + 1,
         });
@@ -1126,7 +1089,7 @@ struct StringRunScan {
 }
 
 impl JsonDeserializer {
-    internal fn inner_depth(&self) -> Result<i32, DeserializeError> {
+    fn inner_depth(&self) -> Result<i32, DeserializeError> {
         return deeper(self.depth, self.max_depth, self.pos as i64);
     }
 
@@ -1230,7 +1193,7 @@ impl JsonDeserializer {
     /// not call it: that caller needs the byte, and returning it here means
     /// re-reading it after the comma for every seq element and map key, which
     /// costs json-catalog deserialize 2% against a flat reading for this shape.
-    internal fn entry_head(&mut self, close: i32, first: bool) -> Result<bool, DeserializeError> {
+    fn entry_head(&mut self, close: i32, first: bool) -> Result<bool, DeserializeError> {
         let b = self.peek_after_whitespace();
         if b < 0 {
             builtin::cold_path();
@@ -2068,6 +2031,9 @@ pub struct JsonMapAccess {
     first: bool,
 }
 
+// A `String` key is read straight into place. Handing every key to a
+// `TextKeyDeserializer` instead copies it once more.
+
 /// Reads an object key as the scalar `JsonKeySerializer` wrote: a string as
 /// itself, any other scalar parsed from the string's text.
 pub struct JsonKeyDeserializer {
@@ -2132,7 +2098,7 @@ impl Deserializer for JsonKeyDeserializer {
     }
 
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
-        return self.de.deserialize_char();
+        return self.text()?.deserialize_char();
     }
 
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
@@ -2144,19 +2110,19 @@ impl Deserializer for JsonKeyDeserializer {
     }
 
     fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError> {
-        return Result::Err(compound_key_error(self.de.pos as i64));
+        return Result::Err(DeserializeError::non_scalar_key(self.de.pos as i64));
     }
 
     fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
-        return Result::Err(compound_key_error(self.de.pos as i64));
+        return Result::Err(DeserializeError::non_scalar_key(self.de.pos as i64));
     }
 
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NoCompound, DeserializeError> {
-        return Result::Err(compound_key_error(self.de.pos as i64));
+        return Result::Err(DeserializeError::non_scalar_key(self.de.pos as i64));
     }
 
     fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError> {
-        return Result::Err(compound_key_error(self.de.pos as i64));
+        return Result::Err(DeserializeError::non_scalar_key(self.de.pos as i64));
     }
 
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {

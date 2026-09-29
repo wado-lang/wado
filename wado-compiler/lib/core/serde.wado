@@ -100,10 +100,20 @@ pub struct SerializeError {
 }
 
 impl SerializeError {
+    /// A value the format has no way to write.
     pub fn unsupported_value<S: AsStrSlice>(msg: S) -> SerializeError {
         return SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: msg.to_string() };
     }
+
+    /// A map key whose type is not a scalar, which a text format has no one
+    /// string to spell as.
+    pub fn non_scalar_key() -> SerializeError {
+        builtin::cold_path();
+        return SerializeError::unsupported_value(NON_SCALAR_KEY_MESSAGE);
+    }
 }
+
+global NON_SCALAR_KEY_MESSAGE: String = "a map key must be a scalar";
 
 impl Display for SerializeError {
     fn fmt(&self, f: &mut Formatter) {
@@ -204,6 +214,12 @@ impl DeserializeError {
             message: `duplicate field: ${name}`,
             offset: -1,
         };
+    }
+
+    /// `SerializeError::non_scalar_key`, for a key being read.
+    pub fn non_scalar_key(offset: i64) -> DeserializeError {
+        builtin::cold_path();
+        return DeserializeError::unexpected_type(NON_SCALAR_KEY_MESSAGE, offset);
     }
 }
 
@@ -389,7 +405,7 @@ pub trait DeserializeSeq with () {
 
 pub trait DeserializeMap with () {
     /// The next entry's key, or `null` past the last one. A text format spells
-    /// every key as a string, so there a key is a scalar parsed back as `K`.
+    /// every key as a string, so a key there is a scalar parsed back as `K`.
     fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>;
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>;
     fn end(&mut self) -> Result<(), DeserializeError>;
@@ -1083,12 +1099,6 @@ impl DeserializeVariant for NoCompound {
     }
 }
 
-/// The error a map key reports when its type is not a scalar.
-pub fn compound_key_error(offset: i64) -> DeserializeError {
-    builtin::cold_path();
-    return DeserializeError::unexpected_type("a map key must be a scalar", offset);
-}
-
 /// Reads a map key a text format spelled as a string, parsed as the scalar the
 /// key type asks for.
 pub struct TextKeyDeserializer {
@@ -1175,19 +1185,19 @@ impl Deserializer for TextKeyDeserializer {
     }
 
     fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError> {
-        return Result::Err(compound_key_error(self.offset));
+        return Result::Err(DeserializeError::non_scalar_key(self.offset));
     }
 
     fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
-        return Result::Err(compound_key_error(self.offset));
+        return Result::Err(DeserializeError::non_scalar_key(self.offset));
     }
 
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NoCompound, DeserializeError> {
-        return Result::Err(compound_key_error(self.offset));
+        return Result::Err(DeserializeError::non_scalar_key(self.offset));
     }
 
     fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError> {
-        return Result::Err(compound_key_error(self.offset));
+        return Result::Err(DeserializeError::non_scalar_key(self.offset));
     }
 
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
@@ -1294,10 +1304,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
                 return var.end();
             }
         }
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::UnsupportedValue,
-            message: `unknown case of ${type_name}`,
-        });
+        return Result::Err(SerializeError::unsupported_value(`unknown case of ${type_name}`));
     }
 }
 
@@ -1315,10 +1322,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
                 );
             }
         }
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::UnsupportedValue,
-            message: `unknown discriminant of ${Reflect::<E>::type_name()}`,
-        });
+        return Result::Err(SerializeError::unsupported_value(`unknown discriminant of ${Reflect::<E>::type_name()}`));
     }
 }
 

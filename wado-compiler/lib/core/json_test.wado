@@ -980,7 +980,8 @@ test "a map key that does not parse as its type names the key" {
     let e = de_err::<TreeMap<i32, i32>>(`{"x":1}`);
     assert e.kind == DeserializeErrorKind::InvalidValue && e.offset == 1;
     assert e.message.contains("\"x\"") && e.message.contains("i32");
-    assert de_err::<TreeMap<char, i32>>(`{"ab":1}`).kind == DeserializeErrorKind::InvalidValue;
+    let chars = de_err::<TreeMap<char, i32>>(`{"ab":1}`);
+    assert chars.kind == DeserializeErrorKind::InvalidValue && chars.message.contains("\"ab\"");
     assert de_err::<TreeMap<i32, i32>>(`{1:1}`).kind == DeserializeErrorKind::UnexpectedType;
 }
 
@@ -1168,8 +1169,8 @@ struct Reading {
 }
 
 test "a non-finite float fails every serializer, however deeply it sits" {
-    let inf = SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: "Infinity is not allowed in JSON" };
-    let nan = SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: "NaN is not allowed in JSON" };
+    let inf = SerializeError::unsupported_value("Infinity is not allowed in JSON");
+    let nan = SerializeError::unsupported_value("NaN is not allowed in JSON");
     let r = Reading { label: "x", value: f64::INFINITY };
     assert to_string(&r).unwrap_err() == inf;
     assert to_bytes(&r).unwrap_err() == inf;

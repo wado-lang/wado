@@ -53,13 +53,13 @@ use {
     Deserialize,
     Deserializer,
     DeserializeSeq,
-    DeserializeMap,
     DeserializeStruct,
     DeserializeVariant,
     FieldSchema,
     DeserializeError,
     DeserializeErrorKind,
     DuplicateKeyPolicy,
+    NoCompound,
     Visitor,
 } from "core:serde";
 
@@ -308,10 +308,6 @@ pub struct ArgvSeqAccess {
     cursor: i32,
 }
 
-pub struct ArgvMapAccess {
-    de: &mut ArgvDeserializer,
-}
-
 pub struct ArgvVariantAccess {
     de: &mut ArgvDeserializer,
     /// The leading bare token selecting the case (externally tagged).
@@ -424,20 +420,6 @@ impl DeserializeSeq for ArgvSeqAccess {
     }
 }
 
-impl DeserializeMap for ArgvMapAccess {
-    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
-        return Result::Err(unsupported("map"));
-    }
-
-    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
-        return Result::Err(unsupported("map"));
-    }
-
-    fn end(&mut self) -> Result<(), DeserializeError> {
-        return Result::Err(unsupported("map"));
-    }
-}
-
 impl DeserializeVariant for ArgvVariantAccess {
     fn variant_name(&mut self) -> Result<String, DeserializeError> {
         return Result::Ok(self.tag);
@@ -483,7 +465,7 @@ fn unsupported<S: AsStrSlice>(what: S) -> DeserializeError {
 
 impl Deserializer for ArgvDeserializer {
     type SeqAccess = ArgvSeqAccess;
-    type MapAccess = ArgvMapAccess;
+    type MapAccess = NoCompound;
     type StructAccess = ArgvStructAccess;
     type VariantAccess = ArgvVariantAccess;
 
@@ -576,7 +558,7 @@ impl Deserializer for ArgvDeserializer {
         });
     }
 
-    fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError> {
+    fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
         return Result::Err(unsupported("map"));
     }
 

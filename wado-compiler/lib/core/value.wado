@@ -30,7 +30,6 @@ use {
     DeserializeVariant,
     FieldSchema,
     SerializeError,
-    SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
@@ -217,14 +216,10 @@ impl Serialize for Value {
             // raw format-specific bytes that only the originating format can
             // splice back. Neither is expressible through the generic
             // `Serializer`, so serialization errors by default (RFC 8949 §6).
-            Undefined => Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Value::Undefined cannot be serialized",
-            }),
-            Unknown(_) => Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Value::Unknown cannot be re-serialized through a generic Serializer",
-            }),
+            Undefined => Result::Err(SerializeError::unsupported_value("Value::Undefined cannot be serialized")),
+            Unknown(_) => Result::Err(SerializeError::unsupported_value(
+                "Value::Unknown cannot be re-serialized through a generic Serializer",
+            )),
         };
     }
 }
@@ -481,7 +476,7 @@ fn value_key(v: Value) -> Result<String, SerializeError> {
         UInt128(n) => Result::Ok(n.to_string()),
         Float(n) => Result::Ok(n.to_string()),
         Bool(b) => Result::Ok(b.to_string()),
-        _ => Result::Err(SerializeError::unsupported_value("an object key must be a scalar")),
+        _ => Result::Err(SerializeError::non_scalar_key()),
     };
 }
 

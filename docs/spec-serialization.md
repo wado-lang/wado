@@ -109,7 +109,7 @@ The standard library's own impls:
 | `TreeMap<K, V>`                      | a map                                      |
 | `TreeSet<T>`                         | a sequence                                 |
 
-A text format spells every map key as a string, so there a key must be a scalar:
+A text format spells every map key as a string, so a key there must be a scalar:
 an integer, a float, `bool`, `char` or a string. A non-string key is written as
 the string of its spelling (`{"1": …}` for the integer `1`) and parsed back from
 it. Any other key type is an `UnsupportedValue` error on writing and an

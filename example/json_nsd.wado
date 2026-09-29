@@ -22,7 +22,6 @@ use {
     DeserializeVariant,
     FieldSchema,
     SerializeError,
-    SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
@@ -32,18 +31,15 @@ use {
 } from "core:serde";
 
 use { write_escaped_string, JsonDeserializer } from "core:json";
+use { TreeMap } from "core:collections";
 
 test "a struct is a positional array" {
     assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == "[1,2]" };
     assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
 }
 
-// Sub-serializers hold `&mut String` so writes flow back to the
-// outer buffer the caller still owns. A value-typed `String` field
-// would deep-copy on construction (Wado value semantics deep-copy
-// `String`'s `repr`), and the previous `self.buf = ser.buf` save-
-// back trick (still in older revisions) doesn't recover the bytes
-// the sub-serializer wrote to its own copy.
+// Sub-serializers hold `&mut String` so writes flow back to the outer buffer
+// the caller owns: a `String` field would be a copy of it.
 pub struct NsdSeqSerializer {
     buf: &mut String,
     count: i32,
@@ -52,7 +48,6 @@ pub struct NsdSeqSerializer {
 pub struct NsdMapSerializer {
     buf: &mut String,
     count: i32,
-    need_value: bool,
 }
 
 pub struct NsdStructSerializer {
@@ -90,18 +85,25 @@ impl SerializeMap for NsdMapSerializer {
         if self.count > 0 {
             self.buf.push_str(",");
         }
-        let mut ser = NsdSerializer { buf: self.buf };
-        let r = key.serialize::<NsdSerializer>(&mut ser);
+        // A JSON key is a string, so any other scalar goes in as the string of
+        // its spelling, which `TextKeyDeserializer` parses back.
+        let mut spelled: String = "";
+        key.serialize::<NsdSerializer>(&mut NsdSerializer { buf: &mut spelled })?;
+        match spelled.get_byte_unchecked(0) {
+            b'"' => self.buf.push_str(&spelled),
+            b'[' | b'{' | b'n' => {
+                return Result::Err(SerializeError::non_scalar_key());
+            },
+            _ => write_escaped_string(self.buf, &spelled),
+        }
         self.buf.push_str(":");
-        self.need_value = true;
-        return r;
+        return Result::Ok(());
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
         self.count += 1;
-        self.need_value = false;
         return r;
     }
 
@@ -188,34 +190,15 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        if v.is_nan() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "NaN is not allowed in JSON",
-            });
-        }
-        if !v.is_finite() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Infinity is not allowed in JSON",
-            });
-        }
-        self.buf.push_str(`${v as f64}`);
-        return Result::Ok(());
+        return self.serialize_f64(v as f64);
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
         if v.is_nan() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "NaN is not allowed in JSON",
-            });
+            return Result::Err(SerializeError::unsupported_value("NaN is not allowed in JSON"));
         }
         if !v.is_finite() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Infinity is not allowed in JSON",
-            });
+            return Result::Err(SerializeError::unsupported_value("Infinity is not allowed in JSON"));
         }
         self.buf.push_str(`${v}`);
         return Result::Ok(());
@@ -259,7 +242,6 @@ impl Serializer for NsdSerializer {
         return Result::Ok(NsdMapSerializer {
             buf: self.buf,
             count: 0,
-            need_value: false,
         });
     }
 
@@ -313,7 +295,6 @@ pub struct NsdStructAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     index: i32,
-    num_fields: i32,
     first: bool,
 }
 
@@ -542,7 +523,6 @@ impl Deserializer for NsdDeserializer {
             de: self.de,
             depth,
             index: 0,
-            num_fields,
             first: true,
         });
     }
@@ -974,6 +954,20 @@ test "round-trip nested struct" {
     } else {
         panic("round-trip serialize failed");
     }
+}
+
+test "round-trip a map with scalar keys" {
+    let mut ints = TreeMap::<i32, String>::new();
+    ints[1] = "one";
+    assert to_string(&ints) == Result::Ok(`{"1":"one"}`);
+    let back: TreeMap<i32, String> = from_string(`{"1":"one"}`).unwrap();
+    assert back[1] == "one";
+    let mut names = TreeMap::<String, i32>::new();
+    names["a"] = 1;
+    assert to_string(&names) == Result::Ok(`{"a":1}`);
+    let mut lists = TreeMap::<List<i32>, i32>::new();
+    lists[[1]] = 1;
+    assert to_string(&lists) matches { Err(_) };
 }
 
 test "round-trip enum" {
