@@ -882,8 +882,7 @@ fn is_java_string(
             _ => false,
         },
         Cast(c) => c.ty == "String",
-        Binary(b) => b.op == "+"
-            && (is_java_string(rule, rules, &b.lhs, bindings, env) || is_java_string(rule, rules, &b.rhs, bindings, env)),
+        Binary(b) => b.op == "+" && concat_start(rule, rules, &plus_chain(e), bindings, env) matches { Some(_) },
         Paren(p) => is_java_string(rule, rules, &p.inner, bindings, env),
         Int(_) | Bool(_) | Unary(_) => false,
     };
@@ -1035,7 +1034,7 @@ fn append_part(
             match concat_start(rule, rules, &chain, bindings, env) {
                 Some(start) => append_concat(rule, rules, &chain, start, vals_in_scope, bindings, env, out),
                 None => append_interp(rule, rules, e, vals_in_scope, bindings, env, out),
-            };
+            }
         },
         Paren(p) && is_java_string(rule, rules, &p.inner, bindings, env) => {
             append_part(rule, rules, &p.inner, vals_in_scope, bindings, env, out);

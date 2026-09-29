@@ -276,6 +276,8 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
         };
         pos += 2;
         if punct_is(tokens, pos, "(") {
+            // Which methods write is a fixed point over the bodies this scan
+            // precedes; a member body holds a writable handle, so none asks.
             out.add_method(to_snake_case(&name), false, ty == "String");
             pos = skip_parens(tokens, pos);
             if !punct_is(tokens, pos, "{") {
