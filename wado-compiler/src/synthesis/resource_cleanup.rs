@@ -632,6 +632,25 @@ fn elab_block_entry(
     cx: &mut Cx,
     entry: usize,
 ) -> Vec<TirStmt> {
+    elab_scope_stmts(stmts, owned, cx, entry, TemporaryScope::Statement)
+}
+
+/// Which statement a temporary spilled inside a block belongs to.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TemporaryScope {
+    /// The block's own statement that spilled it.
+    Statement,
+    /// The statement holding the block: see [`elab_plain_block`].
+    Enclosing,
+}
+
+fn elab_scope_stmts(
+    stmts: Vec<TirStmt>,
+    owned: &mut Owned,
+    cx: &mut Cx,
+    entry: usize,
+    temporaries: TemporaryScope,
+) -> Vec<TirStmt> {
     let mut out: Vec<TirStmt> = Vec::new();
     let mut flow = Flow::Normal;
 
@@ -646,7 +665,7 @@ fn elab_block_entry(
         let first_slot = owned.len();
         let first_out = out.len();
         flow = elab_stmt(stmt, owned, cx, is_tail, &mut out);
-        if flow == Flow::Normal {
+        if flow == Flow::Normal && temporaries == TemporaryScope::Statement {
             let drops = drop_temporaries(owned, first_slot, cx);
             if drops.is_empty() {
                 continue;
@@ -661,6 +680,13 @@ fn elab_block_entry(
         }
     }
 
+    let deferred: Vec<Live> = match temporaries {
+        TemporaryScope::Statement => Vec::new(),
+        TemporaryScope::Enclosing => owned[entry..]
+            .iter_mut()
+            .filter_map(|slot| slot.take_if(|live| live.temporary))
+            .collect(),
+    };
     if flow == Flow::Normal {
         // Drop resources declared in this block, innermost (last) first.
         let drops = drop_slots(owned, entry, cx);
@@ -671,6 +697,7 @@ fn elab_block_entry(
     // Block-local slots leave scope; enclosing slots (with any transfers
     // applied within this block) remain visible to the caller.
     owned.truncate(entry);
+    owned.extend(deferred.into_iter().map(Some));
     out
 }
 
@@ -708,6 +735,17 @@ fn elab_block(block: &mut TirBlock, owned: &mut Owned, cx: &mut Cx) -> Flow {
     let stmts = std::mem::take(&mut block.stmts);
     block.stmts = elab_block_entry(stmts, owned, cx, entry);
     block_flow(&block.stmts)
+}
+
+/// Elaborate a plain block expression in place. Nothing can leave it but a
+/// `return` or a `break` past it, so it runs whole as part of the statement
+/// holding it, and its temporaries drop when that statement ends. Synthesized
+/// code relies on that: an `assert` captures its operand `f(&t())` as
+/// `f({ $v = &t(); $v })`, so `t()` must outlive the capture's statement.
+fn elab_plain_block(block: &mut TirBlock, owned: &mut Owned, cx: &mut Cx) {
+    let entry = owned.len();
+    let stmts = std::mem::take(&mut block.stmts);
+    block.stmts = elab_scope_stmts(stmts, owned, cx, entry, TemporaryScope::Enclosing);
 }
 
 /// [`elab_block`] for the body of a labeled block, which `break label` leaves.
@@ -1217,9 +1255,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
             elab_expr(value, true, owned, cx);
         }
 
-        TirExprKind::Block(block) => {
-            elab_block(block, owned, cx);
-        }
+        TirExprKind::Block(block) => elab_plain_block(block, owned, cx),
         TirExprKind::LabeledBlock { label, block, .. } => {
             elab_labeled_block(label, block, owned, cx);
         }
