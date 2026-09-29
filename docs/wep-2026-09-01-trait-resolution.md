@@ -602,6 +602,9 @@ A call through a bound is not: `T: Sub` still reaches `Base`'s methods with
 - [ ] Gate the bounds path on the supertrait's declaration being in scope
       (`trait_error_unimported_supertrait_method.wado`).
 
+A static call is gated nowhere: `i32::seed()` reaches `seed` through a trait the
+calling module never imports, even one private to another module.
+
 ### A ref blanket never dispatches
 
 The order ranks `impl<T: Bound> Tr for &T` as the third candidate list, and
