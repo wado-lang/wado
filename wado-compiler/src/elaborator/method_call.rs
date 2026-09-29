@@ -245,20 +245,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait the call `call` reaches through a declared bound, where the
     /// walk is a trait's default body standing on one impl: the one its
     /// author's reading selected ([`Elaborator::abstract_selections`]).
-    fn abstract_selection(&self, call: AstId) -> Option<RequiredTrait> {
+    pub(super) fn abstract_selection(&self, call: AstId) -> Option<DefId> {
         let selections = self.annotate_ctx.trait_ctx.abstract_selections.as_ref()?;
-        let &decl = selections.get(&call)?;
-        Some(RequiredTrait {
-            decl: Resolution::Def(decl),
-            args: None,
-            display: self.tysys.resolutions.defs().name(decl).to_string(),
-        })
+        selections.get(&call).copied()
     }
 
     /// Record, while a default body is read as written, the trait a bound
     /// selected for `call` — unless two of the bounds declare the method, which
     /// selects none of them.
-    fn record_bound_selection(
+    pub(super) fn record_bound_selection(
         &mut self,
         call: Option<AstId>,
         bounds: &[ScopedBound],
@@ -393,7 +388,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A default body's author reached this call through a bound, which
         // names its trait as a qualified call names one.
         let declared_trait = match (&required_trait, call_id) {
-            (None, Some(call)) => self.abstract_selection(call),
+            (None, Some(call)) => self.abstract_selection(call).map(|decl| RequiredTrait {
+                decl: Resolution::Def(decl),
+                args: None,
+                display: self.tysys.resolutions.defs().name(decl).to_string(),
+            }),
             _ => None,
         };
         let required_trait = required_trait.as_ref().or(declared_trait.as_ref());
@@ -1409,7 +1408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
     /// which is what a `Trait::<T>::method(…)` spelling names.
-    fn resolve_static_method_call_of_trait(
+    pub(super) fn resolve_static_method_call_of_trait(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
         required_trait: Option<DefId>,
@@ -2024,6 +2023,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }
             ResolvedType::Primitive(prim) => primitive_receiver(prim),
+            // `()` has its impl blocks in core:prelude/primitive, as a method
+            // call on it finds them.
+            ResolvedType::Unit => (
+                UNIT_TYPE_NAME.to_string(),
+                ModuleSource::primitive(),
+                FqTypeName::builtin(UNIT_TYPE_NAME),
+                vec![],
+            ),
             ResolvedType::BuiltinArray(elem) => {
                 let arg = self.tysys.type_table.borrow().fq_type_name(elem);
                 (
@@ -3336,11 +3343,14 @@ impl TypeSystem {
 
     /// The impl block a selection came from, when written for one instantiation.
     /// Read off target arguments: `impl Default for List<T>` declares no parameters.
+    /// A block inheriting its trait's default supplies it without declaring it.
     fn concrete_impl_of(&self, selected: Option<&StaticMethodRef>) -> Option<DefId> {
-        let impl_def = self
-            .signatures
-            .method_sig(selected?.method_id?)?
-            .declaring_impl?;
+        let selected = selected?;
+        let impl_def = selected.supplying_block.or_else(|| {
+            self.signatures
+                .method_sig(selected.method_id?)?
+                .declaring_impl
+        })?;
         let table = self.type_table.borrow();
         let open = table
             .impl_target_args(impl_def)
@@ -3421,14 +3431,14 @@ impl TypeSystem {
             // Keyed on what they wrap, not on themselves: a newtype's impls are
             // looked up on its base, and `flags`' on `u32`.
             let head = table.representation_head(target_type_id);
-            if matches!(table.get(head), ResolvedType::BuiltinArray(_)) {
-                Some(ImplTargetKey::Builtin(
+            match table.get(head) {
+                ResolvedType::BuiltinArray(_) => Some(ImplTargetKey::Builtin(
                     TypeTable::ARRAY_TYPE_NAME.to_string(),
-                ))
-            } else {
-                table
+                )),
+                ResolvedType::Unit => Some(ImplTargetKey::Builtin(UNIT_TYPE_NAME.to_string())),
+                _ => table
                     .nominal_def(head)
-                    .map(|def| ImplTargetKey::of_decl(self.resolutions.defs(), def))
+                    .map(|def| ImplTargetKey::of_decl(self.resolutions.defs(), def)),
             }
         };
         let name = key

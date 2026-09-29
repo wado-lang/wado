@@ -616,6 +616,15 @@ impl TypeSystem {
         if prefix == "Self"
             && let Some(self_type_id) = ctx.trait_ctx.self_type
         {
+            // In a trait's own frame `Self` is the slot the trait bounds, so
+            // `Self::m()` goes through that bound as `T::m()` does. A blanket's
+            // `Self` is its receiver `T`, which the rewrite below keeps reaching
+            // the blanket itself.
+            if self.binder_name(self_type_id).as_deref() == Some("Self")
+                && ctx.trait_ctx.type_params.contains_key("Self")
+            {
+                return self.callee_ident_for_type_param("Self", suffix, self_type_id);
+            }
             let self_name = self.type_table.borrow().type_name(self_type_id);
             // `Self` names the receiver, not one of its bounds: an impl
             // *provides* the trait whose default body this is.
@@ -1089,6 +1098,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
+        // A default body's author reached `Self::m()` through a bound. `Self`
+        // still names this impl's target, which supplies the body; the bound
+        // names the trait, as `Trait::<Self>::m()` would. A blanket's `Self` is
+        // its receiver parameter, which only the rewrite below reaches.
+        if given_args.is_none()
+            && let [head, method] = ident.segments.as_slice()
+            && head.name == "Self"
+            && let Some(required) = self.abstract_selection(call.id)
+            && self
+                .annotate_ctx
+                .trait_ctx
+                .self_type
+                .is_some_and(|ty| self.tysys.binder_name(ty).is_none())
+        {
+            let on_self = ast::StaticMethodCallExpr {
+                id: call.id,
+                target_type: ast::Type::Named(ast::NamedType::new(
+                    head.id,
+                    head.name.clone(),
+                    head.span,
+                )),
+                method: method.name.clone(),
+                method_id: method.id,
+                method_span: method.span,
+                type_args: call.type_args.clone(),
+                args: call.args.clone(),
+                has_trailing_comma: call.has_trailing_comma,
+                span: call.span,
+            };
+            return self.resolve_static_method_call_of_trait(
+                &on_self,
+                Some(required),
+                ctx,
+                expected_type,
+            );
+        }
         let mut callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
         // A bare case constructs (`Some(x)`) only where the expected type
         // supplies it, and then ahead of any function of that name.
@@ -4456,6 +4501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }
         {
+            self.record_bound_selection(Some(call.id), &bounds, method_name, &found_trait);
             if let Some(def) = method_info_result.method_def
                 && self.report_unavailable(def, call.span)
             {

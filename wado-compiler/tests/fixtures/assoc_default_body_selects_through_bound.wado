@@ -104,6 +104,66 @@ trait Ender: A with () {
 
 impl Ender for Both {}
 
+trait Build with () {
+    fn build() -> i32;
+}
+
+trait Craft with () {
+    fn build() -> i32;
+}
+
+impl Build for Both {
+    fn build() -> i32 {
+        return 3;
+    }
+}
+
+impl Craft for Both {
+    fn build() -> i32 {
+        return 4;
+    }
+}
+
+// A static call on `Self` picks through the bounds too: `Builder` names
+// `Build`, not `Craft`.
+trait Builder: Build with () {
+    fn built(&self) -> i32 {
+        return Self::build();
+    }
+}
+
+impl Builder for Both {}
+
+// Selected through the bound, `Self::zero()` is spelled as `Zero::<Self>::zero()`
+// is, which must reach `()` and a default a primitive's block inherits.
+trait Zero with () {
+    fn zero() -> i32;
+
+    fn zero_twice() -> i32 {
+        return Self::zero() * 2;
+    }
+
+    fn zero_thrice() -> i32 {
+        return Self::zero_twice() + Self::zero();
+    }
+}
+
+impl Zero for () {
+    fn zero() -> i32 {
+        return 5;
+    }
+}
+
+impl Zero for i32 {
+    fn zero() -> i32 {
+        return 5;
+    }
+}
+
+fn through_static_bound<T: Build>() -> i32 {
+    return T::build();
+}
+
 fn through_param<T: Maker>(t: &T) -> i32 {
     let o: T::Out = t.make();
     return o.end();
@@ -131,6 +191,24 @@ test "a nested projection off Self picks through its declared bound" {
 
 test "projections bound to one type each pick through their own bound" {
     assert Shared {}.ends() == 12;
+}
+
+test "a type parameter's bound picks the static" {
+    assert through_static_bound::<Both>() == 3;
+}
+
+test "a static call on Self picks through the trait's supertrait" {
+    assert Both {}.built() == 3;
+}
+
+test "a static call on Self reaches the unit type's impl" {
+    assert Zero::<()>::zero() == 5;
+    assert Zero::<()>::zero_twice() == 10;
+}
+
+test "a static call on Self reaches a default a primitive inherits" {
+    assert Zero::<i32>::zero_twice() == 10;
+    assert i32::zero_thrice() == 15;
 }
 
 test "Self picks through the trait's supertrait" {
