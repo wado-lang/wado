@@ -238,7 +238,10 @@ with no distinct byte-string form keeps working unchanged.
 
 ### `pub trait DeserializeMap with ()`
 
-#### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+#### `fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>`
+
+The next entry's key, or `null` past the last one. A text format spells
+every key as a string, so a key there is a scalar parsed back as `K`.
 
 #### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
 
@@ -437,6 +440,15 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `message: String`
 
+#### `pub fn unsupported_value<S: AsStrSlice>(msg: S) -> SerializeError`
+
+A value the format has no way to write.
+
+#### `pub fn non_scalar_key() -> SerializeError`
+
+A map key whose type is not a scalar, which a text format has no one
+string to spell as.
+
 #### `impl Display for SerializeError`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
@@ -470,6 +482,10 @@ a whole-value rejection, or a format that counts nothing.
 
 #### `pub fn duplicate_field<S: AsStrSlice>(name: S) -> DeserializeError`
 
+#### `pub fn non_scalar_key(offset: i64) -> DeserializeError`
+
+`SerializeError::non_scalar_key`, for a key being read.
+
 #### `impl Display for DeserializeError`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
@@ -484,6 +500,170 @@ cannot, because it reads an explicit `null` as the member never sent.
 #### `impl Deserialize for IgnoredAny`
 
 ##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<IgnoredAny, DeserializeError>`
+
+### `pub struct NoCompound`
+
+The compound access of a serializer or deserializer that has none, such as
+a map key's. The private field keeps it unbuilt outside this module, so the
+`begin_*` that would hand one out always fails first.
+
+_Fields are private._
+
+#### `impl SerializeSeq for NoCompound`
+
+##### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+#### `impl SerializeMap for NoCompound`
+
+##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
+
+##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+#### `impl SerializeStruct for NoCompound`
+
+##### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+#### `impl SerializeVariant for NoCompound`
+
+##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+#### `impl DeserializeSeq for NoCompound`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+#### `impl DeserializeMap for NoCompound`
+
+##### `fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+#### `impl DeserializeStruct for NoCompound`
+
+##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
+
+##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn skip(&mut self) -> Result<(), DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+#### `impl DeserializeVariant for NoCompound`
+
+##### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn disc(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct TextKeySerializer`
+
+Spells a map key as the text `TextKeyDeserializer` reads back: a string as
+itself, any other scalar as its `Display`.
+
+#### `out: &mut String`
+
+#### `impl Serializer for TextKeySerializer`
+
+##### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
+
+##### `fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError>`
+
+##### `fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError>`
+
+##### `fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError>`
+
+##### `fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError>`
+
+##### `fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError>`
+
+##### `fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError>`
+
+##### `fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>`
+
+##### `fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>`
+
+##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
+
+##### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
+
+##### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
+
+##### `fn begin_seq(&mut self, len: i32) -> Result<NoCompound, SerializeError>`
+
+##### `fn begin_map(&mut self, len: i32) -> Result<NoCompound, SerializeError>`
+
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<NoCompound, SerializeError>`
+
+##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
+
+##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<NoCompound, SerializeError>`
+
+### `pub struct TextKeyDeserializer`
+
+Reads a map key a text format spelled as a string, parsed as the scalar the
+key type asks for.
+
+#### `key: String`
+
+#### `offset: i64`
+
+Where the key starts in the input, or -1 where it has no position.
+
+#### `impl Deserializer for TextKeyDeserializer`
+
+##### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn deserialize_i64(&mut self) -> Result<i64, DeserializeError>`
+
+##### `fn deserialize_u32(&mut self) -> Result<u32, DeserializeError>`
+
+##### `fn deserialize_u64(&mut self) -> Result<u64, DeserializeError>`
+
+##### `fn deserialize_i128(&mut self) -> Result<i128, DeserializeError>`
+
+##### `fn deserialize_u128(&mut self) -> Result<u128, DeserializeError>`
+
+##### `fn deserialize_f32(&mut self) -> Result<f32, DeserializeError>`
+
+##### `fn deserialize_f64(&mut self) -> Result<f64, DeserializeError>`
+
+##### `fn deserialize_f16(&mut self) -> Result<f16, DeserializeError>`
+
+##### `fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError>`
+
+##### `fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn deserialize_char(&mut self) -> Result<char, DeserializeError>`
+
+##### `fn deserialize_string(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError>`
+
+##### `fn begin_map(&mut self) -> Result<NoCompound, DeserializeError>`
+
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NoCompound, DeserializeError>`
+
+##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError>`
+
+##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
 ## Enums
 
