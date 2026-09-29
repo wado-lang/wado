@@ -21,9 +21,7 @@ use crate::name::wado_identifier;
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
-use wit_parser::{
-    InterfaceId, Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem,
-};
+use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem};
 
 /// The Wado bindings synthesized from one decoded imported component.
 pub struct ComponentBindings {
@@ -254,7 +252,7 @@ impl Builder {
         }
     }
 
-    fn emit_interface(&mut self, resolve: &Resolve, iface_id: InterfaceId, fq: &str) {
+    fn emit_interface(&mut self, resolve: &Resolve, iface_id: wit_parser::InterfaceId, fq: &str) {
         let iface = &resolve.interfaces[iface_id];
 
         // Named types first, so signatures can reference them.
@@ -717,7 +715,7 @@ fn type_source_fq(resolve: &Resolve, type_id: TypeId, current_fq: &str) -> Strin
 }
 
 /// `namespace:package/interface@version` for an interface.
-fn interface_fq(resolve: &Resolve, iface_id: InterfaceId) -> String {
+fn interface_fq(resolve: &Resolve, iface_id: wit_parser::InterfaceId) -> String {
     let iface = &resolve.interfaces[iface_id];
     let name = iface.name.clone().unwrap_or_default();
     let Some(pkg_id) = iface.package else {
@@ -739,13 +737,12 @@ mod tests {
     use super::*;
     use crate::ast::{Item, cm_import_of};
     use crate::component_model::CmInterfaceRegistry;
-    use wit_component::DecodedWasm;
 
     fn decode_fixture() -> (Resolve, WorldId) {
         let bytes = std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap();
         match wit_component::decode(&bytes).unwrap() {
-            DecodedWasm::Component(r, w) => (r, w),
-            DecodedWasm::WitPackage(..) => panic!("expected component"),
+            wit_component::DecodedWasm::Component(r, w) => (r, w),
+            wit_component::DecodedWasm::WitPackage(..) => panic!("expected component"),
         }
     }
 
