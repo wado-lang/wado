@@ -49,11 +49,7 @@ fn diagnostics_saying<S: AsStrSlice>(out: &GeneratedOutput, text: S) -> i32 {
 /// line each: `input => tree`, or `error`, then any action output. The error's
 /// wording is left out: compatibility covers what is rejected, not how it reads.
 fn parses<S: AsStrSlice>(grammar: S, rule: String, inputs: List<String>) -> String {
-    let mut body = String::new();
-    for let input of inputs {
-        body.push_str(wado`show("${input}", parse_${rule}("${input}"));\n`);
-    }
-    return printed(grammar, body, SHOW_FN);
+    return parses_each(grammar, inputs.into_iter().map(|input| [rule, input]).collect());
 }
 
 /// `parses` for a grammar with several entry rules: each `[rule, input]` pair,
@@ -102,8 +98,8 @@ ${body}}
     return out;
 }
 
-// `SHOW_FN` and `LEX_FN` are `"..."` literals, so their holes are the generated
-// program's own.
+// `SHOW_FN` and `SHOW_TOKENS_FN` are `"..."` literals, so their holes are the
+// generated program's own.
 
 global SHOW_FN: String = "fn show(input: String, r: ParseResult) with Stdout {
     let shown = if r.ok() { to_string_tree(&r) } else { \"error\" };
@@ -111,9 +107,8 @@ global SHOW_FN: String = "fn show(input: String, r: ParseResult) with Stdout {
     println(`${input} => ${shown}${output}`);
 }";
 
-global LEX_FN: String = "fn lex(input: String) with Stdout {
-    let toks = tokenize(input);
-    let mut line = `${input} =>`;
+global SHOW_TOKENS_FN: String = "fn show_tokens(label: String, toks: &TokenStream) with Stdout {
+    let mut line = `${label} =>`;
     for let mut i = 0; toks.kind_at(i) != TK_EOF; i += 1 {
         let name = if toks.is_lex_error(i) { \"error\" } else { token_kind_name(toks.kind_at(i)) };
         line.push_str(` ${name}:${toks.token_text(i)}`);
@@ -123,6 +118,14 @@ global LEX_FN: String = "fn lex(input: String) with Stdout {
     }
     println(line);
 }";
+
+// A lexer base's handler calls `show_tokens` itself, since `tokenize` then
+// carries the base's effect.
+global LEX_FN: String = `${SHOW_TOKENS_FN}
+
+fn lex(input: String) with Stdout {
+    show_tokens(input, &tokenize(input));
+}`;
 
 test "generate header" {
     let mut grammar = Grammar {
@@ -3144,7 +3147,7 @@ WS : [ \\t]+ -> skip ;
 ", got;
 }
 
-test "a list label outside a loop collects a token and a set" {
+test "a list label outside a loop takes a token and a set" {
     let got = parses("grammar T;
 s : xs+=ID ',' xs+=ID ys+=(A | B) ys+=(A | B) EOF ;
 A : '+' ; B : '-' ;
@@ -3272,10 +3275,9 @@ k a a a a a a a x => error
 ", got;
 }
 
-// A Java grammar's `this.ok()` is a base call, so the body runs through the
-// base's effect interface wherever it sits — here inside a looped group.
-test "a Java grammar's parser base call gates an alternative inside a loop" {
-    let items = `${SHOW_FN}
+/// `show_with(ok, input)` shows `parse_s(input)` under a `PBase` whose `ok()`
+/// answers `ok`.
+global SHOW_WITH_PBASE: String = `${SHOW_FN}
 struct Allow {
     ok: bool,
 }
@@ -3293,11 +3295,13 @@ fn show_with(ok: bool, input: String) with Stdout {
     };
 }
 `;
+
+test "a Java grammar's parser base call gates an alternative inside a loop" {
     let got = printed("grammar T;
 options { superClass = PBase; }
 s : ( {this.ok()}? A | B )* EOF ;
 A : 'a' ; B : 'b' ;
-", "show_with(true, \"ab\");\nshow_with(false, \"ab\");\nshow_with(false, \"b\");\n", items);
+", "show_with(true, \"ab\");\nshow_with(false, \"ab\");\nshow_with(false, \"b\");\n", SHOW_WITH_PBASE);
     assert got == "true ab => (s a b)\nfalse ab => error\nfalse b => (s b)\n", got;
 }
 
@@ -3373,7 +3377,8 @@ aexc => (m a e x c)
 }
 
 test "a lexer base predicate gates its alternative inside a group, a loop and a fragment" {
-    let items = `struct Gate {
+    let items = `${SHOW_TOKENS_FN}
+struct Gate {
     on: bool,
 }
 
@@ -3386,12 +3391,7 @@ impl B for Gate {
 fn lex_with(on: bool, input: String) with Stdout {
     let mut base = Gate { on };
     with B => &mut base do {
-        let toks = tokenize(input);
-        let mut line = \`\${on} =>\`;
-        for let mut i = 0; toks.kind_at(i) != TK_EOF; i += 1 {
-            line.push_str(\` \${token_kind_name(toks.kind_at(i))}:\${toks.token_text(i)}\`);
-        }
-        println(line);
+        show_tokens(\`\${on}\`, &tokenize(input));
     };
 }
 `;
@@ -3422,29 +3422,11 @@ A : 'a' ;
 }
 
 test "a parser base call runs in a grammar whose action language has no translator" {
-    let items = `${SHOW_FN}
-struct Allow {
-    ok: bool,
-}
-
-impl PBase for Allow {
-    fn ok(&self, p: &Parser) -> bool {
-        resume self.ok;
-    }
-}
-
-fn show_with(ok: bool, input: String) with Stdout {
-    let mut base = Allow { ok };
-    with PBase => &mut base do {
-        show(\`\${ok} \${input}\`, parse_s(input));
-    };
-}
-`;
     let got = printed("grammar T;
 options { superClass = PBase; language = Cpp; }
 s : {this.ok()}? A | B ;
 A : 'a' ; B : 'b' ;
-", "show_with(true, \"a\");\nshow_with(false, \"a\");\nshow_with(false, \"b\");\n", items);
+", "show_with(true, \"a\");\nshow_with(false, \"a\");\nshow_with(false, \"b\");\n", SHOW_WITH_PBASE);
     assert got == "true a => (s a)\nfalse a => error\nfalse b => (s b)\n", got;
 }
 
@@ -3527,9 +3509,7 @@ WS : ' ' -> skip ;
     assert got == "3.14 42 7. => FLOAT:3.14 INT:42 FLOAT:7.\n1.2.3 => FLOAT:1.2 error:. INT:3\n", got;
 }
 
-test "a fragment ending a rule takes its longest arm there and its first arm before a suffix" {
-    // `X` calls `AB` in tail position, where its arms are scanned for the
-    // longest; `Y` scores them against the `'c'` it still owes.
+test "a fragment's alternation takes its longest arm at the end of a rule, and before a suffix the arm the suffix can follow" {
     let got = lexes("lexer grammar L;
 X : AB ;
 Y : AB 'c' { System.out.println(\"y\"); } ;
@@ -3595,11 +3575,10 @@ WS : ' ' -> skip ;
     assert got == "Select FOO selects => SELECT:Select ID:FOO ID:selects\n", got;
 }
 
+// Gale peeks no suffix carrying a predicate, so the plain `.+` eats the `z` the
+// fragment needs and the rule fails.
 #[TODO]
 test "a greedy loop hands back the chars a predicate-carrying suffix needs" {
-    // ANTLR4 takes the longest match, whose `.+` stops short of the `z` the
-    // fragment needs. Gale peeks no suffix carrying a predicate, so the plain
-    // loop eats the `z` and the rule fails.
     let got = lexes("lexer grammar L;
 options { language = Wado; }
 S : 'a' .+ END ;
@@ -3608,11 +3587,10 @@ fragment END : { true }? 'z' ;
     assert got == "abz => S:abz\n", got;
 }
 
+// Gale scores no alternation that a predicate follows or whose suffix carries
+// one, so the first arm to match wins and the rule fails.
 #[TODO]
 test "an alternation before a predicate takes the arm the rest of the rule needs" {
-    // ANTLR4 takes `ab` so that `bc` can follow. Gale scores no alternation
-    // that a predicate follows or whose suffix carries one, so the first arm to
-    // match wins and the rule fails.
     let after = lexes("lexer grammar L;
 options { language = Wado; }
 I : ('a' | 'ab') { true }? 'bc' ;

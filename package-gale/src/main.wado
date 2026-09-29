@@ -24,8 +24,8 @@ use { render_lexer_dump } from "./lexer_dump.wado";
 
 // CLI shape, parsed by `core:args` from the `Command` subcommand variant.
 // `grammars` is an optional variadic positional so the "no grammar files given"
-// check stays in `cmd_*` with its specific message; long options only (`-o` is
-// dropped). `name_policy` lower-cases the wire tags (`gen` / `dump`).
+// check stays in `cmd_*` with its specific message; long options only.
+// `name_policy` lower-cases the wire tags (`gen` / `dump`).
 struct GenArgs {
     trace: bool = false,
     log_level: Option<String> = null,
@@ -117,23 +117,18 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) -> Result<
             g4_paths.push(*p);
         }
     }
-    if g4_paths.len() == 0 {
+    if g4_paths.is_empty() {
         return Result::Err("gale gen: no grammar files given");
     }
     let mut merged = load_and_merge(&g4_paths)?;
 
     // Parse each `.scm` separately so an error names the file it came from.
     let mut highlight_query: Option<List<HighlightRule>> = null;
-    if scm_paths.len() > 0 {
+    if !scm_paths.is_empty() {
         let mut all_rules: List<HighlightRule> = [];
         for let p of &scm_paths {
-            let src = read_source_file(p)?;
-            match parse_highlight_query(&src) {
-                Ok(rules) => {
-                    for let r of rules {
-                        all_rules.push(r);
-                    }
-                },
+            match parse_highlight_query(&read_source_file(p)?) {
+                Ok(rules) => all_rules.extend(&rules),
                 Err(e) => {
                     return Result::Err(`gale: ${*p}: highlight query ${e.line}:${e.col}: ${e.message}`);
                 },
@@ -143,12 +138,8 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) -> Result<
     }
     let options = GenerateOptions { highlight_query, trace };
 
-    // Generate once and surface the prediction-strategy diagnostics the
-    // single lowering raised. `generate` runs `normalize_caches` and lowers
-    // internally (matching `cmd_dump`), so there is no separate diagnostic
-    // pass to keep in sync. Every kind is advisory; generation still
-    // proceeds and must succeed. The level decides what a default run shows —
-    // see `gir::diagnostic_level`.
+    // Every diagnostic is advisory: generation still succeeds, and
+    // `diagnostic_level` decides what a default run shows.
     let generated = generate(&mut merged, &options);
     for let d of &generated.diagnostics {
         if let Some(level) = diagnostic_level(&d.kind) {
@@ -204,12 +195,9 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) -> Result<(), String> w
     // prologue answers once.
     let token_kinds = canonicalize_for_analysis(&mut merged);
 
-    // Lower to GIR and render the per-rule report derived from the
-    // actual prediction decisions (not the raw surface IR).
     let lit_tokens = collect_literal_tokens(&merged.parser_rules);
-    // Lower through the same ctx render_dump renders with, so the
-    // follow-mask registry is populated and the dump reflects the
-    // literal ctx that lowered the grammar.
+    // `render_dump` renders with the ctx that lowered the grammar, so the
+    // follow-mask registry it reads is populated.
     let mut ctx = analysis_context(&merged, &lit_tokens, token_kinds);
     // Lowering asks whether actions execute, so the report is of the grammar a
     // parser is built from rather than of one with its predicates ignored.
@@ -295,7 +283,7 @@ fn open_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preop
 /// yet, so a search would let grant order pick the output directory.
 fn create_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preopens {
     let dirs = Preopens::get_directories();
-    assert !dirs.is_empty(), "the grammars were read through a grant";
+    assert !dirs.is_empty(), "cmd_gen read the grammars through a grant";
     let root = dirs[0].0;
     let opened = root.open_at(
         PathFlags::none(),

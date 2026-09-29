@@ -660,10 +660,9 @@ pub variant Op {
     /// `.` wildcard. Consumes one token of any kind (matches
     /// `match_any` at runtime).
     Wildcard(WildcardOp),
-    /// `~ X` set complement. `kinds` is the resolved exclusion set;
-    /// emit produces `p.match_not([...])` (or `match_not_via_X` if
-    /// the inner is a single-token RuleRef rule, recovered via
-    /// `not_match_call`'s lower-time analogue).
+    /// `~ X` set complement. `kinds` is the resolved exclusion set
+    /// (`lower::collect_excluded_kinds`); emit produces
+    /// `p.expect_not(...)` over it.
     Excluded(ExcludedOp),
     /// `e?` / `e*` / `e+`. `strategy` selects the loop shape; emit
     /// is structural.
@@ -821,8 +820,7 @@ pub struct WildcardOp {
 }
 
 pub struct ExcludedOp {
-    /// Exclusion set. emit renders this as a literal token-array
-    /// passed to `p.match_not([...])`.
+    /// Exclusion set, the kind set emit passes to `p.expect_not(...)`.
     pub kinds: List<String>,
     pub field: String,
     /// Pre-dedup base name (`not_element_field_name(&ne.element)`).

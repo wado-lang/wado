@@ -234,7 +234,7 @@ pub fn superclass_bases(kind: &GrammarKind, options: &List<GrammarOption>) -> [S
 fn option_value_name(v: &OptionValue) -> String {
     return match v {
         Ident(s) => *s,
-        Qualified(parts) => if parts.is_empty() { "" } else { parts[parts.len() - 1] },
+        Qualified(parts) => parts[parts.len() - 1],
         Str(s) => match s.rsplit_once(".") {
             Some([_, last]) => last.to_string(),
             None => *s,
@@ -266,7 +266,8 @@ pub fn synthesize_implicit_tokens(grammar: &mut Grammar) {
                 break;
             }
         }
-        // A name synthesized earlier is in `lexer_rules` now, so this also dedups.
+        // A name synthesized earlier is in `lexer_rules` by now, so this
+        // also dedups.
         if defined {
             continue;
         }

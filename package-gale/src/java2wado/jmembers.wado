@@ -235,7 +235,7 @@ fn expr_mutates(e: &JExpr, scope: &List<String>, mutators: &List<String>) -> boo
             false;
         },
         Unary(u) => {
-            assert u.op == "!" || u.op == "-", "the Java lexer has no `++` / `--`, so no unary writes its operand";
+            assert u.op == "!" || u.op == "-", "parse_unary forms only `!` and `-`, and neither writes its operand";
             expr_mutates(&u.operand, scope, mutators);
         },
         Member(m) => expr_mutates(&m.recv, scope, mutators),

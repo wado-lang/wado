@@ -5075,11 +5075,10 @@ fn rebind_group_shape<S: AsStrSlice>(shape: GroupShape, new_field: S) -> GroupSh
 ///
 /// * `~ TOKEN` / `~ 'lit'` — single-token complement, the simple case.
 /// * `~ ( A | B | C )` — multi-token complement; each alt must be a
-///   single `TokenRef` or `Literal` (mirrors `parser_gen::collect_not_set_tokens`).
+///   single `TokenRef` or `Literal`.
 ///
-/// Other inner shapes (`~ rule`, `~ ( a b )`) are not supported by
-/// the runtime helpers (`p.match_not([...])`) and aren't expected
-/// in committed grammars.
+/// Other inner shapes (`~ rule`, `~ ( a b )`) name no token set for
+/// `p.expect_not(...)` to exclude.
 fn collect_excluded_kinds(inner: &Element) -> List<String> {
     return match *inner {
         TokenRef(t) => [`TK_${t.name}`],

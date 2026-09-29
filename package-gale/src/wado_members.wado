@@ -8,8 +8,8 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
     let mut methods: List<MemberMethod> = [];
     for let mut i = skip_ws_semi(&chars, 0, n); i < n; i = skip_ws_semi(&chars, i, n) {
         if is_method_start(&chars, i, n) {
-            let close = capture_fn(&chars, i, n)?;
-            let head = method_head(&chars, i, n);
+            let [paren, close] = capture_fn(&chars, i, n)?;
+            let head = method_head(&chars, i, paren, n);
             methods.push(MemberMethod { name: head.0, mutates: head.1, source: collect_range(&chars, i, close) });
             i = close;
         } else {
@@ -22,7 +22,7 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
 /// A method's name, and whether it takes `&mut self` — the receiver a lexer
 /// predicate cannot reach, since it holds `&Lexer`. A Wado member writes its own
 /// receiver, so the source says which those are.
-fn method_head(chars: &List<char>, start: i32, n: i32) -> [String, bool] {
+fn method_head(chars: &List<char>, start: i32, paren: i32, n: i32) -> [String, bool] {
     let mut i = skip_ws(chars, start, n);
     if word_at(chars, i, n, "pub") {
         i = skip_ws(chars, i + 3, n);
@@ -33,11 +33,7 @@ fn method_head(chars: &List<char>, start: i32, n: i32) -> [String, bool] {
         i += 1;
     }
     let name = collect_range(chars, name_start, i);
-    while i < n && chars[i] != '(' {
-        i = skip_span(chars, i, n);
-    }
-    assert i < n, "capture_fn found the parameter list before the head is read";
-    let mut r = skip_ws(chars, i + 1, n);
+    let mut r = skip_ws(chars, paren + 1, n);
     if !word_at(chars, r, n, "&mut") {
         return [name, false];
     }
@@ -93,22 +89,23 @@ fn is_method_start(chars: &List<char>, i: i32, n: i32) -> bool {
     return false;
 }
 
-fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<i32, String> {
-    let mut i = start;
-    while i < n && chars[i] != '(' {
-        i = skip_span(chars, i, n);
+/// The index of a method's `(` and the index just past its body's `}`.
+fn capture_fn(chars: &List<char>, start: i32, n: i32) -> Result<[i32, i32], String> {
+    let mut paren = start;
+    while paren < n && chars[paren] != '(' {
+        paren = skip_span(chars, paren, n);
     }
-    if i >= n {
+    if paren >= n {
         return Result::Err("gale: Wado @members: method parameter list '(' not found");
     }
-    i = skip_balanced(chars, i, n, '(', ')')?;
+    let mut i = skip_balanced(chars, paren, n, '(', ')')?;
     while i < n && chars[i] != '{' {
         i = skip_span(chars, i, n);
     }
     if i >= n {
         return Result::Err("gale: Wado @members: method body '{' not found");
     }
-    return skip_balanced(chars, i, n, '{', '}');
+    return Result::Ok([paren, skip_balanced(chars, i, n, '{', '}')?]);
 }
 
 fn skip_balanced(chars: &List<char>, open_idx: i32, n: i32, open: char, close: char) -> Result<i32, String> {

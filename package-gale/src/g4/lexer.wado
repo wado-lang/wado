@@ -172,7 +172,6 @@ impl G4Lexer {
         if '0' <= c <= '9' {
             return self.read_int_literal();
         }
-        // Two-char operators: peek ahead before consuming `c`.
         if c == '+' && self.peek_at(1) matches { Some('=') } {
             self.pos += 2;
             return self.owned_token(G4Token::PlusAssign, start, self.pos);

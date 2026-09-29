@@ -1,20 +1,14 @@
 //! `run_cli`, the batch highlighter every grammar's CLI shares: what it writes
 //! where, and what it reports when an input or an output fails. The renderer is
-//! a stand-in, since the facade never looks inside what it returns. Files live
-//! under the gitignored `target/`, since `wado test` grants the working
-//! directory; each test empties its own first.
+//! a stand-in, since the facade never looks inside what it returns.
 
 use { run_cli } from "./facade.wado";
 use { Console } from "../../tests/support/console.wado";
+use { scratch } from "../../tests/support/scratch.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 
-fn scratch<S: AsStrSlice>(case: S) -> String with Preopens {
-    let dir = `target/gale-facade-test/${case}`;
-    fs::remove_dir_all(&dir).unwrap();
-    fs::create_dir_all(&dir).unwrap();
-    return dir;
-}
+global SUITE: String = "gale-facade-test";
 
 fn write_input<S: AsStrSlice>(path: S, text: String) with Preopens {
     fs::create_dir_all(fs::parent(&path).unwrap()).unwrap();
@@ -26,7 +20,7 @@ fn bold(source: &String) -> String {
 }
 
 test "each input is rendered to its own path under the output directory" {
-    let dir = scratch("render");
+    let dir = scratch(SUITE, "render");
     let first = `${dir}/src/a.txt`;
     let second = `${dir}/src/nested/b.txt`;
     write_input(&first, "one");
@@ -43,7 +37,7 @@ test "each input is rendered to its own path under the output directory" {
 }
 
 test "an input that cannot be read is logged, and the rest still render" {
-    let dir = scratch("missing-input");
+    let dir = scratch(SUITE, "missing-input");
     let present = `${dir}/present.txt`;
     write_input(&present, "here");
     let out = `${dir}/out`;
@@ -57,7 +51,7 @@ test "an input that cannot be read is logged, and the rest still render" {
 }
 
 test "an output directory that cannot be created is logged" {
-    let dir = scratch("blocked-dir");
+    let dir = scratch(SUITE, "blocked-dir");
     let input = `${dir}/in.txt`;
     write_input(&input, "text");
     let out = `${dir}/out`;
@@ -70,7 +64,7 @@ test "an output directory that cannot be created is logged" {
 }
 
 test "an output that cannot be written is logged" {
-    let dir = scratch("blocked-file");
+    let dir = scratch(SUITE, "blocked-file");
     let input = `${dir}/in.txt`;
     write_input(&input, "text");
     let out = `${dir}/out`;

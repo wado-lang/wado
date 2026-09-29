@@ -190,7 +190,7 @@ fn collect_lits_from_element(elem: &Element, seen: &mut List<String>, result: &m
         Label(lab) => collect_lits_from_element(&lab.element, seen, result),
         // `~ X` is a set-complement transformer. The literal `'x'` inside
         // still needs to be hoisted to an anonymous lexer token so the
-        // runtime `match_not([TK_LIT_x])` call resolves. Without this arm
+        // runtime `expect_not` call resolves. Without this arm
         // any parser-rule `~'x'` / `~('x'|'y')` emits a reference to an
         // undefined TK_LIT_x (Sets/ParserNotToken, Sets/ParserNotSet, …).
         Not(n) => collect_lits_from_element(&n.element, seen, result),
@@ -3142,13 +3142,14 @@ fn lexer_elem_leading_chars(
         AnyChar => any_leading_chars(),
         Not(not_inner) => {
             let inner_casing = if casing matches { Unknown } { Casing::Sensitive } else { casing };
-            // The set under a `~` has leading chars and cannot match empty; only
-            // a negated class inside it (`~('a' | [^b])`) is not read.
-            match lexer_elem_leading_chars(&not_inner.element, all_rules, inner_casing, follow_refs, visiting) {
-                Some(inner) && !inner.negated => Option::<LeadingChars>::Some(
-                    LeadingChars { ranges: inner.ranges, negated: true, nullable: false },
-                ),
-                _ => null,
+            let inner = lexer_elem_leading_chars(&not_inner.element, all_rules, inner_casing, follow_refs, visiting)
+                .expect("the g4 parser admits only a set under `~`, and a set has leading chars");
+            assert !inner.nullable, "a set under `~` consumes one char";
+            // A negated class inside the set (`~('a' | [^b])`) is not read.
+            if inner.negated {
+                null;
+            } else {
+                Option::<LeadingChars>::Some(LeadingChars { ranges: inner.ranges, negated: true, nullable: false });
             }
         },
         Repeat(rep) => match lexer_elem_leading_chars(&rep.element, all_rules, casing, follow_refs, visiting) {

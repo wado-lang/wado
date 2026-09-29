@@ -2836,10 +2836,6 @@ fn rule_has_at_end_conflict(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut Ge
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
     ctx.set_current_rule_index(ctx.rule_index_of(&rule.name));
-    // Phase 4 — dispatch on the GIR `Rule` variant. Each shape gets
-    // its own focused emit entry; the existing internal helpers
-    // carry the body emission but no longer need to re-classify
-    // the rule from surface IR.
     // The canonical name every other rule (and the public input entry)
     // calls. We emit the rule body under `<canonical>__inner` and wrap it
     // with a thin entry that records the rule on the rule stack when its
@@ -3180,7 +3176,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     ctx: &mut GenContext,
     fn_name: S,
 ) {
-    assert rule.alternatives.len() > 1, "a single-alternative rule lowers to `Simple`";
+    assert rule.alternatives.len() > 1, "`lower_rule` makes a single-alternative rule `Simple`, which `gen_parse_fn` emits apart";
 
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
     // `keyword`) use a compact `{ span, token }` struct (see
@@ -5303,9 +5299,8 @@ fn gen_op_transparent_optional(
     }
 
     return match &rep_op.strategy {
-        // A shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`.
         OptionalShapeLookahead(_) => panic(
-            "gen_op_transparent_optional: a one-element body holding an optional is collapsed before lowering",
+            "gen_op_transparent_optional: a shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`",
         ),
         OptionalLookahead(s) => gen_op_transparent_optional_with_cond(
             w,
@@ -5891,14 +5886,11 @@ fn gen_consume_single_alt_group_op(
     // the inner elements already appended; no struct.
 }
 
-/// Emit `name+=elem` outside a Repeat: allocate the array, parse the
-/// inner op once, push the resulting binding. Lower stores the label
-/// name in `ll.field` and the inner op in `ll.inner` (carrying its
-/// own `field` already deduped against the label's fresh inner scope).
-/// `elem` is the matching surface `Label(lab)` with `lab.list == true`
-/// — consulted only by `sync_name_counts_for_label` to keep the
-/// outer scope's dedup counters consistent with surface emitters that
-/// still inspect `name_counts`.
+/// Emit `name+=elem` outside a Repeat: parse the inner op once. Lower
+/// stores the label name in `ll.field` and the inner op in `ll.inner`
+/// (carrying its own `field` already deduped against the label's fresh
+/// inner scope). `elem` is the matching surface `Label(lab)`, whose
+/// operand an inner group or list label walks.
 fn gen_op_list_label(
     w: &mut CodeWriter,
     ll: &ListLabelOp,

@@ -218,19 +218,11 @@ pub fn group_case_name(alt: &Alternative) -> String {
 }
 
 
-/// A token-only group: multiple alternatives, each with a single TokenRef or Literal.
-/// Example: (K_INSERT | K_REPLACE)
-pub fn is_token_only_group(alts: &List<Alternative>) -> bool {
-    if alts.len() < 2 {
-        return false;
-    }
+/// Whether each alternative is a single TokenRef or Literal, as in
+/// `(K_INSERT | K_REPLACE)`.
+fn is_token_only_group(alts: &List<Alternative>) -> bool {
     for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        if let TokenRef(_) | Literal(_) = alt.elements[0] {
-            // ok
-        } else {
+        if alt.elements.len() != 1 || !alt.elements[0] matches { TokenRef(_) | Literal(_) } {
             return false;
         }
     }

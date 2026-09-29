@@ -1309,20 +1309,14 @@ A : 'a' -> type ;";
     assert result matches { Err(_) }, "expected malformed type command to be rejected";
 }
 
-test "lexer command channel with HIDDEN" {
+test "lexer command channel with HIDDEN or DEFAULT_TOKEN_CHANNEL" {
     let input = "lexer grammar Test;
-WS : [ \\t]+ -> channel(HIDDEN) ;";
-    let g = parse(input).unwrap();
-    assert g.lexer_rules.len() == 1;
-    assert g.lexer_rules[0].channel == 1;
-    assert g.lexer_rules[0].skip == false;
-}
-
-test "lexer command channel with DEFAULT_TOKEN_CHANNEL" {
-    let input = "lexer grammar Test;
-A : 'a' -> channel(HIDDEN) ;
+WS : [ \\t]+ -> channel(HIDDEN) ;
 B : 'b' -> channel(DEFAULT_TOKEN_CHANNEL) ;";
     let g = parse(input).unwrap();
+    assert g.lexer_rules.len() == 2;
+    assert g.lexer_rules[0].channel == 1;
+    assert g.lexer_rules[0].skip == false;
     assert g.lexer_rules[1].channel == 0, `B channel ${g.lexer_rules[1].channel}`;
 }
 

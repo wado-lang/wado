@@ -73,7 +73,7 @@ test "collect_literal_tokens: literal inside Not — single token" {
     // ANTLR4 runtime-testsuite descriptor Sets/ParserNotToken.txt.
     // The literal `'x'` defines the *exclusion* token, so it still
     // needs an anonymous TK_LIT_x token in the lexer for the runtime
-    // `match_not([TK_LIT_x])` call to reference.
+    // `expect_not` call to reference.
     let g = parse_grammar("grammar T; a : ~'x' 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);

@@ -1,19 +1,14 @@
-//! The corpus tools' shell: which paths a run processes, and the baseline its
-//! count ratchets against. Files live under the gitignored `target/`, since
-//! `wado test` grants the working directory; each test empties its own first.
+//! The corpus tools' shell: which paths a run processes, where an offset falls,
+//! and the baseline its count ratchets against.
 
-use { collect_paths, ratchet } from "./corpus.wado";
+use { collect_paths, line_of, ratchet } from "./corpus.wado";
 use { Console } from "../tests/support/console.wado";
+use { scratch } from "../tests/support/scratch.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { TreeMap } from "core:collections";
 
-fn scratch<S: AsStrSlice>(case: S) -> String with Preopens {
-    let dir = `target/gale-corpus-test/${case}`;
-    fs::remove_dir_all(&dir).unwrap();
-    fs::create_dir_all(&dir).unwrap();
-    return dir;
-}
+global SUITE: String = "gale-corpus-test";
 
 global NOUN: String = "inline paths";
 global REMEDY: String = "Import them with `use`.";
@@ -27,7 +22,7 @@ fn counts(entries: List<[String, i32]>) -> TreeMap<String, i32> {
 }
 
 test "a --paths-from list gives one path per line, blank lines skipped" {
-    let dir = scratch("paths-from");
+    let dir = scratch(SUITE, "paths-from");
     let list = `${dir}/paths.txt`;
     let text: String = "src/a.rs\n\nsrc/with space.rs\n";
     fs::write(&list, &text).unwrap();
@@ -47,10 +42,8 @@ test "bare arguments with the extension are paths, and the caller's flags are no
     assert paths == ["a.rs", "b.rs"];
 }
 
-// An unreadable list must not leave a run that checked nothing looking clean,
-// so its own path goes on for the run to fail on.
 test "a list that cannot be read is reported and kept as a path" {
-    let dir = scratch("paths-from-missing");
+    let dir = scratch(SUITE, "paths-from-missing");
     let list = `${dir}/absent.txt`;
     let mut console = Console {};
     let paths = with &mut console do {
@@ -68,8 +61,16 @@ test "an argument that is neither a path nor a flag stops the run" {
     };
 }
 
+test "line_of counts the newlines before the offset" {
+    let source = "a\nbb\nccc";
+    assert line_of(&source, 0) == 1;
+    assert line_of(&source, 2) == 2;
+    assert line_of(&source, 5) == 3;
+    assert line_of(&source, source.len()) == 3;
+}
+
 fn baseline_with<S: AsStrSlice>(case: S, text: String) -> String with Preopens {
-    let path = `${scratch(case)}/baseline.json`;
+    let path = `${scratch(SUITE, case)}/baseline.json`;
     fs::write(&path, &text).unwrap();
     return path;
 }
@@ -127,7 +128,6 @@ test "an update records the counts as the new baseline" {
     assert fs::read_to_string(&baseline).unwrap() == "{\n  \"a.rs\": 1\n}\n";
 }
 
-// Recording a growth would license what the check is there to refuse.
 test "an update never records a file that grew" {
     let text: String = "{\"a.rs\": 2}";
     let baseline = baseline_with("ratchet-update-grown", text);
@@ -142,7 +142,7 @@ test "an update never records a file that grew" {
 }
 
 test "a missing baseline fails the run" {
-    let baseline = `${scratch("ratchet-missing")}/baseline.json`;
+    let baseline = `${scratch(SUITE, "ratchet-missing")}/baseline.json`;
     let mut console = Console {};
     let status = with &mut console do {
         ratchet(baseline, &counts([]), false, NOUN, REMEDY);
