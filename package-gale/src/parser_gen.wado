@@ -2162,9 +2162,9 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         return;
     }
     let guard = if non_greedy_exit_by_atn(re.non_greedy, re.kind, &loop_admits) {
-        atn_enters_cond(ctx, re.atn_decision, "tokens", "pos")
+        atn_enters_cond(ctx, re.atn_decision, "tokens", "pos");
     } else {
-        scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)
+        scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx);
     };
     w.begin(`while ${guard}`);
     gen_scan_iteration(w, re, &loop_admits, ctx, true);
@@ -4405,7 +4405,9 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx, true)}${lr_cont_forward(mid_operand_gated)})`;
+        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx, true)}${lr_cont_forward(
+            mid_operand_gated,
+        )})`;
     };
     let matched = prebound matches { Some(_) };
     let no_match = lr_suffix_no_match(may_match_empty);
@@ -5284,7 +5286,12 @@ fn gen_op_transparent_optional(
 
     // Non-greedy `??`: runtime ATN decision (see gen_op_storable_optional).
     if rep.non_greedy && ctx.needs_atn() {
-        gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos"));
+        gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &atn_enters_cond(
+            ctx,
+            rep_op.atn_decision,
+            "&p.kinds",
+            "p.pos",
+        ));
         return;
     }
 

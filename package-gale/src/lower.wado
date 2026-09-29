@@ -4401,11 +4401,16 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     reaches_rule_tail: bool,
     rule_name: S,
 ) -> RepeatExitStamps {
-    if non_greedy_exit_by_atn(non_greedy, kind, body_admits) {
+    let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
+    if by_atn {
         ctx.mark_needs_scan_atn();
     }
     return RepeatExitStamps {
-        probe: lower_continuation_probe(non_greedy, kind, alt_elements, index, ctx, reaches_rule_tail, rule_name),
+        probe: if by_atn {
+            ContinuationProbe {};
+        } else {
+            lower_continuation_probe(non_greedy, kind, alt_elements, index, ctx, reaches_rule_tail, rule_name);
+        },
         probe_contested: optional_probe_contested(
             non_greedy,
             kind,

@@ -1011,11 +1011,20 @@ the compiled fast path:**
 4. A **group whose nullable alternative competes** with another for the
    tokens that follow the group (see "A nullable alternative is admitted by
    what follows the group" above).
+5. A **non-greedy `*?` / `+?` over a body taking every token** (`.*?`,
+   `~X*?`). Such a body can match whatever the exit needs, so only the whole
+   rest of the input decides where it stops: in an LR suffix, a group or a
+   caller's continuation alike, the loop exits at the first position from
+   which the parse can finish. Both the parse and the scan ask the simulator
+   (`non_greedy_exit_by_atn`); the tests are in `codegen_test.wado`
+   (`LR_SUFFIX_LOOPS` and "a non-greedy wildcard exits only where the whole
+   rest of the input can match").
 
 Two more sites _would_ belong here on correctness grounds and are left out on
 cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
-(fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop no
-lookahead separates (`ll_non_greedy_plus_loop.g4`). A prediction per occurrence
+(fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
+narrower body that no lookahead separates (`ll_non_greedy_plus_loop.g4`,
+SQLite's `name+?`). A prediction per occurrence
 costs a full closure over the grammar, which took SQLite's DDL-heavy benchmark
 corpus from 2.6 ms to 402 ms per parse; neither gating it behind the ambiguous
 lookahead nor bounding the lookahead recovers that. The two are also coupled —
