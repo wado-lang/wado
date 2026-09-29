@@ -700,7 +700,8 @@ as [Format Traits](./spec-traits.md#format-traits) states.
   form.
 - A tuple renders `[a, b]`, each element in its `Display` form. A tuple has
   `Display` only when every element does.
-- A range renders `start..<end` or `start..=end`.
+- A range renders `start..<end` or `start..=end`, as written. A range has
+  `Display` only when its bound type does.
 - A closure renders as its `Inspect` form, so `${f}` writes the signature and
   `${f:#}` the source.
 

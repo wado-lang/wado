@@ -30,8 +30,8 @@ pack have a fixed position, so the pattern names at most those and ends in `..`.
 
 A string-literal pattern tests the scrutinee with `==` against a `String`, so
 any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
-newtype over either. A type parameter bounded by `AsStrSlice` matches as well,
-since `AsStrSlice` requires `Eq<String>`.
+newtype over either. A type parameter bounded by
+[`AsStrSlice`](./spec-standard-traits.md#asstrslice) matches as well.
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -79,10 +79,10 @@ let Some(y) = opt;
 A bare name in such a pattern, at its root or below it, is a case pattern when
 it names a case of the type it matches, and a binding otherwise. It never names
 a global: a constant pattern can always fail, so reading one here could only be
-rejected. So `let [None, n] = pair` tests its first element and is an error,
-since `None` may not match, while `let limit = 1` binds even where a
-`global limit` is in scope. The `shadowed_name` lint reports that global. A
-refutable pattern reads such a name differently
+rejected. So `let [None, n] = pair` tests its first element, and is an error
+since `None` may not match. `let limit = 1` binds even where a `global limit` is
+in scope, and [`shadowed_name`](./spec-expressions.md#the-shadowed_name-lint)
+warns. A refutable pattern reads such a name differently
 ([Constant Patterns](#constant-patterns)).
 
 An uninitialized `let x: T;` declares a single name, or `_`.

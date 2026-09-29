@@ -173,9 +173,6 @@ export fn run() {
 }
 ```
 
-A supertrait's method called through a bound is gated the same way: `T: Sub`
-reaches `Base`'s methods only where `Base` is imported.
-
 #### Candidates
 
 A call's candidates come from two places:
@@ -368,7 +365,9 @@ the same name when both take `self` or both do not. The trait's is reached as
 `Trait::method(recv, …)`.
 
 An associated function with no `self` has no receiver argument to bind `Self`
-from, so the trait-qualified form cannot name it.
+from, so the trait-qualified form cannot name it. A reflection trait is the
+exception: its one type argument is the subject
+([Trait-Qualified Calls](./spec-reflection.md#trait-qualified-calls)).
 
 Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md).
 

@@ -168,6 +168,8 @@ position listed:
 | `trap`    | `..trap` rest clause of an effect handler `impl`    |
 | `forward` | `..forward` rest clause of an effect handler `impl` |
 | `resume`  | `resume expr` in an effect handler                  |
+| `self`    | a method's receiver: `&self`, `self.field`          |
+| `Self`    | the implementing or declared type: `Self::Item`     |
 
 Elsewhere each is an ordinary identifier: a variable, field, parameter, or type
 name.

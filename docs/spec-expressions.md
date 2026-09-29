@@ -183,10 +183,10 @@ test {
 }
 ```
 
-A bare name that a pattern reads as a case or a constant binds nothing, so the
-lint skips it. [Patterns](./spec-patterns.md#patterns-that-cannot-fail) says
-which reading a name takes. In a `let` or `for` binding a name reaching a
-`global` binds, so the lint reports it.
+As for redeclaration, only a name that binds counts.
+[Patterns](./spec-patterns.md#patterns-that-cannot-fail) says which reading a
+bare name takes. In a `let` or `for` binding a name reaching a `global` binds,
+so the lint reports it.
 
 The derivation is read off the binder's own source, not off the `let` keyword,
 and holds at any scope. `let x = x + 1` under an `if`, `if let Some(x) = x` and
@@ -679,8 +679,8 @@ range of `i32` used as an index gives a `Slice<T>`
   for `..=`.
 - `r.is_empty()` is whether no value does.
 - `r1 == r2` compares the bounds.
-- `` `${r}` `` renders the range as written, `0..<10` or `1..=5`, where `T`
-  implements `Display`.
+- `` `${r}` `` renders the range as
+  [Display Output](./spec-literals.md#display-output) states.
 
 ### Range Iteration
 

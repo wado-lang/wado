@@ -478,7 +478,15 @@ test {
 
 ### Auto-Derivation
 
-`Default` is derived for a non-generic struct whose every field declares a default expression (`f: T = expr`; see [Struct Field Defaults](./spec-types.md#struct-field-defaults)). A fieldless struct qualifies, having exactly one value. This is what lets a marker like `NoFields` serve as a type parameter's default. A generic struct derives no `Default`, since a default expression is checked against the declaration and not against an instantiation, so it needs a written impl. [Derivation Policy](./spec-traits.md#derivation-policy) says where the impl is derived, and that a written one wins.
+`Default` is derived for a non-generic struct whose every field declares a
+default expression (`f: T = expr`; see
+[Struct Field Defaults](./spec-types.md#struct-field-defaults)). A fieldless
+struct qualifies, since it has exactly one value, so a marker like `NoFields`
+can serve as a type parameter's default. A generic struct derives no `Default`:
+a default expression is checked against the declaration, not against an
+instantiation, so the struct needs a written impl.
+[Derivation Policy](./spec-traits.md#derivation-policy) says where the impl is
+derived, and that a written one wins.
 
 <!-- {"fixture":"spec_traits_default_derive.wado"} -->
 

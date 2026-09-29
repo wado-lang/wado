@@ -3,8 +3,7 @@
 Reflection lets library code read a type's name and structure. The compiler
 describes each type through a family of sealed traits, and a library derives a
 trait from that description with an ordinary generic `impl`. Every answer is
-resolved at compile time. Nothing is looked up at run time, and a walk over a
-type's members is unrolled into one block per member.
+resolved at compile time, and nothing is looked up at run time.
 
 ## The `Reflect` Family
 
@@ -191,9 +190,8 @@ types are the prelude structs `StructField<T, F>`, `VariantCase<T, P>`,
 
 `members()` on a concrete subject is an ordinary tuple, so its elements are
 reached as `.0`, `.1`, and so on. A walk over it is a
-[tuple `for-of`](./spec-control-flow.md#tuple-for-of-compile-time-expansion).
-The loop body is expanded once per member, and each expansion binds the handle
-at that member's own type.
+[tuple `for-of`](./spec-control-flow.md#tuple-for-of-compile-time-expansion), so
+the body runs once per member and sees each handle at that member's own type.
 
 ### The `Member` Trait
 

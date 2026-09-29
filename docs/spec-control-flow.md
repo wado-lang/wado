@@ -232,13 +232,14 @@ The binding is a copy of each element
 ([Value Semantics](./spec-memory.md#value-semantics)), so changing it does not
 change the collection. `for let x of &xs` and `for let x of &mut xs` bind
 references instead, as
-[iteration by reference](./spec-standard-traits.md#value-semantics) states. Each iteration binds it anew, so a closure
-or a reference taken in one iteration keeps that iteration's element.
+[iteration by reference](./spec-standard-traits.md#value-semantics) states.
+Each iteration binds it anew, so a closure or a reference taken in one iteration
+keeps that iteration's element.
 
 The binding must match every element, as a `let` pattern must (see
-[Patterns That Cannot Fail](./spec-patterns.md#patterns-that-cannot-fail)). A pattern that can
-fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error.
-Match on the element in the body instead.
+[Patterns That Cannot Fail](./spec-patterns.md#patterns-that-cannot-fail)). A
+pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a
+compile error. Match on the element in the body instead.
 
 ### Tuple for-of (compile-time expansion)
 
@@ -258,8 +259,12 @@ assert out == "42 hello true ";
 ```
 
 `break` and `continue` are errors inside a tuple for-of body, since the runs are
-not iterations of one loop. `.enumerate()` binds a compile-time index beside the
-element.
+not iterations of one loop.
+
+`.enumerate()` binds the index beside the element:
+`for let [i, v] of t.enumerate()`. The index is a compile-time constant, so it
+is the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and
+writes alike. A `mut` index can change, so it is not a subscript.
 
 ### Tuple comprehension
 
@@ -281,7 +286,8 @@ test {
 }
 ```
 
-The `.enumerate()` form binds the index alongside the value (`[for let [i, v] of t.enumerate() { ... }]`). The index is a compile-time constant, so it is also the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and writes alike. A `mut` index can change, so it is not a subscript.
+The `.enumerate()` form works here too:
+`[for let [i, v] of t.enumerate() { ... }]`.
 
 The source must be a variadic tuple (`[..T]`). A concrete tuple cannot be
 walked this way.
@@ -360,8 +366,9 @@ a struct literal. An unlabeled `{ ... }` block is a parse error.
 
 `break LABEL` inside a loop nest leaves all of it at once, and the block's tail
 is the path no `break` took. Inside a block, `break LABEL` skips the rest, so a
-chain of guards stays flat instead of nesting one inside the next. A `break` may also leave an effect handler's `do` block
-(see [Handler Scope](./spec-effects.md#handler-scope)).
+chain of guards stays flat instead of nesting one inside the next. A `break`
+may also leave an effect handler's `do` block (see
+[Handler Scope](./spec-effects.md#handler-scope)).
 
 <!-- {"fixture":"spec_control_flow_labeled_blocks.wado"} -->
 
@@ -615,7 +622,7 @@ test "assert panics when the condition is false" {
 }
 ```
 
-A trap cannot be caught in Wado. It ends the program.
+A trap cannot be caught in Wado.
 
 ### Recoverable Errors (Result Type)
 

@@ -7,15 +7,18 @@ flags, and how type arguments are inferred. Traits over these types are in
 
 ## Prelude Types
 
-These types come from the [prelude](./spec-modules.md#the-prelude), so they need
-no `use`:
+These types, among others, come from the
+[prelude](./spec-modules.md#the-prelude), so they need no `use`:
 
-- `String`, UTF-8 text.
-- `List<T>`, a growable sequence.
+- `String`, UTF-8 text, and `StrSlice`, a view of part of one.
+- `List<T>`, a growable sequence, and `Array<T>` and `Slice<T>`, the rest of
+  [the sequence family](#the-sequence-family).
 - `Option<T>` with its cases `Some(x)` and `None`, which `null` also denotes.
 - `Result<T, E>` with its cases `Ok(x)` and `Err(e)`.
 - `Stream<T>` and `Future<T>`, the Component Model's async stream and future.
 - `i128` and `u128`, the 128-bit integers.
+
+[`core:prelude`](./stdlib-core-prelude.md) lists them all.
 
 ## Primitive Types
 
@@ -877,9 +880,9 @@ A literal's field values are evaluated once each, in the order the source
 writes them, not the order the struct declares them.
 `P { y: f(), x: g() }` calls `f` before `g`.
 
-Functional update (`..base`): a leading `..base` fills every field the literal
-does not list explicitly from the struct value `base` (same type). The listed
-fields override; `base` is evaluated once and left unchanged (value semantics).
+A leading `..base` is a functional update. It fills every field the literal
+does not list from the struct value `base`. The listed fields override it, and
+`base` itself is left unchanged.
 
 <!-- {"fixture":"spec_types_structs.wado"} -->
 
@@ -1483,8 +1486,8 @@ A derived `Eq` or `Ord` compares by the type's shape:
   declaration order.
 - An enum compares its case. `Ord` follows declaration order.
 - A flags type compares its raw bits.
-- A variant compares for equality only: two values are equal when they are the
-  same case and their payloads, if any, are equal.
+- Two values of a variant are equal when they are the same case and their
+  payloads, if any, are equal.
 
 When a derived impl exists, which instantiations of a generic type it covers,
 and how a written impl overrides it are stated in
