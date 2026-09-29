@@ -569,7 +569,7 @@ export async fn run() with Stdout {
 `test` is a synthetic world. `wado test` compiles each file for it and runs the
 file's `test` blocks. The world exports those blocks and nothing else, so a
 file needs no entry point to be tested. A file that has one keeps it as an
-ordinary function. [Assertions and Testing](./spec-testing.md) holds the rules
+ordinary function. [Testing](./spec-testing.md) holds the rules
 for `test` blocks.
 
 <!-- {"fixture":"spec_worlds_test.wado"} -->

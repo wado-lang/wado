@@ -21,6 +21,7 @@
 - [Types](./spec-types.md)
 - [Patterns](./spec-patterns.md)
 - [Control Flow](./spec-control-flow.md)
+- [Assertions](./spec-assertions.md)
 - [Functions](./spec-functions.md)
 - [Memory Model](./spec-memory.md)
 - [Traits](./spec-traits.md)
@@ -34,7 +35,7 @@
 - [Components](./spec-components.md)
 - [Serialization](./spec-serialization.md)
 - [Compiler Attributes](./spec-attributes.md)
-- [Assertions and Testing](./spec-testing.md)
+- [Testing](./spec-testing.md)
 
 ## Wado Evolution Proposals
 

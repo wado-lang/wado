@@ -845,7 +845,7 @@ return slow_path(key);
 
 ## Assert
 
-`assert` behaves like power-assert.
+`assert` behaves like power-assert, in a test or in ordinary code. See [the spec](./spec-assertions.md).
 
 ```wado
 assert x > 0;

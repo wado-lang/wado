@@ -1,58 +1,10 @@
-# Assertions and Testing
-
-`assert` checks a condition while a program runs, and a `test` block declares a
-test. This chapter covers both, how a test's outcome is judged, and how
-`wado test` finds the files to run.
-
-## The `assert` Statement
-
-`assert` checks that a condition is true. If it is false, the program panics
-with a message showing the condition's source and the values of its operands,
-as power-assert does.
-
-<!-- {"fixture":"spec_testing_assert.wado"} -->
-
-```wado
-// If x is not greater than 0, the program will panic, printing x.
-assert x > 0;
-
-// Also assert can take an optional message.
-assert x > 0, "x must be checked elsewhere";
-```
-
-`assert` evaluates its condition exactly as the surrounding code would, so a
-guarded operand never runs when its guard fails. An operand the run did not
-reach is reported as `<not evaluated>`.
-
-<!-- {"fixture":"spec_testing_power_assert.wado"} -->
-
-```wado
-let list: List<i32> = [1, 2, 3];
-let i = 99;
-assert i < list.len() && list[i] == 1;
-// condition: i < list.len() && list[i] == 1
-// i: 99
-// list: [1, 2, 3]
-// list.len(): 3
-// i < list.len(): false
-// i: <not evaluated>
-// list[i]: <not evaluated>
-// list[i] == 1: <not evaluated>
-```
-
-Each captured operand is rendered with `Inspect` (`:?`), so a long `String` or
-`List` operand is cut at `Inspect`'s default length and marked where it was cut
-(see [Inspect Truncation](./spec-literals.md#inspect-truncation)). This keeps a
-failure readable. The optional message is an ordinary expression, formatted by
-whatever template specifiers it uses. `Display` is never cut, so formatting a
-value into the message yourself shows all of it.
-
-## Testing
+# Testing
 
 Tests are first-class syntax: a `test` block declares one, and `wado test`
-finds and runs them. The runner's flags are described by `wado test --help`.
+finds and runs them. The runner's flags are described by `wado test --help`. A
+test checks its results with [`assert`](./spec-assertions.md).
 
-### Test Declaration Syntax
+## Test Declaration Syntax
 
 Tests are declared using the `test` keyword followed by an optional name and a block:
 
@@ -104,7 +56,7 @@ test {
 }
 ```
 
-#### Syntax Rules
+### Syntax Rules
 
 - `test` is a contextual keyword (functions named `test` are still allowed)
 - Test name is an optional string literal
@@ -112,9 +64,9 @@ test {
 - A test declares no return type and no effects, and may perform any effect
 - Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, [`#[synopsis]`](./spec-attributes.md#synopsis)) may appear before the `test` keyword
 
-### Test Semantics
+## Test Semantics
 
-#### Execution
+### Execution
 
 - Each test runs in isolation with fresh state: every global starts from its initializer
 - Tests are independent, so they may run in any order, and concurrently
@@ -123,7 +75,7 @@ test {
 - [`core:eval`](./stdlib-core-eval.md) belongs to the `test` world too. A program for any other world that reaches it does not compile
 - Only the test blocks of the file being tested run. A test block in a module it imports is compiled but not run, so each test runs once, from the file that declares it
 
-#### `#[expect_trap]` Attribute
+### `#[expect_trap]` Attribute
 
 The `#[expect_trap]` attribute inverts a test's pass/fail condition: the test
 passes only if its body traps, by a `panic`, an `unreachable`, a failed `assert`
@@ -139,7 +91,7 @@ test "panics on null dereference" {
 }
 ```
 
-#### `#[TODO]` Attribute
+### `#[TODO]` Attribute
 
 The `#[TODO]` attribute marks a test for a feature not yet implemented. Its
 outcome is reported on a separate axis from pass and fail
@@ -154,7 +106,7 @@ test "not yet implemented feature" {
 }
 ```
 
-#### `#[timeout_ms(N)]` Attribute
+### `#[timeout_ms(N)]` Attribute
 
 The `#[timeout_ms(N)]` attribute overrides the default test timeout of 5000ms
 for one test. `N` is an integer literal, in milliseconds. A test that runs
@@ -171,11 +123,11 @@ test "large data processing" {
 }
 ```
 
-### Test Outcome Model
+## Test Outcome Model
 
 Test results are classified into two independent axes: the pass/fail axis for regular tests, and the TODO axis for tests marked with `#[TODO]`.
 
-#### Regular Tests
+### Regular Tests
 
 | Condition                                               | Outcome |
 | ------------------------------------------------------- | ------- |
@@ -184,7 +136,7 @@ Test results are classified into two independent axes: the pass/fail axis for re
 | Body traps and `#[expect_trap]` is present              | pass    |
 | Body completes normally and `#[expect_trap]` is present | fail    |
 
-#### TODO Tests
+### TODO Tests
 
 Tests marked with `#[TODO]` are reported separately from regular tests. They do not contribute to the pass or fail count.
 
@@ -199,7 +151,7 @@ A pending TODO test never causes a failure. So fixing a compiler bug cannot
 raise the failure count: a TODO test the fix makes pass shows as resolved on the
 TODO axis, not as a failure on the pass/fail axis.
 
-#### `#![TODO]` Modules
+### `#![TODO]` Modules
 
 The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 
@@ -207,14 +159,14 @@ The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 - If the module compiles successfully, each test block is implicitly treated as `#[TODO]`.
 - If the module compiles and all tests pass (i.e., the feature is implemented), it is reported as resolved, which fails the run.
 
-#### Run Result
+### Run Result
 
 A run reports a third axis beside the two above: compile (passed / failed),
 over every [discovered](#test-discovery) file. It exits non-zero when any test
 fails, any TODO test is resolved, or any file fails to compile other than a
 `#![TODO]` module, which counts as a pending TODO instead.
 
-### Test Discovery
+## Test Discovery
 
 `wado test` with no path argument walks the current directory for `*.wado`
 files. It skips:
@@ -240,7 +192,7 @@ file compiles under the `test` world, where an entry point written for another
 world still type-checks, and a file with no `test` block is compiled and not
 run.
 
-#### `[test]` in `wado.toml`
+### `[test]` in `wado.toml`
 
 ```toml
 [test]
@@ -257,7 +209,7 @@ discovered. While `include` has any pattern, the walk still enters an excluded
 directory to look for one, but a `wado.toml` inside an excluded directory does
 not start a run of its own.
 
-#### Path Arguments
+### Path Arguments
 
 A path argument replaces the walk of the current directory. The files the
 arguments name are reported as one run, whichever packages they belong to.
@@ -269,7 +221,7 @@ arguments name are reported as one run, whichever packages they belong to.
 - A file argument is tested as given. `[test].exclude` and `[test].include` do
   not apply to it.
 
-#### File Naming
+### File Naming
 
 `*_test.wado` is the recommended name for a file that contains only tests. The
 suffix is not required: any file with `test` blocks contributes its tests.
@@ -293,7 +245,7 @@ tests/
 
 Rationale: [WEP: Test Discovery](./wep-2026-05-02-test-discovery.md).
 
-### Coverage
+## Coverage
 
 `wado test --coverage` reports which code the tests ran, and changes no test
 outcome.
@@ -332,7 +284,7 @@ exactly those FILE lists. `--coverage=baseline` writes such a file.
 
 Rationale: [WEP: Test Coverage](./wep-2026-09-28-test-coverage.md).
 
-### Example Test File
+## Example Test File
 
 <!-- {"fixture":"spec_testing_math_test.wado"} -->
 
