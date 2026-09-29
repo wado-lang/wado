@@ -13,52 +13,39 @@ global SUITE: String = "gale-corpus-test";
 global NOUN: String = "inline paths";
 global REMEDY: String = "Import them with `use`.";
 
-fn counts(entries: List<[String, i32]>) -> TreeMap<String, i32> {
-    let mut map = TreeMap::<String, i32>::new();
-    for let [path, n] of entries {
-        map[path] = n;
-    }
-    return map;
+/// The `.rs` paths `argv` names, and what `collect_paths` printed.
+fn collect(argv: List<String>, flags: List<String>) -> [List<String>, Console] with Preopens {
+    let mut console = Console {};
+    let paths = with &mut console do {
+        collect_paths(&argv, ".rs", flags);
+    };
+    return [paths, console];
 }
 
 test "a --paths-from list gives one path per line, blank lines skipped" {
-    let dir = scratch(SUITE, "paths-from");
-    let list = `${dir}/paths.txt`;
+    let list = `${scratch(SUITE, "paths-from")}/paths.txt`;
     let text: String = "src/a.rs\n\nsrc/with space.rs\n";
     fs::write(&list, &text).unwrap();
-    let mut console = Console {};
-    let paths = with &mut console do {
-        collect_paths(&["--paths-from", list], ".rs", []);
-    };
+    let [paths, console] = collect(["--paths-from", list], []);
     assert paths == ["src/a.rs", "src/with space.rs"];
     assert console.stderr() == "";
 }
 
 test "bare arguments with the extension are paths, and the caller's flags are not" {
-    let mut console = Console {};
-    let paths = with &mut console do {
-        collect_paths(&["a.rs", "--update", "b.rs"], ".rs", ["--update"]);
-    };
+    let [paths, _] = collect(["a.rs", "--update", "b.rs"], ["--update"]);
     assert paths == ["a.rs", "b.rs"];
 }
 
 test "a list that cannot be read is reported and kept as a path" {
-    let dir = scratch(SUITE, "paths-from-missing");
-    let list = `${dir}/absent.txt`;
-    let mut console = Console {};
-    let paths = with &mut console do {
-        collect_paths(&["--paths-from", list], ".rs", []);
-    };
+    let list = `${scratch(SUITE, "paths-from-missing")}/absent.txt`;
+    let [paths, console] = collect(["--paths-from", list], []);
     assert paths == [list];
     assert console.stderr() == `error: ${list}: no such file or directory\n`;
 }
 
 #[expect_trap]
 test "an argument that is neither a path nor a flag stops the run" {
-    let mut console = Console {};
-    with &mut console do {
-        collect_paths(&["--verbose"], ".rs", []);
-    };
+    collect(["--verbose"], []);
 }
 
 test "line_of counts the newlines before the offset" {
@@ -75,15 +62,18 @@ fn baseline_with<S: AsStrSlice>(case: S, text: String) -> String with Preopens {
     return path;
 }
 
-test "counts that match the baseline pass" {
-    let baseline = baseline_with("ratchet-equal", "{\"a.rs\": 2, \"b.rs\": 1}");
+/// `ratchet`'s exit status on `counts`, and what it printed.
+fn ratchet_run(baseline: &String, counts: TreeMap<String, i32>, update: bool) -> [i32, Console] with Preopens {
     let mut console = Console {};
     let status = with &mut console do {
-        ratchet(baseline, &counts([
-            ["a.rs", 2],
-            ["b.rs", 1],
-        ]), false, NOUN, REMEDY);
+        ratchet(*baseline, &counts, update, NOUN, REMEDY);
     };
+    return [status, console];
+}
+
+test "counts that match the baseline pass" {
+    let baseline = baseline_with("ratchet-equal", "{\"a.rs\": 2, \"b.rs\": 1}");
+    let [status, console] = ratchet_run(&baseline, { "a.rs": 2, "b.rs": 1 }, false);
     assert status == 0;
     assert console.stdout() == "ok: no file gained inline paths (3 left)\n";
     assert console.stderr() == "";
@@ -91,25 +81,14 @@ test "counts that match the baseline pass" {
 
 test "counts below the baseline pass and ask for an update" {
     let baseline = baseline_with("ratchet-shrunk", "{\"a.rs\": 2, \"b.rs\": 1}");
-    let mut console = Console {};
-    let status = with &mut console do {
-        ratchet(baseline, &counts([
-            ["a.rs", 1],
-        ]), false, NOUN, REMEDY);
-    };
+    let [status, console] = ratchet_run(&baseline, { "a.rs": 1 }, false);
     assert status == 0;
     assert console.stdout() == "ok: no file gained inline paths (1 left, 2 fewer than the baseline — run --update)\n";
 }
 
 test "a file that grew fails, naming each file with its old and new count" {
     let baseline = baseline_with("ratchet-grown", "{\"a.rs\": 2}");
-    let mut console = Console {};
-    let status = with &mut console do {
-        ratchet(baseline, &counts([
-            ["a.rs", 3],
-            ["new.rs", 1],
-        ]), false, NOUN, REMEDY);
-    };
+    let [status, console] = ratchet_run(&baseline, { "a.rs": 3, "new.rs": 1 }, false);
     assert status == 1;
     assert console.stdout() == "";
     assert console.stderr() == "error: inline paths added:\n  a.rs: 2 -> 3\n  new.rs: 0 -> 1\n\nImport them with `use`.\n";
@@ -117,12 +96,7 @@ test "a file that grew fails, naming each file with its old and new count" {
 
 test "an update records the counts as the new baseline" {
     let baseline = baseline_with("ratchet-update", "{\"a.rs\": 2, \"b.rs\": 1}");
-    let mut console = Console {};
-    let status = with &mut console do {
-        ratchet(baseline, &counts([
-            ["a.rs", 1],
-        ]), true, NOUN, REMEDY);
-    };
+    let [status, console] = ratchet_run(&baseline, { "a.rs": 1 }, true);
     assert status == 0;
     assert console.stdout() == "baseline: 1 inline paths in 1 files\n";
     assert fs::read_to_string(&baseline).unwrap() == "{\n  \"a.rs\": 1\n}\n";
@@ -131,32 +105,21 @@ test "an update records the counts as the new baseline" {
 test "an update never records a file that grew" {
     let text: String = "{\"a.rs\": 2}";
     let baseline = baseline_with("ratchet-update-grown", text);
-    let mut console = Console {};
-    let status = with &mut console do {
-        ratchet(baseline, &counts([
-            ["a.rs", 3],
-        ]), true, NOUN, REMEDY);
-    };
+    let [status, _] = ratchet_run(&baseline, { "a.rs": 3 }, true);
     assert status == 1;
     assert fs::read_to_string(&baseline).unwrap() == text;
 }
 
 test "a missing baseline fails the run" {
     let baseline = `${scratch(SUITE, "ratchet-missing")}/baseline.json`;
-    let mut console = Console {};
-    let status = with &mut console do {
-        ratchet(baseline, &counts([]), false, NOUN, REMEDY);
-    };
+    let [status, console] = ratchet_run(&baseline, {}, false);
     assert status == 1;
     assert console.stderr() == `error: ${baseline}: no such file or directory\n`;
 }
 
 test "a baseline that is not a JSON object of counts fails the run" {
     let baseline = baseline_with("ratchet-malformed", "[1, 2]");
-    let mut console = Console {};
-    let status = with &mut console do {
-        ratchet(baseline, &counts([]), false, NOUN, REMEDY);
-    };
+    let [status, console] = ratchet_run(&baseline, {}, false);
     assert status == 1;
     assert console.stderr().starts_with(`error: ${baseline}: `), console.stderr();
 }

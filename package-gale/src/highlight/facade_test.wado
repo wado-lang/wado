@@ -7,6 +7,7 @@ use { Console } from "../../tests/support/console.wado";
 use { scratch } from "../../tests/support/scratch.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
 
 global SUITE: String = "gale-facade-test";
 
@@ -19,6 +20,15 @@ fn bold(source: &String) -> String {
     return `<b>${*source}</b>`;
 }
 
+/// What `run_cli` printed and logged, rendering with `bold`.
+fn highlight_cli(args: List<String>) -> Console with (Preopens, MonotonicClock) {
+    let mut console = Console {};
+    with &mut console do {
+        run_cli(bold, args);
+    };
+    return console;
+}
+
 test "each input is rendered to its own path under the output directory" {
     let dir = scratch(SUITE, "render");
     let first = `${dir}/src/a.txt`;
@@ -26,10 +36,7 @@ test "each input is rendered to its own path under the output directory" {
     write_input(&first, "one");
     write_input(&second, "two");
     let out = `${dir}/out`;
-    let mut console = Console {};
-    with &mut console do {
-        run_cli(bold, ["--output-dir", out, first, second]);
-    };
+    let console = highlight_cli(["--output-dir", out, first, second]);
     assert fs::read_to_string(`${out}/${first}.html`).unwrap() == "<b>one</b>";
     assert fs::read_to_string(`${out}/${second}.html`).unwrap() == "<b>two</b>";
     assert console.stderr() == "";
@@ -41,10 +48,7 @@ test "an input that cannot be read is logged, and the rest still render" {
     let present = `${dir}/present.txt`;
     write_input(&present, "here");
     let out = `${dir}/out`;
-    let mut console = Console {};
-    with &mut console do {
-        run_cli(bold, ["--output-dir", out, `${dir}/absent.txt`, present]);
-    };
+    let console = highlight_cli(["--output-dir", out, `${dir}/absent.txt`, present]);
     assert console.events == ["Error: cannot read input"];
     assert !fs::exists(`${out}/${dir}/absent.txt.html`);
     assert fs::read_to_string(`${out}/${present}.html`).unwrap() == "<b>here</b>";
@@ -56,10 +60,7 @@ test "an output directory that cannot be created is logged" {
     write_input(&input, "text");
     let out = `${dir}/out`;
     write_input(&out, "a file where the output directory would go");
-    let mut console = Console {};
-    with &mut console do {
-        run_cli(bold, ["--output-dir", out, input]);
-    };
+    let console = highlight_cli(["--output-dir", out, input]);
     assert console.events == ["Error: cannot create output directory"];
 }
 
@@ -69,25 +70,16 @@ test "an output that cannot be written is logged" {
     write_input(&input, "text");
     let out = `${dir}/out`;
     fs::create_dir_all(`${out}/${input}.html`).unwrap();
-    let mut console = Console {};
-    with &mut console do {
-        run_cli(bold, ["--output-dir", out, input]);
-    };
+    let console = highlight_cli(["--output-dir", out, input]);
     assert console.events == ["Error: cannot write output"];
 }
 
 test "no input files is an error" {
-    let mut console = Console {};
-    with &mut console do {
-        run_cli(bold, ["--output-dir", "out"]);
-    };
+    let console = highlight_cli(["--output-dir", "out"]);
     assert console.stderr() == "error: no input files given\n";
 }
 
 test "arguments that do not parse are reported with the usage" {
-    let mut console = Console {};
-    with &mut console do {
-        run_cli(bold, ["in.txt"]);
-    };
+    let console = highlight_cli(["in.txt"]);
     assert console.stderr() == "error: missing field: output_dir\nusage: <cmd> --output-dir <dir> <input> ...\n";
 }
