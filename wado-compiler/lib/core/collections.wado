@@ -127,7 +127,7 @@ impl<K: Ord, V> TreeMap<K, V> {
                     if self.nodes[rr_idx].level == self.nodes[n_idx].level {
                         self.nodes[n_idx].right = self.nodes[right_idx].left;
                         self.nodes[right_idx].left = Option::Some(n_idx);
-                        self.nodes[right_idx].level = self.nodes[right_idx].level + 1;
+                        self.nodes[right_idx].level += 1;
                         return Option::Some(right_idx);
                     }
                 }
@@ -206,7 +206,7 @@ impl<K: Ord, V> TreeMap<K, V> {
             deleted: false,
         });
         self.root = self.insert_node(self.root, key, new_index);
-        self.size = self.size + 1;
+        self.size += 1;
     }
 
     /// The implementation behind `map[key] = value`; the public API is index
@@ -267,8 +267,8 @@ impl<K: Ord, V> TreeMap<K, V> {
 
         // Mark entry as deleted
         self.entries[index].deleted = true;
-        self.deleted_count = self.deleted_count + 1;
-        self.size = self.size - 1;
+        self.deleted_count += 1;
+        self.size -= 1;
 
         // Compact if too many deleted entries
         if self.deleted_count > self.size && self.deleted_count > 4 {

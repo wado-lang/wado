@@ -122,7 +122,7 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext, named: &Tre
         for let depth_set of &entry.mask {
             let id = intern_position_set(&mut sets, depth_set) + 1;
             assert id <= FOLLOW_MAX_POSITION_ID, `follow mask ${entry.id}: position set id ${id} exceeds the ${FOLLOW_MAX_POSITION_ID} a packed continuation slot holds`;
-            packed = packed | id as i64 << (slot * FOLLOW_SLOT_BITS) as i64;
+            packed |= id as i64 << (slot * FOLLOW_SLOT_BITS) as i64;
             slot += 1;
         }
         assert slot <= FOLLOW_CONT_SLOTS, `follow mask ${entry.id}: ${slot} positions exceed the ${FOLLOW_CONT_SLOTS} a packed continuation holds`;
@@ -149,7 +149,7 @@ pub fn kind_bitset_words(set: &List<i32>) -> List<String> {
         while words.len() <= w {
             words.push(0);
         }
-        words[w] = words[w] | 1 << (*kind & 31);
+        words[w] |= 1 << (*kind & 31);
     }
     let mut out: List<String> = [];
     for let word of &words {

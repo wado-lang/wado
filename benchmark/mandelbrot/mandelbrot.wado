@@ -28,7 +28,7 @@ fn mandelbrot_iterations(cx: f64, cy: f64, max_iter: i32) -> i32 {
         let xy = x * y;
         x = x2 - y2 + cx;
         y = 2.0 * xy + cy;
-        iter = iter + 1;
+        iter += 1;
     }
 
     return max_iter;
@@ -52,10 +52,10 @@ fn mandelbrot_total(width: i32, height: i32, max_iter: i32) -> i32 {
         let mut px = 0;
         while px < width {
             let cx = x_min + px as f64 * dx;
-            total = total + mandelbrot_iterations(cx, cy, max_iter);
-            px = px + 1;
+            total += mandelbrot_iterations(cx, cy, max_iter);
+            px += 1;
         }
-        py = py + 1;
+        py += 1;
     }
     return total;
 }

@@ -189,8 +189,8 @@ pub fn mul_pow10(p: i32) -> PmHiLo {
     let mut q = p / K;
     let mut r = p % K;
     if r < 0 {
-        q = q - 1;
-        r = r + K;
+        q -= 1;
+        r += K;
     }
 
     let at = (q - Q_MIN) * 3;
@@ -220,9 +220,9 @@ pub fn mul_pow10(p: i32) -> PmHiLo {
     // Round the top 128 bits up where anything below them is set.
     let mut top_hi = w3;
     if below != 0 {
-        top_lo = top_lo + 1;
+        top_lo += 1;
         if top_lo == 0 {
-            top_hi = top_hi + 1;
+            top_hi += 1;
         }
     }
 
@@ -260,7 +260,7 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
         let [_, mid2_i64] = builtin::i64_mul_wide_u(x as i64, pm_lo as i64);
         let mid2 = mid2_i64 as u64;
         sticky = (mid - mid2 > 1) as u64;
-        hi = hi - (mid < mid2) as u64;
+        hi -= (mid < mid2) as u64;
     }
 
     return hi >> s as u64 | sticky;
@@ -512,7 +512,7 @@ pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
     let d1 = rotate_right(u64_mul(xv, inv5), 1);
     if d1 <= thresh_10 {
         xv = d1;
-        pv = pv + 1;
+        pv += 1;
     } else {
         return [xv, pv];
     }
@@ -520,25 +520,25 @@ pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
     let d8 = rotate_right(u64_mul(xv, inv5p8), 8);
     if d8 <= thresh_1e8 {
         xv = d8;
-        pv = pv + 8;
+        pv += 8;
     }
 
     let d4 = rotate_right(u64_mul(xv, inv5p4), 4);
     if d4 <= thresh_10000 {
         xv = d4;
-        pv = pv + 4;
+        pv += 4;
     }
 
     let d2 = rotate_right(u64_mul(xv, inv5p2), 2);
     if d2 <= thresh_100 {
         xv = d2;
-        pv = pv + 2;
+        pv += 2;
     }
 
     let d1b = rotate_right(u64_mul(xv, inv5), 1);
     if d1b <= thresh_10 {
         xv = d1b;
-        pv = pv + 1;
+        pv += 1;
     }
 
     return [xv, pv];
@@ -569,8 +569,8 @@ fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
     let mut idx = offset + nd - 1;
     while idx >= offset {
         buf.set_byte_unchecked(idx, b'0' + (v % 10) as u8);
-        v = v / 10;
-        idx = idx - 1;
+        v /= 10;
+        idx -= 1;
     }
 }
 
@@ -709,8 +709,8 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         let mut trim_d = d;
         let mut skip = nd - digits_to_output;
         while skip > 0 {
-            trim_d = trim_d / 10;
-            skip = skip - 1;
+            trim_d /= 10;
+            skip -= 1;
         }
         write_digits_at(buf, frac + leading_zeros, trim_d, digits_to_output);
         zeros_at(buf, frac + leading_zeros + digits_to_output, remaining_prec - digits_to_output);
@@ -730,8 +730,8 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             let mut trim_d = d;
             let mut skip = nd - output_nd;
             while skip > 0 {
-                trim_d = trim_d / 10;
-                skip = skip - 1;
+                trim_d /= 10;
+                skip -= 1;
             }
             let start = reserve_uninit(buf, output_nd + 1);
             write_digits_at(buf, start, trim_d, output_nd);
@@ -774,8 +774,8 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         let mut trim_d = d;
         let mut skip = nd - digit_count;
         while skip > 0 {
-            trim_d = trim_d / 10;
-            skip = skip - 1;
+            trim_d /= 10;
+            skip -= 1;
         }
         write_digits_at(buf, start, trim_d, digit_count);
         let raw = buf.internal_raw_bytes_mut();
@@ -787,8 +787,8 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         let mut first_d = d;
         let mut skip = nd - 1;
         while skip > 0 {
-            first_d = first_d / 10;
-            skip = skip - 1;
+            first_d /= 10;
+            skip -= 1;
         }
         write_digits_at(buf, start, first_d, 1);
     }
@@ -928,7 +928,7 @@ pub fn parse_bits(d: u64, p: i32, format: &BinaryFormat) -> u64 {
     let unmin = (1 as u64 << (precision + 2) as u64) - 2;
     let shift = (u >= unmin) as u64;
     u = u >> shift | u & 1;
-    e = e - shift as i32;
+    e -= shift as i32;
 
     let m = unrounded_round(u);
     let hidden = 1 as u64 << format.fraction_bits();

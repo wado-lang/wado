@@ -163,7 +163,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Arbitrary for L {
         let mut raw: u64 = 0;
         for let bit of ReflectFlags::<L>::members() {
             if g.bool() {
-                raw = raw | bit.bit();
+                raw |= bit.bit();
             }
         }
         return ReflectFlags::<L>::from_bits(raw).expect("only declared bits are set");

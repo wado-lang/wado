@@ -171,7 +171,7 @@ fn varint_len(value: u64) -> i32 {
     let mut rest = value;
     let mut len = 1;
     while rest >= 128 {
-        rest = rest >> 7;
+        rest >>= 7;
         len += 1;
     }
     return len;
@@ -324,7 +324,7 @@ impl Writer {
         let mut rest = value;
         while rest >= 128 {
             self.buf.push((rest & 0x7f | 0x80) as u8);
-            rest = rest >> 7;
+            rest >>= 7;
         }
         self.buf.push(rest as u8);
     }
@@ -481,7 +481,7 @@ impl Reader {
             if shift == 63 && byte > 1 {
                 return self.fail("a varint overflows 64 bits");
             }
-            value = value | (byte & 0x7f) as u64 << shift;
+            value |= (byte & 0x7f) as u64 << shift;
             if byte < 128 {
                 return Result::Ok(value);
             }
