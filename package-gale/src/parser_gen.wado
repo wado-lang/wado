@@ -239,12 +239,7 @@ pub fn gen_parser(
     members: &MemberDecls,
     ctx: &mut GenContext,
 ) {
-    // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
-    // by name and order. emit still consumes surface IR for the body
-    // of each rule (Phase 4 migrates those entry points); the
-    // `LoweredGrammar` is threaded through so we can dispatch on
-    // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
-    // recomputing the classification at every emit site.
+    assert lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order";
     let mut lr_snakes: List<String> = [];
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         if let LeftRecursive(_) = &lowered.parser_rules[i] {
@@ -3732,10 +3727,7 @@ fn gen_alt_elements(
 /// but accepts an `outer_follow` parameter so nested non-greedy /
 /// follow-aware Repeats can union the outer iter-follow into their
 /// effective continuation set. `ops` runs parallel to `elements` —
-/// callers obtain it from the surrounding `AltBody.ops`. Leaf / Group /
-/// ListLabel ops dispatch through `gen_op_leaf` / `gen_op_group` /
-/// `gen_op_list_label`; Repeat / Label / Not still flow through the
-/// surface `gen_repeat*` helpers (Phase 2-C migrates the Repeat arm).
+/// callers obtain it from the surrounding `AltBody.ops`.
 fn gen_elements_with_non_greedy(
     w: &mut CodeWriter,
     elements: &List<Element>,
@@ -5724,13 +5716,10 @@ fn op_leaf_dedup_base(op: &Op) -> String {
 
 /// Top-level dispatch for `Op::Group(g_op)`. Reads `g_op.shape` to
 /// pick the matching emit shape; reads the deduped field name and
-/// struct / variant type names straight from the shape payload
-/// instead of recomputing via `single_alt_group_type_name` /
-/// `token_group_field_name` / etc. Inner element emission still
-/// flows through surface `gen_elements_with_non_greedy` for now —
-/// `gen_consume_*_op` helpers consult `g_op.alts[k].fields` for the
-/// final struct-literal field list (GIR-canonical) but parse the
-/// alt body via the surface walker that hasn't migrated yet.
+/// struct / variant type names straight from the shape payload. The
+/// `gen_consume_*_op` helpers read the struct-literal field list from
+/// `g_op.alts[k].fields` and emit each alt body through
+/// `gen_elements_with_non_greedy`.
 ///
 /// `elem` is the matching `Element::Group(g_surface)`; the surface
 /// reference flows into `gen_elements_with_non_greedy` and surface
@@ -8595,7 +8584,7 @@ fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> Option<String> {
 /// Whether alternative `idx`'s scan helper tests its gate itself, against a
 /// scan gate seeded from the parser's.
 fn alt_scan_checks_gate(idx: i32, ctx: &GenContext) -> bool {
-    let rule = &ctx.parser_rules()[ctx.current_rule_index()];
+    let rule = ctx.current_rule();
     return !alt_scan_gate_conditions(&rule.alternatives[idx], ctx).is_empty();
 }
 

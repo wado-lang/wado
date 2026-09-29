@@ -747,11 +747,7 @@ impl GenContext {
     }
 
     fn current_captures(&self) -> &RuleCaptures {
-        let ridx = self.current_rule_index();
-        if ridx < 0 {
-            return &NO_CAPTURES;
-        }
-        return self.rule_captures(&self.parser_rules[ridx].name);
+        return self.rule_captures(&self.current_rule().name);
     }
 
     pub fn set_rule_follow(&mut self, kinds: TreeMap<String, List<String>>, exact: bool) {
@@ -914,6 +910,12 @@ impl GenContext {
     /// The rule currently being emitted, or -1 outside rule-body emission.
     pub fn current_rule_index(&self) -> i32 {
         return self.current_rule_index;
+    }
+
+    /// The rule currently being emitted, for a caller inside rule-body emission.
+    pub fn current_rule(&self) -> &ParserRule {
+        assert self.current_rule_index >= 0, "the parse and scan emit loops make each rule current before walking its body";
+        return &self.parser_rules[self.current_rule_index];
     }
 
     /// Must run before any body emit: a call site may target a later rule.

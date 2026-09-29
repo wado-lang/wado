@@ -54,9 +54,8 @@ fn atn_dump_source<S: AsStrSlice>(input: S) -> String {
     return render_atn_dump(&merged, &lowered);
 }
 
-/// `cmd_dump`'s prologue, whole. The step this used to leave out —
-/// `install_action_context` — is the one `lower_for_analysis` now asserts,
-/// which is how the omission stopped being invisible.
+/// `cmd_dump`'s prologue, whole: `lower_for_analysis` asserts that
+/// `install_action_context` ran.
 fn lower_pipeline(merged: &mut Grammar) -> [LoweredGrammar, GenContext] {
     let token_kinds = canonicalize_for_analysis(merged);
     let lit = collect_literal_tokens(&merged.parser_rules);

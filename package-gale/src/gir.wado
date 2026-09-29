@@ -399,9 +399,7 @@ pub fn lr_trailing_prec(own_prec: i32, right_associative: bool) -> i32 {
     return if right_associative { own_prec } else { own_prec + 1 };
 }
 
-/// LR suffix dispatch metadata. The fields mirror
-/// `compute_lr_dispatch_data` in legacy `parser_gen.wado`, but
-/// computed once and stored.
+/// LR suffix dispatch metadata, computed once per rule at lowering.
 pub struct LrDispatchData {
     /// Indices into `LeftRecursiveRule.lr_alts` of the alternatives
     /// that have a non-empty suffix. The degenerate `expr : expr`
@@ -941,9 +939,7 @@ pub struct RepeatOp {
     pub body_admits: Admits,
     /// True iff the inner element is a single-alt `Group` — i.e.
     /// `compute_iter_follow` should union the body's first set with
-    /// the outer follow rather than using outer alone. Mirrors the
-    /// surface `if let Group(g) = inner && g.alternatives.len() == 1`
-    /// check the iter-follow computation used to perform at emit time.
+    /// the outer follow rather than using outer alone.
     pub body_is_single_alt_group: bool,
     /// True iff the inner element contributes a CST field — i.e.
     /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
@@ -1009,10 +1005,8 @@ pub struct RepeatOp {
     /// caller's continuation can collide with another iteration. The
     /// gate is inert when the runtime `follow` is empty (non-repair
     /// callers), so it is sound to emit unconditionally at such
-    /// positions; it subsumes BOTH the old 1-token follow subtraction
-    /// and the K-prefix `__follow_<id>` variant gate. The actual mask is
-    /// no longer baked here — it arrives at runtime via the `follow`
-    /// argument the caller threads in.
+    /// positions. The mask arrives at runtime via the `follow` argument
+    /// the caller threads in.
     pub gate_caller_follow: bool,
     /// Surface `RepeatElement.atn_decision` id: the decision site a non-greedy
     /// `??` predicts its enter/skip at. -1 when sites were not assigned.
@@ -1190,8 +1184,7 @@ pub struct SingleAltShape {
     pub field: String,
     /// Rule that owns the struct's general-group sub-type names
     /// when the single-alt body contains nested general groups.
-    /// Drives `general_group_type_name` resolution; mirrors the
-    /// legacy `single_alt_owner` map.
+    /// Drives `general_group_type_name` resolution.
     pub owner_rule: String,
 }
 

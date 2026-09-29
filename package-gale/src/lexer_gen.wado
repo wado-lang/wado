@@ -3133,8 +3133,9 @@ fn lexer_elem_leading_chars(
         AnyChar => any_leading_chars(),
         Not(not_inner) => {
             let inner_casing = if casing matches { Unknown } { Casing::Sensitive } else { casing };
-            let inner = lexer_elem_leading_chars(&not_inner.element, all_rules, inner_casing, follow_refs, visiting)
-                .expect("the g4 parser admits only a set under `~`, and a set has leading chars");
+            let inner = lexer_elem_leading_chars(&not_inner.element, all_rules, inner_casing, follow_refs, visiting).expect(
+                "the g4 parser admits only a set under `~`, and a set has leading chars",
+            );
             assert !inner.nullable, "a set under `~` consumes one char";
             // A negated class inside the set (`~('a' | [^b])`) is not read.
             if inner.negated {
