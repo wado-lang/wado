@@ -48,6 +48,17 @@ enum Flow {
     Diverged,
 }
 
+impl Flow {
+    /// The flow where two paths meet: diverged only when both diverge.
+    fn join(self, other: Flow) -> Flow {
+        if self == Flow::Diverged && other == Flow::Diverged {
+            Flow::Diverged
+        } else {
+            Flow::Normal
+        }
+    }
+}
+
 /// Where a `break` or `continue` lands: a labeled block, or a loop
 /// (`label: None`). Leaving for it drops every slot from `entry` up.
 struct BreakTarget {
@@ -65,8 +76,7 @@ struct Cx<'a> {
 }
 
 impl Cx<'_> {
-    /// Allocate a fresh local slot (used to spill values and to bind variant
-    /// payloads inside synthesized structural-drop `match`es).
+    /// Allocate a fresh local slot, named after `what` it holds.
     fn alloc_local(&mut self, type_id: TypeId, what: &str) -> (u32, String) {
         let idx = self.locals.len() as u32;
         let name = minted_name(what, idx);
@@ -245,11 +255,7 @@ impl TirRefVisitor for PatternBindings<'_> {
             }
             // Reify binds every alternative to the first one's locals, so the
             // first names each value once.
-            TirPattern::Or(alternatives) => {
-                if let Some(first) = alternatives.first() {
-                    self.visit_pattern(first);
-                }
-            }
+            TirPattern::Or(alternatives) => self.visit_pattern(&alternatives[0]),
             // An unrestricted handle is never dropped, so it owes no cleanup.
             TirPattern::Narrow { .. } => {}
             TirPattern::Wildcard
@@ -555,10 +561,8 @@ fn result_drop_arm(
     cx: &mut Cx,
 ) -> TirMatchArm {
     let span = synth_span();
-    let (case_name, case_index) = {
-        let (_, _, name, index) = cx.resources.tt.compiler_variant_case(case);
-        (name.to_string(), index)
-    };
+    let (_, _, case_name, case_index) = cx.resources.tt.compiler_variant_case(case);
+    let case_name = case_name.to_string();
     let (payload_local, payload_name) = cx.alloc_local(payload_ty, "drop_v");
     let body_stmts = if drop_payload {
         drop_value(
@@ -758,16 +762,17 @@ fn stmt_flow(stmt: &TirStmt) -> Flow {
             then_block,
             else_block: Some(else_block),
             ..
-        } => {
-            if block_flow(&then_block.stmts) == Flow::Diverged
-                && block_flow(&else_block.stmts) == Flow::Diverged
-            {
-                Flow::Diverged
-            } else {
-                Flow::Normal
-            }
+        } => block_flow(&then_block.stmts).join(block_flow(&else_block.stmts)),
+        TirStmtKind::If {
+            else_block: None, ..
         }
-        _ => Flow::Normal,
+        | TirStmtKind::Let { .. }
+        | TirStmtKind::LetDestructure { .. }
+        | TirStmtKind::Expr(_)
+        | TirStmtKind::TaskReturn { .. }
+        | TirStmtKind::Loop { .. }
+        | TirStmtKind::LabeledBlock { .. }
+        | TirStmtKind::VariadicForOf { .. } => Flow::Normal,
     }
 }
 
@@ -1000,13 +1005,8 @@ fn elab_if_branches(
         let drops = drop_all(&lives, cx);
         block.stmts = append_block_drops(stmts, drops, cx);
     }
-    let flow = if then_flow == Flow::Diverged && else_flow == Flow::Diverged {
-        Flow::Diverged
-    } else {
-        Flow::Normal
-    };
     let else_block = (has_else || !else_block.stmts.is_empty()).then_some(else_block);
-    (then_block, else_block, flow)
+    (then_block, else_block, then_flow.join(else_flow))
 }
 
 /// Merge the post-states of the paths out of a branch, each `(owned, flow)`
@@ -1030,7 +1030,7 @@ fn merge_paths(owned: &mut Owned, paths: &[(Owned, Flow)]) -> Vec<Vec<Live>> {
             .copied()
             .filter(|&path| paths[path].0[slot].is_some())
             .collect();
-        if falling_through.is_empty() || owners.len() == falling_through.len() {
+        if owners.len() == falling_through.len() {
             continue;
         }
         for path in owners {

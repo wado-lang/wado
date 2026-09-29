@@ -386,23 +386,13 @@ struct UseSite<'a> {
 
 fn walk_stmt_for_leftmost(body: &Body, stmt: StmtId, site: &UseSite<'_>) -> LeftmostWalk {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            match value.as_expr().map_or(LeftmostWalk::Blocked, |ve| {
-                walk_expr_for_leftmost(body, ve, site)
-            }) {
-                LeftmostWalk::Found => LeftmostWalk::Found,
-                _ => LeftmostWalk::Blocked,
-            }
-        }
+        StmtKind::Let { value, .. }
+        | StmtKind::LetDestructure { value, .. }
+        | StmtKind::Return { value: Some(value) }
+        | StmtKind::Break {
+            value: Some(value), ..
+        } => observable_propagate(walk_operand_for_leftmost(body, *value, site)),
         StmtKind::Expr(e) => walk_operand_for_leftmost(body, *e, site),
-        StmtKind::Return { value: Some(v) } | StmtKind::Break { value: Some(v), .. } => {
-            match v.as_expr().map_or(LeftmostWalk::Blocked, |ve| {
-                walk_expr_for_leftmost(body, ve, site)
-            }) {
-                LeftmostWalk::Found => LeftmostWalk::Found,
-                _ => LeftmostWalk::Blocked,
-            }
-        }
         StmtKind::Return { value: None }
         | StmtKind::Break { value: None, .. }
         | StmtKind::Continue
@@ -455,17 +445,13 @@ fn walk_expr_shape(body: &Body, expr: ExprId, site: &UseSite<'_>) -> LeftmostWal
             match walk_assign_target(body, target, site) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 LeftmostWalk::Blocked => LeftmostWalk::Blocked,
-                LeftmostWalk::Pure => match walk_operand_for_leftmost(body, value, site) {
-                    LeftmostWalk::Found => LeftmostWalk::Found,
-                    _ => LeftmostWalk::Blocked,
-                },
+                LeftmostWalk::Pure => {
+                    observable_propagate(walk_operand_for_leftmost(body, value, site))
+                }
             }
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            match walk_operand_for_leftmost(body, *value, site) {
-                LeftmostWalk::Found => LeftmostWalk::Found,
-                _ => LeftmostWalk::Blocked,
-            }
+            observable_propagate(walk_operand_for_leftmost(body, *value, site))
         }
         ExprKind::Call { args, .. } => {
             walk_children_observable(body, args.iter().map(|a| a.expr), site)
@@ -551,12 +537,7 @@ fn walk_expr_shape(body: &Body, expr: ExprId, site: &UseSite<'_>) -> LeftmostWal
 
 /// Finish a value-producing node's leftmost walk: after its children have been
 /// walked in evaluation order (`walked`), account for the node's *own* trap. A
-/// node the shared [`expr_node_may_trap`](super::arena_query::expr_node_may_trap)
-/// taxonomy flags as trapping is observable, so a Pure subtree below it does not
-/// paint the surrounding context Pure — but a Found still propagates unchanged
-/// (the substitution lands INSIDE the op, whose own trap fires AFTER the
-/// substituted inner, exactly as before elision). Consumes the single per-node
-/// taxonomy instead of re-listing which ops trap.
+/// node [`expr_node_may_trap`] flags is observable: see [`observable_propagate`].
 fn finish_leftmost(body: &Body, expr: ExprId, walked: LeftmostWalk) -> LeftmostWalk {
     if expr_node_may_trap(body, expr) {
         observable_propagate(walked)
@@ -612,10 +593,7 @@ fn walk_children_observable(
     children: impl IntoIterator<Item = Operand>,
     site: &UseSite<'_>,
 ) -> LeftmostWalk {
-    match walk_children_pure(body, children, site) {
-        LeftmostWalk::Found => LeftmostWalk::Found,
-        _ => LeftmostWalk::Blocked,
-    }
+    observable_propagate(walk_children_pure(body, children, site))
 }
 
 // -----------------------------------------------------------------------

@@ -6,7 +6,7 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::nir::{NirBinaryOp, NirFunction};
+use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -233,11 +233,11 @@ fn is_forwardable_value(body: &Body, root: ExprId) -> bool {
         let NodeRef::Expr(id) = node else { return None };
         match &body.exprs[id].kind {
             ExprKind::Index { .. } | ExprKind::GlobalVarGet { .. } => Some(()),
-            ExprKind::Binary {
-                op: NirBinaryOp::Div | NirBinaryOp::Mod,
-                right,
-                ..
-            } if !is_safe_const_divisor(body, *right) => Some(()),
+            ExprKind::Binary { op, right, .. }
+                if op.may_trap() && !is_safe_const_divisor(body, *right) =>
+            {
+                Some(())
+            }
             _ => None,
         }
     })

@@ -1035,25 +1035,18 @@ impl i128 {
     /// - remainder has the same sign as dividend
     /// Panics if divisor is zero, or on `MIN / -1`, whose quotient overflows
     pub fn div_rem(&self, divisor: &i128) -> [i128, i128] {
-        // Check for division by zero
         if divisor.low == 0 && divisor.high == 0 {
             panic("i128 division by zero");
         }
 
         let dividend_neg = self.is_negative();
         let divisor_neg = divisor.is_negative();
-
-        // Get absolute values as u128
         let abs_dividend = self.abs_u128();
         let abs_divisor = divisor.abs_u128();
-
-        // Perform unsigned division
         let result = abs_dividend.div_rem(&abs_divisor);
         let abs_quotient = result[0];
         let abs_remainder = result[1];
 
-        // Apply signs
-        // Quotient: negative if signs differ
         let mut quotient = i128::from_u128(abs_quotient);
         if dividend_neg != divisor_neg {
             quotient = -quotient;
@@ -1062,7 +1055,6 @@ impl i128 {
             panic("i128 division overflow");
         }
 
-        // Remainder: same sign as dividend
         let mut remainder = i128::from_u128(abs_remainder);
         if dividend_neg {
             remainder = -remainder;

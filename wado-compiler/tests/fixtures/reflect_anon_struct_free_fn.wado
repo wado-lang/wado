@@ -1,8 +1,7 @@
 // An anonymous struct walks its fields through a `ReflectStruct` bound on a
-// generic function or method, as a declared struct does. The call site
-// projects `FieldTypes` to settle the pack, and that projection reads the
-// fields through the struct's head: through a declaration alone it answers
-// nothing for a shape, and the pack settles empty.
+// generic function or method, as a declared struct does. The call site settles
+// the pack by projecting `FieldTypes`, which for a shape has no declaration to
+// read and must read the struct's head.
 
 fn field_names<T: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &T) -> String {
     let mut out = "";

@@ -1,6 +1,5 @@
-// Every temporary owned resource that is only borrowed is dropped, whatever
-// borrows it and however conditionally it is evaluated. Each shape below used
-// to leak a resource-table slot.
+// Every temporary owned resource that is only borrowed is dropped at the end of
+// its statement, whatever borrows it and however conditionally it is evaluated.
 
 use { Request, Response, ErrorCode, Fields, Headers, Trailers, FieldName } from "wasi:http";
 
@@ -31,6 +30,10 @@ fn greeting_count(request: &Request) -> i32 {
 }
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // A method receiver.
+    let n = request.get_headers().get("x-greeting" as FieldName).len();
+    assert n == 1;
+
     // A `&` argument.
     assert !has_greeting(&Fields::new());
 

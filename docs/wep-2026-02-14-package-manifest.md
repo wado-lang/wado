@@ -271,6 +271,8 @@ Each key is the specifier used in Wado source code, byte-for-byte (`"docs:regex"
 
 Each dependency must have exactly one primary source type (`git`, `registry`, or `path`). The exception is `path`, which can be combined with `registry` or `git` for publishing (see Publishing).
 
+There is no `url` source type. A remote module import (`use ... from "https://..."`) stays a source-level feature, not a `wado.toml` dependency, until a use case appears that git or a registry cannot serve.
+
 #### Git
 
 ```toml
@@ -956,10 +958,6 @@ This enables seamless local development while ensuring published packages are se
 - `[world]` table keyed by FQ world name: hosted worlds are declared by their Component Model world name (`"wasi:cli/command"`) rather than a short alias (`command`/`bin`/`cli`). The key is the world the entry conforms to, so new worlds need no new manifest field and the mapping to the CM world is explicit. The library world is the one exception — it has no externally-fixed FQ name, so it is named after the package and declared by `[package].lib`.
 - `[package]` over `[project]`: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
 - `path` + `registry` dual source: adds complexity to the dependency spec but eliminates the "path deps can't be published" problem. The alternative (Cargo's separate `[patch]` section) is more complex and harder to maintain.
-
-### Not Included
-
-- URL dependencies (`url = "..."`): Not included in this WEP. Remote module imports via `use ... from "https://..."` remain a source-level feature (not a `wado.toml` dependency). A `url` dependency source type may be added in a future WEP if a compelling use case emerges that cannot be served by git or registry dependencies.
 
 ## Known gaps
 

@@ -79,8 +79,9 @@ with the generator artifact's integrity digest. `wado fetch` then pre-pulls the
 component from the generator world sub-path into the shared cache, under
 `~/wado/ghcr.io/wado-lang/gale/core-kiln-generator/`. On
 compile, `GeneratorModule::Spec("wado-lang:gale")` resolves to the locked version,
-reuses the fetched component (a published version is immutable, so the cache is
-sound), and recovers its options descriptor from the component WIT. The generator
+reuses the fetched component without checking it against the lock's digest
+([Package Manifest](../../docs/wep-2026-02-14-package-manifest.md#known-gaps)),
+and recovers its options descriptor from the component WIT. The generator
 then runs as a prebuilt component through the same driver path as a source
 generator. Without a lock the compiler resolves and pulls lazily.
 
@@ -91,10 +92,3 @@ A registry generator's options shape comes from its component WIT, and a WIT
 unless its type is an `Option`, a `List` or a `TreeMap`
 ([Options](../../docs/spec-kiln.md#options)). That is why the clause above
 writes `trace: false`, although `trace` defaults to `false` in gale's source.
-
-### Remaining follow-ups
-
-- [ ] Carry source-level option defaults across the registry boundary, so an
-      omitted field falls back to the generator's default.
-- [ ] Enforce the integrity `wado.lock` records on fetch and compile, with a
-      `--locked` / `--offline` mode.

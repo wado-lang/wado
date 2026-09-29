@@ -19,7 +19,7 @@ use crate::git::materialize;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
-use crate::manifest::{DiscoveryError, absolute, openable_dir, resolve_manifest};
+use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
@@ -858,12 +858,9 @@ fn build_dep_generator_local_path(
 /// by the `[build-dependencies]`-name and directory-`module:` resolution paths
 /// so both spellings land on the same entry file.
 fn package_generator_entry(pkg_dir: &Path) -> Result<Option<String>, DiscoveryError> {
-    let manifest_path = pkg_dir.join("wado.toml");
-    if !manifest_path.is_file() {
+    let Some(manifest) = manifest_in(pkg_dir)? else {
         return Ok(None);
-    }
-    let manifest_text = fs::read_to_string(manifest_path).map_err(DiscoveryError::Io)?;
-    let manifest = resolve_manifest(pkg_dir, &manifest_text)?;
+    };
     Ok(manifest
         .world_entry(GENERATOR_WORLD_FQ)
         .map(ToString::to_string))

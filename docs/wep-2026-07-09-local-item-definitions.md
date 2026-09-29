@@ -91,8 +91,8 @@ message of its own. Only a local `struct` and a local newtype work in full.
 ### Methods on a local type
 
 A local `impl` parses, but its methods never reach a call, which fails as
-`no method 'x' found on type`. Two module-wide registries are built before any function body is walked, and a
-local `impl` needs both.
+`no method 'x' found on type`. Two module-wide registries are built before any
+function body is walked, and a local `impl` needs both.
 
 - `TraitEnv` indexes `module.items`, so no local block reaches it. A block whose
   target is a function-local declaration is scoped by that declaration's

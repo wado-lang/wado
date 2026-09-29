@@ -28,8 +28,7 @@ function title(file) {
   throw new Error(`${DOCS}/${file}: no top-level heading`);
 }
 
-// The overview's `## Chapters` list is the specification's reading order. It
-// names every other spec file exactly once, and the index follows it.
+// The overview's `## Chapters` list is the specification's reading order.
 function chapters(files) {
   const text = readFileSync(`${DOCS}/${OVERVIEW}`, "utf8");
   const section = /^## Chapters\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(text);

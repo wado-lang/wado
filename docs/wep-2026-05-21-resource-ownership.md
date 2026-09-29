@@ -508,7 +508,7 @@ unused helper — while a miss leaves the fold no helper to call.
 Move-only semantics need no syntax: transfer is implicit, a use-after-move
 diagnostic replaces a `move` operator's local visibility, and the consuming
 receiver is spelled bare `self` (scoped to resources, so it never contradicts
-value semantics — see the receiver grammar under [Roadmap](#roadmap)). `unique`
+value semantics — see [Move-only resources](#move-only-resources)). `unique`
 as a `struct` modifier only matters for a move-only type that carries no
 resource — a resource-bearing aggregate is already move-only by composition, and
 no use case has appeared. Current state: `move` is not tokenized; `unique` is
@@ -535,10 +535,6 @@ reuses the same move-check machinery, resources being its first client.
 - Move-only is a new concept for one type category; an element cannot be moved
   out of a resource-bearing aggregate (restructure around iteration); a resource
   API returns owned handles, not `&R`.
-- Open: guaranteed drops on panic (needs Wasm EH). Place-level moves out of
-  aggregates now land at struct / tuple literals for non-resource value types;
-  moving a field out of a _live_ aggregate, or through a deref / index, still
-  copies.
 
 ## Roadmap
 
@@ -798,6 +794,12 @@ Neither the inliner nor any NIR pass can stand in: the copy is chosen before NIR
 exists, and `#[inline(always)]` on `next` leaves the expanded clone in the
 caller's loop untouched even with the cloned array provably unread.
 
+### A field moved out of a live aggregate
+
+A place-level move out of an aggregate happens at a struct or tuple literal,
+for a value type that owns no resource. Moving a field out of an aggregate that
+is still live, or through a deref or an index, copies.
+
 ### A declared retention the walk does not confirm
 
 Only a body-less declaration carries retention now
@@ -849,8 +851,7 @@ temporary it borrows, is never dropped.
 Moving one resource field out of a temporary aggregate (`make().a`) drops
 nothing else the temporary owns, so a second resource field leaks.
 
-A `List` element is never dropped, so a list of owned resources leaks each one
-when the list goes out of scope.
+A panic drops nothing the program owns.
 
 ### A destructured field's path is assumed to borrow
 

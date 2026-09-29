@@ -557,42 +557,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.report_operator_bound_missing(&operand.spelled, item, span);
                     return TypeTable::ERROR;
                 };
-                if is_eq {
-                    // The bound's own spelling, so an argument it writes
-                    // (`S: Eq<String>`) names the impl that answers it.
-                    let resolved = ResolvedTraitMethod::through_bound(
-                        operand.receiver,
-                        bound_trait_name,
-                        &method,
-                        info,
-                    );
-                    // Reify rebuilds the `!` wrapper for `!=`.
-                    return self.dispatch_trait_op_method(
-                        left,
-                        vec![(right, right_span)],
-                        &resolved,
-                        origin,
-                    );
-                }
-                let ord_trait_name = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .compiler_trait_fq(CompilerItem::Ord);
-                let resolved = ResolvedTraitMethod::through_bound(
-                    operand.receiver,
-                    ord_trait_name,
-                    &method,
-                    info,
-                );
-                let cmp_call = self.dispatch_trait_op_method(
+                // `Eq` keeps the bound's own spelling, so an argument it writes
+                // (`S: Eq<String>`) names the impl that answers it.
+                let trait_name = if is_eq {
+                    bound_trait_name
+                } else {
+                    self.tysys.type_table.borrow().compiler_trait_fq(item)
+                };
+                let resolved =
+                    ResolvedTraitMethod::through_bound(operand.receiver, trait_name, &method, info);
+                let call = self.dispatch_trait_op_method(
                     left,
                     vec![(right, right_span)],
                     &resolved,
                     origin,
                 );
-                if cmp_call == TypeTable::ERROR {
-                    return TypeTable::ERROR;
+                // Reify rebuilds the `!` wrapper for `!=`.
+                if is_eq || call == TypeTable::ERROR {
+                    return call;
                 }
                 return TypeTable::BOOL;
             }

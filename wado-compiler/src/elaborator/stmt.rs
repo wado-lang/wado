@@ -3250,9 +3250,7 @@ fn collect_pattern_bindings_with_index_inner(
             }
         }
         TirPattern::Or(alternatives) => {
-            if let Some(first) = alternatives.first() {
-                collect_pattern_bindings_with_index_inner(first, out);
-            }
+            collect_pattern_bindings_with_index_inner(&alternatives[0], out);
         }
         TirPattern::Wildcard
         | TirPattern::Literal(_)
