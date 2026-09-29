@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790688089116,
+  "lastUpdate": 1790719714412,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62009,6 +62009,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2f47588ea93a127200866ba7da9ded4bd7a4f1dc"
         },
         "date": 1790688088527,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22798,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f769ab463bc31ed97c194eae120632262a1f4f40",
+          "message": "Merge pull request #2224 from wado-lang/ccr-fd64d001-e4xu7u\n\nchore(gale): cover package-gale's CLI and generators past 95%, fixing what the tests found",
+          "timestamp": "2026-09-30T06:37:03+09:00",
+          "tree_id": "6b3864fd4c8ae6c7215083dfbe7bc6cba0c55627",
+          "url": "https://github.com/wado-lang/wado/commit/f769ab463bc31ed97c194eae120632262a1f4f40"
+        },
+        "date": 1790719713621,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
