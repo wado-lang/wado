@@ -26,6 +26,7 @@ use {
     DeserializeErrorKind,
     Visitor,
     TextKeyDeserializer,
+    TextKeySerializer,
     deeper,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
@@ -85,17 +86,9 @@ impl SerializeMap for NsdMapSerializer {
         if self.count > 0 {
             self.buf.push_str(",");
         }
-        // A JSON key is a string, so any other scalar goes in as the string of
-        // its spelling, which `TextKeyDeserializer` parses back.
-        let mut spelled: String = "";
-        key.serialize::<NsdSerializer>(&mut NsdSerializer { buf: &mut spelled })?;
-        match spelled.get_byte_unchecked(0) {
-            b'"' => self.buf.push_str(&spelled),
-            b'[' | b'{' | b'n' => {
-                return Result::Err(SerializeError::non_scalar_key());
-            },
-            _ => write_escaped_string(self.buf, &spelled),
-        }
+        let mut spelled = String::new();
+        key.serialize(&mut TextKeySerializer { out: &mut spelled })?;
+        write_escaped_string(self.buf, &spelled);
         self.buf.push_str(":");
         return Result::Ok(());
     }
