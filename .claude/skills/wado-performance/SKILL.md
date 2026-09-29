@@ -209,28 +209,38 @@ paid on a benchmark `fts` never touched.
   and the guard as separate arms: folded into one they read as a single cost,
   and the assert takes the blame for what the guard spent.
 
-## 4. Inlining is usually not the lever
+## 4. Inlining: fix the inliner, never the code
 
-wasmtime/Cranelift call small Wasm functions cheaply, so forcing inlining rarely
-moves wall-time and raising the threshold bloats hot loops (measured slower). The
-exception is a tight iteration-bound loop with a trivial body.
+An inline hint or a hand-inlined body is almost never worth it: it reaches one
+call site, and it silently outlives the measurement that justified it. The
+stdlib carries no `#[inline]` / `#[inline(never)]`, because a hint that makes
+code faster marks a case the optimizer misses.
 
-A rare heavy sub-case behind a `cold_path()` marker usually needs no
-hand-splitting: `nir/cold_outline` moves what the marker opens into a function of
-its own, so the leaf inlines at its hot-path size. Its region runs to the end of
-the enclosing block, so a marker mid-loop-body is one it cannot take (see that
-pass's module doc) and that shape still needs the split written out. Split by
-hand also when the slow path is not rare: a `width > 0` branch that runs every
-time a width is set is hot when taken, which no marker should claim otherwise.
+Improving the inliner is what pays, and it keeps being improved. A better price
+reaches every program at once. When it declines a callee that should be spliced,
+that is a cost-model bug: find the price with `WADO_TRACE=inline` and fix it in
+`optimize/inline.rs`.
 
-**Write the stdlib to be fast without inline hints.** A `#[inline]` /
-`#[inline(never)]` in `wado-compiler/lib/` is a claim the cost model got it
-wrong, and it silently outlives whatever measurement justified it — the split
-that `#[inline(never)]` was added for is usually one the inliner already
-declines on size. Prefer changing the shape (a separate function, a smaller hot
-path) and leave the decision to the threshold; reach for a hint only after
-measuring that the shape alone does not get there, and say in a comment what it
-buys.
+Never bend source to the inliner's current prices. Collapsing `let`s into one
+expression, choosing an operation width, or splitting a function only to get
+under the threshold are all banned. It is §2's rule applied to the inliner: the
+contortion reaches one call site and hides the gap from every other. zlib's
+`read_u32_le` is the case that set this rule. Widening each byte to `u64`
+priced it one instruction over the threshold, and doing the arithmetic in `u32`
+with one widening at the end got it inlined. But the widening costs nothing:
+Cranelift folds an `i64.extend_i32_u` into the load or arithmetic producing it. The
+price was wrong, and `is_zero_extension` in `optimize/inline.rs` is its fix.
+
+Raising the threshold wholesale is not the lever: it bloats hot loops and
+measured slower. The lever is a price that matches what the spliced code costs.
+
+A split that is right on its own stays. A slow path that is not rare is one: a
+`width > 0` branch runs every time a width is set, so it is hot when taken and
+no `cold_path()` marker should claim otherwise. A rare heavy sub-case needs no
+hand-split at all: `nir/cold_outline` moves what the marker opens into a
+function of its own, so the leaf inlines at its hot-path size. A marker
+`cold_outline` cannot take (mid-loop-body, see that pass's module doc) is a gap
+in that pass, per §2.
 
 ## 5. Measurement
 
@@ -283,7 +293,10 @@ same arms over `all-wado`, six rounds seconds apart, settled every row. Keep
 `sieve` in the selection as the in-band control, and run `benchmark-all` once at
 the end for the record.
 
+It is a task of `benchmark/mise.toml`, so it runs from `benchmark/` only.
+
 ```sh
+cd benchmark
 mise run all-wado                                # every Wado row
 mise run all-wado json_catalog sieve             # those, by name
 ```

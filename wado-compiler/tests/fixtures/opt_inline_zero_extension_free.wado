@@ -1,0 +1,42 @@
+// Test: the inliner prices a zero-extension to 64 bits as free.
+//
+// `read_le` widens each byte to `u64` before combining them. Every 64-bit
+// target writes a 32-bit result with its upper half cleared, so Cranelift folds
+// each `i64.extend_i32_u` into the load feeding it. Charged an instruction
+// apiece, the four widenings put `read_le` over the -O2 threshold, and both
+// calls in the loop stayed calls.
+use { println, Stdout } from "core:cli";
+
+fn read_le(bytes: &List<u8>, pos: i32) -> u64 {
+    let b0 = bytes[pos] as u64;
+    let b1 = bytes[pos + 1] as u64;
+    let b2 = bytes[pos + 2] as u64;
+    let b3 = bytes[pos + 3] as u64;
+    return b0 | b1 << 8 | b2 << 16 | b3 << 24;
+}
+
+// Called at two sites, and too big to splice, so `read_le` is priced where
+// `sum_words` itself stands.
+fn sum_words(bytes: &List<u8>) -> u64 {
+    let mut total: u64 = 0;
+    for let mut pos = 0; pos + 8 <= bytes.len(); pos += 8 {
+        let lo = read_le(bytes, pos);
+        let hi = read_le(bytes, pos + 4);
+        total = total * 31 + (lo ^ hi) + (lo & hi) * 7 + (lo | hi) * 3;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let bytes: List<u8> = [1, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0];
+    println(`${sum_words(&builtin::black_box(bytes))}`);
+    println(`${sum_words(&builtin::black_box(bytes))}`);
+}
+
+__DATA__
+{
+    "stdout": "263540\n263540\n",
+    "wir_not_expect:O2": [
+        "\"opt_inline_zero_extension_free.wado/read_le\"("
+    ]
+}

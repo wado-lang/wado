@@ -53,7 +53,7 @@ fn escape_reentry_import_loads_one_module() {
         .modules
         .keys()
         .filter_map(|ms| match ms {
-            ModuleSource::Local { path } if path.ends_with("gen/parser.wado") => {
+            ModuleSource::Local { path, .. } if path.ends_with("gen/parser.wado") => {
                 Some(path.as_str())
             }
             _ => None,
@@ -66,7 +66,7 @@ fn escape_reentry_import_loads_one_module() {
     );
     assert!(
         !loaded.modules.keys().any(
-            |ms| matches!(ms, ModuleSource::Local { path } if path == "../src/gen/parser.wado")
+            |ms| matches!(ms, ModuleSource::Local { path, .. } if path == "../src/gen/parser.wado")
         ),
         "the non-canonical escape-reentry spelling must not intern a second module",
     );
@@ -107,7 +107,7 @@ fn entry_escape_reentry_loads_once() {
         .modules
         .keys()
         .filter(
-            |ms| matches!(ms, ModuleSource::Local { path } if path.ends_with("gen/parser.wado")),
+            |ms| matches!(ms, ModuleSource::Local { path, .. } if path.ends_with("gen/parser.wado")),
         )
         .count();
     assert_eq!(
