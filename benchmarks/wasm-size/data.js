@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790670561824,
+  "lastUpdate": 1790677060835,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -61877,6 +61877,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f495f8e2350e13ae51e5059d188a4b2166b18748"
         },
         "date": 1790670561318,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22798,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41b91fe0c00241ca818603b8aa9a64a42dc0710a",
+          "message": "Merge pull request #2221 from wado-lang/claude/loam-blog-structure-chjy16\n\ndocs(spec): a specification that reads front to back, one rule in one place",
+          "timestamp": "2026-09-29T18:40:55+09:00",
+          "tree_id": "149ad3fd56a0f6667607017f67c6f14526a0ff53",
+          "url": "https://github.com/wado-lang/wado/commit/41b91fe0c00241ca818603b8aa9a64a42dc0710a"
+        },
+        "date": 1790677059885,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
