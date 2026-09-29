@@ -150,7 +150,12 @@ wado test                           # discover and run every .wado test in the p
 wado test file.wado                 # run tests in one file
 wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
 wado test --profile guest file.wado # guest profile over that file's tests
+wado test --coverage=lcov,json      # also report what ran, into build/coverage/
 ```
+
+`--coverage` prints a per-file summary after the run. `coverage.json` names,
+for each region, the tests that ran it. `wado dump --coverage-plan file.wado`
+shows the regions a file is measured by.
 
 `--profile` takes one file, runs it serially, and leaves a test that hangs
 unbounded — it samples on the epoch deadline the per-test timeout is counted in.

@@ -1453,7 +1453,8 @@ impl TypeSystem {
         let (type_name, type_args) = match &resolved {
             ResolvedType::Struct { .. }
             | ResolvedType::Enum { .. }
-            | ResolvedType::Variant { .. } => {
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Resource { .. } => {
                 (self.type_table.borrow().fq_base_type_name(type_id), None)
             }
             // The raw GC array `Array<T>` carries its element as a single type
@@ -1463,7 +1464,7 @@ impl TypeSystem {
                 FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME),
                 self.impl_position_args(type_id),
             ),
-            ResolvedType::GenericInstance { .. } => (
+            ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => (
                 self.type_table.borrow().fq_base_type_name(type_id),
                 self.impl_position_args(type_id),
             ),
@@ -1521,7 +1522,15 @@ impl TypeSystem {
                     TypeTable::U32,
                 );
             }
-            _ => return false,
+            ResolvedType::Primitive(_) => unreachable!("a primitive is answered above"),
+            ResolvedType::Never
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return false,
         };
 
         self.find_trait_impl_for_type_with_args(

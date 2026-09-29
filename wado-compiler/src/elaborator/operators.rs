@@ -14,7 +14,7 @@ use crate::unparse::binary_op_str;
 use super::Elaborator;
 use super::coercion::{
     DeferredOperator, is_literal_arithmetic, is_primitive_literal_target,
-    numeric_literal_pair_order,
+    numeric_literal_pair_order, unary_passes_expected_type,
 };
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
@@ -958,7 +958,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })?;
                     Some(pointee[0])
                 }),
-            UnaryOp::Neg | UnaryOp::BitNot if is_literal_arithmetic(&unary.expr) => expected_type,
+            _ if unary_passes_expected_type(unary) => expected_type,
             // Either keeps the variable a pending call is still to answer,
             // dispatched again once it is.
             UnaryOp::Neg | UnaryOp::BitNot

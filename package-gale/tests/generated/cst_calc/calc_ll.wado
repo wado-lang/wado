@@ -946,8 +946,102 @@ pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
+pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+
+pub global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
+
+pub global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
+
+pub fn follow_open_mark(cont: i64) -> i64 {
+    return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
+}
+
+pub fn follow_open_set(mask: i64) -> i64 {
+    return FOLLOW_OPEN_READING | (mask & FOLLOW_ID_MASK) << FOLLOW_OPEN_SET_SHIFT;
+}
+
+pub fn follow_open_join(a: i64, b: i64) -> i64 {
+    if a == 0 || a == b {
+        return b;
+    }
+    if b == 0 {
+        return a;
+    }
+    return FOLLOW_OPEN_READING;
+}
+
+pub fn follow_open_with(cont: i64, open: i64) -> i64 {
+    return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
+}
+
+pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
+}
+
+pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
+}
+
+pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
+        return true;
+    }
+    let kind = follow_kind_at(tokens, pos, eof_kind);
+    return follow_open_has(cont, kind, sets, true);
+}
+
+fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open == 0 {
+        return false;
+    }
+    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
+}
+
+fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
+    return if pos < tokens.len() { tokens[pos] } else { eof_kind };
+}
+
+fn follow_set_has(sets: &List<List<i32>>, id: i64, kind: i32) -> bool {
+    let set = &sets[(id - 1) as i32];
+    return set.is_empty() || kind_set_has(set, kind);
+}
+
+fn follow_heads_have(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    sets: &List<List<i32>>,
+    eof_kind: i32,
+    unknown_has: bool,
+) -> bool {
+    if cont == 0 {
+        return unknown_has;
+    }
+    let kind = follow_kind_at(tokens, pos, eof_kind);
+    if follow_open_has(cont, kind, sets, unknown_has) {
+        return true;
+    }
+    let mut c = cont & FOLLOW_CONT_MASK;
+    let mut head = true;
+    while c & FOLLOW_ID_MASK != 0 {
+        if c & FOLLOW_OPENS_BIT != 0 {
+            head = true;
+        }
+        if head {
+            if follow_set_has(sets, c & FOLLOW_ID_MASK, kind) {
+                return true;
+            }
+            head = false;
+        }
+        c = c >> FOLLOW_SLOT_BITS;
+    }
+    return false;
+}
+
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont;
+    let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
@@ -963,14 +1057,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
         if depth < FOLLOW_MAX_DEPTH {
             constrained = true;
             if alive {
-                let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
-                if !set.is_empty() {
-                    let idx = pos + depth;
-                    let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                    if !kind_set_has(set, kind) {
-                        alive = false;
-                    }
-                }
+                alive = follow_set_has(sets, c & FOLLOW_ID_MASK, follow_kind_at(tokens, pos + depth, eof_kind));
             }
             depth += 1;
         }
@@ -1547,12 +1634,12 @@ fn _parse_prog(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 1;
-    _parse_term(p, follow);
+    _parse_term(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     while !p.recovering && (_kind_set_0(p.peek_kind())) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 2;
-        _parse_term(p, follow);
+        _parse_term(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     }
     return;
 }
@@ -1570,12 +1657,12 @@ fn _parse_expr(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
-    _parse_factor(p, follow);
+    _parse_factor(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     while !p.recovering && (_kind_set_1(p.peek_kind())) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
         p.site = 4;
-        _parse_factor(p, follow);
+        _parse_factor(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
     }
     return;
 }
@@ -1600,7 +1687,7 @@ fn _parse_factor__inner(p: &mut Parser, follow: i64 = 0) -> () {
     } else if kind == TK_LIT_LPAREN {
         p.take();
         p.site = 5;
-        _parse_expr(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+        _parse_expr(p, (FOLLOW_MASK_3 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
         return;
     }
@@ -1695,7 +1782,9 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [257];
 global EXPECTED_0: List<i32> = [TK_INT, TK_LIT_LPAREN];
 
-global FOLLOW_SETS: List<List<i32>> = [[4], [512]];
+global FOLLOW_SETS: List<List<i32>> = [[4], [48], [257], [192], [512]];
 global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 2;
+global FOLLOW_MASK_1: i64 = 770;
+global FOLLOW_MASK_2: i64 = 772;
+global FOLLOW_MASK_3: i64 = 5;
 

@@ -1,8 +1,8 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
-use wado_lsp::host::discovery::{absolutize, governing_workspace};
+use wado_lsp::host::discovery::{absolutize, governing_workspace, normalize_path};
 use wado_manifest::{Manifest, ManifestError};
 
 use crate::args::CliExit;
@@ -55,8 +55,35 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
                 root: openable_dir(&dir).to_path_buf(),
             }));
         }
-        if !dir.pop() {
-            return Ok(None);
+        match parent_dir(&dir) {
+            Some(parent) => dir = parent,
+            None => return Ok(None),
+        }
+    }
+}
+
+/// The directory above `dir`, spelled the way `dir` is: a relative path stays
+/// relative and walks past the working directory with `..`, where `pop()`
+/// would stop at it. `None` at the filesystem root.
+fn parent_dir(dir: &Path) -> Option<PathBuf> {
+    match dir.components().next_back() {
+        Some(Component::Normal(_)) => Some(dir.parent()?.to_path_buf()),
+        Some(Component::RootDir | Component::Prefix(_)) => None,
+        None | Some(Component::CurDir | Component::ParentDir) => {
+            let above_root = fs::canonicalize(openable_dir(dir)).ok()?.parent().is_none();
+            // A `..` after a named component leaves wherever that component
+            // resolves to, a symlink's target included, so only dots fold.
+            let only_dots = dir
+                .components()
+                .all(|c| matches!(c, Component::CurDir | Component::ParentDir));
+            let above = dir.join("..");
+            (!above_root).then(|| {
+                if only_dots {
+                    normalize_path(&above)
+                } else {
+                    above
+                }
+            })
         }
     }
 }
@@ -68,6 +95,13 @@ pub(crate) fn openable_dir(dir: &Path) -> &Path {
         return Path::new(".");
     }
     dir
+}
+
+/// `path` as an absolute, lexically normalized path, so two paths spelled
+/// independently can be expressed against each other.
+pub(crate) fn absolute(path: &Path) -> PathBuf {
+    let path = openable_dir(path);
+    std::path::absolute(path).map_or_else(|_| path.to_path_buf(), |p| normalize_path(&p))
 }
 
 /// Parse a member's `wado.toml`, applying `[workspace.package]` inheritance when
@@ -408,6 +442,26 @@ mod tests {
     use super::*;
     use std::assert_matches;
     use std::fs;
+
+    #[cfg(unix)]
+    #[test]
+    fn parent_dir_leaves_a_symlink_where_the_filesystem_does() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(tmp.path()).unwrap();
+        fs::create_dir_all(root.join("a/b/c")).unwrap();
+        std::os::unix::fs::symlink(root.join("a/b/c"), root.join("link")).unwrap();
+        let above = parent_dir(&root.join("link/..")).unwrap();
+        assert_eq!(fs::canonicalize(above).unwrap(), root.join("a"));
+    }
+
+    #[test]
+    fn parent_dir_walks_a_relative_path_past_the_working_directory() {
+        assert_eq!(parent_dir(Path::new("a/b")), Some(PathBuf::from("a")));
+        assert_eq!(parent_dir(Path::new("a")), Some(PathBuf::new()));
+        assert_eq!(parent_dir(Path::new("")), Some(PathBuf::from("..")));
+        assert_eq!(parent_dir(Path::new("..")), Some(PathBuf::from("../..")));
+        assert_eq!(parent_dir(Path::new("/")), None);
+    }
 
     // `wado format sub` walks the root this returns, so it must open.
     #[test]

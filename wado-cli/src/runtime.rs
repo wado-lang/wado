@@ -17,6 +17,7 @@ use wasmtime_wasi_tls::{
 };
 
 use crate::args::CliExit;
+use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker};
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
@@ -78,6 +79,8 @@ pub struct WasiState {
     tls: WasiTlsCtx,
     /// `wado test` only: the store's handle on `core:eval`.
     eval: Option<EvalSession>,
+    /// `wado test` only: the coverage regions this store reported.
+    coverage: CoverageHits,
     /// The fuel [`new_store`] filled the store with, where its engine meters.
     fuel_start: Option<u64>,
 }
@@ -188,6 +191,7 @@ impl WasiState {
             http_hooks,
             tls,
             eval: None,
+            coverage: CoverageHits::default(),
             fuel_start: None,
         }
     }
@@ -241,8 +245,14 @@ impl WasiState {
             http_hooks,
             tls,
             eval,
+            coverage: CoverageHits::default(),
             fuel_start: None,
         })
+    }
+
+    /// The coverage regions this store reported.
+    pub fn coverage_hits(&mut self) -> &mut CoverageHits {
+        &mut self.coverage
     }
 
     /// The test's handle on `core:eval`.
@@ -619,7 +629,8 @@ pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
     Ok(linker)
 }
 
-/// Like [`create_linker`], plus `core:eval`, which only a test may reach.
+/// Like [`create_linker`], plus `core:eval` and `core:coverage`, which only a
+/// test may reach.
 ///
 /// # Errors
 ///
@@ -628,6 +639,7 @@ pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
 pub fn create_test_linker(component: &Component) -> Result<Linker<WasiState>> {
     let mut linker = host_linker(component)?;
     add_eval_to_linker(&mut linker, WasiState::eval_session)?;
+    add_coverage_to_linker(&mut linker, WasiState::coverage_hits)?;
     linker.define_unknown_imports_as_traps(component)?;
     Ok(linker)
 }

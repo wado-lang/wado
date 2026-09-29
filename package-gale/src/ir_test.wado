@@ -639,6 +639,33 @@ test "alias_parser_literals: an action does not block the alias" {
     }
 }
 
+// The jar maps `'}'` to TypeScriptLexer's `CloseBrace : '}' {…}`, not to the
+// earlier `TemplateCloseBrace : {…}? '}' -> popMode`: code ahead of the literal
+// blocks the alias, code after it does not.
+test "alias_parser_literals: an action or predicate ahead of the literal blocks the alias" {
+    let mut pred = parsed("grammar T; s : 'kw'; P : {true}? 'kw'; K : 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut pred);
+    if let TokenRef(t) = sole_element(&pred) {
+        assert t.name == "K", t.name;
+    } else {
+        panic("expected a TokenRef");
+    }
+
+    let mut act = parsed("grammar T; s : 'kw'; K : {act();} 'kw'; WS : ' ' -> skip;");
+    alias_parser_literals(&mut act);
+    assert sole_element(&act) matches { Literal(_) }, "a leading action must not alias";
+}
+
+test "alias_parser_literals: a trailing predicate does not block the alias" {
+    let mut g = parsed("grammar T; s : 'kw'; K : 'kw' {true}?; WS : ' ' -> skip;");
+    alias_parser_literals(&mut g);
+    if let TokenRef(t) = sole_element(&g) {
+        assert t.name == "K", t.name;
+    } else {
+        panic("expected a TokenRef");
+    }
+}
+
 test "alias_parser_literals: a fragment or a non-default-mode rule does not alias" {
     let mut frag = parsed("grammar T; s : 'kw'; fragment K : 'kw'; WS : ' ' -> skip;");
     alias_parser_literals(&mut frag);

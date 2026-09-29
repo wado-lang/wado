@@ -1,0 +1,34 @@
+// A `match` arm is a branch, guard or not, and so is each side of `&&` and
+// `||` the right operand of which may not run.
+fn describe(v: Option<i32>) -> String {
+    return match v {
+        Some(n) && n > 100 => "large",
+        Some(_) => "small",
+        None => "none",
+    };
+}
+
+fn both(a: bool, b: bool) -> bool {
+    return a && b;
+}
+
+fn either(a: bool, b: bool) -> bool {
+    return a || b;
+}
+
+test "arms and short circuits" {
+    assert describe(Some(5)) == "small";
+    assert describe(null) == "none";
+    assert !both(false, true);
+    assert either(false, true);
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "uncovered_lines": [5],
+    "uncovered_branches": ["4:12 arm 0", "12:12 rhs"],
+    "uncovered_functions": []
+  }
+}

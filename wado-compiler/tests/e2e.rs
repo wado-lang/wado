@@ -17,6 +17,7 @@ use bytes::Bytes;
 use futures::future::{Either, select};
 use http_body_util::{BodyExt, Full};
 use serde::Deserialize;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -27,6 +28,7 @@ use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi_http::p3::Request;
 use wasmtime_wasi_http::p3::bindings::Service;
 
+use wado_compiler::coverage::{Branch, Coverage, CoverageScope, read_from_component, render_plan};
 use wado_compiler::{CompilerOptions, OptLevel};
 
 // ---------------------------------------------------------------------------
@@ -307,6 +309,29 @@ struct TestSpec {
     /// compiler emits, and whose imports the runner hosts nothing for.
     #[serde(default)]
     compile_only: bool,
+
+    /// Measure the fixture's own code under its `test` blocks, as
+    /// `wado test --coverage` does, and state what they left unrun.
+    #[serde(default)]
+    coverage: Option<CoverageSpec>,
+}
+
+/// What a fixture's tests leave unrun in the fixture itself. Each list is the
+/// whole set, so a region the plan gains or loses is a failure too.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CoverageSpec {
+    #[serde(default)]
+    uncovered_lines: Vec<u32>,
+
+    /// Each as [`Branch::describe`] spells it:
+    /// `"12:5 else"`.
+    #[serde(default)]
+    uncovered_branches: Vec<String>,
+
+    /// Qualified names, closures as `outer::{closure:LINE}`.
+    #[serde(default)]
+    uncovered_functions: Vec<String>,
 }
 
 /// A line of the emitted component's WAT: the substrings it holds, and how many
@@ -569,6 +594,7 @@ async fn run_http_request_async(
             mocks: outgoing_mocks,
         },
         tls_ctx: common::build_tls_ctx(tls_mocks),
+        coverage_hits: BTreeSet::new(),
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)
@@ -871,6 +897,7 @@ fn run_with_allocator(
                 .collect(),
             policy: param_policy,
         },
+        coverage: spec.coverage.as_ref().map(|_| CoverageScope::default()),
         ..Default::default()
     };
 
@@ -1022,6 +1049,15 @@ fn run_with_allocator(
             panic!("[{test_id}] test world error: {e:?}");
         });
         verify_result(&result, spec, test_id, opt_level);
+        if let Some(coverage) = &spec.coverage {
+            assert_coverage(
+                &wasm,
+                fixture_path,
+                &result.coverage_hits,
+                coverage,
+                test_id,
+            );
+        }
     } else {
         // Default: wasi:cli/command. `_temp_dirs` must outlive the run: dropping
         // a `TempDir` deletes it from disk.
@@ -1038,6 +1074,61 @@ fn run_with_allocator(
         });
         verify_result(&result, spec, test_id, opt_level);
     }
+}
+
+/// Check what the fixture's tests left unrun in the fixture against `expected`.
+fn assert_coverage(
+    wasm: &[u8],
+    fixture_path: &Path,
+    hits: &BTreeSet<u32>,
+    expected: &CoverageSpec,
+    test_id: &str,
+) {
+    let plans = read_from_component(wasm)
+        .unwrap_or_else(|| panic!("[{test_id}] the component carries no coverage section"));
+    let mut coverage = Coverage::default();
+    let registered = coverage
+        .register(&plans, str::to_string)
+        .unwrap_or_else(|mismatch| panic!("[{test_id}] plans disagree on {}", mismatch.path));
+    coverage.record(&registered, hits, None);
+    let name = fixture_path.file_name().unwrap().to_string_lossy();
+    let file = coverage
+        .files
+        .get(name.as_ref())
+        .unwrap_or_else(|| panic!("[{test_id}] no plan for {name}"));
+
+    let lines = file.uncovered_lines();
+    let branches: Vec<String> = file
+        .branches()
+        .iter()
+        .filter(|b| !b.taken)
+        .map(Branch::describe)
+        .collect();
+    let functions: Vec<String> = file
+        .functions()
+        .into_iter()
+        .filter(|(_, ran)| !ran)
+        .map(|(f, _)| f.name.clone())
+        .collect();
+    let plan = || render_plan(&file.plan);
+    assert_eq!(
+        lines,
+        expected.uncovered_lines,
+        "[{test_id}] uncovered lines\n{}",
+        plan()
+    );
+    assert_eq!(
+        branches,
+        expected.uncovered_branches,
+        "[{test_id}] uncovered branches\n{}",
+        plan()
+    );
+    assert_eq!(
+        functions,
+        expected.uncovered_functions,
+        "[{test_id}] uncovered functions\n{}",
+        plan()
+    );
 }
 
 /// Check the fixture's `wir_expect:Ox` / `wir_not_expect:Ox` patterns against the

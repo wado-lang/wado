@@ -3,7 +3,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::DependencySource;
 
 use lexopt::Arg::Value;
@@ -20,7 +19,13 @@ use crate::git::materialize;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
+<<<<<<< HEAD
 use crate::manifest::{DiscoveryError, openable_dir, resolve_manifest};
+||||||| 4e0a100fd
+use crate::manifest::{openable_dir, resolve_manifest};
+=======
+use crate::manifest::{absolute, openable_dir, resolve_manifest};
+>>>>>>> origin/main
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
@@ -157,6 +162,8 @@ pub struct CompileFlags {
     /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`
     /// section (issue #1654). Set by `wado compile` when embedding.
     pub embed_wit_contract: Option<wado_compiler::wit_emit::WitContract>,
+    /// `wado test --coverage`. Forwarded to `CompilerOptions::coverage`.
+    pub coverage: Option<wado_compiler::coverage::CoverageScope>,
 }
 
 #[derive(Clone, Copy)]
@@ -398,6 +405,7 @@ pub async fn try_compile_with_run_cache(
         lib_interface_export: flags.lib_interface_export,
         retain_wir: flags.retain_wir,
         embed_wit_contract: flags.embed_wit_contract.clone(),
+        coverage: flags.coverage,
         ..Default::default()
     };
 
@@ -846,19 +854,6 @@ fn build_dep_generator_local_path(
     let entry = package_generator_entry(&manifest_root.join(path))?;
     Ok(entry
         .map(|entry| wado_compiler::kiln::InvocationPath::normalize(&format!("{path}/{entry}"))))
-}
-
-/// `path` as an absolute, lexically normalized path, so two paths spelled
-/// independently can be expressed against each other.
-fn absolute(path: &Path) -> PathBuf {
-    // An empty path names the current directory here, and is the one input
-    // `std::path::absolute` refuses.
-    let path = if path.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        path
-    };
-    std::path::absolute(path).map_or_else(|_| path.to_path_buf(), |p| normalize_path(&p))
 }
 
 /// Resolve a generator *package directory* (absolute) to its

@@ -1,8 +1,8 @@
 // AST definitions for Wado
 
 use crate::attribute::{
-    ALLOW, CM, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO, UNAVAILABLE,
-    WASM_MODULE,
+    ALLOW, CM, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO,
+    UNAVAILABLE, WASM_MODULE,
 };
 use std::borrow::Cow;
 
@@ -1203,6 +1203,11 @@ impl Module {
     /// Indicates machine-generated code (e.g. wado-from-idl, gale).
     pub fn has_generated(&self) -> bool {
         self.inner_attributes.iter().any(|a| a.name == GENERATED)
+    }
+
+    /// Returns true if the module has the `#![coverage(off)]` attribute.
+    pub fn has_coverage_off(&self) -> bool {
+        self.inner_attributes.iter().any(|a| a.name == COVERAGE)
     }
 
     /// Returns the `wasm_module` name if `#![wasm_module("name")]` is present.

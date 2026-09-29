@@ -41,7 +41,13 @@ use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from ".
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use {
     follow_composed,
+    follow_alternative,
+    follow_opened,
+    follow_admits_call,
+    follow_exit_viable_call,
+    follow_resumes_call,
     follow_forward_args,
+    lr_cont_forward,
     follow_yields_call,
     follow_yields_call_if,
     follow_yields_call_of,
@@ -55,6 +61,7 @@ use {
     ATN_STATE_TYPE,
     Forwarded,
     GenContext,
+    SCAN_MEMO_HANDLE,
     is_nullable,
     sets_overlap,
     union_kind_arrays,
@@ -269,6 +276,7 @@ pub fn gen_parser(
         ctx.emit_actions(),
         !ctx.fragment_entries().is_empty(),
         ctx.emit_scan_gate(),
+        &if ctx.scan_memo() { Option::Some(ctx.scan_memo_type()) } else { null },
         members,
         ctx.parser_superclass_name(),
     );
@@ -360,11 +368,6 @@ fn called_scan_chunks(chunks: &List<String>, parse_text: &String) -> List<String
         }
     }
     return out;
-}
-
-/// The caller's own `lr_cont`, handed on where the callee's trailing operand reads it.
-fn lr_cont_forward(mid_operand_gated: bool) -> String {
-    return if mid_operand_gated { ", lr_cont" } else { "" };
 }
 
 /// The `lr_cont` argument a self-reference passes, with its leading comma.
@@ -484,9 +487,11 @@ fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
 }
 
 /// What a scan call passes after the position: the parser state it borrows,
-/// and the caller's follow where the rule reads one.
+/// the caller's follow where the rule reads one, and `lr_cont` inside an atom
+/// that owes it.
 fn scan_trailing_args(ctx: &GenContext) -> String {
-    return `${ctx.scan_state_args()}${follow_sep(ctx.current_rule_reads_follow())}`;
+    return `${ctx.scan_state_args()}${follow_sep(ctx.current_rule_reads_follow())}${lr_cont_forward(ctx.lr_cont_in_atom(
+    ))}`;
 }
 
 /// A scan function's parameters up to `min_prec`: the token kinds, the
@@ -500,8 +505,14 @@ fn add_scan_params(f: &mut FnSpec, ctx: &GenContext) {
     if ctx.needs_scan_atn() {
         f.add_param(&ATN_STATE_HANDLE, `&mut ${ATN_STATE_TYPE}`);
     }
+    if ctx.scan_memo() {
+        f.add_param(&SCAN_MEMO_HANDLE, `&mut ${ctx.scan_memo_type()}`);
+    }
     if ctx.current_rule_reads_follow() {
         add_follow_param(f);
+    }
+    if ctx.lr_cont_in_atom() {
+        add_lr_cont_param(f);
     }
 }
 
@@ -522,12 +533,27 @@ fn gen_scan_functions(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut Gen
     let mut chunks: List<String> = [];
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         ctx.set_current_rule_index(i);
+        ctx.set_lr_continuation(lr_continuation_of(&lowered.parser_rules[i]));
         let mut w = CodeWriter::with_capacity(1024);
         gen_scan_function(&mut w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
         chunks.push(w.to_string());
     }
+    ctx.set_lr_continuation([]);
     ctx.set_in_scan_fn(was_scan);
     return chunks;
+}
+
+/// What continues every alternative's tail besides `follow`: in a
+/// left-recursive rule, atom or suffix, the suffix loop. Both sides read it, so
+/// the scan enters an optional exactly where the parse does.
+fn lr_continuation_of(lowered_rule: &Rule) -> List<String> {
+    let mut continuation: List<String> = [];
+    if let LeftRecursive(l) = lowered_rule {
+        for let first of &lr_suffix_first_sets(&l.lr_alts, &l.lr_dispatch) {
+            continuation = union_kind_arrays(&continuation, first);
+        }
+    }
+    return continuation;
 }
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
@@ -772,6 +798,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     mid_operand_gated: bool = false,
 ) {
     let atom_name = `${fn_name}_atom`;
+    let was_in_atom = ctx.set_lr_cont_in_atom(mid_operand_gated);
 
     let atom_og = if non_lr_indices.len() > 1 {
         let og = rule_overlap_groups(rule, lowered_rule, ctx);
@@ -810,12 +837,15 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     }
     w.end();
     w.blank();
+    ctx.set_lr_cont_in_atom(was_in_atom);
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
     gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name, mid_operand_gated);
 
-    // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
-    let mut f2 = FnSpec::new(fn_name);
+    // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop,
+    // named scan_X__walk where the memo stands in front of it.
+    let walk_name = if ctx.scan_memo() { `${fn_name}__walk` } else { fn_name.to_string() };
+    let mut f2 = FnSpec::new(&walk_name);
     add_scan_params(&mut f2, ctx);
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
@@ -826,9 +856,12 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         add_lr_cont_param(&mut f2);
     }
     f2.set_return_type("i32");
+    if ctx.scan_memo() {
+        gen_scan_memo_wrapper(w, ctx, &f2, fn_name, &walk_name, mid_operand_gated);
+    }
     f2.emit_begin(w);
     w.line(
-        `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)});`,
+        `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`,
     );
     w.line("if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
@@ -837,6 +870,42 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     }
     w.line("return pos;");
+    w.end();
+    w.blank();
+}
+
+/// `scan_X` as the memo in front of its walk, which `walk` declares: the key is
+/// every argument the walk reads, and the answer is the end and the gate the
+/// walk leaves.
+fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    ctx: &GenContext,
+    walk: &FnSpec,
+    name: S,
+    walk_name: S1,
+    mid_operand_gated: bool,
+) {
+    let mut f = *walk;
+    f.name = name.to_string();
+    f.emit_begin(w);
+    let gated = ctx.emit_scan_gate();
+    let gate = if gated { `*${SCAN_GATE_HANDLE}` } else { "()" };
+    let follow = if ctx.current_rule_reads_follow() { follow_forward_args() } else { "0" };
+    let cont = if mid_operand_gated { "lr_cont" } else { "0" };
+    let key = `${ctx.current_rule_index()}, pos, min_prec, ${follow}, ${cont}`;
+    w.line(`let memo_at = ${SCAN_MEMO_HANDLE}.find(${key}, &${gate});`);
+    w.begin("if memo_at >= 0");
+    if gated {
+        w.line(`${gate} = ${SCAN_MEMO_HANDLE}.gate_of(memo_at);`);
+    }
+    w.line(`return ${SCAN_MEMO_HANDLE}.end_of(memo_at);`);
+    w.end();
+    w.line(`let memo_gate = ${gate};`);
+    w.line(`let memo_end = ${walk_name}(tokens, pos${scan_trailing_args(ctx)}, min_prec${lr_cont_forward(
+        mid_operand_gated,
+    )});`);
+    w.line(`${SCAN_MEMO_HANDLE}.put(${key}, memo_gate, memo_end, ${gate});`);
+    w.line("return memo_end;");
     w.end();
     w.blank();
 }
@@ -1841,14 +1910,13 @@ fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: 
 
 /// Scan mirror of `gen_optional_probe_entry`. With `cont_done` named, a probe
 /// that holds has scanned the rest of the sequence, so it sets the flag and stays.
-fn gen_scan_optional_probe<S: AsStrSlice>(
+fn gen_scan_optional_probe(
     w: &mut CodeWriter,
     re: &ScanRepeatElement,
     ctx: &mut GenContext,
-    caller_follow_gate: S,
     cont_done: &String = &NO_CONT_DONE,
 ) {
-    w.begin(`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
+    w.begin(`if ${scan_repeat_guard(&re.inner_admits, "", ctx)}`);
     gen_scan_mark(w, ctx, "sp");
     gen_scan_op_element_assign(w, &re.body, ctx, &known_at_start(&admits_kinds(&re.inner_admits)));
     w.begin("if pos < 0");
@@ -2048,7 +2116,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     }
 
     if scan_takes_optional_probe(re, ctx) {
-        gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);
+        gen_scan_optional_probe(w, re, ctx);
         return;
     }
     if let Optional = re.kind {
@@ -2076,8 +2144,22 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         } else {
             [] as List<String>;
         };
-        w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
+        let leaf_enters = re.gate_caller_follow && re.body matches { Token(_) | Wildcard | Excluded(_) };
+        let call_enters = scan_enters_while_viable(re);
+        let yield_gate = if leaf_enters || call_enters { String::new() } else { caller_follow_gate };
+        let mut guard = scan_repeat_guard_excluding(&effective, &excluded, &yield_gate, ctx);
+        if leaf_enters {
+            guard = `${guard} && ${leaf_enters_while_viable(ctx, &re.caller_follow_first, "tokens", "tokens", "pos")}`;
+        }
+        w.begin(`if ${guard}`);
         gen_scan_iteration(w, re, &effective, ctx, false);
+        if call_enters {
+            assert !repeat_body_implied_by_guard(&re.body, &effective), "a rule-call body is scanned, which marks `sp`";
+            let resumes = continuation_resumes_at(ctx, &re.caller_follow_first, "tokens", "tokens", "pos");
+            w.begin(`if ${follow_yields_call("tokens", "sp")} && !${resumes}`);
+            gen_scan_rewind(w, ctx, "sp");
+            w.end();
+        }
         w.end();
         return;
     }
@@ -2099,6 +2181,11 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     w.begin(`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
     gen_scan_iteration(w, re, &loop_admits, ctx, true);
     w.end();
+}
+
+/// The scan's twin of `enters_while_viable`.
+fn scan_enters_while_viable(re: &ScanRepeatElement) -> bool {
+    return re.kind matches { Optional } && re.body matches { RuleCall(_) } && re.gate_caller_follow && re.body_scannable;
 }
 
 /// One scanned iteration: take the token the guard already proved, or scan the
@@ -2163,7 +2250,14 @@ fn gen_scan_decline_stranded(
     for let se of &duties.decline_scan {
         gen_scan_op_element(w, se, ctx, `break dcl_${gc};`);
     }
-    emit_probe_verdict(w, DECLINE_ASKS_CALLER, &duties.decline_viable, `dc_${gc}_exit`, ctx);
+    emit_probe_verdict(
+        w,
+        DECLINE_ASKS_CALLER,
+        &duties.decline_viable,
+        `dc_${gc}_exit`,
+        ctx,
+        duties.decline_scan.is_empty(),
+    );
     w.end();
     // Both exits leave a walk that did not happen, so both put the gate back:
     // declining rewinds to the iteration's start, and continuing resumes at the
@@ -2526,13 +2620,7 @@ fn gen_scan_op_elements<S: AsStrSlice>(
                 };
                 let cont_done = `cont_done_${w.next_id()}`;
                 w.line(`let mut ${cont_done} = false;`);
-                gen_scan_optional_probe(
-                    w,
-                    re,
-                    ctx,
-                    &follow_yields_call_if(re.gate_caller_follow, "tokens", "pos"),
-                    &cont_done,
-                );
+                gen_scan_optional_probe(w, re, ctx, &cont_done);
                 w.begin(`if !${cont_done}`);
                 gen_scan_op_elements(w, scan_elems, i + 1, end, ctx, fail_stmt, gates, &NO_SCAN_GATE_COND, &k);
                 w.end();
@@ -2766,13 +2854,12 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     let mut iw = CodeWriter::new();
     match *lowered_rule {
         Simple(_) => gen_parse_fn_simple_named(&mut iw, rule, lowered_rule, ctx, &inner),
-        MultiAlt(_) | LeftRecursive(_) => gen_parse_fn_named(
-            &mut iw,
-            rule,
-            lowered_rule,
-            ctx,
-            &inner,
-        ),
+        MultiAlt(_) => gen_parse_fn_named(&mut iw, rule, lowered_rule, ctx, &inner),
+        LeftRecursive(_) => {
+            ctx.set_lr_continuation(lr_continuation_of(lowered_rule));
+            gen_parse_fn_named(&mut iw, rule, lowered_rule, ctx, &inner);
+            ctx.set_lr_continuation([]);
+        },
     }
     let inner_text = iw.to_string();
     let inlined = if rule_takes_min_prec(lowered_rule) { null } else { single_statement_fn_body(&inner_text) };
@@ -3121,6 +3208,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     let has_overlaps = has_multi_alt_groups(&og.groups);
 
     mark_gated_predicates(rule, has_overlaps, &og.groups, &og.first_sets, &og.non_lr_indices, &og.end_follow, ctx);
+    let was_in_atom = ctx.set_lr_cont_in_atom(lr_mid_operand_gated(lowered_rule));
 
     if has_overlaps {
         // Pre-compute which alts' scan helpers the dispatch will call so the
@@ -3158,6 +3246,9 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     // continuity; the helper mutates its own copy and returns it.
                     if rule_emits_vals(ctx, rule) {
                         add_seeded_vals_param(&mut f, rule);
+                    }
+                    if ctx.lr_cont_in_atom() {
+                        add_lr_cont_param(&mut f);
                     }
                     f.set_return_type(&rule_result_type_for(rule, ctx));
                     let mut hw = CodeWriter::with_capacity(256);
@@ -3224,6 +3315,9 @@ fn gen_parse_fn_named<S: AsStrSlice>(
             type_str: "i32",
             default_value: Option::Some("0"),
         });
+        if ctx.lr_cont_in_atom() {
+            add_lr_cont_param(&mut f);
+        }
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if rule_emits_vals(ctx, rule) {
@@ -3234,6 +3328,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, &type_name, ctx, &og, fn_name);
         w.end();
         w.blank();
+        ctx.set_lr_cont_in_atom(was_in_atom);
 
         let lr_data = if let LeftRecursive(l) = lowered_rule {
             [&l.lr_alts, &l.lr_dispatch];
@@ -4201,10 +4296,11 @@ fn gen_lr_fn<S: AsStrSlice>(
     }
     // The atom seeds the accumulator (the left operand's value); each LR
     // continuation folds a right operand into it (`emit_lr_branch_body`).
+    let contfwd = lr_cont_forward(mid_operand_gated);
     if emits_vals {
-        w.line(`let mut _lr_acc = ${fn_name}_atom(p${fsep}, vals, min_prec);`);
+        w.line(`let mut _lr_acc = ${fn_name}_atom(p${fsep}, vals, min_prec${contfwd});`);
     } else {
-        w.line(`${fn_name}_atom(p${fsep}, min_prec);`);
+        w.line(`${fn_name}_atom(p${fsep}, min_prec${contfwd});`);
     }
     w.line("p.b.finish_node(p.last_end());");
     // ATN-class LR: the suffix loop-entry can't be resolved by static
@@ -4530,6 +4626,7 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     prefix_scan: Option<ScanElement>,
     asks_caller: bool,
     probe_viable: &List<String>,
+    definite: bool = false,
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(`${label}:`);
@@ -4541,28 +4638,37 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     for let se of continuation {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx);
+    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx, definite);
     w.end();
 }
 
 /// The probe's verdict once its scan has matched: the match itself short of the
 /// rule's tail; at the tail, the threaded mask and any stamped FOLLOW admitting the position.
+///
+/// `definite` asks the mask for the caller's whole known continuation rather
+/// than its first token. A loop ending its rule has nothing of its own left to
+/// scan, so one token of the caller is all that would stand behind a decline:
+/// `paraContent NL NL` would give up the `\n` of `\n EOF` to a `para` that
+/// cannot finish either way.
 fn emit_probe_verdict<S: AsStrSlice>(
     w: &mut CodeWriter,
     asks_caller: bool,
     probe_viable: &List<String>,
     verdict: S,
     ctx: &mut GenContext,
+    definite: bool = false,
 ) {
     if !asks_caller {
         assert probe_viable.is_empty(), "a FOLLOW is stamped only on a probe reaching the rule's tail";
         w.line(`${verdict} = true;`);
         return;
     }
-    let mask = if ctx.current_rule_reads_follow() {
-        `${FOLLOW_PARAM} == 0 || ${follow_yields_call("tokens", "pos")}`;
-    } else {
+    let mask = if !ctx.current_rule_reads_follow() {
         "true";
+    } else if definite {
+        follow_exit_viable_call("tokens", "pos");
+    } else {
+        follow_admits_call("tokens", "pos");
     };
     if probe_viable.is_empty() {
         if mask == "true" {
@@ -6317,12 +6423,76 @@ fn gen_op_repeat_optional_rulecall(
         },
     };
 
-    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
     let proven: List<String> = match &rep_op.body_admits {
         Kinds(kinds) => subtract_sets(kinds, follow),
         _ => [],
     };
+    if enters_while_viable(rep_op) {
+        // A token the caller's continuation cannot start at decides by itself,
+        // as ANTLR4's LL(1) does, so `a { b: }` still reports inside the body.
+        // Where the continuation can start (the caller's, or the LR suffix
+        // loop's, which `follow` does not carry), the scan side enters only
+        // where the body scans, and the parse must too or the tournament
+        // measures a length the parse does not take.
+        let verdict = dedup_name("opt_enter", name_counts);
+        w.line(`let mut ${verdict}: bool = ${entry};`);
+        let lr_suffix = *ctx.lr_continuation();
+        let contested = if lr_suffix.is_empty() {
+            follow_admits_call("&p.kinds", "p.pos");
+        } else {
+            `(${follow_admits_call("&p.kinds", "p.pos")} || ${ctx.kind_check_str(&lr_suffix, "p.peek_kind()")})`;
+        };
+        w.begin(`if ${verdict} && ${contested}`);
+        let scan_pos = gen_scan_guard_with_prefix(
+            w,
+            &rep_op.scan_body,
+            ctx,
+            name_counts,
+            "opt_scan_pos",
+            "opt_scan",
+            false,
+        );
+        let resumes = continuation_resumes_at(ctx, &rep_op.caller_follow_first, "&p.kinds", "p.kinds", &scan_pos);
+        w.line(`${verdict} = ${scan_pos} >= 0 && (!${follow_yields_call("&p.kinds", "p.pos")} || ${resumes});`);
+        w.end();
+        gen_optional_present(w, &rep_op.body, "", &verdict, ctx, &proven);
+        return;
+    }
+    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx, &proven);
+}
+
+/// Whether a tail `?` over a rule call yields to its caller only where entering
+/// would strand the caller's continuation. ANTLR4 resolves the ambiguity by
+/// entering, so a continuation that merely starts here does not yield: the
+/// body's end must fail to start it too. The scan side reads the same answer
+/// through `scan_enters_while_viable`.
+fn enters_while_viable(r: &RepeatOp) -> bool {
+    return r.gate_caller_follow && r.body_scannable;
+}
+
+/// Whether what follows a tail-reaching repeat is known to start at `at`: the
+/// rest of its own alternative, which is nullable there, the LR suffix loop
+/// around an atom, or the caller. A caller that passed on no continuation
+/// counts as none: what it resumes with is unknown, so it cannot overturn the
+/// continuation that yields (Rust's `a::T {`, whose `::` the path keeps).
+/// `tokens` is the token array as the runtime takes it and `stream` the same
+/// array indexed directly.
+fn continuation_resumes_at<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    ctx: &mut GenContext,
+    local_first: &List<String>,
+    tokens: S,
+    stream: S1,
+    at: S2,
+) -> String {
+    let caller_resumes = follow_resumes_call(tokens, at);
+    let mut kinds = *local_first;
+    dedup_append_arr(&mut kinds, ctx.lr_continuation());
+    if kinds.is_empty() {
+        return caller_resumes;
+    }
+    let kind = `(${kind_at(stream, &at)})`;
+    return `(${ctx.kind_check_str(&kinds, &kind)} || ${caller_resumes})`;
 }
 
 /// Whether the probe decides this greedy `?` over a leaf body. Any leaf: a
@@ -6342,17 +6512,13 @@ fn probe_decides(continuation: &List<ScanElement>, continuation_scannable: bool,
 
 /// Greedy Optional that enters when entering stays viable. The cheap
 /// first-set check stays in front so a token that cannot start the body
-/// never pays for a scan, and the caller-FOLLOW yield gate still wins —
-/// where the repair already decided to yield the probe does not rule.
+/// never pays for a scan. A caller's continuation starting here does not
+/// yield by itself: ANTLR4 enters wherever entering stays viable, and the
+/// probe asks exactly that.
 fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let verdict = dedup_name("opt_enter", nc);
-    let entry_gate = if ctx.current_rule_reads_follow() && r.gate_caller_follow {
-        ` && !${follow_yields_call("&p.kinds", "p.pos")}`;
-    } else {
-        "";
-    };
     w.line(`let mut ${verdict}: bool = false;`);
-    w.begin(`if ${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}${entry_gate}`);
+    w.begin(`if ${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}`);
     gen_viability_probe(
         w,
         &r.continuation_scan,
@@ -6407,15 +6573,28 @@ fn gen_op_repeat_optional_leaf(
         return;
     }
 
-    // Same K-prefix gate as the RuleCall arm — see
-    // `gen_op_repeat_optional_rulecall` for the rationale.
-    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
-    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &repeat_guard_cond(
-        &rep_op.body_admits,
-        &NO_EXCLUSION,
-        &PEEK_KIND,
-        ctx,
-    ), ctx, &admits_kinds(&rep_op.body_admits));
+    let entry = repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx);
+    let enters = if rep_op.gate_caller_follow {
+        `${entry} && ${leaf_enters_while_viable(ctx, &rep_op.caller_follow_first, "&p.kinds", "p.kinds", "p.pos")}`;
+    } else {
+        entry;
+    };
+    gen_optional_present(w, &rep_op.body, "", &enters, ctx, &admits_kinds(&rep_op.body_admits));
+}
+
+/// `enters_while_viable` for a body of one token, whose end is the next
+/// position: a caller's continuation starting at the token yields it only when
+/// none starts after it. The scan side emits the same condition.
+fn leaf_enters_while_viable<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    ctx: &mut GenContext,
+    local_first: &List<String>,
+    tokens: S,
+    stream: S1,
+    pos: S2,
+) -> String {
+    let end = `${pos} + 1`;
+    let resumes = continuation_resumes_at(ctx, local_first, &tokens, stream, &end);
+    return `(!${follow_yields_call(tokens, pos)} || ${resumes})`;
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy Repeat's
@@ -6456,14 +6635,37 @@ fn follow_arg_expr(ctx: &mut GenContext, arg: &FollowArg) -> String {
     return match arg {
         NoFollow => "0",
         Forward => follow_forward_args(),
+        ForwardOpen(first) => follow_opened(
+            &follow_forward_args(),
+            &follow_open_set_expr(ctx, *first),
+        ),
         Mask(id) => ctx.follow_mask_ref(*id),
         // The caller's continuation shifts along behind the new head, starting
         // where the head stops constraining. What that pushes past the last
         // slot begins at a depth the gate does not read.
         Combined(id) => follow_composed(ctx.follow_mask_ref(*id), ctx.follow_mask_positions(*id), false),
-        // Same, and what the caller wants opens a fresh reading: the loop
+        // Same, and what follows the loop opens a fresh reading: the loop
         // iteration and it are alternatives, not a sequence.
-        AltMask(id) => follow_composed(ctx.follow_mask_ref(*id), ctx.follow_mask_positions(*id), true),
+        AltMask(le) => {
+            let loop_ref = ctx.follow_mask_ref(le.loop_mask);
+            let positions = ctx.follow_mask_positions(le.loop_mask);
+            match le.exit {
+                Forward => follow_composed(loop_ref, positions, true),
+                ForwardOpen(first) => follow_opened(
+                    &follow_composed(loop_ref, positions, true),
+                    &follow_open_set_expr(ctx, first),
+                ),
+                _ => follow_alternative(loop_ref, positions, follow_arg_expr(ctx, &le.exit)),
+            }
+        },
+    };
+}
+
+/// The open reading a `ForwardOpen` adds: the kinds it starts with, or any.
+fn follow_open_set_expr(ctx: &GenContext, first: Option<i32>) -> String {
+    return match first {
+        Some(id) => `follow_open_set(${ctx.follow_mask_ref(id)})`,
+        None => "FOLLOW_OPEN_READING",
     };
 }
 
@@ -6858,6 +7060,7 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
         null,
         DECLINE_ASKS_CALLER,
         &duties.decline_viable,
+        duties.decline_scan.is_empty(),
     );
     w.line(`if ${dead_end} { break; }`);
     w.end();
@@ -7082,9 +7285,12 @@ fn gen_scan_gate_restore<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, sl
 /// The lookahead read every gate and probe opens with: the kind at `at`, EOF
 /// past the end. `stream` is `tokens` inside a scan and `p.kinds` outside one.
 fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, stream: S1, at: S2) {
-    w.line(
-        `let ${name} = if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF };`,
-    );
+    w.line(`let ${name} = ${kind_at(stream, at)};`);
+}
+
+/// The kind at `at` as an expression, EOF past the end.
+fn kind_at<S: AsStrSlice, S1: AsStrSlice>(stream: S, at: S1) -> String {
+    return `if ${at} < ${stream}.len() { ${stream}[${at}] } else { TK_EOF }`;
 }
 
 /// Whether the token after an iteration lets the walk go on without declining:
@@ -7098,7 +7304,7 @@ fn decline_continue_check<S: AsStrSlice>(
     let mut kinds = *loop_first;
     dedup_append_arr(&mut kinds, &duties.decline_cont_first);
     dedup_append_arr(&mut kinds, &duties.decline_viable);
-    assert !kinds.is_empty(), "a decline is stamped only where the loop's first set overlaps the suffix's";
+    assert !kinds.is_empty(), "a decline is stamped only where the loop's first set overlaps the suffix's or the rule's FOLLOW";
     return ctx.kind_check_str(&kinds, subject);
 }
 

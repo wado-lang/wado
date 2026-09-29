@@ -789,7 +789,7 @@ fn elab_stmt(
             is_reactive,
             type_id,
             value,
-            skip_value_copy,
+            storage,
         } => {
             let value = elab_value_expr(value, owned, cx);
             if cx.carries_resource(type_id) {
@@ -808,7 +808,7 @@ fn elab_stmt(
                     is_reactive,
                     type_id,
                     value,
-                    skip_value_copy,
+                    storage,
                 },
                 span,
             });

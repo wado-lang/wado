@@ -9,8 +9,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    LetStorage, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
@@ -138,17 +138,18 @@ impl Temp {
 }
 
 impl WriteBack<'_> {
-    /// Bind `value` to a fresh local. `skip_copy` holds for a temp standing in
-    /// for storage the caller still owns — a place, or a borrow of one — and
-    /// for a fresh result. A by-value argument is neither, and value semantics
-    /// still owe it its copy.
+    /// Bind `value` to a fresh local. A temp standing in for storage the
+    /// caller still owns — a place, or a borrow of one — is `Aliased`. A
+    /// by-value argument and a call's result are `Planned`: value semantics
+    /// still owe the one its copy, and the other may be a projection of the
+    /// temp.
     fn bind(
         &mut self,
         prefix: &mut Vec<TirStmt>,
         kind: &str,
         value: TirExpr,
         is_mut: bool,
-        skip_copy: bool,
+        storage: LetStorage,
     ) -> Temp {
         assert_eq!(
             u32::try_from(self.locals.len()).unwrap() + self.local_base,
@@ -167,7 +168,7 @@ impl WriteBack<'_> {
                 is_reactive: false,
                 type_id,
                 value,
-                skip_value_copy: skip_copy,
+                storage,
             },
             span,
         ));
@@ -370,32 +371,36 @@ impl WriteBack<'_> {
             } => self.hoist_place(expr, prefix),
             TirExprKind::Index { expr, index } => {
                 self.hoist_place(expr, prefix);
-                self.hoist_operand(index, prefix, true);
+                self.hoist_operand(index, prefix);
             }
-            // A step of the place stands in for the place's own storage.
-            _ => self.hoist_operand(place, prefix, true),
+            _ => self.hoist_operand(place, prefix),
         }
     }
 
-    /// Bind `expr` to a temp and leave a read of it behind, unless re-reading
-    /// it costs nothing and still names the same thing — a slot read as a step
-    /// of a place, which the place's own assignment re-reads the same way.
-    /// `skip_copy` as in [`Self::bind`].
-    fn hoist_operand(&mut self, expr: &mut TirExpr, prefix: &mut Vec<TirStmt>, skip_copy: bool) {
+    /// Bind a step of a place, which stands in for the place's own storage, to
+    /// a temp and leave a read of it behind — unless re-reading it costs
+    /// nothing and still names the same thing: a slot, which the place's own
+    /// assignment re-reads the same way.
+    fn hoist_operand(&mut self, expr: &mut TirExpr, prefix: &mut Vec<TirStmt>) {
         if matches!(
             expr.kind,
             TirExprKind::Local { .. } | TirExprKind::Capture { .. }
         ) {
             return;
         }
-        self.hoist_argument(expr, prefix, skip_copy);
+        self.hoist_argument(expr, prefix, LetStorage::Aliased);
     }
 
     /// The same for an argument moved ahead of the call, where a slot is *not*
     /// free to re-read: a place this loop reads after it can write that slot —
     /// `f(n, &mut xs[bump(&mut n)].item)` reads `n` before `bump`. Only a
     /// literal, which no prefix statement can move, stays in the call.
-    fn hoist_argument(&mut self, expr: &mut TirExpr, prefix: &mut Vec<TirStmt>, skip_copy: bool) {
+    fn hoist_argument(
+        &mut self,
+        expr: &mut TirExpr,
+        prefix: &mut Vec<TirStmt>,
+        storage: LetStorage,
+    ) {
         if matches!(
             expr.kind,
             TirExprKind::IntLiteral { .. }
@@ -410,10 +415,10 @@ impl WriteBack<'_> {
         }
         let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span);
         let value = std::mem::replace(expr, placeholder);
-        *expr = self.bind(prefix, "place_", value, false, skip_copy).read();
+        *expr = self.bind(prefix, "place_", value, false, storage).read();
     }
 
-    /// `{ let t = place; let b = t; let r = f(&mut t); if t !== b { place = t }; r }`
+    /// `{ let t = place; let b = t; let r = f(&mut t); if t !== b { let m = t; place = m }; r }`
     /// — the call keeps its position, so a `?` on it still sees the write-back
     /// run first.
     fn wrap(&mut self, call: &mut TirExpr) {
@@ -441,7 +446,7 @@ impl WriteBack<'_> {
         if let TirExprKind::IndirectCall { callee, args } = &mut call.kind
             && args.iter().any(|arg| self.detached_place(arg).is_some())
         {
-            self.hoist_argument(callee, &mut prefix, true);
+            self.hoist_argument(callee, &mut prefix, LetStorage::Aliased);
         }
         // A direct callee declares the positions it keeps a borrow past the
         // call; an indirect one carries them on its function type.
@@ -547,7 +552,12 @@ impl WriteBack<'_> {
                 // temp stands in for the caller's storage rather than a
                 // snapshot of it.
                 if position < last_place {
-                    self.hoist_argument(arg, &mut prefix, has_receiver && position == 0);
+                    let storage = if has_receiver && position == 0 {
+                        LetStorage::Aliased
+                    } else {
+                        LetStorage::Planned
+                    };
+                    self.hoist_argument(arg, &mut prefix, storage);
                 }
                 continue;
             }
@@ -577,11 +587,38 @@ impl WriteBack<'_> {
             self.hoist_place(&mut place, &mut prefix);
             // The temp aliases the place, so payload mutation through it lands
             // without any store back.
-            let temp = self.bind(&mut prefix, "", place.clone(), true, true);
+            let temp = self.bind(&mut prefix, "", place.clone(), true, LetStorage::Aliased);
             self.borrowed_temps.push(temp.index);
             // An identity witness, never a copy: a copy would make every call
             // look like a whole-value write.
-            let before = self.bind(&mut prefix, "before_", temp.read(), false, true);
+            let before = self.bind(
+                &mut prefix,
+                "before_",
+                temp.read(),
+                false,
+                LetStorage::Aliased,
+            );
+            // The store is the temp's last read, so it hands the storage over
+            // rather than copying the whole payload.
+            let mut store_back: Vec<TirStmt> = Vec::new();
+            let moved = self.bind(
+                &mut store_back,
+                "moved_",
+                temp.read(),
+                false,
+                LetStorage::Taken,
+            );
+            store_back.push(TirStmt::new(
+                TirStmtKind::Expr(TirExpr::new(
+                    TirExprKind::Assign {
+                        target: Box::new(place),
+                        value: Box::new(moved.read()),
+                    },
+                    TypeTable::UNIT,
+                    span,
+                )),
+                span,
+            ));
             // Store back only what the callee replaced. An unconditional store
             // would also undo a write the callee made through another route to
             // the same place — `self`, or a sibling `&mut` argument.
@@ -597,17 +634,7 @@ impl WriteBack<'_> {
                         span,
                     ),
                     then_block: TirBlock {
-                        stmts: vec![TirStmt::new(
-                            TirStmtKind::Expr(TirExpr::new(
-                                TirExprKind::Assign {
-                                    target: Box::new(place),
-                                    value: Box::new(temp.read()),
-                                },
-                                TypeTable::UNIT,
-                                span,
-                            )),
-                            span,
-                        )],
+                        stmts: store_back,
                         span,
                     },
                     else_block: None,
@@ -632,7 +659,10 @@ impl WriteBack<'_> {
         let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
         let original = std::mem::replace(call, placeholder);
         let mut stmts = prefix;
-        let result = self.bind(&mut stmts, "result_", original, false, true);
+        // The result may be a projection of the temp, which the place is about
+        // to take over, so whether it needs a copy is the value-copy analysis'
+        // call, as it would be at the call's own use site.
+        let result = self.bind(&mut stmts, "result_", original, false, LetStorage::Planned);
         stmts.append(&mut write_backs);
         stmts.push(TirStmt::new(TirStmtKind::Expr(result.read()), span));
         *call = TirExpr::new(

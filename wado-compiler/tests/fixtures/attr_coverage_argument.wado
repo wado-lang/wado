@@ -1,0 +1,13 @@
+// `#[coverage]` takes `off` alone: measuring is the default, so nothing else
+// has a meaning.
+#[coverage(on)]
+fn f() -> i32 {
+    return 1;
+}
+
+test {
+    assert f() == 1;
+}
+
+__DATA__
+{"compile_error": ":3:1: analysis error: `coverage` takes `off`", "compile_error_codes": ["ATTR_MISUSE"]}

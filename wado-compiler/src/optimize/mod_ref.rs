@@ -8,7 +8,13 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir;
+<<<<<<< HEAD
 use crate::nir::{NirFunction, NirUnaryOp};
+||||||| 4e0a100fd
+use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
+=======
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
+>>>>>>> origin/main
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -16,7 +22,7 @@ use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::{
     expr_node_may_trap_typed, field_receiver_nonnull, operand_values_may_trap, unary_may_trap,
 };
-use crate::optimize::bounds::{self, Builtin};
+use crate::optimize::bounds::{self, Builtin, Proofs};
 use crate::optimize::inline::recursive_scc_members;
 use crate::tir::{BuiltinDeclarations, LinearMemory, TypeTable};
 
@@ -758,6 +764,64 @@ fn leaf_effect<'a>(
     (effect, Some(builtin))
 }
 
+/// Each bodyless function's summary and, for a builtin, what it declared,
+/// indexed by `func_id.index()`. A function with a body is left pure here.
+fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<Builtin<'_>>>) {
+    let funcs = &project.functions;
+    let mut effects = vec![FnEffect::default(); funcs.len()];
+    let mut builtins = vec![None; funcs.len()];
+    for (i, f) in funcs.iter().enumerate() {
+        let f = f.borrow();
+        if f.body.is_none() {
+            (effects[i], builtins[i]) =
+                leaf_effect(&f, &project.builtin_registry, &project.builtin_declarations);
+        }
+    }
+    (effects, builtins)
+}
+
+/// Every function's [`FnEffect`], and the [`Proofs`] for the builtin calls in
+/// its body, both indexed by `func_id.index()`.
+pub(super) struct FnSummaries {
+    pub effects: Vec<FnEffect>,
+    proofs: Vec<Proofs>,
+}
+
+impl FnSummaries {
+    /// What the calls in the body of function `index` may do.
+    pub fn of_body(&self, index: usize) -> CallFacts<'_> {
+        CallFacts {
+            effects: &self.effects,
+            proofs: &self.proofs[index],
+        }
+    }
+}
+
+/// What the calls in one body may do: each callee's summary, less the trap a
+/// proof for that call site rules out.
+#[derive(Clone, Copy)]
+pub(super) struct CallFacts<'a> {
+    pub effects: &'a [FnEffect],
+    /// Proven against this body: an `ExprId` names one expression for the
+    /// body's lifetime, so a proof holds while the body keeps its meaning.
+    pub proofs: &'a Proofs,
+}
+
+impl CallFacts<'_> {
+    /// The effect of the call `id` to `func_id`.
+    pub fn call(&self, id: ExprId, func_id: FuncId) -> FnEffect {
+        use cranelift_entity::EntityRef;
+
+        let mut effect = self
+            .effects
+            .get(func_id.index())
+            .copied()
+            .unwrap_or_else(FnEffect::opaque);
+        effect.may_trap &= !self.proofs.holds(id, func_id);
+        effect
+    }
+}
+
 /// Resolve [`FnEffect`] for every function, indexed by `func_id.index()`.
 ///
 /// Least fixpoint from "pure until a reason appears": a function starts at its
@@ -766,19 +830,19 @@ fn leaf_effect<'a>(
 /// pure, which is what makes ordinary recursive helpers usable, but it may
 /// diverge.
 pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
+    summarize(project).0.effects
+}
+
+/// [`compute_fn_effects`] with each body's [`Proofs`], and what each builtin
+/// declared (indexed by `func_id.index()`), for a caller that proves a body
+/// again after changing it.
+pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<Builtin<'_>>>) {
     use cranelift_entity::EntityRef;
 
     let funcs = &project.functions;
     let types = project.type_table.borrow();
-    let mut effects = vec![FnEffect::default(); funcs.len()];
-    let mut builtins: Vec<Option<Builtin<'_>>> = vec![None; funcs.len()];
-    for (i, f) in funcs.iter().enumerate() {
-        let f = f.borrow();
-        if f.body.is_none() {
-            (effects[i], builtins[i]) =
-                leaf_effect(&f, &project.builtin_registry, &project.builtin_declarations);
-        }
-    }
+    let (mut effects, builtins) = leaf_effects(project);
+    let mut proofs: Vec<Proofs> = funcs.iter().map(|_| Proofs::default()).collect();
     // Callee edges as one flat run per function rather than an `IndexSet` each:
     // this walks every function in the package three times per fixed-point round.
     let mut callee_edges: Vec<usize> = Vec::new();
@@ -819,7 +883,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
                     // `#[trap(...)]` checks, and whose memory it writes.
                     ExprKind::Call { func_id, .. } if builtins[func_id.index()].is_some() => {
                         own.merge(FnEffect {
-                            may_trap: !bounds.in_bounds.contains(&id),
+                            may_trap: !bounds.proofs.holds(id, *func_id),
                             writes_shared_heap: false,
                             ..effects[func_id.index()]
                         });
@@ -846,6 +910,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
         }
         effects[i] = own;
         edge_ranges[i] = (edge_start, callee_edges.len());
+        proofs[i] = bounds.proofs;
     }
 
     let call_graph: Vec<Vec<usize>> = edge_ranges
@@ -876,7 +941,7 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
             break;
         }
     }
-    effects
+    (FnSummaries { effects, proofs }, builtins)
 }
 
 #[cfg(test)]

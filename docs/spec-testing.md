@@ -295,6 +295,45 @@ tests/
 
 Rationale: [WEP: Test Discovery](./wep-2026-05-02-test-discovery.md).
 
+### Coverage
+
+`wado test --coverage` reports which code the tests ran, and changes no test
+outcome.
+
+```sh
+wado test --coverage                        # summary on stdout, build/coverage/lcov.info
+wado test --coverage=lcov,json,baseline     # the files written to build/coverage/
+wado test --coverage --coverage-include=deps,stdlib
+wado test --coverage --coverage-baseline FILE
+```
+
+The unit is a region: a span of source that runs as a unit. A function, method
+or closure body is one, and so is each `if` branch (an `else` the source omits
+included), each `match` arm, a loop body, the `else` of `let … else`, the right
+operand of `&&` and `||`, the early return of `?`, and the statements after one
+that can leave its block with `return`, `break`, `continue` or `?`. A region
+counts as run once any test runs its start.
+
+Three measures derive from regions:
+
+- A function ran when its body region did.
+- A branch is a region one side of a choice starts: an `if` branch, a `match`
+  arm, the `else` of `let … else`, the right operand of `&&` or `||`, or the
+  early return of `?`.
+- A line counts when a statement starts on it, and ran when the innermost
+  region holding that statement did.
+
+A `test` block is not measured, nor is a global's initializer. What is measured
+is the package's own modules; `--coverage-include=deps` adds its dependencies',
+and `--coverage-include=stdlib` the `core:` modules, for the standard library's
+own tests. [`#[coverage(off)]`](./spec-attributes.md#coverageoff) leaves a
+function, an `impl` or a module unmeasured.
+
+`--coverage-baseline FILE` fails the run unless the regions no test ran are
+exactly those FILE lists. `--coverage=baseline` writes such a file.
+
+Rationale: [WEP: Test Coverage](./wep-2026-09-28-test-coverage.md).
+
 ### Example Test File
 
 <!-- {"fixture":"spec_testing_math_test.wado"} -->

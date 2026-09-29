@@ -1,0 +1,47 @@
+// `#[coverage(off)]` leaves a function or an `impl` out of the plan, and a
+// closure is a function of its own.
+struct Counter {
+    n: i32,
+}
+
+#[coverage(off)]
+impl Counter {
+    fn unused(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Counter {
+    fn bump(&mut self) {
+        self.n += 1;
+    }
+
+    fn reset(&mut self) {
+        self.n = 0;
+    }
+}
+
+#[coverage(off)]
+fn helper() -> i32 {
+    return 1;
+}
+
+fn apply(xs: List<i32>) -> List<i32> {
+    return xs.into_iter().map(|x| x + 1).collect();
+}
+
+test "methods and closures" {
+    let mut c = Counter { n: 0 };
+    c.bump();
+    assert c.n == 1;
+    assert apply([]).len() == 0;
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "uncovered_lines": [20],
+    "uncovered_functions": ["Counter::reset", "apply::{closure:30}"]
+  }
+}

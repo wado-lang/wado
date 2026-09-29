@@ -50,8 +50,9 @@ The Wado compiler crate.
 `src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
 them from disk, so editing one takes effect on the next `wado` run with no
 rebuild. A release build embeds them, as does any `wasm32` build, which has no
-filesystem. `lib/wasi/`, `lib/core/kiln/` and `lib/core/eval/` are generated from WIT: read
-`wado-from-idl/AGENTS.md` first.
+filesystem. `lib/wasi/`, `lib/core/kiln/`, `lib/core/eval/` and
+`lib/core/coverage/` are generated from WIT: read `wado-from-idl/AGENTS.md`
+first.
 
 The stdlib carries no inline hints (`#[inline(...)]`). A hint that makes code
 faster marks a case the optimizer misses, so the fix belongs in the optimizer.
@@ -77,6 +78,12 @@ facade puts each test beside the file that implements it, which is why
 
 `core:prelude` owes neither. Every program already imports it, so a synopsis has
 nothing to show, and the e2e fixtures are what hold its behaviour.
+
+`mise run test-stdlib-coverage` holds the stdlib to
+`scripts/stdlib-coverage.json`, the regions its tests leave unrun, and fails on
+a difference either way. New code gets a test, or `#[coverage(off)]` where no
+test can reach it. Remove what a new test covers with
+`mise run update-stdlib-coverage-baseline`; never add to it.
 
 `builtin::select` evaluates both operands and hands one back, so it is planned
 as the merge it is: the copy keeping a composite result independent lands on the

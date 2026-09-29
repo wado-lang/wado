@@ -3,7 +3,7 @@
 use std::ops::ControlFlow;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
-use super::mod_ref::FnEffect;
+use super::mod_ref::{CallFacts, FnSummaries};
 
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
@@ -26,10 +26,18 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
+<<<<<<< HEAD
 use crate::optimize::arena_query::{
     expr_node_may_trap, is_pure_nontrapping_expr_typed, operand_values_may_trap,
     promoted_local_reads,
 };
+||||||| 4e0a100fd
+use crate::optimize::arena_query::{
+    expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
+};
+=======
+use crate::optimize::arena_query::{expr_node_may_trap, promoted_local_reads};
+>>>>>>> origin/main
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
 use crate::{hashmap, nir, tir};
 
@@ -1888,15 +1896,14 @@ fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))>
 /// The expression predicate answers first, with its typed refinement, for a
 /// literal aggregate. Failing that the tree is walked: it refuses every call on
 /// sight, while the initializer globalization hoists for a reflect member walk
-/// *is* a call, so each one is answered by its whole-function summary instead.
+/// *is* a call, so each one is answered by `calls`: its callee's summary, less a
+/// trap a proof for that call rules out.
 pub(super) fn deletable_value(
     body: &Body,
     value: Operand,
     types: &TypeTable,
-    effects: &[FnEffect],
+    calls: CallFacts,
 ) -> bool {
-    use cranelift_entity::EntityRef;
-
     if is_pure_nontrapping_operand_typed(body, value, Some(types)) {
         return true;
     }
@@ -1907,11 +1914,7 @@ pub(super) fn deletable_value(
         _ if operand_values_may_trap(body, node) => Some(()),
         NodeRef::Expr(id) => match &body.exprs[id].kind {
             ExprKind::Call { func_id, .. } => {
-                let effect = effects
-                    .get(func_id.index())
-                    .copied()
-                    .unwrap_or_else(FnEffect::opaque);
-                (!effect.is_deletable()).then_some(())
+                (!calls.call(id, *func_id).is_deletable()).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
             | ExprKind::Assign { .. }
@@ -1934,7 +1937,7 @@ fn lazy_guard_global(
     stmt: StmtId,
     descriptors: &[FunctionRef],
     types: &TypeTable,
-    effects: &[FnEffect],
+    calls: CallFacts,
 ) -> Option<(ExprId, (String, String), Operand)> {
     let StmtKind::If {
         condition,
@@ -1981,7 +1984,7 @@ fn lazy_guard_global(
     }
     // Dropping the guard drops the value it stores, so a value whose trap the
     // program is entitled to is not a guard this pass may take.
-    if !deletable_value(body, *value, types, effects) {
+    if !deletable_value(body, *value, types, calls) {
         return None;
     }
     Some((
@@ -1994,13 +1997,14 @@ fn lazy_guard_global(
 struct GlobalGuards<'a> {
     descriptors: &'a [FunctionRef],
     types: &'a TypeTable,
-    effects: &'a [FnEffect],
     inert_functions: IndexSet<FuncId>,
 }
 
 impl GlobalGuards<'_> {
-    fn inert_value(&self, body: &Body, value: Operand) -> bool {
-        if is_pure_nontrapping_operand_typed(body, value, Some(self.types)) {
+    /// Whether `value` does nothing observable: a value this pass may delete,
+    /// or a call to a function whose whole body is such work.
+    fn inert_value(&self, body: &Body, value: Operand, calls: CallFacts) -> bool {
+        if deletable_value(body, value, self.types, calls) {
             return true;
         }
         let Some(expr) = value.as_expr() else {
@@ -2013,31 +2017,65 @@ impl GlobalGuards<'_> {
             || callee_descriptor(self.descriptors, *func_id).is_builtin_named("cold_path"))
             && args
                 .iter()
-                .all(|arg| is_pure_nontrapping_operand_typed(body, arg.expr, Some(self.types)))
+                .all(|arg| deletable_value(body, arg.expr, self.types, calls))
     }
 
-    fn inert_body(&self, body: &Body) -> bool {
+    /// Whether `stmt` binds a local nothing mentions to a value the pass may
+    /// delete — a binding that computes something and drops it. A trap is an
+    /// observable effect, so a trapping value keeps the binding alive even
+    /// though nobody reads it.
+    fn dead_binding(
+        &self,
+        body: &Body,
+        stmt: StmtId,
+        mentioned: &IndexSet<u32>,
+        calls: CallFacts,
+    ) -> Option<ExprId> {
+        let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[stmt].kind
+        else {
+            return None;
+        };
+        if mentioned.contains(local_index) {
+            return None;
+        }
+        let expr = value.as_expr()?;
+        deletable_value(body, *value, self.types, calls).then_some(expr)
+    }
+
+    fn inert_body(&self, body: &Body, calls: CallFacts) -> bool {
         body.blocks[body.root]
             .stmts
             .iter()
             .all(|s| match body.stmts[*s].kind {
                 StmtKind::Expr(value) | StmtKind::Let { value, .. } => {
-                    self.inert_value(body, value)
+                    self.inert_value(body, value, calls)
                 }
                 StmtKind::Return { value: None } => true,
-                StmtKind::Return { value: Some(value) } => self.inert_value(body, value),
+                StmtKind::Return { value: Some(value) } => self.inert_value(body, value, calls),
                 _ => false,
             })
     }
 
-    fn find(&self, body: &Body, stmt: StmtId) -> Option<(ExprId, (String, String), Operand)> {
-        lazy_guard_global(body, stmt, self.descriptors, self.types, self.effects)
-            .or_else(|| self.once_guard(body, stmt))
+    fn find(
+        &self,
+        body: &Body,
+        stmt: StmtId,
+        calls: CallFacts,
+    ) -> Option<(ExprId, (String, String), Operand)> {
+        lazy_guard_global(body, stmt, self.descriptors, self.types, calls)
+            .or_else(|| self.once_guard(body, stmt, calls))
     }
 
     /// `L: { if flag { break L; } inert_work(); flag = value; }` observes
     /// nothing when no other read observes the flag. Calls must terminate too.
-    fn once_guard(&self, body: &Body, stmt: StmtId) -> Option<(ExprId, (String, String), Operand)> {
+    fn once_guard(
+        &self,
+        body: &Body,
+        stmt: StmtId,
+        calls: CallFacts,
+    ) -> Option<(ExprId, (String, String), Operand)> {
         let (label, block) = match &body.stmts[stmt].kind {
             StmtKind::LabeledBlock { label, block, .. } => (label, *block),
             StmtKind::Expr(Operand::Expr(e)) if body.exprs[*e].type_id == TypeTable::UNIT => {
@@ -2085,11 +2123,14 @@ impl GlobalGuards<'_> {
         else {
             return None;
         };
-        if set_module != module_source || set_name != name || !self.inert_value(body, *value) {
+        if set_module != module_source || set_name != name || !self.inert_value(body, *value, calls)
+        {
             return None;
         }
         if !work.iter().all(|s| match body.stmts[*s].kind {
-            StmtKind::Expr(value) | StmtKind::Let { value, .. } => self.inert_value(body, value),
+            StmtKind::Expr(value) | StmtKind::Let { value, .. } => {
+                self.inert_value(body, value, calls)
+            }
             _ => false,
         }) {
             return None;
@@ -2102,41 +2143,18 @@ impl GlobalGuards<'_> {
     }
 }
 
-/// Whether `stmt` binds a local nothing mentions to a value the pass may
-/// delete — a binding that computes something and drops it. A trap is an
-/// observable effect, so a trapping value keeps the binding alive even though
-/// nobody reads it.
-fn dead_pure_binding(
-    body: &Body,
-    stmt: StmtId,
-    mentioned: &IndexSet<u32>,
-    types: &TypeTable,
-) -> Option<ExprId> {
-    let StmtKind::Let {
-        local_index, value, ..
-    } = &body.stmts[stmt].kind
-    else {
-        return None;
-    };
-    if mentioned.contains(local_index) {
-        return None;
-    }
-    let value = value.as_expr()?;
-    is_pure_nontrapping_expr_typed(body, value, Some(types)).then_some(value)
-}
-
 /// Un-hoist a constant globalization hoisted for nobody: the folds that run
 /// after globalization can take every reader with them, leaving a global that
 /// holds its whole initializer in the binary for no observer. The
 /// `is_uninitialized` guard and a read bound to an unmentioned local do not
 /// count as observing, provided the value is a `deletable_value`.
 ///
-/// Answers whether any body changed, so a caller holding `effects` knows
+/// Answers whether any body changed, so a caller holding `summaries` knows
 /// whether they still describe the IR.
 pub(super) fn unhoist_unobserved_globals(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
-    effects: &[FnEffect],
+    summaries: &FnSummaries,
 ) -> bool {
     let descriptors = cache.descriptors(project);
     let type_table = project.type_table.clone();
@@ -2144,16 +2162,16 @@ pub(super) fn unhoist_unobserved_globals(
     let mut guards = GlobalGuards {
         descriptors,
         types: &types,
-        effects,
         inert_functions: IndexSet::default(),
     };
     loop {
         let before = guards.inert_functions.len();
-        for func in &project.functions {
+        for (i, func) in project.functions.iter().enumerate() {
             let func = func.borrow();
+            let calls = summaries.of_body(i);
             if let (Some(id), Some(body)) = (func.id, &func.body)
                 && !guards.inert_functions.contains(&id)
-                && guards.inert_body(body)
+                && guards.inert_body(body, calls)
             {
                 guards.inert_functions.insert(id);
             }
@@ -2164,19 +2182,20 @@ pub(super) fn unhoist_unobserved_globals(
     }
     let mut guarded: IndexSet<(String, String)> = IndexSet::default();
     let mut observed: IndexSet<(String, String)> = IndexSet::default();
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
+        let calls = summaries.of_body(i);
         let Some(body) = func.body.as_ref() else {
             continue;
         };
         let mentioned = mentioned_locals(body);
         let mut unobserving: IndexSet<ExprId> = IndexSet::default();
         for stmt in reachable_stmt_ids(body) {
-            if let Some((read, key, _)) = guards.find(body, stmt) {
+            if let Some((read, key, _)) = guards.find(body, stmt, calls) {
                 guarded.insert(key);
                 unobserving.insert(read);
             }
-            if let Some(value) = dead_pure_binding(body, stmt, &mentioned, &types) {
+            if let Some(value) = guards.dead_binding(body, stmt, &mentioned, calls) {
                 unobserving.extend(global_reads_in(body, value).into_iter().map(|(e, _)| e));
             }
         }
@@ -2195,12 +2214,13 @@ pub(super) fn unhoist_unobserved_globals(
     if unobserved.is_empty() {
         return false;
     }
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
+        let calls = summaries.of_body(i);
         if let Some(body) = func.body.as_mut() {
             let mentioned = mentioned_locals(body);
             for block in reachable_block_ids(body) {
-                drop_unobserved_stmts(body, block, &unobserved, &mentioned, &guards);
+                drop_unobserved_stmts(body, block, &unobserved, &mentioned, &guards, calls);
             }
             debug_assert!(
                 !reads_any_global(body, &unobserved),
@@ -2255,15 +2275,17 @@ fn drop_unobserved_stmts(
     unobserved: &IndexSet<(String, String)>,
     mentioned: &IndexSet<u32>,
     guards: &GlobalGuards,
+    calls: CallFacts,
 ) {
     let old = std::mem::take(&mut body.blocks[block].stmts);
     let mut kept: Vec<StmtId> = Vec::with_capacity(old.len());
     for s in old {
         let is_guard = guards
-            .find(body, s)
+            .find(body, s, calls)
             .is_some_and(|(_, key, _)| unobserved.contains(&key));
-        let is_dead_read =
-            dead_pure_binding(body, s, mentioned, guards.types).is_some_and(|value| {
+        let is_dead_read = guards
+            .dead_binding(body, s, mentioned, calls)
+            .is_some_and(|value| {
                 global_reads_in(body, value)
                     .iter()
                     .any(|(_, key)| unobserved.contains(key))
@@ -2303,7 +2325,7 @@ fn compute_global_reachability(
 pub(super) fn remove_unreachable_globals(
     project: &mut NirPackage,
     used_globals: &IndexSet<(String, String)>,
-    effects: &[FnEffect],
+    summaries: &FnSummaries,
 ) {
     project.globals.retain(|global| {
         let global_module_key = global.module_source.to_path().join("::");
@@ -2311,17 +2333,12 @@ pub(super) fn remove_unreachable_globals(
     });
 
     let type_table = project.type_table.borrow();
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
+        let calls = summaries.of_body(i);
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
-            remove_dead_global_sets(
-                body,
-                NodeRef::Block(root),
-                used_globals,
-                &type_table,
-                effects,
-            );
+            remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table, calls);
         }
     }
 }
@@ -2333,7 +2350,7 @@ fn remove_dead_global_sets(
     node: NodeRef,
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
-    effects: &[FnEffect],
+    calls: CallFacts,
 ) {
     if let NodeRef::Block(block) = node {
         let old = std::mem::take(&mut body.blocks[block].stmts);
@@ -2347,7 +2364,7 @@ fn remove_dead_global_sets(
                 kept.push(s);
                 continue;
             };
-            if let Some(effect) = kept_effect(body, value, type_table, effects) {
+            if let Some(effect) = kept_effect(body, value, type_table, calls) {
                 body.stmts[s].kind = StmtKind::Expr(effect.into());
                 kept.push(s);
             }
@@ -2366,7 +2383,7 @@ fn remove_dead_global_sets(
     for store in stores {
         let value = dead_store_value(body, store, used).expect("collected as a dead store");
         let unit = body.exprs[store].type_id;
-        if let Some(effect) = kept_effect(body, value, type_table, effects) {
+        if let Some(effect) = kept_effect(body, value, type_table, calls) {
             let span = body.exprs[store].span;
             let stmt = body.stmts.push(StmtNode {
                 kind: StmtKind::Expr(effect.into()),
@@ -2386,7 +2403,7 @@ fn remove_dead_global_sets(
     let mut children: Vec<NodeRef> = Vec::new();
     body.for_each_child(node, |c| children.push(c));
     for child in children {
-        remove_dead_global_sets(body, child, used, type_table, effects);
+        remove_dead_global_sets(body, child, used, type_table, calls);
     }
 }
 
@@ -2410,11 +2427,11 @@ fn kept_effect(
     body: &Body,
     value: Operand,
     type_table: &TypeTable,
-    effects: &[FnEffect],
+    calls: CallFacts,
 ) -> Option<ExprId> {
     value
         .as_expr()
-        .filter(|_| !deletable_value(body, value, type_table, effects))
+        .filter(|_| !deletable_value(body, value, type_table, calls))
 }
 
 #[cfg(test)]

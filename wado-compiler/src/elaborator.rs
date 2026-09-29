@@ -24,6 +24,7 @@ mod method_lookup;
 mod module;
 mod operators;
 pub(crate) mod orchestration;
+mod probe;
 mod reflect;
 pub(crate) mod reify;
 mod scope;

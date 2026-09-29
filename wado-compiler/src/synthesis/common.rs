@@ -15,9 +15,9 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TemplateId, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, MonomorphInfo, TemplateId,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -219,7 +219,7 @@ pub fn let_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -
             is_reactive: false,
             type_id,
             value,
-            skip_value_copy: false,
+            storage: LetStorage::Planned,
         },
         synth_span(),
     )
@@ -235,7 +235,7 @@ pub fn let_mut_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExp
             is_reactive: false,
             type_id,
             value,
-            skip_value_copy: false,
+            storage: LetStorage::Planned,
         },
         synth_span(),
     )

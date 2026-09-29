@@ -136,6 +136,7 @@ use {
     FieldKind,
     KindSet,
     FollowArg,
+    CallerLoop,
     DiagnosticKind,
     DiagnosticOwner,
     DiagnosticSite,
@@ -152,17 +153,16 @@ use {
 } from "./gir.wado";
 
 /// True when an element threads a `FollowArg` into a callee: a `RuleRef`,
-/// or a `Label` wrapping one. Other shapes discard it in `lower_op`, so
-/// computing a mask there interns a dead `FOLLOW_MASK` and perturbs mask
-/// ids.
+/// or a `Label` or greedy repeat wrapping one. Other shapes discard it in
+/// `lower_op`, so computing a mask there interns a dead `FOLLOW_MASK` and
+/// perturbs mask ids.
 fn element_consumes_follow_arg(elem: &Element) -> bool {
     return match elem {
         RuleRef(_) => true,
         Label(lab) => element_consumes_follow_arg(&lab.element),
-        // A greedy `?` runs its body once, so `lower_repeat_op` hands its own
-        // continuation straight down to it. Every other kind loops, and what
-        // follows one iteration is another one.
-        Repeat(rep) => !rep.non_greedy && rep.kind matches { Optional } && element_consumes_follow_arg(&rep.element),
+        // `greedy_optional_inner_follow` hands the continuation down: whole to
+        // a `?`, and to a loop as the other reading beside its next iteration.
+        Repeat(rep) => !rep.non_greedy && element_consumes_follow_arg(&rep.element),
         TokenRef(_) | Literal(_) | Group(_) | Wildcard(_) | Not(_) => false,
     };
 }
@@ -210,8 +210,8 @@ fn elements_from(elements: &List<Element>, start: i32) -> List<Element> {
 ///     already spans it: the depth past the suffix is what separates a callee's
 ///     own reading of a token from the caller's;
 ///   - empty local prefix, callee strictly at this rule's tail → `Forward`;
-///   - empty local prefix with a caller loop past it → `AltMask(id)`: another
-///     iteration or what follows the loop, whichever the input matches.
+///   - a caller loop heading the suffix → `AltMask`: another iteration or what
+///     follows the loop, whichever the input matches.
 fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
     let arg = follow_arg_for(ctx, elements, i);
     // `Forward`, `Combined` and `AltMask` all spell the caller's own slots into
@@ -240,11 +240,26 @@ fn follow_arg_for(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> Fol
     if !element_consumes_follow_arg(&elements[i]) {
         return FollowArg::NoFollow;
     }
+    return continuation_arg(ctx, elements, i + 1);
+}
+
+/// The FOLLOW argument for what continues from `elements[from]` on.
+fn continuation_arg(ctx: &mut GenContext, elements: &List<Element>, from: i32) -> FollowArg {
+    // A caller loop is an alternative to what follows it, not a prefix of it:
+    // prepending asserts the loop's first token at a depth the other reading
+    // does not have it, and dropping it gives the loop's token to the callee.
+    if let Some(loop_mask) = caller_loop_mask(ctx, elements, from) {
+        let exit = continuation_arg(ctx, elements, from + 1);
+        if exit matches { NoFollow } {
+            return exit;
+        }
+        return FollowArg::AltMask(CallerLoop { loop_mask, exit });
+    }
     let mut visiting: List<String> = [];
-    let [deep, consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
+    let [deep, consumed] = ctx.deep_position_first_sets_from(elements, from, FOLLOW_MASK_MAX_K, &mut visiting);
     // A mask stopping short of the suffix proves only that the caller's
     // continuation could *start* here, not that it can complete.
-    let covers_suffix = i + 1 + consumed >= elements.len();
+    let covers_suffix = from + consumed >= elements.len();
     // Effective caller-continuation mask. Prefer the multi-depth deep
     // walk; when it halts immediately (a `Repeat` / `Group` / multi-alt
     // `RuleRef` at the suffix head, e.g. `a b?`), fall back to the
@@ -252,21 +267,21 @@ fn follow_arg_for(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> Fol
     // deep-nullable suffix's `first(b)` and drops a non-first-exact one
     // (soundness invariant 2) — exactly the depth-0 token the deep walk
     // misses.
-    let one_tok = ctx.compute_call_site_follow(elements, i);
+    let one_tok = ctx.compute_call_site_follow(elements, from - 1);
     let mut mask: List<List<String>> = [];
     if !deep.is_empty() {
         mask = deep;
     } else if !one_tok.is_empty() {
         mask.push(one_tok);
     }
-    if !ctx.tail_is_nullable_deep(elements, i + 1) {
+    if !ctx.tail_is_nullable_deep(elements, from) {
         // A mask that stops short of an optional head proves nothing: the token
         // it names may be the callee's own, and yielding it strands the token
         // where the caller declines the optional. Greedy is ANTLR4's answer for
         // nested subrules — the inner `if` keeps the `else` its caller could
         // also take.
         let mut head_visiting: List<String> = [];
-        if !covers_suffix && ctx.element_is_nullable_deep(&elements[i + 1], &mut head_visiting) {
+        if !covers_suffix && ctx.element_is_nullable_deep(&elements[from], &mut head_visiting) {
             return FollowArg::NoFollow;
         }
         // The local suffix is the whole continuation the callee must clear, but
@@ -279,24 +294,14 @@ fn follow_arg_for(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> Fol
         }
         return FollowArg::NoFollow;
     }
-    // A caller loop past the callee is an alternative to what the current rule
-    // was called with, not a prefix of it: prepending asserts the loop's first
-    // token at a depth the other reading does not have it, and replacing loses
-    // that reading.
-    if mask.is_empty() && i + 1 < elements.len() {
-        if let Repeat(rep) = &elements[i + 1] {
-            if let Some(id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
-                return FollowArg::AltMask(id);
-            }
-        }
-    }
     // A suffix that can vanish entirely is no continuation to gate on: yielding
     // on its first token hands back one the caller may take none of. What the
     // current rule was called with is the answer instead — the mask would say
     // `htmlElement` is followed by `htmlChardata?` and nothing else, and `<p>`
     // would give its text to the loop that called it.
-    if i + 1 < elements.len() && !covers_suffix {
-        return FollowArg::Forward;
+    if from < elements.len() && !covers_suffix {
+        let suffix_first = ctx.first_of_elements_from(elements, from);
+        return FollowArg::ForwardOpen(ctx.intern_follow_mask(&[suffix_first]));
     }
     if let Some(id) = ctx.intern_follow_mask(&mask) {
         return sequenced_follow_arg(ctx, id, covers_suffix);
@@ -319,13 +324,23 @@ fn sequenced_follow_arg(ctx: &GenContext, mask_id: i32, covers_suffix: bool) -> 
 }
 
 /// What a repeat's body is told about its own continuation. A greedy `?` runs
-/// its body once, so it passes its own arg down; every other kind loops, and
-/// `retarget_loop_tail_follow` answers that instead.
-fn greedy_optional_inner_follow(rep: &RepeatElement, follow_arg: FollowArg) -> FollowArg {
-    if !rep.non_greedy && rep.kind matches { Optional } {
+/// its body once, so it passes its own arg down. A greedy loop's body continues
+/// with another iteration or with what follows the loop, which a bare rule-call
+/// body is told here and a group body's tail by `retarget_loop_tail_follow`.
+fn greedy_optional_inner_follow(ctx: &mut GenContext, rep: &RepeatElement, follow_arg: FollowArg) -> FollowArg {
+    if rep.non_greedy {
+        return FollowArg::NoFollow;
+    }
+    if rep.kind matches { Optional } {
         return follow_arg;
     }
-    return FollowArg::NoFollow;
+    if follow_arg matches { NoFollow } || rep.element matches { Group(_) } {
+        return FollowArg::NoFollow;
+    }
+    let Some(loop_mask) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) else {
+        return FollowArg::NoFollow;
+    };
+    return FollowArg::AltMask(CallerLoop { loop_mask, exit: follow_arg });
 }
 
 /// The suffix twin of `greedy_optional_inner_follow`: what continues past a
@@ -346,7 +361,7 @@ fn retarget_loop_tail_follow(op: Op, mask_id: i32) -> Op {
         RuleCall(rc) => {
             if rc.follow_arg matches { Forward } {
                 let mut call = rc;
-                call.follow_arg = FollowArg::AltMask(mask_id);
+                call.follow_arg = FollowArg::AltMask(CallerLoop { loop_mask: mask_id, exit: FollowArg::Forward });
                 Op::RuleCall(call);
             } else {
                 Op::RuleCall(rc);
@@ -381,7 +396,7 @@ fn retarget_scan_loop_tail_follow(element: ScanElement, mask_id: i32) -> ScanEle
         RuleCall(rc) => {
             if rc.follow_arg matches { Forward } {
                 let mut call = rc;
-                call.follow_arg = FollowArg::AltMask(mask_id);
+                call.follow_arg = FollowArg::AltMask(CallerLoop { loop_mask: mask_id, exit: FollowArg::Forward });
                 ScanElement::RuleCall(call);
             } else {
                 ScanElement::RuleCall(rc);
@@ -403,10 +418,24 @@ fn retarget_scan_loop_tail_follow(element: ScanElement, mask_id: i32) -> ScanEle
     };
 }
 
+/// The interned iteration prefix of the greedy loop at `elements[from]`, if one
+/// stands there and its prefix is deep enough to gate on.
+fn caller_loop_mask(ctx: &mut GenContext, elements: &List<Element>, from: i32) -> Option<i32> {
+    if from >= elements.len() {
+        return null;
+    }
+    let Repeat(rep) = &elements[from] else {
+        return null;
+    };
+    return ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep));
+}
+
 /// The positions one iteration of `rep` consumes, or `[]` when the loop is not
 /// one this evidence covers: a non-greedy or `?` repeat decides elsewhere, a
 /// multi-alt body has no single prefix, and a one-position prefix is the
-/// over-approximation soundness invariant 1 rejects.
+/// over-approximation soundness invariant 1 rejects. A `?` heading a
+/// continuation is not a reading to yield to: the inner `if` keeps the `else`
+/// its caller could also take.
 fn greedy_loop_prefix(ctx: &mut GenContext, rep: &RepeatElement) -> List<List<String>> {
     let empty: List<List<String>> = [];
     if rep.non_greedy || rep.kind matches { Optional } {
@@ -431,7 +460,7 @@ fn greedy_loop_prefix(ctx: &mut GenContext, rep: &RepeatElement) -> List<List<St
     // the rule the loop exists to re-enter, and takes the repair with it —
     // `driver_cst_ll_opt_tail_caller_loop_test` is the case.
     if prefix.len() < 2 {
-        return empty;
+        return ctx.exact_two_position_first_sets(&body_elements);
     }
     return prefix;
 }
@@ -837,7 +866,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     assert !lr_indices.is_empty(), `LR rule '${rule.name}' has no LR alt — should not have reached lower_lr_rule`;
 
     let total_lr: i32 = lr_indices.len();
-    let atom = lower_lr_atom(rule, &non_lr_indices, ctx);
+    let mut atom = lower_lr_atom(rule, &non_lr_indices, ctx);
 
     // Lower each LR alt's suffix and compute its precedence /
     // metadata. `own_prec` follows ANTLR4's convention: first LR
@@ -872,8 +901,11 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // pass `atn_class` through.
     let lr_dispatch = compute_lr_dispatch_data(&lr_alts, &suffix_classes, atn_class);
 
-    let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
+    let atom_gated = !atn_class && stamp_lr_atom_mid_operands(&mut atom, rule, &non_lr_indices, &lr_alts, ctx);
+    let suffix_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
+    let mid_operand_gated = atom_gated || suffix_gated;
     if mid_operand_gated {
+        forward_lr_cont_to_trailing_operands(&mut atom, &mut lr_alts, &rule.name, &rule.snake_name);
         ctx.mark_caller_follow_gate();
         ctx.mark_rule_reads_follow();
     }
@@ -1061,32 +1093,92 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
             );
         }
     }
-    if mid_operand_gated {
-        forward_lr_cont_to_trailing_operands(lr_alts, rule_name, rule_snake);
-    }
     return mid_operand_gated;
+}
+
+/// Stamps an atom's mid operand the way `stamp_lr_self_ref_min_prec` stamps a
+/// suffix's; returns whether any is gated. `'new' e '<'? args` owes `args` to
+/// the `new`, and the operand's own call suffix would take them, so the operand
+/// climbs only while what follows it can still start. Only where the suffix
+/// loop can take that continuation's first token: elsewhere, as in
+/// `'(' e ')'`, the loop stops by itself.
+fn stamp_lr_atom_mid_operands(
+    atom: &mut MultiAltRule,
+    rule: &ParserRule,
+    non_lr_indices: &List<i32>,
+    lr_alts: &List<LrAlt>,
+    ctx: &mut GenContext,
+) -> bool {
+    let lr_suffix_first_tokens = collect_lr_suffix_first_tokens_from_lowered(lr_alts);
+    let mut gated = false;
+    for let mut a = 0; a < atom.alts.len(); a += 1 {
+        let elements = &rule.alternatives[non_lr_indices[a]].elements;
+        let ops_len = atom.alts[a].ops.len();
+        let scan_len = atom.scan_alts[a].elements.len();
+        assert scan_len == ops_len, `LR atom walk length mismatch: parse-side ${ops_len}, scan-side ${scan_len}`;
+        for let mut k = 0; k + 1 < ops_len; k += 1 {
+            if find_self_ref_rule_call(&atom.alts[a].ops[k], &rule.name) matches { None } {
+                continue;
+            }
+            if ctx.tail_is_nullable_deep(elements, k + 1) {
+                continue;
+            }
+            let cont_first = ctx.first_of_elements_from(elements, k + 1);
+            if !sets_overlap(&cont_first, &lr_suffix_first_tokens) {
+                continue;
+            }
+            let Some(id) = ctx.intern_follow_mask(&[cont_first]) else {
+                continue;
+            };
+            atom.alts[a].ops[k] = rebind_self_ref_lr_cont(rebind_self_ref_min_prec(atom.alts[a].ops[k], 0), id);
+            atom.scan_alts[a].elements[k] = rebind_scan_self_ref_lr_cont(
+                rebind_scan_self_ref_min_prec(atom.scan_alts[a].elements[k], &rule.snake_name, 0),
+                &rule.snake_name,
+                id,
+            );
+            gated = true;
+        }
+    }
+    return gated;
 }
 
 /// A trailing operand ends the invocation it sits in, so the continuation that
 /// invocation must leave behind is its own: `a or b` as a mid operand stops `b`
-/// before `and`.
+/// before `and`, and `-a` as one stops `a` before the arguments a `new` owes.
 fn forward_lr_cont_to_trailing_operands<S: AsStrSlice, S1: AsStrSlice>(
+    atom: &mut MultiAltRule,
     lr_alts: &mut List<LrAlt>,
     rule_name: S,
     rule_snake: S1,
 ) {
+    let name = rule_name.to_string();
+    let snake = rule_snake.to_string();
+    for let mut a = 0; a < atom.alts.len(); a += 1 {
+        forward_lr_cont_to_trailing_operand(&mut atom.alts[a].ops, &mut atom.scan_alts[a].elements, &name, &snake);
+    }
     for let mut i = 0; i < lr_alts.len(); i += 1 {
-        let last = lr_alts[i].suffix.ops.len() - 1;
-        if last < 0 || find_self_ref_rule_call(&lr_alts[i].suffix.ops[last], rule_name) matches { None } {
-            continue;
-        }
-        lr_alts[i].suffix.ops[last] = rebind_self_ref_lr_cont(lr_alts[i].suffix.ops[last], LR_CONT_FORWARD);
-        lr_alts[i].scan_suffix.elements[last] = rebind_scan_self_ref_lr_cont(
-            lr_alts[i].scan_suffix.elements[last],
-            rule_snake,
-            LR_CONT_FORWARD,
+        forward_lr_cont_to_trailing_operand(
+            &mut lr_alts[i].suffix.ops,
+            &mut lr_alts[i].scan_suffix.elements,
+            &name,
+            &snake,
         );
     }
+}
+
+/// `forward_lr_cont_to_trailing_operands` for one walk, parse and scan side.
+fn forward_lr_cont_to_trailing_operand<S: AsStrSlice, S1: AsStrSlice>(
+    ops: &mut List<Op>,
+    scan: &mut List<ScanElement>,
+    rule_name: S,
+    rule_snake: S1,
+) {
+    let last = ops.len() - 1;
+    if last < 0 || find_self_ref_rule_call(&ops[last], rule_name) matches { None } {
+        return;
+    }
+    ops[last] = rebind_self_ref_lr_cont(ops[last], LR_CONT_FORWARD);
+    scan[last] = rebind_scan_self_ref_lr_cont(scan[last], rule_snake, LR_CONT_FORWARD);
 }
 
 /// Per-depth first sets of the LR suffix ops from `start` — the caller-side
@@ -2292,7 +2384,7 @@ fn lower_scan_repeat(
     gate_caller_follow: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
-    let inner_follow_arg = greedy_optional_inner_follow(rep, follow_arg);
+    let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
     let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
     // Greedy Optional + Group inner with nested optional sub-elements
     // is the shape-based-lookahead case: lower produces
@@ -3702,7 +3794,7 @@ fn lower_repeat_op<S: AsStrSlice>(
     gate_caller_follow: bool,
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
-    let inner_follow_arg = greedy_optional_inner_follow(rep, follow_arg);
+    let inner_follow_arg = greedy_optional_inner_follow(ctx, rep, follow_arg);
     let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
     let outer_field = compute_repeat_outer_field(rep, name_counts, *group_counter);
     // Every shape decision below reads the body the op was lowered from, not
@@ -4378,11 +4470,21 @@ fn lower_iteration_duties<S: AsStrSlice>(
     // would decide nothing. Marking it would thread a `follow` parameter through
     // every caller of every rule carrying such a loop — 6000 lines of SQLite's
     // parser, for no answer.
-    if let Some(hit) = lower_decline_scan(non_greedy, kind, loop_first, alt_elements, index, ctx, reaches_rule_tail) {
+    let rule_follow = ctx.rule_follow_for_probe(rule_name);
+    if let Some(hit) = lower_decline_scan(
+        non_greedy,
+        kind,
+        loop_first,
+        alt_elements,
+        index,
+        ctx,
+        reaches_rule_tail,
+        &rule_follow,
+    ) {
         duties.decline_stranded = true;
         duties.decline_scan = hit.0;
         duties.decline_cont_first = hit.1;
-        duties.decline_viable = ctx.rule_follow_for_probe(rule_name);
+        duties.decline_viable = rule_follow;
     }
     return duties;
 }
@@ -4427,12 +4529,16 @@ fn lower_reserve_scan(
 /// `{ y }.m()` is the shape — the `{ y }` scans as a statement and strands the
 /// `.m()`.
 ///
+/// The caller is the other continuation that can lose its head, and an empty
+/// suffix leaves it the only one: `statement+` ending a case clause takes
+/// `default` as a statement and strands the `:` of `default :`.
+///
 /// The conditions mirror `lower_reserve_scan`'s and answer the other half of
 /// the same question. A reservation protects a *mandatory* suffix from the
 /// loop; this protects an *optional* one, which nothing else does. Both need
-/// the two heads to overlap, or the loop could not have taken the suffix's
-/// input in the first place. Only this one needs the rule's tail, because it
-/// ends by asking the caller's FOLLOW.
+/// the loop's head to overlap what it could take, or the loop could not have
+/// taken that input in the first place. Only this one needs the rule's tail,
+/// because it ends by asking the caller's FOLLOW.
 ///
 /// Returns the continuation's scan and its FIRST set together: the guard needs
 /// both and the set is what decides whether to build the scan at all, so
@@ -4446,15 +4552,16 @@ fn lower_decline_scan(
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
+    rule_follow: &List<String>,
 ) -> Option<[List<ScanElement>, List<String>]> {
     if non_greedy || !kind matches { Star | Plus } || !reaches_rule_tail {
         return null;
     }
-    if index + 1 >= alt_elements.len() || !ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+    if !ctx.tail_is_nullable_deep(alt_elements, index + 1) {
         return null;
     }
     let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
-    if !sets_overlap(loop_first, &suffix_first) {
+    if !sets_overlap(loop_first, &suffix_first) && !sets_overlap(loop_first, rule_follow) {
         return null;
     }
     return match lower_scan_continuation_elements(alt_elements, index, ctx) {

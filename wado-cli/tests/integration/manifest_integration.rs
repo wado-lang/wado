@@ -337,6 +337,38 @@ export fn run() with Stdout {
     assert!(output_path.exists());
 }
 
+// The package is found above the working directory, and a directory named
+// relative to it is still the one walked: its files are spelled as named.
+#[test]
+fn a_directory_below_the_package_is_walked_from_below_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src_dir = tmp.path().join("src");
+    fs::create_dir_all(src_dir.join("sub")).unwrap();
+    fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"p\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        src_dir.join("sub/a.wado"),
+        "test {\n    assert 1 == 1;\n}\n",
+    )
+    .unwrap();
+
+    for dir in ["sub", "."] {
+        wado_in(&src_dir)
+            .args(["test", "--format", "verbose", dir])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("sub/a.wado"))
+            .stdout(predicate::str::contains("../").not());
+    }
+    wado_in(&src_dir)
+        .args(["format", "--check", "sub"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn test_help_shows_init_command() {
     let tmp = tempfile::tempdir().unwrap();

@@ -949,8 +949,102 @@ pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
 
+pub global FOLLOW_OPEN_READING: i64 = 0x0100_0000_0000_0000;
+
+pub global FOLLOW_OPEN_FIELD: i64 = ~0x00FF_FFFF_FFFF_FFFF;
+
+pub global FOLLOW_OPEN_SET_SHIFT: i64 = 57;
+
+pub fn follow_open_mark(cont: i64) -> i64 {
+    return if cont == 0 { FOLLOW_OPEN_READING } else { cont & FOLLOW_OPEN_FIELD };
+}
+
+pub fn follow_open_set(mask: i64) -> i64 {
+    return FOLLOW_OPEN_READING | (mask & FOLLOW_ID_MASK) << FOLLOW_OPEN_SET_SHIFT;
+}
+
+pub fn follow_open_join(a: i64, b: i64) -> i64 {
+    if a == 0 || a == b {
+        return b;
+    }
+    if b == 0 {
+        return a;
+    }
+    return FOLLOW_OPEN_READING;
+}
+
+pub fn follow_open_with(cont: i64, open: i64) -> i64 {
+    return cont & FOLLOW_CONT_MASK | follow_open_join(follow_open_mark(cont), open);
+}
+
+pub fn follow_admits(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, true);
+}
+
+pub fn follow_resumes(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    return follow_heads_have(tokens, pos, cont, sets, eof_kind, false);
+}
+
+pub fn follow_exit_viable(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    if cont == 0 || follow_yields(tokens, pos, cont, sets, eof_kind) {
+        return true;
+    }
+    let kind = follow_kind_at(tokens, pos, eof_kind);
+    return follow_open_has(cont, kind, sets, true);
+}
+
+fn follow_open_has(cont: i64, kind: i32, sets: &List<List<i32>>, unknown_has: bool) -> bool {
+    let open = cont & FOLLOW_OPEN_FIELD;
+    if open == 0 {
+        return false;
+    }
+    let set_id = open >> FOLLOW_OPEN_SET_SHIFT & FOLLOW_ID_MASK;
+    return if set_id == 0 { unknown_has } else { follow_set_has(sets, set_id, kind) };
+}
+
+fn follow_kind_at(tokens: &Array<i32>, pos: i32, eof_kind: i32) -> i32 {
+    return if pos < tokens.len() { tokens[pos] } else { eof_kind };
+}
+
+fn follow_set_has(sets: &List<List<i32>>, id: i64, kind: i32) -> bool {
+    let set = &sets[(id - 1) as i32];
+    return set.is_empty() || kind_set_has(set, kind);
+}
+
+fn follow_heads_have(
+    tokens: &Array<i32>,
+    pos: i32,
+    cont: i64,
+    sets: &List<List<i32>>,
+    eof_kind: i32,
+    unknown_has: bool,
+) -> bool {
+    if cont == 0 {
+        return unknown_has;
+    }
+    let kind = follow_kind_at(tokens, pos, eof_kind);
+    if follow_open_has(cont, kind, sets, unknown_has) {
+        return true;
+    }
+    let mut c = cont & FOLLOW_CONT_MASK;
+    let mut head = true;
+    while c & FOLLOW_ID_MASK != 0 {
+        if c & FOLLOW_OPENS_BIT != 0 {
+            head = true;
+        }
+        if head {
+            if follow_set_has(sets, c & FOLLOW_ID_MASK, kind) {
+                return true;
+            }
+            head = false;
+        }
+        c = c >> FOLLOW_SLOT_BITS;
+    }
+    return false;
+}
+
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
-    let mut c = cont;
+    let mut c = cont & FOLLOW_CONT_MASK;
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
@@ -966,20 +1060,59 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
         if depth < FOLLOW_MAX_DEPTH {
             constrained = true;
             if alive {
-                let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
-                if !set.is_empty() {
-                    let idx = pos + depth;
-                    let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                    if !kind_set_has(set, kind) {
-                        alive = false;
-                    }
-                }
+                alive = follow_set_has(sets, c & FOLLOW_ID_MASK, follow_kind_at(tokens, pos + depth, eof_kind));
             }
             depth += 1;
         }
         c = c >> FOLLOW_SLOT_BITS;
     }
     return alive && constrained;
+}
+pub struct ScanMemo<G> {
+    heads: Array<i32>,
+    entries: List<ScanMemoEntry<G>>,
+}
+
+struct ScanMemoEntry<G> {
+    next: i32,
+    rule: i32,
+    min_prec: i32,
+    follow: i64,
+    cont: i64,
+    gate_in: G,
+    end: i32,
+    gate_out: G,
+}
+
+impl<G: Eq> ScanMemo<G> {
+    pub fn new(positions: i32) -> ScanMemo<G> {
+        return ScanMemo { heads: Array::<i32>::filled(positions + 1, -1), entries: [] };
+    }
+
+    pub fn find(&self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate: &G) -> i32 {
+        let mut at = self.heads[pos];
+        while at >= 0 {
+            let e = &self.entries[at];
+            if e.rule == rule && e.min_prec == min_prec && e.follow == follow && e.cont == cont && e.gate_in == *gate {
+                return at;
+            }
+            at = e.next;
+        }
+        return -1;
+    }
+
+    pub fn end_of(&self, entry: i32) -> i32 {
+        return self.entries[entry].end;
+    }
+
+    pub fn gate_of(&self, entry: i32) -> G {
+        return self.entries[entry].gate_out;
+    }
+
+    pub fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+        self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
+        self.heads[pos] = self.entries.len() - 1;
+    }
 }
 pub global TK_IF: i32 = 0;
 pub global TK_EQ: i32 = 1;
@@ -1200,6 +1333,7 @@ struct Parser {
     line_starts: List<i32>,
     no_brace: i32 = 0,
     scan_gate: ScanGate = ScanGate {},
+    memo: ScanMemo<ScanGate>,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -1213,7 +1347,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars), memo: ScanMemo::new(kinds.len()) };
     }
 
     fn emit(&mut self, s: String) {
@@ -1616,14 +1750,14 @@ impl Parser {
     }
 }
 
-fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_stmt(tokens, pos, gate);
+    pos = scan_stmt(tokens, pos, gate, memo);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_stmt(tokens, pos, gate);
+        pos = scan_stmt(tokens, pos, gate, memo);
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -1641,14 +1775,14 @@ fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
                 if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
                     let sp_gate = *gate;
-                    pos = scan_expr(tokens, pos, gate, 0);
+                    pos = scan_expr(tokens, pos, gate, memo, 0);
                     if pos < 0 {
                         pos = sp;
                         *gate = sp_gate;
                     }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if probe_kind == TK_RB && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_0_exit = true; }
+                if probe_kind == TK_RB && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_0_exit = true; }
             }
             if dc_0_exit {
                 pos = sp;
@@ -1659,11 +1793,15 @@ fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
             *gate = dc_0_gate;
         }
     }
-    if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_expr(tokens, pos, gate, 0);
+        pos = scan_expr(tokens, pos, gate, memo, 0);
         if pos < 0 {
+            pos = sp;
+            *gate = sp_gate;
+        }
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
             pos = sp;
             *gate = sp_gate;
         }
@@ -1671,14 +1809,14 @@ fn scan_stmts_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: 
     return pos;
 }
 
-fn scan_stmts_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+fn scan_stmts_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos, gate, 0);
+    pos = scan_expr(tokens, pos, gate, memo, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_stmts(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 0) -> i32 {
+fn scan_stmts(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
     let mut pos = pos;
@@ -1686,10 +1824,10 @@ fn scan_stmts(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 
     if _kind_set_0(kind) {
         let mut best: i32 = -1;
         let mut best_gate = *gate;
-        let try_0_end = scan_stmts_alt_0(tokens, start, gate, follow);
+        let try_0_end = scan_stmts_alt_0(tokens, start, gate, memo, follow);
         if try_0_end > best { best = try_0_end; best_gate = *gate; }
         *gate = start_gate;
-        let try_1_end = scan_stmts_alt_1(tokens, start, gate, follow);
+        let try_1_end = scan_stmts_alt_1(tokens, start, gate, memo, follow);
         if try_1_end > best { best = try_1_end; best_gate = *gate; }
         if best >= 0 {
             pos = best;
@@ -1701,16 +1839,16 @@ fn scan_stmts(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, follow: i64 = 
     return -1;
 }
 
-fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos, gate, 0);
+    pos = scan_expr(tokens, pos, gate, memo, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
     pos += 1;
@@ -1721,7 +1859,7 @@ fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     return pos;
 }
 
-fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     if !((gate.no_brace == 0)) { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
@@ -1735,14 +1873,14 @@ fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i
     return pos;
 }
 
-fn scan_expr_atom_alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_expr_atom_alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let start = pos;
     let start_gate = *gate;
     let mut pos = pos;
@@ -1751,10 +1889,10 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
         pos = start + 1;
         try_1: {
             gate.no_brace = 1;
-            pos = scan_expr(tokens, pos, gate, 0);
+            pos = scan_expr(tokens, pos, gate, memo, 0);
             if pos < 0 { break try_1; }
             gate.no_brace = 0;
-            pos = scan_blk(tokens, pos, gate);
+            pos = scan_blk(tokens, pos, gate, memo);
             if pos < 0 { break try_1; }
             return pos;
         }
@@ -1763,10 +1901,10 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     if kind == TK_ID {
         let mut best: i32 = -1;
         let mut best_gate = *gate;
-        let try_2_end = scan_expr_atom_alt_2(tokens, start, gate);
+        let try_2_end = scan_expr_atom_alt_2(tokens, start, gate, memo);
         if try_2_end > best { best = try_2_end; best_gate = *gate; }
         *gate = start_gate;
-        let try_3_end = scan_expr_atom_alt_3(tokens, start, gate);
+        let try_3_end = scan_expr_atom_alt_3(tokens, start, gate, memo);
         if try_3_end > best { best = try_3_end; best_gate = *gate; }
         if best >= 0 {
             pos = best;
@@ -1778,17 +1916,29 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
     return -1;
 }
 
-fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate) -> i32 {
+fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_EQ { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos, gate, 2);
+    pos = scan_expr(tokens, pos, gate, memo, 2);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expr_atom(tokens, pos, gate);
+fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
+    let memo_at = memo.find(5, pos, min_prec, 0, 0, &*gate);
+    if memo_at >= 0 {
+        *gate = memo.gate_of(memo_at);
+        return memo.end_of(memo_at);
+    }
+    let memo_gate = *gate;
+    let memo_end = scan_expr__walk(tokens, pos, gate, memo, min_prec);
+    memo.put(5, pos, min_prec, 0, 0, memo_gate, memo_end, *gate);
+    return memo_end;
+}
+
+fn scan_expr__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expr_atom(tokens, pos, gate, memo);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1796,7 +1946,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, min_prec: i32 =
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 let lr_saved_pos_gate = *gate;
-                pos = scan_expr_lr_0(tokens, pos, gate);
+                pos = scan_expr_lr_0(tokens, pos, gate, memo);
                 if pos < 0 {
                     pos = lr_saved_pos;
                     *gate = lr_saved_pos_gate;
@@ -1861,7 +2011,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                 p.scan_gate.no_brace = p.no_brace;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_stmt(tokens, pos, &mut p.scan_gate);
+                pos = scan_stmt(tokens, pos, &mut p.scan_gate, &mut p.memo);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
@@ -1877,14 +2027,14 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                             let sp = pos;
                             let sp_gate = p.scan_gate;
-                            pos = scan_expr(tokens, pos, &mut p.scan_gate, 0);
+                            pos = scan_expr(tokens, pos, &mut p.scan_gate, &mut p.memo, 0);
                             if pos < 0 {
                                 pos = sp;
                                 p.scan_gate = sp_gate;
                             }
                         }
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if probe_kind == TK_RB && (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
+                        if probe_kind == TK_RB && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { decline_dead = true; }
                     }
                     if decline_dead { break; }
                 }
@@ -1910,7 +2060,20 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 2;
         _parse_stmt(p);
     }
-    if _kind_set_0(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+    let mut opt_enter: bool = _kind_set_0(p.peek_kind());
+    if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        let mut opt_scan_pos: i32 = -1;
+        opt_scan: {
+            p.scan_gate.no_brace = p.no_brace;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_expr(tokens, pos, &mut p.scan_gate, &mut p.memo, 0);
+            if pos < 0 { break opt_scan; }
+            opt_scan_pos = pos;
+        }
+        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF));
+    }
+    if opt_enter {
         p.site = 3;
         _parse_expr(p);
     }
@@ -1924,9 +2087,9 @@ fn _parse_stmts__inner(p: &mut Parser, follow: i64 = 0) -> () {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_brace = p.no_brace;
-        let _sd_p_1 = scan_stmts_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_1 = scan_stmts_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo, follow);
         p.scan_gate.no_brace = p.no_brace;
-        let _sd_p_0 = scan_stmts_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+        let _sd_p_0 = scan_stmts_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -2032,9 +2195,9 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_brace = p.no_brace;
-        let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         p.scan_gate.no_brace = p.no_brace;
-        let _sd_p_3 = scan_expr_atom_alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        let _sd_p_3 = scan_expr_atom_alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_2 > _sd_best_p {
@@ -2072,7 +2235,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         if _sk == TK_EQ {
             if 1 >= min_prec {
                 p.scan_gate.no_brace = p.no_brace;
-                if scan_expr_lr_0(&p.kinds, p.pos, &mut p.scan_gate) < 0 {
+                if scan_expr_lr_0(&p.kinds, p.pos, &mut p.scan_gate, &mut p.memo) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
