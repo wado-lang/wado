@@ -73,6 +73,15 @@ each world it targets to an entry module, or the `--world` option of
 `wado compile` and `wado run` target `wasi:cli/command`, and `wado serve`
 targets `wasi:http/service`.
 
+An effect the selected world does not import is not rejected. The compiler adds
+the effect's interface to the component's imports, and the host decides whether
+it can instantiate the component.
+
+Both behaviours are undecided. Whether a module declares the world it conforms
+to in source, and whether an effect outside the world's imports is a compile
+error, are open
+([WEP: World Conformance](./wep-2026-01-16-world-conformance-and-export.md)).
+
 The manifest declares worlds in two places:
 
 - The `[world]` table maps a hosted world, keyed by its fully qualified

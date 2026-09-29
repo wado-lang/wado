@@ -93,6 +93,12 @@ Single-file mode has no lock file, so a source package whose manifest carries a 
 - [ ] Transitive resolution for registry source packages; revise Package Manifest §Registry backend.
 - [ ] LSP reads the section for dependency navigation.
 
+## Known gaps
+
+- Whether a registry package carries its `pub` items to a Wado consumer is not
+  settled. Until it is, a registry dependency reaches its consumer only through
+  what its component exports, and the specification says so.
+
 ## References
 
 - [Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-visibility-internal-pub-export.md)

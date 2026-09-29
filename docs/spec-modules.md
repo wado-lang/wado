@@ -55,8 +55,11 @@ test {
 | `pub fn foo()`      | Yes       | Yes          | Yes                 | No          |
 | `export fn foo()`   | Yes       | Yes          | Yes                 | Yes         |
 
-A `pub`-only item reaches Wado consumers only (source dependency or
-provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
+A `pub`-only item reaches a Wado consumer of the package's source. It does not
+reach a consumer of a registry package, which is a prebuilt component, and
+whether it will is undecided
+([Registries](./spec-packages.md#registries)). A non-Wado CM consumer sees
+`export` items only.
 
 `pub` is absolute. A module has no privacy of its own beyond its file, so there
 is no `pub(crate)` / `pub(super)` family, and no enclosing module can narrow a

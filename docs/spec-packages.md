@@ -355,7 +355,10 @@ named after the world with `:` and `/` written as `-`:
 
 A registry package is a prebuilt component. Its specifier imports the
 interfaces the component exports, as a `use` of a component file does
-([Components](./spec-modules.md#components)):
+([Components](./spec-modules.md#components)). A `pub` item the component does
+not export does not reach the consumer. Whether a registry package will also
+carry its `pub` items to a Wado consumer is undecided
+([WEP: Provider Metadata](./wep-2026-07-26-provider-metadata.md)):
 
 <!-- {"source": "example/hello-packages/src/main.wado"} -->
 

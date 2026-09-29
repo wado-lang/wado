@@ -216,6 +216,9 @@ export(Command::run, HttpServer::run) pub fn run() {
 
 ## Known gaps
 
+The design is to be reviewed again before it is implemented, so the
+specification states the current behaviour and leaves the rest undecided.
+
 - `contract` does not parse. No declaration names the world a module conforms
   to, so the world comes from the command line or the manifest alone.
 - `export(World::name)` mapping and type export do not parse.
