@@ -413,7 +413,7 @@ global DISTS_TYPE: i32 = 2;
 // distance symbols under a 6-bit one.
 global ENOUGH_LENS: i32 = 852;
 global ENOUGH_DISTS: i32 = 592;
-global ENOUGH: i32 = 1444;  // ENOUGH_LENS + ENOUGH_DISTS
+global ENOUGH: i32 = ENOUGH_LENS + ENOUGH_DISTS;
 global MAXBITS: i32 = 15;
 global STORED_MAX: i32 = 65535;  // largest DEFLATE stored block, bounded by the 16-bit LEN field
 
@@ -799,6 +799,7 @@ impl InflateState {
         assert n <= 57;
         while self.bits < n {
             if self.next == self.end {
+                builtin::cold_path();
                 return false;
             }
             self.hold = self.hold | input[self.next] as u64 << self.bits as u64;
@@ -835,6 +836,7 @@ impl InflateState {
                 return Option::Some(here);
             }
             if !self.need_bits(input, self.bits + 1) {
+                builtin::cold_path();
                 return null;
             }
         }
@@ -1060,6 +1062,7 @@ fn inflate_raw_ex(
                 state.next += copy;
                 state.length -= copy;
                 if state.length != 0 {
+                    builtin::cold_path();
                     break;
                 }
                 state.mode = InflateMode::TypeDo;
@@ -1356,11 +1359,6 @@ pub fn deflate_stored(input: &ByteList) -> ByteList {
     }
 
     return output;
-}
-
-/// Wraps data in zlib format using stored blocks (no actual compression).
-pub fn zlib_compress_stored(input: &ByteList) -> ByteList {
-    return zlib_compress(input, Z_NO_COMPRESSION);
 }
 
 
@@ -2033,7 +2031,7 @@ fn encoded_data_bits(
 }
 
 // Everything a dynamic block needs, derived once from the frequencies.
-// `write_dynamic_block` emits a plan; `deflate_with_level` prices one.
+// `write_dynamic_block` emits a plan; `deflate_raw` prices one.
 struct DynamicPlan {
     lit_tree: List<i32>,
     dist_tree: List<i32>,
@@ -2306,8 +2304,9 @@ struct DeflateConfig {
     use_lazy: bool,  // whether to use lazy evaluation
 }
 
-// Level 0 stores, and never reads a config.
 fn get_deflate_config(level: i32) -> DeflateConfig {
+    // Level 0 stores, and never reads a config.
+    assert 1 <= level <= 9;
     match level {
         1 => {
             return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 8, max_chain: 4, use_lazy: false };
@@ -2334,17 +2333,17 @@ fn get_deflate_config(level: i32) -> DeflateConfig {
             return DeflateConfig { good_length: 32, max_lazy: 128, nice_length: 258, max_chain: 1024, use_lazy: true };
         },
         _ => {
-            return DeflateConfig { good_length: 32, max_lazy: 258, nice_length: 258, max_chain: 4096, use_lazy: true };  // level 9
+            return DeflateConfig { good_length: 32, max_lazy: 258, nice_length: 258, max_chain: 4096, use_lazy: true };
         },
     }
 }
 
-/// Compresses data using DEFLATE with the given compression level and strategy.
+/// Compresses data as raw DEFLATE (RFC 1951) with no wrapper header or trailer.
 ///
 /// `level` is 0-9 (0 = stored, 1 = fastest, 9 = best compression).
 /// `strategy` is one of `Z_DEFAULT_STRATEGY`, `Z_FILTERED`, `Z_HUFFMAN_ONLY`,
 /// `Z_RLE`, or `Z_FIXED`.
-pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteList {
+pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> ByteList {
     let input_len = input.len();
 
     // Level 0: stored blocks
@@ -2660,10 +2659,7 @@ fn zlib_wrap(input: &ByteList, deflated: &ByteList, level: i32) -> ByteList {
     flg += 31 - (cmf * 256 + flg) % 31;
     output.push(cmf as u8);
     output.push(flg as u8);
-
-    for let mut i = 0; i < deflated.len(); i += 1 {
-        output.push(deflated[i]);
-    }
+    output.extend(deflated);
 
     // adler32 trailer (big-endian)
     let checksum = adler32(adler32_init(), input, 0, input.len());
@@ -2684,7 +2680,7 @@ pub fn zlib_compress(
     level: i32 = Z_DEFAULT_COMPRESSION,
     strategy: i32 = Z_DEFAULT_STRATEGY,
 ) -> ByteList {
-    let deflated = deflate_with_level(input, level, strategy);
+    let deflated = deflate_raw(input, level, strategy);
     return zlib_wrap(input, &deflated, level);
 }
 
@@ -2723,7 +2719,7 @@ fn gzip_parse_header(input: &ByteList, start: i32) -> Result<[GzipHeader, i32], 
     let mut header = GzipHeader::new();
     header.text = flags & GZIP_FTEXT != 0;
     header.hcrc = flags & GZIP_FHCRC != 0;
-    header.time = input[start + 4] as u32 | input[start + 5] as u32 << 8 | input[start + 6] as u32 << 16 | input[start + 7] as u32 << 24;
+    header.time = read_u32_le(input, start + 4) as u32;
     header.xflags = input[start + 8] as i32;
     header.os = input[start + 9] as i32;
     let mut pos = start + 10;
@@ -2811,25 +2807,20 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
             return Result::Err(ZlibError::TruncatedTrailer);
         }
 
-        // Verify CRC32
-        let stored_crc = input[trailer_pos] as u32 | input[trailer_pos + 1] as u32 << 8 | input[trailer_pos + 2] as u32 << 16 | input[trailer_pos + 3] as u32 << 24;
+        let stored_crc = read_u32_le(input, trailer_pos) as u32;
         let computed_crc = crc32(crc32_init(), &member_output, 0, member_output.len());
         if computed_crc != stored_crc {
             builtin::cold_path();
             return Result::Err(ZlibError::Crc32Mismatch);
         }
 
-        // Verify ISIZE (original size mod 2^32)
-        let stored_size = input[trailer_pos + 4] as u32 | input[trailer_pos + 5] as u32 << 8 | input[trailer_pos + 6] as u32 << 16 | input[trailer_pos + 7] as u32 << 24;
-        if stored_size != member_output.len() as u32 {
+        // ISIZE is the member's size mod 2^32.
+        if read_u32_le(input, trailer_pos + 4) as u32 != member_output.len() as u32 {
             builtin::cold_path();
             return Result::Err(ZlibError::IsizeMismatch);
         }
 
-        // Append member output
-        for let mut i = 0; i < member_output.len(); i += 1 {
-            output.push(member_output[i]);
-        }
+        output.extend(&member_output);
 
         // Move to next member
         member_start = trailer_pos + 8;
@@ -2857,14 +2848,6 @@ pub fn uncompress(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteLi
     return inflate_zlib(input, max_output);
 }
 
-
-/// Compresses data as raw DEFLATE (RFC 1951) with no wrapper header or trailer.
-///
-/// `level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
-/// `Z_DEFAULT_STRATEGY`.
-pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> ByteList {
-    return deflate_with_level(input, level, strategy);
-}
 
 /// A gzip header (RFC 1952) used by `gzip_compress` to set
 /// optional fields and by `inflate_get_gzip_header` to report them.
@@ -2973,7 +2956,7 @@ pub fn gzip_compress(
     strategy: i32 = Z_DEFAULT_STRATEGY,
     header: &GzipHeader = &GzipHeader::new(),
 ) -> ByteList {
-    let deflated = deflate_with_level(input, level, strategy);
+    let deflated = deflate_raw(input, level, strategy);
     let mut output = ByteList::with_capacity(deflated.len() + 64);
 
     // Gzip header
@@ -2981,30 +2964,24 @@ pub fn gzip_compress(
     output.push(GZIP_MAGIC2);
     output.push(8);  // CM = deflate
 
-    // Flags
-    let mut flags = 0;
+    let mut flags: u8 = 0;
     if header.text {
-        flags = flags | 1;  // FTEXT
+        flags = flags | GZIP_FTEXT;
     }
     if header.hcrc {
-        flags = flags | 2;  // FHCRC
+        flags = flags | GZIP_FHCRC;
     }
     if header.extra.len() > 0 {
-        flags = flags | 4;  // FEXTRA
+        flags = flags | GZIP_FEXTRA;
     }
     if header.name.len() > 0 {
-        flags = flags | 8;  // FNAME
+        flags = flags | GZIP_FNAME;
     }
     if header.comment.len() > 0 {
-        flags = flags | 16;  // FCOMMENT
+        flags = flags | GZIP_FCOMMENT;
     }
-    output.push(flags as u8);
-
-    // MTIME (4 bytes little-endian)
-    output.push((header.time & 0xFF) as u8);
-    output.push((header.time >> 8 & 0xFF) as u8);
-    output.push((header.time >> 16 & 0xFF) as u8);
-    output.push((header.time >> 24 & 0xFF) as u8);
+    output.push(flags);
+    push_u32_le(&mut output, header.time);
 
     // XFL
     let xfl = if level <= 1 {
@@ -3024,24 +3001,18 @@ pub fn gzip_compress(
         let xlen = header.extra.len();
         output.push((xlen & 0xFF) as u8);
         output.push((xlen >> 8 & 0xFF) as u8);
-        for let mut i = 0; i < xlen; i += 1 {
-            output.push(header.extra[i]);
-        }
+        output.extend(&header.extra);
     }
 
     // File name (null-terminated)
     if header.name.len() > 0 {
-        for let mut i = 0; i < header.name.len(); i += 1 {
-            output.push(header.name.get_byte_unchecked(i));
-        }
+        output.extend_from_slice(header.name.as_bytes() as Slice<u8>);
         output.push(0);
     }
 
     // Comment (null-terminated)
     if header.comment.len() > 0 {
-        for let mut i = 0; i < header.comment.len(); i += 1 {
-            output.push(header.comment.get_byte_unchecked(i));
-        }
+        output.extend_from_slice(header.comment.as_bytes() as Slice<u8>);
         output.push(0);
     }
 
@@ -3052,26 +3023,17 @@ pub fn gzip_compress(
         output.push((hcrc >> 8 & 0xFF) as u8);
     }
 
-    // Compressed data
-    for let mut i = 0; i < deflated.len(); i += 1 {
-        output.push(deflated[i]);
-    }
-
-    // CRC32 trailer
-    let crc = crc32(crc32_init(), input, 0, input.len());
-    output.push((crc & 0xFF) as u8);
-    output.push((crc >> 8 & 0xFF) as u8);
-    output.push((crc >> 16 & 0xFF) as u8);
-    output.push((crc >> 24 & 0xFF) as u8);
-
-    // ISIZE
-    let isize_val = input.len() as u32;
-    output.push((isize_val & 0xFF) as u8);
-    output.push((isize_val >> 8 & 0xFF) as u8);
-    output.push((isize_val >> 16 & 0xFF) as u8);
-    output.push((isize_val >> 24 & 0xFF) as u8);
-
+    output.extend(&deflated);
+    push_u32_le(&mut output, crc32(crc32_init(), input, 0, input.len()));
+    push_u32_le(&mut output, input.len() as u32);  // ISIZE
     return output;
+}
+
+fn push_u32_le(output: &mut ByteList, value: u32) {
+    output.push((value & 0xFF) as u8);
+    output.push((value >> 8 & 0xFF) as u8);
+    output.push((value >> 16 & 0xFF) as u8);
+    output.push((value >> 24 & 0xFF) as u8);
 }
 
 /// Parses and returns the gzip header without decompressing the body.
@@ -3179,9 +3141,7 @@ impl DeflateStream {
     /// been finished.
     pub fn update(&mut self, chunk: &ByteList) {
         assert !self.finished, "DeflateStream already finished";
-        for let mut i = 0; i < chunk.len(); i += 1 {
-            self.buffer.push(chunk[i]);
-        }
+        self.buffer.extend(chunk);
     }
 
     /// Compresses all buffered input and returns the wrapped output. Marks
@@ -3209,23 +3169,11 @@ impl DeflateStream {
 
     fn compress_internal(&self, input: &ByteList) -> ByteList {
         if self.format == RAW_FORMAT {
-            return self.compress_raw(input);
+            return deflate_raw(input, self.level, self.strategy);
         } else if self.format == GZIP_FORMAT {
-            return self.compress_gzip(input);
+            return gzip_compress(input, self.level, self.strategy, &self.gzip_header);
         }
-        return self.compress_zlib(input);
-    }
-
-    fn compress_raw(&self, input: &ByteList) -> ByteList {
-        return deflate_with_level(input, self.level, self.strategy);
-    }
-
-    fn compress_zlib(&self, input: &ByteList) -> ByteList {
-        return zlib_wrap(input, &deflate_with_level(input, self.level, self.strategy), self.level);
-    }
-
-    fn compress_gzip(&self, input: &ByteList) -> ByteList {
-        return gzip_compress(input, self.level, self.strategy, &self.gzip_header);
+        return zlib_compress(input, self.level, self.strategy);
     }
 }
 
@@ -3283,9 +3231,7 @@ impl InflateStream {
 
     /// Appends `chunk` to the buffered compressed input.
     pub fn update(&mut self, chunk: &ByteList) {
-        for let mut i = 0; i < chunk.len(); i += 1 {
-            self.buffer.push(chunk[i]);
-        }
+        self.buffer.extend(chunk);
     }
 
     /// Decompresses the buffered input into at most `max_output` bytes and

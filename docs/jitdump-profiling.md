@@ -63,7 +63,7 @@ Symbols include full monomorphization detail:
 
 ```
 wasm[1]::function[78]::Status^Deserialize::deserialize<JsonDeserializer>
-wasm[1]::function[48]::deflate_with_level
+wasm[1]::function[48]::deflate_raw
 ```
 
 Each function has both a long form (`wasm[1]::function[N]::name`) and a short alias (`name`).

@@ -35,7 +35,6 @@ use {
     crc32_init,
     crc32_combine,
     zlib_compress,
-    zlib_compress_stored,
     inflate_zlib,
     compress_bound,
     deflate_raw,
@@ -59,14 +58,6 @@ use {
     inflate_sync_find,
 } from "core:zlib";
 
-fn string_to_bytes(s: String) -> ByteList {
-    let mut out = ByteList::with_capacity(s.len());
-    for let mut i = 0; i < s.len(); i += 1 {
-        out.push(s.get_byte_unchecked(i));
-    }
-    return out;
-}
-
 fn make_pattern_data(size: i32) -> ByteList {
     let mut data = ByteList::with_capacity(size);
     for let mut i = 0; i < size; i += 1 {
@@ -76,11 +67,7 @@ fn make_pattern_data(size: i32) -> ByteList {
 }
 
 fn make_repeated(byte: u8, count: i32) -> ByteList {
-    let mut data = ByteList::with_capacity(count);
-    for let mut i = 0; i < count; i += 1 {
-        data.push(byte);
-    }
-    return data;
+    return List::filled(count, byte) as ByteList;
 }
 
 // Text-shaped: a small vocabulary recurring at varying distances, which is what
@@ -183,8 +170,8 @@ test "crc32" {
 }
 
 test "adler32_combine" {
-    let seg1 = string_to_bytes("Hello, ");
-    let seg2 = string_to_bytes("World!");
+    let seg1 = b"Hello, ";
+    let seg2 = b"World!";
     let mut combined = ByteList::with_capacity(seg1.len() + seg2.len());
     for let mut i = 0; i < seg1.len(); i += 1 {
         combined.push(seg1[i]);
@@ -201,8 +188,8 @@ test "adler32_combine" {
 }
 
 test "crc32_combine" {
-    let seg1 = string_to_bytes("Hello, ");
-    let seg2 = string_to_bytes("World!");
+    let seg1 = b"Hello, ";
+    let seg2 = b"World!";
     let mut combined = ByteList::with_capacity(seg1.len() + seg2.len());
     for let mut i = 0; i < seg1.len(); i += 1 {
         combined.push(seg1[i]);
@@ -276,14 +263,7 @@ test "inflate zlib empty" {
 
 test "stored block round-trip Hello" {
     let data: ByteList = [72, 101, 108, 108, 111];
-    let compressed = zlib_compress_stored(&data);
-    let decompressed = inflate_zlib(&compressed).unwrap();
-    assert decompressed == data;
-}
-
-test "stored block round-trip 1000 bytes" {
-    let data = make_pattern_data(1000);
-    let compressed = zlib_compress_stored(&data);
+    let compressed = zlib_compress(&data, Z_NO_COMPRESSION);
     let decompressed = inflate_zlib(&compressed).unwrap();
     assert decompressed == data;
 }
@@ -321,9 +301,7 @@ test "Huffman round-trip Hello World x20" {
     let unit: ByteList = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33, 32];
     let mut data = ByteList::with_capacity(280);
     for let mut j = 0; j < 20; j += 1 {
-        for let mut i = 0; i < 14; i += 1 {
-            data.push(unit[i]);
-        }
+        data.extend(&unit);
     }
     let compressed = zlib_compress(&data);
     assert compressed.len() < data.len(), "repetitive text should compress";
@@ -395,10 +373,7 @@ test "default strategy never loses to fixed or stored" {
     // The encoder estimates all three costs and emits the cheapest, so its
     // output may never exceed either alternative.
     let inputs: List<ByteList> = [
-        string_to_bytes(""),
-        string_to_bytes("a"),
-        string_to_bytes("Hello, world!"),
-        make_repeated(65, 3),
+        b"", b"a", b"Hello, world!", make_repeated(65, 3),
         make_repeated(65, 1000),
         make_pattern_data(1000),
         make_pattern_data(70000),
@@ -437,7 +412,7 @@ test "strategy fixed round-trip" {
 }
 
 test "raw deflate round-trip" {
-    let data = string_to_bytes("Hello, raw deflate!");
+    let data = b"Hello, raw deflate!";
     let compressed = deflate_raw(&data);
     assert compressed[0] != 0x78, "raw should not have zlib header";
     let decompressed = inflate_raw(&compressed).unwrap();
@@ -445,7 +420,7 @@ test "raw deflate round-trip" {
 }
 
 test "raw deflate levels" {
-    let data = string_to_bytes("Hello, raw deflate!");
+    let data = b"Hello, raw deflate!";
     let c1 = deflate_raw(&data, Z_BEST_SPEED);
     assert inflate_raw(&c1).unwrap() == data;
     let c9 = deflate_raw(&data, Z_BEST_COMPRESSION);
@@ -460,7 +435,7 @@ test "raw deflate large data" {
 }
 
 test "gzip round-trip" {
-    let data = string_to_bytes("Hello, gzip!");
+    let data = b"Hello, gzip!";
     let compressed = gzip_compress(&data);
     assert compressed[0] == 0x1F, "gzip magic byte 1";
     assert compressed[1] == 0x8B, "gzip magic byte 2";
@@ -470,7 +445,7 @@ test "gzip round-trip" {
 }
 
 test "gzip compression levels" {
-    let data = string_to_bytes("Hello, gzip!");
+    let data = b"Hello, gzip!";
     let c1 = gzip_compress(&data, Z_BEST_SPEED);
     assert inflate_gzip(&c1).unwrap() == data;
     let c9 = gzip_compress(&data, Z_BEST_COMPRESSION);
@@ -492,8 +467,8 @@ test "gzip uncompress auto-detection" {
 }
 
 test "gzip multi-member" {
-    let seg1 = string_to_bytes("First member");
-    let seg2 = string_to_bytes("Second member");
+    let seg1 = b"First member";
+    let seg2 = b"Second member";
     let gz1 = gzip_compress(&seg1);
     let gz2 = gzip_compress(&seg2);
 
@@ -793,7 +768,7 @@ fn gzip_hello_world() -> ByteList {
 // LEN=5 and NLEN=~5, then the five literal bytes of "Hello".
 test "inflate raw stored block (RFC 1951 3.2.4)" {
     let stream: ByteList = [0x01, 0x05, 0x00, 0xFA, 0xFF, 72, 101, 108, 108, 111];
-    assert inflate_raw(&stream).unwrap() == string_to_bytes("Hello");
+    assert inflate_raw(&stream).unwrap() == b"Hello";
 }
 
 // RFC 1951 section 3.2.4: an empty final stored block (LEN=0, NLEN=0xFFFF).
@@ -838,7 +813,7 @@ test "inflate raw dynamic Huffman block (RFC 1951 3.2.7)" {
     let text = "In the beginning the Universe was created. This has made a lot of people very angry and been widely regarded as a bad move. Many races believe that it was created by some sort of god.";
     let out = inflate_raw(&stream).unwrap();
     assert out.len() == 183;
-    assert out == string_to_bytes(text);
+    assert out == text.bytes().collect();
 }
 
 // RFC 1951 section 3.2.3: a distance cannot refer past the beginning of the
@@ -879,10 +854,9 @@ test "gzip members after a long member decode in place" {
     let second = make_wordy(3000);
     let mut members = gzip_compress(&first);
     members.extend(&gzip_compress(&second));
-    let out = inflate_gzip(&members).unwrap();
-    assert out.len() == first.len() + second.len();
-    assert out[0..<first.len()].to_list() as ByteList == first;
-    assert out[first.len()..<out.len()].to_list() as ByteList == second;
+    let mut expected = first;
+    expected.extend(&second);
+    assert inflate_gzip(&members).unwrap() == expected;
 }
 
 // The malformed streams below are ones no encoder emits, so they are written
@@ -922,9 +896,7 @@ fn finish(w: &BitWriter, padding: i32) -> ByteList {
     let mut flushed = *w;
     flushed.flush();
     let mut out = flushed.output;
-    for let mut i = 0; i < padding; i += 1 {
-        out.push(0);
-    }
+    out.extend(&make_repeated(0, padding));
     return out;
 }
 
@@ -1123,7 +1095,7 @@ test "inflate zlib rejects truncated deflate body (RFC 1951 3.2.3)" {
 // RFC 1952: a complete reference gzip member decodes to its original bytes.
 test "inflate gzip reference member (RFC 1952)" {
     let gz = gzip_hello_world();
-    assert inflate_gzip(&gz).unwrap() == string_to_bytes("hello world");
+    assert inflate_gzip(&gz).unwrap() == b"hello world";
 }
 
 // RFC 1952 section 2.3.1: the CRC32 trailer must match the uncompressed data.
@@ -1155,7 +1127,7 @@ test "gzip header preserves UTF-8 name and comment" {
     header.set_name("café_日本語.txt");
     header.set_comment("コメント 😀");
 
-    let data = string_to_bytes("payload");
+    let data = b"payload";
     let compressed = gzip_compress(&data, Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY, &header);
 
     let parsed = inflate_get_gzip_header(&compressed).unwrap();
@@ -1239,9 +1211,7 @@ test "a Fibonacci-skewed distribution round-trips with codes limited to 15 bits"
     let mut count = 1;
     let mut next = 2;
     for let mut k = 0; k < 22; k += 1 {
-        for let mut i = 0; i < count; i += 1 {
-            data.push(k as u8);
-        }
+        data.extend(&make_repeated(k as u8, count));
         let sum = count + next;
         count = next;
         next = sum;
