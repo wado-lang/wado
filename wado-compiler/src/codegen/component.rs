@@ -4003,11 +4003,8 @@ fn compose_dependency_components(
                 if let Err(refused) =
                     graph.validate_connection(prov_inst, Some(prov_export), dep_inst, import_idx)
                 {
-                    let (Some(prov), Some(dep)) =
-                        (graph.get_component(prov_id), graph.get_component(dep_id))
-                    else {
-                        unreachable!("both components were added above");
-                    };
+                    let prov = graph.get_component(prov_id).expect("added above");
+                    let dep = graph.get_component(dep_id).expect("added above");
                     let reason =
                         subtype_refusal(prov, dep, fq).unwrap_or_else(|| format!("{refused:#}"));
                     return Err(ComposeFailure::Provider(mismatch(reason)));
