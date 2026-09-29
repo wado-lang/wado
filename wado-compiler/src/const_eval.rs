@@ -714,72 +714,39 @@ pub(crate) fn eval_int_shr(lval: u64, rval: u64, prim: PrimitiveType) -> u64 {
     }
 }
 
+/// `None` where the division traps at runtime — a zero divisor, or a signed
+/// `MIN / -1` at any width — so the trap is left for the runtime to raise.
 pub(crate) fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    if rval == 0 {
-        return None;
-    }
-    match prim {
+    let quotient = match prim {
         PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-            Some(truncate_int(lval / rval, prim))
+            lval.checked_div(rval)?
         }
-        PrimitiveType::I8 => {
-            let result = (lval as i8).wrapping_div(rval as i8);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I16 => {
-            let result = (lval as i16).wrapping_div(rval as i16);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I32 => {
-            if lval as i32 == i32::MIN && rval as i32 == -1 {
-                return None;
-            }
-            let result = (lval as i32).wrapping_div(rval as i32);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I64 => {
-            if lval as i64 == i64::MIN && rval as i64 == -1 {
-                return None;
-            }
-            let result = (lval as i64).wrapping_div(rval as i64);
-            Some(result as u64)
-        }
-        _ => None,
-    }
+        PrimitiveType::I8 => (lval as i8).checked_div(rval as i8)? as u64,
+        PrimitiveType::I16 => (lval as i16).checked_div(rval as i16)? as u64,
+        PrimitiveType::I32 => (lval as i32).checked_div(rval as i32)? as u64,
+        PrimitiveType::I64 => (lval as i64).checked_div(rval as i64)? as u64,
+        _ => return None,
+    };
+    Some(truncate_int(quotient, prim))
 }
 
+/// `None` for a zero divisor, which traps at runtime. A signed `MIN % -1` is 0
+/// at every width, as Wasm `rem_s` answers.
 pub(crate) fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     if rval == 0 {
         return None;
     }
-    match prim {
+    let remainder = match prim {
         PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-            Some(truncate_int(lval % rval, prim))
+            lval % rval
         }
-        PrimitiveType::I8 => {
-            let result = (lval as i8).wrapping_rem(rval as i8);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I16 => {
-            let result = (lval as i16).wrapping_rem(rval as i16);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I32 => {
-            if lval as i32 == i32::MIN && rval as i32 == -1 {
-                return None;
-            }
-            let result = (lval as i32).wrapping_rem(rval as i32);
-            Some(truncate_int(result as u64, prim))
-        }
-        PrimitiveType::I64 => {
-            if lval as i64 == i64::MIN && rval as i64 == -1 {
-                return None;
-            }
-            let result = (lval as i64).wrapping_rem(rval as i64);
-            Some(result as u64)
-        }
-        _ => None,
-    }
+        PrimitiveType::I8 => (lval as i8).wrapping_rem(rval as i8) as u64,
+        PrimitiveType::I16 => (lval as i16).wrapping_rem(rval as i16) as u64,
+        PrimitiveType::I32 => (lval as i32).wrapping_rem(rval as i32) as u64,
+        PrimitiveType::I64 => (lval as i64).wrapping_rem(rval as i64) as u64,
+        _ => return None,
+    };
+    Some(truncate_int(remainder, prim))
 }
 
 pub(crate) fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {

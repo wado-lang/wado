@@ -5,6 +5,7 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::compiler_item::SeqField;
+use crate::const_eval::{int_bit_width, prim_of};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -182,7 +183,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I64Unsigned => WirInstr::I64DivU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64DivS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32DivU(left, right),
-                PrimitiveKind::I32Signed => WirInstr::I32DivS(left, right),
+                PrimitiveKind::I32Signed => self.signed_div_i32(left, right, left_type_id),
             },
             NirBinaryOp::Mod => match kind {
                 // Wasm has no float remainder; `%` on a float is a type error.
@@ -302,6 +303,29 @@ impl FunctionTranslator<'_, '_> {
             // Returned above, before the operand kind is classified.
             NirBinaryOp::RefNotEq => unreachable!(),
         }
+    }
+
+    /// Signed `/` at the operand's width, which traps on `MIN / -1` as
+    /// `i32.div_s` does. An `i8` or `i16` dividend is shifted into the top of
+    /// the i32, where its `MIN` is i32's, so `div_s` overflows on exactly that
+    /// case. Dividing again by the shift's power of two restores the quotient:
+    /// truncating twice toward zero truncates once.
+    fn signed_div_i32(
+        &self,
+        left: Box<WirInstr>,
+        right: Box<WirInstr>,
+        type_id: TypeId,
+    ) -> WirInstr {
+        let head = self.type_table.representation_head(type_id);
+        let shift = prim_of(head, self.type_table).map_or(0, |p| 32 - int_bit_width(p));
+        if shift == 0 {
+            return WirInstr::I32DivS(left, right);
+        }
+        let widened = WirInstr::I32Shl(left, Box::new(WirInstr::I32Const(shift as i32)));
+        WirInstr::I32DivS(
+            Box::new(WirInstr::I32DivS(Box::new(widened), right)),
+            Box::new(WirInstr::I32Const(1 << shift)),
+        )
     }
 
     /// Translate a unary operation to WIR.

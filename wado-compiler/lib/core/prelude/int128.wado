@@ -1033,7 +1033,7 @@ impl i128 {
     /// Uses signed division semantics:
     /// - quotient is negative if signs differ
     /// - remainder has the same sign as dividend
-    /// Panics if divisor is zero
+    /// Panics if divisor is zero, or on `MIN / -1`, whose quotient overflows
     pub fn div_rem(&self, divisor: &i128) -> [i128, i128] {
         // Check for division by zero
         if divisor.low == 0 && divisor.high == 0 {
@@ -1057,6 +1057,9 @@ impl i128 {
         let mut quotient = i128::from_u128(abs_quotient);
         if dividend_neg != divisor_neg {
             quotient = -quotient;
+        } else if quotient.is_negative() {
+            // A magnitude of 2^127 with agreeing signs: `MIN / -1`.
+            panic("i128 division overflow");
         }
 
         // Remainder: same sign as dividend
@@ -1388,9 +1391,10 @@ impl Div for i128 {
 impl Rem for i128 {
     type Output = i128;
 
+    /// Not through `div_rem`: `MIN % -1` is 0, though `MIN / -1` overflows.
     pub fn rem(&self, other: &Self) -> Self::Output {
-        let result = self.div_rem(other);
-        return result[1];
+        let remainder = i128::from_u128(self.abs_u128() % other.abs_u128());
+        return if self.is_negative() { -remainder } else { remainder };
     }
 }
 

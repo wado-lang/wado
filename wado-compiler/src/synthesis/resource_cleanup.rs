@@ -429,21 +429,14 @@ impl TirRefVisitor for ResourceProbe<'_> {
 // Drop-statement synthesis
 // ---------------------------------------------------------------------------
 
-/// Build the statements that drop `live` — a `resource.drop` for a bare
-/// resource, or a structural `match` for a resource-carrying aggregate.
-fn drop_one(live: &Live, cx: &mut Cx) -> Vec<TirStmt> {
-    drop_value(
-        local_ref(live.local, &live.name, live.type_id),
-        live.type_id,
-        cx,
-    )
-}
-
 /// Build the statements that drop `lives`, in order.
 fn drop_all<'l>(lives: impl IntoIterator<Item = &'l Live>, cx: &mut Cx) -> Vec<TirStmt> {
     lives
         .into_iter()
-        .flat_map(|live| drop_one(live, cx))
+        .flat_map(|live| {
+            let value = local_ref(live.local, &live.name, live.type_id);
+            drop_value(value, live.type_id, cx)
+        })
         .collect()
 }
 
