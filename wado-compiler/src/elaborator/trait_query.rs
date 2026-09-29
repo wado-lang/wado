@@ -2161,9 +2161,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Find a method in the trait declarations the bound names give, read in
-    /// elaborated form: `T: Ord` searches `Ord` and its supertraits.
+    /// elaborated form: `T: Ord` searches `Ord` and its supertraits. `call` is
+    /// the node [`Scope::bound_selections`] records the selection under.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
+        call: Option<AstId>,
         bounds: &[ScopedBound],
         method_name: &str,
         self_type_id: TypeId,
@@ -2206,6 +2208,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
+        // Two traits declaring the method select neither.
+        let selects_one_trait = candidates.len() == 1;
         // A reserved name answers only where no method of its kind does.
         let header = |c: &BoundCandidate| self.tysys.trait_method_header_of(&c.decl, method_name);
         let answers = |receiver: bool| {
@@ -2258,6 +2262,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             decl,
             written_self,
         } = candidate;
+        if selects_one_trait
+            && let (Some(call), Some(selections)) =
+                (call, self.annotate_ctx.bound_selections.as_mut())
+        {
+            selections.insert(call, decl);
+        }
         let fq_trait_name = FqTraitName::declared(self.tysys.resolutions.defs(), decl);
         // The arguments the bound writes name the trait the way the impl that
         // answers it is named, so `T: Eq<String>` reaches `impl Eq<String>`.
@@ -2293,11 +2303,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// The header of `method_name` on the trait `key` names: the cheap form of
     /// [`Elaborator::trait_method_of`], cloning no declaration.
-    pub(super) fn trait_method_header_of(
-        &self,
-        key: &DefId,
-        method_name: &str,
-    ) -> Option<&ImplMethodHeader> {
+    fn trait_method_header_of(&self, key: &DefId, method_name: &str) -> Option<&ImplMethodHeader> {
         self.trait_env
             .decl_header_of(key)?
             .methods

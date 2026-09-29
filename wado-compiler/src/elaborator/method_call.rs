@@ -4,7 +4,6 @@ use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
@@ -250,35 +249,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         selections.get(&call).copied()
     }
 
-    /// Record, while a default body is read as written, the trait a bound
-    /// selected for `call` — unless two of the bounds declare the method, which
-    /// selects none of them.
-    pub(super) fn record_bound_selection(
-        &mut self,
-        call: Option<AstId>,
-        bounds: &[ScopedBound],
-        method_name: &str,
-        found: &FqTraitName,
-    ) {
-        let (Some(call), Some(decl)) = (call, found.canonical()) else {
-            return;
-        };
-        if self.annotate_ctx.bound_selections.is_none() {
-            return;
-        }
-        let declaring: IndexSet<DefId> = self
-            .elaborate_bounds(bounds)
-            .iter()
-            .filter_map(|b| self.trait_decl_of(&b.bound))
-            .filter(|d| self.tysys.trait_method_header_of(d, method_name).is_some())
-            .collect();
-        if declaring.len() == 1
-            && let Some(selections) = self.annotate_ctx.bound_selections.as_mut()
-        {
-            selections.insert(call, decl);
-        }
-    }
-
     pub(super) fn resolve_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -365,12 +335,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
             required_trait,
         } = input;
-        // A qualified call names one trait, so the inherent-method step — a
-        // different namespace — is skipped; only that trait's impls may
-        // answer. The ref-impl priority step still runs (with the filter):
-        // it is trait-impl lookup too, and skipping it would send
-        // `IntoIterator::into_iter(&list)` to the base type's impl where
-        // `(&list).into_iter()` selects `impl IntoIterator for &List<T>`.
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
@@ -388,13 +352,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A default body's author reached this call through a bound, which
         // names its trait as a qualified call names one.
         let declared_trait = match (&required_trait, call_id) {
-            (None, Some(call)) => self.abstract_selection(call).map(|decl| RequiredTrait {
-                decl: Resolution::Def(decl),
-                args: None,
-                display: self.tysys.resolutions.defs().name(decl).to_string(),
-            }),
+            (None, Some(call)) => self
+                .abstract_selection(call)
+                .map(|decl| self.tysys.required_trait(decl)),
             _ => None,
         };
+        // A qualified call names one trait, so the inherent-method step — a
+        // different namespace — is skipped; only that trait's impls may
+        // answer. The ref-impl priority step still runs (with the filter):
+        // it is trait-impl lookup too, and skipping it would send
+        // `IntoIterator::into_iter(&list)` to the base type's impl where
+        // `(&list).into_iter()` selects `impl IntoIterator for &List<T>`.
         let required_trait = required_trait.as_ref().or(declared_trait.as_ref());
 
         // The handle argument-directed selection classifies through (WEP
@@ -586,6 +554,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let bounds = self.carried_bounds(base_type_id, span);
             if !bounds.is_empty()
                 && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    call_id,
                     &bounds,
                     method_name,
                     base_type_id,
@@ -594,7 +563,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ArgSource::Exprs(&mut probe),
                 )
             {
-                self.record_bound_selection(call_id, &bounds, method_name, &found_trait);
                 trait_name = Some(found_trait);
                 method_info = Some(info);
             }
@@ -3331,6 +3299,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
+    /// A requirement naming the trait `decl`, with no argument list pinned.
+    pub(super) fn required_trait(&self, decl: DefId) -> RequiredTrait {
+        RequiredTrait {
+            decl: Resolution::Def(decl),
+            args: None,
+            display: self.resolutions.defs().name(decl).to_string(),
+        }
+    }
+
     /// An impl header's target head as a declaration name, resolved through the
     /// impl's own imports unless one of its type parameters shadows the spelling.
     fn impl_head_decl_name(&self, header: &ImplHeader, impl_module: &ModuleSource) -> String {

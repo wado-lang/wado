@@ -4492,6 +4492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) = {
                 self.find_method_in_trait_bounds(
+                    Some(call.id),
                     &bounds,
                     method_name,
                     type_param_type_id,
@@ -4501,7 +4502,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             }
         {
-            self.record_bound_selection(Some(call.id), &bounds, method_name, &found_trait);
             if let Some(def) = method_info_result.method_def
                 && self.report_unavailable(def, call.span)
             {

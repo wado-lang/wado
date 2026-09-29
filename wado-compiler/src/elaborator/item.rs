@@ -20,7 +20,6 @@ use crate::token::Span;
 use super::Elaborator;
 use super::infer_hole::InferHoleTable;
 use super::scope::{BinderInScope, Scope, ScopedBound, TypeParamScope, param_decl};
-use super::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
 use super::sig::{DeclSig, MethodSig};
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
@@ -1512,7 +1511,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// each impl's walk takes the bound its author's reading selected. That
     /// walk decides only this: its diagnostics are each impl's walk's to
     /// report, and every fact it records is dropped.
-    pub(super) fn abstract_selections(
+    fn abstract_selections(
         &mut self,
         trait_decl: DefId,
         func: &Function,
@@ -1524,15 +1523,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .tysys
             .trait_env
             .decl_header_of(&trait_decl)
-            .map(|h| (h.name.clone(), h.span, h.type_params.clone()));
+            .expect("a trait supplying a default body is declared");
+        let (name, span, type_params) =
+            (header.name.clone(), header.span, header.type_params.clone());
         let sig = self
             .tysys
             .trait_sig_of(&trait_decl)
             .and_then(|s| s.method(&func.name))
-            .map(|m| m.sig.decl.clone());
-        let (Some((name, span, type_params)), Some(sig)) = (header, sig) else {
-            return Rc::default();
-        };
+            .expect("a default body is one of its trait's recorded methods")
+            .sig
+            .decl
+            .clone();
         let trait_id = self.tysys.resolutions.defs().ast_id(trait_decl);
         let walk = Scope {
             resolving_home: Some(self.home_module(func.id)),
@@ -1540,48 +1541,34 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             bound_selections: Some(hashmap::IndexMap::default()),
             ..Scope::default()
         };
-        let synthetic = ModuleSemantics {
-            bindings: ModuleBindings::default(),
-            imports: std::mem::take(&mut self.sem.imports),
-            types: TypeAnnotations::default(),
-            decls: std::mem::take(&mut self.sem.decls),
-            default_method_facts: hashmap::IndexMap::default(),
-        };
         let logger = self.logger;
         let _quiet = logger.quiet();
-        let ((((), walked), _), populated) = util::replaced(
-            self,
-            |e| &mut e.sem,
-            synthetic,
-            |this| {
-                util::replaced(
-                    this,
-                    |e| &mut e.infer_holes,
-                    InferHoleTable::default(),
-                    |this| {
-                        util::replaced(
-                            this,
-                            |e| &mut e.annotate_ctx,
-                            walk,
-                            |this| {
-                                let (mut scope, _, next_slot) =
-                                    this.enter_trait_frame(trait_id, &name, span, &type_params);
-                                scope.register_generic_params(&func.type_params, next_slot);
-                                scope.sem.decls.clear_fn_local_items();
-                                let return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
-                                let mut ctx = FunctionContext::new(return_type, func.name.clone());
-                                for (param, &ty) in func.params.iter().zip(&sig.param_types) {
-                                    scope.bind_fn_param(param, ty, &func.type_params, &mut ctx);
-                                }
-                                scope.walk_fn_body(func, return_type, &mut ctx);
-                            },
-                        )
-                    },
-                )
-            },
-        );
-        self.sem.imports = populated.imports;
-        self.sem.decls = populated.decls;
+        let ((((), walked), _), _) = self.with_lent_semantics(|this| {
+            util::replaced(
+                this,
+                |e| &mut e.infer_holes,
+                InferHoleTable::default(),
+                |this| {
+                    util::replaced(
+                        this,
+                        |e| &mut e.annotate_ctx,
+                        walk,
+                        |this| {
+                            let (mut scope, _, next_slot) =
+                                this.enter_trait_frame(trait_id, &name, span, &type_params);
+                            scope.register_generic_params(&func.type_params, next_slot);
+                            scope.sem.decls.clear_fn_local_items();
+                            let return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
+                            let mut ctx = FunctionContext::new(return_type, func.name.clone());
+                            for (param, &ty) in func.params.iter().zip(&sig.param_types) {
+                                scope.bind_fn_param(param, ty, &func.type_params, &mut ctx);
+                            }
+                            scope.walk_fn_body(func, return_type, &mut ctx);
+                        },
+                    )
+                },
+            )
+        });
         let selections = Rc::new(
             walked
                 .bound_selections
@@ -2419,11 +2406,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         // `recorded_sig` is `None` for a trait's own default-bodied method,
         // which was written against the trait's `Self`, not this impl's.
-        let abstract_selections = match (recorded_sig, trait_name.and_then(FqTraitName::canonical))
-        {
-            (None, Some(trait_decl)) => Some(self.abstract_selections(trait_decl, func)),
-            _ => None,
-        };
+        let abstract_selections = recorded_sig.is_none().then(|| {
+            let trait_decl = trait_name
+                .and_then(FqTraitName::canonical)
+                .expect("a default body is synthesised from its trait's declaration");
+            self.abstract_selections(trait_decl, func)
+        });
 
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -2477,6 +2465,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // From here on the method's own AST is read, which a trait's default
         // body wrote in the trait's module, whichever impl inherits it.
         let home = Some(scope.home_module(func.id));
+        // `with_resolving_home` would hand the walk the bare `Elaborator`, and
+        // the walk reads type parameters in this scope's frame.
         let ((method_resolved_param_types, return_type, param_types, type_params), _) =
             util::replaced(
                 &mut scope,
@@ -2526,7 +2516,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         mangled_name: String,
         display_name: String,
     ) -> (Vec<TypeId>, TypeId, Vec<TypeId>, Vec<TirTypeParam>) {
-        let scope = self;
         // A method the impl block declares has its canonical signature from
         // the decl pass, resolved in this same frame; reading it back is what
         // keeps the two passes from drifting. A trait *default* method being
@@ -2538,11 +2527,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             None => func
                 .return_type
                 .as_ref()
-                .map(|t| scope.resolve_type(t))
+                .map(|t| self.resolve_type(t))
                 .unwrap_or(TypeTable::UNIT),
         };
-        scope
-            .sem
+        self.sem
             .decls
             .function_return_types
             .insert(mangled_name, return_type);
@@ -2550,12 +2538,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let mut ctx = FunctionContext::new(return_type, display_name);
         // `resume` is valid only in a handler method body (WEP 2026-04-11).
         if let Some(handled) = trait_name.and_then(FqTraitName::canonical)
-            && let kind = scope.tysys.resolutions.defs().kind(handled)
+            && let kind = self.tysys.resolutions.defs().kind(handled)
             && kind.is_effect()
         {
             ctx.in_handler_method = true;
             let is_resource_effect = kind == DefKind::Resource;
-            let async_op = scope
+            let async_op = self
                 .tysys
                 .signatures
                 .resource_method_sig(handled, &func.name)
@@ -2564,8 +2552,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {
-                let _ = scope.emit(TypeError::AsyncUserEffectHandlerUnsupported {
-                    interface_name: scope.tysys.resolutions.defs().name(handled).to_string(),
+                let _ = self.emit(TypeError::AsyncUserEffectHandlerUnsupported {
+                    interface_name: self.tysys.resolutions.defs().name(handled).to_string(),
                     op_name: func.name.clone(),
                     span: func.span,
                 });
@@ -2579,7 +2567,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             None => func
                 .params
                 .iter()
-                .map(|param| scope.resolve_method_param_type(param))
+                .map(|param| self.resolve_method_param_type(param))
                 .collect(),
         };
 
@@ -2591,7 +2579,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         if trait_name.is_some() && recorded_sig.is_some() {
             for type_param in &func.type_params {
                 if let Some(default) = &type_param.default {
-                    let _ = scope.emit(TypeError::TypeParamDefaultInTraitImpl {
+                    let _ = self.emit(TypeError::TypeParamDefaultInTraitImpl {
                         method: func.name.clone(),
                         param: type_param.name.clone(),
                         span: default.span(),
@@ -2600,7 +2588,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             }
             for param in &func.params {
                 if let Some(default) = &param.default {
-                    let _ = scope.emit(TypeError::DefaultInTraitImpl {
+                    let _ = self.emit(TypeError::DefaultInTraitImpl {
                         method: func.name.clone(),
                         param: param.name.clone(),
                         span: default.span(),
@@ -2614,14 +2602,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         assert_eq!(param_types.len(), func.params.len());
         for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
             if param.self_kind == ast::SelfKind::Value {
-                scope.check_self_by_value(type_id, param.span);
+                self.check_self_by_value(type_id, param.span);
             }
-            scope.bind_fn_param(param, type_id, &func.type_params, &mut ctx);
+            self.bind_fn_param(param, type_id, &func.type_params, &mut ctx);
         }
 
-        scope.walk_fn_body(func, return_type, &mut ctx);
+        self.walk_fn_body(func, return_type, &mut ctx);
 
-        let type_params = scope.fn_type_params(&func.type_params);
+        let type_params = self.fn_type_params(&func.type_params);
 
         // Store resolved param types for generic methods (before restoring type params scope)
         // so TypeParams have the correct ids for later inference at call sites.
@@ -2631,13 +2619,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             func.params
                 .iter()
                 .filter(|p| p.self_kind == SelfKind::None)
-                .map(|p| scope.resolve_type(&p.ty))
+                .map(|p| self.resolve_type(&p.ty))
                 .collect()
         };
 
-        let effects = scope.resolve_effects(&func.effects);
+        let effects = self.resolve_effects(&func.effects);
 
-        scope.sem.types.function_effects.insert(func.id, effects);
+        self.sem.types.function_effects.insert(func.id, effects);
 
         (
             method_resolved_param_types,
