@@ -1375,7 +1375,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let [self_ty_ast] = head.args else {
                 let _ = self.emit(TypeError::TypeArgumentCount {
-                    name: head.name.to_string(),
+                    name: head.name.clone(),
                     expected: 1,
                     found: head.args.len(),
                     span: static_call.span,
