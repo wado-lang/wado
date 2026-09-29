@@ -1,6 +1,19 @@
 use { Value, to_value, from_value, merge } from "core:value";
 use { to_string, from_string } from "core:json";
-use { Serialize, DeserializeError, DeserializeErrorKind } from "core:serde";
+use {
+    Serialize,
+    Serializer,
+    SerializeMap,
+    SerializeError,
+    SerializeErrorKind,
+    Deserialize,
+    Deserializer,
+    DeserializeVariant,
+    DeserializeError,
+    DeserializeErrorKind,
+    DuplicateKeyPolicy,
+    Visitor,
+} from "core:serde";
 use { TreeMap } from "core:collections";
 
 fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
@@ -610,4 +623,470 @@ test "to_value preserves byte strings as Value::Bytes" {
     } else {
         panic("expected Value::Bytes");
     }
+}
+
+// --- every arm ---
+
+fn every_arm() -> List<Value> {
+    let bytes: ByteList = [1, 0xab];
+    let raw: ByteList = [0xf7];
+    return [
+        Value::Null, Value::Bool(true),
+        Value::Int(-3),
+        Value::UInt(u64::MAX),
+        Value::Int128(i128::MIN),
+        Value::UInt128(u128::MAX),
+        Value::Float(1.5),
+        Value::String("s"),
+        Value::Bytes(bytes),
+        Value::List([Value::Int(1)]),
+        { a: 1 },
+        Value::Undefined, Value::Unknown(raw),
+    ];
+}
+
+test "Value::from picks the arm of the source type" {
+    assert Value::from(-5 as i64) == Value::Int(-5);
+    assert Value::from(7 as u32) == Value::UInt(7);
+    assert Value::from(u64::MAX) == Value::UInt(u64::MAX);
+}
+
+test "Value equality compares each arm by payload" {
+    let arms = every_arm();
+    for let a of 0..<arms.len() {
+        for let b of 0..<arms.len() {
+            assert (arms[a] == arms[b]) == (a == b);
+        }
+    }
+    assert Value::UInt128(1) != Value::UInt128(2);
+    let one: ByteList = [1];
+    assert Value::Unknown(one) != Value::Bytes(one);
+    assert Value::Int(1) != Value::UInt(1);
+}
+
+test "Value equality of objects ignores key order but not keys" {
+    let ab: Value = { a: 1, b: 2 };
+    let ba: Value = { b: 2, a: 1 };
+    let ac: Value = { a: 1, c: 2 };
+    let a: Value = { a: 1 };
+    assert ab == ba;
+    assert ab != ac;
+    assert ab != a;
+}
+
+test "from_value into Value returns every arm unchanged" {
+    for let v of every_arm() {
+        assert from_value::<Value>(&v) matches { Ok(back) && back == v };
+    }
+}
+
+test "to_value of a Value returns every representable arm unchanged" {
+    for let v of every_arm() {
+        if v matches { Undefined | Unknown(_) } {
+            continue;
+        }
+        assert to_value(&v) matches { Ok(back) && back == v };
+    }
+}
+
+// --- to_value ---
+
+struct ValueHolder {
+    v: Value,
+}
+
+variant ValueCase {
+    Wrap(Value),
+}
+
+test "to_value refuses Undefined and Unknown, however deep" {
+    let raw: ByteList = [0xf7];
+    let unsupported = |r: Result<Value, SerializeError>| r matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
+    assert unsupported(to_value(&Value::Undefined));
+    assert unsupported(to_value(&Value::Unknown(raw)));
+    assert unsupported(to_value(&Value::List([Value::Undefined])));
+    let in_object: Value = { a: Value::Undefined };
+    assert unsupported(to_value(&in_object));
+    assert unsupported(to_value(&ValueHolder { v: Value::Undefined }));
+    assert unsupported(to_value(&ValueCase::Wrap(Value::Undefined)));
+}
+
+test "to_value keeps each primitive's width" {
+    assert to_value(&(-5 as i64)) matches { Ok(v) && v == Value::Int(-5) };
+    assert to_value(&(7 as u32)) matches { Ok(v) && v == Value::UInt(7) };
+    assert to_value(&i128::MIN) matches { Ok(v) && v == Value::Int128(i128::MIN) };
+    assert to_value(&u128::MAX) matches { Ok(v) && v == Value::UInt128(u128::MAX) };
+    assert to_value(&(1.5 as f32)) matches { Ok(v) && v == Value::Float(1.5) };
+    assert to_value(&'é') matches { Ok(v) && v == Value::String("é") };
+}
+
+test "to_value writes a string-keyed map as an object in key order" {
+    let mut m = TreeMap::<String, i32>::new();
+    m["z"] = 1;
+    m["a"] = 2;
+    let expected: Value = { z: 1, a: 2 };
+    assert to_value(&m) matches { Ok(v) && v == expected };
+}
+
+/// A hand-written map whose keys are not strings.
+struct ScalarKeys {
+}
+
+// Its `?`s forward errors `to_value` never raises for these keys and values.
+#[coverage(off)]
+impl Serialize for ScalarKeys {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(3)?;
+        m.key(&-1)?;
+        m.value(&"int")?;
+        m.key(&(2 as u64))?;
+        m.value(&"uint")?;
+        m.key(&true)?;
+        m.value(&"bool")?;
+        return m.end();
+    }
+}
+
+test "to_value spells integer and bool map keys as strings" {
+    let expected: Value = {
+        "-1": "int",
+        "2": "uint",
+        true: "bool",
+    };
+    assert to_value(&ScalarKeys {}) matches { Ok(v) && v == expected };
+}
+
+// --- Inspect ---
+
+test "inspect renders the binary-format arms" {
+    let bytes: ByteList = [1, 0xab];
+    let raw: ByteList = [0xf7];
+    assert `${Value::Int(-3):?}` == "-3";
+    assert `${Value::UInt(7):?}` == "7";
+    assert `${Value::Int128(-5):?}` == "-5";
+    assert `${Value::UInt128(5):?}` == "5";
+    assert `${Value::Bytes(bytes):?}` == "0x01ab";
+    assert `${Value::Undefined:?}` == "undefined";
+    assert `${Value::Unknown(raw):?}` == "unknown(0xf7)";
+}
+
+test "inspect separates object entries with a comma" {
+    let v: Value = { a: 1, b: null };
+    assert `${v:?}` == "{\"a\": 1, \"b\": null}";
+}
+
+test "pretty-print renders scalars as inspect does" {
+    let bytes: ByteList = [1, 0xab];
+    let raw: ByteList = [0xf7];
+    let scalars: List<Value> = [
+        Value::Null, Value::Bool(true),
+        Value::Bool(false),
+        Value::Int(-3),
+        Value::UInt(7),
+        Value::Int128(-5),
+        Value::UInt128(5),
+        Value::Float(1.5),
+        Value::String("s"),
+        Value::Bytes(bytes), Value::Undefined,
+        Value::Unknown(raw),
+    ];
+    for let v of scalars {
+        assert `${v:#?}` == `${v:?}`;
+    }
+}
+
+test "pretty-print keeps empty containers on one line" {
+    let v: Value = {
+        list: Value::List([]),
+        object: Value::Object(obj([])),
+    };
+    assert `${v:#?}` == "{
+  \"list\": [],
+  \"object\": {},
+}";
+}
+
+// --- merge ---
+
+test "merge replaces an object with a non-object overlay" {
+    let base: Value = { a: 1 };
+    assert merge(base, Value::Int(5)) == Value::Int(5);
+}
+
+test "merge takes an object the base lacks whole" {
+    let base: Value = { a: 1 };
+    let overlay: Value = {
+        b: { c: 2 },
+    };
+    let expected: Value = {
+        a: 1,
+        b: { c: 2 },
+    };
+    assert merge(base, overlay) == expected;
+}
+
+test "merge replaces a scalar with an object overlay" {
+    let base: Value = { a: 1 };
+    let overlay: Value = {
+        a: { b: 2 },
+    };
+    assert merge(base, overlay) == overlay;
+}
+
+// --- from_value: scalars ---
+
+test "from_value reads bool" {
+    assert from_value::<bool>(&Value::Bool(true)) matches { Ok(true) };
+}
+
+test "from_value reads a small UInt128 into a narrow integer" {
+    assert from_value::<i32>(&Value::UInt128(5)) matches { Ok(5) };
+}
+
+test "from_value rejects a non-number for an integer" {
+    let kind = |r: Result<i32, DeserializeError>| match r {
+        Ok(_) => DeserializeErrorKind::Custom,
+        Err(e) => e.kind,
+    };
+    assert kind(from_value(&Value::Bool(true))) == DeserializeErrorKind::UnexpectedType;
+    assert kind(from_value(&Value::String("12x"))) == DeserializeErrorKind::InvalidValue;
+    assert from_value::<u64>(&Value::Int(-1)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "from_value reads u128 from every integer spelling" {
+    assert from_value::<u128>(&Value::UInt128(u128::MAX)) matches { Ok(n) && n == u128::MAX };
+    assert from_value::<u128>(&Value::String("340282366920938463463374607431768211455")) matches { Ok(n) && n == u128::MAX };
+    assert from_value::<u128>(&Value::Int(7)) matches { Ok(7) };
+    assert from_value::<u128>(&Value::Int(-1)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+}
+
+test "from_value widens every integer arm to a float" {
+    assert from_value::<f64>(&Value::UInt(3)) matches { Ok(f) && f == 3.0 };
+    assert from_value::<f64>(&Value::Int128(-2)) matches { Ok(f) && f == -2.0 };
+    assert from_value::<f64>(&Value::UInt128(4)) matches { Ok(f) && f == 4.0 };
+}
+
+test "from_value reads narrow floats" {
+    assert from_value::<f32>(&Value::Float(1.5)) matches { Ok(f) && f == 1.5 };
+    let half: f16 = 0.5;
+    assert from_value::<f16>(&Value::Float(0.5)) matches { Ok(f) && f == half };
+    let brain: bf16 = -2.0;
+    assert from_value::<bf16>(&Value::Int(-2)) matches { Ok(f) && f == brain };
+}
+
+test "from_value rejects a non-number for a float" {
+    let unexpected = |e: &DeserializeError| e.kind == DeserializeErrorKind::UnexpectedType;
+    assert from_value::<f64>(&Value::String("1")) matches { Err(e) && unexpected(&e) };
+    assert from_value::<f32>(&Value::Null) matches { Err(e) && unexpected(&e) };
+    assert from_value::<f16>(&Value::Null) matches { Err(e) && unexpected(&e) };
+    assert from_value::<bf16>(&Value::Null) matches { Err(e) && unexpected(&e) };
+}
+
+test "from_value rejects a char that is not exactly one character" {
+    let invalid = |e: &DeserializeError| e.kind == DeserializeErrorKind::InvalidValue;
+    assert from_value::<char>(&Value::String("")) matches { Err(e) && invalid(&e) };
+    assert from_value::<char>(&Value::String("xy")) matches { Err(e) && invalid(&e) };
+    assert from_value::<char>(&Value::Int(120)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
+test "from_value rejects bytes that are neither Bytes nor base64" {
+    assert from_value::<ByteList>(&Value::String("!!")) matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+    assert from_value::<ByteList>(&Value::Int(1)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
+test "from_value reads Null and Undefined as an absent Option" {
+    assert from_value::<Option<i32>>(&Value::Null) matches { Ok(None) };
+    assert from_value::<Option<i32>>(&Value::Undefined) matches { Ok(None) };
+    assert from_value::<Option<i32>>(&Value::Int(3)) matches { Ok(Some(3)) };
+}
+
+// --- from_value: containers ---
+
+test "from_value rejects a non-object for a struct or map" {
+    let unexpected = |e: &DeserializeError| e.kind == DeserializeErrorKind::UnexpectedType;
+    assert from_value::<Endpoint>(&Value::List([])) matches { Err(e) && unexpected(&e) };
+    assert from_value::<TreeMap<String, i64>>(&Value::Int(1)) matches { Err(e) && unexpected(&e) };
+}
+
+test "from_value reports a bad list element" {
+    let v = Value::List([
+        Value::Int(1),
+        Value::Bool(true),
+    ]);
+    assert from_value::<List<i32>>(&v) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
+test "from_value rejects a list longer than the tuple" {
+    let v = Value::List([
+        Value::Int(1),
+        Value::Int(2),
+        Value::Int(3),
+    ]);
+    assert from_value::<[i32, i32]>(&v) matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+}
+
+test "from_value rejects a payload case named without its payload" {
+    assert from_value::<ToValueShape>(&Value::String("Circle")) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType
+        && e.message == "expected a payload for Circle" };
+}
+
+test "from_value reads a variant only from a name or a one-key object" {
+    let unexpected = |r: Result<ToValueShape, DeserializeError>| r matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    let two_keys: Value = { Circle: 1, Dot: null };
+    assert unexpected(from_value(&Value::Int(1)));
+    assert unexpected(from_value(&Value::Object(obj([]))));
+    assert unexpected(from_value(&two_keys));
+}
+
+/// Records whether the wire's variant case carried a payload.
+struct CaseShape {
+    unit: bool,
+}
+
+impl Deserialize for CaseShape {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<CaseShape, DeserializeError> {
+        let mut va = d.begin_variant("CaseShape", 2)?;
+        return va.is_unit().map(|unit| CaseShape { unit });
+    }
+}
+
+test "a variant read from a Value tells a unit case from a payload case" {
+    let payload: Value = { Circle: 1 };
+    assert from_value::<CaseShape>(&Value::String("Dot")) matches { Ok(c) && c.unit };
+    assert from_value::<CaseShape>(&payload) matches { Ok(c) && !c.unit };
+    assert from_value::<CaseShape>(&Value::Int(1)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
+// --- duplicate keys ---
+
+test "a Value read from JSON rejects a repeated key" {
+    let r: Result<Value, DeserializeError> = from_string(`{"a":1,"a":2}`);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+/// `D` with the duplicate-key policy relaxed to last-wins.
+struct LastWins<D: Deserializer> {
+    inner: &mut D,
+}
+
+// The trait asks for every method, but reading a `Value` reaches only
+// `on_duplicate_key` and `deserialize_any`.
+#[coverage(off)]
+impl<D: Deserializer> Deserializer for LastWins<D> {
+    type SeqAccess = D::SeqAccess;
+    type MapAccess = D::MapAccess;
+    type StructAccess = D::StructAccess;
+    type VariantAccess = D::VariantAccess;
+
+    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
+        return DuplicateKeyPolicy::PassThru;
+    }
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return self.inner.deserialize_i32();
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return self.inner.deserialize_i64();
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return self.inner.deserialize_u32();
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return self.inner.deserialize_u64();
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return self.inner.deserialize_i128();
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return self.inner.deserialize_u128();
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return self.inner.deserialize_f32();
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return self.inner.deserialize_f64();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.inner.deserialize_f16();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.inner.deserialize_bf16();
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        return self.inner.deserialize_bool();
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        return self.inner.deserialize_char();
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return self.inner.deserialize_string();
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return self.inner.is_null();
+    }
+
+    fn begin_seq(&mut self) -> Result<D::SeqAccess, DeserializeError> {
+        return self.inner.begin_seq();
+    }
+
+    fn begin_map(&mut self) -> Result<D::MapAccess, DeserializeError> {
+        return self.inner.begin_map();
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<D::StructAccess, DeserializeError> {
+        return self.inner.begin_struct(name, num_fields);
+    }
+
+    fn begin_variant<S: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        num_cases: i32,
+    ) -> Result<D::VariantAccess, DeserializeError> {
+        return self.inner.begin_variant(type_name, num_cases);
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return self.inner.deserialize_any(visitor);
+    }
+}
+
+/// A `Value` read under a last-wins policy.
+struct LastWinsValue {
+    value: Value,
+}
+
+impl Deserialize for LastWinsValue {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<LastWinsValue, DeserializeError> {
+        let mut relaxed = LastWins { inner: d };
+        return Value::deserialize(&mut relaxed).map(|value| LastWinsValue { value });
+    }
+}
+
+test "a Value read under a last-wins policy keeps the last repeated key" {
+    let r: Result<LastWinsValue, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
+    let expected: Value = { a: 3.0, b: 2.0 };
+    assert r matches { Ok(v) && v.value == expected };
+}
+
+test "a Value read from malformed JSON fails at the bad byte inside the container" {
+    let fails_at = |json: String, offset: i64| {
+        let r: Result<Value, DeserializeError> = from_string(json);
+        return r matches { Err(e) && e.offset == offset };
+    };
+    assert fails_at("[1,}", 3);
+    assert fails_at("{1:2}", 1);
+    assert fails_at(`{"a":}`, 5);
 }

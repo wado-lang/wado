@@ -507,9 +507,7 @@ impl SerializeMap for ValueMapSerializer {
         let mut v: Value = Value::Null;
         let mut ser = ValueSerializer { out: &mut v };
         value.serialize(&mut ser)?;
-        if let Some(k) = self.pending {
-            self.entries[k] = v;
-        }
+        self.entries[self.pending.expect("a value is written after its key")] = v;
         self.pending = null;
         return Result::Ok(());
     }
@@ -1031,9 +1029,7 @@ impl Deserializer for ValueDeserializer {
         }
         if let Object(fields) = self.value {
             if fields.len() == 1 {
-                let Some([name, payload]) = fields.entries().next() else {
-                    unreachable();
-                };
+                let [name, payload] = fields.entries().next().expect("a one-key object has an entry");
                 return Result::Ok(ValueVariantAccess { name: *name, payload: Option::Some(payload) });
             }
         }
