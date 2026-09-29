@@ -895,6 +895,198 @@ test "gzip members after a long member decode in place" {
     assert bytes_equal(&(out[first.len()..<out.len()].to_list() as ByteList), &second);
 }
 
+// Writes the malformed streams no encoder emits. A header field goes least
+// significant bit first, a Huffman code most significant bit first (RFC 1951
+// section 3.1.1).
+struct BitWriter {
+    out: ByteList,
+    acc: i32,
+    count: i32,
+}
+
+impl BitWriter {
+    fn new() -> BitWriter {
+        return BitWriter { out: [], acc: 0, count: 0 };
+    }
+
+    fn bits(&mut self, value: i32, n: i32) {
+        for let mut i = 0; i < n; i += 1 {
+            self.acc = self.acc | (value >> i & 1) << self.count;
+            self.count += 1;
+            if self.count == 8 {
+                self.out.push(self.acc as u8);
+                self.acc = 0;
+                self.count = 0;
+            }
+        }
+    }
+
+    fn code(&mut self, code: i32, n: i32) {
+        for let mut i = n - 1; i >= 0; i -= 1 {
+            self.bits(code >> i, 1);
+        }
+    }
+
+    fn fixed_block(&mut self) {
+        self.bits(1, 1);
+        self.bits(1, 2);
+    }
+
+    // A final dynamic block (RFC 1951 section 3.2.7) whose code length code
+    // gives `lengths[symbol]` bits to each code length symbol.
+    fn dynamic_block(&mut self, nlen: i32, ndist: i32, lengths: &List<i32>) {
+        let order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+        let mut ncode = 4;
+        for let mut i = 0; i < 19; i += 1 {
+            if lengths[order[i]] != 0 {
+                ncode = i32::max(ncode, i + 1);
+            }
+        }
+        self.bits(1, 1);
+        self.bits(2, 2);
+        self.bits(nlen - 257, 5);
+        self.bits(ndist - 1, 5);
+        self.bits(ncode - 4, 4);
+        for let mut i = 0; i < ncode; i += 1 {
+            self.bits(lengths[order[i]], 3);
+        }
+    }
+
+    // The stream so far, its last byte zero-filled, then `padding` zero bytes.
+    fn finish(&self, padding: i32) -> ByteList {
+        let mut out = self.out;
+        if self.count > 0 {
+            out.push(self.acc as u8);
+        }
+        for let mut i = 0; i < padding; i += 1 {
+            out.push(0);
+        }
+        return out;
+    }
+}
+
+fn rejects(w: &BitWriter, padding: i32) -> bool {
+    return inflate_raw(&w.finish(padding)) matches { Err(ZlibError::InvalidDeflateData) };
+}
+
+// A code length code giving one bit each to two code length symbols, whose
+// canonical codes are then 0 for `a` and 1 for `b`.
+fn two_symbol_code_lengths(a: i32, b: i32) -> List<i32> {
+    let mut lengths = List::filled(19, 0);
+    lengths[a] = 1;
+    lengths[b] = 1;
+    return lengths;
+}
+
+// RFC 1951 section 3.2.6: literal/length codes 286 and 287 "will never
+// actually occur in the compressed data". Unpadded, the byte-at-a-time path
+// decodes the stream; padded, the fast loop does.
+test "literal/length codes 286 and 287 are rejected" {
+    let symbols: List<i32> = [286, 287];
+    for let symbol of symbols {
+        let mut w = BitWriter::new();
+        w.fixed_block();
+        w.code(0b11000000 + symbol - 280, 8);
+        assert rejects(&w, 0), `${symbol} unpadded`;
+        assert rejects(&w, 8), `${symbol} padded`;
+    }
+}
+
+// RFC 1951 section 3.2.6: distance codes 30 and 31 "will never actually occur
+// in the compressed data". Each follows length code 257.
+test "distance codes 30 and 31 are rejected" {
+    let symbols: List<i32> = [30, 31];
+    for let symbol of symbols {
+        let mut w = BitWriter::new();
+        w.fixed_block();
+        w.code(1, 7);
+        w.code(symbol, 5);
+        assert rejects(&w, 0), `${symbol} unpadded`;
+        assert rejects(&w, 8), `${symbol} padded`;
+    }
+}
+
+// RFC 1951 section 3.2.4: LEN and NLEN take four bytes after the header byte.
+test "a stored block cut inside LEN or NLEN is rejected" {
+    let cut_in_len: ByteList = [0x01, 0x05];
+    let cut_in_nlen: ByteList = [0x01, 0x05, 0x00, 0xFA];
+    assert inflate_raw(&cut_in_len) matches { Err(ZlibError::InvalidDeflateData) };
+    assert inflate_raw(&cut_in_nlen) matches { Err(ZlibError::InvalidDeflateData) };
+}
+
+// RFC 1951 section 3.2.4: "NLEN is the one's complement of LEN".
+test "a stored block whose NLEN is not LEN's complement is rejected" {
+    let stream: ByteList = [0x01, 0x05, 0x00, 0x05, 0x00, 72, 101, 108, 108, 111];
+    assert inflate_raw(&stream) matches { Err(ZlibError::InvalidDeflateData) };
+}
+
+// RFC 1951 section 3.2.7: HLIT counts at most 286 codes and HDIST at most 30,
+// though the five-bit fields reach 288 and 32.
+test "a dynamic block counting more codes than the alphabet has is rejected" {
+    let lengths = two_symbol_code_lengths(0, 16);
+    let mut too_many_lengths = BitWriter::new();
+    too_many_lengths.dynamic_block(287, 1, &lengths);
+    let mut too_many_distances = BitWriter::new();
+    too_many_distances.dynamic_block(257, 31, &lengths);
+    assert rejects(&too_many_lengths, 4);
+    assert rejects(&too_many_distances, 4);
+}
+
+// Four one-bit codes cannot all be told apart.
+test "an over-subscribed code length code is rejected" {
+    let mut lengths = List::filled(19, 0);
+    lengths[16] = 1;
+    lengths[17] = 1;
+    lengths[18] = 1;
+    lengths[0] = 1;
+    let mut w = BitWriter::new();
+    w.dynamic_block(257, 1, &lengths);
+    assert rejects(&w, 4);
+}
+
+// RFC 1951 section 3.2.7: code 16 copies "the previous code length", which the
+// first length does not have.
+test "a repeat before any code length is rejected" {
+    let mut w = BitWriter::new();
+    w.dynamic_block(257, 1, &two_symbol_code_lengths(0, 16));
+    w.code(1, 1);
+    w.bits(0, 2);
+    assert rejects(&w, 4);
+}
+
+test "a block without an end-of-block code is rejected" {
+    let mut w = BitWriter::new();
+    w.dynamic_block(257, 1, &two_symbol_code_lengths(0, 16));
+    for let mut i = 0; i < 258; i += 1 {
+        w.code(0, 1);
+    }
+    assert rejects(&w, 4);
+}
+
+test "an over-subscribed literal/length code is rejected" {
+    let mut w = BitWriter::new();
+    w.dynamic_block(257, 1, &two_symbol_code_lengths(0, 1));
+    for let mut i = 0; i < 258; i += 1 {
+        w.code(1, 1);
+    }
+    assert rejects(&w, 4);
+}
+
+// The literal/length code is complete, one bit each for literal 0 and
+// end-of-block, and the distance code gives one bit each to three distances.
+test "an over-subscribed distance code is rejected" {
+    let mut w = BitWriter::new();
+    w.dynamic_block(257, 3, &two_symbol_code_lengths(0, 1));
+    w.code(1, 1);
+    for let mut i = 1; i < 256; i += 1 {
+        w.code(0, 1);
+    }
+    for let mut i = 0; i < 4; i += 1 {
+        w.code(1, 1);
+    }
+    assert rejects(&w, 4);
+}
+
 // RFC 1950 section 2.2: FCHECK requires CMF*256+FLG to be a multiple of 31.
 test "inflate zlib rejects bad FCHECK (RFC 1950 2.2)" {
     let bad: ByteList = [0x78, 0x00, 0, 0, 0, 0];
