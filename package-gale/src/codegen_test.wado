@@ -2868,6 +2868,7 @@ test "every strategy the dump reports is one the emitter emitted" {
     for let src of &[
         "grammar T;\nr : A ;\nA : ('a' | 'ab') ;\nB : . ;", "grammar T;\nr : A ;\nA : 'a' (~'b')+ 'c' ;\nB : . ;",
         "grammar T;\nr : A ;\nA : 'a' .*? 'c' ;\nB : . ;", "grammar T;\nr : A ;\nA : ('a' | 'ab') 'c' ;\nB : . ;",
+        "grammar T;\nr : A ;\nA : 'a' 'b'? 'b' ;\nB : . ;",
         "grammar T;\nr : A B ;\nA : 'a' (~'b')+ 'c' | ('x' | 'xy') 'z' ;\nB : 'q' .*? 'r' ;\nC : . ;",
     ] {
         let report = lexer_dump(src);
@@ -3582,9 +3583,36 @@ WS : ' ' -> skip ;
     assert got == "Select FOO selects => SELECT:Select ID:FOO ID:selects\n", got;
 }
 
-// Gale peeks no suffix carrying a predicate, so the plain `.+` eats the `z` the
-// fragment needs and the rule fails.
-#[TODO]
+// The jar's tokens, over the same rules with `getText().equals(…)`: a predicate
+// after a construct decides where it stops, the trailing one included.
+test "a predicate after a loop, an optional or an alternation decides where it stops" {
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+MID : 'a' .+ { $text == \"azz\" }? 'z' ;
+END : 'b' .+ 'z' { $text == \"bzz\" }? ;
+TAIL : 'c' .+ { $text == \"czz\" }? ;
+OPT : 'd' 'z'? { $text == \"d\" }? ;
+ARM : ('e' | 'ez') { $text == \"e\" }? 'z' ;
+LAST : ('f' | 'fz') { $text == \"fz\" }? ;
+X : . ;
+", ["azzzz", "bzzzz", "czzzz", "dz", "ezz", "fz"]);
+    assert got == "azzzz => MID:azzz X:z
+bzzzz => END:bzz X:z X:z
+czzzz => TAIL:czz X:z X:z
+dz => OPT:d X:z
+ezz => ARM:ez X:z
+fz => LAST:fz
+", got;
+}
+
+test "an optional leaves the char the rest of the rule needs" {
+    let got = lexes("lexer grammar L;
+OVER : 'g' 'z'? 'z' ;
+X : . ;
+", ["gz", "gzz"]);
+    assert got == "gz => OVER:gz\ngzz => OVER:gzz\n", got;
+}
+
 test "a greedy loop hands back the chars a predicate-carrying suffix needs" {
     let got = lexes("lexer grammar L;
 options { language = Wado; }
@@ -3594,9 +3622,6 @@ fragment END : { true }? 'z' ;
     assert got == "abz => S:abz\n", got;
 }
 
-// Gale scores no alternation that a predicate follows or whose suffix carries
-// one, so the first arm to match wins and the rule fails.
-#[TODO]
 test "an alternation before a predicate takes the arm the rest of the rule needs" {
     let after = lexes("lexer grammar L;
 options { language = Wado; }
