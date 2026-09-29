@@ -188,6 +188,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.
     pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
+    /// [`Self::abstract_selections`] by default body, which every impl
+    /// inheriting the body in this module asks for.
+    pub(super) abstract_selection_cache:
+        hashmap::IndexMap<ast::AstId, Rc<hashmap::IndexMap<ast::AstId, DefId>>>,
 }
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
@@ -246,17 +250,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
-    /// A [`TypeLookup`] standing in the frame the AST under resolution was written in.
-    pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
-        // The frame is where the AST under resolution was written, so a
-        // travelled expression reads names as its author did — and its aliases
-        // too, since `nsb::Thing` is one name that only the author's `use ns`
-        // table can spell out.
-        let frame = self
-            .annotate_ctx
+    /// The module that wrote the AST under resolution. A travelled walk reads
+    /// names, aliases and traits in scope as its author did.
+    pub(super) fn frame_module(&self) -> &ModuleSource {
+        self.annotate_ctx
             .resolving_home
             .as_ref()
-            .unwrap_or(&self.current_module_source);
+            .unwrap_or(&self.current_module_source)
+    }
+
+    /// A [`TypeLookup`] standing in the frame the AST under resolution was written in.
+    pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
+        let frame = self.frame_module();
         let namespace_imports = self
             .namespace_imports_in(frame)
             .expect("a module the walk resolves in is one `TraitEnv` indexed");

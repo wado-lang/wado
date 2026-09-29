@@ -1177,6 +1177,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             interner: Rc::clone(&state.interner),
             infer_holes: InferHoleTable::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
+            abstract_selection_cache: hashmap::IndexMap::default(),
         }
     }
 

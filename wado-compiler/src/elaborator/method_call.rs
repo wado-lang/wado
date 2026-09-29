@@ -4,6 +4,7 @@ use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
+use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
@@ -241,6 +242,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
+    /// The trait the call `call` reaches through a declared bound, where the
+    /// walk is a trait's default body standing on one impl: the one its
+    /// author's reading selected ([`Elaborator::abstract_selections`]).
+    fn abstract_selection(&self, call: AstId) -> Option<RequiredTrait> {
+        let selections = self.annotate_ctx.trait_ctx.abstract_selections.as_ref()?;
+        let &decl = selections.get(&call)?;
+        Some(RequiredTrait {
+            decl: Resolution::Def(decl),
+            args: None,
+            display: self.tysys.resolutions.defs().name(decl).to_string(),
+        })
+    }
+
+    /// Record, while a default body is read as written, the trait a bound
+    /// selected for `call` — unless two of the bounds declare the method, which
+    /// selects none of them.
+    fn record_bound_selection(
+        &mut self,
+        call: Option<AstId>,
+        bounds: &[ScopedBound],
+        method_name: &str,
+        found: &FqTraitName,
+    ) {
+        let (Some(call), Some(decl)) = (call, found.canonical()) else {
+            return;
+        };
+        if self.annotate_ctx.bound_selections.is_none() {
+            return;
+        }
+        let declaring: IndexSet<DefId> = self
+            .elaborate_bounds(bounds)
+            .iter()
+            .filter_map(|b| self.trait_decl_of(&b.bound))
+            .filter(|d| self.tysys.trait_method_header_of(d, method_name).is_some())
+            .collect();
+        if declaring.len() == 1
+            && let Some(selections) = self.annotate_ctx.bound_selections.as_mut()
+        {
+            selections.insert(call, decl);
+        }
+    }
+
     pub(super) fn resolve_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -333,7 +376,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // it is trait-impl lookup too, and skipping it would send
         // `IntoIterator::into_iter(&list)` to the base type's impl where
         // `(&list).into_iter()` selects `impl IntoIterator for &List<T>`.
-        let required_trait = required_trait.as_ref();
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
@@ -347,6 +389,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let error = self.resolve_args_without_callee(args_ast, ctx);
             return MethodCallOutcome::no_dispatch(error);
         }
+
+        // A default body's author reached this call through a bound, which
+        // names its trait as a qualified call names one.
+        let declared_trait = match (&required_trait, call_id) {
+            (None, Some(call)) => self.abstract_selection(call),
+            _ => None,
+        };
+        let required_trait = required_trait.as_ref().or(declared_trait.as_ref());
 
         // The handle argument-directed selection classifies through (WEP
         // 2026-07-31). Constructing it costs nothing: a class is synthesized
@@ -545,6 +595,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ArgSource::Exprs(&mut probe),
                 )
             {
+                self.record_bound_selection(call_id, &bounds, method_name, &found_trait);
                 trait_name = Some(found_trait);
                 method_info = Some(info);
             }

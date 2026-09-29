@@ -8,8 +8,9 @@ use std::borrow::Borrow;
 use std::cell::{Cell, RefCell};
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
-use crate::ast;
+use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -236,6 +237,11 @@ pub(super) struct TraitContext {
     /// names. Qualifies `Self::Assoc` when `Self` is a concrete type, where
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<DefId>,
+    /// Set while the body under walk is a trait's default body, written
+    /// against the trait's `Self` rather than this concrete one: the trait
+    /// each of its calls reaches through a declared bound, by the call's node.
+    /// See [`Elaborator::abstract_selections`].
+    pub(super) abstract_selections: Option<Rc<IndexMap<AstId, DefId>>>,
     /// The `impl` block whose type parameters are in scope, paired with the
     /// node declaring its receiver binder — what names that binder in a mangle.
     /// The node, not the spelling: a method parameter may shadow the letter.
@@ -248,6 +254,7 @@ pub(super) struct SelfFrame {
     assoc_type_bindings: IndexMap<String, TypeId>,
     self_type: Option<TypeId>,
     self_trait: Option<DefId>,
+    abstract_selections: Option<Rc<IndexMap<AstId, DefId>>>,
 }
 
 /// One open `type_implements_trait` question.
@@ -282,6 +289,9 @@ pub(super) struct Scope {
     /// While set, use→def edges are dropped: a speculative walk choosing
     /// among overloads leaves no trace, and the real walk records them.
     pub(super) suppress_reference_recording: bool,
+    /// Set while a trait's default body is walked as its author wrote it: each
+    /// method call a declared bound alone answers records that bound's trait.
+    pub(super) bound_selections: Option<IndexMap<AstId, DefId>>,
     /// The `(base, assoc)` pairs whose binding is being resolved right now.
     /// Two assoc types bounded through each other have no fixpoint.
     pub(super) assoc_binding_stack: IndexSet<(TypeId, String)>,
@@ -301,6 +311,7 @@ impl Scope {
             assoc_type_bindings: std::mem::take(&mut self.trait_ctx.assoc_type_bindings),
             self_type: self.trait_ctx.self_type.take(),
             self_trait: self.trait_ctx.self_trait.take(),
+            abstract_selections: self.trait_ctx.abstract_selections.take(),
         }
     }
 
@@ -308,6 +319,7 @@ impl Scope {
         self.trait_ctx.assoc_type_bindings = frame.assoc_type_bindings;
         self.trait_ctx.self_type = frame.self_type;
         self.trait_ctx.self_trait = frame.self_trait;
+        self.trait_ctx.abstract_selections = frame.abstract_selections;
     }
 }
 
@@ -512,6 +524,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
         self.annotate_ctx.trait_ctx.self_trait = binding.declaring_trait;
         self.annotate_ctx.trait_ctx.self_type = Some(binding.type_id);
+        self.annotate_ctx.trait_ctx.abstract_selections = None;
     }
 
     /// [`Self::set_self_binding`] for the duration of `body`, restoring the

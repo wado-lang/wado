@@ -2293,7 +2293,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// The header of `method_name` on the trait `key` names: the cheap form of
     /// [`Elaborator::trait_method_of`], cloning no declaration.
-    fn trait_method_header_of(&self, key: &DefId, method_name: &str) -> Option<&ImplMethodHeader> {
+    pub(super) fn trait_method_header_of(
+        &self,
+        key: &DefId,
+        method_name: &str,
+    ) -> Option<&ImplMethodHeader> {
         self.trait_env
             .decl_header_of(key)?
             .methods

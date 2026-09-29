@@ -18,11 +18,14 @@ use crate::tir::{TirEffectOp, TirParam, TypeId, TypeTable, method_param_offset};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, ScopedBound, TypeParamScope, param_decl};
+use super::infer_hole::InferHoleTable;
+use super::scope::{BinderInScope, Scope, ScopedBound, TypeParamScope, param_decl};
+use super::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
 use super::sig::{DeclSig, MethodSig};
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
+use super::util;
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
@@ -1444,6 +1447,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         trait_decl: &ast::TraitDecl,
     ) -> (TypeParamScope<'_, 'a, H>, TypeId, u32) {
+        self.enter_trait_frame(
+            trait_decl.id,
+            &trait_decl.name,
+            trait_decl.span,
+            &trait_decl.type_params,
+        )
+    }
+
+    /// [`Self::enter_trait_scope`] for the trait the node `id` declares, named
+    /// `name` at `span` with `type_params`.
+    fn enter_trait_frame(
+        &mut self,
+        id: AstId,
+        name: &str,
+        span: Span,
+        type_params: &[ast::GenericParam],
+    ) -> (TypeParamScope<'_, 'a, H>, TypeId, u32) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
 
@@ -1456,7 +1476,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // mean, and inside the declaration that is this trait.
         let declaring = SelfBinding {
             type_id: self_slot,
-            declaring_trait: Some(scope.tysys.def_at(trait_decl.id)),
+            declaring_trait: Some(scope.tysys.def_at(id)),
         };
         scope.set_self_binding(declaring);
         scope.bind_param(
@@ -1466,19 +1486,110 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 ast::TraitBound {
                     // The trait's own declaration node, which the resolution
                     // walk answers for; a fresh id nothing resolved would not.
-                    id: trait_decl.id,
-                    name: trait_decl.name.clone(),
+                    id,
+                    name: name.to_string(),
                     type_args: Vec::new(),
                     assoc_types: Vec::new(),
-                    span: trait_decl.span,
+                    span,
                     fn_signature: None,
                     resolved: None,
                 },
                 Some(declaring),
             )],
         );
-        let next_slot = scope.register_generic_params(&trait_decl.type_params, 1);
+        let next_slot = scope.register_generic_params(type_params, 1);
         (scope, self_slot, next_slot)
+    }
+
+    /// The trait each method call in `func`, a default body of `trait_decl`,
+    /// reaches through a bound the declaration states, by the call's node.
+    ///
+    /// The body is walked once per impl inheriting it, standing on that impl's
+    /// types, where a projection is only the type it binds: `Self::SeqAccess`
+    /// and `Self::MapAccess` bound to one type are one receiver there. Its
+    /// author read it with `Self` abstract, so it is walked that way first, in
+    /// the frame [`Self::resolve_trait_decl`] gives the trait's signatures, and
+    /// each impl's walk takes the bound its author's reading selected. That
+    /// walk decides only this: its diagnostics are each impl's walk's to
+    /// report, and every fact it records is dropped.
+    pub(super) fn abstract_selections(
+        &mut self,
+        trait_decl: DefId,
+        func: &Function,
+    ) -> Rc<hashmap::IndexMap<AstId, DefId>> {
+        if let Some(found) = self.abstract_selection_cache.get(&func.id) {
+            return Rc::clone(found);
+        }
+        let header = self
+            .tysys
+            .trait_env
+            .decl_header_of(&trait_decl)
+            .map(|h| (h.name.clone(), h.span, h.type_params.clone()));
+        let sig = self
+            .tysys
+            .trait_sig_of(&trait_decl)
+            .and_then(|s| s.method(&func.name))
+            .map(|m| m.sig.decl.clone());
+        let (Some((name, span, type_params)), Some(sig)) = (header, sig) else {
+            return Rc::default();
+        };
+        let trait_id = self.tysys.resolutions.defs().ast_id(trait_decl);
+        let walk = Scope {
+            resolving_home: Some(self.home_module(func.id)),
+            suppress_reference_recording: true,
+            bound_selections: Some(hashmap::IndexMap::default()),
+            ..Scope::default()
+        };
+        let synthetic = ModuleSemantics {
+            bindings: ModuleBindings::default(),
+            imports: std::mem::take(&mut self.sem.imports),
+            types: TypeAnnotations::default(),
+            decls: std::mem::take(&mut self.sem.decls),
+            default_method_facts: hashmap::IndexMap::default(),
+        };
+        let logger = self.logger;
+        let _quiet = logger.quiet();
+        let ((((), walked), _), populated) = util::replaced(
+            self,
+            |e| &mut e.sem,
+            synthetic,
+            |this| {
+                util::replaced(
+                    this,
+                    |e| &mut e.infer_holes,
+                    InferHoleTable::default(),
+                    |this| {
+                        util::replaced(
+                            this,
+                            |e| &mut e.annotate_ctx,
+                            walk,
+                            |this| {
+                                let (mut scope, _, next_slot) =
+                                    this.enter_trait_frame(trait_id, &name, span, &type_params);
+                                scope.register_generic_params(&func.type_params, next_slot);
+                                scope.sem.decls.clear_fn_local_items();
+                                let return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
+                                let mut ctx = FunctionContext::new(return_type, func.name.clone());
+                                for (param, &ty) in func.params.iter().zip(&sig.param_types) {
+                                    scope.bind_fn_param(param, ty, &func.type_params, &mut ctx);
+                                }
+                                scope.walk_fn_body(func, return_type, &mut ctx);
+                            },
+                        )
+                    },
+                )
+            },
+        );
+        self.sem.imports = populated.imports;
+        self.sem.decls = populated.decls;
+        let selections = Rc::new(
+            walked
+                .bound_selections
+                .expect("the walk records into the table it was given"),
+        );
+        self.abstract_selection_cache
+            .insert(func.id, Rc::clone(&selections));
+        selections
     }
 
     /// [`Self::resolve_operation_param_defaults`] for a `trait`'s methods, whose
@@ -2306,6 +2417,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         recorded_sig: Option<&MethodSig>,
         impl_def: Option<DefId>,
     ) {
+        // `recorded_sig` is `None` for a trait's own default-bodied method,
+        // which was written against the trait's `Self`, not this impl's.
+        let abstract_selections = match (recorded_sig, trait_name.and_then(FqTraitName::canonical))
+        {
+            (None, Some(trait_decl)) => Some(self.abstract_selections(trait_decl, func)),
+            _ => None,
+        };
+
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.sem.decls.clear_fn_local_items();
@@ -2330,32 +2449,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .method_impl_type_params
             .insert(method_key, impl_type_params);
 
-        // A method the impl block declares has its canonical signature from
-        // the decl pass, resolved in this same frame; reading it back is what
-        // keeps the two passes from drifting. A trait *default* method being
-        // synthesised into this impl has no such entry: its signature is
-        // canonical per impl, not per declaration, so it resolves here until
-        // the trait-decl digest (S6) gives it a per-impl key.
-        let return_type = match recorded_sig {
-            Some(sig) => sig.decl.return_type.unwrap_or(TypeTable::UNIT),
-            None => func
-                .return_type
-                .as_ref()
-                .map(|t| scope.resolve_type(t))
-                .unwrap_or(TypeTable::UNIT),
-        };
-
         // The receiver is named by the module that declares it — the written
         // name alone is not an identity. `display_name` below stays bare: it is
         // what diagnostics show, not what the registry keys on.
         let qualified_struct_name =
             scope.receiver_name_of_impl(impl_type, impl_declared_params, impl_def);
         let mangled_name = MethodName::format_local(&qualified_struct_name, trait_name, &func.name);
-        scope
-            .sem
-            .decls
-            .function_return_types
-            .insert(mangled_name.clone(), return_type);
 
         // Diagnostics show the written name, not the registry key.
         let display_name =
@@ -2372,6 +2471,81 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 mangled: mangled_name.clone(),
             },
         );
+
+        scope.annotate_ctx.trait_ctx.abstract_selections = abstract_selections;
+
+        // From here on the method's own AST is read, which a trait's default
+        // body wrote in the trait's module, whichever impl inherits it.
+        let home = Some(scope.home_module(func.id));
+        let ((method_resolved_param_types, return_type, param_types, type_params), _) =
+            util::replaced(
+                &mut scope,
+                |s| &mut s.annotate_ctx.resolving_home,
+                home,
+                |scope| {
+                    scope.walk_method_in_home(
+                        func,
+                        trait_name,
+                        recorded_sig,
+                        mangled_name.clone(),
+                        display_name,
+                    )
+                },
+            );
+
+        drop(scope);
+
+        // In `func.params` order, receiver included.
+        self.sem.types.fn_param_types.insert(func.id, param_types);
+        self.sem.types.fn_return_types.insert(func.id, return_type);
+        self.sem.types.decl_type_params.insert(func.id, type_params);
+
+        // Store type parameters for generic methods (for call site substitution)
+        if !func.type_params.is_empty() {
+            self.sem
+                .decls
+                .generic_method_params
+                .insert(mangled_name.clone(), type_param_list);
+            self.sem
+                .decls
+                .generic_method_resolved_param_types
+                .insert(mangled_name, method_resolved_param_types);
+        }
+    }
+}
+
+impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
+    /// Walk a method's signature and body in the frame [`Elaborator::resolve_method`]
+    /// entered, answering its resolved parameter types (the value ones, for a
+    /// generic method), return type, parameter types, and type parameters.
+    fn walk_method_in_home(
+        &mut self,
+        func: &Function,
+        trait_name: Option<&FqTraitName>,
+        recorded_sig: Option<&MethodSig>,
+        mangled_name: String,
+        display_name: String,
+    ) -> (Vec<TypeId>, TypeId, Vec<TypeId>, Vec<TirTypeParam>) {
+        let scope = self;
+        // A method the impl block declares has its canonical signature from
+        // the decl pass, resolved in this same frame; reading it back is what
+        // keeps the two passes from drifting. A trait *default* method being
+        // synthesised into this impl has no such entry: its signature is
+        // canonical per impl, not per declaration, so it resolves here until
+        // the trait-decl digest (S6) gives it a per-impl key.
+        let return_type = match recorded_sig {
+            Some(sig) => sig.decl.return_type.unwrap_or(TypeTable::UNIT),
+            None => func
+                .return_type
+                .as_ref()
+                .map(|t| scope.resolve_type(t))
+                .unwrap_or(TypeTable::UNIT),
+        };
+        scope
+            .sem
+            .decls
+            .function_return_types
+            .insert(mangled_name, return_type);
 
         let mut ctx = FunctionContext::new(return_type, display_name);
         // `resume` is valid only in a handler method body (WEP 2026-04-11).
@@ -2465,24 +2639,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         scope.sem.types.function_effects.insert(func.id, effects);
 
-        drop(scope);
-
-        // In `func.params` order, receiver included.
-        self.sem.types.fn_param_types.insert(func.id, param_types);
-        self.sem.types.fn_return_types.insert(func.id, return_type);
-        self.sem.types.decl_type_params.insert(func.id, type_params);
-
-        // Store type parameters for generic methods (for call site substitution)
-        if !func.type_params.is_empty() {
-            self.sem
-                .decls
-                .generic_method_params
-                .insert(mangled_name.clone(), type_param_list);
-            self.sem
-                .decls
-                .generic_method_resolved_param_types
-                .insert(mangled_name, method_resolved_param_types);
-        }
+        (
+            method_resolved_param_types,
+            return_type,
+            param_types,
+            type_params,
+        )
     }
 }
 

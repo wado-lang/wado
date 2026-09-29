@@ -1,0 +1,141 @@
+//! A trait's default body is walked once per impl, with `Self` standing on the
+//! impl's target. The body was written against the trait's declaration, so a
+//! call on `Self` or on a projection of it selects through the bounds that
+//! declaration states, as a generic parameter's bound does. `Both` implements
+//! `A` and `B`, each declaring `end`; only the bound names which one is meant.
+
+trait A with () {
+    fn end(&self) -> i32;
+}
+
+trait B with () {
+    fn end(&self) -> i32;
+}
+
+struct Both {}
+
+impl A for Both {
+    fn end(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl B for Both {
+    fn end(&self) -> i32 {
+        return 2;
+    }
+}
+
+trait HasInner with () {
+    type Inner: A;
+    fn inner(&self) -> Self::Inner;
+}
+
+struct Mid {}
+
+impl HasInner for Mid {
+    type Inner = Both;
+    fn inner(&self) -> Both {
+        return Both {};
+    }
+}
+
+trait Maker with () {
+    type Out: A;
+    type Nest: HasInner;
+    fn make(&self) -> Self::Out;
+    fn nest(&self) -> Self::Nest;
+
+    fn through_projection(&self) -> i32 {
+        let o = self.make();
+        return o.end();
+    }
+
+    fn through_nested_projection(&self) -> i32 {
+        return self.nest().inner().end();
+    }
+}
+
+struct M {}
+
+impl Maker for M {
+    type Out = Both;
+    type Nest = Mid;
+    fn make(&self) -> Both {
+        return Both {};
+    }
+    fn nest(&self) -> Mid {
+        return Mid {};
+    }
+}
+
+// Two projections bound to one type are one receiver to the impl, and two to
+// the body's author: each reaches the method its own bound declares.
+trait Source with () {
+    type Seq: A;
+    type Map: B;
+    fn seq(&self) -> Self::Seq;
+    fn map(&self) -> Self::Map;
+
+    fn ends(&self) -> i32 {
+        return self.seq().end() * 10 + self.map().end();
+    }
+}
+
+struct Shared {}
+
+impl Source for Shared {
+    type Seq = Both;
+    type Map = Both;
+    fn seq(&self) -> Both {
+        return Both {};
+    }
+    fn map(&self) -> Both {
+        return Both {};
+    }
+}
+
+// `Self` reaches `A`'s `end` through the supertrait, not through `B`.
+trait Ender: A with () {
+    fn twice(&self) -> i32 {
+        return self.end() * 2;
+    }
+}
+
+impl Ender for Both {}
+
+fn through_param<T: Maker>(t: &T) -> i32 {
+    let o: T::Out = t.make();
+    return o.end();
+}
+
+fn through_bound<T: A>(t: &T) -> i32 {
+    return t.end();
+}
+
+test "a type parameter's bound picks the method" {
+    assert through_bound(&Both {}) == 1;
+}
+
+test "a projection off a type parameter picks through its bound" {
+    assert through_param(&M {}) == 1;
+}
+
+test "a projection off Self picks through its declared bound" {
+    assert M {}.through_projection() == 1;
+}
+
+test "a nested projection off Self picks through its declared bound" {
+    assert M {}.through_nested_projection() == 1;
+}
+
+test "projections bound to one type each pick through their own bound" {
+    assert Shared {}.ends() == 12;
+}
+
+test "Self picks through the trait's supertrait" {
+    assert Both {}.twice() == 2;
+}
+
+__DATA__
+{"test": {}}
