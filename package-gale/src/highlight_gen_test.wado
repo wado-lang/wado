@@ -41,10 +41,14 @@ fn highlight_output<S: AsStrSlice>(input: S) -> String {
     return highlight_output_q(input, "");
 }
 
+fn assert_one_warning<S: AsStrSlice>(run: &[String, List<Diagnostic>], needle: S) {
+    assert run.1.len() == 1, `expected one diagnostic, got ${run.1.len()}`;
+    assert run.1[0].message.contains(needle), run.1[0].message;
+}
+
 /// A rule capture the generator cannot expand: one warning, no overrides.
 fn assert_capture_refused(run: &[String, List<Diagnostic>]) {
-    assert run.1.len() == 1, `expected one diagnostic, got ${run.1.len()}`;
-    assert run.1[0].message.contains("single token"), run.1[0].message;
+    assert_one_warning(run, "single token");
     assert !run.0.contains("RuleCapture {"), run.0;
 }
 
@@ -261,33 +265,17 @@ B : 'b' ;
 }
 
 test "unknown token in query warns via ctx diagnostics" {
-    let g = parse_grammar("grammar T;
+    assert_one_warning(&highlight_run("grammar T;
 r : B ;
 B : 'b' ;
-");
-    let lits = collect_literal_tokens(&g.parser_rules);
-    let query = parse_highlight_query("(NOPE) @keyword").unwrap();
-    let mut ctx = GenContext::new(&g.parser_rules, &lits);
-    let mut w = CodeWriter::new();
-    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
-    let diags = ctx.copy_diagnostics();
-    assert diags.len() == 1, `expected one diagnostic, got ${diags.len()}`;
-    assert diags[0].message.contains("unknown token"), diags[0].message;
+", "(NOPE) @keyword"), "unknown token");
 }
 
 test "unknown parser rule in an override warns via ctx diagnostics" {
-    let g = parse_grammar("grammar T;
+    assert_one_warning(&highlight_run("grammar T;
 r : B ;
 B : 'b' ;
-");
-    let lits = collect_literal_tokens(&g.parser_rules);
-    let query = parse_highlight_query("(nope (B) @string)").unwrap();
-    let mut ctx = GenContext::new(&g.parser_rules, &lits);
-    let mut w = CodeWriter::new();
-    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
-    let diags = ctx.copy_diagnostics();
-    assert diags.len() == 1, `expected one diagnostic, got ${diags.len()}`;
-    assert diags[0].message.contains("unknown parser rule"), diags[0].message;
+", "(nope (B) @string)"), "unknown parser rule");
 }
 
 test "capture_vocabulary lists the query's distinct capture classes, sorted" {
@@ -310,4 +298,30 @@ test "capture_vocabulary lists a capture shared by two selectors once" {
 test "capture_vocabulary is empty without a highlight query" {
     let out = highlight_output("grammar T; s : KW ; KW : 'if' ;");
     assert out.contains("capture_names: [],"), out;
+}
+
+test "a later rule capture on the same rule replaces the earlier one" {
+    let out = highlight_output_q("grammar T;
+r : name ;
+name : IDENTIFIER ;
+IDENTIFIER : [a-z]+ ;
+", "(name) @variable\n(name) @type");
+    assert count_occurrences(&out, "RuleCapture {") == 1, out;
+    assert out.contains("RuleCapture { rule_id: RK_NAME as i32, capture_id: 0, order: 0 },  // @type"), out;
+}
+
+test "an override on a later token kind leaves an empty row for each kind before it" {
+    let out = highlight_output_q("grammar T;
+r : A B ;
+A : 'a' ;
+B : 'b' ;
+", "(r (B) @string)");
+    assert out.contains("overrides_by_kind: [\n        [],  // TK_A\n        [  // TK_B\n"), out;
+}
+
+test "an unknown literal in a query warns, naming it as a literal" {
+    assert_one_warning(&highlight_run("grammar T;
+r : B ;
+B : 'b' ;
+", "\"zz\" @keyword"), "literal \"zz\"");
 }

@@ -37,15 +37,25 @@ use { parse } from "./g4/parser.wado";
 /// by re-deriving them per query, which on `RustParser.g4` cost three orders
 /// of magnitude over generating the whole parser.
 fn dump_pipeline<S: AsStrSlice>(input: S) -> [String, GenContext] {
-    let mut merged = merge_grammars([parse(input.to_string()).unwrap()]);
-    synthesize_implicit_tokens(&mut merged);
+    let mut merged = merged_source(input);
     let [lowered, mut ctx] = lower_pipeline(&mut merged);
     return [render_dump(&merged, &lowered, &mut ctx), ctx];
 }
 
-/// `cmd_dump`'s prologue, whole. The step this used to leave out —
-/// `install_action_context` — is the one `lower_for_analysis` now asserts,
-/// which is how the omission stopped being invisible.
+fn merged_source<S: AsStrSlice>(input: S) -> Grammar {
+    let mut merged = merge_grammars([parse(input.to_string()).unwrap()]);
+    synthesize_implicit_tokens(&mut merged);
+    return merged;
+}
+
+fn atn_dump_source<S: AsStrSlice>(input: S) -> String {
+    let mut merged = merged_source(input);
+    let [lowered, _] = lower_pipeline(&mut merged);
+    return render_atn_dump(&merged, &lowered);
+}
+
+/// `cmd_dump`'s prologue, whole: `lower_for_analysis` asserts that
+/// `install_action_context` ran.
 fn lower_pipeline(merged: &mut Grammar) -> [LoweredGrammar, GenContext] {
     let token_kinds = canonicalize_for_analysis(merged);
     let lit = collect_literal_tokens(&merged.parser_rules);
@@ -67,10 +77,7 @@ test "the dump lowers through the emitter's primed context" {
 // lowering. Re-lowering it through `build_atn`'s fresh context instead reaches
 // a table that knows none of the stamped ids.
 test "the ATN dump builds off the lowering the dump already has" {
-    let mut merged = merge_grammars([parse("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;").unwrap()]);
-    synthesize_implicit_tokens(&mut merged);
-    let [lowered, _] = lower_pipeline(&mut merged);
-    let report = render_atn_dump(&merged, &lowered);
+    let report = atn_dump_source("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
     assert report.contains("rule 0 'a'"), report;
     assert report.contains("rule 1 'c'"), report;
 }
@@ -450,14 +457,8 @@ ID : [a-z]+ ;";
 }
 
 test "render_dump renders a multi-token tail-greedy repeat rule" {
-    // `prog : item X Y ; item : (X Y)* ;` — `item`'s tail repeat has a
-    // multi-token inner `(X Y)`. Under the runtime-FOLLOW redesign the
-    // follow repair is no longer a per-(rule, mask) `__follow_<id>`
-    // variant baked into the dump; the caller threads a `FOLLOW_MASK`
-    // at runtime and `item`'s loop gates on it via `follow_yields`. The
-    // dump therefore no longer prints a `follow-variants:` section — it
-    // just renders the rules. (A per-call-site FollowArg dump view is a
-    // possible follow-up.)
+    // `item`'s loop gates on the FOLLOW its caller threads at runtime
+    // (`follow_yields`), so there is no per-(rule, mask) variant to print.
     let g = "grammar K;
 prog : item X Y ;
 item : (X Y)* ;
@@ -467,7 +468,6 @@ Y : 'y' ;";
 
     assert report.contains("prog"), report;
     assert report.contains("item"), report;
-    // The retired variant section must NOT appear.
     assert !report.contains("follow-variants:"), report;
 }
 
@@ -486,10 +486,10 @@ a : ('x' 'y' | 'x' 'z')? 'p'
 }
 
 test "render_dump walks a multi-token repeat body reached through an opaque rule-ref" {
-    // `p` sees `t` and `q` as opaque rule-refs and expands them. Inside `t`
-    // the walk used to step past `(ID '::')*` as one token, so `ID` at depth
-    // 1 was claimed for `t` and `'::'` for `q` alone — committing `a matches`
-    // to `t` and `a :: b` to `q`. Neither token separates the alts here.
+    // `p` sees `t` and `q` as opaque rule-refs and expands them. Stepping past
+    // `(ID '::')*` inside `t` as one token would claim `ID` at depth 1 for `t`
+    // and `'::'` for `q` alone — committing `a matches` to `t` and `a :: b` to
+    // `q`. Neither token separates the alts here.
     let g = "grammar R;
 p : t | q ;
 t : (ID '::')* ID '`' ;
@@ -500,4 +500,62 @@ ID : [a-z]+ ;";
     assert !p.contains("Leaf(alt 0)"), p;
     assert !p.contains("Leaf(alt 1)"), p;
     assert p.contains("Ambiguous([alt 0, alt 1]) — opaque rule-ref prefix"), p;
+}
+
+test "render_dump names each repeat's kind and the strategy that decides it" {
+    let r = section_of(&dump_source("grammar D;
+r : (A B)? C (A? B)? D (xs+=A)* E+ F .*? G ;
+A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ; F : 'f' ; G : 'g' ;"), "r");
+
+    assert r.contains("  repeats:
+    ? → OptionalLookahead
+    ? → OptionalShapeLookahead
+    ? → Plain
+    * → Plain
+    + → Plain
+    * → NonGreedy
+"), r;
+}
+
+test "render_dump marks a right-associative LR alt" {
+    let e = section_of(&dump_source("grammar D;
+e : <assoc=right> e '^' e | ID ;
+ID : [a-z]+ ;"), "e");
+
+    assert e.contains("alt 0 (Alt0) prec=1 conflict-min=1 right-assoc suffix-first=[TK_LIT_CARET]"), e;
+}
+
+test "render_dump names a shared literal prefix by its token constant" {
+    let k = section_of(&dump_source("grammar D;
+k : 'k' A | 'k' B ;
+A : 'a' ; B : 'b' ;"), "k");
+
+    assert k.contains("Consume(TK_LIT_k)"), k;
+}
+
+test "render_dump says why prediction halted: identical alts, the depth limit, an open-ended alt" {
+    let report = dump_source("grammar D;
+dd : A | A ;
+deep : A (B|C) (B|C) (B|C) (B|C) (B|C) (B|C) D | A (B|C) (B|C) (B|C) (B|C) (B|C) (B|C) E ;
+v : A ~B C | A ~B D ;
+A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ;");
+
+    let dd = section_of(&report, "dd");
+    assert dd.contains("Ambiguous([alt 0, alt 1]) — multiple alts end together: true ambiguity"), dd;
+    let deep = section_of(&report, "deep");
+    assert deep.contains("Ambiguous([alt 0, alt 1]) — branch-depth limit (5) reached: needs unbounded lookahead"), deep;
+    let v = section_of(&report, "v");
+    assert v.contains("Ambiguous([alt 0, alt 1]) — no token named: an alt admits every one (`.` / `~X`)"), v;
+}
+
+test "the ATN dump names every state and transition kind a grammar builds" {
+    let report = atn_dump_source("grammar G;
+e : e '+' e | A* B+ ~C . ;
+A : 'a' ; B : 'b' ; C : 'c' ;");
+    for let kind of ["StarLoopEntry", "StarLoopBack", "PlusLoopBack", "LoopEnd", "BlockStart", "BlockEnd"] {
+        assert report.contains(` ${kind} rule=0`), report;
+    }
+    for let arrow of ["-notatom->", "-wild->", "-prec->", "-atom->", "-rule->", "-eps->"] {
+        assert report.contains(arrow), report;
+    }
 }

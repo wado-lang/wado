@@ -133,9 +133,10 @@ fn push_parser_elem_bodies(elem: &Element, out: &mut List<SuperBody>) {
             }
         },
         Repeat(rep) => push_parser_elem_bodies(&rep.element, out),
-        Label(lab) => push_parser_elem_bodies(&lab.element, out),
         Not(n) => push_parser_elem_bodies(&n.element, out),
-        _ => {
+        // A label's operand is an atom or a set of terminals, never a block
+        // holding an action (`is_labelable_set`).
+        Label(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) => {
         },
     }
 }
@@ -765,17 +766,13 @@ fn rewrite_parser_elem<S: AsStrSlice>(elem: &Element, base_name: S) -> Element {
             nr.element = rewrite_parser_elem(&rep.element, base_name);
             Element::Repeat(nr);
         },
-        Label(lab) => {
-            let mut nl = *lab;
-            nl.element = rewrite_parser_elem(&lab.element, base_name);
-            Element::Label(nl);
-        },
         Not(n) => {
             let mut nn = *n;
             nn.element = rewrite_parser_elem(&n.element, base_name);
             Element::Not(nn);
         },
-        _ => *elem,
+        // A label's operand holds no action to rewrite (`is_labelable_set`).
+        Label(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) => *elem,
     };
 }
 

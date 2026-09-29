@@ -1,0 +1,119 @@
+//! A test double for a command-line program's console: what it prints on stdout
+//! and stderr, and the events it logs, captured instead of written.
+//!
+//! Installed with `with &mut console do { ... }`. A stream the program writes
+//! somewhere else, such as a file, still reaches the host, so a program under
+//! test can print and write files in one run.
+
+use { Stdout, Stderr } from "core:cli";
+use { ErrorCode } from "wasi:cli";
+use { Log, Event, Level } from "core:log";
+use { TreeMap } from "core:collections";
+
+/// What a program printed and logged while this console was installed.
+pub struct Console {
+    out: List<u8> = [],
+    err: List<u8> = [],
+    /// Each event as `<level>: <message>`.
+    pub events: List<String> = [],
+    /// The readable end of every stream the host created here, by its writable end.
+    readers: TreeMap<i32, i32> = TreeMap::<i32, i32>::new(),
+    /// Where each captured stream's bytes go (`true` for stderr), by its readable end.
+    to_stderr: TreeMap<i32, bool> = TreeMap::<i32, bool>::new(),
+}
+
+impl Console {
+    /// Everything printed on stdout.
+    pub fn stdout(&self) -> String {
+        return String::from_utf8_lossy(self.out);
+    }
+
+    /// Everything printed on stderr.
+    pub fn stderr(&self) -> String {
+        return String::from_utf8_lossy(self.err);
+    }
+
+    fn capture(&mut self, writer: i32, data: &List<u8>) -> bool {
+        let Some(reader) = self.readers.get(writer) else {
+            return false;
+        };
+        let Some(to_stderr) = self.to_stderr.get(reader) else {
+            return false;
+        };
+        if to_stderr {
+            self.err.extend(data);
+        } else {
+            self.out.extend(data);
+        }
+        return true;
+    }
+
+    fn console_future(&mut self, data: Stream<u8>, to_stderr: bool) -> Future<Result<(), ErrorCode>> {
+        let reader = data as i32;
+        self.to_stderr[reader] = to_stderr;
+        return reader as Future<Result<(), ErrorCode>>;
+    }
+}
+
+impl Stream<u8> for Console {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+        let [rx, tx] = Stream::<u8>::new();
+        let reader = rx as i32;
+        let writer = tx as i32;
+        self.readers[writer] = reader;
+        resume [reader as Stream<u8>, writer as StreamWritable<u8>];
+    }
+
+    ..forward
+}
+
+impl StreamWritable<u8> for Console {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
+        if self.capture(*this as i32, &data) {
+            resume StreamWrite { count: data.len(), result: CopyResult::Completed };
+        }
+        resume this.write(data);
+    }
+
+    fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
+        if self.capture(*this as i32, &data.to_list()) {
+            resume CopyResult::Completed;
+        }
+        resume this.write_raw_all(data);
+    }
+
+    ..forward
+}
+
+impl Stdout for Console {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        resume self.console_future(data, false);
+    }
+}
+
+impl Stderr for Console {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        resume self.console_future(data, true);
+    }
+}
+
+impl Future<Result<(), ErrorCode>> for Console {
+    fn drop(&mut self, this: &Future<Result<(), ErrorCode>>) {
+        let _ = this;
+    }
+
+    ..trap
+}
+
+impl Log for Console {
+    fn enabled(&self, level: Level) -> bool {
+        let _ = level;
+        resume true;
+    }
+
+    fn event(&mut self, event: Event) {
+        self.events.push(`${event.meta.level}: ${event.message}`);
+    }
+
+    ..forward
+}

@@ -8,6 +8,11 @@ use {
     rule_threads_args,
     vals_struct_name,
     wado_type_default,
+    rule_action_bodies,
+    rule_uses_rule_span,
+    rule_binding_reads,
+    action_reads_rule_ctx,
+    action_reads_rule_span,
 } from "./action_translate.wado";
 use { parse } from "./g4/parser.wado";
 use { AltBinding } from "./attr_resolve.wado";
@@ -247,4 +252,90 @@ test "wado_type_default covers the corpus surface" {
     assert wado_type_default("String") matches { Some(_) };
     assert wado_type_default("List<String>") matches { Some(_) };
     assert wado_type_default("SomeUserType") matches { None }, "unknown type has no default";
+}
+
+test "a lexer body reads $index and $pos off the match window" {
+    // `wado_lex_attrs.g4`: `$index` is the cursor, `$pos` its column in the line.
+    let out = translate_lexer_body(" if $index - start == 2 && $pos >= 1 { $type = TK_B } ", &LexerAttrEnv {}).unwrap();
+    assert out == " if pos - start == 2 && char_pos_in_line(chars, pos) >= 1 { lx.act_type = TK_B } ", `out: '${out}'`;
+}
+
+test "translate reads an unlabeled rule reference's value channel" {
+    let g = parse("grammar T;
+r : e { print($e.v); } ;
+e returns [i32 v] locals [i32 w] : ID ;
+").unwrap();
+    let out = translate_wado_action(
+        &g.parser_rules[0],
+        &g.parser_rules,
+        " print($e.v); keep($e); ",
+        false,
+        &NO_BINDINGS,
+    ).unwrap();
+    assert out == " print(e.v); keep(e); ", `out: '${out}'`;
+    // A callee's locals are its own: ANTLR4 error(65), "unknown attribute w for rule e".
+    let local = translate_wado_action(&g.parser_rules[0], &g.parser_rules, " print($e.w); ", false, &NO_BINDINGS);
+    assert local matches { Err(m) && m.contains("invalid member '.$w'") }, `${local:?}`;
+}
+
+test "translate reads labels on a literal and on a set as token labels" {
+    let g = parse("grammar T;
+r : op='+' n=~ID ~ID { print($op.text + $n.text + $n.channel); } ;
+ID : [a-z]+ ;
+").unwrap();
+    let out = translate_wado_action(
+        &g.parser_rules[0],
+        &g.parser_rules,
+        " print($op.text + $n.text + $n.channel); ",
+        false,
+        &NO_BINDINGS,
+    ).unwrap();
+    // A token the parser sees is on the default channel, so `.channel` is 0.
+    assert out == " print(p.token_text(op) + p.token_text(n) + 0); ", `out: '${out}'`;
+}
+
+test "a locals-only rule has a value channel; an argument without a Wado default is not threaded" {
+    let g = parse("grammar T;
+r locals [i32 n] : ID ;
+s[Foo x] : ID ;
+").unwrap();
+    assert rule_value_channel_ready(&g.parser_rules[0]), "locals alone make a channel";
+    assert !rule_threads_args(&g.parser_rules[1]), "Foo has no default to seed the channel with";
+}
+
+test "a rule's action bodies include its prequels and call-site arguments" {
+    // `b[$x.text]` runs in `r`'s frame, so it reads `r`'s captures.
+    let g = parse("grammar T;
+r @init { init(); } @after { after(); } : x=a ~ID b[$x.text] { print($text); } ;
+a : ID ;
+b[String s] : ID ;
+ID : [a-z]+ ;
+").unwrap();
+    let r = &g.parser_rules[0];
+    let bodies = rule_action_bodies(r);
+    let want: List<String> = [" init(); ", " after(); ", " print($text); ", "$x.text"];
+    assert bodies == want, `${bodies:?}`;
+    assert rule_uses_rule_span(r, &g.parser_rules), "`$text` needs the rule's start token";
+    assert rule_binding_reads(r, &g.parser_rules) matches { Some(reads) && reads.contains(&"x") }, "reads x";
+}
+
+test "binding reads are unknown once a body reaches through $ctx or does not resolve" {
+    let g = parse("grammar T;
+r : x=ID { p.emit($ctx.toStringTree()); } ;
+s : x=ID { print($nope); } ;
+").unwrap();
+    assert rule_binding_reads(&g.parser_rules[0], &g.parser_rules) matches { None };
+    assert rule_binding_reads(&g.parser_rules[1], &g.parser_rules) matches { None };
+}
+
+test "a body reads a call's node only through `$label.ctx`" {
+    assert action_reads_rule_ctx(" p.emit($x.ctx); ", "x");
+    assert !action_reads_rule_ctx(" p.emit($x.text); ", "x");
+    assert !action_reads_rule_ctx(" p.emit($y.ctx); ", "x");
+}
+
+test "a body reads a call's token range only through `$label.text`" {
+    assert action_reads_rule_span(" p.emit($x.text); ", "x");
+    assert !action_reads_rule_span(" p.emit($x.ctx); ", "x");
+    assert !action_reads_rule_span(" p.emit($y.text); ", "x");
 }

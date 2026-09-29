@@ -67,6 +67,74 @@ AB : 'a' | 'b' ;");
     assert report.contains("first-match: every arm consumes the same fixed length"), report;
 }
 
+test "lexer dump reports equal-length arms before a suffix as first-match" {
+    let report = lexer_dump("grammar T;
+r : OP ;
+OP : ('ab' | 'cd') 'e' ;");
+
+    assert report.contains(
+        "alternation ('ab' | 'cd') then 'e' — first-match: every arm consumes the same fixed length",
+    ), report;
+    assert report.contains("alternation + suffix: first-match 1, arm scoring 0"), report;
+}
+
+test "lexer dump names an empty arm" {
+    // The empty arm can match where the others do, so the arms are scored.
+    let report = lexer_dump("grammar T;
+r : NUM ;
+NUM : [0-9]+ ('e' ('+' | '-' | ) [0-9]+)? ;");
+
+    assert report.contains("alternation ('+' | '-' | ε) then [0-9]+ — arm scoring"), report;
+}
+
+test "lexer dump shortens a class of many ranges" {
+    let report = lexer_dump("grammar T;
+r : ID ;
+ID : [a-zA-Z_$0-9\\u00C0-\\u00D6\\u00D8-\\u00F6]+ ;");
+
+    assert report.contains("repeat [a-zA-Z_$0-9À-Ö…]+ — plain loop: nothing follows the repeat"), report;
+}
+
+test "lexer dump says a predicate kept a construct from peeking what follows it" {
+    let report = lexer_dump("grammar T;
+r : S I J ;
+S : 'a' .+ END ;
+I : ('a' | 'ab') {true}? 'bc' ;
+J : ('a' | 'ab') END ;
+fragment END : {true}? 'z' ;");
+
+    assert report.contains(
+        "repeat .+ then END — plain loop: the suffix carries a semantic predicate, so it cannot be peeked",
+    ), report;
+    assert report.contains(
+        "alternation ('a' | 'ab') then 'bc' — first-match: a semantic predicate follows the alternation",
+    ), report;
+    assert report.contains(
+        "alternation ('a' | 'ab') then END — first-match: the suffix carries a semantic predicate, so it cannot be peeked",
+    ), report;
+}
+
+test "lexer dump escapes a quote and an unprinted char" {
+    let report = lexer_dump("grammar T;
+r : CHR WS ;
+CHR : '\\'' (~['\\\\] | '\\\\' .)+ '\\'' ;
+WS : [ \\t\\f]+ -> skip ;");
+
+    assert report.contains("then '\\'' — "), report;
+    assert report.contains("repeat [ \\t\\u{c}]+"), report;
+}
+
+test "lexer dump reports a keyword whose carrier is built of fragments and ranges" {
+    let report = lexer_dump("grammar T;
+r : IF ID ;
+IF : 'if' ;
+ID : LETTER (LETTER | '0'..'9')* ;
+fragment LETTER : 'a'..'z' | '_' ;");
+
+    assert report.contains("rule IF — keyword classifier (carrier ID)"), report;
+    assert report.contains("set (LETTER | '0'..'9') — one class test of 3 ranges: every arm is one char"), report;
+}
+
 test "lexer dump reports a called rule's alternation as not-tail" {
     // `B` is entered from `A` with `'z'` still to consume, so its body
     // alternation cannot take maximal munch however long an arm reaches. It

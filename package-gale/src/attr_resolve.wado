@@ -255,9 +255,7 @@ fn check_member<S: AsStrSlice>(
         // no member.
         ParserSpecial => r.name matches { "start" | "stop" } && is_token_member(&member)
             || r.name == "ctx" && member == "toStringTree",
-        LexerSpecial => false,
-        RuleAttr => false,
-        ListLabel => false,
+        LexerSpecial | RuleAttr | ListLabel => false,
     };
     if ok {
         return Result::Ok(());

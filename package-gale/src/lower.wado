@@ -507,11 +507,6 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx));
     }
-    // Phase 2.7 — pre-intern multi-element token-kind sets that
-    // surface in dispatch branches and `Op::Excluded` kinds. The
-    // resulting registry is the source of truth for `_kind_set_<id>`
-    // helper-function emission; emit consults it in lockstep with
-    // the dispatch / op walk it does anyway.
     let kind_sets = intern_kind_sets(&parser_rules, ctx);
     ctx.set_follow_rule_snakes(&follow_rule_snakes(grammar, ctx));
     return LoweredGrammar {
@@ -594,8 +589,8 @@ fn intern_kind_sets(parser_rules: &List<Rule>, ctx: &mut GenContext) -> List<Kin
     }
     // Snapshot ctx's current state. Emit may grow this registry
     // further when `kind_check_str` hits a set lower didn't see
-    // (e.g. token sets that surface only from the legacy emit
-    // walks that don't read from GIR yet). Those tail entries
+    // (e.g. token sets that surface only from the emit walks over
+    // surface IR). Those tail entries
     // remain reachable via `ctx.kind_sets()` and the kind-set
     // helper emitter handles them via the salvage tail.
     let entries = ctx.kind_sets();
@@ -766,9 +761,6 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
 /// Classify a parser rule by shape and dispatch to the matching
 /// lowering. Single-alt → `Simple`; multi-alt with no LR alt →
 /// `MultiAlt`; multi-alt with at least one LR alt → `LeftRecursive`.
-/// The shape decision matches `parser_gen::gen_parse_fn_named`'s
-/// branching exactly so the eventual Phase 4 split is a structural
-/// translation rather than a re-classification.
 fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
     // Scan-group leniency (`scan_group_is_nullable`) reads the rule's
     // scan-cyclic flag; record which rule we are lowering. Emit re-sets this per
@@ -1336,23 +1328,18 @@ fn nested_operand_meets_operator<S: AsStrSlice>(
     };
 }
 
+/// Stamp `prec` on a self-reference, bare or under its `ListLabel`; every
+/// caller found it with `find_self_ref_rule_call` first.
 fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
-    return match op {
-        RuleCall(mut rc) => {
-            rc.min_prec_arg = Option::Some(prec);
-            Op::RuleCall(rc);
-        },
-        ListLabel(mut ll) => {
-            ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
-            Op::ListLabel(ll);
-        },
-        Token(t) => Op::Token(t),
-        Literal(l) => Op::Literal(l),
-        Wildcard(wop) => Op::Wildcard(wop),
-        Excluded(e) => Op::Excluded(e),
-        Repeat(r) => Op::Repeat(r),
-        Group(g) => Op::Group(g),
+    if let ListLabel(mut ll) = op {
+        ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
+        return Op::ListLabel(ll);
+    }
+    let RuleCall(mut rc) = op else {
+        panic("rebind_self_ref_min_prec: not a self-reference");
     };
+    rc.min_prec_arg = Option::Some(prec);
+    return Op::RuleCall(rc);
 }
 
 /// True iff FIRST(`op`) can contain a token in `lr_first` (the union of
@@ -3971,9 +3958,8 @@ fn lower_repeat_op<S: AsStrSlice>(
     });
 }
 
-/// Inner second-position first set for non-greedy 2-token disambiguation.
-/// Mirrors the surface check `compute_non_greedy_condition` used to perform
-/// at emit time: when the inner is a single-alt `Group` of ≥ 2 elements,
+/// Inner second-position first set for the non-greedy 2-token
+/// disambiguation `compute_non_greedy_condition` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> List<String> {
     if let Group(g) = peel_repeat_body_label(elem) {
@@ -4720,9 +4706,8 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
 /// element, then overriding the inner op's field name with the
 /// label's name (deduped against the surrounding alt's name table).
 ///
-/// Mirrors `parser_gen::gen_element`'s scalar-Label arm: the inner
-/// emission would have produced its own field name, but the label
-/// rebinds the value under `lab.field_name`. A list label (`+=`) needs a
+/// The inner emission would have produced its own field name, but the
+/// label rebinds the value under `lab.field_name`. A list label (`+=`) needs a
 /// `List<...>`-typed wrapper field, which the CST `FieldDecl` enumeration adds.
 fn lower_label_op<S: AsStrSlice>(
     lab: &LabelElement,
@@ -4791,10 +4776,9 @@ fn lower_label_op<S: AsStrSlice>(
 /// the lowered op list. Transparent `Group` ops contribute their
 /// inner op's field instead (the group itself has no struct slot).
 ///
-/// Mirrors what `gen_util::element_field_info` computed at emit
-/// time, but consumes the lowered IR so the field name and type
-/// agree with whatever shape the lowering chose. emit reads this
-/// list directly to lay out the struct.
+/// It reads the lowered IR, so the field name and type agree with
+/// whatever shape the lowering chose. emit reads this list directly to
+/// lay out the struct.
 fn enumerate_alt_field_decls(ops: &List<Op>) -> List<FieldDecl> {
     let mut fields: List<FieldDecl> = [
         FieldDecl {
@@ -5082,11 +5066,10 @@ fn rebind_group_shape<S: AsStrSlice>(shape: GroupShape, new_field: S) -> GroupSh
 ///
 /// * `~ TOKEN` / `~ 'lit'` — single-token complement, the simple case.
 /// * `~ ( A | B | C )` — multi-token complement; each alt must be a
-///   single `TokenRef` or `Literal` (mirrors `parser_gen::collect_not_set_tokens`).
+///   single `TokenRef` or `Literal`.
 ///
-/// Other inner shapes (`~ rule`, `~ ( a b )`) are not supported by
-/// the runtime helpers (`p.match_not([...])`) and aren't expected
-/// in committed grammars.
+/// Other inner shapes (`~ rule`, `~ ( a b )`) name no token set for
+/// `p.expect_not(...)` to exclude.
 fn collect_excluded_kinds(inner: &Element) -> List<String> {
     return match *inner {
         TokenRef(t) => [`TK_${t.name}`],

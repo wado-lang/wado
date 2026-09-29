@@ -1,9 +1,16 @@
-use { translate_action, translate_predicate, translate_members, stage_lexer_bodies } from "./java2wado.wado";
+use {
+    translate_action,
+    translate_predicate,
+    translate_members,
+    stage_lexer_bodies,
+    translate_attr_types,
+    should_emit_actions,
+} from "./java2wado.wado";
 use { grammar_has_superclass } from "./superclass.wado";
 use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
 use { AltBinding } from "./attr_resolve.wado";
-use { MemberNames } from "./java2wado/jmembers.wado";
+use { MemberNames, MemberField, member_names } from "./java2wado/jmembers.wado";
 
 global NO_BINDINGS: List<AltBinding> = [];
 global NO_MEMBERS: MemberNames = MemberNames {};
@@ -592,15 +599,18 @@ test "the parser's token-stream API is refused in a lexer body" {
     // The generated `Lexer` has characters and a cursor, not tokens and rules,
     // so each of these would have emitted a method it does not carry.
     let lang = ActionLanguage::Java;
-    for let body of &[
-        "_input.LA(1) == 0", "_input.LT(1).getText().equals(\"x\")", "_input.getText().equals(\"x\")",
-        "getRuleInvocationStack().isEmpty()",
-    ] {
+    let cases: List<[String, String]> = [
+        ["_input.LA(1) == 0", "_input.LA()"],
+        ["_input.LT(1).getText().equals(\"x\")", "_input.LT()"],
+        ["_input.getText().equals(\"x\")", "_input.getText()"],
+        ["getRuleInvocationStack()", "getRuleInvocationStack()"],
+    ];
+    for let [body, api] of cases {
         let mut g = parse(`lexer grammar L;
-A : 'a' { ${*body} }? ;
+A : 'a' { ${body} }? ;
 `).unwrap();
         let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
-        assert msgs.len() == 1, `must refuse '${*body}': ${msgs.len()} diagnostics`;
+        assert msgs.len() == 1 && msgs[0].contains(`'${api}' reads the parser's token stream`), `'${body}': ${msgs:?}`;
     }
 
     // The same call in a parser body is the API it belongs to.
@@ -692,4 +702,263 @@ A : '!' ;
         &NO_MEMBERS,
     );
     assert optional matches { Err(_) }, `an unbound token must not fold: ${optional:?}`;
+}
+
+test "java action: a labeled rule's ctx renders through its captured node" {
+    // `ParseTrees/RuleRef`: `$r.ctx` is the node, so the call on it is dropped.
+    let out = java_action("System.out.println($r.ctx.toStringTree(this));", "s : r=a ;\na : 'x' ;", false);
+    assert out == "p.emit(`${p.rule_tree_at(vals._node_r)}\\n`);", `out: '${out}'`;
+}
+
+test "java action: getRuleInvocationStack() reads the parser's rule stack" {
+    let out = java_action("System.out.println(getRuleInvocationStack());", "a : ID ;", false);
+    assert out == "p.emit(`${p.rule_stack()}\\n`);", `out: '${out}'`;
+}
+
+test "java predicate: && binds tighter than ||, as in Java" {
+    let flat = java_pred("$i == 1 || $i == 2 && this.b", "a[i32 i] : ID ;", true);
+    assert flat == "vals.i == 1 || vals.i == 2 && p.b", `flat: '${flat}'`;
+    let grouped = java_pred("($i == 1 || $i == 2) && this.b", "a[i32 i] : ID ;", true);
+    assert grouped == "(vals.i == 1 || vals.i == 2) && p.b", `grouped: '${grouped}'`;
+}
+
+test "java print: a string concat interpolates each operand that is not a string" {
+    // Java adds `$i + 1` before concatenating, so it stays one interpolation.
+    let out = java_action(
+        "System.out.println(($i + 1) + \" y=\" + $i * 2 + (\"!\" + \"?\"));",
+        "a[i32 i] : ID ;",
+        true,
+    );
+    assert out == "p.emit(`${(vals.i + 1)} y=${vals.i * 2}!?\\n`);", `out: '${out}'`;
+}
+
+test "java print: `$` and backticks in a string literal stay text" {
+    let out = java_action("System.out.println(\"cost ${n} `q`\");", "a : ID ;", false);
+    assert out == "p.emit(`cost \\${n} \\`q\\`\\n`);", `out: '${out}'`;
+}
+
+test "java predicate: at an alternative's end only the ctx-token presence test folds" {
+    let g = parse("grammar T;
+s : ID A ;
+").unwrap();
+    let bindings: List<AltBinding> = [
+        AltBinding { is_token: true, base: "a", field: "a" },
+    ];
+    let members = MemberNames {
+        methods: ["f"],
+    };
+    let cases: List<[String, String]> = [
+        ["((SContext)$ctx).A() == null", "false"],
+        ["this.n > 0", "p.n > 0"],
+        ["this.n != 0", "p.n != 0"],
+        ["this.n == null", "p.n == null"],
+        ["f(1) == null", "p.f(1) == null"],
+        ["f() == null", "p.f() == null"],
+        ["this.f() == null", "p.f() == null"],
+    ];
+    for let [body, want] of cases {
+        let out = translate_predicate(
+            &ActionLanguage::Java,
+            &g.parser_rules[0],
+            &g.parser_rules,
+            body,
+            false,
+            &bindings,
+            &g.name,
+            &members,
+            true,
+        );
+        assert out matches { Ok(code) && code == want }, `'${body}': ${out:?}`;
+    }
+}
+
+test "java members: a method's receiver follows every way its body can write" {
+    let m = translate_members(
+        &ActionLanguage::Java,
+        "int n = 0;
+          void bump() { n = n + 1; }
+          int take() { int r = this.next(); return r; }
+          int next() { this.n = this.n + 1; return this.n; }
+          boolean checked() { assert this.next() > 0; return true; }
+          boolean negated() { return !(this.n > 0); }
+          boolean same(int a, int b) { return a == b; }
+          void reset() { this.n = 0; return; }
+          boolean argued() { return this.same(this.next(), 1); }
+          int widened() { return (int)this.next(); }",
+        "T",
+    ).unwrap();
+    let mut mutating: List<String> = [];
+    for let method of &m.methods {
+        if method.mutates {
+            mutating.push(method.name);
+        }
+    }
+    let want: List<String> = ["bump", "take", "next", "checked", "reset", "argued", "widened"];
+    assert mutating == want, `${mutating:?}`;
+    assert m.methods[0].source == "fn bump(&mut self) { self.n = self.n + 1; }", m.methods[0].source;
+    assert m.methods[4].source == "fn negated(&self) -> bool { return !(self.n > 0); }", m.methods[4].source;
+    assert m.methods[5].source == "fn same(&self, a: i32, b: i32) -> bool { return a == b; }", m.methods[5].source;
+    assert m.methods[6].source == "fn reset(&mut self) { self.n = 0; return; }", m.methods[6].source;
+
+    let call = java_pred_m("this.same(1, 2)", "a : ID ;", false, &member_names(&m));
+    assert call == "p.same(1, 2)", `call: '${call}'`;
+}
+
+test "java attribute types map to Wado; one outside the subset passes through" {
+    let mut g = parse("grammar T;
+r[int a] returns [boolean ok, List<String> xs] locals [long n] : ID ;
+").unwrap();
+    translate_attr_types(&mut g);
+    let r = &g.parser_rules[0];
+    assert r.args[0].type_text == "i32" && r.returns_decls[0].type_text == "bool", `${r.args:?} ${r.returns_decls:?}`;
+    assert r.returns_decls[1].type_text == "List<String>" && r.locals_decls[0].type_text == "i64", `${r.locals_decls:?}`;
+}
+
+test "an action language without a translator is refused at every entry" {
+    let g = parse("grammar T;
+a : ID ;
+").unwrap();
+    let cpp = ActionLanguage::Other("Cpp");
+    let action = translate_action(
+        &cpp,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        "x();",
+        false,
+        &NO_BINDINGS,
+        "T",
+        &NO_MEMBERS,
+    );
+    assert action matches { Err(m) && m.contains("unsupported action language 'Cpp'") }, `${action:?}`;
+    let pred = translate_predicate(
+        &cpp,
+        &g.parser_rules[0],
+        &g.parser_rules,
+        "x()",
+        false,
+        &NO_BINDINGS,
+        "T",
+        &NO_MEMBERS,
+    );
+    assert pred matches { Err(m) && m.contains("unsupported action language 'Cpp'") }, `${pred:?}`;
+    assert translate_members(&cpp, "int n = 0;", "T") matches { Err(m) && m.contains("'Cpp'") };
+    let mut lexer = parse("lexer grammar L;
+A : 'a' { x(); } ;
+").unwrap();
+    let msgs = stage_lexer_bodies(&mut lexer, &cpp, &NO_MEMBERS);
+    assert msgs.len() == 1 && msgs[0].contains("'Cpp'"), `${msgs:?}`;
+}
+
+test "a value channel alone turns the action machinery on" {
+    // `returns` with no action body still gives callers a `$r.v` to read.
+    let channel = parse("grammar T;
+options { language = Wado; }
+r returns [i32 v] : ID ;
+").unwrap();
+    assert should_emit_actions(&channel);
+    let plain = parse("grammar T;
+options { language = Wado; }
+r : ID ;
+").unwrap();
+    assert !should_emit_actions(&plain);
+}
+
+test "java: a primitive cast is dropped and its operand kept" {
+    // Wado infers the operand's type from the comparison, so the cast adds nothing.
+    let out = java_pred("(int)this.n > (long)3", "a : ID ;", false);
+    assert out == "p.n > 3", `out: '${out}'`;
+}
+
+test "java: a parenthesized name is a cast only when an operand follows it" {
+    let cases: List<[String, String]> = [
+        ["(int)(this.n) > 2", "(p.n) > 2"],
+        ["(boolean)!this.b", "!p.b"],
+        ["this.b == (true)", "p.b == (true)"],
+        ["(true) == this.b", "(true) == p.b"],
+    ];
+    for let [java, wado] of cases {
+        let out = java_pred(&java, "a : ID ;", false);
+        assert out == wado, `${java}: '${out}'`;
+    }
+}
+
+test "java action: an increment statement is a compound assignment" {
+    let members = MemberNames {
+        fields: ["ids"],
+    };
+    let cases: List<[String, String]> = [
+        ["ids++;", "p.ids += 1;"],
+        ["++ids;", "p.ids += 1;"],
+        ["this.ids--;", "p.ids -= 1;"],
+        ["(ids)++;", "p.ids += 1;"],
+        ["--(this.ids);", "p.ids -= 1;"],
+        ["int n = 0; n++;", "let mut n: i32 = 0; n += 1;"],
+    ];
+    for let [java, wado] of cases {
+        let out = java_action_m(&java, "a : ID ;", false, &members);
+        assert out == wado, `${java}: '${out}'`;
+    }
+}
+
+test "java action: an increment inside an expression is refused" {
+    // Its value differs between the prefix and postfix forms, which a compound
+    // assignment cannot carry.
+    let res = java_action_res("System.out.print(this.ids++);", "a : ID ;", false);
+    assert res == Result::Err("java2wado: `++` and `--` are supported only as a statement"), `${res:?}`;
+}
+
+test "java action: an increment of anything but a variable or field is refused" {
+    let res = java_action_res("getText()++;", "a : ID ;", false);
+    assert res == Result::Err("java2wado: `++` and `--` step a variable or a field"), `${res:?}`;
+}
+
+test "java members: a field without an initializer takes its type's default" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(&lang, "int n; boolean b; double d; long l;", "T").unwrap();
+    let inits: List<String> = m.fields.iter_ref().map(|f: &MemberField| f.init).collect();
+    assert inits == ["0", "false", "0.0", "0"], `${inits:?}`;
+}
+
+test "java members: a String field without an initializer is refused" {
+    // Java's default is null, which a Wado String cannot hold.
+    let lang = ActionLanguage::Java;
+    let res = translate_members(&lang, "String name;", "T");
+    assert res matches { Err(_) }, "a String field needs an initializer";
+}
+
+test "java: `+` with a String-typed operand concatenates" {
+    let lang = ActionLanguage::Java;
+    let members = member_names(
+        &translate_members(&lang, "String label = \"x\"; String tag() { return label; }", "T").unwrap(),
+    );
+    // Types as `translate_attr_types` leaves them.
+    let rule = "a[String t, i32 n] returns [String r] locals [String l] : ID ;";
+    let cases: List<[String, String]> = [
+        ["System.out.print($t + $n);", "p.emit(`${vals.t}${vals.n}`);"],
+        ["System.out.print(t + n);", "p.emit(`${vals.t}${vals.n}`);"],
+        ["System.out.print($n + $r);", "p.emit(`${vals.n}${vals.r}`);"],
+        ["System.out.print($l + 1);", "p.emit(`${vals.l}${1}`);"],
+        ["String s = \"x\"; System.out.print(s + $n);", "let mut s: String = \"x\"; p.emit(`${s}${vals.n}`);"],
+        ["System.out.print(label + $n);", "p.emit(`${p.label}${vals.n}`);"],
+        ["System.out.print($ID.text + $n);", "p.emit(`${p.token_text(id)}${vals.n}`);"],
+        ["System.out.print($n + $n + $t);", "p.emit(`${vals.n + vals.n}${vals.t}`);"],
+        ["System.out.print(tag() + $n);", "p.emit(`${p.tag()}${vals.n}`);"],
+        ["System.out.print(this.tag() + $n);", "p.emit(`${p.tag()}${vals.n}`);"],
+        ["System.out.print($n + ($t + $n) + $n);", "p.emit(`${vals.n}${vals.t}${vals.n}${vals.n}`);"],
+    ];
+    for let [java, wado] of cases {
+        let out = java_action_m(&java, rule, true, &members);
+        assert out == wado, `${java}: '${out}'`;
+    }
+}
+
+test "java members: a String field or parameter makes `+` concatenate in a method" {
+    let lang = ActionLanguage::Java;
+    let m = translate_members(
+        &lang,
+        "String label = \"x\"; void show(int n) { System.out.print(label + n); } void tag(String s, int n) { System.out.print(s + n); }",
+        "T",
+    ).unwrap();
+    assert m.methods[0].source == "fn show(&mut self, n: i32) { self.emit(`${self.label}${n}`); }", m.methods[0].source;
+    assert m.methods[1].source == "fn tag(&mut self, s: String, n: i32) { self.emit(`${s}${n}`); }", m.methods[1].source;
 }

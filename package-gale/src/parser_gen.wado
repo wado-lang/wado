@@ -15,9 +15,6 @@ use {
     ActionSource,
 } from "./ir.wado";
 use {
-    literal_field_name,
-    not_element_field_name,
-    is_token_only_group,
     group_field_base_name,
     single_alt_group_type_name,
     single_alt_group_field_name,
@@ -28,8 +25,6 @@ use {
     dedup_append_arr,
     subtract_sets,
     dedup_name,
-    peek_dedup_name,
-    element_field_info,
     all_alts_are_single_token,
     single_token_first,
     rule_alts_labeled,
@@ -244,12 +239,7 @@ pub fn gen_parser(
     members: &MemberDecls,
     ctx: &mut GenContext,
 ) {
-    // Phase 3 — `lowered` mirrors `grammar.parser_rules` rule-for-rule
-    // by name and order. emit still consumes surface IR for the body
-    // of each rule (Phase 4 migrates those entry points); the
-    // `LoweredGrammar` is threaded through so we can dispatch on
-    // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
-    // recomputing the classification at every emit site.
+    assert lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order";
     let mut lr_snakes: List<String> = [];
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         if let LeftRecursive(_) = &lowered.parser_rules[i] {
@@ -2841,10 +2831,6 @@ fn rule_has_at_end_conflict(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut Ge
 
 fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
     ctx.set_current_rule_index(ctx.rule_index_of(&rule.name));
-    // Phase 4 — dispatch on the GIR `Rule` variant. Each shape gets
-    // its own focused emit entry; the existing internal helpers
-    // carry the body emission but no longer need to re-classify
-    // the rule from surface IR.
     // The canonical name every other rule (and the public input entry)
     // calls. We emit the rule body under `<canonical>__inner` and wrap it
     // with a thin entry that records the rule on the rule stack when its
@@ -3185,13 +3171,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     ctx: &mut GenContext,
     fn_name: S,
 ) {
-    // Single-alt rules are handled by the dedicated
-    // \`gen_parse_fn_simple_named\` so the heavy multi-alt + LR setup
-    // below doesn't run for the trivial shape.
-    if rule.alternatives.len() == 1 {
-        gen_parse_fn_simple_named(w, rule, lowered_rule, ctx, fn_name);
-        return;
-    }
+    assert rule.alternatives.len() > 1, "`lower_rule` makes a single-alternative rule `Simple`, which `gen_parse_fn` emits apart";
 
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
     // `keyword`) use a compact `{ span, token }` struct (see
@@ -3289,9 +3269,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         }
     }
 
-    let has_lr = lowered_rule matches { LeftRecursive(_) };
-
-    if has_lr {
+    if let LeftRecursive(l) = lowered_rule {
         let atom_name = `${fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
         add_parser_super_effect(&mut f, ctx);
@@ -3330,27 +3308,15 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         w.blank();
         ctx.set_lr_cont_in_atom(was_in_atom);
 
-        let lr_data = if let LeftRecursive(l) = lowered_rule {
-            [&l.lr_alts, &l.lr_dispatch];
-        } else {
-            panic("gen_parse_fn_named: has_lr but lowered_rule is not LeftRecursive");
-        };
-        let lr_alts = lr_data.0;
-        let lr_dispatch = lr_data.1;
-        let h_atn_class = if let LeftRecursive(l) = lowered_rule {
-            l.atn_class;
-        } else {
-            false;
-        };
-        let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
+        let h_loop_dec = if l.atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
         gen_lr_fn(
             w,
             rule,
-            lr_alts,
-            lr_dispatch,
+            &l.lr_alts,
+            &l.lr_dispatch,
             ctx,
             fn_name,
-            h_atn_class,
+            l.atn_class,
             h_loop_dec,
             lr_mid_operand_gated(lowered_rule),
         );
@@ -3761,10 +3727,7 @@ fn gen_alt_elements(
 /// but accepts an `outer_follow` parameter so nested non-greedy /
 /// follow-aware Repeats can union the outer iter-follow into their
 /// effective continuation set. `ops` runs parallel to `elements` —
-/// callers obtain it from the surrounding `AltBody.ops`. Leaf / Group /
-/// ListLabel ops dispatch through `gen_op_leaf` / `gen_op_group` /
-/// `gen_op_list_label`; Repeat / Label / Not still flow through the
-/// surface `gen_repeat*` helpers (Phase 2-C migrates the Repeat arm).
+/// callers obtain it from the surrounding `AltBody.ops`.
 fn gen_elements_with_non_greedy(
     w: &mut CodeWriter,
     elements: &List<Element>,
@@ -3983,19 +3946,13 @@ fn gen_op_leaf_taken(w: &mut CodeWriter, op: &Op, ctx: &GenContext, name_counts:
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
 /// already baked in dedup, the per-call-site `FollowArg`, and the
 /// LR-prefix `min_prec` argument — emit does not re-derive any of
-/// it. Counterpart of the leaf arms of `gen_element` for the surface
-/// IR walker; that walker is still in use inside group bodies and
-/// Label / Not cases, but the top-level alt walker (`gen_alt_elements`)
-/// dispatches leaves here instead.
+/// it.
 ///
 /// The mirror `dedup_name(&op.dedup_base, name_counts)` keeps
-/// `name_counts` in sync with what `gen_element`'s leaf arms would
-/// have produced, so siblings that still walk surface IR (e.g.
-/// `gen_lr_fn`'s inline `dedup_name(&rr.field_name, ...)`
-/// paths and `gen_element` fallbacks) read a consistent count. The
-/// emitted field name comes from `op.field` exclusively — `dedup_base`
-/// is consulted only for the sync. The sync goes away entirely once
-/// every emit path consumes `Op`.
+/// `name_counts` in sync with lower's, so siblings that still walk
+/// surface IR (e.g. `gen_lr_fn`'s inline `dedup_name(&rr.field_name, ...)`
+/// paths) read a consistent count. The emitted field name comes from
+/// `op.field` exclusively — `dedup_base` is consulted only for the sync.
 fn gen_op_leaf(
     w: &mut CodeWriter,
     op: &Op,
@@ -4892,10 +4849,8 @@ fn gen_shape_entry_conditions(
 
 /// Shape-lookahead Optional under the op-only walker: one branch per shape,
 /// longest-first, each gated on that shape's own entry condition and emitting
-/// only the positions the shape contains. The op-only analogue of
-/// `gen_op_optional_with_shape_lookahead_transparent`, whose `unwrap_optional_op`
-/// peel it shares — the shape already decided that a present nested optional
-/// fires.
+/// only the positions the shape contains, each peeled by `unwrap_optional_op` —
+/// the shape already decided that a present nested optional fires.
 fn gen_op_optional_shape_lookahead(
     w: &mut CodeWriter,
     r: &RepeatOp,
@@ -5055,9 +5010,8 @@ fn gen_op_storable_group_inner(
 
 /// Op-driven single-element dispatch. Routes a single `Op` + matching
 /// surface `Element` to the right `gen_op_*` helper based on op kind.
-/// Used by `gen_op_optional_with_shape_lookahead_*` so each shape's
-/// per-element parse routes through op-driven helpers instead of the
-/// surface `gen_element` graph.
+/// Used by `gen_op_optional_with_shape_lookahead_*` for each shape's
+/// per-element parse.
 fn gen_op_dispatch_element(
     w: &mut CodeWriter,
     op: &Op,
@@ -5081,12 +5035,10 @@ fn gen_op_dispatch_element(
     }
 }
 
-/// Op-driven `unwrap_optional` analogue. Peels through an Optional
-/// `Op::Repeat` wrapper to its inner op. Used by the Transparent
-/// shape-lookahead walker so each present optional element is
-/// dispatched at its unwrapped op (which carries the actual emit
-/// shape) rather than through `gen_op_repeat`'s optional gate (the
-/// shape already promised the element is present).
+/// Peels an Optional `Op::Repeat` wrapper to its inner op. Used by the
+/// shape-lookahead walkers so each present optional element is
+/// dispatched at its unwrapped op rather than through the optional's
+/// own gate (the shape already promised the element is present).
 fn unwrap_optional_op(op: &Op) -> &Op {
     if let Repeat(rep_op) = op {
         if let Optional = rep_op.kind {
@@ -5233,8 +5185,7 @@ fn gen_op_storable_optional(
 /// Runtime entry condition for a non-greedy `??`: the ATN simulator decides
 /// enter vs skip with full context. The exact ATN decision number is stamped
 /// at compile time (`RepeatElement.atn_decision` -> `Atn.decision_sites`), so
-/// each `??` predicts its own decision — several `??` in one rule no longer
-/// collide on the retired "unique exit-first BlockStart" search. Non-greedy
+/// each `??` predicts its own decision, however many one rule holds. Non-greedy
 /// optional edges are ordered `[exit=0, enter=1]`, so ENTER iff the simulator
 /// returns alt 1.
 fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
@@ -5316,11 +5267,9 @@ fn gen_op_storable_optional_body<S: AsStrSlice>(
     w.end();
 }
 
-/// Op-driven emit for Optional + non-storable (Transparent) Group.
-/// Dispatches on `rep_op.strategy`. Strategy coverage mirrors
-/// `gen_op_storable_optional` — Optional-specialised shapes from
-/// `pick_optional_specialised` plus the `Plain` fallback. No outer
-/// `Option<T>` wrapping; each branch inlines the inner alt directly.
+/// Op-driven emit for Optional + non-storable (Transparent) Group,
+/// dispatching on `rep_op.strategy`. No outer `Option<T>` wrapping;
+/// each branch inlines the inner alt directly.
 fn gen_op_transparent_optional(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -5339,14 +5288,8 @@ fn gen_op_transparent_optional(
     }
 
     return match &rep_op.strategy {
-        OptionalShapeLookahead(s) => gen_op_optional_with_shape_lookahead_transparent(
-            w,
-            g_op,
-            g_elem,
-            s,
-            ctx,
-            name_counts,
-            rep_op.gate_caller_follow,
+        OptionalShapeLookahead(_) => panic(
+            "gen_op_transparent_optional: a shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`",
         ),
         OptionalLookahead(s) => gen_op_transparent_optional_with_cond(
             w,
@@ -5734,95 +5677,8 @@ fn gen_op_optional_with_shape_lookahead_storable(
     }
 }
 
-/// Op-driven shape-lookahead emit for the Transparent Optional case.
-/// Mirrors `gen_optional_with_lookahead`: each shape branch walks
-/// only the present-positions, peeling Optional Repeats via
-/// `unwrap_optional` / `unwrap_optional_op` so the inner parse is
-/// dispatched directly at the unwrapped op shape (the shape already
-/// promised the optional fires). No struct construction.
-fn gen_op_optional_with_shape_lookahead_transparent(
-    w: &mut CodeWriter,
-    g_op: &GroupOp,
-    g_elem: &GroupElement,
-    s: &OptionalShapeLookaheadStrategy,
-    ctx: &mut GenContext,
-    name_counts: &mut List<[String, i32]>,
-    gate_caller_follow: bool,
-) {
-    let body = &g_op.alts[0];
-    let alt = &g_elem.alternatives[0];
-    let elements = &alt.elements;
-
-    let conditions = gen_shape_entry_conditions(w, s, ctx, name_counts);
-    // The shape twin of `optional_entry_test`: the alternative is the same one
-    // in every shape, so its gate joins each shape's own condition.
-    let gate = alt_gate_and_suffix(alt, ctx);
-    let outer_choice = ctx.enter_group_body(false);
-    let mut is_first = true;
-    for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
-        let entry = &s.shapes[ei];
-        // K-prefix gate: every shape entry's condition must yield to
-        // the caller when the deterministic K-prefix matches, so wrap
-        // each entry's condition with `!(K_match) && (cond)`.
-        let cond = `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`;
-
-        if is_first {
-            w.begin(`if ${cond}`);
-            is_first = false;
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
-
-        let mut nc: List<[String, i32]> = [];
-        let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
-        // Actions are the alternative's own, so they run in every shape branch;
-        // the positions decide only which elements are parsed.
-        let mut k = 0;
-        for let mut idx = 0; idx < elements.len(); idx += 1 {
-            gen_alt_actions_at(w, &alt.actions, idx, ctx);
-            if k >= entry.positions.len() || entry.positions[k] != idx {
-                continue;
-            }
-            k += 1;
-            let elem = &elements[idx];
-            let body_op = &body.ops[idx];
-            let actual_elem = unwrap_optional(elem);
-            let actual_op = unwrap_optional_op(body_op);
-            if let Group(g) = actual_elem {
-                if g.alternatives.len() == 1 {
-                    if let Group(inner_g_op) = actual_op {
-                        let inner_body = &inner_g_op.alts[0];
-                        let inner_alt = &g.alternatives[0];
-                        let inner_outer = enter_group_alt_bindings(&inner_body.ops, &inner_alt.actions, ctx);
-                        for let mut j = 0; j < inner_alt.elements.len(); j += 1 {
-                            gen_alt_actions_at(w, &inner_alt.actions, j, ctx);
-                            gen_op_dispatch_element(w, &inner_body.ops[j], &inner_alt.elements[j], ctx, &mut nc);
-                        }
-                        gen_alt_actions_at(w, &inner_alt.actions, inner_alt.elements.len(), ctx, true);
-                        leave_group_alt_bindings(&inner_outer, &inner_alt.actions, ctx);
-                    } else {
-                        panic(
-                            "gen_op_optional_with_shape_lookahead_transparent: single-alt Group surface but non-Group op",
-                        );
-                    }
-                } else {
-                    gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
-                }
-            } else {
-                gen_op_dispatch_element(w, actual_op, actual_elem, ctx, &mut nc);
-            }
-        }
-        gen_alt_actions_at(w, &alt.actions, elements.len(), ctx, true);
-        leave_group_alt_bindings(&outer, &alt.actions, ctx);
-    }
-    ctx.leave_group_body(outer_choice);
-    if !is_first {
-        w.end();
-    }
-}
-
-/// Bump `name_counts` for a leaf `Op` exactly the way `gen_element`
-/// would have, by reading the lower-baked `dedup_base`. Used by
+/// Bump `name_counts` for a leaf `Op` exactly the way lower did, by
+/// reading the lower-baked `dedup_base`. Used by
 /// `gen_op_leaf` so siblings that still route through the surface
 /// walker see lower-consistent dedup state.
 ///
@@ -5857,19 +5713,14 @@ fn op_leaf_dedup_base(op: &Op) -> String {
 
 /// Top-level dispatch for `Op::Group(g_op)`. Reads `g_op.shape` to
 /// pick the matching emit shape; reads the deduped field name and
-/// struct / variant type names straight from the shape payload
-/// instead of recomputing via `single_alt_group_type_name` /
-/// `token_group_field_name` / etc. Inner element emission still
-/// flows through surface `gen_elements_with_non_greedy` for now —
-/// `gen_consume_*_op` helpers consult `g_op.alts[k].fields` for the
-/// final struct-literal field list (GIR-canonical) but parse the
-/// alt body via the surface walker that hasn't migrated yet.
+/// struct / variant type names straight from the shape payload. The
+/// `gen_consume_*_op` helpers read the struct-literal field list from
+/// `g_op.alts[k].fields` and emit each alt body through
+/// `gen_elements_with_non_greedy`.
 ///
 /// `elem` is the matching `Element::Group(g_surface)`; the surface
 /// reference flows into `gen_elements_with_non_greedy` and surface
-/// dedup so siblings continue to see lower-consistent state. The
-/// surface fallback in `gen_element`'s Group arm remains until every
-/// caller routes through `gen_op_group` (Phase 2-B follow-ups).
+/// dedup so siblings continue to see lower-consistent state.
 fn gen_op_group(
     w: &mut CodeWriter,
     g_op: &GroupOp,
@@ -6021,14 +5872,11 @@ fn gen_consume_single_alt_group_op(
     // the inner elements already appended; no struct.
 }
 
-/// Emit `name+=elem` outside a Repeat: allocate the array, parse the
-/// inner op once, push the resulting binding. Lower stores the label
-/// name in `ll.field` and the inner op in `ll.inner` (carrying its
-/// own `field` already deduped against the label's fresh inner scope).
-/// `elem` is the matching surface `Label(lab)` with `lab.list == true`
-/// — consulted only by `sync_name_counts_for_label` to keep the
-/// outer scope's dedup counters consistent with surface emitters that
-/// still inspect `name_counts`.
+/// Emit `name+=elem` outside a Repeat: parse the inner op once. Lower
+/// stores the label name in `ll.field` and the inner op in `ll.inner`
+/// (carrying its own `field` already deduped against the label's fresh
+/// inner scope). `elem` is the matching surface `Label(lab)`, whose
+/// operand an inner group or list label walks.
 fn gen_op_list_label(
     w: &mut CodeWriter,
     ll: &ListLabelOp,
@@ -6041,18 +5889,17 @@ fn gen_op_list_label(
     } else {
         panic("gen_op_list_label: ListLabel op mapped to non-Label element");
     };
-    if !op_is_leaf(&ll.inner) && !ll.inner matches { Group(_) } {
-        // Inner of shape `Op::Repeat` / nested `Op::ListLabel`: the surface
-        // walker reserves the label's name itself, so return before the
-        // reservation below.
-        gen_element(w, elem, ctx, name_counts);
-        return;
-    }
     // The label itself binds nothing here (the builder holds the matched
     // values), but reserve its name so a sibling on the surface walker sees
     // lower-consistent dedup state. The inner's own name was deduped against
     // this same scope by `lower_label_op`, so it needs no repair here.
     let _ = dedup_name(&ll.dedup_base, name_counts);
+    // A label's operand is an atom, so its op is a leaf, a group, or — for
+    // `a+=b+=X`, which the g4 parser accepts — another list label.
+    if let ListLabel(inner) = &ll.inner {
+        gen_op_list_label(w, inner, &lab.element, ctx, name_counts);
+        return;
+    }
     if let Group(g_op) = &ll.inner {
         // Non-leaf inner of shape `Op::Group` (e.g. `items += (a | b)`
         // outside a Repeat): the inner Group appends to the builder, so
@@ -6066,74 +5913,6 @@ fn gen_op_list_label(
 
 fn gen_op_excluded_call(e: &ExcludedOp, ctx: &mut GenContext) -> String {
     return `p.expect_not(${sync_set_ref(ctx, &e.kinds)})`;
-}
-
-fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    match elem {
-        TokenRef(t) => {
-            let field_name = dedup_name(&t.field_name, name_counts);
-            w.line(
-                `${leaf_binding(ctx, &t.field_name, &field_name)}${expect_call(`TK_${t.name}`, t.atn_leaf_site, ctx)};`,
-            );
-        },
-        Literal(l) => {
-            let const_name = l.const_name;
-            let base = literal_field_name(&l.text);
-            let field_name = dedup_name(&base, name_counts);
-            w.line(`${leaf_binding(ctx, &base, &field_name)}${expect_call(&const_name, l.atn_leaf_site, ctx)};`);
-        },
-        // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
-        // by lower and consumed by the op-driven walkers; this surface arm
-        // only fires for legacy paths (Label inner / LR-suffix fallback /
-        // Consume node) where the call needs no follow argument and so
-        // passes the defaulted `&EMPTY_FOLLOW`. Prefix LR alts' trailing
-        // self-ref is reached via `gen_op_leaf` on `RuleCallOp.min_prec_arg`,
-        // so precedence is never threaded here either.
-        RuleRef(r) => {
-            let field_name = dedup_name(&r.field_name, name_counts);
-            gen_call_site_stamps(w, ctx, r.atn_call_site);
-            w.line(`${leaf_binding(ctx, &r.field_name, &field_name)}_parse_${r.snake_name}(p);`);
-        },
-        Wildcard(_) => {
-            let field_name = dedup_name("wildcard", name_counts);
-            w.line(`${leaf_binding(ctx, "wildcard", &field_name)}p.any();`);
-        },
-        Not(ne) => {
-            let base = not_element_field_name(&ne.element);
-            let field_name = dedup_name(&base, name_counts);
-            let check = not_match_call(&ne.element, ctx);
-            w.line(`${leaf_binding(ctx, &base, &field_name)}${check};`);
-        },
-        // After the Phase 2-G op-driven migration, only token-only groups
-        // reach this surface walker — every other Group classification
-        // (SimpleCst, SingleAlt, General) is handled by op-driven walkers
-        // before `gen_element` is invoked.
-        Group(g) => {
-            assert is_token_only_group(&g.alternatives), "gen_element: only token-only groups reach the surface walker; other classifications must be handled op-driven before gen_element is invoked";
-            gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
-        },
-        Label(lab) => {
-            // The inner parse appends its match to the builder, so a label
-            // accumulates nothing. The inner shares `name_counts` so that
-            // `a=e ... b=e` cannot emit one shared binding.
-            let lab_name = dedup_name(&lab.field_name, name_counts);
-            let inner_info = element_field_info(&lab.element);
-            let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-            gen_element(w, &lab.element, ctx, name_counts);
-            if !lab.list && ctx.emit_actions() {
-                w.line(`let ${lab_name} = ${predicted_inner};`);
-            }
-        },
-        // Every op-driven Repeat dispatch flows through
-        // `gen_op_repeat_with_follow_override` against the lowered
-        // `RepeatOp` directly. The remaining surface callers (Label /
-        // scan-side fallbacks) never see a Repeat here because lower
-        // replaces them with op-driven walkers before this point. Probe
-        // with a panic so a future regression is surfaced.
-        Repeat(_) => panic(
-            "gen_element: Repeat element reached the retired surface walker — route through op-driven `gen_op_repeat_with_follow_override`",
-        ),
-    }
 }
 
 /// Op-driven top-level Repeat dispatcher. Walkers reach this with
@@ -7407,14 +7186,6 @@ fn compute_non_greedy_condition(
     return `(${peek0_cond}) && (${peek1_cond})`;
 }
 
-fn unwrap_optional(elem: &Element) -> &Element {
-    return match elem {
-        Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
-        Label(lab) => unwrap_optional(&lab.element),
-        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => elem,
-    };
-}
-
 /// Emit an inline scan guard for an optional's inner element.
 ///
 /// Emits code of the form:
@@ -7548,47 +7319,7 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
     return scan_pos_var;
 }
 
-/// Parser-side `~`. The excluded set is interned, so nothing is rebuilt here.
-fn not_match_call(inner: &Element, ctx: &mut GenContext) -> String {
-    let unsupported = "not_match_call: unsupported inner element for parser-side ~";
-    let kinds = match inner {
-        TokenRef(t) => [`TK_${t.name}`] as List<String>,
-        Literal(l) => [l.const_name] as List<String>,
-        Group(g) => {
-            let mut ks: List<String> = [];
-            if !collect_not_set_tokens(&g.alternatives, &mut ks) {
-                panic(unsupported);
-            }
-            ks;
-        },
-        RuleRef(_) | Label(_) | Repeat(_) | Wildcard(_) | Not(_) => panic(unsupported),
-    };
-    return `p.expect_not(${sync_set_ref(ctx, &kinds)})`;
-}
-
-/// Collect terminal token constants from a `~ ( ... )` group's alternatives.
-/// Returns false if any alternative is not a simple terminal (unsupported).
-fn collect_not_set_tokens(alts: &List<Alternative>, out: &mut List<String>) -> bool {
-    for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        let e = &alt.elements[0];
-        if let TokenRef(t) = e {
-            out.push(`TK_${t.name}`);
-        } else if let Literal(l) = e {
-            out.push(l.const_name);
-        } else {
-            return false;
-        }
-    }
-    return true;
-}
-
 fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
-    if sorted_group.len() < 2 {
-        return false;
-    }
     for let idx_ref of sorted_group {
         let alt = &alts[*idx_ref];
         if alt.elements.len() != 1 {
@@ -8292,18 +8023,6 @@ fn group_all_scannable(
     };
 }
 
-fn gen_consume_token_group(
-    w: &mut CodeWriter,
-    alts: &List<Alternative>,
-    ctx: &mut GenContext,
-    name_counts: &mut List<[String, i32]>,
-) {
-    let base = token_group_field_name(alts);
-    let var_name = dedup_name(&base, name_counts);
-    let kinds = collect_token_only_kinds(alts);
-    w.line(`${leaf_binding(ctx, &base, &var_name)}${expect_set_call(ctx, &kinds)};`);
-}
-
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the
 // name-counter order is preserved.
 /// General-shape group: the alternatives carry elements, so a branch parses
@@ -8411,9 +8130,6 @@ fn gen_general_alt_parse_and_store(
 /// groups): a tournament ranks by scan length, so an alt it cannot scan has no
 /// length to rank.
 fn general_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
-    if sorted_group.len() < 2 {
-        return false;
-    }
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt = &alts[sorted_group[k]];
         // An empty alternative scans, to zero: `gen_scan_winner_round` measures
@@ -8844,16 +8560,8 @@ fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut G
 /// carries none. Registering it emits the `pred_<id>` fn the condition names,
 /// which is why this asks `alt_has_gate` first rather than registering
 /// speculatively.
-///
-/// `Option`, not an empty string: "carries no gate" and "there is no such
-/// alternative" are different answers, and a tournament candidate silently
-/// ungated is what the second would look like as the first.
 fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> Option<String> {
-    let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return null;
-    }
-    let rule = &ctx.parser_rules()[ridx];
+    let rule = ctx.current_rule();
     assert idx >= 0 && idx < rule.alternatives.len(), "alt_initial_gate: a tournament candidate is an alternative of the rule it belongs to";
     let alt = &rule.alternatives[idx];
     if !alt_has_gate(alt, ctx) {
@@ -8865,7 +8573,7 @@ fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> Option<String> {
 /// Whether alternative `idx`'s scan helper tests its gate itself, against a
 /// scan gate seeded from the parser's.
 fn alt_scan_checks_gate(idx: i32, ctx: &GenContext) -> bool {
-    let rule = &ctx.parser_rules()[ctx.current_rule_index()];
+    let rule = ctx.current_rule();
     return !alt_scan_gate_conditions(&rule.alternatives[idx], ctx).is_empty();
 }
 

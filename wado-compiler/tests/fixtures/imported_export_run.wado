@@ -1,0 +1,13 @@
+// A module's `export fn run` is an ordinary function to a module importing it:
+// only the entry module's `run` is the `wasi:cli/command` export, so a test of
+// a CLI's entry point calls it like any other function.
+use { run, ran } from "./sub/imported_export_run_dep.wado";
+
+test "an imported `export fn run` is callable" {
+    run();
+    run();
+    assert ran() == 2;
+}
+
+__DATA__
+{"test": {}}

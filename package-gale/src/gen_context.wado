@@ -561,8 +561,8 @@ impl GenContext {
 
     /// Whether an action of the rule being emitted reads the binding `base`.
     pub fn reads_binding<S: AsStrSlice>(&self, base: S) -> bool {
-        let r = self.current_rule_index;
-        assert r >= 0 && r < self.binding_reads.len(), "gen_parser installs the binding reads before any rule emits";
+        let r = self.current_rule_index();
+        assert r < self.binding_reads.len(), "gen_parser installs the binding reads before any rule emits";
         return match &self.binding_reads[r] {
             Some(reads) => reads.contains_str(base),
             None => true,
@@ -570,13 +570,13 @@ impl GenContext {
     }
 
     pub fn record_alt_scan_fn<S: AsStrSlice>(&mut self, alt: i32, name: S) {
-        let key = [self.current_rule_index, alt];
-        assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${self.current_rule_index} already has a scan function`;
+        let key = [self.current_rule_index(), alt];
+        assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${key.0} already has a scan function`;
         self.alt_scan_fns[key] = name.to_string();
     }
 
     pub fn alt_scan_fn(&self, alt: i32) -> Option<String> {
-        return self.alt_scan_fns.get([self.current_rule_index, alt]);
+        return self.alt_scan_fns.get([self.current_rule_index(), alt]);
     }
 
     /// Return the next scan-group id and advance the counter. Replaces the
@@ -747,11 +747,7 @@ impl GenContext {
     }
 
     fn current_captures(&self) -> &RuleCaptures {
-        let ridx = self.current_rule_index();
-        if ridx < 0 {
-            return &NO_CAPTURES;
-        }
-        return self.rule_captures(&self.parser_rules[ridx].name);
+        return self.rule_captures(&self.current_rule().name);
     }
 
     pub fn set_rule_follow(&mut self, kinds: TreeMap<String, List<String>>, exact: bool) {
@@ -905,15 +901,18 @@ impl GenContext {
     /// position (a zero-consumption scan cycle). A mandatory group in such a
     /// rule must scan strict to break the cycle (issue #1671).
     pub fn is_rule_scan_cyclic(&self, idx: i32) -> bool {
-        if idx < 0 || idx >= self.scan_cyclic.len() {
-            return false;
-        }
         return self.scan_cyclic[idx];
     }
 
-    /// The rule currently being emitted, or -1 outside rule-body emission.
+    /// The index of `current_rule`.
     pub fn current_rule_index(&self) -> i32 {
+        assert self.current_rule_index >= 0, "lowering and the parse and scan emit loops make each rule current before walking its body";
         return self.current_rule_index;
+    }
+
+    /// The rule being lowered or emitted.
+    pub fn current_rule(&self) -> &ParserRule {
+        return &self.parser_rules[self.current_rule_index()];
     }
 
     /// Must run before any body emit: a call site may target a later rule.
@@ -933,17 +932,15 @@ impl GenContext {
     /// Record that the rule being lowered reads the continuation it was called
     /// with directly — a caller-FOLLOW gate or a probe.
     pub fn mark_rule_reads_follow(&mut self) {
-        let idx = self.current_rule_index;
-        if idx >= 0 {
-            self.rule_reads_follow[idx] = true;
-        }
+        let idx = self.current_rule_index();
+        self.rule_reads_follow[idx] = true;
     }
 
     /// Record that the rule being lowered hands its own continuation to
     /// `target`, so it reads the slots exactly when `target` declares them.
     pub fn mark_rule_forwards_follow<S: AsStrSlice>(&mut self, target: S) {
-        let idx = self.current_rule_index;
-        if idx >= 0 && !self.follow_forward_edges[idx].contains_str(target) {
+        let idx = self.current_rule_index();
+        if !self.follow_forward_edges[idx].contains_str(target) {
             self.follow_forward_edges[idx].push(target.to_string());
         }
     }
@@ -959,11 +956,7 @@ impl GenContext {
     /// The declaration side of `rule_reads_follow`, answered off the same list
     /// so a rule cannot declare what its callers do not pass.
     pub fn current_rule_reads_follow(&self) -> bool {
-        let idx = self.current_rule_index;
-        if idx < 0 {
-            return false;
-        }
-        return self.rule_reads_follow(&self.parser_rules[idx].snake_name);
+        return self.rule_reads_follow(&self.current_rule().snake_name);
     }
 
     pub fn set_follow_rule_snakes(&mut self, names: &List<String>) {
@@ -1250,14 +1243,10 @@ impl GenContext {
         self.diagnostics.push(Diagnostic { owner: *owner, kind, message: message.to_string() });
     }
 
-    /// The name of the parser rule currently being lowered / emitted, or
-    /// `""` outside a rule. Diagnostics raised from inside a rule use it as
-    /// their structured owner.
+    /// The name of `current_rule`, which diagnostics raised from inside a rule
+    /// use as their structured owner.
     pub fn current_rule_name(&self) -> String {
-        if self.current_rule_index < 0 {
-            return String::new();
-        }
-        return self.parser_rules[self.current_rule_index].name;
+        return self.current_rule().name;
     }
 
     /// Return the collected diagnostics (a value copy under Wado value
@@ -2142,7 +2131,7 @@ impl GenContext {
     /// "the first-set token is present at the input position" implies
     /// "this element will successfully consume that token (and only
     /// that token) when it matches". The criterion underlying LL repair
-    /// for nullable suffixes (Phase 5 step 3): a deep-nullable suffix
+    /// for nullable suffixes: a deep-nullable suffix
     /// can contribute its first set to a `RuleRef`'s caller-follow only
     /// when every walked element is first-exact. Otherwise the
     /// suffix's first might be a multi-element alt's leading token

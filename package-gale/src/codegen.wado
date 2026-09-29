@@ -804,16 +804,7 @@ fn gen_grammar_metadata(w: &mut CodeWriter, grammar: &Grammar) {
 fn format_option_value(v: &OptionValue) -> String {
     return match *v {
         Ident(s) => s,
-        Qualified(parts) => {
-            let mut out = String::with_capacity(16);
-            for let mut i = 0; i < parts.len(); i += 1 {
-                if i > 0 {
-                    out.push('.');
-                }
-                out.push_str(&parts[i]);
-            }
-            out;
-        },
+        Qualified(parts) => parts.join("."),
         Str(s) => `"${s}"`,
         Int(n) => `${n}`,
         Action(_) => "{ ... }",

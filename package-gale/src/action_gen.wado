@@ -147,11 +147,7 @@ fn translate_caller_arg<S: AsStrSlice>(expr: S, ctx: &GenContext) -> Option<Stri
     if ctx.action_language() matches { Wado } && find_attr_refs(expr).len() == 0 {
         return Option::Some(expr.to_string());
     }
-    let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return null;
-    }
-    let rule = &ctx.parser_rules()[ridx];
+    let rule = ctx.current_rule();
     let vals_in_scope = rule_emits_vals(ctx, rule);
     let lang = ctx.action_language();
     return match translate_predicate(
@@ -173,9 +169,8 @@ fn translate_caller_arg<S: AsStrSlice>(expr: S, ctx: &GenContext) -> Option<Stri
 ///
 /// A member write is spelled `{noBrace = 1;}` in Java and `{p.noBrace = 1}` in
 /// Wado, and both come out of the translator as `p.<declared member> = 1`. That
-/// is the form `scan_gate.wado` reads. It used to read the grammar text and
-/// snake_case the name to guess what the translator would call it, which is a
-/// second answer to a question the translator already answers — right for Java
+/// is the form `scan_gate.wado` reads, so the translator is the one answer to
+/// what a member is called: guessing it from the grammar text is right for Java
 /// by construction and wrong for every Wado grammar.
 ///
 /// A body the translator refuses is simply absent, and the gate analysis refuses
@@ -498,11 +493,7 @@ pub fn rule_emits_vals(ctx: &GenContext, rule: &ParserRule) -> bool {
 }
 
 pub fn current_rule_emits_vals(ctx: &GenContext) -> bool {
-    let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return false;
-    }
-    return rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
+    return rule_emits_vals(ctx, ctx.current_rule());
 }
 
 /// Install what every rule's actions read off its labeled rule calls, so the
@@ -609,7 +600,7 @@ fn push_op_rule_call_bindings(op: &Op, out: &mut List<[String, String]>) {
 /// Emit every retained action / predicate whose position is `before` (it
 /// runs after `elements[before - 1]` and before `elements[before]`). No-op
 /// unless action execution is on. Predicates emit an inline runtime guard
-/// (a false one fails the parse); prediction-time gating is Phase 2 proper.
+/// (a false one fails the parse).
 pub fn gen_alt_actions_at(
     w: &mut CodeWriter,
     actions: &List<AltAction>,
@@ -671,11 +662,7 @@ fn warn_unsupported_prediction_predicate(src: &ActionSource, ctx: &mut GenContex
 }
 
 fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
-    let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return false;
-    }
-    return ctx.parser_rules()[ridx].alternatives.len() > 1;
+    return ctx.current_rule().alternatives.len() > 1;
 }
 
 /// The dispatch-gate condition an alt-initial predicate contributes, or `null`
@@ -704,11 +691,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext, handle: &String = &PARSER
         // handle and falls through to the translator, which renders against it.
         return Option::Some(`${pred_fn_name(a.source.action_id)}(p)`);
     }
-    let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        return null;
-    }
-    let rule = &ctx.parser_rules()[ridx];
+    let rule = ctx.current_rule();
     let vals_in_scope = rule_emits_vals(ctx, rule);
     let lang = ctx.action_language();
     return match translate_predicate(
@@ -1154,21 +1137,13 @@ fn translate_action_or_warn(
     if body_needs_no_translator(&src.text, ctx) {
         return Option::Some(src.text);
     }
-    let ridx = ctx.current_rule_index();
-    if ridx < 0 {
-        ctx.warn(
-            &action_owner(src.action_id, ctx),
-            DiagnosticKind::UnsupportedAction,
-            `action ${src.action_id} references attributes outside a rule context`,
-        );
-        return null;
-    }
-    let vals_in_scope = rule_emits_vals(ctx, &ctx.parser_rules()[ridx]);
+    let rule = ctx.current_rule();
+    let vals_in_scope = rule_emits_vals(ctx, rule);
     let lang = ctx.action_language();
     let translated = if is_predicate {
         translate_predicate(
             &lang,
-            &ctx.parser_rules()[ridx],
+            rule,
             ctx.parser_rules(),
             &src.text,
             vals_in_scope,
@@ -1180,7 +1155,7 @@ fn translate_action_or_warn(
     } else {
         translate_action(
             &lang,
-            &ctx.parser_rules()[ridx],
+            rule,
             ctx.parser_rules(),
             &src.text,
             vals_in_scope,
@@ -1221,9 +1196,9 @@ pub fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext
 
 /// Emit a semantic predicate `{cond}?` as an inline runtime guard: when the
 /// (translated) condition is false during a real (non-speculative) parse, the
-/// rule fails into normal recovery. Prediction-time gating of which alt to
-/// take is Phase 2 proper; this serves mid-alt predicates and single-alt-rule
-/// gates, where a false predicate is a parse failure at that point.
+/// rule fails into normal recovery. This serves mid-alt predicates and
+/// single-alt-rule gates, where a false predicate is a parse failure at that
+/// point; a predicate choosing between alternatives gates the prediction.
 fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenContext, at_alt_end: bool) {
     ctx.mark_action_seen(src.action_id);
     let cond = match translate_action_or_warn(src, true, ctx, at_alt_end) {

@@ -1,8 +1,5 @@
 //! `gale dump --lexer` rendering: per lexer rule, its route and the
 //! `lexer_rule_plan` tree `gen_lexer` emits from, read out.
-//!
-//! Not reported: a repeat directly under another repeat or a `~`. No sequence
-//! surrounds such a position, so there is no strategy to pick.
 
 use {
     Grammar,
@@ -107,9 +104,7 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
         render_rule(&mut o, &ctx, &ctx.rules[i], &ctx.routes[i], &plans.rules[i]);
     }
     for let frag of &plans.fragments {
-        let Some(rule) = find_fragment(&ctx.rules, &frag.key.name) else {
-            panic("a fragment matcher names no fragment");
-        };
+        let rule = find_fragment(&ctx.rules, &frag.key.name).expect("a fragment matcher names no fragment");
         o.fragment_fns += 1;
         o.text.push_str(`fragment matcher ${frag.key.fn_name()}\n`);
         render_body(&mut o, &ctx, &rule.body, &frag.plan, /*top=*/ true);
@@ -228,22 +223,17 @@ fn render_seq(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, plan: &Lex
     }
 }
 
-/// `SingleArm` is not an alternation and `NoSuffix` is the tail-alternation
-/// decision `render_body` reports, so neither is a line here.
 fn render_group(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i32, plan: &LexerGroupPlan) {
     let Group(g_alts) = &alt.elements[index] else {
         panic("a group step plans something other than a group");
     };
-    if !plan.emit matches { FirstMatchSingleArm | FirstMatchNoSuffix } {
+    if let Some(label) = group_emit_label(plan.emit) {
         if plan.emit matches { ArmScoring } {
             o.group_arm_scoring += 1;
         } else {
             o.group_first_match += 1;
         }
-        decision_line(
-            o,
-            `alternation ${alts_text(g_alts, 0)}${suffix_text(alt, index)} — ${group_emit_label(plan.emit)}`,
-        );
+        decision_line(o, `alternation ${alts_text(g_alts, 0)}${suffix_text(alt, index)} — ${label}`);
     }
     match &plan.shape {
         // The suffix is a step of the enclosing sequence, which renders it — the
@@ -295,12 +285,6 @@ fn suffix_text(alt: &LexerAlternative, index: i32) -> String {
 fn render_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, plan: &LexerElemPlan) {
     match plan {
         Body(body) => render_elem_body(o, ctx, elem, body),
-        PlainRepeat(nested) => {
-            let Repeat(rep) = elem else {
-                panic("a repeat plan against something other than a repeat");
-            };
-            render_elem(o, ctx, &rep.element, &nested.inner);
-        },
         Not(nested) => {
             let Not(n) = elem else {
                 panic("a not plan against something other than a not");
@@ -331,9 +315,7 @@ fn render_elem_body(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, body: &
     let RuleRef(name) = elem else {
         panic("a body plan against neither a group nor a rule reference");
     };
-    let Some(frag) = find_fragment(&ctx.rules, name) else {
-        panic("a body plan against a rule reference with no fragment");
-    };
+    let frag = find_fragment(&ctx.rules, name).expect("a body plan against a rule reference with no fragment");
     let saved = o.scope;
     o.scope = `${o.scope}${name} › `;
     render_body(o, ctx, &frag.body, body, /*top=*/ false);
@@ -355,21 +337,24 @@ fn alts_emit_label(emit: LexerAltsEmit) -> String {
     return match emit {
         MaximalMunch => "maximal munch: every arm scanned from the same start, longest wins",
         FirstMatchNotTail => "first-match: not in tail position, a longer arm could strand what follows",
-        FirstMatchSingleArm => "first-match: one arm",
         FirstMatchFixedLenArms => "first-match: every arm consumes the same fixed length",
         FirstMatchArmsDisjoint => "first-match: no two arms can match at the same position",
     };
 }
 
-fn group_emit_label(emit: LexerGroupEmit) -> String {
+/// Null for the two that are no decision here: `SingleArm` is not an
+/// alternation, and `NoSuffix` is the tail-alternation decision `render_body`
+/// reports.
+fn group_emit_label(emit: LexerGroupEmit) -> Option<String> {
     return match emit {
-        ArmScoring => "arm scoring: each arm scored on how far arm-plus-suffix reaches",
-        FirstMatchSingleArm => "first-match: one arm",
-        FirstMatchNoSuffix => "first-match: nothing follows",
-        FirstMatchFixedLenArms => "first-match: every arm consumes the same fixed length",
-        FirstMatchArmsDisjoint => "first-match: no two arms can match at the same position",
-        FirstMatchPredicateAfter => "first-match: a semantic predicate follows the alternation",
-        FirstMatchSuffixNotPeekable => "first-match: the suffix carries a semantic predicate, so it cannot be peeked",
+        ArmScoring => Option::Some("arm scoring: each arm scored on how far arm-plus-suffix reaches"),
+        FirstMatchSingleArm | FirstMatchNoSuffix => null,
+        FirstMatchFixedLenArms => Option::Some("first-match: every arm consumes the same fixed length"),
+        FirstMatchArmsDisjoint => Option::Some("first-match: no two arms can match at the same position"),
+        FirstMatchPredicateAfter => Option::Some("first-match: a semantic predicate follows the alternation"),
+        FirstMatchSuffixNotPeekable => Option::Some(
+            "first-match: the suffix carries a semantic predicate, so it cannot be peeked",
+        ),
     };
 }
 

@@ -38,13 +38,14 @@ test "find_attr_refs skips single-quoted char and block comments" {
 }
 
 test "find_attr_refs skips a literal dollar in backtick text but scans interpolations" {
-    let refs = find_attr_refs("p.emit(`cost $amount, v={$v} done`)");
+    // Only `${` opens an interpolation: a bare `{` and an escaped `\${` are text.
+    let refs = find_attr_refs("p.emit(`cost $amount, {$lit} \\${$esc} v=${$v} done`)");
     assert refs.len() == 1, `count: ${refs.len()}`;
     assert refs[0].name == "v", `name: ${refs[0].name}`;
 }
 
 test "find_attr_refs scans nested member refs inside a backtick interpolation" {
-    let refs = find_attr_refs("`{$a.v + $b.v}`");
+    let refs = find_attr_refs("`${$a.v + $b.v}`");
     assert refs.len() == 2, `count: ${refs.len()}`;
     assert refs[0].name == "a" && refs[1].name == "b";
 }
