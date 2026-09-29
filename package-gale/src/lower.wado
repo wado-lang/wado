@@ -1336,23 +1336,18 @@ fn nested_operand_meets_operator<S: AsStrSlice>(
     };
 }
 
+/// Stamp `prec` on a self-reference, bare or under its `ListLabel`; every
+/// caller found it with `find_self_ref_rule_call` first.
 fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
-    return match op {
-        RuleCall(mut rc) => {
-            rc.min_prec_arg = Option::Some(prec);
-            Op::RuleCall(rc);
-        },
-        ListLabel(mut ll) => {
-            ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
-            Op::ListLabel(ll);
-        },
-        Token(t) => Op::Token(t),
-        Literal(l) => Op::Literal(l),
-        Wildcard(wop) => Op::Wildcard(wop),
-        Excluded(e) => Op::Excluded(e),
-        Repeat(r) => Op::Repeat(r),
-        Group(g) => Op::Group(g),
+    if let ListLabel(mut ll) = op {
+        ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
+        return Op::ListLabel(ll);
+    }
+    let RuleCall(mut rc) = op else {
+        panic("rebind_self_ref_min_prec: not a self-reference");
     };
+    rc.min_prec_arg = Option::Some(prec);
+    return Op::RuleCall(rc);
 }
 
 /// True iff FIRST(`op`) can contain a token in `lr_first` (the union of

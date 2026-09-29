@@ -9,10 +9,10 @@
 //!
 //! This file reaches `generate`, so it compiles the whole generator.
 
-use { gale } from "./main.wado";
+use { gale, run } from "./main.wado";
 use { generate as kiln_generate, Options } from "./generator.wado";
 use { Console } from "../tests/support/console.wado";
-use { Environment } from "core:cli";
+use { Environment, Exit } from "core:cli";
 use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use fs from "core:fs";
 use {
@@ -288,6 +288,31 @@ test "a grammar read from the second grant is found" {
     let run = gale_with([empty, src], ["dump", "Expr.g4"]);
     assert run.result matches { Ok(_) }, run.failure();
     assert run.stdout().starts_with("grammar Expr\n");
+}
+
+/// An `Exit` that traps on any use: the run must not end the process.
+struct NoExit {
+}
+
+impl Exit for NoExit {
+    ..trap
+}
+
+test "run prints what a successful command prints, and does not exit" {
+    let dir = scratch("run");
+    put(&dir, "Expr.g4", EXPR);
+    let line = CommandLine {
+        argv: ["dump", "--atn", "Expr.g4"],
+    };
+    let dirs = Grants {
+        dirs: [dir],
+    };
+    let mut console = Console {};
+    with &mut console, Environment => &line, Preopens => &dirs, Exit => &NoExit {} do {
+        run();
+    };
+    assert console.stdout().contains("rule 0 'expr'"), console.stdout();
+    assert console.stderr() == "";
 }
 
 // ---------------------------------------------------------------------------
