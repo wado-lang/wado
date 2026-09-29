@@ -860,11 +860,11 @@ impl LastUseAnalyzer<'_> {
                 self.walk_expr(&e.start, live, record);
             }
             Expr::StructLiteral(e) => {
-                for spread in e.spreads.iter().rev() {
-                    self.walk_expr(&spread.expr, live, record);
-                }
                 for field in e.fields.iter().rev() {
                     self.walk_expr(&field.value, live, record);
+                }
+                for spread in e.spreads.iter().rev() {
+                    self.walk_expr(&spread.expr, live, record);
                 }
             }
             Expr::TupleLiteral(e) => {
