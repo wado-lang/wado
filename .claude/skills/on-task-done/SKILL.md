@@ -11,8 +11,8 @@ First, review the branch:
 2. `/code-review-response` on its findings. It ends with `/distill`.
 
 `/code-review` runs in a subagent, so `--fix` would have that subagent edit the
-tree out of sight. The fixes are made here instead, where each one can be
-watched and redirected.
+tree out of sight. The main session makes the fixes instead, where each one can
+be watched and redirected.
 
 Then update docs if applicable:
 
