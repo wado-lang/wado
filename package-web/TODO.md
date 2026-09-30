@@ -23,8 +23,8 @@ the current snapshot it skips 570 members:
 | A union                            | 13      | `append`, `prepend`, `before`, the `inner_html` getter |
 | More than one overload lowers      | 2       | `Window.alert`                                         |
 
-A variadic argument lowers to a `List<T>`, which the glue spreads into the
-call. `append` and its siblings still wait on the union `(Node or DOMString)`.
+A variadic argument lowers, but `append` and its siblings take
+`(Node or DOMString)`, so they wait on the union.
 
 ## Order
 

@@ -678,7 +678,7 @@ impl Lowering<'_> {
         for arg in arguments {
             assert!(!variadic, "WebIDL admits a variadic argument only last");
             let ty = match self.lower_type(&arg.idl_type, Flow::In) {
-                // The values the call spreads; none is the argument left out.
+                // An empty list leaves the argument out.
                 Ok(ty) if arg.variadic => {
                     variadic = true;
                     WadoType::List(Box::new(ty))
