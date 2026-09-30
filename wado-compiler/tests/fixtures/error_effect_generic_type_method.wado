@@ -1,0 +1,33 @@
+// A call of a generic type's method demands the effects it declares, whatever
+// the type arguments are.
+use { println, Stdout } from "core:cli";
+
+struct Holder<T> {
+    v: T,
+}
+
+impl<T> Holder<T> {
+    fn shout(&self) -> i32 with Stdout {
+        println("x");
+        return 1;
+    }
+}
+
+fn generic<T>(h: Holder<T>) -> i32 {
+    return h.shout();
+}
+
+fn concrete(h: Holder<i32>) -> i32 {
+    return h.shout();
+}
+
+export fn run() with Stdout {
+    let _ = generic(Holder { v: 1 });
+    let _ = concrete(Holder { v: 1 });
+}
+
+__DATA__
+{
+    "compile_error": ":17:12: analysis error: missing effect 'Stdout' required by 'shout'; 21:12: missing effect 'Stdout' required by 'shout'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

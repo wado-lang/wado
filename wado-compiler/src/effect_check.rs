@@ -11,7 +11,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, is_test_function};
 use crate::resolve::Resolutions;
-use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
+use crate::tir::{EffectRef, FunctionRef, ResolvedType, TemplateId, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
 use crate::ast::{
@@ -19,8 +19,8 @@ use crate::ast::{
     ImplBlock, Item, Pattern, RestClause, Stmt, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
+use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
 use crate::semantics::Semantics;
@@ -392,11 +392,20 @@ impl SemanticDiagnostics {
     }
 }
 
-/// Walk every user-authored function / method / trait method, appending effect
+/// The standard library is held to the rules it states, so every module is
+/// checked but the bindings, whose declarations have no body to read.
+fn is_effect_checked(src: &ModuleSource) -> bool {
+    !matches!(
+        src,
+        ModuleSource::Binding { .. } | ModuleSource::Wasm { .. }
+    )
+}
+
+/// Walk every function / method / trait method with a body, appending effect
 /// violations. Shared by [`check_effects_semantic`] and [`check_semantics`].
 fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectError>) {
     for (src, module) in &sem.modules {
-        if !is_user_authored(src) {
+        if !is_effect_checked(src) {
             continue;
         }
         for item in &module.items {
@@ -491,6 +500,7 @@ struct OwnedEffectData {
     resources: IndexSet<EffectRef>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
+    waiting: IndexSet<EffectRef>,
     /// Each interface declaration's effect and `#[cm]` FQ.
     interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
@@ -549,6 +559,7 @@ impl OwnedEffectData {
         // Effect / resource propagation closure: holding effect `E` admits the
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
         let closure = build_propagation_closure_sem(sem, state, &members);
+        let waiting = async_call_effects(sem, state);
 
         // An empty entry is meaningful: the method exists and grants nothing.
         // A declaration has no body, so `fn_effects` holds nothing for it.
@@ -663,6 +674,7 @@ impl OwnedEffectData {
             resources,
             members,
             closure,
+            waiting,
             interfaces,
             effect_by_cm_fq,
             provided_import_fqs,
@@ -685,6 +697,7 @@ impl OwnedEffectData {
             resources: &self.resources,
             members: &self.members,
             closure: &self.closure,
+            waiting: &self.waiting,
             interfaces: &self.interfaces,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
@@ -722,6 +735,8 @@ struct EffectIndex<'a> {
     members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+    /// What waiting on an `AsyncCall` demands, held where the call starts.
+    waiting: &'a IndexSet<EffectRef>,
     /// Interface declaration → its effect and `#[cm]` FQ.
     interfaces: &'a IndexMap<DefId, (EffectRef, Option<String>)>,
     /// CM interface FQ → the effect it declares, for reconstructing a
@@ -954,6 +969,9 @@ fn check_function_effects_sem(
     }
     current.extend(benign);
     current.extend(held.cloned());
+    if annotations.is_some_and(|ann| starts_async_call(body, ann, &sem.types)) {
+        current.extend(index.waiting.iter().cloned());
+    }
     // A function holding `Stdout` may call operations that internally need
     // `Stream`, etc.
     let mut current = expand_through_closure(&current, index.closure);
@@ -980,6 +998,38 @@ fn check_function_effects_sem(
         out,
     };
     ast::walk_block(&mut walker, body);
+}
+
+/// What waiting on an `AsyncCall` demands: the effects its inherent methods
+/// declare.
+fn async_call_effects(sem: &Semantics, state: &AnnotateState) -> IndexSet<EffectRef> {
+    let Some(async_call) = sem.types.compiler_item_def(CompilerItem::AsyncCall) else {
+        return IndexSet::default();
+    };
+    let resolutions = &*state.tysys.resolutions;
+    let mut effects = IndexSet::default();
+    for (src, module) in &sem.modules {
+        for item in &module.items {
+            let Item::Impl(block) = item else {
+                continue;
+            };
+            let targets_async_call = impl_facts(sem, src, block).is_some_and(|facts| {
+                facts.trait_name.is_none() && facts.struct_name.head().def() == Some(async_call)
+            });
+            if !targets_async_call {
+                continue;
+            }
+            for method in &block.methods {
+                effects.extend(
+                    method
+                        .effects
+                        .iter()
+                        .map(|effect| resolutions.effect_named(effect, src)),
+                );
+            }
+        }
+    }
+    effects
 }
 
 /// Build the effect / resource propagation closure from `Semantics`: for each
@@ -1147,6 +1197,38 @@ fn add_narrowed_resources(
             return;
         }
     }
+}
+
+/// Whether `body` starts an async call, so it may wait on the call there.
+fn starts_async_call(body: &Block, annotations: &TypeAnnotations, types: &TypeTable) -> bool {
+    struct Starts<'a> {
+        annotations: &'a TypeAnnotations,
+        types: &'a TypeTable,
+        found: bool,
+    }
+    impl AstVisitor for Starts<'_> {
+        fn visit_expr(&mut self, expr: &Expr) {
+            if matches!(expr, Expr::Call(_) | Expr::MethodCall(_))
+                && self
+                    .annotations
+                    .all(|facts| &facts.expression_types, expr.id())
+                    .any(|&ty| {
+                        self.types
+                            .is_compiler_item_type(ty, CompilerItem::AsyncCall)
+                    })
+            {
+                self.found = true;
+            }
+            ast::walk_expr(self, expr);
+        }
+    }
+    let mut starts = Starts {
+        annotations,
+        types,
+        found: false,
+    };
+    ast::walk_block(&mut starts, body);
+    starts.found
 }
 
 /// The ids a body's type patterns are recorded under: each `p: T`, and each
@@ -1332,11 +1414,14 @@ impl EffectIndex<'_> {
         // dispatch has no impl to read: the declaration is what a call requires.
         let mut effects = match self.declared_by_trait(func_ref) {
             Some(declared) => declared.to_vec(),
-            None => self
-                .mangled_index
-                .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-                .cloned()
-                .unwrap_or_default(),
+            None => match self.declaration_of(func_ref) {
+                Some(decl) => self.fn_effects.get(&decl).cloned().unwrap_or_default(),
+                None => self
+                    .mangled_index
+                    .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+                    .cloned()
+                    .unwrap_or_default(),
+            },
         };
         effects = self.resolve_open_head(func_ref, effects);
         if let Some(method_info) = &func_ref.method_info
@@ -1428,10 +1513,23 @@ impl EffectIndex<'_> {
 
     /// Parameter type ids for a method / static dispatch target.
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
-        self.mangled_params
-            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            .cloned()
-            .unwrap_or_default()
+        match self.declaration_of(func_ref) {
+            Some(decl) => self.fn_params.get(&decl).cloned().unwrap_or_default(),
+            None => self
+                .mangled_params
+                .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+                .cloned()
+                .unwrap_or_default(),
+        }
+    }
+
+    /// The declaration a dispatch selected. Its name carries the receiver's
+    /// type arguments, so only a callee no declaration names is looked up by it.
+    fn declaration_of(&self, func_ref: &FunctionRef) -> Option<AstId> {
+        match &func_ref.template {
+            Some(TemplateId::Declared { def, .. }) => Some(self.resolutions.defs().ast_id(*def)),
+            Some(TemplateId::Synthesized { .. }) | None => None,
+        }
     }
 }
 
@@ -1825,14 +1923,14 @@ pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
     out
 }
 
-/// Walk every user-authored expression that must be pure, appending violations.
+/// Walk every expression that must be pure, appending violations.
 /// Shared by [`check_purity_semantic`] and [`check_semantics`].
 fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityError>) {
     let Some(state) = sem.state.as_ref() else {
         return;
     };
     for (src, module) in &sem.modules {
-        if !is_user_authored(src) {
+        if !is_effect_checked(src) {
             continue;
         }
         let mut walker = PurityWalker {

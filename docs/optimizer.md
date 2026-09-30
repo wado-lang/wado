@@ -16,8 +16,7 @@ branchless conditionals, `array.copy` and `array.fill` for bulk operations, and
 
 A call to a function that declares no effects, or to an `#[ambient]` one, may be
 removed when its result is unused. A call that may trap or may not return stays,
-since removing it changes what the program does. See
-[Non-Effects](./spec-effects.md#non-effects).
+since removing it changes what the program does.
 
 ## Optimization Levels
 

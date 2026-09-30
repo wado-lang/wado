@@ -121,7 +121,7 @@ pub struct BufferedRandom {
 }
 
 impl Random for BufferedRandom {
-    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> with Random {
         if max_len > self.pool_bytes as u64 {
             resume Random::get_random_bytes(max_len);
         }
@@ -134,7 +134,7 @@ impl Random for BufferedRandom {
         resume self.take(i32::min(n, self.available()));
     }
 
-    fn get_random_u64(&mut self) -> u64 {
+    fn get_random_u64(&mut self) -> u64 with Random {
         let mut value: u64 = 0;
         let mut shift = 0;
         while shift < 64 {

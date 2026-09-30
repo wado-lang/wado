@@ -409,10 +409,6 @@ test {
 
 [`#[benign(E)]`](./spec-attributes.md#benigne-) is the narrower form: only the named effects go undeclared, and the rest of the body is checked.
 
-### Non-Effects
-
-The effect system tracks effects and nothing else. A trap is not an effect: `panic`, `unreachable`, a failed `assert` and any other trap may happen in a function that declares none. `panic` and `unreachable` return `!`. Nor is what an [ambient function](#ambient-functions) writes an effect of its caller.
-
 ## Generic Effects (Effect Polymorphism)
 
 `<effect E>` declares an effect parameter. `E` stands for zero or more concrete effects, inferred at each call site from the function-typed arguments.

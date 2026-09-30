@@ -1,7 +1,8 @@
 //! Trait synthesis: auto-derives `Eq` / `Ord` for structs and enums and `Eq` for
 //! variants (discriminant, then payload), `Default` for structs, `Inspect` for
 //! debug formatting, and `Display` for an enum’s bare case name.
-//! Runs before monomorphize.
+//! Runs before monomorphize, but for the `fn(..)` dispatch stubs only an
+//! instance reaches.
 
 use std::cell::RefCell;
 use std::convert::identity;
@@ -12,6 +13,7 @@ use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
+use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
@@ -21,6 +23,7 @@ use crate::tir::{
     TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStructField, TirTypeParam, TraitRef, TypeId, TypeTable,
 };
+use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 
 use super::common::{
@@ -4116,6 +4119,82 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 
     drop(tt);
     module.functions.extend(generated);
+}
+
+/// Mint the `fn(..)^Inspect` dispatch stubs that monomorphization reaches and
+/// synthesis could not: a `fn(..)` type spelled through a type parameter, as a
+/// generic struct's field is, is concrete only in its instance. Each stub goes
+/// to the module whose call names it.
+pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
+    let names = TraitsStdlibNames::from_type_table(&flat.type_table.borrow());
+    let signatures: hashmap::IndexMap<String, FnSignature> =
+        collect_canonical_fn_signatures(&flat.type_table.borrow())
+            .into_iter()
+            .map(|sig| {
+                let info =
+                    trait_method_info(&sig.receiver, &names.inspect_fq, &names.inspect_method);
+                (info.to_mangled_name(), sig)
+            })
+            .collect();
+
+    struct CalledStubs<'a> {
+        signatures: &'a hashmap::IndexMap<String, FnSignature>,
+        called: IndexSet<(ModuleSource, String)>,
+    }
+    impl TirRefVisitor for CalledStubs<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Call { func, .. } = &expr.kind
+                && self.signatures.contains_key(&func.name)
+            {
+                self.called
+                    .insert((func.module_source.clone(), func.name.clone()));
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut calls = CalledStubs {
+        signatures: &signatures,
+        called: IndexSet::default(),
+    };
+    for func_rc in &flat.functions {
+        if let Some(body) = &func_rc.borrow().body {
+            calls.visit_block(body);
+        }
+    }
+    let defined: IndexSet<(ModuleSource, String)> = flat
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            (f.module_source.clone(), f.name.clone())
+        })
+        .collect();
+
+    let mut tt = flat.type_table.borrow_mut();
+    let formatter_type = tt.make_compiler_struct(CompilerItem::Formatter);
+    let fmt_type = tt.make_mut_ref(formatter_type);
+    let mut generated = Vec::new();
+    for (module_source, name) in calls.called {
+        if defined.contains(&(module_source.clone(), name.clone())) {
+            continue;
+        }
+        let sig = &signatures[&name];
+        let ref_type = tt.make_ref(sig.repr_type_id);
+        let mut stub = generate_fn_inspect_fn(
+            &sig.receiver,
+            sig.arity,
+            sig.return_type,
+            ref_type,
+            fmt_type,
+            synth_span(),
+            &names.inspect_fq,
+            &names.inspect_method,
+        );
+        stub.module_source = module_source;
+        generated.push(Rc::new(RefCell::new(stub)));
+    }
+    drop(tt);
+    flat.functions.extend(generated);
 }
 
 /// Auto-derive `EnumName^Display::fmt` writing the bare case name (`Red`),

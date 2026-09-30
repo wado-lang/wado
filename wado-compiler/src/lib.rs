@@ -1808,6 +1808,7 @@ fn compile_after_load<H: CompilerHost>(
         synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
         synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
         mono.resume(&mut flat);
+        synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }
 
     // === Phase 9a: Erase Newtypes and Flags ===
@@ -2257,6 +2258,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
                 synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
                 mono.resume(&mut flat);
+                synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
             }
 
             // Erase Newtypes and Flags (after monomorphize, before lower)

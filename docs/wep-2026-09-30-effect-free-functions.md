@@ -57,6 +57,11 @@ in `..forward`, which passes operations to the next handler out.
 A handler method holds only what it declares. One that delegates to the next
 handler out declares `with E`, as it would any other effect.
 
+### Waiting where the call starts
+
+A function that starts an async call also holds the effects `AsyncCall`'s
+methods declare, so it waits on the call with nothing more to declare.
+
 ### Globals
 
 Reading or writing a `global mut` is an effect. The details, such as which
@@ -69,10 +74,6 @@ effect a global access demands, are not decided, so they are a known gap of
 treats a call to an ambient function as it treats one that declares no effects,
 so it may remove one whose result is unused. Ambient output such as
 `log_stderr` is therefore best-effort: it may not appear.
-
-### Exports are not special
-
-An `export fn` declares its effects exactly as any other function does.
 
 ## Roadmap
 
@@ -87,6 +88,8 @@ An `export fn` declares its effects exactly as any other function does.
 3. The specification and the diagnostics speak of effects, not purity. Done:
    [Effect System](./spec-effects.md) states the rules above, and a position
    that admits no effects reports `EFFECT_NOT_ALLOWED`.
+4. The standard library is effect-checked. Done: `core:*` compiles under the
+   rules above.
 
 ## Known gaps
 

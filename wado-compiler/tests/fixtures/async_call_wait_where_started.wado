@@ -1,0 +1,24 @@
+// A function that starts an async call waits on it with nothing more to
+// declare; one handed the call declares what waiting performs.
+fn finish(call: AsyncCall<i32>) -> i32 with (Subtask, WaitableSet) {
+    return call.wait();
+}
+
+test {
+    with Fetch => &Canned {} do {
+        assert Fetch::get("/abc").wait() == 4;  // where the call starts
+        assert finish(Fetch::get("/a")) == 2;   // handed on
+    }
+}
+
+#[cm("example:demo/fetch")]
+interface Fetch {
+    #[cm("example:demo/fetch#get")]
+    async fn get(url: String) -> AsyncCall<i32>;
+}
+
+struct Canned {}
+
+impl Fetch for Canned {
+    fn get(&self, url: String) -> i32 { resume url.len(); }
+}
