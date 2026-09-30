@@ -186,11 +186,15 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.
     pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
-    /// [`Self::abstract_selections`] by default body, which every impl
-    /// inheriting the body in this module asks for.
-    pub(super) abstract_selection_cache:
-        hashmap::IndexMap<ast::AstId, Rc<hashmap::IndexMap<ast::AstId, DefId>>>,
+    /// [`Self::abstract_selections`] by default body, shared by every module
+    /// (`AnnotateState::abstract_selections`).
+    pub(super) abstract_selection_cache: Rc<RefCell<AbstractSelectionCache>>,
 }
+
+/// The trait each call in a default body reaches through a bound, by the
+/// call's node, keyed by the body.
+pub(crate) type AbstractSelectionCache =
+    hashmap::IndexMap<ast::AstId, Rc<hashmap::IndexMap<ast::AstId, DefId>>>;
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// Bind an `impl` block's type parameters to the slots its methods resolve

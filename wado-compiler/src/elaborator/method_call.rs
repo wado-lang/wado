@@ -434,7 +434,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
-        {
+        // A default body's call is the exception: its author's bound names the
+        // pointee, which no `&T` impl answers, so every impl reads it alike.
+        if declared_trait.is_none() {
             let is_ref = matches!(
                 self.tysys.type_table.borrow().get(receiver),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)

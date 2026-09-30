@@ -1510,13 +1510,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the frame [`Self::resolve_trait_decl`] gives the trait's signatures, and
     /// each impl's walk takes the bound its author's reading selected. That
     /// walk decides only this: its diagnostics are each impl's walk's to
-    /// report, and every fact it records is dropped.
+    /// report, and every fact it records is dropped, the declarations it wrote
+    /// against the abstract `Self` included.
     fn abstract_selections(
         &mut self,
         trait_decl: DefId,
         func: &Function,
     ) -> Rc<hashmap::IndexMap<AstId, DefId>> {
-        if let Some(found) = self.abstract_selection_cache.get(&func.id) {
+        if let Some(found) = self.abstract_selection_cache.borrow().get(&func.id) {
             return Rc::clone(found);
         }
         let header = self
@@ -1543,6 +1544,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         let logger = self.logger;
         let _quiet = logger.quiet();
+        let decls = self.sem.decls.clone();
         let ((((), walked), _), _) = self.with_lent_semantics(|this| {
             util::replaced(
                 this,
@@ -1570,12 +1572,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 },
             )
         });
+        self.sem.decls = decls;
         let selections = Rc::new(
             walked
                 .bound_selections
                 .expect("the walk records into the table it was given"),
         );
         self.abstract_selection_cache
+            .borrow_mut()
             .insert(func.id, Rc::clone(&selections));
         selections
     }
