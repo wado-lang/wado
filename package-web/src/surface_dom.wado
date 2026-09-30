@@ -11,6 +11,7 @@ use {
     HtmlElement,
     HtmlInputElement,
     Node,
+    NodeOrString,
     Window,
     DOCUMENT_CLASS,
     EVENT_CLASS,
@@ -687,6 +688,19 @@ impl Element for SurfaceDom {
         let mut html = "";
         self.serialize_children(self.index(*this), &mut html);
         resume html;
+    }
+
+    fn append(&mut self, this: &Element, nodes: List<NodeOrString>) {
+        let parent = self.index(*this);
+        for let item of nodes {
+            let child = match item {
+                AsNode(node) => self.index(node),
+                AsString(text) => self.push(Content::Text(text)),
+            };
+            self.assert_insertable(parent, child);
+            self.append(parent, child);
+        }
+        resume ();
     }
 
     ..trap

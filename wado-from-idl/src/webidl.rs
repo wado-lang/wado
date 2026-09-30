@@ -1,6 +1,8 @@
 //! WebIDL-to-IR transformation, over the webidl2 AST `scripts/webidl/snapshot.mjs`
 //! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-web.md`.
 
+use std::cell::RefCell;
+
 use anyhow::{Result, anyhow, bail};
 use indexmap::{IndexMap, IndexSet};
 use serde::Deserialize;
@@ -8,11 +10,17 @@ use wado_compiler::ast::HandleClasses;
 
 use crate::WadoCodeGenerator;
 use crate::glue;
-use crate::ir::{WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType};
+use crate::ir::{
+    WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType, WadoTypeDef,
+    WadoVariant, WadoVariantCase,
+};
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
 /// The interface of the functions handing out the first handle.
 const GLOBAL_INTERFACE: &str = "global";
+
+/// The interface declaring the variants the slice's unions lower to.
+const TYPES_INTERFACE: &str = "types";
 
 /// The file `snapshot.mjs` writes: the slice's definitions, in webidl2's shape.
 #[derive(Deserialize)]
@@ -134,10 +142,10 @@ pub enum IdlTypeInner {
     Types(Vec<IdlType>),
 }
 
-/// Which way a value crosses the boundary. It decides whether collapsing a
-/// union to its one expressible constituent is lossless: on the way in the
-/// dropped constituents are types the slice cannot build, on the way out they
-/// are values the host may hand back.
+/// Which way a value crosses the boundary. It decides whether dropping a
+/// union's inexpressible constituents is lossless: on the way in they are types
+/// the slice cannot build, on the way out they are values the host may hand
+/// back.
 #[derive(Clone, Copy, PartialEq)]
 enum Flow {
     In,
@@ -153,6 +161,8 @@ pub struct WebIdlOutput {
     pub js: IndexMap<String, JsFunction>,
     /// Each resource's `WebIDL` interface name, keyed by its Wado name.
     pub interfaces: IndexMap<String, String>,
+    /// The variant each union lowered to, keyed by its Wado name.
+    pub unions: IndexMap<String, Union>,
     /// `Interface.member: reason`, in source order.
     pub skipped: Vec<String>,
 }
@@ -192,6 +202,18 @@ pub enum JsMember {
     Global,
     /// An attribute of the `[Global]` object.
     GlobalGet(String),
+}
+
+/// A union's variant, and the ways its values cross.
+#[derive(Debug)]
+pub struct Union {
+    /// Each case's CM name and payload.
+    pub cases: Vec<(String, WadoType)>,
+    /// The guest hands one to the host.
+    pub into_host: bool,
+    /// The host hands one to the guest, which the glue tells apart by
+    /// `typeof` and `instanceof`.
+    pub out_of_host: bool,
 }
 
 /// One interface with its partials and mixins folded in. `defined` is false
@@ -290,6 +312,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
             .values()
             .any(|iface| iface.global)
             .then(|| to_upper_camel_case(&snapshot.module)),
+        unions: RefCell::default(),
     };
 
     let classes = number_classes(&merged)?;
@@ -335,10 +358,33 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         .map(|(name, r)| (r.name.clone(), (*name).to_string()))
         .collect();
     module.resources = resources.into_values().collect();
+    let types_path = lowering.interface_path(TYPES_INTERFACE);
+    let unions = lowering.unions.into_inner();
+    module.types = unions
+        .iter()
+        .map(|(name, union)| {
+            WadoTypeDef::Variant(WadoVariant {
+                name: name.clone(),
+                doc_comment: None,
+                cm_attr: Some(format!("{types_path}#{}", to_kebab_case(name))),
+                cases: union
+                    .cases
+                    .iter()
+                    .map(|(cm_name, ty)| WadoVariantCase {
+                        name: to_upper_camel_case(cm_name),
+                        payload: Some(ty.clone()),
+                        doc_comment: None,
+                        cm_attr: Some(cm_name.clone()),
+                    })
+                    .collect(),
+            })
+        })
+        .collect();
     Ok(WebIdlOutput {
         module,
         js,
         interfaces,
+        unions,
         skipped,
     })
 }
@@ -505,6 +551,8 @@ struct Lowering<'a> {
     /// The interface handing out the first handle, which a callback's body may
     /// perform. `None` without a `[Global]` interface.
     global_interface: Option<String>,
+    /// The unions lowered so far, in the order they were met.
+    unions: RefCell<IndexMap<String, Union>>,
 }
 
 impl Lowering<'_> {
@@ -703,39 +751,126 @@ impl Lowering<'_> {
         ))
     }
 
-    /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
-    /// the one constituent the slice can express; `undefined` in it means nullable.
+    /// The Wado type of a `WebIDL` type, or why the slice has none.
     fn lower_type(&self, ty: &IdlType, flow: Flow) -> std::result::Result<WadoType, String> {
+        self.lower_type_named(ty, flow, None)
+    }
+
+    /// `lower_type`, naming a union after `typedef` where one declares it.
+    fn lower_type_named(
+        &self,
+        ty: &IdlType,
+        flow: Flow,
+        typedef: Option<&str>,
+    ) -> std::result::Result<WadoType, String> {
         if !ty.generic.is_empty() {
             return Err(format!("`{}<…>`", ty.generic));
         }
-        let (inner, nullable) = match &ty.inner {
-            IdlTypeInner::Name(name) => (self.lower_name(name, flow)?, ty.nullable),
+        match &ty.inner {
+            IdlTypeInner::Name(name) => Ok(optional(self.lower_name(name, flow)?, ty.nullable)),
             IdlTypeInner::Types(constituents) => {
-                let mut expressible = Vec::new();
-                let mut reasons = Vec::new();
-                for constituent in constituents.iter().filter(|c| !is_undefined(c)) {
-                    match self.lower_type(constituent, flow) {
-                        Ok(ty) => expressible.push(ty),
-                        Err(reason) => reasons.push(reason),
-                    }
-                }
-                match expressible.len() {
-                    1 if reasons.is_empty() || flow == Flow::In => (),
-                    1 => {
-                        return Err(format!(
-                            "union narrowed in a result: {}",
-                            reasons.join("; ")
-                        ));
-                    }
-                    0 => return Err(format!("union: {}", reasons.join("; "))),
-                    n => return Err(format!("union of {n} expressible types")),
-                }
-                let nullable = ty.nullable || constituents.iter().any(is_undefined);
-                (expressible.pop().unwrap(), nullable)
+                self.lower_union(constituents, ty.nullable, flow, typedef)
             }
+        }
+    }
+
+    /// A union is a variant of the constituents the slice can express, or the
+    /// one such constituent itself; `undefined` in it means nullable.
+    fn lower_union(
+        &self,
+        constituents: &[IdlType],
+        mut nullable: bool,
+        flow: Flow,
+        typedef: Option<&str>,
+    ) -> std::result::Result<WadoType, String> {
+        // Keyed by the case word, so two constituents of one Wado type are one.
+        let mut cases: IndexMap<String, WadoType> = IndexMap::new();
+        let mut reasons = Vec::new();
+        for constituent in constituents {
+            if is_undefined(constituent) {
+                nullable = true;
+                continue;
+            }
+            match self.lower_type(constituent, flow) {
+                Ok(WadoType::Callback { .. }) => reasons.push("a callback in a union".to_string()),
+                Ok(WadoType::Option(inner)) => {
+                    nullable = true;
+                    cases.entry(case_word(&inner)).or_insert(*inner);
+                }
+                Ok(ty) => {
+                    cases.entry(case_word(&ty)).or_insert(ty);
+                }
+                Err(reason) => reasons.push(reason),
+            }
+        }
+        if cases.is_empty() {
+            return Err(format!("union: {}", reasons.join("; ")));
+        }
+        if flow == Flow::Out && !reasons.is_empty() {
+            return Err(format!(
+                "union narrowed in a result: {}",
+                reasons.join("; ")
+            ));
+        }
+        let inner = if cases.len() == 1 {
+            cases.pop().unwrap().1
+        } else {
+            WadoType::Named(self.declare_union(cases, flow, typedef)?)
         };
         Ok(optional(inner, nullable))
+    }
+
+    /// The name of the variant over `cases`, recording which way it crosses.
+    fn declare_union(
+        &self,
+        cases: IndexMap<String, WadoType>,
+        flow: Flow,
+        typedef: Option<&str>,
+    ) -> std::result::Result<String, String> {
+        if flow == Flow::Out {
+            let mut tests: IndexMap<&str, &str> = IndexMap::new();
+            for (word, ty) in &cases {
+                let test = self.js_test(ty);
+                if let Some(first) = test.and_then(|test| tests.insert(test, word)) {
+                    return Err(format!(
+                        "a union in a result whose `{first}` and `{word}` the glue cannot tell apart"
+                    ));
+                }
+                if test.is_none() {
+                    return Err(format!("a union nested in a result's union: `{word}`"));
+                }
+            }
+        }
+        let name = typedef.map_or_else(
+            || cases.keys().cloned().collect::<Vec<_>>().join("Or"),
+            to_upper_camel_case,
+        );
+        let mut unions = self.unions.borrow_mut();
+        let union = unions.entry(name.clone()).or_insert_with(|| Union {
+            cases: cases
+                .into_iter()
+                .map(|(word, ty)| (format!("as-{}", to_kebab_case(&word)), ty))
+                .collect(),
+            into_host: false,
+            out_of_host: false,
+        });
+        match flow {
+            Flow::In => union.into_host = true,
+            Flow::Out => union.out_of_host = true,
+        }
+        Ok(name)
+    }
+
+    /// What `typeof` or `instanceof` tells a value of `ty` by in JavaScript;
+    /// `None` for a union's variant, which has no one test.
+    fn js_test(&self, ty: &WadoType) -> Option<&'static str> {
+        match ty {
+            WadoType::Bool => Some("boolean"),
+            WadoType::String => Some("string"),
+            WadoType::Named(name) if self.unions.borrow().contains_key(name) => None,
+            WadoType::Named(_) => Some("object"),
+            _ => Some("number"),
+        }
     }
 
     fn lower_name(&self, name: &str, flow: Flow) -> std::result::Result<WadoType, String> {
@@ -756,7 +891,7 @@ impl Lowering<'_> {
             _ if self.slice.contains(name) => WadoType::Named(to_upper_camel_case(name)),
             _ => {
                 if let Some(target) = self.typedefs.get(name) {
-                    return self.lower_type(target, flow);
+                    return self.lower_type_named(target, flow, Some(name));
                 }
                 return match self.callbacks.get(name) {
                     Some(signature) => self.lower_callback(signature.clone()?, flow),
@@ -789,7 +924,9 @@ impl Lowering<'_> {
                     return Err(format!("callback argument `{}`: optional", arg.name));
                 }
                 let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
-                if ty.callback_argument_word().is_some() {
+                let is_union =
+                    matches!(&ty, WadoType::Named(name) if self.unions.borrow().contains_key(name));
+                if !is_union && ty.callback_argument_word().is_some() {
                     return Ok(ty);
                 }
                 Err(format!(
@@ -892,6 +1029,18 @@ fn optional(ty: WadoType, wrap: bool) -> WadoType {
         WadoType::Option(_) | WadoType::Callback { .. } => ty,
         ty if wrap => WadoType::Option(Box::new(ty)),
         ty => ty,
+    }
+}
+
+/// What a union's case calls a constituent of type `ty`: `Node`, `String`, `F64`.
+fn case_word(ty: &WadoType) -> String {
+    match ty {
+        WadoType::Named(name) => name.clone(),
+        WadoType::String => "String".to_string(),
+        ty => to_upper_camel_case(
+            ty.primitive_name()
+                .unwrap_or_else(|| unreachable!("the WebIDL frontend admits no {ty:?} in a union")),
+        ),
     }
 }
 

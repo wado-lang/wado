@@ -1,4 +1,4 @@
-use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "./dom.wado";
+use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node, NodeOrString } from "./dom.wado";
 use { SurfaceDom } from "./surface_dom.wado";
 
 test "a fresh document has a body" {
@@ -109,6 +109,34 @@ test "a tree is built by appending" {
         list.remove_child(second);
         assert !list.has_child_nodes();
         assert second.parent_node() == null;
+    };
+}
+
+test "append takes nodes and strings, a string as a text node" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let p = doc.create_element("p", null);
+        let b = doc.create_element("b", null);
+        p.append([
+            NodeOrString::AsString("Hello, "),
+            NodeOrString::AsNode(b),
+            NodeOrString::AsString("!"),
+        ]);
+        b.append([NodeOrString::AsString("Wado")]);
+        assert p.get_html() == "Hello, <b>Wado</b>!";
+        assert p.first_child().unwrap().node_type() == 3;
+        p.append([]);
+        assert p.text_content() == Option::Some("Hello, Wado!");
+    };
+}
+
+#[expect_trap]
+test "a node appended into itself is a hierarchy error, through append too" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let div = Dom::document().create_element("div", null);
+        div.append([NodeOrString::AsNode(div)]);
     };
 }
 

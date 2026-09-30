@@ -12,19 +12,20 @@ covers eight interfaces: `EventTarget`, `Event`, `Node`, `Element`,
 `HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
 
 `wado-from-idl` skips every member it cannot lower and names it on stderr. On
-the current snapshot it skips 570 members:
+the current snapshot it skips 560 members:
 
-| Reason                             | Members | Examples                                               |
-| ---------------------------------- | ------- | ------------------------------------------------------ |
-| An event handler attribute         | 353     | `onclick`, `oninput`                                   |
-| A type outside the slice           | 145     | `NodeList`, `HTMLCollection`, `DOMTokenList`, `any`    |
-| `Promise<T>`                       | 35      | `scroll_to`, `request_fullscreen`                      |
-| `sequence<T>` and `FrozenArray<T>` | 17      | `composed_path`, `get_attribute_names`                 |
-| A union                            | 13      | `append`, `prepend`, `before`, the `inner_html` getter |
-| More than one overload lowers      | 2       | `Window.alert`                                         |
+| Reason                             | Members | Examples                                            |
+| ---------------------------------- | ------- | --------------------------------------------------- |
+| An event handler attribute         | 353     | `onclick`, `oninput`                                |
+| A type outside the slice           | 145     | `NodeList`, `HTMLCollection`, `DOMTokenList`, `any` |
+| `Promise<T>`                       | 35      | `scroll_to`, `request_fullscreen`                   |
+| `sequence<T>` and `FrozenArray<T>` | 17      | `composed_path`, `get_attribute_names`              |
+| A union the slice cannot type      | 3       | the `inner_html` getter, `current_script`           |
+| More than one overload lowers      | 2       | `Window.alert`                                      |
 
-A variadic argument lowers, but `append` and its siblings take
-`(Node or DOMString)`, so they wait on the union.
+A union lowers to a `variant`, so `append` and its siblings take a
+`List<NodeOrString>`. The getter of `(TrustedHTML or DOMString)` is skipped:
+the host may hand back a `TrustedHTML`, which the slice cannot type.
 
 ## Order
 
@@ -49,7 +50,7 @@ lower is then available to each interface the slice adds.
 
 - [ ] Merge overloads into one member where they differ by trailing optional
       arguments (`Window.alert()` and `alert(message)`)
-- [ ] Lower a union of two or more typable constituents to a `variant`, named
+- [x] Lower a union of two or more typable constituents to a `variant`, named
       after its typedef where it has one (`(Node or DOMString)`)
 
 ### 4. Promises

@@ -1,5 +1,23 @@
 #![generated(by = "wado-from-idl", sources = ["package-web/idl/dom.webidl.json"])]
 
+#[cm("wado-lang:web/types#node-or-string")]
+pub variant NodeOrString {
+    #[cm("as-node")]
+    AsNode(Node),
+    #[cm("as-string")]
+    AsString(String),
+}
+
+#[cm("wado-lang:web/types#bool-or-f64-or-string")]
+pub variant BoolOrF64OrString {
+    #[cm("as-bool")]
+    AsBool(bool),
+    #[cm("as-f64")]
+    AsF64(f64),
+    #[cm("as-string")]
+    AsString(String),
+}
+
 #[cm("wado-lang:web/event-target", linearity = "unrestricted", classes = "0..=6")]
 pub resource EventTarget {
     #[cm("wado-lang:web/event-target#new")]
@@ -331,6 +349,15 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#child-element-count")]
     #[cm_params("self")]
     fn child_element_count(&self) -> u32;
+    #[cm("wado-lang:web/element#prepend")]
+    #[cm_params("self", "nodes")]
+    fn prepend(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/element#append")]
+    #[cm_params("self", "nodes")]
+    fn append(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/element#replace-children")]
+    #[cm_params("self", "nodes")]
+    fn replace_children(&self, nodes: List<NodeOrString>);
     #[cm("wado-lang:web/element#move-before")]
     #[cm_params("self", "node", "child")]
     fn move_before(&self, node: Node, child: Option<Node>);
@@ -343,6 +370,15 @@ pub resource Element extends Node {
     #[cm("wado-lang:web/element#next-element-sibling")]
     #[cm_params("self")]
     fn next_element_sibling(&self) -> Option<Element>;
+    #[cm("wado-lang:web/element#before")]
+    #[cm_params("self", "nodes")]
+    fn before(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/element#after")]
+    #[cm_params("self", "nodes")]
+    fn after(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/element#replace-with")]
+    #[cm_params("self", "nodes")]
+    fn replace_with(&self, nodes: List<NodeOrString>);
     #[cm("wado-lang:web/element#remove")]
     #[cm_params("self")]
     fn remove(&self);
@@ -677,6 +713,12 @@ pub resource HtmlElement extends Element {
     #[cm("wado-lang:web/html-element#set-dir")]
     #[cm_params("self", "value")]
     fn set_dir(&self, value: String);
+    #[cm("wado-lang:web/html-element#hidden")]
+    #[cm_params("self")]
+    fn hidden(&self) -> Option<BoolOrF64OrString>;
+    #[cm("wado-lang:web/html-element#set-hidden")]
+    #[cm_params("self", "value")]
+    fn set_hidden(&self, value: Option<BoolOrF64OrString>);
     #[cm("wado-lang:web/html-element#inert")]
     #[cm_params("self")]
     fn inert(&self) -> bool;
@@ -1323,6 +1365,15 @@ pub resource Document extends Node {
     #[cm("wado-lang:web/document#child-element-count")]
     #[cm_params("self")]
     fn child_element_count(&self) -> u32;
+    #[cm("wado-lang:web/document#prepend")]
+    #[cm_params("self", "nodes")]
+    fn prepend(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/document#append")]
+    #[cm_params("self", "nodes")]
+    fn append(&self, nodes: List<NodeOrString>);
+    #[cm("wado-lang:web/document#replace-children")]
+    #[cm_params("self", "nodes")]
+    fn replace_children(&self, nodes: List<NodeOrString>);
     #[cm("wado-lang:web/document#move-before")]
     #[cm_params("self", "node", "child")]
     fn move_before(&self, node: Node, child: Option<Node>);

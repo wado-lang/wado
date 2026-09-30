@@ -5,11 +5,12 @@ use std::cmp::Reverse;
 use std::fmt::Write;
 
 use heck::ToLowerCamelCase;
+use indexmap::IndexMap;
 use wado_compiler::ast::HandleClasses;
 use wado_compiler::name::callback_export_name;
 
 use crate::ir::{WadoFunction, WadoType};
-use crate::webidl::{JsFunction, JsMember, WebIdlOutput};
+use crate::webidl::{JsFunction, JsMember, Union, WebIdlOutput};
 
 /// Handles are interned, so `==` on two of them is identity. The `$` prefix keeps
 /// the runtime's names apart from every `WebIDL` argument name.
@@ -143,6 +144,9 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
     }
     out.push_str("];\n");
     out.push_str(RUNTIME);
+    for (name, union) in &output.unions {
+        write_union(&mut out, name, union, output);
+    }
 
     let interfaces = module
         .resources
@@ -160,14 +164,69 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
             .expect("a `<package>/<interface>` path");
         writeln!(out, "\nexport const {} = {{", name.to_lower_camel_case()).unwrap();
         for function in functions {
-            write_function(&mut out, function, &output.js[&function.cm_attr]);
+            write_function(
+                &mut out,
+                function,
+                &output.js[&function.cm_attr],
+                &output.unions,
+            );
         }
         out.push_str("};\n");
     }
     out
 }
 
-fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
+/// The functions converting a union's variant, in jco's `{ tag, val }` form, to
+/// the DOM's value and back, each where a member needs it.
+fn write_union(out: &mut String, name: &str, union: &Union, output: &WebIdlOutput) {
+    let unions = &output.unions;
+    if union.into_host {
+        write!(
+            out,
+            "\nconst $from{name} = ({{ tag, val }}) => {{\n  switch (tag) {{\n"
+        )
+        .unwrap();
+        for (tag, ty) in &union.cases {
+            let value = from_guest(ty, "val", unions);
+            writeln!(out, "    case {tag:?}:\n      return {value};").unwrap();
+        }
+        out.push_str("  }\n};\n");
+    }
+    if union.out_of_host {
+        writeln!(out, "\nfunction $to{name}(value) {{").unwrap();
+        for (tag, ty) in &union.cases {
+            let test = match ty {
+                WadoType::Bool => "typeof value === \"boolean\"".to_string(),
+                WadoType::String => "typeof value === \"string\"".to_string(),
+                WadoType::Named(resource) => {
+                    format!(
+                        "value instanceof globalThis.{}",
+                        output.interfaces[resource]
+                    )
+                }
+                _ => "typeof value === \"number\"".to_string(),
+            };
+            let value = to_guest(ty, "value", unions);
+            writeln!(
+                out,
+                "  if ({test}) {{\n    return {{ tag: {tag:?}, val: {value} }};\n  }}"
+            )
+            .unwrap();
+        }
+        writeln!(
+            out,
+            "  throw new TypeError(`${{value}} is none of {name}'s types`);\n}}"
+        )
+        .unwrap();
+    }
+}
+
+fn write_function(
+    out: &mut String,
+    function: &WadoFunction,
+    js: &JsFunction,
+    unions: &IndexMap<String, Union>,
+) {
     let (_, name) = function
         .cm_attr
         .split_once('#')
@@ -188,7 +247,7 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
         .params
         .iter()
         .zip(&params)
-        .map(|(p, name)| from_guest(&p.ty, name))
+        .map(|(p, name)| from_guest(&p.ty, name, unions))
         .collect();
     if js.variadic {
         let last = args.last_mut().expect("a variadic argument");
@@ -208,7 +267,7 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
         JsMember::GlobalGet(attribute) => format!("globalThis.{attribute}"),
     };
     let body = match &function.return_type {
-        Some(ty) => format!("return {};", to_guest(ty, &value)),
+        Some(ty) => format!("return {};", to_guest(ty, &value, unions)),
         None => format!("{value};"),
     };
     writeln!(
@@ -221,11 +280,11 @@ fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
 }
 
 /// `value`, as jco lifts it from the guest, in the form the DOM takes.
-fn from_guest(ty: &WadoType, value: &str) -> String {
+fn from_guest(ty: &WadoType, value: &str, unions: &IndexMap<String, Union>) -> String {
     match ty {
-        WadoType::Callback { params, .. } => callback(params, value),
+        WadoType::Callback { params, .. } => callback(params, value, unions),
         WadoType::List(inner) => {
-            let element = from_guest(inner, "x");
+            let element = from_guest(inner, "x", unions);
             if element == "x" {
                 value.to_string()
             } else {
@@ -234,18 +293,18 @@ fn from_guest(ty: &WadoType, value: &str) -> String {
                 format!("Array.from({value}, (x) => {element})")
             }
         }
-        ty => apply(conversion(ty).map(|(to_dom, _)| to_dom), value),
+        ty => apply(conversion(ty, unions).map(|(to_dom, _)| to_dom), value),
     }
 }
 
 /// The function calling back the closure `key` names, which takes `params`.
-fn callback(params: &[WadoType], key: &str) -> String {
+fn callback(params: &[WadoType], key: &str, unions: &IndexMap<String, Union>) -> String {
     let export = callback_export_name(params.iter().map(argument_word)).to_lower_camel_case();
     let args: Vec<String> = (0..params.len()).map(|i| format!(", a{i}")).collect();
     let lifted: Vec<String> = params
         .iter()
         .enumerate()
-        .map(|(i, ty)| format!(", {}", to_guest(ty, &format!("a{i}"))))
+        .map(|(i, ty)| format!(", {}", to_guest(ty, &format!("a{i}"), unions)))
         .collect();
     format!(
         "$callback({key}, (key{}) => $callbackExport.{export}(key{}))",
@@ -260,34 +319,37 @@ fn argument_word(ty: &WadoType) -> &'static str {
 }
 
 /// `value`, as the DOM returns it, in the form jco lowers to the guest.
-fn to_guest(ty: &WadoType, value: &str) -> String {
-    apply(conversion(ty).map(|(_, to_guest)| to_guest), value)
+fn to_guest(ty: &WadoType, value: &str, unions: &IndexMap<String, Union>) -> String {
+    apply(conversion(ty, unions).map(|(_, to_guest)| to_guest), value)
 }
 
-fn apply(function: Option<&str>, value: &str) -> String {
+fn apply(function: Option<String>, value: &str) -> String {
     function.map_or_else(|| value.to_string(), |f| format!("{f}({value})"))
 }
 
 /// The functions converting a `ty` to the DOM and back, where jco's own form
 /// differs. A `None` crosses as `undefined`, which the DOM reads as `null`.
-fn conversion(ty: &WadoType) -> Option<(&'static str, &'static str)> {
+fn conversion(ty: &WadoType, unions: &IndexMap<String, Union>) -> Option<(String, String)> {
     match ty {
-        WadoType::Option(inner) => Conversion::of(inner).map(|c| c.functions(true)),
-        ty => Conversion::of(ty).map(|c| c.functions(false)),
+        WadoType::Option(inner) => Conversion::of(inner, unions).map(|c| c.functions(true)),
+        ty => Conversion::of(ty, unions).map(|c| c.functions(false)),
     }
 }
 
 #[derive(Clone, Copy)]
-enum Conversion {
+enum Conversion<'a> {
     Handle,
     BigInt,
+    /// The variant a union lowers to, by its Wado name.
+    Union(&'a str),
 }
 
-impl Conversion {
-    fn of(ty: &WadoType) -> Option<Self> {
+impl<'a> Conversion<'a> {
+    fn of(ty: &'a WadoType, unions: &IndexMap<String, Union>) -> Option<Self> {
         match ty {
+            WadoType::Named(name) if unions.contains_key(name) => Some(Self::Union(name)),
             WadoType::Named(_) => Some(Self::Handle),
-            WadoType::Borrow(inner) => Self::of(inner),
+            WadoType::Borrow(inner) => Self::of(inner, unions),
             WadoType::I64 | WadoType::U64 => Some(Self::BigInt),
             WadoType::Bool
             | WadoType::I8
@@ -315,12 +377,20 @@ impl Conversion {
         }
     }
 
-    const fn functions(self, optional: bool) -> (&'static str, &'static str) {
-        match (self, optional) {
+    fn functions(self, optional: bool) -> (String, String) {
+        let (to_dom, to_guest) = match (self, optional) {
             (Self::Handle, false) => ("$object", "$handle"),
             (Self::Handle, true) => ("$someObject", "$nullableHandle"),
             (Self::BigInt, false) => ("Number", "BigInt"),
             (Self::BigInt, true) => ("$someNumber", "$nullableBigInt"),
-        }
+            (Self::Union(name), false) => return (format!("$from{name}"), format!("$to{name}")),
+            (Self::Union(name), true) => {
+                return (
+                    format!("$some($from{name})"),
+                    format!("$nullable($to{name})"),
+                );
+            }
+        };
+        (to_dom.to_string(), to_guest.to_string())
     }
 }

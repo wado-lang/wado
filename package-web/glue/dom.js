@@ -61,6 +61,39 @@ function $callback(key, call) {
   return f;
 }
 
+const $fromNodeOrString = ({ tag, val }) => {
+  switch (tag) {
+    case "as-node":
+      return $object(val);
+    case "as-string":
+      return val;
+  }
+};
+
+const $fromBoolOrF64OrString = ({ tag, val }) => {
+  switch (tag) {
+    case "as-bool":
+      return val;
+    case "as-f64":
+      return val;
+    case "as-string":
+      return val;
+  }
+};
+
+function $toBoolOrF64OrString(value) {
+  if (typeof value === "boolean") {
+    return { tag: "as-bool", val: value };
+  }
+  if (typeof value === "number") {
+    return { tag: "as-f64", val: value };
+  }
+  if (typeof value === "string") {
+    return { tag: "as-string", val: value };
+  }
+  throw new TypeError(`${value} is none of BoolOrF64OrString's types`);
+}
+
 export const eventTarget = {
   new() {
     return $handle(new globalThis.EventTarget());
@@ -389,6 +422,15 @@ export const element = {
   childElementCount(self) {
     return $object(self).childElementCount;
   },
+  prepend(self, nodes) {
+    $object(self).prepend(...Array.from(nodes, (x) => $fromNodeOrString(x)));
+  },
+  append(self, nodes) {
+    $object(self).append(...Array.from(nodes, (x) => $fromNodeOrString(x)));
+  },
+  replaceChildren(self, nodes) {
+    $object(self).replaceChildren(...Array.from(nodes, (x) => $fromNodeOrString(x)));
+  },
   moveBefore(self, node, child) {
     $object(self).moveBefore($object(node), $someObject(child));
   },
@@ -400,6 +442,15 @@ export const element = {
   },
   nextElementSibling(self) {
     return $nullableHandle($object(self).nextElementSibling);
+  },
+  before(self, nodes) {
+    $object(self).before(...Array.from(nodes, (x) => $fromNodeOrString(x)));
+  },
+  after(self, nodes) {
+    $object(self).after(...Array.from(nodes, (x) => $fromNodeOrString(x)));
+  },
+  replaceWith(self, nodes) {
+    $object(self).replaceWith(...Array.from(nodes, (x) => $fromNodeOrString(x)));
   },
   remove(self) {
     $object(self).remove();
@@ -733,6 +784,12 @@ export const htmlElement = {
   },
   setDir(self, value) {
     $object(self).dir = value;
+  },
+  hidden(self) {
+    return $nullable($toBoolOrF64OrString)($object(self).hidden);
+  },
+  setHidden(self, value) {
+    $object(self).hidden = $some($fromBoolOrF64OrString)(value);
   },
   inert(self) {
     return $object(self).inert;
@@ -1378,6 +1435,15 @@ export const document = {
   },
   childElementCount(self) {
     return $object(self).childElementCount;
+  },
+  prepend(self, nodes) {
+    $object(self).prepend(...Array.from(nodes, (x) => $fromNodeOrString(x)));
+  },
+  append(self, nodes) {
+    $object(self).append(...Array.from(nodes, (x) => $fromNodeOrString(x)));
+  },
+  replaceChildren(self, nodes) {
+    $object(self).replaceChildren(...Array.from(nodes, (x) => $fromNodeOrString(x)));
   },
   moveBefore(self, node, child) {
     $object(self).moveBefore($object(node), $someObject(child));

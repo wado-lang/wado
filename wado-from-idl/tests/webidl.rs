@@ -10,6 +10,7 @@ struct Definitions {
     mixins: Vec<String>,
     includes: Vec<String>,
     callbacks: Vec<String>,
+    typedefs: Vec<String>,
 }
 
 impl Definitions {
@@ -29,7 +30,12 @@ impl Definitions {
             self.interfaces.join(", "),
             self.mixins.join(", "),
             self.includes.join(", "),
-            typedef("Timestamp", &plain("double")),
+            [typedef("Timestamp", &plain("double"))]
+                .iter()
+                .chain(&self.typedefs)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
             self.callbacks.join(", "),
         );
         serde_json::from_str(&json).expect("the test snapshot should parse")
@@ -312,7 +318,7 @@ fn the_global_yields_the_dom_effect_with_its_resource_typed_attributes() {
 #[test]
 fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
     let promise = r#"{"type": "return-type", "extAttrs": [], "generic": "Promise", "nullable": false, "union": false, "idlType": [{"type": "return-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "undefined"}]}"#;
-    let union = r#"{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": true, "idlType": [{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "DOMString"}, {"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "Node"}]}"#;
+    let union = r#"{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": true, "idlType": [{"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "NamedNodeMap"}, {"type": "argument-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "Attr"}]}"#;
     let members = [
         attribute("attributes", &plain("NamedNodeMap"), true),
         operation("requestFullscreen", promise, &[], ""),
@@ -369,7 +375,7 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
         [
             "Element.attributes: `NamedNodeMap` is outside the slice",
             "Element.request_fullscreen: `Promise<…>`",
-            "Element.append: `nodes`: union of 2 expressible types",
+            "Element.append: `nodes`: union: `NamedNodeMap` is outside the slice; `Attr` is outside the slice",
             "Element.prepend: `nodes`: `NodeList` is outside the slice",
             "Element.alert: 2 overloads",
             "Element.(getter): getter operation",
@@ -553,11 +559,6 @@ fn a_union_collapses_only_where_the_guest_supplies_the_value() {
                 true,
             ),
             attribute(
-                "hidden",
-                &union(&[plain("boolean"), plain("DOMString")], false),
-                false,
-            ),
-            attribute(
                 "script",
                 &union(
                     &[plain("HTMLScriptElement"), plain("SVGScriptElement")],
@@ -579,10 +580,118 @@ fn a_union_collapses_only_where_the_guest_supplies_the_value() {
         skipped,
         [
             "Element.inner_html: union narrowed in a result: `TrustedHTML` is outside the slice",
-            "Element.hidden: union of 2 expressible types",
             "Element.script: union: `HTMLScriptElement` is outside the slice; `SVGScriptElement` is outside the slice",
         ]
     );
+}
+
+#[test]
+fn a_union_of_typable_constituents_is_a_variant() {
+    let mut defs = chain();
+    defs.typedefs = vec![typedef(
+        "NodeOrElement",
+        &union(&[plain("Node"), plain("Element"), plain("Text")], false),
+    )];
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "append",
+                &plain("undefined"),
+                &[variadic(
+                    "nodes",
+                    &union(&[plain("Node"), plain("DOMString")], false),
+                )],
+                "",
+            ),
+            // The typedef names it, and `Text` is nothing lost on the way in.
+            operation(
+                "adopt",
+                &plain("boolean"),
+                &[argument("other", &plain("NodeOrElement"), false, "null")],
+                "",
+            ),
+            // On the way out, `typeof` tells the constituents apart.
+            attribute(
+                "hidden",
+                &union(
+                    &[
+                        plain("boolean"),
+                        plain("unrestricted double"),
+                        plain("DOMString"),
+                    ],
+                    true,
+                ),
+                false,
+            ),
+            attribute(
+                "owner",
+                &union(&[plain("Node"), plain("Element")], false),
+                true,
+            ),
+            // Two constituents of one Wado type are one.
+            operation(
+                "label",
+                &plain("undefined"),
+                &[argument(
+                    "value",
+                    &union(&[plain("DOMString"), plain("USVString")], false),
+                    false,
+                    "null",
+                )],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains(
+            "#[cm(\"wado-lang:web/types#node-or-string\")]\npub variant NodeOrString {\n    #[cm(\"as-node\")]\n    AsNode(Node),\n    #[cm(\"as-string\")]\n    AsString(String),\n}"
+        ),
+        "{code}"
+    );
+    assert!(
+        code.contains("pub variant NodeOrElement {\n    #[cm(\"as-node\")]\n    AsNode(Node),\n    #[cm(\"as-element\")]\n    AsElement(Element),\n}"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn append(&self, nodes: List<NodeOrString>);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn adopt(&self, other: NodeOrElement) -> bool;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn hidden(&self) -> Option<BoolOrF64OrString>;"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn set_hidden(&self, value: Option<BoolOrF64OrString>);"),
+        "{code}"
+    );
+    assert!(code.contains("fn label(&self, value: String);"), "{code}");
+    assert_eq!(
+        skipped,
+        [
+            "Element.owner: a union in a result whose `Node` and `Element` the glue cannot tell apart"
+        ]
+    );
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    for expected in [
+        "$object(self).append(...Array.from(nodes, (x) => $fromNodeOrString(x)));",
+        "const $fromNodeOrString = ({ tag, val }) => {\n  switch (tag) {\n    case \"as-node\":\n      return $object(val);\n    case \"as-string\":\n      return val;\n  }\n};",
+        "return $nullable($toBoolOrF64OrString)($object(self).hidden);",
+        "$object(self).hidden = $some($fromBoolOrF64OrString)(value);",
+        "  if (typeof value === \"number\") {\n    return { tag: \"as-f64\", val: value };\n  }",
+    ] {
+        assert!(glue.contains(expected), "{expected}\n---\n{glue}");
+    }
+    // A union only the guest supplies needs no way back.
+    assert!(!glue.contains("$toNodeOrString"), "{glue}");
 }
 
 #[test]
