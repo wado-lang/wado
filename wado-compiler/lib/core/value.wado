@@ -237,10 +237,9 @@ fn object_key(scalar: Value) -> Result<String, DeserializeError> {
         return Result::Ok(s);
     }
     let mut text = String::new();
-    let spelled = scalar.serialize(&mut TextKeySerializer { out: &mut text });
-    if spelled matches { Err(_) } {
-        return Result::Err(DeserializeError::non_scalar_key(-1));
-    }
+    scalar.serialize(&mut TextKeySerializer { out: &mut text }).map_err(
+        |_: SerializeError| DeserializeError::non_scalar_key(-1),
+    )?;
     return Result::Ok(text);
 }
 

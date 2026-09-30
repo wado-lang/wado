@@ -519,6 +519,13 @@ impl DefTable {
         self.get(def).visibility
     }
 
+    /// Whether code in `module` may name `def`, as its visibility allows.
+    #[must_use]
+    pub fn nameable_from(&self, def: DefId, module: &ModuleSource) -> bool {
+        self.visibility(def)
+            .reachable_from(self.module(def).same_package(module))
+    }
+
     #[must_use]
     pub fn span(&self, def: DefId) -> Option<Span> {
         self.get(def).span

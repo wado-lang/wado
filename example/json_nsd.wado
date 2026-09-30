@@ -123,8 +123,7 @@ impl SerializeVariant for NsdVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         self.buf.push_str(",");
         let mut ser = NsdSerializer { buf: self.buf };
-        let r = value.serialize::<NsdSerializer>(&mut ser);
-        return r;
+        return value.serialize::<NsdSerializer>(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -562,13 +561,7 @@ impl Deserializer for NsdDeserializer {
 /// Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
 /// `trailing_char`, when `Some`, is appended after the value.
 pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError> {
-    let mut buf: String = "";
-    let mut ser = NsdSerializer { buf: &mut buf };
-    value.serialize::<NsdSerializer>(&mut ser)?;
-    if let Some(c) = trailing_char {
-        buf.push(c);
-    }
-    return Result::Ok(buf.as_bytes());
+    return Result::Ok(to_string(value, trailing_char)?.as_bytes());
 }
 
 /// Serializes a value to a JSON NSD string. Convenience over `to_bytes` for

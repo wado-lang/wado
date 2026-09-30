@@ -94,7 +94,7 @@ pub(super) enum StaticLookup {
     /// call site reports the import that would enable it.
     OutOfScope {
         receiver: String,
-        traits: Vec<String>,
+        traits: Vec<DefId>,
     },
     NotStatic,
 }
@@ -392,15 +392,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn out_of_scope_lookup(&self, receiver_name: &str, out_of_scope: &[Candidate]) -> StaticLookup {
         let defs = self.tysys.resolutions.defs();
         let frame = self.frame_module();
-        let mut traits: Vec<String> = Vec::new();
+        let mut traits: Vec<DefId> = Vec::new();
         for supply in out_of_scope.iter().filter_map(|c| c.supply.as_ref()) {
             let trait_ = supply.trait_decl;
-            let reachable = defs
-                .visibility(trait_)
-                .reachable_from(defs.module(trait_).same_package(frame));
-            let name = defs.name(trait_).to_string();
-            if reachable && !traits.contains(&name) {
-                traits.push(name);
+            if defs.nameable_from(trait_, frame) && !traits.contains(&trait_) {
+                traits.push(trait_);
             }
         }
         if traits.is_empty() {
@@ -613,7 +609,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             StaticLookup::OutOfScope { receiver, traits } => TypeError::TraitNotImported {
                 method: method_name.to_string(),
                 receiver: receiver.clone(),
-                traits: traits.clone(),
+                traits: {
+                    let defs = self.tysys.resolutions.defs();
+                    traits.iter().map(|&t| defs.name(t).to_string()).collect()
+                },
                 span,
             },
             StaticLookup::Found(_) | StaticLookup::Overloaded { .. } | StaticLookup::NotStatic => {

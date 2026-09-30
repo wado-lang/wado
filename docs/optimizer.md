@@ -92,8 +92,8 @@ Allocation and aggregates:
   back: at its only call site, or at its only site in a loop.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
   own.
-- `sroa` — split a struct, tuple, or array local used only for element access
-  into scalar locals, or a local bound to a borrow of a struct or tuple
+- `sroa` — split into scalar locals a struct, tuple, or array local used only
+  for element access, or a local bound to a borrow of a struct or tuple
   literal. The highest-impact WasmGC pass.
 - `container_sroa` — turn a `List` of structs or tuples into one list per field.
 - `sroa_param` — pass the one field a callee reads instead of the struct.

@@ -201,7 +201,8 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
             decomposed.insert(c.local_index);
         } else if soft_escaped.contains(&c.local_index) && c.kind != AggKind::Array && !c.borrowed {
             // An array's reads are not the shape `reconstruct_aggregate` rebuilds,
-            // so an escape it cannot see through leaves it whole.
+            // and a borrowed literal's escape needs the reference, which no
+            // reconstructed literal is; either escape leaves it whole.
             decomposed.insert(c.local_index);
             reconstruct_set.insert(c.local_index);
         } else {
@@ -254,13 +255,19 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         }
     }
 
-    let mut candidate_mut: IndexMap<u32, bool> = IndexMap::default();
+    let mut decomposed_lets: IndexMap<u32, DecomposedLet> = IndexMap::default();
     let mut reconstruct_info: IndexMap<u32, ReconstructInfo> = IndexMap::default();
     for candidate in &candidates {
         if !decomposed.contains(&candidate.local_index) {
             continue;
         }
-        candidate_mut.insert(candidate.local_index, candidate.is_mut);
+        decomposed_lets.insert(
+            candidate.local_index,
+            DecomposedLet {
+                literal: candidate.literal,
+                is_mut: candidate.is_mut,
+            },
+        );
         if reconstruct_set.contains(&candidate.local_index) {
             reconstruct_info.insert(
                 candidate.local_index,
@@ -286,7 +293,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     let ctx = Rewrite {
         decomposed: &decomposed,
         field_map: &field_map,
-        candidate_mut: &candidate_mut,
+        decomposed_lets: &decomposed_lets,
         reconstruct_info: &reconstruct_info,
         arrays: &arrays,
         aliases: &aliases,
@@ -946,12 +953,19 @@ fn callee_stores_param_at(
 // Rewrite (engine-routed)
 // -----------------------------------------------------------------------
 
+/// What expanding a decomposed candidate's `Let` reads off the candidate.
+#[derive(Clone, Copy)]
+struct DecomposedLet {
+    literal: ExprId,
+    is_mut: bool,
+}
+
 struct Rewrite<'a> {
     /// Every decomposed candidate: the non-escaping ones plus the soft-escaped
     /// ones [`Rewrite::reconstruct_info`] re-materializes.
     decomposed: &'a IndexSet<u32>,
     field_map: &'a IndexMap<(u32, u32), FieldSlot>,
-    candidate_mut: &'a IndexMap<u32, bool>,
+    decomposed_lets: &'a IndexMap<u32, DecomposedLet>,
     reconstruct_info: &'a IndexMap<u32, ReconstructInfo>,
     /// The array candidates, their borrow aliases, and the length slot each
     /// `array_len` read becomes.
@@ -1003,17 +1017,7 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
         };
         if let Some(local_idx) = candidate {
             let span = engine.body.stmts[stmt].span;
-            let is_mut = ctx.candidate_mut.get(&local_idx).copied().unwrap_or(false);
-            let StmtKind::Let { value, .. } = &engine.body.stmts[stmt].kind else {
-                unreachable!("candidate must be Let statement");
-            };
-            let value = *value;
-            // `candidate_from_stmt` only accepts a skeleton literal, or a borrow of one.
-            let Some(value_e) = value.as_expr() else {
-                unreachable!("SROA candidate requires a skeleton literal value");
-            };
-            let literal = borrowed_projected_literal(engine.body, value_e)
-                .map_or(value_e, |(literal, _)| literal);
+            let DecomposedLet { literal, is_mut } = ctx.decomposed_lets[&local_idx];
             expand_struct_let(
                 engine,
                 literal,

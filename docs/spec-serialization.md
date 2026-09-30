@@ -57,10 +57,7 @@ A format is self-describing (SD) when the input names what it holds, such as
 self-describing format resolves each key to a field by its wire name. A
 non-self-describing (NSD) format leaves the reader to know what the input holds,
 as [`core:args`](#command-line-arguments-coreargs) does. The same `Deserialize`
-impl reads both. `example/json_nsd.wado` is an NSD JSON format written outside
-the standard library: a struct is an array of its fields in declaration order,
-a unit variant case is its discriminant, and a payload case is
-`[discriminant, payload]`.
+impl reads both.
 
 Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 

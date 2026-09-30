@@ -4192,18 +4192,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|info| info.type_param_type_ids.clone())
                 .unwrap_or_default();
             let subst = SubstitutionContext::new().bind(&slots, &type_args);
-            let mut fields: Vec<ResolvedField> = if type_args.is_empty() {
-                fields
-            } else {
-                fields
-                    .into_iter()
-                    .map(|mut field| {
-                        field.type_id = subst
-                            .substitute(field.type_id, &mut self.tysys.type_table.borrow_mut());
-                        field
-                    })
-                    .collect()
-            };
+            let mut fields: Vec<ResolvedField> = fields
+                .into_iter()
+                .map(|mut field| {
+                    field.type_id =
+                        subst.substitute(field.type_id, &mut self.tysys.type_table.borrow_mut());
+                    field
+                })
+                .collect();
 
             // Second pass: coerce and check what the first pass deferred, now
             // that the type arguments are known. `[10, 20, 30]` in

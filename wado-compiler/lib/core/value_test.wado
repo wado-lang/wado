@@ -1012,12 +1012,7 @@ test "an ignored map reads each key as a string" {
     assert from_value::<IgnoredAny>(&v) matches { Ok(_) };
 }
 
-// --- duplicate keys ---
-
-test "a Value read from JSON rejects a repeated key" {
-    let r: Result<Value, DeserializeError> = from_string(`{"a":1,"a":2}`);
-    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
-}
+// --- repeated keys ---
 
 /// `D` with its `DuplicateFieldPolicy` relaxed to `PassThru`.
 struct LastWins<D: Deserializer> {

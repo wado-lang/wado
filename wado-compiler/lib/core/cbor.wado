@@ -2006,10 +2006,10 @@ impl Deserializer for CborDeserializer {
                     self.skip_item(self.depth)?;
                     return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
                 },
-                // major == MAJOR_SIMPLE (7), the only remaining 3-bit value.
                 _ => {
                     let start = self.pos;
                     let [smajor, ai, arg, indef] = self.read_head()?;
+                    assert smajor == MAJOR_SIMPLE;
                     if indef {
                         builtin::cold_path();
                         return Result::Err(self.unexpected_break());

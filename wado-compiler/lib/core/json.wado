@@ -159,8 +159,8 @@ fn write_json_i32(buf: &mut String, v: i32) -> Result<(), SerializeError> {
     return Result::Ok(());
 }
 
-/// Writes `v` as a JSON string of its display form, which for a number or a
-/// `bool` holds no byte JSON escapes.
+/// Writes the integer `v` as a JSON string of its digits, which hold no byte
+/// JSON escapes.
 fn write_quoted_display<T: Display>(buf: &mut String, v: &T) -> Result<(), SerializeError> {
     buf.push('"');
     buf.push_display(v);

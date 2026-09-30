@@ -418,8 +418,7 @@ reused via `pub` functions where practical.
 
 The groundwork, the `core:cbor` format itself (encoder, decoder, canonical
 encoding), the typed `core:temporal` date/time mapping and map keys of any key
-type are complete. The remaining items are lossy CBOR→JSON conversion and CWT,
-which is planned but not started.
+type are complete. The remaining items are lossy CBOR→JSON conversion and CWT.
 
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
 - [x] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
@@ -431,7 +430,7 @@ which is planned but not started.
 - [x] compiler: emit the new `lookup` signature from the struct-deserialize
       synthesizer (reads the key via the generic `Slice<u8>` ops,
       monomorphized at `u8`)
-- [x] `core:json`/`core:json_nsd`: bytes-primary API
+- [x] `core:json`: bytes-primary API
       (`from_bytes`/`to_bytes`/`to_bytes_pretty`/`to_bytes_canonical`); the
       deserializer scans a `ByteSlice` view (no byte copy, UTF-8 validation
       localized to string tokens); `core:router` shares the bytes `FieldSchema`.
@@ -475,9 +474,7 @@ which is planned but not started.
       `undefined`/non-finite→`null`); the default still errors.
 - [ ] CWT (RFC 8392): a claims set is read and written with its integer labels
       (`iss` is 1, `sub` is 2) through a type that names each claim, and keeps
-      those labels through CBOR → `Value` → CBOR. Today a struct field's wire
-      key is a text string, so a claims set is only a map, and `Value` turns
-      its keys into text (below).
+      those labels through CBOR → `Value` → CBOR.
 
 ## Known gaps
 

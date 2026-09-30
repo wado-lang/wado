@@ -246,7 +246,7 @@ pub fn report_duplicate_field<K: Inspect>(policy: DuplicateFieldPolicy, key: &K)
         },
         DuplicateFieldPolicy::Warn => {
             builtin::cold_path();
-            log_stderr(`warning: duplicate field: ${key:?}`);
+            log_stderr(`warning: ${DeserializeError::duplicate_field(key)}`);
         },
         DuplicateFieldPolicy::PassThru => {
         },

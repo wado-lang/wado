@@ -639,7 +639,8 @@ impl TypeSystem {
     }
 
     /// A `Param::method()` call, where `Param` is the type parameter bound to
-    /// `type_id`. Reached for `Self` too: a blanket's `Self` *is* its receiver.
+    /// `type_id`. Reached for `Self` too, in a trait's own frame, where `Self` is
+    /// the slot the trait bounds.
     fn callee_ident_for_type_param<'a>(
         &self,
         prefix: &str,

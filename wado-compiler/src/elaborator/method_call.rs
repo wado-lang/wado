@@ -429,6 +429,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
         // `Receiver::Ref` without re-inspecting the string.
         let mut matched_ref_kind: Option<RefKind> = None;
+        let is_ref = matches!(
+            self.tysys.type_table.borrow().get(receiver),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        );
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
@@ -436,44 +440,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A default body's call whose author reached the bound's subject
         // through a reference is the exception: no `&T` impl answers what the
         // author wrote, so every impl reads it alike.
-        if !selection.is_some_and(|s| s.through_ref) {
-            let is_ref = matches!(
-                self.tysys.type_table.borrow().get(receiver),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        if is_ref && !selection.is_some_and(|s| s.through_ref) {
+            let ref_kind =
+                RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone())
+                    .expect("ref classify");
+            let result = self.find_trait_method_for_type(
+                &ImplTargetKey::Ref(ref_kind),
+                method_name,
+                receiver_type_args_for_trait.as_deref(),
+                Some(base_type_id),
+                span,
+                required_trait,
+                Some(&mut probe),
             );
-            if is_ref {
-                let ref_kind =
-                    RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone())
-                        .expect("ref classify");
-                let result = self.find_trait_method_for_type(
-                    &ImplTargetKey::Ref(ref_kind),
-                    method_name,
-                    receiver_type_args_for_trait.as_deref(),
-                    Some(base_type_id),
-                    span,
-                    required_trait,
-                    Some(&mut probe),
-                );
-                // Only use ref-type impls that target a concrete container type
-                // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
-                // (e.g., impl Inspect for &T where the inner type is just a type param).
-                if let Some(trait_match) = result
-                    && !trait_match.is_blanket_ref_impl
-                {
-                    let owner =
-                        trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
-                    matched_impl_decl = trait_match.impl_struct_fq.head().def();
-                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
-                    matched_ref_kind = Some(ref_kind);
-                    trait_name = Some(trait_match.trait_name);
-                    let mut info = trait_match.method_info;
-                    info.is_ref_impl = true;
-                    info.owner = owner;
-                    method_info = Some(info);
-                    trait_impl_module_source = Some(trait_match.impl_module_source);
-                    blanket_type_param = trait_match.blanket_type_param;
-                    blanket_binder = trait_match.blanket_binder;
-                }
+            // Only use ref-type impls that target a concrete container type
+            // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
+            // (e.g., impl Inspect for &T where the inner type is just a type param).
+            if let Some(trait_match) = result
+                && !trait_match.is_blanket_ref_impl
+            {
+                let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
+                matched_impl_decl = trait_match.impl_struct_fq.head().def();
+                trait_impl_struct_name = Some(trait_match.impl_struct_fq);
+                matched_ref_kind = Some(ref_kind);
+                trait_name = Some(trait_match.trait_name);
+                let mut info = trait_match.method_info;
+                info.is_ref_impl = true;
+                info.owner = owner;
+                method_info = Some(info);
+                trait_impl_module_source = Some(trait_match.impl_module_source);
+                blanket_type_param = trait_match.blanket_type_param;
+                blanket_binder = trait_match.blanket_binder;
             }
         }
 
@@ -557,7 +554,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !bounds.is_empty()
                 && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
                     call_id,
-                    receiver != base_type_id,
+                    is_ref,
                     &bounds,
                     method_name,
                     base_type_id,
