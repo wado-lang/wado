@@ -5751,6 +5751,52 @@ pub enum TirPattern {
     },
 }
 
+impl TirPattern {
+    /// The local this pattern itself declares, with its type: a binding's, or
+    /// the one a narrowing holds the scrutinee in. Sub-patterns are not asked.
+    pub fn declared_local(&self) -> Option<(u32, TypeId)> {
+        match self {
+            TirPattern::Binding {
+                local_index,
+                type_id,
+                ..
+            }
+            | TirPattern::Narrow {
+                local_index,
+                type_id,
+                ..
+            } => Some((*local_index, *type_id)),
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::Or(_)
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => None,
+        }
+    }
+
+    /// The index of the local [`Self::declared_local`] names, to renumber it.
+    pub fn declared_local_index_mut(&mut self) -> Option<&mut u32> {
+        match self {
+            TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
+                Some(local_index)
+            }
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::Or(_)
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TirStructPatternField {
     pub field_name: String,

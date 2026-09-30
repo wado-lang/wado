@@ -1531,13 +1531,8 @@ impl TirRefVisitor for LocalCollector<'_> {
     /// right type for the slot; otherwise `wir_build` falls back to a
     /// placeholder and downstream code emits ref→i32 type-mismatch Wasm.
     fn visit_pattern(&mut self, pattern: &TirPattern) {
-        if let TirPattern::Binding {
-            local_index,
-            type_id,
-            ..
-        } = pattern
-        {
-            self.locals.push((*local_index, *type_id));
+        if let Some(local) = pattern.declared_local() {
+            self.locals.push(local);
         }
         self.walk_pattern(pattern);
     }

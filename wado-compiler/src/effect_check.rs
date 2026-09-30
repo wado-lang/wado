@@ -15,7 +15,7 @@ use crate::tir::{EffectRef, FunctionRef, ResolvedType, TemplateId, TypeId, TypeS
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, Attribute, Block, CmImport, EffectHandlerBinding, Expr, Function,
+    self, AstId, AstVisitor, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
     ImplBlock, Item, Pattern, RestClause, Stmt, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
@@ -983,7 +983,13 @@ fn check_function_effects_sem(
     // `Stream`, etc.
     let mut current = expand_through_closure(&current, index.closure);
     if let Some(ann) = annotations {
-        add_narrowed_resources(body, ann, &scan, index.closure, &mut current);
+        add_narrowed_resources(
+            |v| ast::walk_block(v, body),
+            ann,
+            &scan,
+            index.closure,
+            &mut current,
+        );
     }
 
     // Parameter name → type id (aligned with the recorded signature types),
@@ -1140,14 +1146,14 @@ fn add_signature_resources(
 /// Union into `held` the resources the body's type patterns narrow to. A
 /// narrowing hands out a held ancestor's handle, as an operation returning it would.
 fn add_narrowed_resources(
-    body: &Block,
+    walk: impl FnOnce(&mut TypePatternSites),
     annotations: &TypeAnnotations,
     scan: &ResourceScan<'_>,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     held: &mut IndexSet<EffectRef>,
 ) {
     let mut sites = TypePatternSites::default();
-    ast::walk_block(&mut sites, body);
+    walk(&mut sites);
     let mut targets: Vec<DefId> = sites
         .0
         .into_iter()
@@ -1221,11 +1227,18 @@ fn starts_async_call(
 }
 
 /// The ids a body's type patterns are recorded under: each `p: T`, and each
-/// `let … else` whose annotation is one.
+/// `let … else` whose annotation is one. A closure is a body of its own, so the
+/// search stops at one.
 #[derive(Default)]
 struct TypePatternSites(Vec<AstId>);
 
 impl AstVisitor for TypePatternSites {
+    fn visit_expr(&mut self, expr: &Expr) {
+        if !matches!(expr, Expr::Closure(_)) {
+            ast::walk_expr(self, expr);
+        }
+    }
+
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if let Stmt::Let(let_stmt) = stmt
             && let_stmt.else_block.is_some()
@@ -1835,7 +1848,22 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }) {
                     declared.extend(self.index.waiting.iter().cloned());
                 }
-                let carried = expand_through_closure(&declared, self.index.closure);
+                let mut carried = expand_through_closure(&declared, self.index.closure);
+                if let Some(ann) = self.annotations {
+                    let scan = ResourceScan {
+                        tt: &self.sem.types,
+                        resolutions: self.index.resolutions,
+                        members: self.index.members,
+                    };
+                    carried.extend(self.current.iter().cloned());
+                    add_narrowed_resources(
+                        |v| v.visit_expr(&closure.body),
+                        ann,
+                        &scan,
+                        self.index.closure,
+                        &mut carried,
+                    );
+                }
                 self.walk_granted(carried, |walker| ast::walk_expr(walker, expr));
                 return;
             }

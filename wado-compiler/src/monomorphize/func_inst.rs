@@ -343,7 +343,7 @@ impl TirMutVisitor for LocalIndexRewriter {
     }
 
     fn visit_pattern(&mut self, pattern: &mut TirPattern) {
-        if let TirPattern::Binding { local_index, .. } = pattern
+        if let Some(local_index) = pattern.declared_local_index_mut()
             && *local_index == self.old_idx
         {
             *local_index = self.new_idx;
@@ -377,8 +377,8 @@ impl TirRefVisitor for LocalCollector {
     }
 
     fn visit_pattern(&mut self, pattern: &TirPattern) {
-        if let TirPattern::Binding { local_index, .. } = pattern {
-            self.locals.push(*local_index);
+        if let Some((local_index, _)) = pattern.declared_local() {
+            self.locals.push(local_index);
         }
         self.walk_pattern(pattern);
     }
@@ -429,15 +429,11 @@ impl TirRefVisitor for LocalTypeFinder {
     }
 
     fn visit_pattern(&mut self, pattern: &TirPattern) {
-        if let TirPattern::Binding {
-            local_index,
-            type_id,
-            ..
-        } = pattern
-            && *local_index == self.target
+        if let Some((local_index, type_id)) = pattern.declared_local()
+            && local_index == self.target
             && self.found.is_none()
         {
-            self.found = Some(*type_id);
+            self.found = Some(type_id);
         }
         self.walk_pattern(pattern);
     }
