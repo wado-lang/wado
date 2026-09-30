@@ -708,7 +708,8 @@ a spec violation: the input may be perfectly well-formed.
 
 What to do when the wire repeats a field or key. A repeat is how two
 readers of the same bytes are made to disagree, so rejecting is the
-default; `Warn` and `PassThru` both keep the last occurrence.
+default. `Warn` and `PassThru` both keep the last value, and a map key
+or set element as first read.
 
 #### `Error`
 
