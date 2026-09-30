@@ -1,7 +1,8 @@
 //! Scalar Replacement of Aggregates: a struct, tuple or array used only for
 //! element access — `let s = S { x: e1, y: e2 }; let a = s.x;` — is decomposed
 //! into per-element `$sroa_s_x_N` locals, and copy propagation then removes the
-//! trivial copies.
+//! trivial copies. A local bound to `&S { … }` or `&mut S { … }` splits the
+//! same way: the literal is a place only that local reaches.
 
 use std::cell::{Cell, RefCell};
 
@@ -44,6 +45,10 @@ struct SroaCandidate {
     local_name: String,
     /// The `StructLiteral` / `TupleLiteral` / `ArrayLiteral` the `Let` binds.
     literal: ExprId,
+    /// The `Let` binds a borrow of the literal, `&Lit` or `&mut Lit`: a fresh
+    /// place only this local reaches. A use the slots cannot answer needs the
+    /// reference, which no reconstructed literal is.
+    borrowed: bool,
     /// Per-field info: (`field_name`, `field_type_id`).
     fields: Vec<(String, TypeId)>,
     is_mut: bool,
@@ -194,7 +199,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         }
         if !uses.escaped.contains(&c.local_index) {
             decomposed.insert(c.local_index);
-        } else if soft_escaped.contains(&c.local_index) && c.kind != AggKind::Array {
+        } else if soft_escaped.contains(&c.local_index) && c.kind != AggKind::Array && !c.borrowed {
             // An array's reads are not the shape `reconstruct_aggregate` rebuilds,
             // so an escape it cannot see through leaves it whole.
             decomposed.insert(c.local_index);
@@ -390,8 +395,12 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
     };
     let (name, local_index, is_mut, value) = (name.clone(), *local_index, *is_mut, *value);
     // A promoted constant binding is not an aggregate to scalarize.
-    let Some(value_e) = value.as_expr() else {
+    let Some(bound) = value.as_expr() else {
         return;
+    };
+    let (value_e, borrowed, is_mut) = match borrowed_projected_literal(body, bound) {
+        Some((literal, is_mut_ref)) => (literal, true, is_mut_ref),
+        None => (bound, false, is_mut),
     };
     let aggregate_type_id = body.exprs[value_e].type_id;
     match &body.exprs[value_e].kind {
@@ -421,6 +430,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
                 local_index,
                 local_name: name,
                 literal: value_e,
+                borrowed,
                 fields: field_info,
                 is_mut,
                 aggregate_type_id,
@@ -442,6 +452,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
                 local_index,
                 local_name: name,
                 literal: value_e,
+                borrowed,
                 fields: field_info,
                 is_mut,
                 aggregate_type_id,
@@ -451,6 +462,26 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
         }
         _ => {}
     }
+}
+
+/// `&Lit` / `&mut Lit` over a struct or tuple literal: the literal and whether
+/// the borrow is mutable, which is whether its fields may be written. What
+/// passing `&mut S { … }` to an inlined callee binds its parameter to.
+fn borrowed_projected_literal(body: &Body, expr: ExprId) -> Option<(ExprId, bool)> {
+    let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind else {
+        return None;
+    };
+    let is_mut_ref = match op {
+        NirUnaryOp::Ref => false,
+        NirUnaryOp::MutRef => true,
+        NirUnaryOp::Not | NirUnaryOp::Neg | NirUnaryOp::BitNot | NirUnaryOp::Deref => return None,
+    };
+    let literal = inner.as_expr()?;
+    matches!(
+        body.exprs[literal].kind,
+        ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+    )
+    .then_some((literal, is_mut_ref))
 }
 
 // -----------------------------------------------------------------------
@@ -980,13 +1011,15 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
                 unreachable!("candidate must be Let statement");
             };
             let value = *value;
-            // `candidate_from_stmt` only accepts a skeleton `StructLiteral` value.
+            // `candidate_from_stmt` only accepts a skeleton literal, or a borrow of one.
             let Some(value_e) = value.as_expr() else {
-                unreachable!("SROA candidate requires a skeleton StructLiteral value");
+                unreachable!("SROA candidate requires a skeleton literal value");
             };
+            let literal = borrowed_projected_literal(engine.body, value_e)
+                .map_or(value_e, |(literal, _)| literal);
             expand_struct_let(
                 engine,
-                value_e,
+                literal,
                 local_idx,
                 is_mut,
                 span,

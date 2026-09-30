@@ -1,0 +1,75 @@
+// Test: a `&mut` to a struct literal scalarizes as a named literal does
+//
+// Passing `&mut Writer { … }` to a function the inliner takes leaves
+// `let w = &mut Writer { … }`. The literal is a fresh place only `w` reaches,
+// so it is the same program as binding the literal first and borrowing that,
+// which `sroa` scalarizes. `core:json`'s map-key writer has the shape.
+//
+// `put` writes `count` through the reference and `put_twice` reads it back, so
+// a rewrite that copied the literal to each use would print 1 for every line.
+
+use { println, Stdout } from "core:cli";
+
+struct Writer {
+    out: &mut String,
+    count: i32,
+}
+
+fn put(w: &mut Writer, c: char) {
+    w.out.push(c);
+    w.count += 1;
+}
+
+fn put_twice(w: &mut Writer, c: char) -> i32 {
+    put(w, c);
+    put(w, c);
+    return w.count;
+}
+
+#[inline("never")]
+fn fill(s: &mut String, cs: &List<char>) -> i32 {
+    let mut n = 0;
+    for let mut i = 0; i < cs.len(); i += 1 {
+        n += put_twice(&mut Writer { out: s, count: 0 }, cs[i]);
+    }
+    return n;
+}
+
+// `bump` keeps the reference, so the literal must stay whole for it to write.
+struct Tally {
+    n: i32,
+}
+
+#[inline("never")]
+fn bump(t: &mut Tally) {
+    t.n += 1;
+}
+
+fn bump_twice(t: &mut Tally) -> i32 {
+    bump(t);
+    bump(t);
+    return t.n;
+}
+
+#[inline("never")]
+fn tally(start: i32) -> i32 {
+    return bump_twice(&mut Tally { n: start });
+}
+
+export fn run() with Stdout {
+    let mut s = "";
+    let cs: List<char> = ['a', 'b', 'c'];
+    let n = fill(&mut s, &cs);
+    println(`${s} ${n} ${tally(5)}`);
+}
+
+__DATA__
+{
+    "stdout": "aabbcc 6 7\n",
+    "wir_expect:O2": [
+        "opt_sroa_mut_ref_to_literal.wado//Tally"
+    ],
+    "wir_not_expect:O2": [
+        "opt_sroa_mut_ref_to_literal.wado//Writer"
+    ]
+}

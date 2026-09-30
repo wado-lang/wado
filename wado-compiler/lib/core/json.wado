@@ -390,19 +390,11 @@ fn write_pretty_newline_and_indent<S: AsStrSlice>(buf: &mut String, indent: S, d
     }
 }
 
-/// Serializes one nested value into `buf`, wrapping and unwrapping the
-/// `JsonSerializer` the compact container writers share.
+/// Serializes one nested value into `buf` as compact JSON, for the compact
+/// container writers.
 fn serialize_into<T: Serialize>(buf: &mut String, value: &T) -> Result<(), SerializeError> {
     let mut ser = JsonSerializer { buf: buf };
     return value.serialize(&mut ser);
-}
-
-/// `serialize_into` for an object key. Building the key serializer inline at
-/// the call instead stops the optimizer from holding `buf`'s fields in locals
-/// across a map's entry loop, which cost json-catalog serialize 9%.
-fn serialize_key_into<T: Serialize>(buf: &mut String, key: &T) -> Result<(), SerializeError> {
-    let mut ser = JsonKeySerializer { buf: buf };
-    return key.serialize(&mut ser);
 }
 
 impl SerializeSeq for JsonSeqSerializer {
@@ -426,7 +418,7 @@ impl SerializeMap for JsonMapSerializer {
         if self.count > 0 {
             self.buf.push_str(",");
         }
-        let r = serialize_key_into(self.buf, key);
+        let r = key.serialize(&mut JsonKeySerializer { buf: self.buf });
         self.buf.push_str(":");
         return r;
     }
@@ -693,7 +685,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
             self.buf.push_str(",");
         }
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth);
-        let r = serialize_key_into(self.buf, key);
+        let r = key.serialize(&mut JsonKeySerializer { buf: self.buf });
         self.buf.push_str(": ");
         return r;
     }
@@ -2663,7 +2655,7 @@ impl SerializeSeq for CanonicalSeqSerializer {
 impl SerializeMap for CanonicalMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         let mut kbuf = String::with_capacity(16);
-        serialize_key_into(&mut kbuf, key)?;
+        key.serialize(&mut JsonKeySerializer { buf: &mut kbuf })?;
         self.pending_key = kbuf;
         return Result::Ok(());
     }
