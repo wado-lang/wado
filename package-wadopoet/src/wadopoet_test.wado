@@ -1,5 +1,7 @@
 use {
     CodeWriter,
+    CallStmt,
+    CallForm,
     FieldSpec,
     StructSpec,
     VariantSpec,
@@ -153,6 +155,107 @@ test "manual indent/dedent" {
     w.dedent();
     w.line("outer again");
     assert w.to_string() == "outer\n    inner\nouter again\n";
+}
+
+/// A private unit function `name(p: i32)` whose body `body` writes.
+fn unit_fn(w: &mut CodeWriter, name: String, prunable: bool, body: fn(&mut CodeWriter)) {
+    let mut f = FnSpec::new(name);
+    f.add_param("p", "i32");
+    if prunable {
+        f.set_prunable();
+    }
+    f.emit_begin(w);
+    body(w);
+    w.end();
+    w.blank();
+}
+
+fn call_of(callee: String, args: List<String>, form: CallForm = CallForm::Discard) -> CallStmt {
+    return CallStmt { form, callee, args };
+}
+
+test "append indents what it splices to the current depth" {
+    let mut inner = CodeWriter::new();
+    inner.begin("if c");
+    inner.call(call_of("f", ["p"]));
+    inner.end();
+    let mut w = CodeWriter::new();
+    w.begin("fn g(p: i32)");
+    w.append(&inner);
+    w.ret();
+    w.end();
+    assert w.to_string() == "fn g(p: i32) {\n    if c {\n        f(p);\n    }\n    return;\n}\n", `got: ${w.to_string()}`;
+}
+
+test "prune drops a prunable function nothing kept calls, and what only it references" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "kept", false, |b| {
+        b.line("used(p);");
+        b.note("used");
+    });
+    unit_fn(&mut w, "used", true, |b| b.ret());
+    unit_fn(&mut w, "dead", true, |b| b.call(call_of("dead_callee", ["p"])));
+    unit_fn(&mut w, "dead_callee", true, |b| b.ret());
+    w.prune();
+    assert w.to_string() == "fn kept(p: i32) {\n    used(p);\n}\n\nfn used(p: i32) {\n    return;\n}\n\n", `got: ${w.to_string(
+    )}`;
+}
+
+test "prune inlines a one-statement body where its parameters are passed" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "outer", false, |b| b.call(call_of("one", ["p"])));
+    unit_fn(&mut w, "one", true, |b| {
+        b.line("take(p);");
+        b.note("TABLE");
+        b.ret();
+    });
+    w.prune();
+    assert w.to_string() == "fn outer(p: i32) {\n    take(p);\n}\n\n", `got: ${w.to_string()}`;
+    assert w.references().contains("TABLE");
+}
+
+test "prune forwards a call through a body that only calls, with its pre-statements" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "outer", false, |b| b.call(call_of("helper", ["p"], CallForm::Return)));
+    unit_fn(&mut w, "helper", true, |b| {
+        b.call(CallStmt {
+            pre: ["p.site = 3;"],
+            callee: "target",
+            args: ["p", "7"],
+        });
+        b.ret();
+    });
+    unit_fn(&mut w, "target", false, |b| b.ret());
+    w.prune();
+    let expected = "fn outer(p: i32) {\n    p.site = 3;\n    return target(p, 7);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "prune renames a call to a function returning another's result on its own parameters" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "outer", false, |b| b.call(call_of("alias", ["q"], CallForm::Bind("let r = "))));
+    unit_fn(&mut w, "alias", true, |b| b.call(call_of("target", ["p"], CallForm::Return)));
+    unit_fn(&mut w, "target", false, |b| b.ret());
+    w.prune();
+    let expected = "fn outer(p: i32) {\n    let r = target(q);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "prune keeps a call whose arguments a forwarded body cannot take" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "outer", false, |b| b.call(call_of("helper", ["q"])));
+    unit_fn(&mut w, "helper", true, |b| {
+        b.call(CallStmt {
+            pre: ["p.site = 3;"],
+            callee: "target",
+            args: ["p"],
+        });
+        b.ret();
+    });
+    unit_fn(&mut w, "target", false, |b| b.ret());
+    w.prune();
+    assert w.to_string().contains("helper(q);");
+    assert w.to_string().contains("fn helper(");
 }
 
 

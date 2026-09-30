@@ -1,13 +1,90 @@
 use { ReflectTemplate } from "core:prelude";
+use { TreeMap, TreeSet } from "core:collections";
 
-/// Indentation and blocks for generated Wado source. The builder specs
-/// (`StructSpec`, `VariantSpec`, `FnSpec`, …) construct declarations around it;
-/// function bodies stay string-based.
+/// What a call does with the callee's result.
+pub variant CallForm {
+    /// `callee(args);`
+    Discard,
+    /// `return callee(args);`
+    Return,
+    /// The prefix given, then the call: `let x = callee(args);`, `pos = …`.
+    Bind(String),
+}
+
+/// A call statement kept apart from the text around it, so `prune` can see
+/// which function it calls and with what.
+pub struct CallStmt {
+    /// Statements that run just before the call, each on its own line. They
+    /// travel with the call when `prune` forwards it.
+    pub pre: List<String> = [],
+    pub form: CallForm = CallForm::Discard,
+    pub callee: String,
+    pub args: List<String>,
+}
+
+/// Lines written as text. What a pass may ask of them is counted as they are
+/// written, never read back from `text`.
+struct TextSeg {
+    text: String,
+    /// Extra indentation levels, applied at every line start when printed. A
+    /// segment spliced in by `append` carries the level it landed at.
+    offset: i32 = 0,
+    /// Statement lines: `line` calls, block openers and closers.
+    lines: i32 = 0,
+    blocks: bool = false,
+    /// Written by `write` or `raw`, whose line structure is not counted.
+    opaque: bool = false,
+    /// The byte range of the first `line` call's text.
+    first: [i32, i32] = [0, 0],
+    /// Names the text references, for `prune`.
+    refs: List<String> = [],
+}
+
+struct FnOpenSeg {
+    spec: FnSpec,
+    depth: i32,
+}
+
+/// The brace closing a function body.
+struct CloseSeg {
+    depth: i32,
+    blank_after: bool = false,
+}
+
+struct CallSeg {
+    call: CallStmt,
+    depth: i32,
+}
+
+/// One statement a forwarded function contributed at a call site.
+struct LineSeg {
+    text: String,
+    depth: i32,
+    refs: List<String>,
+}
+
+variant Seg {
+    Text(TextSeg),
+    FnOpen(FnOpenSeg),
+    Close(CloseSeg),
+    Call(CallSeg),
+    Line(LineSeg),
+    /// `return;` at the depth given.
+    Return(i32),
+}
+
+/// Generated Wado source: indentation and blocks for the text, and the
+/// functions, calls and references within it held apart, so `prune` can forward
+/// and drop functions before anything is printed. The builder specs
+/// (`StructSpec`, `VariantSpec`, `FnSpec`, …) construct declarations around it.
 pub struct CodeWriter {
-    buf: String,
+    segs: List<Seg>,
+    cur: TextSeg,
     indent_level: i32,
     fresh_line: bool,
     id_counter: i32,
+    /// Per open block, whether it is a function body `FnSpec::emit_begin` opened.
+    fn_blocks: List<bool> = [],
     hoisted_names: List<[String, String]> = [],
     hoisted: String = "",
 }
@@ -21,7 +98,8 @@ impl CodeWriter {
 
     pub fn with_capacity(initial: i32) -> CodeWriter {
         return CodeWriter {
-            buf: String::with_capacity(initial),
+            segs: [],
+            cur: TextSeg { text: String::with_capacity(initial) },
             indent_level: 0,
             fresh_line: true,
             id_counter: 0,
@@ -30,16 +108,17 @@ impl CodeWriter {
 
     /// Write text with auto-indentation at line starts.
     pub fn write<S: AsStrSlice>(&mut self, text: S) {
+        self.cur.opaque = true;
         for let c of text.chars() {
             if c == '\n' {
-                self.buf.push('\n');
+                self.cur.text.push('\n');
                 self.fresh_line = true;
             } else {
                 if self.fresh_line {
                     self.write_indent();
                     self.fresh_line = false;
                 }
-                self.buf.push(c);
+                self.cur.text.push(c);
             }
         }
     }
@@ -47,54 +126,135 @@ impl CodeWriter {
     /// Write a complete line (auto-indented, with trailing newline).
     pub fn line<S: AsStrSlice>(&mut self, text: S) {
         self.write_indent();
-        self.buf.push_str(text);
-        self.buf.push('\n');
+        if self.cur.lines == 0 {
+            let start = self.cur.text.len();
+            self.cur.first = [start, start + text.len()];
+        }
+        self.cur.lines += 1;
+        self.cur.text.push_str(text);
+        self.cur.text.push('\n');
         self.fresh_line = true;
     }
 
     /// Emit a blank line.
     pub fn blank(&mut self) {
-        self.buf.push('\n');
+        let n = self.segs.len();
+        if n > 0 && self.cur.text.is_empty() && self.cur.refs.is_empty() {
+            if let Close(c) = self.segs[n - 1] {
+                self.segs[n - 1] = Seg::Close(CloseSeg { depth: c.depth, blank_after: true });
+                self.fresh_line = true;
+                return;
+            }
+        }
+        self.cur.text.push('\n');
         self.fresh_line = true;
     }
 
     /// Begin a block: emits "opener {" and increases indentation.
     pub fn begin<S: AsStrSlice>(&mut self, opener: S) {
         self.write_indent();
-        self.buf.push_str(opener);
-        self.buf.push_str(" {\n");
+        self.cur.text.push_str(opener);
+        self.cur.text.push_str(" {\n");
+        self.cur.lines += 1;
+        self.cur.blocks = true;
         self.fresh_line = true;
         self.indent_level += 1;
+        self.fn_blocks.push(false);
     }
 
     /// End a block: decreases indentation and emits "}".
     pub fn end(&mut self) {
         self.indent_level -= 1;
+        if self.fn_blocks.pop().unwrap_or(false) {
+            self.flush_text();
+            self.segs.push(Seg::Close(CloseSeg { depth: self.indent_level }));
+            self.fresh_line = true;
+            return;
+        }
         self.write_indent();
-        self.buf.push_str("}\n");
+        self.cur.text.push_str("}\n");
+        self.cur.lines += 1;
+        self.cur.blocks = true;
         self.fresh_line = true;
     }
 
     /// End a block with a trailing suffix, e.g. "," or "\n".
     pub fn end_with<S: AsStrSlice>(&mut self, suffix: S) {
         self.indent_level -= 1;
+        assert !self.fn_blocks.pop().unwrap_or(false), "CodeWriter: a function body closes with `end`";
         self.write_indent();
-        self.buf.push('}');
-        self.buf.push_str(suffix);
-        self.buf.push('\n');
+        self.cur.text.push('}');
+        self.cur.text.push_str(suffix);
+        self.cur.text.push('\n');
+        self.cur.lines += 1;
+        self.cur.blocks = true;
         self.fresh_line = true;
     }
 
     /// Close the current block and open a new one: "} opener {".
     /// Useful for else-if chains: `w.else_begin("else if cond")`.
     pub fn else_begin<S: AsStrSlice>(&mut self, opener: S) {
+        assert !self.fn_blocks.last().unwrap_or(false), "CodeWriter: a function body has no else";
         self.indent_level -= 1;
         self.write_indent();
-        self.buf.push_str("} ");
-        self.buf.push_str(opener);
-        self.buf.push_str(" {\n");
+        self.cur.text.push_str("} ");
+        self.cur.text.push_str(opener);
+        self.cur.text.push_str(" {\n");
+        self.cur.lines += 1;
+        self.cur.blocks = true;
         self.fresh_line = true;
         self.indent_level += 1;
+    }
+
+    /// A call statement at the current depth.
+    pub fn call(&mut self, call: CallStmt) {
+        self.flush_text();
+        self.segs.push(Seg::Call(CallSeg { call, depth: self.indent_level }));
+        self.fresh_line = true;
+    }
+
+    /// `return;` at the current depth.
+    pub fn ret(&mut self) {
+        self.flush_text();
+        self.segs.push(Seg::Return(self.indent_level));
+        self.fresh_line = true;
+    }
+
+    /// Record that the text here references `name`, which keeps a function or
+    /// global of that name through `prune`.
+    pub fn note<S: AsStrSlice>(&mut self, name: S) {
+        self.cur.refs.push(name.to_string());
+    }
+
+    /// Splice in what `other` wrote, indented to the current depth.
+    pub fn append(&mut self, other: &CodeWriter) {
+        assert other.indent_level == 0, `CodeWriter: appending an unbalanced writer (level=${other.indent_level})`;
+        assert other.hoisted.is_empty(), "CodeWriter: an appended writer holds a hoisted definition never written";
+        self.flush_text();
+        let d = self.indent_level;
+        for let seg of &other.segs {
+            self.segs.push(seg.shifted(d));
+        }
+        if !other.cur.text.is_empty() || !other.cur.refs.is_empty() {
+            self.segs.push(Seg::Text(other.cur).shifted(d));
+        }
+        self.fresh_line = true;
+    }
+
+    fn open_fn(&mut self, spec: &FnSpec) {
+        self.flush_text();
+        self.segs.push(Seg::FnOpen(FnOpenSeg { spec: *spec, depth: self.indent_level }));
+        self.fresh_line = true;
+        self.indent_level += 1;
+        self.fn_blocks.push(true);
+    }
+
+    fn flush_text(&mut self) {
+        if self.cur.text.is_empty() && self.cur.refs.is_empty() {
+            return;
+        }
+        self.segs.push(Seg::Text(self.cur));
+        self.cur = TextSeg { text: String::new() };
     }
 
     /// Increase indentation level manually.
@@ -140,7 +300,8 @@ impl CodeWriter {
 
     /// Append raw text with no indentation handling.
     pub fn raw<S: AsStrSlice>(&mut self, text: S) {
-        self.buf.push_str(text);
+        self.cur.opaque = true;
+        self.cur.text.push_str(text);
         if text.len() > 0 {
             self.fresh_line = text.as_str_slice().ends_with("\n");
         }
@@ -150,13 +311,418 @@ impl CodeWriter {
     pub fn to_string(&self) -> String {
         assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level=${self.indent_level})`;
         assert self.hoisted.is_empty(), "CodeWriter: a hoisted definition was never written";
-        return self.buf;
+        if self.segs.is_empty() {
+            return self.cur.text;
+        }
+        let mut out = String::with_capacity(65536);
+        for let seg of &self.segs {
+            seg.print(&mut out);
+        }
+        Seg::Text(self.cur).print(&mut out);
+        return out;
+    }
+
+    /// Forward calls through functions that only forward, then drop each
+    /// function `FnSpec::set_prunable` marked that nothing kept calls or
+    /// `note`s. Everything else written at the top level is kept, and what it
+    /// references.
+    ///
+    /// A prunable function forwards when its body, apart from `note`d names, is
+    /// one call returned, one call then `return;`, or one statement line then
+    /// `return;`. A call to it passing its own parameters by name becomes that
+    /// body, the call's statements and the callee's `pre` included. A call
+    /// passing anything else is renamed to the inner callee instead, where the
+    /// body forwards every parameter in order and runs nothing before.
+    pub fn prune(&mut self) {
+        self.flush_text();
+        for let mut round = 0; round < MAX_FORWARD_ROUNDS; round += 1 {
+            if !self.forward_calls() {
+                break;
+            }
+        }
+        self.drop_unreached();
+    }
+
+    /// Every name the text `note`s or a call statement calls.
+    pub fn references(&self) -> TreeSet<String> {
+        let mut names = TreeSet::<String>::new();
+        for let seg of &self.segs {
+            seg.collect_refs(&mut names);
+        }
+        for let r of &self.cur.refs {
+            names.insert(*r);
+        }
+        return names;
     }
 
     fn write_indent(&mut self) {
         for let mut i = 0; i < self.indent_level; i += 1 {
-            self.buf.push_str("    ");
+            self.cur.text.push_str("    ");
         }
+    }
+
+    /// The top-level function items, in order.
+    fn items(&self) -> List<Item> {
+        let mut items: List<Item> = [];
+        let mut opened_at: Option<i32> = null;
+        for let mut i = 0; i < self.segs.len(); i += 1 {
+            match &self.segs[i] {
+                FnOpen(f) && f.depth == 0 => {
+                    opened_at = Option::Some(i);
+                },
+                Close(c) && c.depth == 0 => {
+                    let Some(start) = opened_at else {
+                        panic("CodeWriter: a function body closes that never opened");
+                    };
+                    let FnOpen(f) = &self.segs[start] else {
+                        unreachable();
+                    };
+                    items.push(Item { spec: f.spec, start, end: i });
+                    opened_at = null;
+                },
+                _ => {
+                },
+            }
+        }
+        return items;
+    }
+
+    /// One round of forwarding. Whether any call changed.
+    fn forward_calls(&mut self) -> bool {
+        let items = self.items();
+        let mut forwards = TreeMap::<String, Forward>::new();
+        let mut specs = TreeMap::<String, FnSpec>::new();
+        for let item of &items {
+            specs[item.spec.name] = item.spec;
+            if item.spec.prunable {
+                if let Some(fw) = self.forward_of(item) {
+                    forwards[item.spec.name] = fw;
+                }
+            }
+        }
+        if forwards.is_empty() {
+            return false;
+        }
+        let mut changed = false;
+        let mut out: List<Seg> = [];
+        for let seg of &self.segs {
+            let Call(site) = seg else {
+                out.push(*seg);
+                continue;
+            };
+            let Some(fw) = forwards.get_str(&site.call.callee) else {
+                out.push(*seg);
+                continue;
+            };
+            let Some(spec) = specs.get_str(&site.call.callee) else {
+                unreachable();
+            };
+            if forward_site(&mut out, site, &spec, &fw, &specs) {
+                changed = true;
+            } else {
+                out.push(*seg);
+            }
+        }
+        self.segs = out;
+        return changed;
+    }
+
+    /// What a call to `item` can run instead, or `null`.
+    fn forward_of(&self, item: &Item) -> Option<Forward> {
+        let mut refs: List<String> = [];
+        let mut body: List<Seg> = [];
+        for let mut i = item.start + 1; i < item.end; i += 1 {
+            let seg = &self.segs[i];
+            if let Text(t) = seg {
+                refs.extend(&t.refs);
+                if t.text.is_empty() {
+                    continue;
+                }
+            }
+            body.push(*seg);
+        }
+        if body.len() == 1 {
+            if let Call(c) = &body[0] {
+                if c.call.form matches { Return } {
+                    return Option::Some(Forward { kind: ForwardKind::Call(c.call), refs });
+                }
+            }
+            return null;
+        }
+        if body.len() != 2 || !body[1] matches { Return(_) } {
+            return null;
+        }
+        return match &body[0] {
+            Call(c) && c.call.form matches { Discard } => Option::Some(
+                Forward { kind: ForwardKind::Call(c.call), refs },
+            ),
+            Text(t) && t.lines == 1 && !t.blocks && !t.opaque => Option::Some(
+                Forward { kind: ForwardKind::Stmt(t.text.substr_bytes(t.first.0, t.first.1)), refs },
+            ),
+            _ => null,
+        };
+    }
+
+    /// Drop the prunable functions nothing kept reaches.
+    fn drop_unreached(&mut self) {
+        let items = self.items();
+        let mut item_of = TreeMap::<String, i32>::new();
+        for let mut k = 0; k < items.len(); k += 1 {
+            item_of[items[k].spec.name] = k;
+        }
+        let mut kept: List<bool> = [];
+        let mut queue: List<i32> = [];
+        for let mut k = 0; k < items.len(); k += 1 {
+            let root = !items[k].spec.prunable;
+            kept.push(root);
+            if root {
+                queue.push(k);
+            }
+        }
+        let mut roots = TreeSet::<String>::new();
+        let mut next_item = 0;
+        for let mut i = 0; i < self.segs.len(); i += 1 {
+            if next_item < items.len() && i == items[next_item].start {
+                i = items[next_item].end;
+                next_item += 1;
+                continue;
+            }
+            self.segs[i].collect_refs(&mut roots);
+        }
+        for let name of roots.iter_value() {
+            reach(&name, &item_of, &mut kept, &mut queue);
+        }
+        while let Some(k) = queue.pop() {
+            let mut names = TreeSet::<String>::new();
+            for let mut i = items[k].start; i <= items[k].end; i += 1 {
+                self.segs[i].collect_refs(&mut names);
+            }
+            for let name of names.iter_value() {
+                reach(&name, &item_of, &mut kept, &mut queue);
+            }
+        }
+        let mut out: List<Seg> = [];
+        let mut next = 0;
+        for let mut i = 0; i < self.segs.len(); i += 1 {
+            if next < items.len() && i == items[next].start {
+                if !kept[next] {
+                    i = items[next].end;
+                    next += 1;
+                    continue;
+                }
+                next += 1;
+            }
+            out.push(self.segs[i]);
+        }
+        self.segs = out;
+    }
+}
+
+/// Forwarding rounds before `prune` stops following chains of forwarders. Each
+/// round resolves one link of every chain, and generated code nests few.
+global MAX_FORWARD_ROUNDS: i32 = 8;
+
+/// A top-level function: its spec and the segments of its head and closing brace.
+struct Item {
+    spec: FnSpec,
+    start: i32,
+    end: i32,
+}
+
+variant ForwardKind {
+    Call(CallStmt),
+    Stmt(String),
+}
+
+/// What a forwarding function runs, and the names its body `note`s.
+struct Forward {
+    kind: ForwardKind,
+    refs: List<String>,
+}
+
+/// Mark the item `name` names kept, if there is one.
+fn reach(name: &String, item_of: &TreeMap<String, i32>, kept: &mut List<bool>, queue: &mut List<i32>) {
+    if let Some(k) = item_of.get_str(name) {
+        if !kept[k] {
+            kept[k] = true;
+            queue.push(k);
+        }
+    }
+}
+
+/// Push what `site`, a call to the function `spec` names, becomes under `fw`.
+/// Whether it could be forwarded.
+fn forward_site(
+    out: &mut List<Seg>,
+    site: &CallSeg,
+    spec: &FnSpec,
+    fw: &Forward,
+    specs: &TreeMap<String, FnSpec>,
+) -> bool {
+    let passes_params = site.call.args == spec.param_names();
+    let call = match &fw.kind {
+        Stmt(text) => {
+            if !passes_params || !site.call.form matches { Discard } {
+                return false;
+            }
+            for let p of &site.call.pre {
+                out.push(Seg::Line(LineSeg { text: *p, depth: site.depth, refs: [] }));
+            }
+            out.push(Seg::Line(LineSeg { text: *text, depth: site.depth, refs: fw.refs }));
+            return true;
+        },
+        Call(inner) => inner,
+    };
+    if call.callee == spec.name {
+        return false;
+    }
+    // A body discarding the inner result forwards a value only where there is
+    // none to discard.
+    if call.form matches { Discard } && !site.call.form matches { Discard } {
+        let Some(target) = specs.get_str(&call.callee) else {
+            return false;
+        };
+        if !target.returns_unit() {
+            return false;
+        }
+    }
+    let mut pre = site.call.pre;
+    let args = if passes_params {
+        pre.extend(&call.pre);
+        call.args;
+    } else {
+        if !call.pre.is_empty()
+            || call.args != spec.param_names()
+            || !renamed_call_keeps_defaults(site, spec, call, specs) {
+            return false;
+        }
+        site.call.args;
+    };
+    out.push(Seg::Call(CallSeg {
+        call: CallStmt { pre, form: site.call.form, callee: call.callee, args },
+        depth: site.depth,
+    }));
+    if !fw.refs.is_empty() {
+        out.push(Seg::Text(TextSeg { text: String::new(), refs: fw.refs }));
+    }
+    return true;
+}
+
+/// Whether a call leaving out `spec`'s defaulted parameters gets the same
+/// defaults from the inner callee.
+fn renamed_call_keeps_defaults(site: &CallSeg, spec: &FnSpec, call: &CallStmt, specs: &TreeMap<String, FnSpec>) -> bool {
+    let given = site.call.args.len();
+    if given == spec.params.len() {
+        return true;
+    }
+    let Some(target) = specs.get_str(&call.callee) else {
+        return false;
+    };
+    for let mut i = given; i < spec.params.len(); i += 1 {
+        if i >= target.params.len() || target.params[i].default_value != spec.params[i].default_value {
+            return false;
+        }
+    }
+    return true;
+}
+
+impl Seg {
+    /// This segment spliced in `levels` deeper.
+    fn shifted(&self, levels: i32) -> Seg {
+        return match self {
+            Text(t) => Seg::Text(TextSeg { ..*t, offset: t.offset + levels }),
+            FnOpen(f) => Seg::FnOpen(FnOpenSeg { spec: f.spec, depth: f.depth + levels }),
+            Close(c) => Seg::Close(CloseSeg { depth: c.depth + levels, blank_after: c.blank_after }),
+            Call(c) => Seg::Call(CallSeg { call: c.call, depth: c.depth + levels }),
+            Line(l) => Seg::Line(LineSeg { text: l.text, depth: l.depth + levels, refs: l.refs }),
+            Return(d) => Seg::Return(*d + levels),
+        };
+    }
+
+    fn collect_refs(&self, names: &mut TreeSet<String>) {
+        match self {
+            Text(t) => {
+                for let r of &t.refs {
+                    names.insert(*r);
+                }
+            },
+            Line(l) => {
+                for let r of &l.refs {
+                    names.insert(*r);
+                }
+            },
+            Call(c) => {
+                names.insert(c.call.callee);
+            },
+            FnOpen(_) | Close(_) | Return(_) => {
+            },
+        }
+    }
+
+    fn print(&self, out: &mut String) {
+        match self {
+            Text(t) => print_shifted(out, &t.text, t.offset),
+            FnOpen(f) => {
+                push_indent(out, f.depth);
+                out.push_str(&f.spec.signature());
+                out.push_str(" {\n");
+            },
+            Close(c) => {
+                push_indent(out, c.depth);
+                out.push_str(if c.blank_after { "}\n\n" } else { "}\n" });
+            },
+            Call(c) => {
+                for let p of &c.call.pre {
+                    push_indent(out, c.depth);
+                    out.push_str(p);
+                    out.push('\n');
+                }
+                push_indent(out, c.depth);
+                match &c.call.form {
+                    Discard => {
+                    },
+                    Return => out.push_str("return "),
+                    Bind(prefix) => out.push_str(prefix),
+                }
+                out.push_str(&c.call.callee);
+                out.push('(');
+                out.push_str(&join_comma(&c.call.args));
+                out.push_str(");\n");
+            },
+            Line(l) => {
+                push_indent(out, l.depth);
+                out.push_str(&l.text);
+                out.push('\n');
+            },
+            Return(d) => {
+                push_indent(out, *d);
+                out.push_str("return;\n");
+            },
+        }
+    }
+}
+
+fn push_indent(out: &mut String, depth: i32) {
+    for let mut i = 0; i < depth; i += 1 {
+        out.push_str("    ");
+    }
+}
+
+/// `text` with `levels` more indentation at each line start that has content.
+fn print_shifted(out: &mut String, text: &String, levels: i32) {
+    if levels == 0 {
+        out.push_str(text);
+        return;
+    }
+    let mut fresh = true;
+    for let c of text.chars() {
+        if c == '\n' {
+            fresh = true;
+        } else if fresh {
+            push_indent(out, levels);
+            fresh = false;
+        }
+        out.push(c);
     }
 }
 
@@ -621,6 +1187,8 @@ pub struct FnSpec {
     /// type (e.g. `["Stdout", "Stderr"]` → ` with (Stdout, Stderr)`).
     effects: List<String>,
     receiver: Option<String>,
+    /// Whether `CodeWriter::prune` may drop it when nothing kept references it.
+    prunable: bool = false,
 }
 
 impl FnSpec {
@@ -634,6 +1202,25 @@ impl FnSpec {
             generics: [],
             effects: [],
             receiver: null,
+        };
+    }
+
+    /// Let `CodeWriter::prune` drop the function when nothing kept calls it or
+    /// `note`s its name, and forward calls through it. Every reference to it
+    /// must then be a `CallStmt` or a `note`.
+    pub fn set_prunable(&mut self) -> &mut FnSpec {
+        self.prunable = true;
+        return self;
+    }
+
+    fn param_names(&self) -> List<String> {
+        return self.params.iter_ref().map(|p| p.name).collect();
+    }
+
+    fn returns_unit(&self) -> bool {
+        return match &self.return_type {
+            None => true,
+            Some(t) => *t == "()",
         };
     }
 
@@ -677,7 +1264,7 @@ impl FnSpec {
     /// Emit the function signature as a `begin` block (opens `{`).
     /// Caller writes the body via `w`, then calls `w.end()`.
     pub fn emit_begin(&self, w: &mut CodeWriter) {
-        w.begin(&self.signature());
+        w.open_fn(self);
     }
 
     /// Build the full signature string.
