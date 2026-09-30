@@ -35,7 +35,8 @@ pub fn expected_set_ref(ctx: &mut GenContext, expected: &List<String>) -> String
 
 /// `p.expect_set(...)` consuming one token of `kinds`.
 pub fn expect_set_call(ctx: &mut GenContext, kinds: &List<String>) -> String {
-    return `p.expect_set(${sync_set_ref(ctx, kinds)}, ${expected_set_ref(ctx, kinds)})`;
+    let [bits, list] = ctx.sync_refs(kinds);
+    return `p.expect_set(&${bits}, &${list})`;
 }
 
 enum LookaheadAccess {
