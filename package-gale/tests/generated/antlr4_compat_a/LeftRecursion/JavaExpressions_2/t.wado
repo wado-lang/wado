@@ -1957,8 +1957,12 @@ pub fn atn_predict_with_stack(
         if alts.is_empty() {
             return atn_first_enabled_alt(&prev, disabled_alts);
         }
-        if alts.len() == 1 || atn_min_alt_covers_rest(&mut arena, &configs, alts[0]) || atn_all_at_end(sim, &configs) {
-            return atn_first_enabled_alt(&alts, disabled_alts);
+        let first_enabled = atn_first_enabled_alt(&alts, disabled_alts);
+        if first_enabled < 0
+            || alts.len() == 1
+            || atn_min_alt_covers_rest(&mut arena, &configs, first_enabled)
+            || atn_all_at_end(sim, &configs) {
+            return first_enabled;
         }
         prev = alts;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
@@ -3373,7 +3377,7 @@ fn scan_e_atom_alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: 
     return pos;
 }
 
-fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -3502,7 +3506,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32,
     return -1;
 }
 
-fn scan_e_lr_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -3511,7 +3515,7 @@ fn scan_e_lr_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32,
     return pos;
 }
 
-fn scan_e_lr_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -3520,7 +3524,7 @@ fn scan_e_lr_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32,
     return pos;
 }
 
-fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -3540,7 +3544,7 @@ fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32,
     return pos;
 }
 
-fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
@@ -3562,7 +3566,7 @@ fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32,
     return pos;
 }
 
-fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
     pos += 1;
@@ -3575,14 +3579,14 @@ fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_13(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_13(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_4(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
@@ -3598,7 +3602,7 @@ fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_17(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_17(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_5(tokens[pos]) { return -1; }
     pos += 1;
@@ -3609,7 +3613,7 @@ fn scan_e_lr_17(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_18(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_18(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_6(tokens[pos]) { return -1; }
     pos += 1;
@@ -3620,7 +3624,7 @@ fn scan_e_lr_18(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_19(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_19(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_7(tokens[pos]) { return -1; }
     pos += 1;
@@ -3631,7 +3635,7 @@ fn scan_e_lr_19(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_8(tokens[pos]) { return -1; }
     pos += 1;
@@ -3642,7 +3646,7 @@ fn scan_e_lr_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_instanceof { return -1; }
     pos += 1;
@@ -3653,7 +3657,7 @@ fn scan_e_lr_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_9(tokens[pos]) { return -1; }
     pos += 1;
@@ -3664,7 +3668,7 @@ fn scan_e_lr_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_AMP { return -1; }
     pos += 1;
@@ -3675,7 +3679,7 @@ fn scan_e_lr_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_CARET { return -1; }
     pos += 1;
@@ -3686,7 +3690,7 @@ fn scan_e_lr_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPE { return -1; }
     pos += 1;
@@ -3697,7 +3701,7 @@ fn scan_e_lr_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_AMPAMP { return -1; }
     pos += 1;
@@ -3708,7 +3712,7 @@ fn scan_e_lr_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPEPIPE { return -1; }
     pos += 1;
@@ -3719,7 +3723,7 @@ fn scan_e_lr_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_28(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_28(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_QUESTION { return -1; }
     pos += 1;
@@ -3736,7 +3740,7 @@ fn scan_e_lr_28(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_e_lr_29(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_e_lr_29(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_10(tokens[pos]) { return -1; }
     pos += 1;
@@ -3748,7 +3752,7 @@ fn scan_e_lr_29(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
 }
 
 fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos, atn, min_prec, follow);
+    let mut pos = scan_e_atom(tokens, pos, atn, follow);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -3757,7 +3761,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
             if second_kind == TK_ID {
                 if 20 >= min_prec {
                     let lr_saved_pos = pos;
-                    pos = scan_e_lr_6(tokens, pos, atn, min_prec, follow);
+                    pos = scan_e_lr_6(tokens, pos, atn, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
@@ -3765,7 +3769,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
             } else if second_kind == TK_LIT_this {
                 if 19 >= min_prec {
                     let lr_saved_pos = pos;
-                    pos = scan_e_lr_7(tokens, pos, atn, min_prec, follow);
+                    pos = scan_e_lr_7(tokens, pos, atn, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
@@ -3773,7 +3777,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
             } else if second_kind == TK_LIT_super {
                 if 18 >= min_prec {
                     let lr_saved_pos = pos;
-                    pos = scan_e_lr_8(tokens, pos, atn, min_prec, follow);
+                    pos = scan_e_lr_8(tokens, pos, atn, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
@@ -3781,7 +3785,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
             } else {
                 if 17 >= min_prec {
                     let lr_saved_pos = pos;
-                    pos = scan_e_lr_9(tokens, pos, atn, min_prec, follow);
+                    pos = scan_e_lr_9(tokens, pos, atn, follow);
                     if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
                     break;
@@ -3790,7 +3794,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_LBRACKET {
             if 16 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_11(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_11(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3798,7 +3802,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if _kind_set_4(suffix_kind) {
             if 15 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_13(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_13(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3806,7 +3810,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_LPAREN {
             if 14 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_14(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_14(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3814,7 +3818,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if _kind_set_5(suffix_kind) {
             if 13 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_17(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_17(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3822,7 +3826,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if _kind_set_6(suffix_kind) {
             if 12 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_18(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_18(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3830,7 +3834,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if _kind_set_7(suffix_kind) {
             if 11 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_19(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_19(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3838,7 +3842,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if _kind_set_8(suffix_kind) {
             if 10 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_20(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_20(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3846,7 +3850,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_instanceof {
             if 9 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_21(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_21(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3854,7 +3858,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if _kind_set_9(suffix_kind) {
             if 8 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_22(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_22(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3862,7 +3866,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_AMP {
             if 7 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_23(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_23(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3870,7 +3874,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_CARET {
             if 6 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_24(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_24(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3878,7 +3882,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_PIPE {
             if 5 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_25(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_25(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3886,7 +3890,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_AMPAMP {
             if 4 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_26(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_26(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3894,7 +3898,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_PIPEPIPE {
             if 3 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_27(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_27(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3902,7 +3906,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if suffix_kind == TK_LIT_QUESTION {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_28(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_28(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3910,7 +3914,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, mi
         } else if _kind_set_10(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_29(tokens, pos, atn, min_prec, follow);
+                pos = scan_e_lr_29(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -4220,7 +4224,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
         if _sk == TK_LIT_DOT {
             if p.peek_at(1) == TK_ID {
                 if 20 >= min_prec {
-                    if scan_e_lr_6(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                    if scan_e_lr_6(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
@@ -4232,7 +4236,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 }
             } else if p.peek_at(1) == TK_LIT_this {
                 if 19 >= min_prec {
-                    if scan_e_lr_7(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                    if scan_e_lr_7(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
@@ -4244,7 +4248,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 }
             } else if p.peek_at(1) == TK_LIT_super {
                 if 18 >= min_prec {
-                    if scan_e_lr_8(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                    if scan_e_lr_8(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
@@ -4274,7 +4278,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 }
             } else {
                 if 17 >= min_prec {
-                    if scan_e_lr_9(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                    if scan_e_lr_9(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                         break;
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
@@ -4306,7 +4310,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_LBRACKET {
             if 16 >= min_prec {
-                if scan_e_lr_11(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_11(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4321,7 +4325,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_4(_sk) {
             if 15 >= min_prec {
-                if scan_e_lr_13(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_13(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4332,7 +4336,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_LPAREN {
             if 14 >= min_prec {
-                if scan_e_lr_14(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_14(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4360,7 +4364,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_5(_sk) {
             if 13 >= min_prec {
-                if scan_e_lr_17(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_17(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4374,7 +4378,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_6(_sk) {
             if 12 >= min_prec {
-                if scan_e_lr_18(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_18(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4388,7 +4392,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_7(_sk) {
             if 11 >= min_prec {
-                if scan_e_lr_19(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_19(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4402,7 +4406,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_8(_sk) {
             if 10 >= min_prec {
-                if scan_e_lr_20(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_20(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4416,7 +4420,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_instanceof {
             if 9 >= min_prec {
-                if scan_e_lr_21(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_21(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4430,7 +4434,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_9(_sk) {
             if 8 >= min_prec {
-                if scan_e_lr_22(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_22(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4444,7 +4448,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_AMP {
             if 7 >= min_prec {
-                if scan_e_lr_23(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_23(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4458,7 +4462,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_CARET {
             if 6 >= min_prec {
-                if scan_e_lr_24(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_24(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4472,7 +4476,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_PIPE {
             if 5 >= min_prec {
-                if scan_e_lr_25(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_25(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4486,7 +4490,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_AMPAMP {
             if 4 >= min_prec {
-                if scan_e_lr_26(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_26(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4500,7 +4504,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_PIPEPIPE {
             if 3 >= min_prec {
-                if scan_e_lr_27(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_27(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4514,7 +4518,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_QUESTION {
             if 2 >= min_prec {
-                if scan_e_lr_28(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_28(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
@@ -4532,7 +4536,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _kind_set_10(_sk) {
             if 1 >= min_prec {
-                if scan_e_lr_29(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_e_lr_29(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);

@@ -1957,8 +1957,12 @@ pub fn atn_predict_with_stack(
         if alts.is_empty() {
             return atn_first_enabled_alt(&prev, disabled_alts);
         }
-        if alts.len() == 1 || atn_min_alt_covers_rest(&mut arena, &configs, alts[0]) || atn_all_at_end(sim, &configs) {
-            return atn_first_enabled_alt(&alts, disabled_alts);
+        let first_enabled = atn_first_enabled_alt(&alts, disabled_alts);
+        if first_enabled < 0
+            || alts.len() == 1
+            || atn_min_alt_covers_rest(&mut arena, &configs, first_enabled)
+            || atn_all_at_end(sim, &configs) {
+            return first_enabled;
         }
         prev = alts;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
@@ -2867,14 +2871,14 @@ impl Parser {
     }
 }
 
-fn scan_ce_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32) -> i32 {
+fn scan_ce_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_ce_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32) -> i32 {
+fn scan_ce_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { return -1; }
     pos += 1;
@@ -2903,14 +2907,14 @@ fn scan_ce_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
 }
 
 fn scan_ce(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_ce_atom(tokens, pos, atn, min_prec);
+    let mut pos = scan_ce_atom(tokens, pos, atn);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_LIT_COMMA {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_ce_lr_0(tokens, pos, atn, min_prec);
+                pos = scan_ce_lr_0(tokens, pos, atn);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -2922,14 +2926,14 @@ fn scan_ce(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32 = 0)
     return pos;
 }
 
-fn scan_pe_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_pe_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_pe_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_pe_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     sg_2_done: {
         sg_2: {
@@ -2963,12 +2967,12 @@ fn scan_pe_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
 }
 
 fn scan_pe(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_pe_atom(tokens, pos, atn, min_prec, follow);
+    let mut pos = scan_pe_atom(tokens, pos, atn, follow);
     if pos < 0 { return -1; }
     loop {
         let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 4, tokens, pos, TK_EOF, min_prec);
         if _atn_alt == 0 {
-            pos = scan_pe_lr_0(tokens, pos, atn, min_prec, follow);
+            pos = scan_pe_lr_0(tokens, pos, atn, follow);
             if pos < 0 { return -1; }
         } else {
             break;
@@ -2977,14 +2981,14 @@ fn scan_pe(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, m
     return pos;
 }
 
-fn scan_re_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_re_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_re_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_re_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_DOTDOT { return -1; }
     pos += 1;
@@ -3001,7 +3005,7 @@ fn scan_re_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
     return pos;
 }
 
-fn scan_re_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32, follow: i64 = 0) -> i32 {
+fn scan_re_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { return -1; }
     pos += 1;
@@ -3013,14 +3017,14 @@ fn scan_re_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32
 }
 
 fn scan_re(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_re_atom(tokens, pos, atn, min_prec, follow);
+    let mut pos = scan_re_atom(tokens, pos, atn, follow);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_LIT_DOTDOT {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_re_lr_0(tokens, pos, atn, min_prec, follow);
+                pos = scan_re_lr_0(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3028,7 +3032,7 @@ fn scan_re(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0, m
         } else if suffix_kind == TK_LIT_PLUS {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_re_lr_1(tokens, pos, atn, min_prec, follow);
+                pos = scan_re_lr_1(tokens, pos, atn, follow);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -3088,7 +3092,7 @@ fn _parse_ce__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _sk = p.peek_kind();
         if _sk == TK_LIT_COMMA {
             if 1 >= min_prec {
-                if scan_ce_lr_0(&p.kinds, p.pos, &mut p.atn, min_prec) < 0 {
+                if scan_ce_lr_0(&p.kinds, p.pos, &mut p.atn) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_CE, _start);
@@ -3400,7 +3404,7 @@ fn _parse_re__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
         let _sk = p.peek_kind();
         if _sk == TK_LIT_DOTDOT {
             if 2 >= min_prec {
-                if scan_re_lr_0(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_re_lr_0(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_RE, _start);
@@ -3426,7 +3430,7 @@ fn _parse_re__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
             }
         } else if _sk == TK_LIT_PLUS {
             if 1 >= min_prec {
-                if scan_re_lr_1(&p.kinds, p.pos, &mut p.atn, min_prec, follow) < 0 {
+                if scan_re_lr_1(&p.kinds, p.pos, &mut p.atn, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_RE, _start);

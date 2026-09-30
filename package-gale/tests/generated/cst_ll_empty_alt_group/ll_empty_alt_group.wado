@@ -1957,8 +1957,12 @@ pub fn atn_predict_with_stack(
         if alts.is_empty() {
             return atn_first_enabled_alt(&prev, disabled_alts);
         }
-        if alts.len() == 1 || atn_min_alt_covers_rest(&mut arena, &configs, alts[0]) || atn_all_at_end(sim, &configs) {
-            return atn_first_enabled_alt(&alts, disabled_alts);
+        let first_enabled = atn_first_enabled_alt(&alts, disabled_alts);
+        if first_enabled < 0
+            || alts.len() == 1
+            || atn_min_alt_covers_rest(&mut arena, &configs, first_enabled)
+            || atn_all_at_end(sim, &configs) {
+            return first_enabled;
         }
         prev = alts;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };

@@ -1825,8 +1825,12 @@ pub fn atn_predict_with_stack(
         if alts.is_empty() {
             return atn_first_enabled_alt(&prev, disabled_alts);
         }
-        if alts.len() == 1 || atn_min_alt_covers_rest(&mut arena, &configs, alts[0]) || atn_all_at_end(sim, &configs) {
-            return atn_first_enabled_alt(&alts, disabled_alts);
+        let first_enabled = atn_first_enabled_alt(&alts, disabled_alts);
+        if first_enabled < 0
+            || alts.len() == 1
+            || atn_min_alt_covers_rest(&mut arena, &configs, first_enabled)
+            || atn_all_at_end(sim, &configs) {
+            return first_enabled;
         }
         prev = alts;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
@@ -2744,7 +2748,7 @@ fn scan_stat(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     return -1;
 }
 
-fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2771,7 +2775,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i
     return -1;
 }
 
-fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32) -> i32 {
+fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_and { return -1; }
     pos += 1;
@@ -2783,12 +2787,12 @@ fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i
 }
 
 fn scan_expr(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expr_atom(tokens, pos, atn, min_prec);
+    let mut pos = scan_expr_atom(tokens, pos, atn);
     if pos < 0 { return -1; }
     loop {
         let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 2, tokens, pos, TK_EOF, min_prec);
         if _atn_alt == 0 {
-            pos = scan_expr_lr_1(tokens, pos, atn, min_prec);
+            pos = scan_expr_lr_1(tokens, pos, atn);
             if pos < 0 { return -1; }
         } else {
             break;
