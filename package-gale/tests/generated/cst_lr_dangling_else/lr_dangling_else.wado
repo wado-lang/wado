@@ -933,6 +933,52 @@ fn emit_lexer_token(
     }
     out.push_str(`${lc.0}:${lc.1}]\n`);
 }
+pub struct ScanMemo<G> {
+    heads: Array<i32>,
+    entries: List<ScanMemoEntry<G>>,
+}
+
+struct ScanMemoEntry<G> {
+    next: i32,
+    rule: i32,
+    min_prec: i32,
+    follow: i64,
+    cont: i64,
+    gate_in: G,
+    end: i32,
+    gate_out: G,
+}
+
+impl<G: Eq> ScanMemo<G> {
+    pub fn new(positions: i32) -> ScanMemo<G> {
+        return ScanMemo { heads: Array::<i32>::filled(positions + 1, -1), entries: [] };
+    }
+
+    pub fn find(&self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate: &G) -> i32 {
+        let mut at = self.heads[pos];
+        while at >= 0 {
+            let e = &self.entries[at];
+            if e.rule == rule && e.min_prec == min_prec && e.follow == follow && e.cont == cont && e.gate_in == *gate {
+                return at;
+            }
+            at = e.next;
+        }
+        return -1;
+    }
+
+    pub fn end_of(&self, entry: i32) -> i32 {
+        return self.entries[entry].end;
+    }
+
+    pub fn gate_of(&self, entry: i32) -> G {
+        return self.entries[entry].gate_out;
+    }
+
+    pub fn put(&mut self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate_in: G, end: i32, gate_out: G) {
+        self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
+        self.heads[pos] = self.entries.len() - 1;
+    }
+}
 pub global ATN_BASIC: i32 = 1;
 pub global ATN_RULE_START: i32 = 2;
 pub global ATN_RULE_STOP: i32 = 3;
@@ -1092,29 +1138,105 @@ global CFG_KEY_STATE_SLOT: i32 = 1048576;
 
 global CTX_BOUNDARY: i32 = -3;
 global CTX_UNKNOWN_RETURN: i32 = -4;
+global CTX_HIDDEN_RETURN: i32 = -5;
+global ATN_READS_HIDDEN: i32 = -6;
 
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
 
 pub struct AtnState {
     pub stack: List<i32>,
+    floor: i32,
+    reach: i32,
     verdict_index: AtnKeyMap,
     verdict_next: List<i32>,
     verdict_start: List<i32>,
     verdict_alt: List<i32>,
+    verdict_reach: List<i32>,
     verdict_keys: List<i32>,
+}
+
+pub struct AtnFloor {
+    depth: i32,
+    reach: i32,
 }
 
 impl AtnState {
     pub fn new() -> AtnState {
         return AtnState {
             stack: [],
+            floor: 0,
+            reach: 0,
             verdict_index: AtnKeyMap::new(),
             verdict_next: [],
             verdict_start: [],
             verdict_alt: [],
+            verdict_reach: [],
             verdict_keys: [],
         };
+    }
+
+    pub fn hide_callers(&mut self) -> AtnFloor {
+        let saved = AtnFloor { depth: self.floor, reach: self.reach };
+        self.floor = self.stack.len();
+        self.reach = self.floor;
+        return saved;
+    }
+
+    pub fn reveal_callers(&mut self, saved: AtnFloor) -> bool {
+        let read = self.reach < self.floor;
+        self.floor = saved.depth;
+        self.reach = i32::min(saved.reach, self.reach);
+        return read;
+    }
+
+    pub fn predict(
+        &mut self,
+        sim: &AtnSim,
+        decision: i32,
+        tokens: &Array<i32>,
+        pos: i32,
+        eof: i32,
+        min_prec: i32,
+        disabled_alts: &List<i32>,
+    ) -> i32 {
+        let [alt, reach] = self.predict_reaching(sim, decision, tokens, pos, eof, min_prec, disabled_alts);
+        self.read_down_to(reach);
+        return alt;
+    }
+
+    fn read_down_to(&mut self, depth: i32) {
+        self.reach = i32::min(self.reach, depth);
+    }
+
+    fn predict_reaching(
+        &self,
+        sim: &AtnSim,
+        decision: i32,
+        tokens: &Array<i32>,
+        pos: i32,
+        eof: i32,
+        min_prec: i32,
+        disabled_alts: &List<i32>,
+    ) -> [i32, i32] {
+        assert self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor";
+        if self.floor > 0 {
+            let alt = atn_predict_above(
+                sim,
+                decision,
+                &self.stack,
+                self.floor,
+                tokens,
+                pos,
+                eof,
+                min_prec,
+                disabled_alts,
+            );
+            if alt != ATN_READS_HIDDEN {
+                return [alt, self.floor];
+            }
+        }
+        return [atn_predict_above(sim, decision, &self.stack, 0, tokens, pos, eof, min_prec, disabled_alts), 0];
     }
 
     fn question_hash(&self, decision: i32, pos: i32, min_prec: i32, depth: i32) -> i64 {
@@ -1152,7 +1274,7 @@ impl AtnState {
         return v;
     }
 
-    pub fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32) {
+    pub fn record_verdict(&mut self, decision: i32, pos: i32, min_prec: i32, depth: i32, alt: i32, reach: i32) {
         let h = self.question_hash(decision, pos, min_prec, depth);
         if self.recorded_verdict(h, decision, pos, min_prec, depth) >= 0 {
             return;
@@ -1167,6 +1289,7 @@ impl AtnState {
             self.verdict_keys.push(self.stack[i]);
         }
         self.verdict_alt.push(alt);
+        self.verdict_reach.push(reach);
         self.verdict_next.push(self.verdict_index.get(h));
         self.verdict_index.set(h, v);
     }
@@ -1244,6 +1367,7 @@ struct CtxArena {
     intern_next: List<i32>,
     merge_cache: AtnKeyMap,
     cover_cache: AtnKeyMap,
+    hidden_alts: List<i32>,
 }
 
 struct AtnConfig {
@@ -1266,6 +1390,7 @@ impl CtxArena {
             intern_next: [],
             merge_cache: AtnKeyMap::new(),
             cover_cache: AtnKeyMap::new(),
+            hidden_alts: [],
         };
         let empty = arena.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = arena.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
@@ -1277,12 +1402,13 @@ impl CtxArena {
         return self.node_start.len();
     }
 
-    fn push_caller_stack(&mut self, sim: &AtnSim, rstk: &List<i32>) -> i32 {
+    fn push_caller_stack(&mut self, sim: &AtnSim, rstk: &List<i32>, floor: i32) -> i32 {
         if rstk.is_empty() {
             return CTX_UNKNOWN;
         }
-        let mut ctx = CTX_EMPTY;
-        for let mut k = 0; k < rstk.len(); k += 1 {
+        assert floor == 0 || sim.state_collapse_to.is_empty(), "a collapse into a caller loop reads the callers a floor hides";
+        let mut ctx = if floor > 0 { self.push(CTX_HIDDEN_RETURN, 0, CTX_EMPTY) } else { CTX_EMPTY };
+        for let mut k = floor; k < rstk.len(); k += 1 {
             if rstk[k] >= 0 {
                 ctx = self.push(rstk[k], atn_invocation_prec(sim, rstk, k - 1), ctx);
             } else if k > 0 {
@@ -1676,6 +1802,10 @@ fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, work: &mut List<AtnConfig>, rs
             rset.add(arena, ATN_ACCEPT_EOF, cur.alt, cur.pr, CTX_EMPTY);
         } else if r == CTX_UNKNOWN_RETURN {
             rset.add(arena, cur.state, cur.alt, cur.pr, CTX_UNKNOWN);
+        } else if r == CTX_HIDDEN_RETURN {
+            if !arena.hidden_alts.contains(&cur.alt) {
+                arena.hidden_alts.push(cur.alt);
+            }
         } else {
             work.push(AtnConfig { state: r, alt: cur.alt, pctx: arena.parent[e], pr: arena.rpr[e] });
         }
@@ -1781,10 +1911,12 @@ pub fn atn_predict_once(
     let depth = atn.stack.len();
     let v = atn.recorded_verdict(atn.question_hash(decision, pos, min_prec, depth), decision, pos, min_prec, depth);
     if v >= 0 {
+        atn.read_down_to(atn.verdict_reach[v]);
         return atn.verdict_alt[v];
     }
-    let alt = atn_predict_with_stack(sim, decision, &atn.stack, tokens, pos, eof, min_prec);
-    atn.record_verdict(decision, pos, min_prec, depth, alt);
+    let [alt, reach] = atn.predict_reaching(sim, decision, tokens, pos, eof, min_prec, &ATN_NO_DISABLED);
+    atn.read_down_to(reach);
+    atn.record_verdict(decision, pos, min_prec, depth, alt, reach);
     return alt;
 }
 
@@ -1798,11 +1930,25 @@ pub fn atn_predict_with_stack(
     min_prec: i32 = 0,
     disabled_alts: &List<i32> = &ATN_NO_DISABLED,
 ) -> i32 {
+    return atn_predict_above(sim, decision, rule_stack, 0, tokens, start_pos, eof, min_prec, disabled_alts);
+}
+
+fn atn_predict_above(
+    sim: &AtnSim,
+    decision: i32,
+    rule_stack: &List<i32>,
+    floor: i32,
+    tokens: &Array<i32>,
+    start_pos: i32,
+    eof: i32,
+    min_prec: i32,
+    disabled_alts: &List<i32>,
+) -> i32 {
     let dstate = sim.decision_state[decision];
     let start = sim.state_tr_start[dstate];
     let cnt = sim.state_tr_count[dstate];
     let mut arena = CtxArena::new();
-    let caller = arena.push_caller_stack(sim, rule_stack);
+    let caller = arena.push_caller_stack(sim, rule_stack, floor);
     let mut seeds: List<AtnConfig> = [];
     for let mut j = 0; j < cnt; j += 1 {
         if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
@@ -1817,6 +1963,18 @@ pub fn atn_predict_with_stack(
     let limit = tokens.len() - start_pos + 8;
     let mut guard = 0;
     loop {
+        if !arena.hidden_alts.is_empty() {
+            let mut alive = atn_unique_alts(&configs);
+            for let a of &arena.hidden_alts {
+                if !alive.contains(a) {
+                    alive.push(*a);
+                }
+            }
+            if alive.len() == 1 {
+                return atn_first_enabled_alt(&alive, disabled_alts);
+            }
+            return ATN_READS_HIDDEN;
+        }
         guard += 1;
         if guard > limit {
             return atn_first_enabled_alt(&prev, disabled_alts);
@@ -2063,6 +2221,7 @@ struct Parser {
     atn_ret_pending: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
+    memo: ScanMemo<()>,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -2076,7 +2235,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], atn: AtnState::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], atn: AtnState::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], memo: ScanMemo::new(kinds.len()) };
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -2392,7 +2551,7 @@ impl Parser {
     }
 }
 
-fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32) -> i32 {
+fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, min_prec: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2400,13 +2559,13 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32)
         pos = start + 1;
         try_0: {
             atn.stack.push(17);
-            pos = scan_e(tokens, pos, atn, 0);
+            pos = scan_e(tokens, pos, atn, memo, 0);
             atn.stack.pop();
             if pos < 0 { break try_0; }
             if pos >= tokens.len() || tokens[pos] != TK_LIT_then { break try_0; }
             pos += 1;
             atn.stack.push(21);
-            pos = scan_e(tokens, pos, atn, 0);
+            pos = scan_e(tokens, pos, atn, memo, 0);
             atn.stack.pop();
             if pos < 0 { break try_0; }
             if atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec) == 1 {
@@ -2415,7 +2574,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32)
                     sg_0: {
                         pos += 1;
                         atn.stack.push(30);
-                        pos = scan_e(tokens, pos, atn, 0);
+                        pos = scan_e(tokens, pos, atn, memo, 0);
                         atn.stack.pop();
                         if pos < 0 { break sg_0; }
                         break sg_0_done;
@@ -2434,26 +2593,38 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32)
     return -1;
 }
 
-fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32) -> i32 {
+fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, min_prec: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { return -1; }
     pos += 1;
     atn.stack.push(41);
-    pos = scan_e(tokens, pos, atn, 2);
+    pos = scan_e(tokens, pos, atn, memo, 2);
     atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos, atn, min_prec);
+fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, min_prec: i32 = 0) -> i32 {
+    let memo_at = memo.find(1, pos, min_prec, 0, 0, &());
+    if memo_at >= 0 {
+        return memo.end_of(memo_at);
+    }
+    let memo_gate = ();
+    let memo_callers = atn.hide_callers();
+    let memo_end = scan_e__walk(tokens, pos, atn, memo, min_prec);
+    if !atn.reveal_callers(memo_callers) { memo.put(1, pos, min_prec, 0, 0, memo_gate, memo_end, ()); }
+    return memo_end;
+}
+
+fn scan_e__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_e_atom(tokens, pos, atn, memo, min_prec);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_LIT_STAR {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_e_lr_1(tokens, pos, atn, min_prec);
+                pos = scan_e_lr_1(tokens, pos, atn, memo, min_prec);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
@@ -2530,7 +2701,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _sk = p.peek_kind();
         if _sk == TK_LIT_STAR {
             if 1 >= min_prec {
-                if scan_e_lr_1(&p.kinds, p.pos, &mut p.atn, min_prec) < 0 {
+                if scan_e_lr_1(&p.kinds, p.pos, &mut p.atn, &mut p.memo, min_prec) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
