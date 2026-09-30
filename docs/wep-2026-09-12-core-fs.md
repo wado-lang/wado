@@ -99,8 +99,7 @@ anything this module does not cover, and returns the same descriptor.
 
 ### The error carries the path
 
-Every call site prints the path with the error (`error: ${path}: cannot open:
-${e:?}`), so the path belongs in the type rather than in 21 copies of the
+Every call site prints the path with the error (`error: ${path}: cannot open: ${e:?}`), so the path belongs in the type rather than in 21 copies of the
 message:
 
 ```wado

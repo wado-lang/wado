@@ -25,8 +25,7 @@ The field-tested precedents all attach the explanation to the declaration
 rather than to prose: Swift's `@available(*, unavailable, message:)` and
 `@available(*, deprecated, renamed:)`, Kotlin's
 `@Deprecated(level = DeprecationLevel.ERROR, replaceWith = ...)`, C#'s
-`[Obsolete(message, error: true)]`, and C++26's `= delete("should have a
-reason")` (P2573), which follows a deliberate progression of message-carrying
+`[Obsolete(message, error: true)]`, and C++26's `= delete("should have a reason")` (P2573), which follows a deliberate progression of message-carrying
 diagnostics: `static_assert` (C++11), `[[deprecated]]` (C++14),
 `[[nodiscard]]` (C++20).
 

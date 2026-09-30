@@ -103,8 +103,7 @@ binding gains an iterator-driven loop.
 `map` is ungated inside Wado: a component Wado emits targets the WASI 0.3.1
 baseline, where 🗺️ is required. Wado's own validation already admits it
 (`WasmFeatures::all()`). The one switch to flip is the embedder's:
-`Config::wasm_component_model_map(true)` in `wado-cli`'s runtime, so `wado
-run` / `test` / `serve` accept what the compiler emits.
+`Config::wasm_component_model_map(true)` in `wado-cli`'s runtime, so `wado run` / `test` / `serve` accept what the compiler emits.
 
 ## Consequences
 

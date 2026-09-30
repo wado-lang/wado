@@ -83,8 +83,7 @@ that take two closures as arguments are often overdoing it. Do you really gain
 in readability over map + getOrElse?"). The 38 Wado sites are `map(f)`
 followed by `unwrap_or(v)`, which risks no ordering at all.
 
-`is_some`, `is_none`, and `is_some_and` are not offered: `opt matches
-{ Some(_) }` covers the test, with a guard for the predicate form.
+`is_some`, `is_none`, and `is_some_and` are not offered: `opt matches { Some(_) }` covers the test, with a guard for the predicate form.
 
 `and`, `or`, `xor`, `filter`, `zip`, `flatten`, and `unwrap_or_default` are
 not offered. No Wado site wants them, and idiomatic Rust barely does.

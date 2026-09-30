@@ -383,69 +383,69 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 ## Open questions
 
 - [ ] What bounds a token's interned set. Tokens forbid eviction — an entry
-      freed under a live token dangles — so the set is a permanent high-water
-      mark and must be small, not merely finite. The bound wanted is on the key
-      type's cardinality, which is a facade-authoring decision rather than
-      anything the compiler checks; whether it should instead be a distinct type
-      per bounded configuration is undecided. Unrelated to data slicing.
+  freed under a live token dangles — so the set is a permanent high-water
+  mark and must be small, not merely finite. The bound wanted is on the key
+  type's cardinality, which is a facade-authoring decision rather than
+  anything the compiler checks; whether it should instead be a distinct type
+  per bounded configuration is undecided. Unrelated to data slicing.
 - [ ] Holding an affine handle in a global, and capturing one in a closure
-      ([resource ownership](./wep-2026-05-21-resource-ownership.md)). The token
-      form needs neither, so this bounds only the tailored, runtime-configured,
-      and stateful surface — where a service caching a collator per
-      `Accept-Language` lives.
+  ([resource ownership](./wep-2026-05-21-resource-ownership.md)). The token
+  form needs neither, so this bounds only the tailored, runtime-configured,
+  and stateful surface — where a service caching a collator per
+  `Accept-Language` lives.
 - [ ] Does ICU4X expose collation sort keys? A bulk key-extraction call would let
-      a sort cross the boundary once instead of per comparison, which dominates
-      any handle-versus-lookup difference.
+  a sort cross the boundary once instead of per comparison, which dominates
+  any handle-versus-lookup difference.
 - [ ] Where the facade's date/time formatting meets
-      [`core:temporal`](./wep-2026-06-05-core-temporal.md), which takes its zone
-      IANA canonicalization from here — WASI's `timezone` answers only for the
-      host's own zone, so it cannot serve one, and ICU4X's own zone data stops
-      at identifiers: `TimezonePeriodsV1` is 6.8 KB for every zone and holds a
-      standard/daylight pair, not the transitions that say which is in effect.
-      Open: whether the tzdb the offsets do need rides this facade's data
-      component as one more marker set, or arrives beside it.
+  [`core:temporal`](./wep-2026-06-05-core-temporal.md), which takes its zone
+  IANA canonicalization from here — WASI's `timezone` answers only for the
+  host's own zone, so it cannot serve one, and ICU4X's own zone data stops
+  at identifiers: `TimezonePeriodsV1` is 6.8 KB for every zone and holds a
+  standard/daylight pair, not the transitions that say which is in effect.
+  Open: whether the tzdb the offsets do need rides this facade's data
+  component as one more marker set, or arrives beside it.
 - [ ] The full capability inventory, and which of its data is locale-bearing.
-      The first cut covers what the spikes measured — locale identity,
-      normalization, case mapping, character properties, segmentation,
-      collation — with formatting, plural rules, and transliteration following.
+  The first cut covers what the spikes measured — locale identity,
+  normalization, case mapping, character properties, segmentation,
+  collation — with formatting, plural rules, and transliteration following.
 
 ## Implementation
 
 - [ ] Non-owning token support in CM component import
-      ([Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)):
-      a `dtor`-less imported handle decoded as a copyable newtype. It is what
-      normalization, case mapping, collation over the declared locales, and
-      grapheme boundaries by eager pass need beyond what character properties
-      already use.
+  ([Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)):
+  a `dtor`-less imported handle decoded as a copyable newtype. It is what
+  normalization, case mapping, collation over the declared locales, and
+  grapheme boundaries by eager pass need beyond what character properties
+  already use.
 - [ ] Affine resource support in the same path — methods, static constructors,
-      `borrow<T>` parameters, `resource.drop` — gating the tailored,
-      runtime-configured, and stateful surface, not the package.
+  `borrow<T>` parameters, `resource.drop` — gating the tailored,
+  runtime-configured, and stateful surface, not the package.
 - [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
-      itself, reduced here to an archive lookup: `core:icu` runs no provider
-      component and needs no compile-time execution.
+  itself, reduced here to an archive lookup: `core:icu` runs no provider
+  component and needs no compile-time execution.
 - [ ] Ship the asset relocatable, and move the locale-bearing capabilities onto
-      a buffer provider with the rest left baked. The asset is first-party and
-      bundled already; what it is not yet is either of those.
+  a buffer provider with the rest left baked. The asset is first-party and
+  bundled already; what it is not yet is either of those.
 - [x] Collect over a component asset. Each core module it holds is embedded and
-      every other section copied byte for byte, so nothing is renumbered and
-      each `alias core export` still resolves. The root set is the lifted
-      functions the program imports; the rest keep their name and signature as
-      a stub. A program reaching one property carries 104 KB of the 303 KB
-      asset.
+  every other section copied byte for byte, so nothing is renumbered and
+  each `alias core export` still resolves. The root set is the lifted
+  functions the program imports; the rest keep their name and signature as
+  a stub. A program reaching one property carries 104 KB of the 303 KB
+  asset.
 - [x] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
-      data range or a function. A live data range can root a function, so the
-      data and code edges close over one worklist rather than the code seeding
-      the data once. libm has none; ICU has 146.
+  data range or a function. A live data range can root a function, so the
+  data and code edges close over one worklist rather than the code seeding
+  the data once. libm has none; ICU has 146.
 - [x] Bake ICU's data-reference map at asset-build time, as libm's is. That is
-      what keeps the `.wat`: the map's offsets are segment-relative, so a
-      print/reparse preserves them where a `reloc` entry's offset into the
-      encoded code section would not. Resolving the map at compile time instead
-      would need the asset to ship relocatable, and ship in binary with it.
+  what keeps the `.wat`: the map's offsets are segment-relative, so a
+  print/reparse preserves them where a `reloc` entry's offset into the
+  encoded code section would not. Resolving the map at compile time instead
+  would need the asset to ship relocatable, and ship in binary with it.
 - [ ] Grow the facade past character properties: re-exports, the Wado-native
-      shapes (`Ord`, iterators, `Display`), and the one-shot helpers.
+  shapes (`Ord`, iterators, `Display`), and the one-shot helpers.
 - [ ] Build the data image — per-(capability, locale) zlib entries plus index,
-      deduplicated against the fallback parent — and bundle it with the
-      toolchain.
+  deduplicated against the fallback parent — and bundle it with the
+  toolchain.
 - [ ] Feed several blobs to the asset through ICU4X's fork provider.
 
 ## References

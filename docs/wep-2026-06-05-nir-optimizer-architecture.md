@@ -358,45 +358,45 @@ two specializations of one function are emitted in. Code size is unchanged on
 both benchmarks.
 
 - [ ] Fold the graph build into `lower`. The build's inputs do not exist during
-      lowering. `builder::build` takes the alias sets and the per-call purity
-      verdicts, and both are derived over the whole lowered package. An empty
-      alias set is the _optimistic_ direction, not a conservative one, so
-      building without them is unsound rather than imprecise. A call's verdict is
-      keyed by `FuncId` besides, and `translate` finalizes callee ids only at its
-      end. Keeping the facts therefore means building once every body exists,
-      which is the separate walk this item wanted to remove. What it buys is that
-      one body walk per function, not earlier availability: the early freeze
-      already walks every body before the loop, so the lazy first-query path is
-      eager in practice.
+  lowering. `builder::build` takes the alias sets and the per-call purity
+  verdicts, and both are derived over the whole lowered package. An empty
+  alias set is the _optimistic_ direction, not a conservative one, so
+  building without them is unsound rather than imprecise. A call's verdict is
+  keyed by `FuncId` besides, and `translate` finalizes callee ids only at its
+  end. Keeping the facts therefore means building once every body exists,
+  which is the separate walk this item wanted to remove. What it buys is that
+  one body walk per function, not earlier availability: the early freeze
+  already walks every body before the loop, so the lazy first-query path is
+  eager in practice.
 
 - [ ] Retire the pure node kinds still left in the skeleton, so every pure
-      position is an operand. This is a compile-speed item as much as a
-      saturation prerequisite. Pure kinds are 61 % of the reachable expressions
-      after lower and 77 % at end-of-optimize on the SQLite parser, 61 % and 70 %
-      on `json_twitter`. The local reads the use index is made of are 31–39 % of
-      them. Retiring them therefore cuts what every session walk covers by about
-      two thirds rather than half. The share climbs across the loop because the
-      freeze reaches so little: only 17 % of the reachable operand slots carry a
-      value, so a pure kind stays in the skeleton for want of a freeze. The other
-      compile-speed items are sized against a skeleton this shrinks. Almost none
-      of it is reachable on its own. A value query recurses through operands, so
-      arithmetic left in the skeleton bottoms out on a field load or a call
-      result and yields no value at all. It waits on a consumer; see Precision.
+  position is an operand. This is a compile-speed item as much as a
+  saturation prerequisite. Pure kinds are 61 % of the reachable expressions
+  after lower and 77 % at end-of-optimize on the SQLite parser, 61 % and 70 %
+  on `json_twitter`. The local reads the use index is made of are 31–39 % of
+  them. Retiring them therefore cuts what every session walk covers by about
+  two thirds rather than half. The share climbs across the loop because the
+  freeze reaches so little: only 17 % of the reachable operand slots carry a
+  value, so a pure kind stays in the skeleton for want of a freeze. The other
+  compile-speed items are sized against a skeleton this shrinks. Almost none
+  of it is reachable on its own. A value query recurses through operands, so
+  arithmetic left in the skeleton bottoms out on a field load or a call
+  result and yields no value at all. It waits on a consumer; see Precision.
 
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
-      mid-run. At end-of-optimize the arena holds 1.9× the reachable expressions
-      and 2.4× the reachable statements on the SQLite parser, and 2.5× / 3.5× on
-      `json_twitter`. `lower` alone arrives at 1.1×, so the growth is the loop's.
+  mid-run. At end-of-optimize the arena holds 1.9× the reachable expressions
+  and 2.4× the reachable statements on the SQLite parser, and 2.5× / 3.5× on
+  `json_twitter`. `lower` alone arrives at 1.1×, so the growth is the loop's.
 
 - [ ] Price the switch lowering on something other than table width. The
-      threshold is a count of the values the table covers, set where the
-      `br_table` starts paying on the benchmarks. The count is a proxy. A
-      40-arm synthetic of plain `i32` fields prefers the `else if` chain by
-      11 %, and `cbor-twitter`'s 40-arm `User` prefers the table by 2 %. What
-      separates those two is what the threshold should read: arm body size, or
-      how well the scrutinee sequence predicts. Arm body size is already summed,
-      but only as a blow-up guard on the emitted table, never as the pay-off
-      predicate.
+  threshold is a count of the values the table covers, set where the
+  `br_table` starts paying on the benchmarks. The count is a proxy. A
+  40-arm synthetic of plain `i32` fields prefers the `else if` chain by
+  11 %, and `cbor-twitter`'s 40-arm `User` prefers the table by 2 %. What
+  separates those two is what the threshold should read: arm body size, or
+  how well the scrutinee sequence predicts. Arm body size is already summed,
+  but only as a blow-up guard on the emitted table, never as the pay-off
+  predicate.
 
 ### Precision
 
@@ -528,53 +528,53 @@ walk and versions are monotonic, so a read below the loop-entry watermark is
 invariant.
 
 - [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
-      value runs after the fixed-point loop, so the passes inside it still see
-      none: LICM's value hoist collected zero loop-entry locals in 10 900
-      queries. An in-loop freeze cannot simply be added; see Naming a local,
-      before and after. Moving the build to lowering
-      does not lift that bound: the extraction is point-dependent, not the
-      build. This and resolving every single-version local share the anchor
-      rule as prerequisite. It also gates nearly all of retiring the pure node
-      kinds, not only the
-      local reads, since the arithmetic above a local read resolves to no value
-      either.
+  value runs after the fixed-point loop, so the passes inside it still see
+  none: LICM's value hoist collected zero loop-entry locals in 10 900
+  queries. An in-loop freeze cannot simply be added; see Naming a local,
+  before and after. Moving the build to lowering
+  does not lift that bound: the extraction is point-dependent, not the
+  build. This and resolving every single-version local share the anchor
+  rule as prerequisite. It also gates nearly all of retiring the pure node
+  kinds, not only the
+  local reads, since the arithmetic above a local read resolves to no value
+  either.
 
 - [ ] Copy propagation on value identity rather than on locals.
-      Source-stability is not subsumed by value equality. A write-once `x` whose
-      source `y` is later reassigned can read equal ids yet be unsafe to fold.
-      Revisit with provenance on the merge and opaque kinds.
+  Source-stability is not subsumed by value equality. A write-once `x` whose
+  source `y` is later reassigned can read equal ids yet be unsafe to fold.
+  Revisit with provenance on the merge and opaque kinds.
 - [ ] Induction-variable recognition, as a tagged opaque carrying base and step.
-      Not needed yet. A post-increment read already appears as the addition it
-      is, so this lands when a rule first wants it.
+  Not needed yet. A post-increment read already appears as the addition it
+  is, so this lands when a rule first wants it.
 - [ ] Stop a borrow of a local that flows only into callees which cannot retain
-      it from marking the local aliased. Plumbing the callee's escape summary
-      into the ref-argument check is not the way. The aliased set is seeded from
-      the address-taken locals the elaborator records for every borrow of a
-      local, so the `(&self).field` shape this was written for is already
-      aliased before the call site is looked at. Measured, 3.7 % of ref-arg
-      marks are the sole reason their local is aliased: borrows of a projection,
-      which the elaborator does not record. Narrowing the rest means narrowing
-      the seed. That is a whole-function question, whether all uses of the
-      borrow flow into callees that cannot retain it, over an annotation several
-      other passes also read. The mutable-escape set is built by filtering the
-      aliased set, so dropping a local from one silently drops it from the
-      other, and a callee that cannot retain a reference can still mutate
-      through it during the call. The two have to be decoupled first.
+  it from marking the local aliased. Plumbing the callee's escape summary
+  into the ref-argument check is not the way. The aliased set is seeded from
+  the address-taken locals the elaborator records for every borrow of a
+  local, so the `(&self).field` shape this was written for is already
+  aliased before the call site is looked at. Measured, 3.7 % of ref-arg
+  marks are the sole reason their local is aliased: borrows of a projection,
+  which the elaborator does not record. Narrowing the rest means narrowing
+  the seed. That is a whole-function question, whether all uses of the
+  borrow flow into callees that cannot retain it, over an annotation several
+  other passes also read. The mutable-escape set is built by filtering the
+  aliased set, so dropping a local from one silently drops it from the
+  other, and a callee that cannot retain a reference can still mutate
+  through it during the call. The two have to be decoupled first.
 - [ ] Directed gate propagation, callee-shrink to callers only. Deferred. It
-      drops the edges inlining adds to the build-once call graph, and a
-      per-iteration rebuild does not recover them because the staleness is
-      intra-iteration. It would need incremental edge maintenance, for a
-      measured net-neutral gain.
+  drops the edges inlining adds to the build-once call graph, and a
+  per-iteration rebuild does not recover them because the staleness is
+  intra-iteration. It would need incremental edge maintenance, for a
+  measured net-neutral gain.
 
 ### Terminal ideal
 
 Gated behind measurement; see Not equality saturation.
 
 - [ ] Saturation driver plus cost-based extraction. Run rules to a bounded
-      saturation, then extract a cost-minimal form per operand, materialising a
-      multi-use value only when sharing beats duplication. This subsumes the
-      extraction cost model, the global fixed-point loop, the per-rule
-      did-anything-change guards, and the dirty-set gate.
+  saturation, then extract a cost-minimal form per operand, materialising a
+  multi-use value only when sharing beats duplication. This subsumes the
+  extraction cost model, the global fixed-point loop, the per-rule
+  did-anything-change guards, and the dirty-set gate.
 
 ## Measured dead ends
 

@@ -261,8 +261,7 @@ has no locals list to mint the binding in.
 
 #### Phase 4 — variant locals
 
-A local holds the same tuple a return does. `let mut s: Option<i64> = null; …
-s = Some(v); … match s { … }` is the derived deserializer's slot per scalar
+A local holds the same tuple a return does. `let mut s: Option<i64> = null; … s = Some(v); … match s { … }` is the derived deserializer's slot per scalar
 field, and each `Some(v)` was a heap object. The local qualifies when every
 write builds a case (`null` included) and every read is a tag test, a payload
 read or a one-level `match`. A local read whole, passed or returned, stays a
@@ -532,8 +531,7 @@ alive.
 ### Validation is a snapshot; `inline` runs after
 
 Validation sees the call sites that exist when it runs. `nir/inline` runs later
-in the same iteration and can plant new ones — a `let mut t = <block ending in
-a candidate call>` whose local still carries the variant the callee no longer
+in the same iteration and can plant new ones — a `let mut t = <block ending in a candidate call>` whose local still carries the variant the callee no longer
 returns. The signature is already committed by then, so this is invalid Wasm,
 not a missed optimization (`serde_json_synth_variant.wado`).
 
@@ -643,8 +641,7 @@ worth 12-21% on the deserialize rows.
 Two things had to meet for `slot_flatten` to reach it.
 
 `then_is_pure_slot_copy` matches the `?`-unwrap then-arm as `[single]` or as
-`[LocalSet t, LocalGet t]`. The arm can also arrive as one `Seq([LocalSet,
-LocalGet])` node, one level of nesting on from that shape, so it peels the `Seq`.
+`[LocalSet t, LocalGet t]`. The arm can also arrive as one `Seq([LocalSet, LocalGet])` node, one level of nesting on from that shape, so it peels the `Seq`.
 
 Widening the predicate alone emits invalid Wasm. The desugar nests the error test
 as an `else if` carrying the binding's type, so `rewrite_unwrap_to_guard` turning
@@ -736,8 +733,7 @@ and `CborDeserializer::is_null` — the last boxed tuple this pass left on
 `cbor_twitter` — flattens with it.
 
 The aggregate rule alone was not enough to retire `return_temp.rs`. It removed
-the shape for a literal, and left it for a bare local — `$hfs_call_N = hit;
-self.pos = $hfs_pos; return $hfs_call_N` survived on `sqlite_parse` and
+the shape for a literal, and left it for a bare local — `$hfs_call_N = hit; self.pos = $hfs_pos; return $hfs_call_N` survived on `sqlite_parse` and
 `syntax_highlight`, which the WIR pass had been cleaning up unnoticed. The local
 rule above is what closed it. Removing a shape at its source is still cheaper
 than recognising it afterwards; the caution is that "removed" has to be checked,

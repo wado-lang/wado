@@ -130,6 +130,16 @@ test "print_document keeps a blank line between a table and a trailing paragraph
     }
 }
 
+test "print_document surrounds a fenced code block in a list item with blank lines" {
+    let source = "1. intro\n   ```wado\n   let x = 1;\n   ```\n   after\n";
+    assert roundtrip(&source) == "1. intro\n\n   ```wado\n   let x = 1;\n   ```\n\n   after\n";
+}
+
+test "print_document surrounds a table in a list item with blank lines" {
+    let source = "- intro\n  | a | b |\n  | - | - |\n  | 1 | 2 |\n  after\n";
+    assert roundtrip(&source) == "- intro\n\n  | a | b |\n  | - | - |\n  | 1 | 2 |\n\n  after\n";
+}
+
 test "print_document normalizes a task list checkbox" {
     assert roundtrip("- [ ] todo\n- [x] done") == "- [ ] todo\n- [x] done\n";
 }

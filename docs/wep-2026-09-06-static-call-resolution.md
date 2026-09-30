@@ -154,8 +154,7 @@ What remains is one declaration, or several of one trait that no argument
 separated — the overload.
 
 Steps 4 and 5 are in that order because a written body the argument rejects is
-not an answer: `impl Conv<i32> for M {}` beside `impl Conv<String> for M { fn
-make(…) }` answers `M::make(5)` from the inherited default, though a block wrote
+not an answer: `impl Conv<i32> for M {}` beside `impl Conv<String> for M { fn make(…) }` answers `M::make(5)` from the inherited default, though a block wrote
 a body for the other argument.
 
 An own candidate is exempt from step 4. The arguments choose among _impls_, and

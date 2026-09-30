@@ -309,7 +309,7 @@ declaration, no overloading, no implicit conversion" binds hardest.
 
 - [ ] Accept `Array<T>` in `cm_binding`, matching `wit_emit`.
 - [ ] Lower `Slice<T>` through the canonical ABI and map it in `wit_emit`, then
-      narrow the definition-site error to lifting positions only.
+  narrow the definition-site error to lifting positions only.
 - [ ] The `wado-from-idl` `AsSlice` wrapper.
 - [ ] Document `Array<T>` and `Slice<T>` in `docs/spec-*.md` (CM type mapping,
-      snapshot/aliasing rules) and the cheatsheet.
+  snapshot/aliasing rules) and the cheatsheet.

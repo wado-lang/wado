@@ -40,8 +40,7 @@ statements always need a `;` between them:
 let x = 1 let y = 2    // error: expected `;`
 ```
 
-Consecutive semicolons enclose empty statements, which mean nothing. `wado
-format` removes them.
+Consecutive semicolons enclose empty statements, which mean nothing. `wado format` removes them.
 
 A block's value is its last expression whether or not a `;` follows it. Unlike
 in Rust, a trailing `;` does not turn it into `()`. Write `()` to mean `()`:
@@ -382,8 +381,7 @@ From the tightest binding to the loosest:
 | `..<`, `..=`                                    | Range          | None: `a..<b..<c` is an error   |
 | `=`, `+=`, `-=`, `*=`, `/=`, `%=`, and the rest | Assignment     | Right                           |
 
-The bitwise operators bind tighter than comparison, so `flags & MASK ==
-EXPECTED` is `(flags & MASK) == EXPECTED`. A postfix operator binds tighter than
+The bitwise operators bind tighter than comparison, so `flags & MASK == EXPECTED` is `(flags & MASK) == EXPECTED`. A postfix operator binds tighter than
 a prefix one, so `-x?` is `-(x?)` and `*p.x` is `*(p.x)`. The postfix `?` is
 [error propagation](./spec-control-flow.md#error-propagation).
 

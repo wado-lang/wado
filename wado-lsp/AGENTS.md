@@ -273,11 +273,11 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `workspace/didChangeConfiguration`
 - [ ] `workspace/workspaceFolders` / `workspace/didChangeWorkspaceFolders`
 - [ ] `workspace/didChangeWatchedFiles`
-      Also the prerequisite for caching `FilesystemCompilerHost::dependency_index`
-      across requests: the walk-up + `wado.toml` + `wado.lock` parse currently
-      re-runs once per document version (the loader asks for the index exactly
-      once, when it is constructed). Caching it without watching the manifest
-      would serve a stale dependency set after an edit to `wado.toml`.
+  Also the prerequisite for caching `FilesystemCompilerHost::dependency_index`
+  across requests: the walk-up + `wado.toml` + `wado.lock` parse currently
+  re-runs once per document version (the loader asks for the index exactly
+  once, when it is constructed). Caching it without watching the manifest
+  would serve a stale dependency set after an edit to `wado.toml`.
 - [ ] `workspace/executeCommand`
 - [ ] `workspace/applyEdit`
 - [ ] File operations (`willCreateFiles` / `didCreateFiles` / `willRenameFiles` / `didRenameFiles` / `willDeleteFiles` / `didDeleteFiles`)
@@ -297,30 +297,30 @@ to a specific LSP request kind. Each item identifies the symptom and the
 concrete code location involved.
 
 - [ ] **Narrow `#include_str` / `#include_bytes` cursor match to the path
-      literal.** `Literal::IncludeStr(String)` / `IncludeBytes(String)` store
-      only the path text, so `IncludePathFinder` in `src/definition.rs`
-      matches against the full `#include_str(...)` `LiteralExpr::span`. This
-      causes `#`, the macro name, and the parentheses to all jump. Either
-      store the path literal's `Span` on the variant, or emit a separate
-      `AstId` for the string literal.
+  literal.** `Literal::IncludeStr(String)` / `IncludeBytes(String)` store
+  only the path text, so `IncludePathFinder` in `src/definition.rs`
+  matches against the full `#include_str(...)` `LiteralExpr::span`. This
+  causes `#`, the macro name, and the parentheses to all jump. Either
+  store the path literal's `Span` on the variant, or emit a separate
+  `AstId` for the string literal.
 - [ ] **Define `UseItem::Simple.alias` jump-to-def semantics.** Tests cover
-      only clicks on the imported `name`. Decide and test: clicking the alias
-      should jump to the alias's use-site definition (so callers that use the
-      alias go to the alias line), while clicks on the original `name` still
-      go to the source module. Update `record_use_specifier_references` and
-      add coverage in `tests/definition.rs`.
+  only clicks on the imported `name`. Decide and test: clicking the alias
+  should jump to the alias's use-site definition (so callers that use the
+  alias go to the alias line), while clicks on the original `name` still
+  go to the source module. Update `record_use_specifier_references` and
+  add coverage in `tests/definition.rs`.
 - [ ] **Make `name_span_of` total enough to drop the `def_span` fallback chain.**
-      `Cursor::def_span` falls through three levels (`name_span_of` →
-      `symbol.span` → `span_of_key`) because `name_span_of` does not cover
-      every addressable `AstId` (e.g. anonymous `impl` blocks, `Item::Resource`,
-      `Item::Test` have no dedicated `name_span` field). Either give every
-      decl-bearing AST node a `name_span` so `name_span_of` becomes total,
-      or accept the fallback and remove this TODO.
+  `Cursor::def_span` falls through three levels (`name_span_of` →
+  `symbol.span` → `span_of_key`) because `name_span_of` does not cover
+  every addressable `AstId` (e.g. anonymous `impl` blocks, `Item::Resource`,
+  `Item::Test` have no dedicated `name_span` field). Either give every
+  decl-bearing AST node a `name_span` so `name_span_of` becomes total,
+  or accept the fallback and remove this TODO.
 - [ ] **Serve bundled `.wat` / `.wasm` assets via `workspace/textDocumentContent`.**
-      `core:` / `wasi:` source modules are now openable, but the
-      `ModuleSource::Wasm { path, .. }` arm of `module_uri` in
-      `src/location.rs` still returns the import path verbatim — clients have
-      no way to open `core:libm.wat`. Extend `Engine::text_document_content`
-      to dispatch to `wado_compiler::stdlib::get_stdlib_wasm_asset` for `.wat`
-      assets (text) and either disassemble or skip `.wasm` (binary). Decide
-      whether to advertise additional schemes or reuse `core:` / `wasi:`.
+  `core:` / `wasi:` source modules are now openable, but the
+  `ModuleSource::Wasm { path, .. }` arm of `module_uri` in
+  `src/location.rs` still returns the import path verbatim — clients have
+  no way to open `core:libm.wat`. Extend `Engine::text_document_content`
+  to dispatch to `wado_compiler::stdlib::get_stdlib_wasm_asset` for `.wat`
+  assets (text) and either disassemble or skip `.wasm` (binary). Decide
+  whether to advertise additional schemes or reuse `core:` / `wasi:`.

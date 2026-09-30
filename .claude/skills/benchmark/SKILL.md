@@ -72,8 +72,7 @@ and `WADO_BIN` plus `ab.ts` is how: see the `wado-performance` skill.
 
 ## Reading output
 
-Each program prints a throughput line — `<rate> <unit>/s   (<ms> ms/iter,
-<n> iter)` — per phase (zlib prints two phases, `Compress:`/`Decompress:`).
+Each program prints a throughput line — `<rate> <unit>/s   (<ms> ms/iter, <n> iter)` — per phase (zlib prints two phases, `Compress:`/`Decompress:`).
 Read the rate and the ms/iter straight off; the iteration count auto-calibrates
 to ~1s, so there is no total to report. The unit is the benchmark's own
 (numbers/s, px/s, conversions/s, MB/s, req/s); `vs best` = fastest rate / this

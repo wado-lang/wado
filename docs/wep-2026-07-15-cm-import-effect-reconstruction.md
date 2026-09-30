@@ -117,13 +117,13 @@ at a library boundary lowers to a CM import for a provider to satisfy.
 Not covered yet:
 
 - [ ] Per-export reachability (attribute each import to the exports that reach
-      it) — a refinement over the union, conservative on indirect calls.
+  it) — a refinement over the union, conservative on indirect calls.
 - [ ] A single provider file spanning several of a dependency's imported
-      interfaces (bind by operation name across all).
+  interfaces (bind by operation name across all).
 - [ ] Async import/export surface (`stream<T>` / `future<T>`).
 - [ ] A provider that does not fit its dependency is reported where composition
-      connects the two, so a dependency the program never calls, which is not
-      composed, leaves its provider unchecked.
+  connects the two, so a dependency the program never calls, which is not
+  composed, leaves its provider unchecked.
 
 Resources ride the same rule with no special path: a host-provided resource
 (`wasi:*`, `Stream` / `Future`) bottoms out at the host and stays an effect; a

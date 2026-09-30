@@ -335,8 +335,7 @@ This avoids forcing developers to manually list every type dependency.
 A named type referenced by two exported interfaces must remain **one** type, or
 consumers see two structurally-equal but distinct WIT types and lose type
 identity across the boundary. WIT models this with `use`: the type is defined in
-exactly one owning interface, and every other interface references it via `use
-owner.{T}`.
+exactly one owning interface, and every other interface references it via `use owner.{T}`.
 
 ```wado
 struct Point { x: i32, y: i32 }

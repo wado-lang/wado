@@ -80,8 +80,7 @@ addr2line --version >/dev/null || sudo apt-get install -y binutils
 ## How `analyze_native_profile.ts` works
 
 samply's `--save-only` profile is **unsymbolicated**: `funcTable.name`
-holds the hex relative-virtual-address (RVA), keyed by `(lib_index,
-rva)` so the same hex address in two different libs is never merged.
+holds the hex relative-virtual-address (RVA), keyed by `(lib_index, rva)` so the same hex address in two different libs is never merged.
 The script:
 
 1. **Auto-detects the symbolicator** (`--symbolicator auto`):

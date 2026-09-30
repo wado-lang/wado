@@ -634,8 +634,7 @@ out for the rest — what the manual-split advice prescribes — lost 2-4% on fi
 serde rows and gained nothing, including on json-catalog ser, the row it was
 aimed at.
 
-The split adds a call in the middle of a byte-writing loop, taking `&mut
-Array<u8>`, so the loop reloads the array and the position across it. What it
+The split adds a call in the middle of a byte-writing loop, taking `&mut Array<u8>`, so the loop reloads the array and the position across it. What it
 removed was three compares the branch predictor gets right on ASCII text.
 
 Generalizes to: the manual-split advice is for a sub-case whose _body_ is heavy

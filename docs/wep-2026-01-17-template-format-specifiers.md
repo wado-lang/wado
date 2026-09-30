@@ -235,17 +235,17 @@ one is not.
 ### Known gaps
 
 - [ ] Dynamic width and precision: the grammar takes literal digits, so neither
-      can be computed. Rust's `width$` form names argument-list positions Wado
-      does not have. `format_spec` holds the spec as text, not as anything that
-      could carry an expression.
+  can be computed. Rust's `width$` form names argument-list positions Wado
+  does not have. `format_spec` holds the spec as text, not as anything that
+  could carry an expression.
 - [ ] A parameter with no meaning for its operand is dropped rather than
-      rejected, against the closed grammar's intent: precision on an integer,
-      `+` on a `String`, `#` on `e`/`E`. Only the type checker knows which
-      combination is meaningless, so the check belongs in template synthesis.
+  rejected, against the closed grammar's intent: precision on an integer,
+  `+` on a `String`, `#` on `e`/`E`. Only the type checker knows which
+  combination is meaningless, so the check belongs in template synthesis.
 - [ ] `0` pads a non-numeric value with zeros (`${true:08}` → `0000true`), and
-      every type defaults to right alignment. Rust ignores the flag outside
-      numbers and defaults a non-numeric value to left. `Formatter` carries no
-      "this operand is a number" fact to decide with.
+  every type defaults to right alignment. Rust ignores the flag outside
+  numbers and defaults a non-numeric value to left. `Formatter` carries no
+  "this operand is a number" fact to decide with.
 
 ## References
 

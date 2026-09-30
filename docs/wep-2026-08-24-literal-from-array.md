@@ -197,8 +197,7 @@ compiler builds _is_ the result.
 `List` takes ownership of the array it is handed, so a list literal costs one
 `array.new_fixed` and a struct literal — no capacity check, no push loop.
 
-The SIMD lane readers pad a short literal with zero (`if i < a.len() { a[i] }
-else { 0 }`, folded away since the length is a constant), preserving today's
+The SIMD lane readers pad a short literal with zero (`if i < a.len() { a[i] } else { 0 }`, folded away since the length is a constant), preserving today's
 `[1, 2, 3] as i32x4` behaviour.
 
 `core:value` gains the two array impls plus the leaf conversions
@@ -240,8 +239,7 @@ mechanism needs.
 - Four traits, two blanket impls, and the `Builder` / `Output` indirection are
   gone. The immutable-output case that needed a second trait and a builder
   struct — `Array<T>` and ten SIMD vectors — needs neither.
-- A user makes a type literal-constructible by writing `impl From<Array<T>> for
-  MyVec`, with no vocabulary specific to literals.
+- A user makes a type literal-constructible by writing `impl From<Array<T>> for MyVec`, with no vocabulary specific to literals.
 - Heterogeneous literals work, so `core:value::Value` is constructible from a
   JSON-shaped literal for the first time.
 - `null` becomes a typed value rather than a deferral hole. Every place that

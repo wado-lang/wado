@@ -352,8 +352,7 @@ index — attached where `Resolutions` is built, and on the snapshot restore pat
 whose seeded table hands back the same identities by construction.
 
 A local item's type is distinct because its declaration is, but the mangled
-namespaces downstream are name-keyed and monomorphization asserts `(module,
-name)` is unique across the emitted function set. So `mangle_local_item_name`'s
+namespaces downstream are name-keyed and monomorphization asserts `(module, name)` is unique across the emitted function set. So `mangle_local_item_name`'s
 `@AstId` suffix stays, as what keeps a _rendering_ injective — which every mangle
 owes (§8). The direction is what matters: written at one site, read back at
 none.

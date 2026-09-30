@@ -66,8 +66,7 @@ export fn run() {
 ```
 
 Arithmetic operators start out unable to exhibit a collision at all: the
-prelude's operator traits take no type parameters (`trait Add { type Output; fn
-add(&self, rhs: &Self) … }`), so `impl Add<X>` is not writable and a receiver has
+prelude's operator traits take no type parameters (`trait Add { type Output; fn add(&self, rhs: &Self) … }`), so `impl Add<X>` is not writable and a receiver has
 exactly one `Add` impl — which is what makes `find_arithmetic_trait_impl`'s
 first-impl scan safe. Bringing `+` under the same rule as every other call
 therefore starts by parameterizing them: `trait Add<Rhs = Self>`, the shape
@@ -517,8 +516,7 @@ exists to remove; on `List` it would compile `l.index_value(x)` to a range index
 or an element index depending on impl order, and adding an impl would retarget
 existing calls. What the pick lands on is already visible: report-and-continue
 hands the arguments to the first candidate, so an ambiguous
-`l.index_value(0..<2)` is followed by `expected 'i32', found
-'RangeExclusive<i32>'` — the fallback would keep that selection and drop the
+`l.index_value(0..<2)` is followed by `expected 'i32', found 'RangeExclusive<i32>'` — the fallback would keep that selection and drop the
 error. An overload set that cannot be told apart is an error with two escapes
 (`as`, the trait turbofish), not a coin flip.
 

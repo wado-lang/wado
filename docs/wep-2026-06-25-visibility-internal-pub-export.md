@@ -115,53 +115,53 @@ describing its own reach.
 ## Implementation
 
 - [x] Parse `internal` (the keyword was previously reserved as a no-op).
-      `internal` and `pub` are mutually exclusive; `export` implies `pub` (no
-      `pub export`). The AST carries a `Visibility { Private, Internal, Public }`
-      enum on every top-level declaration, orthogonal to the `is_export` flag.
+  `internal` and `pub` are mutually exclusive; `export` implies `pub` (no
+  `pub export`). The AST carries a `Visibility { Private, Internal, Public }`
+  enum on every top-level declaration, orthogonal to the `is_export` flag.
 - [x] Package identity: `ModuleSource::package_id()` groups modules into
-      packages. `core:*` is one package, `wasi:*` another (independent), the entry
-      point and its local modules the `Root` package, and each resolved dependency
-      / remote URL its own package. A dependency's key is its package root (the
-      resolved `[package].lib`), not the module path, and a relative import
-      inherits it, so every module of one dependency shares a `PackageId`.
-      Where a module is reachable under two roots, the one whose tree contains
-      it wins, so the answer does not depend on load order.
+  packages. `core:*` is one package, `wasi:*` another (independent), the entry
+  point and its local modules the `Root` package, and each resolved dependency
+  / remote URL its own package. A dependency's key is its package root (the
+  resolved `[package].lib`), not the module path, and a relative import
+  inherits it, so every module of one dependency shares a `PackageId`.
+  Where a module is reachable under two roots, the one whose tree contains
+  it wins, so the answer does not depend on load order.
 - [x] Enforcement at import resolution (analyze phase): file-private symbols are
-      never importable; `internal` reaches only same-package importers; `pub` /
-      `export` reach anywhere. A violation is a `PRIVATE_SYMBOL` compile error. The
-      `Symbol` and re-export entries carry their declared visibility; namespace
-      imports register only the visible members. The reachability ladder is a
-      single predicate, `Visibility::reachable_from(same_package)`, shared by the
-      analyze-phase symbol registration and the elaborator's namespace-global
-      collection so the two never disagree (a same-package `internal` global is
-      reachable through `use ns from "..."; ns::FOO` as well as a named import).
+  never importable; `internal` reaches only same-package importers; `pub` /
+  `export` reach anywhere. A violation is a `PRIVATE_SYMBOL` compile error. The
+  `Symbol` and re-export entries carry their declared visibility; namespace
+  imports register only the visible members. The reachability ladder is a
+  single predicate, `Visibility::reachable_from(same_package)`, shared by the
+  analyze-phase symbol registration and the elaborator's namespace-global
+  collection so the two never disagree (a same-package `internal` global is
+  reachable through `use ns from "..."; ns::FOO` as well as a named import).
 - [x] `internal use` re-exports (the package-internal counterpart to `pub use`).
 - [x] A re-export may narrow but not widen: the effective reach of a name is the
-      narrowest hop on its re-export chain, and a `use` claiming more than the
-      item grants is a compile error where it is written.
+  narrowest hop on its re-export chain, and a `use` claiming more than the
+  item grants is a compile error where it is written.
 - [x] Struct fields carry the ladder too: reading, setting, or binding one
-      beyond its reach — field access, struct literal, or destructuring
-      pattern — is a `PRIVATE_SYMBOL` compile error.
+  beyond its reach — field access, struct literal, or destructuring
+  pattern — is a `PRIVATE_SYMBOL` compile error.
 - [x] The prelude is in scope everywhere, so what it puts there is what
-      `core:prelude` exports: its own `pub` declarations and its `pub use`
-      re-exports. Both are read from modules outside `core:`, so
-      `Visibility::reachable_from` gates each against a caller in another
-      package. The builtin types join them on other grounds: `i32` is
-      universal by nature rather than by export. The prelude tier takes a
-      builtin type from whichever prelude module declares it, and the
-      declaration is `pub` because that is the reach the name has. Its name is
-      reserved like any other prelude name, so `struct i32` is an error, which
-      `prelude_builtin_type_collision.wado` pins; naming it in a `use` is not,
-      which `prelude_builtin_type_import.wado` pins. A symbol an implementation
-      module declares for its siblings is not a prelude symbol:
-      `core:prelude/fpfmt.wado`'s `UnpackResult` needs an import, which
-      `prelude_internal_not_visible.wado` pins. A prelude-private helper stays
-      out of the tier too, which
-      `prelude_tier_holds_only_what_reaches_every_module` pins.
+  `core:prelude` exports: its own `pub` declarations and its `pub use`
+  re-exports. Both are read from modules outside `core:`, so
+  `Visibility::reachable_from` gates each against a caller in another
+  package. The builtin types join them on other grounds: `i32` is
+  universal by nature rather than by export. The prelude tier takes a
+  builtin type from whichever prelude module declares it, and the
+  declaration is `pub` because that is the reach the name has. Its name is
+  reserved like any other prelude name, so `struct i32` is an error, which
+  `prelude_builtin_type_collision.wado` pins; naming it in a `use` is not,
+  which `prelude_builtin_type_import.wado` pins. A symbol an implementation
+  module declares for its siblings is not a prelude symbol:
+  `core:prelude/fpfmt.wado`'s `UnpackResult` needs an import, which
+  `prelude_internal_not_visible.wado` pins. A prelude-private helper stays
+  out of the tier too, which
+  `prelude_tier_holds_only_what_reaches_every_module` pins.
 - [x] Impl members (methods, associated constants) likewise, in expression and
-      pattern position alike, and `export` on one is a compile error with a
-      targeted diagnostic. Only _inherent_ members carry a ladder; a trait
-      impl's members reach as far as the trait, so theirs is not consulted.
+  pattern position alike, and `export` on one is a compile error with a
+  targeted diagnostic. Only _inherent_ members carry a ladder; a trait
+  impl's members reach as far as the trait, so theirs is not consulted.
 - The bundled `core:internal` module was renamed to `core:rt` so the module
   name no longer collides with the `internal` visibility keyword.
 
