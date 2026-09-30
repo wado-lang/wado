@@ -387,9 +387,11 @@ is deferred: it requires an `Into<E>` conversion per element.
    or computed keys — e.g., an enum discriminant or an integer — are not supported.
    When this feature is added, the syntax will follow JavaScript's computed-property
    notation:
+
    ```wado
    let m: Map<Color, i32> = { [Color::Red]: 1, [Color::Blue]: 2 };
    ```
+
    Until then, use explicit insertion calls instead.
 
 ## Related WEPs

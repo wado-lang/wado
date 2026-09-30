@@ -312,6 +312,7 @@ every local module it reaches. A dependency, `core:` and `wasi:` stay out:
 - A **value-semantic copy that survived**. Wado deep-copies aggregates on
   assignment, argument passing, and return; the ones no pass removed are
   invisible in the source.
+
   ```
   file.wado:6:5: info: remark: a copy of `List<i32>` survives optimization
   ```
@@ -319,6 +320,7 @@ every local module it reaches. A dependency, `core:` and `wasi:` stay out:
 - A **compile-time parameter that still decides a branch**. `-D log.level=info`
   did not strip what it was told to. The remark names the parameter, and the
   intermediate global when the gate reads a derived one instead.
+
   ```
   file.wado:111:5: info: remark: compile-time parameter `log.level` is still read
   here through global `LOG_STATIC_LEVEL`, so this branch is decided at run time;

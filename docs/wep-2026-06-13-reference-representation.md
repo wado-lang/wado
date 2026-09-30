@@ -123,6 +123,7 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
   callee does not retain, the
   reference provably cannot outlive the call, so it is desugared to a temp +
   write-back:
+
   ```text
     f(&mut xs[idx])
   ⇒ { let $mr_idx = idx;
@@ -131,6 +132,7 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
       xs[$mr_idx] = $mr_t;           // write-back to the place
     }
   ```
+
   The temp is a real local, so the address-taken boxing promotes it exactly as for
   `&mut <local>`. The forbid stays permanently for the escaping case (a retained
   param, or a `&mut` bound to a variable / returned), which has no sound
@@ -186,6 +188,7 @@ fix to conform; none should be preserved.
 - [ ] D1 — a whole-value write through a `&mut` to a non-local place is dropped
   behind `&mut *p` for every replace type but `variant`, and for two
   `variant` shapes is refused rather than written back. Probe (HEAD):
+
   | place, by referent and by where the borrow goes                   | result                |
   | ----------------------------------------------------------------- | --------------------- |
   | primitive / enum / flags / `fn` field or element, anywhere        | refused at the borrow |

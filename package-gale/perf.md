@@ -384,6 +384,7 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
 
 - **Two levers only: compute, and GC.** Isolate GC with `--collector null` (no
   GC; leaks, so only for a one-shot gen) vs the default `copying`:
+
   | grammar | output  | first-sets      | null (compute) | copying | GC       |
   | ------- | ------- | --------------- | -------------- | ------- | -------- |
   | css3    | 1.76 MB | small           | 39.1s          | 41.5s   | **2.4s** |

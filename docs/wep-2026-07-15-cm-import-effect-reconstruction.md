@@ -88,9 +88,11 @@ it:
   outer component ultimately satisfies).
 - Name a **provider** on the import — the dependency-injection shape sanctioned
   by the Component Model (donut/sibling linking):
+
   ```wado
   use { Marl } from "wado-lang:marl" with { provider: "./highlight.wado" };
   ```
+
   The provider is a plain Wado file (`export fn highlight(...) { ... }`, and
   likewise for each other operation) compiled into a component exporting the
   dependency's imported interface, bound by operation name. Composition wires `provider.export → dependency.import` and

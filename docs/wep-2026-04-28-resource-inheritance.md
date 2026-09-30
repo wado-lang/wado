@@ -71,6 +71,7 @@ Linearity is **declared on the resource** and **structurally verified** by the c
 Concretely:
 
 - `#[cm(...)]` on a `resource` takes a `linearity=...` field, `"affine"` or `"unrestricted"`. Making it mandatory means migrating every stdlib resource, which no consumer needs, so the affine majority writes nothing.
+
   ```wado
   #[cm("wado-lang:web/element", linearity = "unrestricted")]
   pub resource Element { ... }

@@ -150,6 +150,7 @@ Transpiled output is one large JS file. Useful canonical-builtin → JS mappings
 
 - **Catch swallowed errors** — jco's async machinery loses errors as unhandled
   rejections:
+
   ```js
   process.on('unhandledRejection', e => { console.error('UNHANDLED:', e); process.exit(1); });
   ```

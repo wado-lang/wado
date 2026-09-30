@@ -129,6 +129,7 @@ let id: UserId = 42u64.into();
    The target type of `Into` is on the trait (`Into<T>`), not the method. Turbofish cannot
    be used: `.into::<String>()` is a compile error. The caller must provide type context
    through variable annotations or other means.
+
    ```rust
    // Fails: cannot infer type
    let x = some_value.into();
@@ -137,6 +138,7 @@ let id: UserId = 42u64.into();
    // Or use From directly:
    let x = String::from(some_value);
    ```
+
    This asymmetry is a frequent source of confusion. `From::from()` is often preferred for
    readability precisely because the target type is visible at the call site.
 
@@ -163,6 +165,7 @@ let id: UserId = 42u64.into();
 
    Users must choose between `From`/`Into`, `AsRef`/`AsMut`, `Borrow`, `Deref`, and `ToOwned`.
    The distinctions are subtle:
+
    | Trait       | Semantics                     | When to use       |
    | ----------- | ----------------------------- | ----------------- |
    | `From<T>`   | Owned → owned (consuming)     | Type construction |
