@@ -79,7 +79,7 @@ impl From<EffectError> for Diagnostic {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message) = match e.fault {
             EffectFault::Missing(kind) => (
-                Code::TypeMismatch,
+                Code::MissingEffect,
                 format!(
                     "missing {} '{}' required by '{}'",
                     kind.noun(),
@@ -88,7 +88,7 @@ impl From<EffectError> for Diagnostic {
                 ),
             ),
             EffectFault::MissingForHandler(kind) => (
-                Code::TypeMismatch,
+                Code::MissingEffect,
                 format!(
                     "missing {} '{}' required by the handler installed for '{}'",
                     kind.noun(),
@@ -97,14 +97,14 @@ impl From<EffectError> for Diagnostic {
                 ),
             ),
             EffectFault::UndeclaredByTrait => (
-                Code::TypeMismatch,
+                Code::EffectNotInTrait,
                 format!(
                     "effect '{}' is not declared by trait method '{}'",
                     e.missing_effect, e.callee
                 ),
             ),
             EffectFault::MissingOpen => (
-                Code::TypeMismatch,
+                Code::MissingEffect,
                 format!(
                     "missing effects required by '{}': its trait leaves them to the impl, so declare `with _`",
                     e.callee
@@ -184,7 +184,7 @@ impl From<PurityError> for Diagnostic {
         };
         Diagnostic {
             severity: Severity::Error,
-            code: Code::TypeMismatch,
+            code: Code::ImpureExpression,
             message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
