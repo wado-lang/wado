@@ -1512,22 +1512,6 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
-            WirInstr::ArrayClone {
-                type_id,
-                src,
-                element_copy: _,
-                len,
-            } => {
-                let elem = self.array_elem_type_str(type_id);
-                let prefix = if len.is_some() { "_prefix" } else { "" };
-                self.write(&format!("builtin::array_clone_deep{prefix}<{elem}>("));
-                self.unparse_instr_inline(src);
-                if let Some(len) = len {
-                    self.write(", ");
-                    self.unparse_instr_inline(len);
-                }
-                self.write(")");
-            }
 
             // GC: Reference
             WirInstr::RefNull { heap_type } => {

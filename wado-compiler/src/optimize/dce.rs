@@ -375,8 +375,8 @@ fn extend_reachable_for_optimizer_passes(
     // call `array_clone::<T'>` for some `T'` whose helper isn't reachable
     // yet, and `compute_reachable` only follows direct call-graph edges
     // (it doesn't replay the array_clone scan). Single-pass would drop
-    // inner helpers for chains like `List<List<List<T>>>`, panicking
-    // codegen with `WirInstr::ArrayClone references unknown helper ...`.
+    // inner helpers for chains like `List<List<List<T>>>`, and WIR build
+    // would find no function for the helper its clone loop calls.
     loop {
         let fresh: Vec<FunctionId> = candidates
             .iter()

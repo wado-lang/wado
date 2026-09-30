@@ -5,8 +5,8 @@ use crate::wir::{WirExportDesc, WirInstr, WirPackage, WirType, WirTypeId};
 
 use super::nullability::Nullability;
 
-/// `func_id`s that must not be SROA'd: exports, element tables, `RefFunc`
-/// references, and every `$value_copy$` helper an `ArrayClone` calls.
+/// `func_id`s that must not be SROA'd: exports, element tables, and `RefFunc`
+/// references.
 pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     let mut pinned = IndexSet::default();
 
@@ -36,31 +36,7 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
         collect_ref_funcs_instr(&global.init, &mut pinned);
     }
 
-    // Codegen emits an `ArrayClone`'s helper call by hand, not through the
-    // `Call` path, so an SROA return rewrite would change the signature under
-    // it. Pin every helper an `ArrayClone` calls.
-    for func in &module.functions {
-        if let Some(body) = &func.body {
-            collect_array_clone_helpers(body, &mut pinned);
-        }
-    }
-
     pinned
-}
-
-fn collect_array_clone_helpers(instrs: &[WirInstr], pinned: &mut IndexSet<u32>) {
-    for instr in instrs {
-        collect_array_clone_helpers_instr(instr, pinned);
-    }
-}
-
-fn collect_array_clone_helpers_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
-    if let WirInstr::ArrayClone { element_copy, .. } = instr {
-        pinned.insert(element_copy.index());
-    }
-    instr.for_each_child(&mut |child| {
-        collect_array_clone_helpers_instr(child, pinned);
-    });
 }
 
 fn collect_ref_funcs(instrs: &[WirInstr], pinned: &mut IndexSet<u32>) {
@@ -157,11 +133,9 @@ impl Footprint {
             | WirInstr::V128Load { .. }
             | WirInstr::TableGet { .. }
             | WirInstr::MemorySize => self.heap = true,
-            // `ArrayClone` reads each element through its copy helper.
-            WirInstr::Call { .. }
-            | WirInstr::CallIndirect { .. }
-            | WirInstr::CallRef { .. }
-            | WirInstr::ArrayClone { .. } => self.call = true,
+            WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
+                self.call = true;
+            }
             _ => {}
         }
         instr.for_each_child(&mut |child| self.add_reads(child));
@@ -407,7 +381,6 @@ pub(super) fn for_each_type_id_slot(instr: &mut WirInstr, f: &mut impl FnMut(&mu
         | WirInstr::ArrayGetU { type_id, .. }
         | WirInstr::ArraySet { type_id, .. }
         | WirInstr::ArrayFill { type_id, .. }
-        | WirInstr::ArrayClone { type_id, .. }
         | WirInstr::RefCast { type_id, .. }
         | WirInstr::RefTest { type_id, .. }
         | WirInstr::CallIndirect { type_id, .. }

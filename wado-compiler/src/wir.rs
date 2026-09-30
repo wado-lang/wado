@@ -290,12 +290,7 @@ impl WasmModuleInfo {
 
 /// Recursively remap `WirFuncId` indices in a `WirInstr` tree.
 fn remap_func_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
-    if let WirInstr::Call { func_id, .. }
-    | WirInstr::RefFunc { func_id }
-    | WirInstr::ArrayClone {
-        element_copy: func_id,
-        ..
-    } = instr
+    if let WirInstr::Call { func_id, .. } | WirInstr::RefFunc { func_id } = instr
         && let Some(&new_idx) = remap.get(&func_id.index())
     {
         *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
@@ -1449,21 +1444,6 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
-    /// Deep-copy an `Array<T>` whose `T` is a value-typed struct: allocate one
-    /// the length of `src` and copy every element through `T`'s `$value_copy$`
-    /// helper, since a bare `array.set(dst, i, array.get(src, i))` would store
-    /// the *same* ref into both arrays.
-    ArrayClone {
-        type_id: WirTypeId,
-        src: Box<WirInstr>,
-        /// The element type's `$value_copy$` helper. A callee reference like
-        /// any other, so DCE roots it and compaction remaps it.
-        element_copy: WirFuncId,
-        /// Number of leading elements to copy — the destination's exact
-        /// length. `None` clones the whole array (`array.len(src)`). Must
-        /// evaluate to <= `array.len(src)`.
-        len: Option<Box<WirInstr>>,
-    },
 
     // === GC: Reference ===
     RefNull {
@@ -2348,12 +2328,6 @@ impl WirInstr {
                 f(src_offset);
                 f(len);
             }
-            Self::ArrayClone { src, len, .. } => {
-                f(src);
-                if let Some(len) = len {
-                    f(len);
-                }
-            }
             Self::Select {
                 condition,
                 if_true,
@@ -2959,12 +2933,6 @@ impl WirInstr {
                 f(src);
                 f(src_offset);
                 f(len);
-            }
-            Self::ArrayClone { src, len, .. } => {
-                f(src);
-                if let Some(len) = len {
-                    f(len);
-                }
             }
             Self::Select {
                 condition,

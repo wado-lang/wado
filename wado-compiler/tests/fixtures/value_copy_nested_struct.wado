@@ -32,12 +32,12 @@
 //    is itself a value-typed struct, Wasm GC's plain
 //    `array.set(dst, i, array.get(src, i))` still stores the *same*
 //    struct ref into both arrays — unsound for a deep copy.
-//    `WirInstr::ArrayClone` now carries an `element_copy_func` field
-//    that codegen calls between `array.get` and `array.set` so each
+//    The `$array_clone_deep` loop WIR build emits calls the element's
+//    `$value_copy$` helper between `array.get` and `array.set` so each
 //    destination element is a fresh struct, and the synthesizer's
 //    `Collector` adds `array_clone::<T>` element types to the helper
 //    worklist alongside direct `copy_value::<T>` callers so the
-//    helper exists by the time codegen looks it up.
+//    helper exists by the time WIR build looks it up.
 //
 // All structs and arrays referenced here are user-defined or live in
 // the core prelude; the fixture deliberately does not import any
