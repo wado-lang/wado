@@ -206,6 +206,8 @@ pub struct WadoParam {
     pub ty: WadoType,
     /// Original WIT kebab-case name for the `#[cm_params]` attribute
     pub wit_name: String,
+    /// The default argument, as Wado source
+    pub default: Option<String>,
 }
 
 #[derive(Debug, Clone)]

@@ -271,6 +271,7 @@ impl<'a> Transformer<'a> {
                     name: to_wado_identifier(&param.name),
                     ty: self.transform_type(param.ty)?,
                     wit_name: param.name.clone(),
+                    default: None,
                 })
             })
             .collect()

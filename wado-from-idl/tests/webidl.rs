@@ -272,14 +272,77 @@ fn a_constructor_is_new_and_a_method_names_its_arguments_in_kebab_case() {
 }
 
 #[test]
-fn an_optional_argument_is_an_option() {
-    let (code, _) = chain().generate();
+fn an_optional_argument_takes_its_webidl_default_or_null() {
+    let members = [
+        operation(
+            "stepUp",
+            &plain("undefined"),
+            &[argument(
+                "n",
+                &plain("long"),
+                true,
+                r#"{"type": "number", "value": "0xFF"}"#,
+            )],
+            "",
+        ),
+        operation(
+            "open",
+            &plain("undefined"),
+            &[argument(
+                "target",
+                &plain("DOMString"),
+                true,
+                r#"{"type": "string", "value": "_\"blank\\"}"#,
+            )],
+            "",
+        ),
+        // A default of another kind than the type is the browser's to apply.
+        operation(
+            "scroll",
+            &plain("undefined"),
+            &[argument(
+                "smooth",
+                &plain("boolean"),
+                true,
+                r#"{"type": "dictionary"}"#,
+            )],
+            "",
+        ),
+        // Only trailing parameters take a default in Wado.
+        operation(
+            "write",
+            &plain("undefined"),
+            &[
+                argument("prefix", &plain("DOMString"), true, "null"),
+                variadic("text", &plain("DOMString")),
+            ],
+            "",
+        ),
+    ];
+    let mut defs = chain();
+    defs.interfaces.push(partial("Element", &members));
+    let (code, _) = defs.generate();
     assert!(
-        code.contains("fn clone_node(&self, subtree: Option<bool>) -> Node;"),
+        code.contains("fn clone_node(&self, subtree: bool = false) -> Node;"),
         "{code}"
     );
     assert!(
-        code.contains("fn set_selection_range(&self, start: u32, direction: Option<String>);"),
+        code.contains(
+            "fn set_selection_range(&self, start: u32, direction: Option<String> = null);"
+        ),
+        "{code}"
+    );
+    assert!(code.contains("fn step_up(&self, n: i32 = 0xFF);"), "{code}");
+    assert!(
+        code.contains(r#"fn open(&self, target: String = "_\"blank\\");"#),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn scroll(&self, smooth: Option<bool> = null);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn write(&self, prefix: Option<String>, text: List<String>);"),
         "{code}"
     );
 }

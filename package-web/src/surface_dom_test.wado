@@ -48,8 +48,8 @@ test "the handles carry the classes dom.wado numbers" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let input = doc.create_element("input", null);
-        let div = doc.create_element("div", null);
+        let input = doc.create_element("input");
+        let div = doc.create_element("div");
         assert input matches { _: HtmlInputElement };
         assert div matches { _: HtmlElement };
         assert !div matches { _: HtmlInputElement };
@@ -66,7 +66,7 @@ test "the handles carry the classes dom.wado numbers" {
 test "a handle inspects as the type its class names" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let node: Node = Dom::document().create_element("div", null);
+        let node: Node = Dom::document().create_element("div");
         assert `${node:?}` == "HtmlElement { type_id: 3, object_id: 6 }";
     };
 }
@@ -75,10 +75,10 @@ test "handles compare equal when they name one object" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let div = doc.create_element("div", null);
+        let div = doc.create_element("div");
         let as_node: Node = div;
         assert as_node == div;
-        assert div != doc.create_element("div", null);
+        assert div != doc.create_element("div");
         assert Dom::document() == doc;
     };
 }
@@ -88,9 +88,9 @@ test "a tree is built by appending" {
     with &mut dom do {
         let doc = Dom::document();
         let body = doc.body().unwrap();
-        let list = doc.create_element("ul", null);
-        let first = doc.create_element("li", null);
-        let second = doc.create_element("li", null);
+        let list = doc.create_element("ul");
+        let first = doc.create_element("li");
+        let second = doc.create_element("li");
         body.append_child(list);
         list.append_child(first);
         list.append_child(second);
@@ -116,8 +116,8 @@ test "text content concatenates the descendants' text" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let p = doc.create_element("p", null);
-        let b = doc.create_element("b", null);
+        let p = doc.create_element("p");
+        let b = doc.create_element("b");
         p.set_text_content(Option::Some("Hello, "));
         b.set_text_content(Option::Some("Wado"));
         p.append_child(b);
@@ -144,7 +144,7 @@ test "setting a document's text content changes nothing" {
 test "a node appended into itself is a hierarchy error" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let div = Dom::document().create_element("div", null);
+        let div = Dom::document().create_element("div");
         div.append_child(div);
     };
 }
@@ -154,8 +154,8 @@ test "an ancestor appended into its descendant is a hierarchy error" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let outer = doc.create_element("div", null);
-        let inner = doc.create_element("div", null);
+        let outer = doc.create_element("div");
+        let inner = doc.create_element("div");
         outer.append_child(inner);
         inner.append_child(outer);
     };
@@ -166,7 +166,7 @@ test "the document is never a child" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        doc.create_element("div", null).append_child(doc);
+        doc.create_element("div").append_child(doc);
     };
 }
 
@@ -175,7 +175,7 @@ test "the document holds one element" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        doc.append_child(doc.create_element("html", null));
+        doc.append_child(doc.create_element("html"));
     };
 }
 
@@ -184,9 +184,9 @@ test "a text node holds no children" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let p = doc.create_element("p", null);
+        let p = doc.create_element("p");
         p.set_text_content(Option::Some("text"));
-        p.first_child().unwrap().append_child(doc.create_element("b", null));
+        p.first_child().unwrap().append_child(doc.create_element("b"));
     };
 }
 
@@ -194,7 +194,7 @@ test "an element is found by id once it is in the document" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let el = doc.create_element("div", null);
+        let el = doc.create_element("div");
         el.set_id("app");
         assert el.id() == "app";
         assert el.get_attribute("id") == Option::Some("app");
@@ -207,7 +207,7 @@ test "an element is found by id once it is in the document" {
 test "attributes are set, read and removed" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let el = Dom::document().create_element("a", null);
+        let el = Dom::document().create_element("a");
         assert !el.has_attribute("href");
         el.set_attribute("href", "/home");
         assert el.get_attribute("href") == Option::Some("/home");
@@ -220,10 +220,10 @@ test "get_html serializes an element's children" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let list = doc.create_element("ul", null);
+        let list = doc.create_element("ul");
         list.set_attribute("class", "menu");
         list.set_id("nav");
-        let item = doc.create_element("li", null);
+        let item = doc.create_element("li");
         item.set_text_content(Option::Some("One"));
         list.append_child(item);
         let body = doc.body().unwrap();
@@ -237,8 +237,8 @@ test "text and attribute values are escaped" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let div = doc.create_element("div", null);
-        let p = doc.create_element("p", null);
+        let div = doc.create_element("div");
+        let p = doc.create_element("p");
         p.set_attribute("title", "\"q\" & <x>");
         p.set_text_content(Option::Some("a < b & \"c\" > d\u{A0}"));
         div.append_child(p);
@@ -250,15 +250,15 @@ test "a void element has no end tag, and an input's value is no attribute" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let form = doc.create_element("form", null);
-        let input = doc.create_element("input", null);
+        let form = doc.create_element("form");
+        let input = doc.create_element("input");
         input.set_attribute("type", "text");
         let input: HtmlInputElement = input else {
             unreachable();
         };
         input.set_value("typed");
         form.append_child(input);
-        form.append_child(doc.create_element("br", null));
+        form.append_child(doc.create_element("br"));
         assert form.get_html() == "<input type=\"text\"><br>";
     };
 }
@@ -267,8 +267,8 @@ test "a script's text is not escaped" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let head = doc.create_element("head", null);
-        let script = doc.create_element("script", null);
+        let head = doc.create_element("head");
+        let script = doc.create_element("script");
         script.set_text_content(Option::Some("if (a < b && c) {}"));
         head.append_child(script);
         assert head.get_html() == "<script>if (a < b && c) {}</script>";
@@ -303,7 +303,7 @@ test "the document serializes with its doctype" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let p = doc.create_element("p", null);
+        let p = doc.create_element("p");
         p.set_text_content(Option::Some("Hi"));
         doc.body().unwrap().append_child(p);
     };
@@ -314,7 +314,7 @@ test "the document serializes with its doctype" {
 test "an element name holding a space is an InvalidCharacterError" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        Dom::document().create_element("div onclick=x", null);
+        Dom::document().create_element("div onclick=x");
     };
 }
 
@@ -322,7 +322,7 @@ test "an element name holding a space is an InvalidCharacterError" {
 test "an element name not starting with a letter is an InvalidCharacterError" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        Dom::document().create_element("1div", null);
+        Dom::document().create_element("1div");
     };
 }
 
@@ -330,7 +330,7 @@ test "an element name not starting with a letter is an InvalidCharacterError" {
 test "an attribute name holding `=` is an InvalidCharacterError" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        Dom::document().create_element("div", null).set_attribute("a=b", "");
+        Dom::document().create_element("div").set_attribute("a=b", "");
     };
 }
 
@@ -338,9 +338,9 @@ test "a name the DOM accepts is kept" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let el = doc.create_element("my-el.x", null);
+        let el = doc.create_element("my-el.x");
         el.set_attribute("data-a:b", "1");
-        let div = doc.create_element("div", null);
+        let div = doc.create_element("div");
         div.append_child(el);
         assert div.get_html() == "<my-el.x data-a:b=\"1\"></my-el.x>";
     };
@@ -350,8 +350,8 @@ test "an attribute name is lowercased" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let div = doc.create_element("div", null);
-        let p = doc.create_element("p", null);
+        let div = doc.create_element("div");
+        let p = doc.create_element("p");
         p.set_attribute("Class", "x");
         assert p.get_attribute("CLASS") == Option::Some("x");
         assert p.has_attribute("class");
@@ -366,8 +366,8 @@ test "a void element's get_html is empty, whatever it holds" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let input = doc.create_element("input", null);
-        input.append_child(doc.create_element("span", null));
+        let input = doc.create_element("input");
+        input.append_child(doc.create_element("span"));
         assert input.get_html() == "";
     };
 }
@@ -376,7 +376,7 @@ test "an empty id is no id" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
         let doc = Dom::document();
-        let div = doc.create_element("div", null);
+        let div = doc.create_element("div");
         div.set_attribute("id", "");
         doc.body().unwrap().append_child(div);
         assert doc.get_element_by_id("") == null;
@@ -386,7 +386,7 @@ test "an empty id is no id" {
 test "an input holds its value" {
     let mut dom = SurfaceDom::new();
     with &mut dom do {
-        let input = Dom::document().create_element("input", null);
+        let input = Dom::document().create_element("input");
         let input: HtmlInputElement = input else {
             unreachable();
         };
@@ -402,13 +402,13 @@ test "an event reaches capturing ancestors first, then the target" {
     with &mut dom do {
         let doc = Dom::document();
         let body = doc.body().unwrap();
-        let button = doc.create_element("button", null);
+        let button = doc.create_element("button");
         body.append_child(button);
-        button.add_event_listener("click", |_: Event| order.push("target"), null);
-        body.add_event_listener("click", |_: Event| order.push("body, bubbling"), null);
+        button.add_event_listener("click", |_: Event| order.push("target"));
+        body.add_event_listener("click", |_: Event| order.push("body, bubbling"));
         body.add_event_listener("click", |_: Event| order.push("body"), Option::Some(true));
         Dom::window().add_event_listener("click", |_: Event| order.push("window"), Option::Some(true));
-        button.add_event_listener("focus", |_: Event| order.push("other type"), null);
+        button.add_event_listener("focus", |_: Event| order.push("other type"));
         assert button.dispatch_event(Event::new("click"));
     };
     assert order == ["window", "body", "target"];
@@ -423,7 +423,7 @@ test "a listener sees the event and may call the DOM" {
             assert e.type() == "ping";
             assert e.target() == Option::Some(Dom::document().body().unwrap() as EventTarget);
             Dom::document().body().unwrap().set_id("pinged");
-        }, null);
+        });
         let event = Event::new("ping");
         assert event.target() == null;
         body.dispatch_event(event);
