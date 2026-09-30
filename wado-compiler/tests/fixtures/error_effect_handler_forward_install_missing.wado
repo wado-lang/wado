@@ -1,0 +1,25 @@
+// A handler ending in `..forward` passes what it leaves out to the next
+// handler out, so installing it performs the effect it handles: a function
+// that does not hold that effect cannot reach it through the handler.
+
+use { Random } from "wasi:random";
+
+struct OnlyBytes {}
+
+impl Random for OnlyBytes {
+    fn get_random_bytes(&self, len: u64) -> List<u8> {
+        resume [];
+    }
+    ..forward
+}
+
+fn sneaky() -> u64 {
+    return with Random => &OnlyBytes {} do { Random::get_random_u64() };
+}
+
+export fn run() {
+    sneaky();
+}
+
+__DATA__
+{"compile_error": ":17:27: analysis error: missing effect 'Random' required by the handler installed for 'Random'", "compile_error_codes": ["TYPE_MISMATCH"]}

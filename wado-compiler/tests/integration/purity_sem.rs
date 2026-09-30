@@ -11,7 +11,9 @@ fn violations(source: &str) -> Vec<String> {
     reported(source)
         .into_iter()
         .map(|(_, impurity)| match impurity {
-            Impurity::Call(callee) | Impurity::Dispatch(callee) => callee,
+            Impurity::Call(callee) | Impurity::Dispatch(callee) | Impurity::Install(callee) => {
+                callee
+            }
         })
         .collect()
 }

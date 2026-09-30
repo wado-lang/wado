@@ -673,6 +673,12 @@ assert o.lines == ["b"];
 
 The handler expressions are evaluated before the body, outside the handlers they install.
 
+A handler runs on behalf of the code that installs it, so installing one demands
+what it performs: every effect its methods declare, and `E` itself where the
+block ends in `..forward` (see
+[Operations a Handler Leaves Out](#operations-a-handler-leaves-out)). A handler
+cannot reach a capability its installer does not hold.
+
 `with ... do` is an expression. Its value is the body's, as a block's is:
 
 <!-- {"fixture":"spec_effects_install.wado"} -->
@@ -756,7 +762,7 @@ assert c.value == 2;
 
 ### Where a Handler Method Runs
 
-A handler method for `E` runs with its own installation set aside, so `E`'s operations inside it reach the next handler out. That is how a handler delegates, to an outer handler or to the host, without recursing into itself. The method holds `E` for this without declaring it.
+A handler method for `E` runs with its own installation set aside, so `E`'s operations inside it reach the next handler out. That is how a handler delegates, to an outer handler or to the host, without recursing into itself. A method that delegates declares `with E`, as it would any other effect it performs.
 
 <!-- {"fixture":"spec_effects_handler_delegates.wado"} -->
 
@@ -768,7 +774,7 @@ struct Counting {
 }
 
 impl Random for Counting {
-    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> with Random {
         self.calls += 1;
         resume Random::get_random_bytes(max_len)   // the next handler out: the host
     }

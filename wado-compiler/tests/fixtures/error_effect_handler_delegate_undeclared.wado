@@ -1,0 +1,22 @@
+// A handler method holds nothing it does not declare, the effect it handles
+// included: delegating to the next handler out takes a `with` naming it.
+
+use { Random } from "wasi:random";
+
+struct Passthrough {}
+
+impl Random for Passthrough {
+    fn get_random_bytes(&self, len: u64) -> List<u8> {
+        resume Random::get_random_bytes(len);
+    }
+    fn get_random_u64(&self) -> u64 {
+        resume 0;
+    }
+}
+
+export fn run() with Random {
+    with Random => &Passthrough {} do { Random::get_random_u64(); }
+}
+
+__DATA__
+{"compile_error": ":10:16: analysis error: missing effect 'Random' required by 'Random::get_random_bytes'", "compile_error_codes": ["TYPE_MISMATCH"]}

@@ -1,0 +1,28 @@
+// Installing a handler performs what its methods declare, so the installing
+// function must hold it. Otherwise any capability is one handler away from a
+// function that declares nothing.
+
+use { Random } from "wasi:random";
+
+interface Dice {
+    fn roll() -> u64;
+}
+
+struct HostDice {}
+
+impl Dice for HostDice {
+    fn roll(&self) -> u64 with Random {
+        resume Random::get_random_u64();
+    }
+}
+
+fn sneaky() -> u64 {
+    return with Dice => &HostDice {} do { Dice::roll() };
+}
+
+export fn run() {
+    sneaky();
+}
+
+__DATA__
+{"compile_error": ":20:25: analysis error: missing effect 'Random' required by the handler installed for 'Dice'", "compile_error_codes": ["TYPE_MISMATCH"]}
