@@ -16,8 +16,8 @@ Wado today and what is still blocked.
 - Compile Wado with **`-f no-wide-arithmetic`** — V8 has no wide-arithmetic
   proposal, and float formatting / `i128` emit it.
 - Run on **Node 26+** — stable JSPI, no flag.
-- **Compute programs work** (including float formatting). Filesystem programs
-  run to completion; reading through a preopen is unverified (see below).
+- **Compute and filesystem programs work** (including float formatting). A
+  filesystem program needs its preopen set with `_setPreopens` (see below).
 - Quick check: `mise run jco-hello-released`. Benchmark:
   `mise run jco-bench <program.wado>`.
 
@@ -40,8 +40,26 @@ plain `transpile()` — jco's own `preview3-shim` serves every import a Wado
 program makes, and the output links to it through a `node_modules` symlink the
 script writes beside the files.
 
-The shim flushes stdout **after** `run()` resolves, so a runner that calls
-`process.exit` on that promise loses the output. Let the event loop drain.
+The shim writes stdout from a worker that is torn down once the event loop
+empties, so lines still queued when `run()` resolves are lost, and a runner that
+calls `process.exit` on that promise loses more. Hold the loop open for a
+second after `run()` resolves. The lines of one run can also arrive out of
+order.
+
+A program that reads files needs a preopen. Set it before importing the
+transpiled module, mapping the guest's `.` to a host directory as
+`wado run --dir <dir>::.` does:
+
+```js
+import { _setPreopens } from "@bytecodealliance/preview3-shim/filesystem";
+_setPreopens({ ".": "/abs/host/dir" });
+const m = await import("./out/prog.js");
+await m.run.run();
+await new Promise((r) => setTimeout(r, 1000));
+```
+
+Resolve the shim from the output directory's `node_modules` symlink, so the
+program and the runner share one preopen table.
 
 mise tasks:
 
@@ -60,7 +78,7 @@ mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transp
 | JSPI                      | ✅ native (Node 26 no flag; Node 24 needs the flag)                                                                                                  |
 | Wide-arithmetic component | ❌ `transpile` rejects it (`wide arithmetic support is not enabled`); even if forced, V8 rejects the opcode at runtime → use `-f no-wide-arithmetic` |
 | Stdout via stream         | ✅ jco's own shim delivers it, flushed after `run()` resolves                                                                                        |
-| Filesystem read stream    | ⚠️ no longer deadlocks; reading through a preopen is unverified                                                                                       |
+| Filesystem read stream    | ✅ reads through a preopen set with `_setPreopens` (zlib benchmark verified)                                                                         |
 
 ## wide-arithmetic (`-f no-wide-arithmetic`)
 
@@ -95,38 +113,34 @@ times (default 3; keep the best). The benchmark programs already self-time via
 `core:benchmark` + `MonotonicClock` and print their own
 throughput line, so no host timing is needed.
 
+`JCO_PREOPEN` names the host directory granted as the program's `.` (default:
+the repository root). The benchmarks read their data relative to `benchmark/`:
+
 ```sh
 mise run jco-bench benchmark/mandelbrot/mandelbrot.wado
+JCO_PREOPEN=benchmark mise run jco-bench benchmark/zlib/zlib_bench.wado
 ```
 
-**Works today** (compute-only — `Stdout` + `MonotonicClock`):
-
-| Benchmark  | Wado on Node (jco) | Wado on wasmtime        |
-| ---------- | ------------------ | ----------------------- |
-| mandelbrot | ~4.0 M px/s        | ~4.2 M                  |
-| sieve      | ~150 M numbers/s   | ~64 M (V8 ~2.3× faster) |
-| fts        | ~12 M conv/s       | —                       |
+| Benchmark       | Wado on Node (jco) | Wado on wasmtime        |
+| --------------- | ------------------ | ----------------------- |
+| mandelbrot      | ~4.0 M px/s        | ~4.2 M                  |
+| sieve           | ~150 M numbers/s   | ~64 M (V8 ~2.3× faster) |
+| fts             | ~12 M conv/s       | —                       |
+| zlib compress   | ~65 MB/s           | —                       |
+| zlib decompress | ~220 MB/s          | —                       |
 
 Compute throughput on V8 lands within ~5–10% of wasmtime (sieve is much faster
 on V8). Numbers are indicative on a noisy cloud VM; keep best-of-3.
 
-**Unported** (the other benchmarks — `Preopens` / `wasi:filesystem`): zlib,
-json-{twitter,canada,catalog}, sqlite-parse, syntax-highlight, cbor. They read
-input data from preopened files, which the pipeline does not set. The data load
-sits **outside** the timed loop, so wiring preopens runs these unchanged.
+The other filesystem benchmarks (json-{twitter,canada,catalog}, sqlite-parse,
+syntax-highlight, cbor) load their data the same way, outside the timed loop,
+but have not been run on Node yet.
 
 ## Known blockers (jco / V8 gaps)
 
 ### wide-arithmetic (V8)
 
 Not jco. Handled by `-f no-wide-arithmetic`.
-
-### Filesystem reads (jco)
-
-A file-reading program no longer hangs — `example/cat.wado` runs to completion
-against `preview3-shim`. What it reads is unconfirmed: the shim needs its
-preopens set (`_setPreopens` in `filesystem/descriptor.js`), and the
-benchmarks that load data from a preopen are still unported.
 
 ### Reusing an instance (jco)
 
@@ -163,11 +177,12 @@ Transpiled output is one large JS file. Useful canonical-builtin → JS mappings
 
 ### Common error patterns
 
-| Error                                                | Likely cause                                                                                       |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `invalid numeric opcode: 0xfc16`                     | Wide-arithmetic — recompile with `-f no-wide-arithmetic`                                           |
-| `WebAssembly.Suspending is not a constructor`        | Node < 24, or Node 22 picked up outside the repo (use Node 26)                                     |
-| `FutureReadableEnd is not defined`                   | Future-end classes not injected (run via `transpile-released.mjs`)                                 |
-| stdout empty                                         | Missing the stream-write hook or `cli.js` map                                                      |
-| `wide arithmetic support is not enabled` (transpile) | Compile with `-f no-wide-arithmetic`; V8 cannot run the opcodes either                             |
-| Hang / timeout                                       | JSPI Suspending missing on a trampoline, or a stream rendezvous deadlock (the filesystem read gap) |
+| Error                                                | Likely cause                                                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `invalid numeric opcode: 0xfc16`                     | Wide-arithmetic — recompile with `-f no-wide-arithmetic`                                         |
+| `WebAssembly.Suspending is not a constructor`        | Node < 24, or Node 22 picked up outside the repo (use Node 26)                                   |
+| `FutureReadableEnd is not defined`                   | Future-end classes not injected (run via `transpile-released.mjs`)                               |
+| stdout empty or missing lines                        | The runner exits or empties the event loop before the shim's worker flushes (wait after `run()`) |
+| Bare `unreachable` from a program that reads files   | No preopen set (`_setPreopens`), or a path outside it; the panic message is lost with the exit   |
+| `wide arithmetic support is not enabled` (transpile) | Compile with `-f no-wide-arithmetic`; V8 cannot run the opcodes either                           |
+| Hang / timeout                                       | JSPI Suspending missing on a trampoline, or a stream rendezvous deadlock                         |
