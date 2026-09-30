@@ -47,6 +47,7 @@ test "char casts" {
 
     let b: u8 = 65;
     assert b as char == 'A';
+    assert 97 as char == 'a';
 
     let from_u32 = char::from_u32(65 as u32);
     let from_i32 = char::from_i32(65);
@@ -78,9 +79,8 @@ test {
 test "integer range" {
     let a: i8 = 127;                  // OK: max i8
     let c: i8 = -128;                 // OK: min i8
-    let f: i8 = 0xFF as i8;           // OK: explicit bit-pattern reinterpretation
-    let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation
-    assert a == i8::MAX && c == i8::MIN && f == -1 && h == -1;
+    let h = (0xFFFF_FFFF as u32) as i32;  // OK: a u32 value transmuted to i32
+    assert a == i8::MAX && c == i8::MIN && h == -1;
 }
 
 test "integer to float" {

@@ -51,9 +51,7 @@ use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_nam
 use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
-use crate::elaborator::expr::{
-    compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
-};
+use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
@@ -68,7 +66,7 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    is_float_only_literal, parse_i128_literal, parse_int_bits, parse_u128_literal,
+    parse_i128_literal, parse_int_bits, parse_u128_literal,
     range_endpoint_to_i128,
 };
 use crate::escape::{
@@ -2680,57 +2678,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let target_type = self
                     .ann_expression_types(cast.id)
                     .unwrap_or(TypeTable::ERROR);
-                // Mirrors `Elaborator::resolve_cast`'s int128 branch.
-                if let Some(tir) = self.try_reify_int128_literal_cast(cast, target_type) {
-                    return tir;
-                }
-                // annotate types a direct literal operand as the target but not
-                // one under a `Neg`: `-9e15 as i64` would truncate as `i32.const`.
-                let numeric_target = self.tysys.type_table.borrow().is_numeric(target_type);
-                let inner = match int_literal_cast_operand(&cast.expr) {
-                    Some((lit, _, negated)) if numeric_target => {
-                        let lit_tir = self.reify_literal(lit, target_type, ctx);
-                        if negated {
-                            TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Neg,
-                                    expr: Box::new(lit_tir),
-                                },
-                                target_type,
-                                span,
-                            )
-                        } else {
-                            lit_tir
-                        }
-                    }
-                    _ => self.reify_expr(&cast.expr, ctx, None),
-                };
+                let inner = self.reify_expr(&cast.expr, ctx, None);
                 let inner =
                     read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
-                let inner = match self.lower_int128_cast(inner, target_type, span) {
-                    ControlFlow::Break(lowered) => return lowered,
-                    ControlFlow::Continue(inner) => inner,
-                };
-                let (from_handle, to_handle) = {
-                    let tt = self.tysys.type_table.borrow();
-                    (
-                        tt.is_unrestricted_handle(inner.type_id),
-                        tt.is_unrestricted_handle(target_type),
-                    )
-                };
-                let inner = match (from_handle, to_handle) {
-                    (true, false) => handle_to_f64(inner),
-                    (false, true) => return handle_from_f64(inner, target_type),
-                    _ => inner,
-                };
-                TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(inner),
-                        target_type,
-                    },
-                    target_type,
-                    span,
-                )
+                self.lower_cast(inner, target_type, span)
             }
             ast::Expr::Unary(unary) => {
                 // `&mut [1, 2] as List<i32>` parses as `(&mut [1, 2]) as …`,
@@ -8514,58 +8465,100 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
-    /// `LITERAL as i128/u128`: a `from_pair` constructor carries a literal past
-    /// `u64`, which the numeric path's `from_u64` / `from_i64` cannot.
-    fn try_reify_int128_literal_cast(
-        &mut self,
-        cast: &ast::CastExpr,
-        target_type: TypeId,
-    ) -> Option<TirExpr> {
-        let item = {
-            let tt = self.tysys.type_table.borrow();
-            tt.wide_int_item(tt.representation_head(target_type))?
+    /// `inner as target_type`, `inner` already read through its references:
+    /// the prelude calls a half or a wide integer needs, then the bare `Cast`.
+    fn lower_cast(&self, inner: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
+        let inner = match self.lower_half_cast(inner, target_type, span) {
+            ControlFlow::Break(lowered) => return lowered,
+            ControlFlow::Continue(inner) => inner,
         };
-
-        // Literal operand: `1042 as u128`.
-        if let ast::Expr::Literal(lit) = &cast.expr
-            && let Some(repr) = int_literal_repr(lit)
-        {
-            let parsed = if item == CompilerItem::U128 {
-                parse_u128_literal(repr).map(|v| v as i128)
-            } else {
-                parse_i128_literal(repr)
-            };
-            if let Ok(value) = parsed {
-                return Some(create_literal(
-                    item,
-                    value,
-                    target_type,
-                    &self.tysys.type_table.borrow(),
-                    cast.span,
-                ));
-            }
-        }
-
-        // Negated literal operand (i128 only): `-170... as i128`.
-        if item == CompilerItem::I128
-            && let ast::Expr::Unary(unary) = &cast.expr
-            && unary.op == ast::UnaryOp::Neg
-            && let ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(repr),
-                ..
-            }) = &unary.expr
-            && !is_float_only_literal(repr)
-            && let Ok(value) = parse_i128_literal(&format!("-{repr}"))
-        {
-            return Some(create_literal(
-                item,
-                value,
+        let inner = match self.lower_int128_cast(inner, target_type, span) {
+            ControlFlow::Break(lowered) => return lowered,
+            ControlFlow::Continue(inner) => inner,
+        };
+        let (from_handle, to_handle) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.is_unrestricted_handle(inner.type_id),
+                tt.is_unrestricted_handle(target_type),
+            )
+        };
+        let inner = match (from_handle, to_handle) {
+            (true, false) => handle_to_f64(inner),
+            (false, true) => return handle_from_f64(inner, target_type),
+            _ => inner,
+        };
+        TirExpr::new(
+            TirExprKind::Cast {
+                expr: Box::new(inner),
                 target_type,
-                &self.tysys.type_table.borrow(),
-                unary.span,
-            ));
+            },
+            target_type,
+            span,
+        )
+    }
+
+    /// A cast with `f16` or `bf16` on either side. No instruction converts
+    /// either, so a half widens to its exact `f32` and casts on from there,
+    /// and a number reaches a half through the prelude conversion that rounds
+    /// it once. `Continue` hands `inner` on where neither side is a half, or
+    /// the cast is only a newtype step.
+    fn lower_half_cast(
+        &self,
+        inner: TirExpr,
+        target_type: TypeId,
+        span: Span,
+    ) -> ControlFlow<TirExpr, TirExpr> {
+        let (source_half, target_half) = {
+            let tt = self.tysys.type_table.borrow();
+            if tt.share_common_base(inner.type_id, target_type) {
+                return ControlFlow::Continue(inner);
+            }
+            let half = |id| tt.primitive_head(id).filter(|p| p.is_half());
+            (half(inner.type_id), half(target_type))
+        };
+        if source_half.is_none() && target_half.is_none() {
+            return ControlFlow::Continue(inner);
         }
-        None
+        let call = |item, arg: TirExpr, result_type| {
+            let func = method_ref(&self.tysys.type_table.borrow(), item);
+            TirExpr::new(
+                TirExprKind::Call {
+                    func: Box::new(func),
+                    type_args: vec![],
+                    args: CallArgs::free(vec![CallArg::new(arg, false)]),
+                },
+                result_type,
+                span,
+            )
+        };
+        let source = match source_half {
+            Some(half) => {
+                let (base, widen) = match half {
+                    PrimitiveType::F16 => (TypeTable::F16, CompilerItem::F16Widen),
+                    _ => (TypeTable::BF16, CompilerItem::Bf16Widen),
+                };
+                call(widen, bare_cast(inner, base, span), TypeTable::F32)
+            }
+            None => inner,
+        };
+        let Some(half) = target_half else {
+            return ControlFlow::Break(self.lower_cast(source, target_type, span));
+        };
+        let (base, item, via) = {
+            let tt = self.tysys.type_table.borrow();
+            let source_base = tt.representation_head(source.type_id);
+            match (half, tt.primitive_head(source_base), tt.wide_int_item(source_base)) {
+                (PrimitiveType::F16, _, _) => (TypeTable::F16, CompilerItem::F16FromF64, TypeTable::F64),
+                (_, _, Some(CompilerItem::I128)) => (TypeTable::BF16, CompilerItem::Bf16FromI128, source_base),
+                (_, _, Some(_)) => (TypeTable::BF16, CompilerItem::Bf16FromU128, source_base),
+                (_, Some(PrimitiveType::I64), _) => (TypeTable::BF16, CompilerItem::Bf16FromI64, TypeTable::I64),
+                (_, Some(PrimitiveType::U64), _) => (TypeTable::BF16, CompilerItem::Bf16FromU64, TypeTable::U64),
+                _ => (TypeTable::BF16, CompilerItem::Bf16FromF64, TypeTable::F64),
+            }
+        };
+        let converted = call(item, self.lower_cast(source, via, span), base);
+        ControlFlow::Break(bare_cast(converted, target_type, span))
     }
 
     /// A cast with a wide integer on either side, `inner` already read through
@@ -10514,6 +10507,22 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
             ..method.clone()
         })
         .collect()
+}
+
+/// `expr as to` as codegen takes it, one instruction or none: `expr` itself
+/// where it already has the type.
+fn bare_cast(expr: TirExpr, to: TypeId, span: Span) -> TirExpr {
+    if expr.type_id == to {
+        return expr;
+    }
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(expr),
+            target_type: to,
+        },
+        to,
+        span,
+    )
 }
 
 /// A half precision literal, given as its bits.

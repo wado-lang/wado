@@ -103,17 +103,6 @@ fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
 }
 
-/// An integer literal standing as a cast operand, bare or negated, and which of
-/// the two it was — the shape reify re-types to the cast's target width.
-pub(super) fn int_literal_cast_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str, bool)> {
-    let (lit, negated) = match expr {
-        Expr::Literal(lit) => (lit, false),
-        Expr::Unary(unary) => (negated_literal(unary)?, true),
-        _ => return None,
-    };
-    int_literal_repr(lit).map(|repr| (lit, repr, negated))
-}
-
 /// The literal `-NUM` negates, which both range checks read as one literal so
 /// the boundary is the signed minimum.
 pub(super) fn negated_literal(unary: &ast::UnaryExpr) -> Option<&ast::LiteralExpr> {
@@ -273,41 +262,43 @@ fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<St
         .then(|| "an unrestricted resource handle is an `f64`".to_string())
 }
 
-/// The reason a cast naming `f16` or `bf16` is refused, or `None` where it
-/// names neither or is the newtype step every type admits (WEP 2026-09-22).
-fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    let from_half = tt.primitive_head(source).filter(|p| p.is_half());
-    let to_half = tt.primitive_head(target).filter(|p| p.is_half());
-    let half = from_half.or(to_half)?.as_str();
+/// The reason Rust's `as` refuses a cast between scalars, which Wado refuses
+/// too: nothing casts to `bool`, a `bool` casts to no float, and an enum casts
+/// to no number and from none.
+fn scalar_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
     if tt.share_common_base(source, target) {
         return None;
     }
-    let source_half = from_half.is_some();
-    Some(if source_half && to_half.is_some() {
-        "neither direction is exact: `f16` has the shorter exponent range and \
-         `bf16` the shorter mantissa"
-            .to_string()
-    } else if source_half {
-        if tt.is_float(target) {
-            format!(
-                "`as` does not convert `{half}`; use `{}::from(x)`",
-                tt.type_name(target)
-            )
-        } else if tt.is_integer(target) {
-            format!("`as` converts a value; use `to_bits()` to read the bits of `{half}`")
-        } else {
-            format!("`{half}` converts only through `to_bits()` and `From`")
-        }
-    } else if tt.is_float(source) {
-        format!(
-            "`as` does not convert to `{half}`; use `{half}::from_f32(x)` to round or \
-             `{half}::try_from(x)` to require an exact value"
-        )
-    } else if tt.is_integer(source) {
-        format!("`as` converts a value; use `{half}::from_bits(x)` to reinterpret the bits")
-    } else {
-        format!("`{half}` is built only by `from_bits`, `from_f32` and `try_from`")
-    })
+    let is_number = |id| tt.is_numeric(id) || tt.is_half(id) || tt.is_wide_int(id);
+    let enum_name = |id| {
+        matches!(tt.get(tt.representation_head(id)), ResolvedType::Enum { .. })
+            .then(|| tt.type_name(id))
+    };
+    if tt.representation_head(target) == TypeTable::BOOL {
+        return Some("nothing casts to `bool`; compare instead, as `x != 0`".to_string());
+    }
+    if tt.representation_head(source) == TypeTable::BOOL
+        && is_number(target)
+        && !tt.is_integer(target)
+        && !tt.is_wide_int(target)
+    {
+        return Some("a `bool` casts only to an integer type".to_string());
+    }
+    if let Some(name) = enum_name(source)
+        && is_number(target)
+    {
+        return Some(format!(
+            "an enum casts to no number; `ReflectEnum::<{name}>::discriminant` reads its tag"
+        ));
+    }
+    if let Some(name) = enum_name(target)
+        && is_number(source)
+    {
+        return Some(format!(
+            "a number casts to no enum; `ReflectEnum::<{name}>::from_discriminant` finds its case"
+        ));
+    }
+    None
 }
 
 /// Whether a cast from or to `id` has nothing to judge: a diverging operand
@@ -805,9 +796,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The type a cast to `target` gives its operand where the operand is a
+    /// numeric literal, bare or negated, that can take one: an integer literal
+    /// any numeric type, a float literal any float type. A newtype target
+    /// gives its representation, and `char` gives `u8`. A byte literal is a
+    /// `u8` of its own, so `None`.
+    fn cast_literal_type(&self, operand: &Expr, target: TypeId) -> Option<TypeId> {
+        let lit = match operand {
+            Expr::Literal(lit) => lit,
+            Expr::Unary(unary) => negated_literal(unary)?,
+            _ => return None,
+        };
+        let Literal::Number(repr) = &lit.value else {
+            return None;
+        };
+        let integer = !util::is_float_only_literal(repr);
+        let tt = self.tysys.type_table.borrow();
+        let head = tt.representation_head(target);
+        if head == TypeTable::CHAR {
+            return integer.then_some(TypeTable::U8);
+        }
+        let float_target = tt.is_float(head) || tt.is_half(head);
+        (is_numeric_literal_target(&tt, head) && (integer || float_target)).then_some(head)
+    }
+
     /// Parse an integer literal, reporting a malformed or wider-than-`u128`
     /// one. Always this walk's job: nothing downstream reports it, and reify
     /// reads such a literal as `0`.
+
     pub(super) fn check_int_literal_parses(&mut self, repr: &str, span: Span) -> Option<u128> {
         match util::parse_u128_literal(repr) {
             Ok(value) => Some(value),
@@ -3503,85 +3519,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return target_type;
         }
 
-        // A cast to i128/u128 becomes a constructor call in reify
-        // (`lower_int128_cast`); here only a literal operand is checked.
-        //
-        // Which pair of words the literal has to fit is how the value is
-        // stored, so the representation answers: `type Signed = i128` is that
-        // pair too, and reading the name instead let an oversized literal
-        // through it with no diagnostic. The cast still yields `target_type`.
-        let repr_target = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(target_type);
-        let wide_target = self.tysys.type_table.borrow().wide_int_item(repr_target);
-        if let Some(item) = wide_target {
-            let name = item.attr_name();
-            // Handle number literal cast specially to support values > u64
-            if let ast::Expr::Literal(lit) = &cast.expr
-                && let Literal::Number(repr) = &lit.value
-                && !util::is_float_only_literal(repr)
-            {
-                let parse_result = if item == CompilerItem::U128 {
-                    util::parse_u128_literal(repr).map(|v| v as i128)
-                } else {
-                    util::parse_i128_literal(repr)
-                };
-
-                if parse_result.is_err() {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!("invalid {name} literal: {repr}"),
-                        span: lit.span,
-                    });
-                }
-                return target_type;
-            }
-
-            // Handle negated number literal cast: -170... as i128
-            if let ast::Expr::Unary(unary) = &cast.expr
-                && unary.op == ast::UnaryOp::Neg
-                && let ast::Expr::Literal(lit) = &unary.expr
-                && let Literal::Number(repr) = &lit.value
-                && !util::is_float_only_literal(repr)
-                && item == CompilerItem::I128
-            {
-                // Parse the negated value directly using Rust's i128
-                let negated_repr = format!("-{repr}");
-                if util::parse_i128_literal(&negated_repr).is_err() {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!("invalid i128 literal: -{repr}"),
-                        span: unary.span,
-                    });
-                }
-                return target_type;
-            }
-
-            let source_type = self.resolve_expr(&cast.expr, ctx, None);
-            let tt = self.tysys.type_table.borrow();
-            if tt.is_numeric(tt.cast_operand_type(source_type, target_type)) {
+        // A cast types a literal operand as an annotation of its target would,
+        // range check included, wherever the literal can take that type. As
+        // in Rust, an integer literal cast to `char` is a `u8`.
+        let literal_type = self.cast_literal_type(&cast.expr, target_type);
+        if let Some(literal_type) = literal_type {
+            self.try_coerce_numeric_literal(&cast.expr, literal_type)
+                .expect("a cast literal type is a numeric literal target");
+            if literal_type == target_type {
                 return target_type;
             }
         }
 
-        // Reify re-types a literal operand to the target's width — what makes
-        // `as` the way to write a bit pattern (`0xFF as i8`) and how a literal
-        // reaches a target wider than `i32` (`65 as i128`). It never lands on
-        // `i32`, so the defaulted range check must not judge it.
-        let source_type = match int_literal_cast_operand(&cast.expr) {
-            // A float has no bit pattern to write, so the literal converts by
-            // value, as `let x: f32 = N;` does.
-            Some(_) if self.tysys.type_table.borrow().is_float(target_type) => {
-                self.try_coerce_numeric_literal(&cast.expr, target_type)
-                    .expect("a float is a numeric literal target");
-                target_type
-            }
-            Some((lit, repr, _)) => {
-                self.check_int_literal_parses(repr, lit.span);
-                self.record_expression_type(cast.expr.id(), TypeTable::I32);
-                self.record_expression_type(lit.id, TypeTable::I32);
-                TypeTable::I32
-            }
+        let source_type = match literal_type {
+            Some(literal_type) => literal_type,
             None => {
                 let expected = match &cast.expr {
                     // A closure takes its parameter types from the function
@@ -3613,7 +3564,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let refused_cast = {
             let tt = self.tysys.type_table.borrow();
             handle_cast_hint(&tt, source_type, target_type)
-                .or_else(|| half_cast_hint(&tt, source_type, target_type))
+                .or_else(|| scalar_cast_hint(&tt, source_type, target_type))
                 .or_else(|| ref_cast_hint(&tt, source_type, target_type))
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
                 .or_else(|| aggregate_cast_hint(&tt, source_type, target_type))
@@ -3649,6 +3600,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Primitive(
                         PrimitiveType::F64
                             | PrimitiveType::F32
+                            | PrimitiveType::F16
+                            | PrimitiveType::Bf16
                             | PrimitiveType::I64
                             | PrimitiveType::U64
                             | PrimitiveType::I32
