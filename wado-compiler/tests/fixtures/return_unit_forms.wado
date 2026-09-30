@@ -1,0 +1,37 @@
+// The forms a unit function may return in: a bare `return;`, `return ();`, and
+// the value of a call that itself returns `()`.
+
+global mut COUNT: i32 = 0;
+
+fn bump() {
+    COUNT += 1;
+}
+
+fn bare(stop: bool) {
+    if stop {
+        return;
+    }
+    bump();
+}
+
+fn explicit_unit() -> () {
+    bump();
+    return ();
+}
+
+fn forwards() {
+    return bump();
+}
+
+test {
+    bare(true);
+    bare(false);
+    explicit_unit();
+    forwards();
+    let c = || { return; };
+    c();
+    assert COUNT == 3;
+}
+
+__DATA__
+{ "test": {} }

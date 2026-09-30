@@ -1,0 +1,21 @@
+// A command reaches only the directories its host preopened. `core:fs`
+// resolves every path against the first of them, and a path that leaves it
+// does not open.
+use { println, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+export fn run() with (Stdout, Preopens) {
+    let text = "remember the milk";
+    assert fs::write("notes.txt", &text) matches { Ok(_) };
+    assert fs::read_to_string("notes.txt").unwrap() == text;
+    assert fs::read_to_string("/etc/hostname") matches { Err(_) };   // absolute
+    assert fs::read_to_string("../notes.txt") matches { Err(_) };    // above the preopen
+    println("notes saved");
+}
+
+__DATA__
+{
+    "preopened_dirs": [["", "."]],
+    "stdout": "notes saved\n"
+}

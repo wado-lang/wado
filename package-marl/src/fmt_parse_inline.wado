@@ -16,6 +16,8 @@ use {
     ReferenceLinkNode,
     ReferenceImageNode,
     AutoLinkNode,
+    COMMENT_OPEN,
+    COMMENT_CLOSE,
 } from "./fmt_ast.wado";
 use { RefTable, ref_table_get, parse_dest_and_title } from "./fmt_links.wado";
 use { StrCursor } from "./str_cursor.wado";
@@ -519,8 +521,8 @@ fn try_autolink_scheme(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
 }
 
 fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
-    if starts_with_at(cur, i, "<!--") {
-        return try_html_to_close(cur, i, "-->");
+    if starts_with_at(cur, i, &COMMENT_OPEN) {
+        return comment_at(cur, i);
     }
     let end = cur.end();
     let mut j = i + 1;
@@ -543,15 +545,29 @@ fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
     return null;
 }
 
-fn try_html_to_close<S: AsStrSlice>(cur: &StrCursor, i: i32, closer: S) -> Option<[Node, i32]> {
-    let end = cur.end();
-    let closer_len = closer.to_chars().len();
-    let mut j = i;
-    while j < end {
-        if starts_with_at(cur, j, closer) {
-            return Option::Some([Node::Html(cur.slice(i, j + closer_len)), j + closer_len]);
+/// The comment opening at `i` and the position past it, or `null` where none
+/// opens there or it never closes. As CommonMark says, `<!-->` and `<!--->` are
+/// empty comments.
+internal fn comment_at(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
+    if !starts_with_at(cur, i, &COMMENT_OPEN) {
+        return null;
+    }
+    let start = i + COMMENT_OPEN.len();
+    for let empty_close of [">", "->"] {
+        if starts_with_at(cur, start, empty_close) {
+            return Option::Some([
+                Node::Comment(""),
+                start + empty_close.len(),
+            ]);
         }
-        j += 1;
+    }
+    for let mut j = start; j < cur.end(); j += 1 {
+        if starts_with_at(cur, j, &COMMENT_CLOSE) {
+            return Option::Some([
+                Node::Comment(cur.slice(start, j)),
+                j + COMMENT_CLOSE.len(),
+            ]);
+        }
     }
     return null;
 }

@@ -15,7 +15,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
-use crate::tir::{ResolvedType, TypeId, TypeTable, range_item};
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, range_item};
 
 use super::sem::decls::ModuleDecls;
 use super::trait_env::{NamespaceImports, TraitEnv};
@@ -115,7 +115,26 @@ impl TypeSystem {
     /// itself rather than a spelling of it, which is what every caller holds:
     /// each reached one by destructuring a `ResolvedType`. Used by the resource
     /// move check to decide whether an aggregate transitively owns a resource.
+    ///
+    /// An anonymous shape answers from its head: it has fields like any other
+    /// struct, and no declaration to reach them through.
     pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        {
+            let table = self.type_table.borrow();
+            if let ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } = table.get(table.peel_refs(type_id))
+            {
+                return Some(
+                    table
+                        .anon_struct_fields(*shape)
+                        .iter()
+                        .map(|(_, ty)| *ty)
+                        .collect(),
+                );
+            }
+        }
         let info = self.data.struct_fields.get(&self.type_def(type_id)?)?;
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }

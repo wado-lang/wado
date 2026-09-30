@@ -522,9 +522,6 @@ test "parse unicode_props.g4" {
     let input = #include_str("../../tests/grammars/unicode_props.g4");
     let g = parse(input).unwrap();
     assert g.name == "unicode_props";
-
-    // Exercises \p{L}, \p{Nd}, \p{Zs} — structural parse is the main
-    // coverage; driver tests exercise match behaviour end-to-end.
     assert g.lexer_rules.len() >= 3;
 }
 
@@ -625,6 +622,25 @@ test "pipeline: assemble_grammar rejects an import naming no supplied input" {
     ];
     let result = assemble_grammar(&inputs);
     assert result matches { Err(Check(m)) && m.contains("not among the supplied inputs") }, "an unresolved import must be reported, not silently omitted";
+}
+
+test "pipeline: assemble_grammar names the input that failed to parse" {
+    let inputs: List<[String, String]> = [
+        ["M.g4", "grammar M;\nimport S;\ns : a ;"],
+        ["S.g4", "parser grammar S;\na : B"],
+    ];
+    let result = assemble_grammar(&inputs);
+    assert result matches { Err(Parse([file, m])) && file == "S.g4" && m.starts_with("expected ;") }, `${result:?}`;
+}
+
+test "pipeline: assemble_grammar checks references across the composite" {
+    // `a` is defined by neither grammar, so the check runs on the merge.
+    let inputs: List<[String, String]> = [
+        ["M.g4", "grammar M;\nimport S;\ns : b ;\nB : 'b' ;"],
+        ["S.g4", "parser grammar S;\nb : a ;"],
+    ];
+    let result = assemble_grammar(&inputs);
+    assert result matches { Err(Check(m)) && m.contains("reference to undefined rule \"a\" in \"b\"") }, `${result:?}`;
 }
 
 // LL(*) regression-suite grammars (`tests/grammars/ll_*.g4`). Each is a

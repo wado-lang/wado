@@ -1,10 +1,628 @@
 # Functions
 
+This chapter covers functions and what calls them: declarations and calls,
+methods, generic functions, closures and function values, and default
+arguments. It ends with variadic type packs, which let one function take tuples
+of any arity.
+
+## Function Declarations
+
+A function declaration is `fn`, a name, a parameter list in parentheses, an
+optional return type after `->`, and a block body. Each parameter is written
+`name: Type`.
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test "a declaration and a call" {
+    assert add(2, 3) == 5;
+}
+```
+
+Every parameter declares its type. Nothing infers it from the calls:
+
+<!-- {"fixture":"spec_functions_param_type_required.wado"} -->
+
+```wado
+fn double(n) -> i32 {
+    return n * 2;
+}
+```
+
+Two parameters of one function may not share a name:
+
+<!-- {"fixture":"spec_functions_duplicate_param.wado"} -->
+
+```wado
+fn area(side: i32, side: i32) -> i32 {
+    return side * side;
+}
+```
+
+A parameter is a local binding of the body. It holds the callee's own copy of
+the argument ([Value Semantics](./spec-memory.md#value-semantics)). It is
+immutable unless declared `mut` ([`mut` Parameters](./spec-memory.md#mut-parameters)).
+
+### Return Values
+
+A function returns a value only through `return`
+([Statements](./spec-expressions.md#statements)). Every path through a
+value-returning body must end in a `return`, or in a call that never returns,
+such as `panic`:
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+fn sign(n: i32) -> i32 {
+    if n < 0 {
+        return -1;
+    } else if n > 0 {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+fn check_positive(n: i32) -> i32 {
+    if n > 0 {
+        return n;
+    }
+    panic("not positive");
+}
+
+test "every path returns" {
+    assert sign(-5) == -1 && sign(0) == 0 && sign(9) == 1;
+    assert check_positive(3) == 3;
+}
+```
+
+A path that reaches the end of the body without a `return` is an error. The
+error points at the function:
+
+<!-- {"fixture":"spec_functions_missing_return.wado"} -->
+
+```wado
+fn sign(n: i32) -> i32 {
+    if n < 0 {
+        return -1;
+    }
+}
+```
+
+A function without `-> T` returns `()`, and `-> ()` says the same. Such a
+function may leave early with `return;`:
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+fn record(log: &mut List<String>, line: String) {
+    if line.is_empty() {
+        return;              // an early exit from a unit function
+    }
+    log.push(line);
+}
+
+fn clear(log: &mut List<String>) -> () {
+    log.truncate(0);
+}
+
+test "a unit function" {
+    let mut log: List<String> = [];
+    record(&mut log, "");
+    record(&mut log, "a");
+    assert log == ["a"];
+    assert record(&mut log, "b") == ();
+    clear(&mut log);
+    assert log.is_empty();
+}
+```
+
+A bare `return;` returns `()`. Every `return` is checked against the declared
+return type, so `return;` is an error in a function that returns a value:
+
+<!-- {"fixture":"error_return_missing_value.wado"} -->
+
+```wado
+fn f() -> i32 {
+    return;
+}
+```
+
+A value is an error in a function that returns `()`:
+
+<!-- {"fixture":"error_return_value_from_unit_fn.wado"} -->
+
+```wado
+fn f() {
+    return 1;
+}
+```
+
+A function that never returns declares `-> !`
+([The Never Type](./spec-types.md#the-never-type-)).
+
+### Calls
+
+A call `f(args)` passes one argument per parameter, in order. A trailing
+parameter with a default may be left out ([Default Arguments](#default-arguments)).
+Any other count is an error:
+
+<!-- {"fixture":"spec_functions_arg_count.wado"} -->
+
+```wado
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+test {
+    assert add(1, 2, 3) == 6;
+}
+```
+
+The arguments are evaluated left to right, and then the body runs:
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+fn next(log: &mut List<i32>, v: i32) -> i32 {
+    log.push(v);
+    return v;
+}
+
+fn digits(a: i32, b: i32, c: i32) -> i32 {
+    return a * 100 + b * 10 + c;
+}
+
+test "arguments are evaluated left to right" {
+    let mut order: List<i32> = [];
+    let n = digits(next(&mut order, 1), next(&mut order, 2), next(&mut order, 3));
+    assert n == 123 && order == [1, 2, 3];
+}
+```
+
+### Scope
+
+A module-level function is in scope in the whole module, before its declaration
+as well as after it. Functions may call each other recursively:
+
+<!-- {"fixture":"spec_functions_declarations.wado"} -->
+
+```wado
+test "a function declared later" {
+    assert is_even(10) && !is_even(7);
+}
+
+fn is_even(n: i32) -> bool {
+    if n == 0 { return true; }
+    return is_odd(n - 1);
+}
+
+fn is_odd(n: i32) -> bool {
+    if n == 0 { return false; }
+    return is_even(n - 1);
+}
+```
+
+A module declares each function name once. A second `fn` of the same name is an
+error, not an overload:
+
+<!-- {"fixture":"spec_functions_duplicate_fn.wado"} -->
+
+```wado
+fn scale(x: i32) -> i32 { return x * 2; }
+fn scale(x: f64) -> f64 { return x * 2.0; }
+```
+
+### Visibility and Effects
+
+A function without a modifier is private to its file. `internal`, `pub` and
+`export` widen its reach, as [Visibility](./spec-modules.md#visibility)
+specifies.
+
+A `with` clause after the return type lists the effects the function performs,
+as [Effect Declaration in Functions](./spec-effects.md#effect-declaration-in-functions)
+specifies.
+
+## Methods
+
+An `impl Type { … }` block declares methods of `Type`.
+[Inherent Impls](./spec-traits.md#inherent-impls) says where such a block may be
+written, and
+[Impl Type Parameters Are Declared](./spec-traits.md#impl-type-parameters-are-declared)
+covers `impl<T>`.
+
+A method whose first parameter is `&self` or `&mut self` is an instance method.
+A method without that receiver is a static method.
+[Method Receiver: `self` by Value](./spec-memory.md#method-receiver-self-by-value)
+says when the receiver may be a bare `self`.
+
+An instance method is called on a value with `.`. A static method is called on
+the type with `::`:
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn new(x: i32, y: i32) -> Point {
+        return Point { x, y };
+    }
+
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+
+    fn scale(&mut self, k: i32) {
+        self.x *= k;
+        self.y *= k;
+    }
+}
+
+test "instance and static methods" {
+    let mut p = Point::new(1, 2);
+    assert p.sum() == 3;
+    p.scale(10);
+    assert p.x == 10 && p.y == 20;
+}
+```
+
+A static method has no receiver, so calling one on a value is an error:
+
+<!-- {"fixture":"spec_functions_static_with_dot.wado"} -->
+
+```wado
+let p = Point { x: 1, y: 2 };
+assert p.origin().x == 0;
+```
+
+A method written with `.` may also be called as `Type::method(recv, args…)`
+([Qualified Calls](./spec-traits.md#qualified-calls)).
+
+### The Receiver
+
+Inside a method, `self` is the receiver. Its fields and the type's other methods
+are reached through it. A bare field name is not in scope:
+
+<!-- {"fixture":"spec_functions_method_bare_field.wado"} -->
+
+```wado
+impl Point {
+    fn sum(&self) -> i32 {
+        return x + y;
+    }
+}
+```
+
+A `&self` or `&mut self` method takes a reference to its receiver. So the
+receiver may be a value, a `&T` or a `&mut T`:
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+test "a call through a reference" {
+    let mut p = Point::new(1, 2);
+    let r = &p;
+    assert r.sum() == 3;           // `&self` through `&Point`
+    let m = &mut p;
+    m.scale(2);                    // `&mut self` through `&mut Point`
+    assert p.sum() == 6;
+}
+```
+
+A `&mut self` method writes to its receiver, so the receiver must be mutable. An
+immutable binding is an error:
+
+<!-- {"fixture":"spec_functions_method_mut_immutable.wado"} -->
+
+```wado
+let c = Counter { n: 0 };
+c.bump();
+assert c.n == 1;
+```
+
+A `&T` does not reach a `&mut self` method either, even when the binding behind
+it is mutable:
+
+<!-- {"fixture":"spec_functions_method_mut_through_ref.wado"} -->
+
+```wado
+let mut c = Counter { n: 0 };
+let r = &c;
+r.bump();
+assert c.n == 1;
+```
+
+### `Self`
+
+Inside an `impl`, `Self` names the impl's type. It stands for that type in a
+signature or a body, and it prefixes the type's static methods and, on a
+variant, its cases ([Variants](./spec-types.md#variants)). A call may follow
+another on the value the first one returns:
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+impl Point {
+    fn origin() -> Self {
+        return Self::new(0, 0);
+    }
+
+    fn moved(&self, dx: i32, dy: i32) -> Self {
+        return Self::new(self.x + dx, self.y + dy);
+    }
+
+    fn doubled_sum(&self) -> i32 {
+        return self.sum() * 2;     // another method, through `self`
+    }
+}
+
+test "Self and chained calls" {
+    assert Point::origin().sum() == 0;
+    assert Point::origin().moved(1, 2).moved(3, 4).doubled_sum() == 20;
+}
+```
+
+### Several Impl Blocks
+
+A type may have several inherent `impl` blocks, as `Point` above does. Their
+methods form one set, so a name is declared once across all of them:
+
+<!-- {"fixture":"spec_functions_method_duplicate.wado"} -->
+
+```wado
+impl Point {
+    fn sum(&self) -> i32 { return self.x + self.y; }
+}
+
+impl Point {
+    fn sum(&self) -> i32 { return self.x; }
+}
+```
+
+Fields and methods are looked up apart. A field and a method may share a name:
+`c.count` reads the field, and `c.count()` calls the method.
+
+<!-- {"fixture":"spec_functions_methods.wado"} -->
+
+```wado
+struct Counter {
+    count: i32,
+}
+
+impl Counter {
+    fn count(&self) -> i32 {
+        return self.count * 10;
+    }
+}
+
+test "a field and a method may share a name" {
+    let c = Counter { count: 4 };
+    assert c.count == 4 && c.count() == 40;
+}
+```
+
+When a trait declares a method of the same name,
+[Method Resolution](./spec-traits.md#method-resolution) says which one a call
+reaches.
+
+### Associated Constants
+
+An `impl` block may declare a `const` with a type and a value. It is named
+through the type, as a static method is, and it cannot be assigned:
+
+<!-- {"fixture":"spec_types_assoc_const.wado"} -->
+
+```wado
+struct Board {
+    cells: List<i32>,
+}
+
+impl Board {
+    pub const SIZE: i32 = 8;
+}
+
+test {
+    assert Board::SIZE * Board::SIZE == 64;
+    assert f64::PI > 3.14;
+}
+```
+
+## Generic Functions
+
+A function declares type parameters in `<…>` after its name. The parameter
+types, the return type and the body may all name them:
+
+<!-- {"fixture":"spec_functions_generics.wado"} -->
+
+```wado
+fn first<T>(items: List<T>) -> Option<T> {
+    if items.is_empty() {
+        return null;
+    }
+    return Some(items[0]);
+}
+
+fn pair<A, B>(a: A, b: B) -> [A, B] {
+    return [a, b];
+}
+
+test "type parameters" {
+    assert first([7, 8]) == Some(7);
+    assert first(["x"]) == Some("x");
+    let p = pair(1, "one");
+    assert p.0 == 1 && p.1 == "one";
+}
+```
+
+A type parameter may declare a default
+([Type Parameter Defaults](#type-parameter-defaults)). A function may also take
+a pack of them ([Variadic Type Packs](#variadic-type-packs)).
+
+### Type Arguments
+
+A call settles each type parameter from its arguments and from the type expected
+of the call. [Generic Type Inference](./spec-types.md#generic-type-inference)
+gives the rules. A turbofish, `f::<T>(…)`, writes the type arguments at the
+call instead:
+
+<!-- {"fixture":"spec_functions_generics.wado"} -->
+
+```wado
+fn zero<T: Default>() -> T {
+    return T::default();
+}
+
+test "a turbofish" {
+    assert zero::<i32>() == 0;
+    let s: String = zero();          // or the expected type settles `T`
+    assert s == "";
+    let n = first::<i64>([5]);       // the literal becomes an `i64`
+    let wide: i64 = n.unwrap();
+    assert wide == 5;
+}
+```
+
+A type parameter that nothing settles is an error:
+
+<!-- {"fixture":"spec_functions_generic_uninferable.wado"} -->
+
+```wado
+fn zero<T: Default>() -> T {
+    return T::default();
+}
+
+test {
+    zero();
+}
+```
+
+A turbofish may not name more type arguments than the function declares:
+
+<!-- {"fixture":"spec_functions_turbofish_count.wado"} -->
+
+```wado
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+test {
+    assert identity::<i32, i32>(1) == 1;
+}
+```
+
+### Bounds
+
+A type parameter may carry bounds, such as `T: Ord` or `T: Ord + Display`.
+[Trait Bounds](./spec-traits.md#trait-bounds) specifies them. A bound lets the
+body use what its traits provide: `>` from `Ord`, `${a}` from `Display`, and
+`T::default()` from `Default`:
+
+<!-- {"fixture":"spec_functions_generics.wado"} -->
+
+```wado
+fn largest<T: Ord>(items: List<T>) -> T {
+    let mut best = items[0];
+    for let x of items {
+        if x > best {
+            best = x;
+        }
+    }
+    return best;
+}
+
+fn describe<T: Ord + Display>(a: T, b: T) -> String {
+    return if a < b { `${a} < ${b}` } else { `${a} >= ${b}` };
+}
+
+test "bounds" {
+    assert largest([3, 9, 2]) == 9;
+    assert largest(["b", "c", "a"]) == "c";
+    assert describe(1, 2) == "1 < 2";
+}
+```
+
+The body may use nothing else. A method that no bound declares is an error,
+whatever type a call would pass:
+
+<!-- {"fixture":"spec_functions_generic_no_bound_method.wado"} -->
+
+```wado
+fn size<T>(x: T) -> i32 {
+    return x.len();
+}
+```
+
+An operator follows the same rule. A comparison needs `T: Ord`, and `==` needs
+`T: Eq`:
+
+<!-- {"fixture":"error_generic_compare_unbounded.wado"} -->
+
+```wado
+fn less<T>(a: T, b: T) -> bool {
+    return a < b;
+}
+```
+
+A call checks its type arguments against the bounds:
+
+<!-- {"fixture":"spec_functions_generic_bound_unmet.wado"} -->
+
+```wado
+trait Named {
+    fn name(&self) -> String;
+}
+
+fn greet<T: Named>(x: &T) -> String {
+    return `Hello, ${x.name()}`;
+}
+
+test {
+    assert greet(&1) == "Hello, 1";
+}
+```
+
+### Generic Methods
+
+A method may declare type parameters of its own, after its name. They sit beside
+the ones its `impl` declares. A turbofish on a method call follows the method
+name:
+
+<!-- {"fixture":"spec_functions_generics.wado"} -->
+
+```wado
+struct Stack<T> {
+    items: List<T>,
+}
+
+impl<T> Stack<T> {
+    fn map<U>(&self, f: fn(T) -> U) -> Stack<U> {
+        let mut out: List<U> = [];
+        for let x of self.items {
+            out.push(f(x));
+        }
+        return Stack { items: out };
+    }
+}
+
+test "a generic method" {
+    let s = Stack { items: [1, 2] };
+    assert s.map(|x| `${x}`).items == ["1", "2"];
+    assert s.map::<i64>(|x| x as i64 * 10).items == [10, 20];
+}
+```
+
 ## Closures
 
-Closures are anonymous function expressions with `|params| body` syntax.
-
-An expression body returns its value implicitly:
+A closure is an anonymous function expression, written `|params| body`. An
+expression body returns its value implicitly:
 
 <!-- {"fixture":"spec_functions_closures.wado"} -->
 
@@ -62,9 +680,9 @@ numeric-literal sibling does not: `fold(0, |acc, x| acc + x)` over a `List<i64>`
 takes `i64` from the body, not `i32` from the `0`. A parameter nothing supplies
 is reported at the call, not inside the closure.
 
-A closure declares no effects; they are inferred from the body.
-`with` after the parameter list, or after `-> Type`, would be that declaration,
-and is a compile error. A handler body therefore needs a block or parentheses:
+A closure cannot declare effects. Its effects are inferred from its body, and a
+`with` after the parameter list or after `-> Type` is a compile error. So a
+closure whose body is a `with … do` handler writes it in parentheses or a block:
 
 <!-- {"fixture":"spec_functions_closure_handler.wado"} -->
 
@@ -272,72 +890,39 @@ test {
 }
 ```
 
-Key points:
+A function value carries no observable identity. It holds no state to observe,
+and two `fn` values cannot be compared.
 
-- Function values carry no observable identity. There is no state to observe, and no way to compare two `fn` values.
-- `&` and `&mut` apply to `fn`-typed values like to any other value, with no special-casing:
-  - `&f` has type `&fn(...)`; `&mut f` (on a mutable binding) has type `&mut fn(...)`.
-  - These references behave per the [Reference Types](./spec-memory.md#reference-types) rules. `&fn(...)` is _not_ a synonym for `fn(...)`; passing one where the other is expected is a type error.
-  - `&mut fn(...)` parameters are useful as out-parameters: the callee can reassign the referenced slot via `*p = other_fn`, and the caller observes the new value through the same binding.
-- A `&fn(...)` or `&mut fn(...)` value is directly callable; the call expression auto-derefs to invoke the underlying `fn(...)`. `let r = &double; r(21)` works without an explicit `*r`.
-- Generic functions taken as values need their type arguments pinned. Two principled forms are supported:
-  - Turbofish on the name itself: `let f = identity::<i32>;` evaluates to a `fn(i32) -> i32` value, and a non-call use like `apply(identity::<i32>, 7)` works the same way.
-  - An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;` and `apply(identity, 7)` (where `apply`'s parameter is `fn(i32) -> i32`) both pin the type arguments through positional inference against the expected signature.
-  - When neither form applies, it is a compile error, and the diagnostic suggests turbofish or a closure wrapper (`|x| identity(x)`).
-- A function type crosses the Component Model boundary only as a callback; see [Component Model Callbacks](#component-model-callbacks).
+`&` and `&mut` apply to a function value as to any other value
+([Reference Types](./spec-memory.md#reference-types)). `&f` has type
+`&fn(...)`, and `&mut f` on a mutable binding has type `&mut fn(...)`.
+`&fn(...)` is not a synonym for `fn(...)`, so passing one where the other is
+expected is a type error. Through a `&mut fn(...)` parameter the callee may
+store another function (`*p = other_fn`), and the caller sees it.
 
-## Component Model Callbacks
+A `&fn(...)` or `&mut fn(...)` is callable directly: the call dereferences it,
+so `let r = &double; r(21)` needs no `*r`.
 
-A function type crosses the Component Model boundary in one place: as a
-parameter of a `#[cm]` import, where it is a callback. Anywhere else it is a
-compile error: in an `export fn`'s parameters or result, in an import's result,
-and inside a type that crosses, as a field or a payload (`Option<fn(..)>`
-included).
+A generic function taken as a value needs its type arguments pinned, in one of
+two ways:
 
-<!-- {"fixture":"spec_functions_cm_callback.wado"} -->
+- A turbofish on the name: `let f = identity::<i32>;` is a `fn(i32) -> i32`,
+  and so is `identity::<i32>` passed as `apply(identity::<i32>, 7)`.
+- An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;`,
+  or `apply(identity, 7)` where `apply`'s parameter is `fn(i32) -> i32`. The
+  expected signature settles the type arguments by position.
 
-```wado
-#[cm("example:demo/target", linearity = "unrestricted")]
-resource Target {
-    #[cm("example:demo/target#listen")]
-    #[cm_params("self", "listener")]
-    fn listen(&self, listener: fn mut(i32));
-}
+Without either, it is a compile error, which suggests a turbofish or a closure
+wrapper (`|x| identity(x)`).
 
-test {
-    let target = mock_target();
-    let mut seen: List<i32> = [];
-    with Target => &mut EchoTarget {} do {
-        target.listen(|v| seen.push(v));
-    }
-    assert seen == [7];                 // `EchoTarget` calls the listener with 7
-}
-```
-
-- A callback's parameters are scalars and handles, and it returns nothing. Any
-  other function type on a `#[cm]` declaration is a compile error.
-- The closure stays in the guest. The call registers it and passes a `u32` key
-  in its place. One closure value has one key.
-- The host calls the closure back through the `wado:callback/callback`
-  interface, which the component exports. It holds one function per argument
-  shape, named `call` followed by one word per argument: the argument's
-  primitive type, or `handle` for a handle (`call`, `call-i32`, `call-handle`).
-  Each takes the key first, is lifted synchronously, and returns nothing.
-  `wado wit` lists the interface among the world's exports.
-- The host may call a callback during an import call, which reenters the
-  component, or while `run` is suspended.
-- A callback runs as a task of its own. It may perform an effect a world import
-  backs.
-- Where a Wado handler answers the `#[cm]` interface instead of the host, the
-  handler receives the closure itself and may call it.
-
-Rationale: [WEP: The Web Interface for Wado](./wep-2026-04-01-web.md#callbacks).
+A function type crosses the Component Model boundary only as a
+[callback](./spec-components.md#callbacks).
 
 ## Default Arguments
 
 Trailing function parameters may declare default values with `= expr`. A call
 that omits a defaulted argument gets the default expression filled in at the
-call site, so it costs what the call with every argument written costs:
+call site:
 
 <!-- {"fixture":"spec_functions_default_args.wado"} -->
 
@@ -474,11 +1059,11 @@ site (see
 
 ### Restrictions
 
-- Function types do not carry default information; assigning a function with defaults to a `fn(...)` type erases them, and every call site of that variable must supply every argument.
-- Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type, so `= expr` on a closure parameter is a compile error.
-- `export fn` cannot declare defaults, since the component's WIT signature requires every parameter. A private helper can declare them behind a thin `export fn` wrapper.
-- An import may declare defaults: a `#[cm]` resource method, or an `interface` operation (see [Default Implementations](./spec-effects.md#default-implementations)). The call fills the default in, and the import receives every argument.
-- Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. An implementation that writes a default is a compile error. Every spelling of a call fills the trait's defaults: `x.m()`, `Type::m(..)`, and `T::m(..)` through a bound. A default-bodied method in the trait is the declaration, so it may write defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
+- A function type carries no defaults. A function with defaults assigned to a `fn(...)` type loses them, and every call through that value supplies every argument.
+- A closure cannot declare defaults, since its arity must match its `fn(...)` type. `= expr` on a closure parameter is a compile error.
+- An `export fn` cannot declare defaults, since the component's WIT signature requires every parameter. A private helper can declare them behind a thin `export fn` wrapper.
+- An `interface` operation or a `#[cm]` resource method may declare defaults. The call fills them in, so the handler or the host receives every argument.
+- A trait method declares its defaults in the trait only, including in a default body there. An implementation receives every parameter, and one that writes a default is a compile error. Every spelling of a call fills the trait's defaults: `x.m()`, `Type::m(..)`, and `T::m(..)` through a bound. A method of an inherent `impl Type { ... }` may declare defaults freely.
 
 ### Type Parameter Defaults
 
@@ -547,7 +1132,7 @@ struct Ping<X, Y = Pong<X>> { v: i32 }   // ERROR, paired with
 struct Pong<X, Y = Ping<X>> { v: i32 }   // this one
 ```
 
-A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the list — the same parameters in the same order, with the defaults omitted — and every spelling of the call fills them from the trait's declaration:
+A trait method's type parameter default belongs to the trait, as its value defaults do. The implementation restates the same parameters in the same order and omits the defaults. Every spelling of the call fills them from the trait's declaration:
 
 <!-- {"fixture":"spec_functions_trait_type_param_default.wado"} -->
 
@@ -576,110 +1161,16 @@ test {
 }
 ```
 
-Rust rejects a type parameter default on every function, method and `impl` (rust-lang/rust#36887), allowing them only on type and trait declarations. Wado accepts them wherever a parameter list is written.
+Wado accepts a type parameter default wherever a parameter list is written. Rust accepts one only on a type or trait declaration (rust-lang/rust#36887).
 
 The same `= expr` syntax applies to struct fields; see [Struct Field Defaults](./spec-types.md#struct-field-defaults).
 
 Rationale: [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
 
-## Tagged Template Literals
-
-A path written directly before a template literal is a tag. The template then
-denotes a call of that function on the template's holes, in their own types,
-with the literal text around them, instead of a rendered `String`:
-
-<!-- {"fixture":"spec_functions_tagged_template.wado"} -->
-
-```wado
-let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
-let s = String::raw`${dir}\bin\run.exe`;   // backslashes kept
-assert q.query == "SELECT * FROM users WHERE id = ? AND name = ?";
-assert s == "C:\\bin\\run.exe";
-```
-
-The tag is a function name or a static method path, with no whitespace before
-the backtick. The backtick is a postfix on the path and binds as a call does.
-Any other expression before a backtick, such as a call result or a
-parenthesized expression, is a syntax error. A path naming a variant case or a
-closure-typed binding is rejected as a tag. The literal is lexed exactly as an
-untagged template, so every escape must still be one the lexer knows even where
-the tag preserves it.
-
-A tag is an ordinary function whose first parameter takes the template by value
-and is bound by `ReflectTemplate`, the reflected kind of a template literal. The
-template is the call's one written argument. Trailing parameters with defaults
-are filled as in any call (see [Default Arguments](#default-arguments)). A first
-parameter of any other type, `&T` included, is reported as a tag error. Nothing
-on the declaration marks a function as a tag.
-
-Each template shape has an anonymous type of its own, holding one field per
-hole. The shape is the template's segments, specifiers, hole types and hole
-source texts. So
-`` tag`${a}` `` and `` tag`${b}` `` are two types, each instantiating the tag,
-even where `a` and `b` share a type. The type is unnameable and reached only
-through the bound; a diagnostic and `Reflect::type_name()` show it as its text
-with each hole spelled by its type and specifier, `` `id = ${i32:04}` ``, cut
-at 50 characters with `...`.
-
-`ReflectTemplate` is sealed: only the compiler implements it, and an `impl` of
-it is a compile error. Its associated type `Holes` is the tuple of hole types,
-and `Members` the tuple of hole handles `members()` returns. The tag walks the
-holes with tuple `for-of`:
-
-<!-- {"fixture":"spec_functions_tagged_template.wado"} -->
-
-```wado
-fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
-    let mut query = "";
-    let mut params: List<SqlParam> = [];
-    for let h of ReflectTemplate::<T>::members() {
-        query.push_str(h.lit());                // literal text before this hole
-        query.push_str("?");
-        params.push(h.get(&t).to_sql_param());  // the value, storage shared
-    }
-    query.push_str(ReflectTemplate::<T>::tail());
-    return SqlQuery { query, params };
-}
-
-test "the tag sees each hole in its own type" {
-    let q = sql`id = ${7} AND name = ${"ann"}`;
-    assert q.params == [SqlParam::Int(7), SqlParam::Text("ann")];
-}
-```
-
-A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
-`lit()` / `raw()` (the preceding segment, escapes processed or preserved),
-`get(&t)` (the value, `V`), `source()` (the expression text), `has_spec()`, and
-`fmt(&t, f)` (rendering as the untagged template would).
-`ReflectTemplate::<T>::tail()` and `raw_tail()` give the segment after the last
-hole. Every answer but `get` and `fmt` is a constant. A hole handle is minted
-only by `members()`.
-
-`members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
-empty tuple (`[]`, for a tag that reads only `tail()`). A concrete tuple
-(`Holes = [List<i32>]`) is an error at the call. A bound on the pack
-(`..V: ToSqlParam`) makes a hole whose type lacks it an error at the call,
-naming that type.
-
-A hole's type may not mention a type parameter of the enclosing item, since the
-shape is minted once rather than per instantiation. A generic body passes its
-tag a concrete value from its caller. The untagged template makes no shape, so
-`` `${v}` `` over a `v: X` is accepted where `` format`${v}` `` is not.
-
-Holes are evaluated once, left to right, before the tag runs. Each hole's value
-is the one it had at its own position, so a later hole that writes to its
-storage changes nothing the tag sees: `` format`${a} ${bump(&mut a)}` ``
-renders what `` `${a} ${bump(&mut a)}` `` renders. A tag may carry effects,
-which the caller declares as for any call, and return any type.
-
-An untagged template means what the prelude's `format` tag means: each hole
-rendered through its specifier into one buffer.
-
-Rationale: [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md).
-
 ## Variadic Type Packs
 
-Use `<..T>` to declare a type pack parameter that represents zero or more types. Type packs enable writing functions that operate on tuples of any arity.
+`<..T>` declares a type pack: a parameter that stands for zero or more types. A
+function over a pack takes tuples of any arity.
 
 <!-- {"fixture":"spec_functions_type_packs.wado"} -->
 
@@ -698,15 +1189,15 @@ test {
 }
 ```
 
-Type pack parameters:
+A pack is declared with the `..` prefix in a generic parameter list: `<..T>`,
+`<A, ..T>`. `...` (three dots) is a parse error, which suggests `..`. A pack
+cannot be an effect parameter, so `<effect ..T>` is invalid. A list may declare
+more than one pack ([Multiple Type Packs](#multiple-type-packs)).
 
-- Are declared with `..` prefix in generic parameter lists: `<..T>`, `<A, ..T>`
-- May appear more than once per list, each settled on its own (see
-  [Multiple Type Packs](#multiple-type-packs))
-- Cannot be combined with `effect`: `<effect ..T>` is invalid
-- Appear inside tuple types as `[..T]` (type pack spread)
-- Can be mixed with fixed type elements: `[A, ..T]`, `[..T, B]`
-- Type arguments are inferred from tuple argument types at call sites
+A pack is used inside a tuple type as `[..T]`, alone or beside fixed elements:
+`[A, ..T]`, `[..T, B]`. A call infers the pack from the tuple it passes. A
+[value spread](./spec-literals.md#value-spread) builds a value of such a type,
+as `[a, ..rest]` does.
 
 ### Multiple Type Packs
 
@@ -792,8 +1283,7 @@ let ba: [..B, ..A] = [..a, ..b];   // ERROR: the order is part of the type
 let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
 ```
 
-A turbofish spells each pack as its own tuple. A flat list carries no boundary
-either:
+A turbofish spells each pack as its own tuple:
 
 <!-- {"fixture":"spec_functions_type_packs.wado"} -->
 
@@ -801,46 +1291,20 @@ either:
 assert concat::<[i32], [bool, String]>([1], [true, "x"]) == [1, true, "x"];
 ```
 
+A flat list of types carries no boundary, so it is refused, even with one type
+per pack. `<i32, String>` could mean `<[i32], [String]>` or
+`<[i32, String], []>`, and nothing says which:
+
 <!-- {"fixture":"spec_functions_type_packs_flat_turbofish.wado"} -->
 
 ```wado
 concat::<i32, String>([1], ["x"]);  // ERROR: spell each type pack as a tuple
 ```
 
-Writing one argument per pack is refused as well: `<i32, String>` and
-`<[i32, String], []>` split the same list, and nothing says which was meant. The
-flat form stays available where a single pack absorbs the surplus on its own
+A function with a single pack still takes the flat form, since that pack
+takes every type the scalar parameters leave over
 (`make_defaults::<i32, String>()`).
 
 `zip` transposes its operands position by position, so its rows must be equally
 long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
 rejected where it is written.
-
-### Lexical note
-
-`..` is one token. Writing `...` (three dots) is a parse error with the diagnostic _"unexpected `...`; did you mean `..`?"_.
-
-### Value Spread
-
-Value spread `[..expr]` splices a tuple's elements into an enclosing tuple literal:
-
-<!-- {"fixture":"spec_functions_type_packs.wado"} -->
-
-```wado
-let a = [1, "hello"];
-let b = [..a, true];   // b: [i32, String, bool]
-let c = [42, ..a];     // c: [i32, i32, String]
-assert b == [1, "hello", true];
-assert c == [42, 1, "hello"];
-```
-
-The spread expression is evaluated exactly once:
-
-<!-- {"fixture":"spec_functions_type_packs.wado"} -->
-
-```wado
-// make_pair() is called once, not twice
-let t = [..make_pair(), 30];
-assert PAIRS == 1;
-assert t == [10, 20, 30];
-```

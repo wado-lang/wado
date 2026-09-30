@@ -310,8 +310,8 @@ fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
     }
 }
 
-/// Pretty-printed payload carried when [`TypeSystem::typecheck`] /
-/// [`TypeSystem::typecheck_return`] rejects an assignment.
+/// Pretty-printed payload carried when [`TypeSystem::typecheck`] rejects an
+/// assignment.
 ///
 /// The strings are materialised at the rejection site (while the
 /// [`TypeTable`] is still borrowed) so the caller can drop the type
@@ -347,19 +347,6 @@ impl TypeSystem {
             }
             TypeCheckResult::Compatible | TypeCheckResult::Deferred => Ok(()),
         }
-    }
-
-    /// Host-agnostic return-type check. `UNIT` expected always succeeds
-    /// (void returns); otherwise delegates to [`TypeSystem::typecheck`].
-    pub(crate) fn typecheck_return(
-        &self,
-        actual: TypeId,
-        expected: TypeId,
-    ) -> Result<(), TypeMismatchPayload> {
-        if expected == TypeTable::UNIT {
-            return Ok(());
-        }
-        self.typecheck(actual, expected)
     }
 }
 
@@ -430,19 +417,5 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             found: found_name,
             span,
         });
-    }
-
-    /// Check return type mismatch and emit a diagnostic on rejection.
-    ///
-    /// `UNIT` expected is always compatible (void returns); otherwise
-    /// delegates to [`Self::typecheck`]'s emit path.
-    pub(super) fn typecheck_return(&self, actual: TypeId, expected: TypeId, span: Span) {
-        if let Err(payload) = self.tysys.typecheck_return(actual, expected) {
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected: payload.expected,
-                found: payload.found,
-                span,
-            });
-        }
     }
 }

@@ -1,8 +1,14 @@
-# Components and Worlds
+# Components
+
+A Wado program compiles to a Component Model component. This chapter says how
+Wado values cross a component boundary, how a component waits, and how Wado
+declarations link to Component Model definitions and resources. Which world a
+component targets, and what its entry point is, is in
+[Worlds and Entry Points](./spec-worlds.md).
 
 ## Type Mapping at Component Boundaries
 
-Wado types lift and lower to Component Model types when they cross a component boundary (the Canonical ABI). The compiler performs this conversion automatically.
+A Wado value that crosses a component boundary is lowered to a Component Model value, and lifted back on the other side, by the Canonical ABI.
 
 The table below is the Wado↔CM correspondence, read in both directions: Wado→CM when generating a component's exported interface, and CM→Wado when importing an external component (`use { Iface } from "./c.wasm" with { type: "wasm" }`, see [Wasm Module and Component Imports](./spec-modules.md#wasm-module-and-component-imports)). CM types are written in their WIT spelling.
 
@@ -29,7 +35,7 @@ The table below is the Wado↔CM correspondence, read in both directions: Wado�
 | `Stream<T>`               | `stream<T>`               | Component Model async stream                                                               |
 | `Future<T>`               | `future<T>`               | Component Model async future                                                               |
 
-For function types, see [Component Model Callbacks](./spec-functions.md#component-model-callbacks).
+A function type has no row: it crosses only as a [callback](#callbacks).
 
 `f16`, `bf16` ([Half Precision](./spec-types.md#half-precision-f16-bf16)) and
 `v128` have no Component Model type, so they do not cross a component boundary.
@@ -41,6 +47,53 @@ exports its bits, as a `List<u16>`.
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
+### Callbacks
+
+A function type crosses the Component Model boundary in one place: as a
+parameter of a `#[cm]` import, where it is a callback. Anywhere else it is a
+compile error: in an `export fn`'s parameters or result, in an import's result,
+and inside a type that crosses, as a field or a payload (`Option<fn(..)>`
+included).
+
+<!-- {"fixture":"spec_functions_cm_callback.wado"} -->
+
+```wado
+#[cm("example:demo/target", linearity = "unrestricted")]
+resource Target {
+    #[cm("example:demo/target#listen")]
+    #[cm_params("self", "listener")]
+    fn listen(&self, listener: fn mut(i32));
+}
+
+test {
+    let target = mock_target();
+    let mut seen: List<i32> = [];
+    with Target => &mut EchoTarget {} do {
+        target.listen(|v| seen.push(v));
+    }
+    assert seen == [7];                 // `EchoTarget` calls the listener with 7
+}
+```
+
+- A callback's parameters are scalars and handles, and it returns nothing. Any
+  other function type on a `#[cm]` declaration is a compile error.
+- The closure stays in the guest. The call registers it and passes a `u32` key
+  in its place. One closure value has one key.
+- The host calls the closure back through the `wado:callback/callback`
+  interface, which the component exports. It holds one function per argument
+  shape, named `call` followed by one word per argument: the argument's
+  primitive type, or `handle` for a handle (`call`, `call-i32`, `call-handle`).
+  Each takes the key first, is lifted synchronously, and returns nothing.
+  `wado wit` lists the interface among the world's exports.
+- The host may call a callback during an import call, which reenters the
+  component, or while `run` is suspended.
+- A callback runs as a task of its own. It may perform an effect a world import
+  backs.
+- Where a Wado handler answers the `#[cm]` interface instead of the host, the
+  handler receives the closure itself and may call it.
+
+Rationale: [WEP: The Web Interface for Wado](./wep-2026-04-01-web.md#callbacks).
+
 ## Concurrency Model
 
 Wado follows the Component Model's concurrency model. It has no `await`: a
@@ -50,8 +103,9 @@ may wait without saying so in its signature.
 ### Async Imports
 
 A Component Model `async func` import is an interface operation declared
-`async fn op(...) -> AsyncCall<T>`. Calling it starts the call and returns an
-`AsyncCall<T>` at once. The caller decides when to wait:
+`async fn op(...) -> AsyncCall<T>`
+([Async Operations](./spec-effects.md#async-operations)). Calling it starts the
+call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 
 - `.wait()` blocks until the call returns, then yields its `T`.
 - `.cancel()` abandons the call.
@@ -82,11 +136,10 @@ again. `join` only registers the call with the set, so the caller still owes the
 
 #### Handling an Async Operation
 
-A [handler](./spec-effects.md#handlers) implements an async operation that a
-Component Model import declares as a plain `fn` that returns `T` and resumes
-with a `T`. The caller still receives an
-`AsyncCall<T>`, one that has already completed, so its `.wait()` returns the
-value at once.
+A [handler](./spec-effects.md#handlers) method for an async operation is a
+plain `fn` that returns `T`, and it resumes with a `T`. The caller still
+receives an `AsyncCall<T>`, one that has already completed, so its `.wait()`
+returns the value at once.
 
 <!-- {"fixture":"spec_components_async_import.wado"} -->
 
@@ -111,7 +164,7 @@ Rationale: [WEP: Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md).
 ### Async Exports
 
 An `export async fn` uses the Component Model async calling convention. Its
-body delivers the result with [`task return`](#task-return-statement) and may
+body delivers the result with [`task return`](./spec-worlds.md#task-return-statement) and may
 keep running afterwards, for example to write a response's trailers.
 
 ### Streams and Futures
@@ -120,189 +173,11 @@ keep running afterwards, for example to write a response's trailers.
 other end reads, and a `read` blocks until the other end writes, so the two ends
 must be driven by different tasks.
 
-## World System
-
-### What is a World?
-
-A world in Wado corresponds directly to the Component Model's `world` concept. A world defines the contract between a Wasm component and its environment:
-
-1. Imports: Which capabilities the component requires (provided by the host or by other components)
-2. Exports: Which functions and types the component provides
-
-Worlds are classified into two categories:
-
-- Hosted world: A world that a runtime knows how to instantiate and drive. The runtime provides all imports and invokes the exports according to a defined lifecycle. Examples: `wasi:cli/command` (executed by `wado run`), `wasi:http/service` (executed by `wado serve`). Informally called a "well-known world."
-- Library world: A world that defines a component's public API for composition. It is not directly executed by a runtime; instead, other components import its exports. Example: a `json` library that exports parsing functions.
-
-This distinction is not part of the Component Model specification, which treats all worlds uniformly. In Wado, the distinction matters for tooling: `wado run` and `wado serve` select a hosted world, while `wado.toml`'s `[package].lib` field defines a library world.
-
-### World Declaration
-
-A world imports whole interfaces, as a WIT world does, and exports interfaces or functions:
-
-<!-- {"fixture":"spec_components_world_declaration.wado"} -->
-
-```wado
-#[cm("example:app/plugin@0.1.0")]
-pub world Plugin {
-    import Stdout;
-    import Environment;
-
-    export Run;                                              // an interface
-    export fn transform(input: String) -> String;            // a function
-    export async fn fetch(url: String) -> Result<String, String>;
-}
-
-test {
-    assert true;   // a world is a declaration: accepting it is the check
-}
-```
-
-- `import Iface;` and `export Iface;` name a `pub interface`. The interface's own `#[cm(...)]` gives its Component Model name and version, and an export takes its signatures from the interface.
-- `export [async] fn name(...) -> T;` exports a freestanding function. `async` marks an export that maps to a WIT `async func`.
-- `#[cm("namespace:package/world@version")]` on the world gives its Component Model name.
-
-### WASI CLI World Example
-
-The standard WASI CLI `command` world, as `wasi:cli` declares it:
-
-<!-- {"fixture":"spec_components_command_world.wado"} -->
-
-```wado
-#[cm("wasi:cli/command@0.3.0")]
-pub world Command {
-    import Environment;
-    import Exit;
-    import Stdin;
-    import Stdout;
-    import Stderr;
-    import TerminalStdin;
-    import TerminalStdout;
-    import TerminalStderr;
-    import MonotonicClock;
-    import SystemClock;
-    import Timezone;
-    import Preopens;
-    import IpNameLookup;
-    import Random;
-    import Insecure;
-    import InsecureSeed;
-
-    export Run;
-}
-
-test {
-    assert true;   // a world is a declaration: accepting it is the check
-}
-```
-
-`Run` declares `async fn run() -> AsyncCall<Result<(), ()>>`. A program implements it with an `export fn run()`:
-
-<!-- {"fixture":"spec_components_run.wado"} -->
-
-```wado
-use { println, Stdout } from "core:cli";
-
-export fn run() with Stdout {
-    let greeting = "Hello, WASI world!";
-    assert greeting.len() == 18;
-    println(greeting);
-}
-```
-
-### Selecting a World
-
-A program does not name its world in source. The package's `wado.toml` maps each world it targets to an entry module, or the `--world` option of `wado compile` selects the world for a single file. Without either, `wado compile` and `wado run` target `wasi:cli/command`, and `wado serve` targets `wasi:http/service`.
-
-The manifest declares worlds in two places:
-
-- The `[world]` table maps a hosted world, keyed by its fully qualified Component Model name, to its entry file. The path is relative to `wado.toml`.
-- `[package].lib` names the entry module of the package's library world.
-
-A package declares at least one world, and may declare several:
-
-```toml
-[package]
-namespace = "acme"
-name = "markdown"
-version = "0.1.0"
-lib = "src/lib.wado"
-
-[world]
-"wasi:cli/command" = "src/cli.wado"
-"wasi:http/service" = "src/server.wado"
-```
-
-A hosted world's entry module exports the entry point that world requires (see [Entry Points](#entry-points)). The library world requires none: every `export` item of its entry module becomes part of an interface named after the package, `<namespace>:<name>/<name>@<version>`. A library world therefore needs `[package].namespace` to be built. The world itself is named `root`, so no package may take that name, in any letter case.
-
-A dependency is imported through its library world's entry module, the file its `[package].lib` names. A dependency without `[package].lib` cannot be imported. A `path` dependency that names a single `.wado` file has that file as its entry module.
-
-Rationale: [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md).
-
-## WASI / Browser Support
-
-Wado targets WASI Preview 3 (0.3.0), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
-
-### WASI P3 CLI Interfaces
-
-Wado effects map to WASI P3 interfaces:
-
-| Wado Effect   | WASI Interface         | Key Functions                                                           |
-| ------------- | ---------------------- | ----------------------------------------------------------------------- |
-| `Stdout`      | `wasi:cli/stdout`      | `write-via-stream(stream<u8>) -> future<result<_, error-code>>`         |
-| `Stderr`      | `wasi:cli/stderr`      | `write-via-stream(stream<u8>) -> future<result<_, error-code>>`         |
-| `Stdin`       | `wasi:cli/stdin`       | `read-via-stream() -> tuple<stream<u8>, future<result<_, error-code>>>` |
-| `Environment` | `wasi:cli/environment` | `get-arguments()`, `get-environment()`                                  |
-| `Exit`        | `wasi:cli/exit`        | `exit(result)`, `exit-with-code(u8)`                                    |
-
-### Entry Points
-
-Each hosted world defines its entry point:
-
-| World                 | Entry Point                                                               | Driver       |
-| --------------------- | ------------------------------------------------------------------------- | ------------ |
-| `wasi:cli/command`    | `export fn run()`                                                         | `wado run`   |
-| `wasi:http/service`   | `export async fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
-| `core:kiln/generator` | `export fn generate(...)`                                                 | Kiln         |
-| `test`                | the entry module's `test` blocks                                          | `wado test`  |
-
-`test` is a synthetic world: it exports the entry module's `test` blocks and nothing else. See [Selecting a World](#selecting-a-world) for how a program's world is chosen.
-
-### `task return` Statement
-
-`task return expr;` is a statement that calls the Component Model `task.return` instruction, delivering the function's result without terminating the Wasm function. Execution continues after `task return`, allowing the function to fulfill outstanding futures (e.g. trailers) or perform cleanup.
-
-#### Motivation
-
-HTTP handlers return a `Response` that contains a `Future`-based trailers channel. With a regular `return`, the Wasm function exits immediately, making it impossible to write to that channel. `task return` separates result delivery from function termination:
-
-<!-- {"fixture":"spec_components_task_return.wado"} -->
-
-```wado
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Headers::new();
-    let [response, _tx_future] = Response::new(headers, null, trailers_future);
-    assert response.get_status_code() == 200;  // the default status
-
-    task return Result::<Response, ErrorCode>::Ok(response); // deliver result; function continues
-    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null)); // fulfill trailers
-}
-```
-
-#### Rules
-
-- `task return` is only valid inside `export async fn` bodies.
-- An `export async fn` body must carry a `task return`, because a body without one could never deliver its result. A body whose every path provably exits first (`panic`, an endless loop) has no result to deliver and is exempt.
-- Whether a `task return` under a branch is reached is not checked. A path that misses it traps at the boundary, the same as a declared result the body never binds.
-- Regular `return` is forbidden in `async fn` bodies. It would exit the Wasm function without notifying the CM runtime.
-- The `task return` expression is type-checked against the declared return type of the enclosing `export async fn`.
-- `task return` delivers the result to the function's caller. A call through the component boundary delivers it to the Component Model runtime, and a Wado caller receives it as an ordinary return value.
-- The `async` of an `export async fn` asks nothing of a Wado call site, which calls it as any other function. It selects the CM async calling convention at the component boundary.
+## Linking and Resources
 
 ### Attribute Syntax for Component Model Linking
 
-Use `#[cm(...)]` attributes to link Wado definitions to Component Model interfaces:
+`#[cm(...)]` links a Wado definition to the Component Model definition it stands for:
 
 <!-- {"fixture":"spec_components_cm_attributes.wado"} -->
 
@@ -336,7 +211,7 @@ test {
 
 `#[cm_params("name", ...)]` on an operation gives the CM-side names of its parameters. Without it, each parameter's CM name is its Wado name in kebab-case.
 
-#### Resource linearity
+#### Resource Linearity
 
 A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine.
 
@@ -465,7 +340,7 @@ A generic resource takes no part in `extends`, on either side.
 - A type parameter is solved to the most specific type, and the upcast happens later, at a use. So a constructor's payload is not upcast: `Option::Some(el)` against `Option<Node>` is an `Option<Element>`, and is written `Option::Some(el as Node)`.
 - `&mut T` is invariant, and so is every generic type, a tuple's elements, and a struct's fields. A write through any of them could install a parent where a child is required. There is no variance annotation.
 - A function type is invariant in its parameters and its result.
-- Narrowing back to a child is never implicit. It is written as a [type pattern](#type-patterns).
+- Narrowing back to a child is never implicit. It is written as a [type pattern](./spec-patterns.md#type-patterns).
 
 <!-- {"fixture":"spec_components_option_invariant.wado"} -->
 
@@ -511,51 +386,3 @@ A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s r
 - `Serialize` and `Deserialize`: a resource, and a struct or variant that holds one, cannot derive either. A handle means something only inside its running instance. A hand-written impl may serialize what it reads from the host object.
 
 Rationale: [WEP: Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md).
-
-### Type Patterns
-
-A pattern may ascribe a type: `p: T` matches when the subject is a `T`, and `p` binds it. The ascription on a `let` is this pattern, so one rule covers both spellings.
-
-Whether the pattern can fail is decided statically, from the subject's type `S`:
-
-| Relation          | Meaning                                                              |
-| ----------------- | -------------------------------------------------------------------- |
-| `S <: T`          | irrefutable — an upcast, or an ordinary type annotation              |
-| `T <: S`, `T ≠ S` | refutable — a runtime test, and only where `extends` relates the two |
-| otherwise         | a type error, as a mismatched annotation is                          |
-
-An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal. A refutable one needs a pattern position that admits failure, so `let` and a `for` binding reject it exactly as they reject `Some(x)`:
-
-<!-- {"fixture":"spec_components_type_patterns.wado"} -->
-
-```wado
-fn check(el: Element, node: Node) {
-    let n: Node = el;                                   // Element <: Node — irrefutable upcast
-    if let input: HtmlInputElement = el { assert input == n; }
-    if node matches { _: Element } { assert kind(node) == "element"; }  // the predicate form
-    let input: HtmlInputElement = el else { return; };  // the guard form
-    assert kind(input) == "input";
-}
-
-fn kind(node: Node) -> String {
-    return match node {
-        input: HtmlInputElement => "input",
-        elem: Element => "element",
-        _ => "other",                                   // required: the hierarchy is open
-    };
-}
-```
-
-A refutable ascription in a plain `let` is rejected:
-
-<!-- {"fixture":"spec_components_let_refutable.wado"} -->
-
-```wado
-let input: HtmlInputElement = el;                   // ERROR: refutable pattern in `let`
-```
-
-A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An unguarded arm whose type is a supertype of a later arm's makes that later arm unreachable, which is an error, as [any unreachable arm](./spec-control-flow.md#exhaustiveness) is.
-
-A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
-
-A type pattern narrows a value at runtime, unlike `match type`, which narrows a type parameter at compile time, is exhaustive, and takes no `_`.

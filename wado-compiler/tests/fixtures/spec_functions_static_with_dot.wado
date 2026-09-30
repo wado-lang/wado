@@ -1,0 +1,20 @@
+// A static method has no receiver, so it is called on the type, not on a value.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn origin() -> Point {
+        return Point { x: 0, y: 0 };
+    }
+}
+
+test {
+    let p = Point { x: 1, y: 2 };
+    assert p.origin().x == 0;
+}
+
+__DATA__
+{"compile_error": ":16:12: analysis error: no method 'origin' found on type 'Point'; 'origin' is a static method; use Point::origin() instead"}

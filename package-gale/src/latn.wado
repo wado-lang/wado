@@ -509,10 +509,7 @@ fn build_element(b: &mut LatnBuilder, elem: &LexerElement) -> [i32, i32] {
         ]),
         Not(n) => {
             let pos = positive_ranges(&n.element, b.ci);
-            // `~AnyChar` legitimately yields []/dead; an empty positive set
-            // from a non-single-char inner (multi-char literal, RuleRef)
-            // would complement to match-anything — reject loudly instead.
-            assert !pos.is_empty(), "gale: `~(...)` over a non-single-char element is unsupported";
+            assert !pos.is_empty(), "gale: `~(...)` over an empty set would match anything, so it is unsupported";
             ranges_segment(b, &complement_ranges(&pos));
         },
         RuleRef(name) => rule_segment(b, &name),
@@ -633,38 +630,25 @@ fn build_repeat(b: &mut LatnBuilder, kind: RepeatKind, non_greedy: bool, inner: 
     };
 }
 
-/// Positive (non-negated) Unicode-scalar ranges a single-char element
-/// admits. Used for atoms inside `~(...)`; an element that is not a
-/// single-char matcher yields an empty list.
+/// Positive (non-negated) Unicode-scalar ranges of the set under a `~`, which
+/// the g4 parser admits only as a single char, a range, a class, or a block of
+/// those (`is_valid_lexer_not_element`).
 fn positive_ranges(elem: &LexerElement, ci: bool) -> List<[i32, i32]> {
     return match *elem {
         CharRange(r) => ci_ranges(ci, r.0, r.1),
         CharClass(cc) => class_ranges(&cc, ci),
-        AnyChar => [
-            [0, CHAR_MAX],
-        ],
         Literal(s) => {
-            let chars: List<char> = s.chars().collect();
-            if chars.len() == 1 {
-                ci_ranges(ci, chars[0], chars[0]);
-            } else {
-                [];
-            }
+            let c = s.chars().next().expect("the g4 parser admits only a one-char literal under `~`");
+            ci_ranges(ci, c, c);
         },
-        Not(n) => complement_ranges(&positive_ranges(&n.element, ci)),
         Group(alts) => {
             let mut out: List<[i32, i32]> = [];
             for let alt of alts {
-                if alt.elements.len() == 1 {
-                    let inner = positive_ranges(&alt.elements[0], ci);
-                    for let r of &inner {
-                        out.push(*r);
-                    }
-                }
+                out.extend(&positive_ranges(&alt.elements[0], ci));
             }
             out;
         },
-        _ => [],
+        AnyChar | RuleRef(_) | Repeat(_) | Not(_) => panic("the g4 parser admits only a set under `~`"),
     };
 }
 

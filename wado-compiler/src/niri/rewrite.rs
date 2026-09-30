@@ -1207,22 +1207,25 @@ pub(super) fn is_discardable(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
-            !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
+            !op.may_trap()
                 && is_discardable_operand(body, *left)
                 && is_discardable_operand(body, *right)
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_discardable_operand(body, *inner)
+            !op.may_trap() && is_discardable_operand(body, *inner)
         }
         ExprKind::Cast { expr: inner, .. } => is_discardable_operand(body, *inner),
         _ => false,
     }
 }
 
-/// Operand form of [`is_discardable`]: a promoted pure value (a constant) is
-/// always discardable.
+/// Operand form of [`is_discardable`]. A promoted value is pure, and
+/// discardable unless it traps.
 pub(super) fn is_discardable_operand(body: &Body, op: Operand) -> bool {
-    op.as_expr().is_none_or(|e| is_discardable(body, e))
+    match op {
+        Operand::Expr(e) => is_discardable(body, e),
+        Operand::Value(v) => !body.values.may_trap(v),
+    }
 }
 
 /// The shapes whose fold consumes what produced the value: a call body run to

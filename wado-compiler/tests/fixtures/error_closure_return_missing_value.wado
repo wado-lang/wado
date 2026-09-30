@@ -1,0 +1,10 @@
+// A closure's declared return type holds its `return` statements as a
+// function's does: a bare `return;` is `()`, not an `i32`.
+
+export fn run() {
+    let f = || -> i32 { return; };
+    assert f() == 0;
+}
+
+__DATA__
+{ "compile_error": ":5:25: analysis error: type mismatch: expected 'i32', found '()'" }

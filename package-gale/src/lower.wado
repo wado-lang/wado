@@ -83,7 +83,14 @@ use {
     subtract_sets,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { GenContext, is_nullable, union_kind_arrays, sets_overlap, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
+use {
+    GenContext,
+    close_over_callers,
+    is_nullable,
+    union_kind_arrays,
+    sets_overlap,
+    FOLLOW_MASK_MAX_K,
+} from "./gen_context.wado";
 use { dedup_append_arr, strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use {
@@ -507,11 +514,6 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx));
     }
-    // Phase 2.7 — pre-intern multi-element token-kind sets that
-    // surface in dispatch branches and `Op::Excluded` kinds. The
-    // resulting registry is the source of truth for `_kind_set_<id>`
-    // helper-function emission; emit consults it in lockstep with
-    // the dispatch / op walk it does anyway.
     let kind_sets = intern_kind_sets(&parser_rules, ctx);
     ctx.set_follow_rule_snakes(&follow_rule_snakes(grammar, ctx));
     return LoweredGrammar {
@@ -536,31 +538,21 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
 /// declaration and the arguments cannot disagree.
 fn follow_rule_snakes(grammar: &Grammar, ctx: &GenContext) -> List<String> {
     let count = grammar.parser_rules.len();
-    let mut reads: List<bool> = [];
+    let mut seeds: List<bool> = [];
+    let mut forwards: List<List<i32>> = [];
     for let mut i = 0; i < count; i += 1 {
-        reads.push(ctx.rule_index_reads_follow(i));
-    }
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for let mut i = 0; i < count; i += 1 {
-            if reads[i] {
-                continue;
-            }
-            for let target of &ctx.rule_forward_targets(i) {
-                for let mut j = 0; j < count; j += 1 {
-                    if reads[j] && grammar.parser_rules[j].snake_name == *target {
-                        reads[i] = true;
-                        changed = true;
-                        break;
-                    }
-                }
-                if reads[i] {
-                    break;
+        seeds.push(ctx.rule_index_reads_follow(i));
+        let mut targets: List<i32> = [];
+        for let target of &ctx.rule_forward_targets(i) {
+            for let mut j = 0; j < count; j += 1 {
+                if grammar.parser_rules[j].snake_name == *target {
+                    targets.push(j);
                 }
             }
         }
+        forwards.push(targets);
     }
+    let reads = close_over_callers(&forwards, seeds);
     let mut snakes: List<String> = [];
     for let mut i = 0; i < count; i += 1 {
         if reads[i] {
@@ -594,8 +586,8 @@ fn intern_kind_sets(parser_rules: &List<Rule>, ctx: &mut GenContext) -> List<Kin
     }
     // Snapshot ctx's current state. Emit may grow this registry
     // further when `kind_check_str` hits a set lower didn't see
-    // (e.g. token sets that surface only from the legacy emit
-    // walks that don't read from GIR yet). Those tail entries
+    // (e.g. token sets that surface only from the emit walks over
+    // surface IR). Those tail entries
     // remain reachable via `ctx.kind_sets()` and the kind-set
     // helper emitter handles them via the salvage tail.
     let entries = ctx.kind_sets();
@@ -766,9 +758,6 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
 /// Classify a parser rule by shape and dispatch to the matching
 /// lowering. Single-alt → `Simple`; multi-alt with no LR alt →
 /// `MultiAlt`; multi-alt with at least one LR alt → `LeftRecursive`.
-/// The shape decision matches `parser_gen::gen_parse_fn_named`'s
-/// branching exactly so the eventual Phase 4 split is a structural
-/// translation rather than a re-classification.
 fn lower_rule(rule: &ParserRule, ctx: &mut GenContext) -> Rule {
     // Scan-group leniency (`scan_group_is_nullable`) reads the rule's
     // scan-cyclic flag; record which rule we are lowering. Emit re-sets this per
@@ -1336,23 +1325,18 @@ fn nested_operand_meets_operator<S: AsStrSlice>(
     };
 }
 
+/// Stamp `prec` on a self-reference, bare or under its `ListLabel`; every
+/// caller found it with `find_self_ref_rule_call` first.
 fn rebind_self_ref_min_prec(op: Op, prec: i32) -> Op {
-    return match op {
-        RuleCall(mut rc) => {
-            rc.min_prec_arg = Option::Some(prec);
-            Op::RuleCall(rc);
-        },
-        ListLabel(mut ll) => {
-            ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
-            Op::ListLabel(ll);
-        },
-        Token(t) => Op::Token(t),
-        Literal(l) => Op::Literal(l),
-        Wildcard(wop) => Op::Wildcard(wop),
-        Excluded(e) => Op::Excluded(e),
-        Repeat(r) => Op::Repeat(r),
-        Group(g) => Op::Group(g),
+    if let ListLabel(mut ll) = op {
+        ll.inner = rebind_self_ref_min_prec(ll.inner, prec);
+        return Op::ListLabel(ll);
+    }
+    let RuleCall(mut rc) = op else {
+        panic("rebind_self_ref_min_prec: not a self-reference");
     };
+    rc.min_prec_arg = Option::Some(prec);
+    return Op::RuleCall(rc);
 }
 
 /// True iff FIRST(`op`) can contain a token in `lr_first` (the union of
@@ -2205,7 +2189,7 @@ fn group_atn_site(
     };
     for let branch of &decision_partition(classes) {
         if branch.alts.len() > 1 && branch.alts.contains(&e.alt_index) {
-            ctx.mark_needs_scan_atn();
+            ctx.mark_body_predicts();
             return g.atn_decision;
         }
     }
@@ -2412,20 +2396,6 @@ fn lower_scan_repeat(
     let mut inner_visiting: List<String> = [];
     let inner_first = ctx.first_of_element(&rep.element, &mut inner_visiting);
 
-    // Scan-side ignores `rep.non_greedy` because the existing surface
-    // emit (`gen_scan_repeat_body`) also ignores it — both greedy and
-    // non-greedy Repeats lower to the same `while peek ∈ inner_first`
-    // loop with `pos = sp; break` on 0-advance / failure. The scan
-    // result has been correct in practice on every committed grammar:
-    // when the loop overshoots, the parse side's longest-match scan
-    // tournament picks a shorter prefix instead. If we ever encounter
-    // a grammar where the scan-side fixed-point really needs 2-token
-    // disambiguation to distinguish `(',' a)*?` from `(',' b)*`, the
-    // `NonGreedyStrategy` infrastructure on the parse side (carrying
-    // `exit_second`) is the natural foundation to restore here.
-    // The scan side has no mask-driven strategies (the caller-FOLLOW
-    // repair is the runtime `gate_caller_follow` gate).
-
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
     let mut body = lower_scan_element(
@@ -2458,6 +2428,7 @@ fn lower_scan_repeat(
         gate_caller_follow: effective_gate,
         non_greedy: rep.non_greedy,
         body_scannable: ctx.is_element_scannable(&rep.element, &mut body_visiting),
+        atn_decision: rep.atn_decision,
     });
 }
 
@@ -2477,34 +2448,13 @@ fn rebind_scan_repeat_caller_follow(
     rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     if let Repeat(re) = se {
-        let probe = lower_continuation_probe(
-            re.non_greedy,
-            re.kind,
-            alt_elements,
-            index,
-            ctx,
-            reaches_rule_tail,
-            rule_name,
-        );
-        let probe_contested = optional_probe_contested(
+        let stamps = lower_repeat_exit_stamps(
             re.non_greedy,
             re.kind,
             &re.inner_admits,
             &caller_follow_first,
-            alt_elements,
-            index,
-            ctx,
-        );
-        let static_exit_undecided = non_greedy_static_undecided(
-            &admits_kinds(&re.inner_admits),
-            &caller_follow_first,
             &scan_repeat_body_second(&alt_elements[index], ctx),
             &compute_caller_follow_second(alt_elements, index + 1, ctx),
-        );
-        let duties = lower_iteration_duties(
-            re.non_greedy,
-            re.kind,
-            &admits_kinds(&re.inner_admits),
             alt_elements,
             index,
             ctx,
@@ -2512,20 +2462,16 @@ fn rebind_scan_repeat_caller_follow(
             rule_name,
         );
         return ScanElement::Repeat(ScanRepeatElement {
-            kind: re.kind,
-            body: re.body,
-            inner_admits: re.inner_admits,
-            caller_follow_first: caller_follow_first,
-            gate_caller_follow: re.gate_caller_follow,
-            non_greedy: re.non_greedy,
-            continuation_scan: probe.scan,
-            continuation_scannable: probe.scannable,
-            probe_asks_caller: probe.asks_caller,
-            probe_contested,
-            static_exit_undecided,
-            probe_viable: probe.viable,
-            body_scannable: re.body_scannable,
-            duties,
+            ..re,
+            caller_follow_first,
+            continuation_scan: stamps.probe.scan,
+            continuation_scannable: stamps.probe.scannable,
+            probe_asks_caller: stamps.probe.asks_caller,
+            probe_contested: stamps.probe_contested,
+            static_exit_undecided: stamps.static_exit_undecided,
+            atn_asked_kinds: stamps.atn_asked_kinds,
+            probe_viable: stamps.probe.viable,
+            duties: stamps.duties,
         });
     }
     return se;
@@ -3849,12 +3795,10 @@ fn lower_repeat_op<S: AsStrSlice>(
         // so it never uses a specialised static Optional strategy. `*?` /
         // `+?` keep the dedicated non-greedy strategy.
         if let Optional = rep.kind {
-            // A non-greedy `??` routes its enter/skip decision through the
-            // runtime ATN simulator; flag the grammar so emit includes the
-            // ATN infrastructure. Always `Plain` — the specialised Optional
-            // strategies are greedy-only (`opt_specialised` is computed only
-            // under `!non_greedy`).
-            ctx.mark_needs_atn();
+            // Always `Plain` — the specialised Optional strategies are
+            // greedy-only (`opt_specialised` is computed only under
+            // `!non_greedy`).
+            ctx.mark_body_predicts();
             RepeatStrategy::Plain;
         } else {
             compute_non_greedy_strategy(body_elem, outer_follow, ctx);
@@ -3971,9 +3915,8 @@ fn lower_repeat_op<S: AsStrSlice>(
     });
 }
 
-/// Inner second-position first set for non-greedy 2-token disambiguation.
-/// Mirrors the surface check `compute_non_greedy_condition` used to perform
-/// at emit time: when the inner is a single-alt `Group` of ≥ 2 elements,
+/// Inner second-position first set for the non-greedy 2-token
+/// disambiguation `compute_non_greedy_condition` emits: when the inner is a single-alt `Group` of ≥ 2 elements,
 /// returns `first_of_elements_from(&elements, 1)`; otherwise `[]`.
 fn compute_body_second_position_first(elem: &Element, ctx: &mut GenContext) -> List<String> {
     if let Group(g) = peel_repeat_body_label(elem) {
@@ -4382,6 +4325,14 @@ pub fn non_greedy_static_undecided(
     return true;
 }
 
+/// A non-greedy `*?` / `+?` over a body taking every token (`.*?`, `~X*?`).
+/// No lookahead says where it stops: exiting is viable only where the whole rest
+/// of the input matches, which ANTLR4 predicts on, so the runtime simulator
+/// decides each exit on the parse and the scan alike.
+pub fn non_greedy_exit_by_atn(non_greedy: bool, kind: RepeatKind, body: &Admits) -> bool {
+    return non_greedy && kind matches { Star | Plus } && admits_is_everything(body);
+}
+
 /// Rebuild a `RepeatOp` with fresh `caller_follow_first` /
 /// `caller_follow_second` while preserving every other field. Used by
 /// every alt-walker post-pass — `lower_alt_body`, `lower_lr_alt_suffix`,
@@ -4397,34 +4348,13 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
     reaches_rule_tail: bool,
     rule_name: S,
 ) -> RepeatOp {
-    let probe = lower_continuation_probe(
-        rep_op.non_greedy,
-        rep_op.kind,
-        alt_elements,
-        index,
-        ctx,
-        reaches_rule_tail,
-        rule_name,
-    );
-    let probe_contested = optional_probe_contested(
+    let stamps = lower_repeat_exit_stamps(
         rep_op.non_greedy,
         rep_op.kind,
         &rep_op.body_admits,
         &caller_follow_first,
-        alt_elements,
-        index,
-        ctx,
-    );
-    let static_exit_undecided = non_greedy_static_undecided(
-        &admits_kinds(&rep_op.body_admits),
-        &caller_follow_first,
         &rep_op.body_second_position_first,
         &caller_follow_second,
-    );
-    let duties = lower_iteration_duties(
-        rep_op.non_greedy,
-        rep_op.kind,
-        &admits_kinds(&rep_op.body_admits),
         alt_elements,
         index,
         ctx,
@@ -4435,13 +4365,112 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         ..*rep_op,
         caller_follow_first,
         caller_follow_second,
-        continuation_scan: probe.scan,
-        continuation_scannable: probe.scannable,
-        probe_asks_caller: probe.asks_caller,
-        probe_contested,
-        static_exit_undecided,
-        probe_viable: probe.viable,
-        duties,
+        continuation_scan: stamps.probe.scan,
+        continuation_scannable: stamps.probe.scannable,
+        probe_asks_caller: stamps.probe.asks_caller,
+        probe_contested: stamps.probe_contested,
+        static_exit_undecided: stamps.static_exit_undecided,
+        atn_asked_kinds: stamps.atn_asked_kinds,
+        probe_viable: stamps.probe.viable,
+        duties: stamps.duties,
+    };
+}
+
+/// What a loop's exit reads from its place in the alternative, stamped alike on
+/// the parse's `RepeatOp` and the scan's `ScanRepeatElement`.
+struct RepeatExitStamps {
+    probe: ContinuationProbe,
+    probe_contested: bool,
+    static_exit_undecided: bool,
+    atn_asked_kinds: List<String>,
+    duties: IterationDuties,
+}
+
+/// The tokens a loop the simulator decides needs asking about: those that
+/// could start the continuation, and those its `.` or `~X` body refuses. Any
+/// other token only the body can take, so the prediction would enter too. Empty
+/// where the continuation can match empty or a token no first set names, since
+/// its first tokens are then not all known.
+fn atn_asked_kinds(
+    repeat: &Element,
+    exit_first: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> List<String> {
+    if ctx.tail_is_nullable_deep(alt_elements, index + 1) || ctx.elements_reach_open_end(alt_elements, index + 1) {
+        return [];
+    }
+    let Repeat(rep) = repeat else {
+        panic("a loop's exit stamps are read at the loop");
+    };
+    let refused = match peel_repeat_body_label(&rep.element) {
+        Wildcard(_) => [] as List<String>,
+        Not(ne) => collect_excluded_kinds(&ne.element),
+        _ => {
+            return [];
+        },
+    };
+    let mut asked = union_kind_arrays(exit_first, &refused);
+    if !asked.contains_str("TK_EOF") {
+        asked.push("TK_EOF");
+    }
+    return asked;
+}
+
+fn lower_repeat_exit_stamps<S: AsStrSlice>(
+    non_greedy: bool,
+    kind: RepeatKind,
+    body_admits: &Admits,
+    caller_follow_first: &List<String>,
+    body_second: &List<String>,
+    caller_follow_second: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+    rule_name: S,
+) -> RepeatExitStamps {
+    let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
+    if by_atn {
+        ctx.mark_body_predicts();
+    }
+    return RepeatExitStamps {
+        probe: if by_atn {
+            ContinuationProbe {};
+        } else {
+            lower_continuation_probe(non_greedy, kind, alt_elements, index, ctx, reaches_rule_tail, rule_name);
+        },
+        probe_contested: optional_probe_contested(
+            non_greedy,
+            kind,
+            body_admits,
+            caller_follow_first,
+            alt_elements,
+            index,
+            ctx,
+        ),
+        static_exit_undecided: non_greedy_static_undecided(
+            &admits_kinds(body_admits),
+            caller_follow_first,
+            body_second,
+            caller_follow_second,
+        ),
+        atn_asked_kinds: if by_atn {
+            atn_asked_kinds(&alt_elements[index], caller_follow_first, alt_elements, index, ctx);
+        } else {
+            [];
+        },
+        duties: lower_iteration_duties(
+            non_greedy,
+            kind,
+            &admits_kinds(body_admits),
+            alt_elements,
+            index,
+            ctx,
+            reaches_rule_tail,
+            rule_name,
+        ),
     };
 }
 
@@ -4720,9 +4749,8 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
 /// element, then overriding the inner op's field name with the
 /// label's name (deduped against the surrounding alt's name table).
 ///
-/// Mirrors `parser_gen::gen_element`'s scalar-Label arm: the inner
-/// emission would have produced its own field name, but the label
-/// rebinds the value under `lab.field_name`. A list label (`+=`) needs a
+/// The inner emission would have produced its own field name, but the
+/// label rebinds the value under `lab.field_name`. A list label (`+=`) needs a
 /// `List<...>`-typed wrapper field, which the CST `FieldDecl` enumeration adds.
 fn lower_label_op<S: AsStrSlice>(
     lab: &LabelElement,
@@ -4791,10 +4819,9 @@ fn lower_label_op<S: AsStrSlice>(
 /// the lowered op list. Transparent `Group` ops contribute their
 /// inner op's field instead (the group itself has no struct slot).
 ///
-/// Mirrors what `gen_util::element_field_info` computed at emit
-/// time, but consumes the lowered IR so the field name and type
-/// agree with whatever shape the lowering chose. emit reads this
-/// list directly to lay out the struct.
+/// It reads the lowered IR, so the field name and type agree with
+/// whatever shape the lowering chose. emit reads this list directly to
+/// lay out the struct.
 fn enumerate_alt_field_decls(ops: &List<Op>) -> List<FieldDecl> {
     let mut fields: List<FieldDecl> = [
         FieldDecl {
@@ -5082,11 +5109,10 @@ fn rebind_group_shape<S: AsStrSlice>(shape: GroupShape, new_field: S) -> GroupSh
 ///
 /// * `~ TOKEN` / `~ 'lit'` — single-token complement, the simple case.
 /// * `~ ( A | B | C )` — multi-token complement; each alt must be a
-///   single `TokenRef` or `Literal` (mirrors `parser_gen::collect_not_set_tokens`).
+///   single `TokenRef` or `Literal`.
 ///
-/// Other inner shapes (`~ rule`, `~ ( a b )`) are not supported by
-/// the runtime helpers (`p.match_not([...])`) and aren't expected
-/// in committed grammars.
+/// Other inner shapes (`~ rule`, `~ ( a b )`) name no token set for
+/// `p.expect_not(...)` to exclude.
 fn collect_excluded_kinds(inner: &Element) -> List<String> {
     return match *inner {
         TokenRef(t) => [`TK_${t.name}`],

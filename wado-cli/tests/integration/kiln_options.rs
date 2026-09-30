@@ -160,6 +160,31 @@ fn type_mismatch_points_at_the_field_key() {
         ));
 }
 
+/// A misspelled key stops `run` before the generator runs, whether or not the
+/// generator declares any options: it never runs on options its use site did
+/// not write, and the program is never built from what it would produce.
+#[test]
+fn unknown_option_stops_the_run_before_the_generator() {
+    let no_options = VERBOSE_GENERATOR
+        .replace("pub struct Options {\n    pub verbose: bool,\n}\n", "")
+        .replace("Request<Options>", "Request")
+        .replace("    let _ = req.options.verbose;\n", "");
+    for generator in [VERBOSE_GENERATOR, no_options.as_str()] {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = write_project(tmp.path(), generator, "{ verbose: false, verbsoe: false }");
+
+        wado_in(&app)
+            .args(["run", "src/main.wado"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "main.wado:5:36: error: kiln: unknown options field `options.verbsoe`",
+            ))
+            .stderr(predicate::str::contains("generator host error").not())
+            .stdout("");
+    }
+}
+
 /// A `TreeMap<String, V>` option takes an object whose keys are the author's
 /// own, and the generator reads them in key order.
 #[test]

@@ -1,0 +1,13 @@
+// A type parameter that neither the arguments nor the expected type settle
+// must be written in a turbofish.
+
+fn zero<T: Default>() -> T {
+    return T::default();
+}
+
+test {
+    zero();
+}
+
+__DATA__
+{"compile_error": ":9:5: analysis error: cannot infer type parameter `T` of function `zero`"}

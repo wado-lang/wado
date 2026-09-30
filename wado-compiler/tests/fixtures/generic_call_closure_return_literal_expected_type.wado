@@ -24,7 +24,7 @@ fn apply<A, B>(x: A, op: fn(A) -> B) -> B {
     return op(x);
 }
 
-fn pick<B>(op: fn() -> B, other: B) -> B {
+fn pick<B: Eq>(op: fn() -> B, other: B) -> B {
     return if other == op() { other } else { op() };
 }
 

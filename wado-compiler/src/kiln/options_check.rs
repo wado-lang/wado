@@ -48,12 +48,17 @@ impl<'a> Site<'a> {
 
     /// An error about this site, blamed on the key at `span`.
     fn error_at(self, span: Span, message: String) -> Diagnostic {
-        Diagnostic {
-            severity: Severity::Error,
-            code: Code::GeneratorOptionsInvalid,
-            message,
-            span: Some(DiagnosticSpan::from_span(&span, Some(self.file))),
-        }
+        clause_error(self.file, &span, message)
+    }
+}
+
+/// An error in a `with { generator: … }` clause of `file`, blamed on `span`.
+pub(super) fn clause_error(file: &str, span: &Span, message: String) -> Diagnostic {
+    Diagnostic {
+        severity: Severity::Error,
+        code: Code::GeneratorOptionsInvalid,
+        message,
+        span: Some(DiagnosticSpan::from_span(span, Some(file))),
     }
 }
 
@@ -94,7 +99,7 @@ pub fn validate(
         Some(other) => {
             diagnostics.push(root.error(format!(
                 "kiln: expected options table, got {}",
-                attr_value_kind(other)
+                other.kind()
             )));
             return Err(diagnostics);
         }
@@ -328,19 +333,8 @@ fn push_mismatch(
         "kiln: `{}` expected {}, got {}",
         site.path,
         ty.describe(),
-        attr_value_kind(supplied)
+        supplied.kind()
     )));
-}
-
-fn attr_value_kind(v: &AttrValue) -> &'static str {
-    match v {
-        AttrValue::String(_) => "string",
-        AttrValue::Int(_) => "integer",
-        AttrValue::Float(_) => "float",
-        AttrValue::Bool(_) => "bool",
-        AttrValue::Array(_) => "array",
-        AttrValue::Object(_) => "object",
-    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,17 @@
+// A member handle's fields are private, so only `members()` mints one.
+
+struct Point {
+    x: i32,
+}
+
+test {
+    let f: EnumCase<Point> = EnumCase {  // ERROR: field `discriminant` of struct
+        discriminant: 0,                 //        `EnumCase` is private
+        value: Point { x: 0 },
+        case_name: "x",
+        wire_override: null,
+    };
+}
+
+__DATA__
+{"compile_error": ":8:30: analysis error: field `discriminant` of struct `EnumCase` is private to its defining file"}

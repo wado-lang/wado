@@ -83,7 +83,7 @@ Single-file mode has no lock file, so a source package whose manifest carries a 
 - Every consumer downloads both representations. Compression absorbs most of it, and the binary earns its bytes as the fallback path.
 - One artifact now presents two interfaces depending on who reads it. This mirrors Rust's rlib / `cdylib` split, but it makes the conformance requirement below load-bearing: a divergence would surface only for one class of consumer.
 
-## Implementation
+## Roadmap
 
 - [ ] Conformance test first: one fixture consumed through both paths, asserting identical observable behavior for `export` items. [Package Manifest](./wep-2026-02-14-package-manifest.md) §Wado-to-Wado Optimization claims this ("the optimization only affects performance"); until it is tested it is an assumption, and the rest of this WEP rests on it.
 - [ ] `wado:package` section format, with the determinism requirements.
@@ -92,6 +92,12 @@ Single-file mode has no lock file, so a source package whose manifest carries a 
 - [ ] Strip composed dependencies' sections at final link.
 - [ ] Transitive resolution for registry source packages; revise Package Manifest §Registry backend.
 - [ ] LSP reads the section for dependency navigation.
+
+## Known gaps
+
+- Whether a registry package carries its `pub` items to a Wado consumer is not
+  settled. Until it is, a consumer reaches only what the package's component
+  exports.
 
 ## References
 

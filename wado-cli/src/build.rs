@@ -295,7 +295,7 @@ pub async fn build_for_driver(
     target_world: &str,
     flags: &CompileFlags,
 ) -> Result<Vec<u8>, CliExit> {
-    match compile::load_nearest_manifest(Path::new(entry)) {
+    match compile::load_nearest_manifest(Path::new(entry)).map_err(CliExit::error)? {
         Some(project) => {
             let segment = compile::world_path_segment(target_world);
             let output = compile::build_output_path(&project.root, &segment);

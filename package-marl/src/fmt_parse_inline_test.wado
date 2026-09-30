@@ -169,10 +169,18 @@ test "parse_inline reads a raw inline HTML span" {
 
 test "parse_inline reads an HTML comment span" {
     let nodes = parse_inline("a <!-- note --> b", &no_refs());
-    if let Some(Node::Html(s)) = nodes.get(1) {
-        assert s == "<!-- note -->";
+    if let Some(Node::Comment(s)) = nodes.get(1) {
+        assert s == " note ";
     } else {
-        panic("expected an Html node");
+        panic("expected a Comment node");
+    }
+}
+
+test "parse_inline reads `<!-->` and `<!--->` as empty comments" {
+    for let source of ["a <!--> b -->", "a <!---> b -->"] {
+        let nodes = parse_inline(&source, &no_refs());
+        assert nodes.get(1) == Option::Some(Node::Comment(""));
+        assert nodes.get(2) == Option::Some(Node::Text(" b -->"));
     }
 }
 

@@ -1,0 +1,29 @@
+// A service builds its response from headers, an optional body stream and a
+// trailers future. It delivers the response with `task return`, then writes
+// the body and resolves the trailers.
+use { Request, Response, ErrorCode, Headers, Trailers, FieldName } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let headers = Headers::new();
+    assert headers.append("content-type" as FieldName, b"text/plain") matches { Ok(_) };
+
+    let [body, body_tx] = Stream::<u8>::new();
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(headers, Some(body), trailers);
+    assert response.set_status_code(201) matches { Ok(_) };
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    body_tx.write_all("created".bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 201,
+        "headers_contain": [["content-type", "text/plain"]],
+        "body": "created"
+    }
+}

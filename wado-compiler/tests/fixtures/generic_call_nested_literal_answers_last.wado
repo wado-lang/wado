@@ -16,7 +16,7 @@ struct Point {
     x: i32,
 }
 
-fn second<T>(p: Pair<T>, fallback: T) -> T {
+fn second<T: Eq>(p: Pair<T>, fallback: T) -> T {
     return if p.a == p.b { fallback } else { p.b };
 }
 
@@ -36,7 +36,7 @@ fn doubled<T: Add<Output = T>>(f: fn(T) -> T, p: Pair<T>, fallback: T) -> T {
     return f(second(p, fallback));
 }
 
-fn end_of<T>(r: &RangeExclusive<T>, fallback: T) -> T {
+fn end_of<T: Eq>(r: &RangeExclusive<T>, fallback: T) -> T {
     return if r.start == r.end { fallback } else { r.end };
 }
 
@@ -51,7 +51,7 @@ impl Picker {
         return second(p, fallback);
     }
 
-    fn first<T>(p: Pair<T>, fallback: T) -> T {
+    fn first<T: Eq>(p: Pair<T>, fallback: T) -> T {
         return if p.a == p.b { fallback } else { p.a };
     }
 }

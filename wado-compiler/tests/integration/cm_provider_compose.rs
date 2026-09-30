@@ -142,6 +142,7 @@ export fn go(code: String, lang: String) -> String {
         opt_level: OptLevel::O2,
         lib_world: Some("test:consumer/consumer@0.1.0".to_string()),
         providers: vec![wado_compiler::ProviderComponent {
+            source: "provider.wado".to_string(),
             import_fq: GUEST_IFACE_FQ.to_string(),
             bytes: provider,
         }],

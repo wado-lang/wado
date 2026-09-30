@@ -10,6 +10,7 @@ use { ScanBody, ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } 
 
 /// `r` is registered left-recursive: only then does `scan_r` take `min_prec`.
 /// Its two alternatives keep its scan a call rather than an inlined token test.
+/// It is current, as the scan emit loop makes each rule before walking it.
 fn lr_ctx() -> GenContext {
     let rules: List<ParserRule> = [
         ParserRule::new("r", Visibility::Default, [], [
@@ -19,6 +20,7 @@ fn lr_ctx() -> GenContext {
     ];
     let mut ctx = GenContext::new(&rules, &[]);
     ctx.set_lr_rule_snakes(&(["r"] as List<String>));
+    ctx.set_current_rule_index(0);
     return ctx;
 }
 

@@ -956,21 +956,46 @@ impl Lexer {
 
 fn try_ENUM(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
+    let mut accept_0: i32 = -1;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
+    let peek_save_1 = pos;
+    let mut peek_ok_1 = false;
+    peek_1: {
+        if !(false) { break peek_1; }
+        peek_ok_1 = true;
+    }
+    pos = peek_save_1;
+    if peek_ok_1 {
+        accept_0 = peek_save_1;
+    }
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_0; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= chars.len() { break la_rep_0; }
+            if !((chars[pos] matches { 'a'..='z' })) { break la_rep_0; }
             pos += 1;
+            let peek_save_2 = pos;
+            let mut peek_ok_2 = false;
+            peek_2: {
+                if !(false) { break peek_2; }
+                peek_ok_2 = true;
+            }
+            pos = peek_save_2;
+            if peek_ok_2 {
+                accept_0 = peek_save_2;
+            }
             continue;
         }
-        pos = rep_saved_0;
+        pos = la_saved_0;
         break;
     }
-    if !(false) { return -1; }
+    if accept_0 < 0 {
+        return -1;
+    }
+    pos = accept_0;
+    if !(false) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     return pos;
 }
 
@@ -980,14 +1005,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_2; }
+        let rep_saved_3 = pos;
+        rep_3: {
+            if pos >= chars.len() { break rep_3; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_3; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_3;
         break;
     }
     return pos;

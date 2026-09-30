@@ -74,7 +74,7 @@ has nothing to substitute.
 A library may declare its own `interface` effect and leave it unhandled at the
 boundary. Compiled as a component, that effect lowers to a CM **import** of a
 synthesized interface — the mirror of reconstruction. marl can thus perform a
-`Highlight` effect it does not implement, leaving the choice to consumers. An
+`RenderHook` effect it does not implement, leaving the choice to consumers. An
 effect handled inside the library stays internal and imports nothing.
 
 ### Satisfying — hold the capability, or compose a provider
@@ -93,9 +93,9 @@ it:
   use { Marl } from "wado-lang:marl" with { provider: "./highlight.wado" };
   ```
 
-  The provider is a plain Wado file (`export fn highlight(...) { ... }`)
-  compiled into a component exporting the dependency's imported interface, bound
-  by operation name. Composition wires `provider.export → dependency.import` and
+  The provider is a plain Wado file (`export fn highlight(...) { ... }`, and
+  likewise for each other operation) compiled into a component exporting the
+  dependency's imported interface, bound by operation name. Composition wires `provider.export → dependency.import` and
   discharges the effect, so the consumer calls `Marl` with no handler installed.
 
 A provider is a _static_ link-time choice, not a per-call dynamic handler.
@@ -121,6 +121,9 @@ Not covered yet:
 - [ ] A single provider file spanning several of a dependency's imported
       interfaces (bind by operation name across all).
 - [ ] Async import/export surface (`stream<T>` / `future<T>`).
+- [ ] A provider that does not fit its dependency is reported where composition
+      connects the two, so a dependency the program never calls, which is not
+      composed, leaves its provider unchecked.
 
 Resources ride the same rule with no special path: a host-provided resource
 (`wasi:*`, `Stream` / `Future`) bottoms out at the host and stays an effect; a

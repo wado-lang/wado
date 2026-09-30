@@ -312,7 +312,7 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
 
         // Methods are registered by `register_methods` (same `method_info`
         // selector), so they partition cleanly against the free functions here.
-        if tir_func.name == "run" || tir_func.body.is_none() || tir_func.method_info.is_some() {
+        if tir_func.body.is_none() || tir_func.method_info.is_some() {
             continue;
         }
 

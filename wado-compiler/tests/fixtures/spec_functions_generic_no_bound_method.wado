@@ -1,0 +1,13 @@
+// A generic body reaches only what the bounds on `T` provide. `T` has none,
+// so `len` is not found, whatever type a call would pass.
+
+fn size<T>(x: T) -> i32 {
+    return x.len();
+}
+
+test {
+    assert size("ab") == 2;
+}
+
+__DATA__
+{"compile_error": ":5:12: analysis error: no method 'len' found on type 'T'"}

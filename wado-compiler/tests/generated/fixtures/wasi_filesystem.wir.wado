@@ -71,9 +71,11 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
+type "functype//wasi/resource-drop:wasi/filesystem/types.wado#descriptor" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -87,6 +89,7 @@ import fn wasi/wasi:filesystem/Preopens::get_directories from "wasi/wasi:filesys
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/resource-drop:wasi/filesystem/types.wado#descriptor from "wasi/resource-drop:wasi/filesystem/types.wado#descriptor";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -189,6 +192,7 @@ fn "wasi_filesystem.wado/run"() with Stdout, Preopens {
             "core:rt/write_string_to_stream"(tx_79, $mv_arg_6.repr, $mv_arg_6.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_75);
         }
+        "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"(first.0);
     } else {
         rx_90 = builtin::i32_wrap_i64(local.tee packed_89("wasi/stream-new"()));
         tx_91 = builtin::i32_wrap_i64(packed_89 >> 32_i64);

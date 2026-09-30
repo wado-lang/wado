@@ -14,6 +14,25 @@ mod component;
 mod component_context;
 mod emit;
 
+/// A provider whose export does not satisfy the interface the dependency it is
+/// wired to imports.
+pub struct ProviderMismatch {
+    /// The provider as its source names it.
+    pub provider: String,
+    pub import_fq: String,
+    /// What differs, in wasmparser's words.
+    pub reason: String,
+}
+
+/// Why emitting a program stopped.
+pub enum EmitFailure {
+    /// The WIR pipeline produced a binary that does not validate: a compiler
+    /// bug.
+    Invalid(Box<InvalidArtifact>),
+    /// A provider the source names does not fit its dependency.
+    Provider(ProviderMismatch),
+}
+
 /// A binary the WIR pipeline produced that does not validate, with the
 /// diagnosis and the bytes themselves. Saving it is the host's to do.
 pub struct InvalidArtifact {
@@ -32,7 +51,7 @@ pub fn emit_wasm(
     package: &NirPackage,
     wir_package: &WirPackage,
     providers: &[ProviderComponent],
-) -> Result<Vec<u8>, Box<InvalidArtifact>> {
+) -> Result<Vec<u8>, EmitFailure> {
     // Step 1: Emit core module bytes from WirPackage
     let core_module =
         emit::emit_core_module(wir_package, package.strip_names, package.codegen_flags);
@@ -41,17 +60,18 @@ pub fn emit_wasm(
     if !package.skip_validation
         && let Some(invalid) = validate_core_module(&core_module, &package.entry_module_source)
     {
-        return Err(Box::new(invalid));
+        return Err(EmitFailure::Invalid(Box::new(invalid)));
     }
 
     // Step 3: Wrap in Component Model
-    let wasm = component::build_component(package, &core_module, wir_package, providers);
+    let wasm = component::build_component(package, &core_module, wir_package, providers)
+        .map_err(EmitFailure::Provider)?;
 
     // Step 4: Validate
     if !package.skip_validation
         && let Some(invalid) = validate_wasm(&wasm, &package.entry_module_source)
     {
-        return Err(Box::new(invalid));
+        return Err(EmitFailure::Invalid(Box::new(invalid)));
     }
 
     Ok(wasm)

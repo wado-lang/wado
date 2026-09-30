@@ -1,0 +1,12 @@
+use { Square, perimeter } from "lib:geo";   // error: `perimeter` is `pub` in a file the entry does not re-export
+
+test {
+    assert perimeter(Square { side: 1 }) == 4;
+}
+
+__DATA__
+{
+  "test": {},
+  "dependencies": { "lib:geo": "sub/spec_packages_geo/lib.wado" },
+  "compile_error": ":1:15: analysis error: symbol 'perimeter' not found in module 'dep:sub/spec_packages_geo/lib.wado'"
+}

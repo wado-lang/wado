@@ -1,6 +1,9 @@
 # Effect System
 
-## Design Philosophy
+An effect is a capability a function uses, such as writing to standard output.
+This chapter covers declaring an effect, declaring the effects a function
+performs and how they propagate to callers, functions generic over effects,
+effects on trait methods, and handlers.
 
 The effect system does three jobs:
 
@@ -82,7 +85,7 @@ A default also answers an operation that a handler leaves out, directly or throu
 
 A default is a handler body, so it runs in the outer scope like every other handler method (see [Where a Handler Method Runs](#where-a-handler-method-runs)). An `Effect::op(...)` inside a default reaches the next handler out, not the handler the default is filling, so a forward never recurses into itself. This is the one place the analogy with a trait's default method stops. A trait default calling `self.other()` reaches the impl's override, and a filled operation's call does not.
 
-A parameter may declare a default, and a call that omits the argument gets it filled in at the call site, as a function call does. The handler receives the argument already in place.
+A parameter may declare a default, which the call fills in ([Restrictions](./spec-functions.md#restrictions)).
 
 Beyond a name, parameters and a return type, an operation declares nothing else. Each of these is a compile error, for the reason given:
 
@@ -119,9 +122,12 @@ test {
 }
 ```
 
-A function that calls an async operation is not itself async. `async` marks only the operation, and the `export async fn` of a world export (see [`task return`](./spec-components.md#task-return-statement)).
+A function that calls an async operation is not itself async. `async` marks only the operation, and the `export async fn` of a world export (see [`task return`](./spec-worlds.md#task-return-statement)).
 
 ## Effect Declaration in Functions
+
+A function or method lists the effects it performs in a `with` clause after its
+return type. A function without one is pure:
 
 <!-- {"fixture":"spec_effects_declaration.wado"} -->
 
@@ -177,7 +183,8 @@ Every member of a row is an effect.
 
 ## Importing Effect Operations
 
-To avoid the verbosity of `Effect::operation()` calls, you can explicitly import effect operations:
+An operation is called as `Effect::op()`. An imported operation may also be
+called by its bare name:
 
 <!-- {"fixture":"spec_effects_import_ops.wado"} -->
 
@@ -212,17 +219,9 @@ test {
 
 ### Import Rules
 
-- Effect operations use `::` syntax: `use {Effect::{op1, op2}} from "..."`
-- Multiple operations can be imported: `Effect::{op1, op2, op3}`
-- Renaming is supported: `use {Effect::{op as renamed}} from "..."`
-- Wildcards are prohibited: `use {Effect::{*}}` is not allowed
-- An imported operation demands what `Effect::op()` demands (see [Effect Propagation](#effect-propagation))
-
-### Name Resolution
-
-- Imported effect operations can be called directly without the `Effect::` prefix
-- If an operation name is ambiguous, use the fully qualified `Effect::operation()` syntax
-- Non-imported effect operations must always use the `Effect::operation()` syntax
+- `use {Effect::{op1, op2}} from "..."` imports operations by name. A wildcard, `use {Effect::{*}}`, is not allowed.
+- An imported operation demands what `Effect::op()` demands (see [Effect Propagation](#effect-propagation)).
+- An operation may be renamed as any import may ([Renaming Imports](./spec-modules.md#renaming-imports)). Two effects' operations of the same name are told apart by renaming one, or by calling it as `Effect::op()`:
 
 <!-- {"fixture":"spec_effects_import_ops_rename.wado"} -->
 
@@ -282,7 +281,7 @@ test {
 }
 ```
 
-A test block declares no effects and may perform any (see [Syntax Rules](./spec-testing.md#syntax-rules)).
+A test block may perform any effect without declaring it (see [Syntax Rules](./spec-testing.md#syntax-rules)).
 
 ### Resources as Effects
 
@@ -363,7 +362,7 @@ test {
 }
 ```
 
-A [type pattern](./spec-components.md#type-patterns) that narrows a handle to resource `R` holds `R` from then on, as an operation returning `R` would:
+A [type pattern](./spec-patterns.md#type-patterns) that narrows a handle to resource `R` holds `R` from then on, as an operation returning `R` would:
 
 <!-- {"fixture":"spec_effects_narrowing_holds.wado"} -->
 
@@ -412,7 +411,7 @@ test {
 
 ## Generic Effects (Effect Polymorphism)
 
-Use `<effect E>` to declare a generic effect parameter. `E` can represent zero or more concrete effects, inferred from function-typed arguments at each call site.
+`<effect E>` declares an effect parameter. `E` stands for zero or more concrete effects, inferred at each call site from the function-typed arguments.
 
 <!-- {"fixture":"spec_effects_generic.wado"} -->
 
@@ -435,12 +434,11 @@ test {
 }
 ```
 
-Effect parameters:
-
-- Are declared with the `effect` keyword in generic parameter lists
-- Are inferred from the effects of function-typed arguments at each call site; when multiple function-typed arguments reference the same effect parameter, `E` resolves to the union of all their effects
-- Can coexist with type parameters: `<T, effect E>`
-- Can be declared in any number, each resolved on its own from the arguments that name it, so a function can keep the effects of two closures apart
+An effect parameter sits beside type parameters in the list (`<T, effect E>`).
+Where several function-typed arguments name the same `E`, it resolves to the
+union of their effects. A function may declare several effect parameters. Each
+resolves on its own from the arguments that name it, so a function can keep the
+effects of two closures apart.
 
 The caller of a generic function must hold what its parameter resolves to:
 

@@ -67,6 +67,88 @@ AB : 'a' | 'b' ;");
     assert report.contains("first-match: every arm consumes the same fixed length"), report;
 }
 
+test "lexer dump reports equal-length arms before a suffix as first-match" {
+    let report = lexer_dump("grammar T;
+r : OP ;
+OP : ('ab' | 'cd') 'e' ;");
+
+    assert report.contains(
+        "alternation ('ab' | 'cd') then 'e' — first-match: every arm consumes the same fixed length",
+    ), report;
+    assert report.contains("alternation + suffix: first-match 1, arm scoring 0"), report;
+}
+
+test "lexer dump names an empty arm" {
+    // The empty arm can match where the others do, so the arms are scored.
+    let report = lexer_dump("grammar T;
+r : NUM ;
+NUM : [0-9]+ ('e' ('+' | '-' | ) [0-9]+)? ;");
+
+    assert report.contains("alternation ('+' | '-' | ε) then [0-9]+ — arm scoring"), report;
+}
+
+test "lexer dump shortens a class of many ranges" {
+    let report = lexer_dump("grammar T;
+r : ID ;
+ID : [a-zA-Z_$0-9\\u00C0-\\u00D6\\u00D8-\\u00F6]+ ;");
+
+    assert report.contains("repeat [a-zA-Z_$0-9À-Ö…]+ — plain: nothing follows the repeat"), report;
+}
+
+test "lexer dump says a predicate after a construct makes it consult what follows" {
+    // `[0-9]` cannot eat the `'z'` and nothing follows the alternation, so only
+    // the predicate has a say in where each stops.
+    let report = lexer_dump("grammar T;
+r : S I ;
+S : 'a' [0-9]+ {true}? 'z' ;
+I : ('a' | 'ab') {true}? ;");
+
+    assert report.contains("repeat [0-9]+ then 'z' — lookahead-aware"), report;
+    assert report.contains("alternation ('a' | 'ab') — arm scoring"), report;
+}
+
+test "lexer dump leaves a repeat plain when a predicate follows only behind a char it cannot eat" {
+    // The predicate runs only after `'z'`, which `[0-9]` cannot eat, so the loop
+    // already stops where the predicate could run. An optional `'z'` lets it run
+    // right where the loop stops.
+    let report = lexer_dump("grammar T;
+r : S O ;
+S : 'a' [0-9]+ 'z' {true}? ;
+O : 'b' [0-9]+ 'z'? {true}? ;");
+
+    assert report.contains("repeat [0-9]+ then 'z' — plain: the inner cannot eat the suffix's first char"), report;
+    assert report.contains("repeat [0-9]+ then 'z'? — lookahead-aware"), report;
+}
+
+test "lexer dump gives a repeat over a string the lookahead-aware scan" {
+    let report = lexer_dump("grammar T;
+r : S ;
+S : 'x' ('ab')* 'ab' ;");
+
+    assert report.contains("repeat ('ab')* then 'ab' — lookahead-aware"), report;
+}
+
+test "lexer dump escapes a quote and an unprinted char" {
+    let report = lexer_dump("grammar T;
+r : CHR WS ;
+CHR : '\\'' (~['\\\\] | '\\\\' .)+ '\\'' ;
+WS : [ \\t\\f]+ -> skip ;");
+
+    assert report.contains("then '\\'' — "), report;
+    assert report.contains("repeat [ \\t\\u{c}]+"), report;
+}
+
+test "lexer dump reports a keyword whose carrier is built of fragments and ranges" {
+    let report = lexer_dump("grammar T;
+r : IF ID ;
+IF : 'if' ;
+ID : LETTER (LETTER | '0'..'9')* ;
+fragment LETTER : 'a'..'z' | '_' ;");
+
+    assert report.contains("rule IF — keyword classifier (carrier ID)"), report;
+    assert report.contains("set (LETTER | '0'..'9') — one class test of 3 ranges: every arm is one char"), report;
+}
+
 test "lexer dump reports a called rule's alternation as not-tail" {
     // `B` is entered from `A` with `'z'` still to consume, so its body
     // alternation cannot take maximal munch however long an arm reaches. It
@@ -86,7 +168,7 @@ test "lexer dump reports a greedy repeat whose inner cannot eat the suffix" {
 r : CMT ;
 CMT : '/*' ~'*'* '*/' ;");
 
-    assert report.contains("repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
+    assert report.contains("repeat ~'*'* then '*/' — plain: the inner cannot eat the suffix's first char"), report;
     assert report.contains("plain 1, lookahead-aware 0"), report;
 }
 
@@ -134,13 +216,13 @@ I : ('a' | 'ab') [0-9]* 'z' ;");
 
 test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
     // The non-greedy emit carries the alt's later predicates onto its rest, so the
-    // `{true}?` lands after the `.*` and keeps that repeat on the plain loop.
+    // `{true}?` lands after the `[0-9]*` and makes that repeat consult it.
     let report = lexer_dump("grammar T;
 r : S ;
-S : 'a' .*? .* {true}? 'x' ;");
+S : 'a' .*? [0-9]* {true}? 'x' ;");
 
-    assert report.contains("repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
-    assert report.contains("plain 1, lookahead-aware 0"), report;
+    assert report.contains("repeat [0-9]* then 'x' — lookahead-aware"), report;
+    assert report.contains("plain 0, lookahead-aware 1"), report;
 }
 
 test "lexer dump reports disjoint arms with a suffix as first-match" {
@@ -421,5 +503,5 @@ r : WS ;
 WS : [ \\t\\r\\n]+ -> skip ;");
 
     assert report.contains("repeat [ \\t\\r\\n]+"), report;
-    assert report.contains("plain loop: nothing follows the repeat"), report;
+    assert report.contains("plain: nothing follows the repeat"), report;
 }

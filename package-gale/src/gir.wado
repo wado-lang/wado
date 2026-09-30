@@ -399,9 +399,7 @@ pub fn lr_trailing_prec(own_prec: i32, right_associative: bool) -> i32 {
     return if right_associative { own_prec } else { own_prec + 1 };
 }
 
-/// LR suffix dispatch metadata. The fields mirror
-/// `compute_lr_dispatch_data` in legacy `parser_gen.wado`, but
-/// computed once and stored.
+/// LR suffix dispatch metadata, computed once per rule at lowering.
 pub struct LrDispatchData {
     /// Indices into `LeftRecursiveRule.lr_alts` of the alternatives
     /// that have a non-empty suffix. The degenerate `expr : expr`
@@ -660,10 +658,9 @@ pub variant Op {
     /// `.` wildcard. Consumes one token of any kind (matches
     /// `match_any` at runtime).
     Wildcard(WildcardOp),
-    /// `~ X` set complement. `kinds` is the resolved exclusion set;
-    /// emit produces `p.match_not([...])` (or `match_not_via_X` if
-    /// the inner is a single-token RuleRef rule, recovered via
-    /// `not_match_call`'s lower-time analogue).
+    /// `~ X` set complement. `kinds` is the resolved exclusion set
+    /// (`lower::collect_excluded_kinds`); emit produces
+    /// `p.expect_not(...)` over it.
     Excluded(ExcludedOp),
     /// `e?` / `e*` / `e+`. `strategy` selects the loop shape; emit
     /// is structural.
@@ -691,8 +688,7 @@ pub struct TokenOp {
     /// Pre-dedup base name (the surface element's `field_name`).
     /// Drives emit's per-leaf `dedup_name(&dedup_base, name_counts)`
     /// sync so siblings that still walk surface IR (e.g. the LR-suffix
-    /// emit in `gen_lr_fn` and `gen_element` fallbacks) observe the same
-    /// count `gen_element` would have produced. For non-rebound leaves it matches the
+    /// emit in `gen_lr_fn`) observe the count lower produced. For non-rebound leaves it matches the
     /// surface element's base name (so `dedup_base == field` when the
     /// leaf was the first occurrence in its alt). For label-rebound
     /// leaves (`name = ID` lowered to `Op::Token { field: "name",
@@ -822,8 +818,7 @@ pub struct WildcardOp {
 }
 
 pub struct ExcludedOp {
-    /// Exclusion set. emit renders this as a literal token-array
-    /// passed to `p.match_not([...])`.
+    /// Exclusion set, the kind set emit passes to `p.expect_not(...)`.
     pub kinds: List<String>,
     pub field: String,
     /// Pre-dedup base name (`not_element_field_name(&ne.element)`).
@@ -944,9 +939,7 @@ pub struct RepeatOp {
     pub body_admits: Admits,
     /// True iff the inner element is a single-alt `Group` — i.e.
     /// `compute_iter_follow` should union the body's first set with
-    /// the outer follow rather than using outer alone. Mirrors the
-    /// surface `if let Group(g) = inner && g.alternatives.len() == 1`
-    /// check the iter-follow computation used to perform at emit time.
+    /// the outer follow rather than using outer alone.
     pub body_is_single_alt_group: bool,
     /// True iff the inner element contributes a CST field — i.e.
     /// emit's Repeat surfaces a storable `Option<T>` (`Optional`) or
@@ -1000,6 +993,9 @@ pub struct RepeatOp {
     /// recomputed so the two emit walkers and the scan side cannot answer
     /// it differently.
     pub static_exit_undecided: bool = false,
+    /// For a loop the simulator decides, the only tokens it needs asking
+    /// about; any other enters. Empty where every token asks.
+    pub atn_asked_kinds: List<String> = [],
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
     /// verdict: its continuation scan ends at the rule's tail, and a token
     /// outside this set cannot continue any caller from there. Empty leaves
@@ -1012,10 +1008,8 @@ pub struct RepeatOp {
     /// caller's continuation can collide with another iteration. The
     /// gate is inert when the runtime `follow` is empty (non-repair
     /// callers), so it is sound to emit unconditionally at such
-    /// positions; it subsumes BOTH the old 1-token follow subtraction
-    /// and the K-prefix `__follow_<id>` variant gate. The actual mask is
-    /// no longer baked here — it arrives at runtime via the `follow`
-    /// argument the caller threads in.
+    /// positions. The mask arrives at runtime via the `follow` argument
+    /// the caller threads in.
     pub gate_caller_follow: bool,
     /// Surface `RepeatElement.atn_decision` id: the decision site a non-greedy
     /// `??` predicts its enter/skip at. -1 when sites were not assigned.
@@ -1193,8 +1187,7 @@ pub struct SingleAltShape {
     pub field: String,
     /// Rule that owns the struct's general-group sub-type names
     /// when the single-alt body contains nested general groups.
-    /// Drives `general_group_type_name` resolution; mirrors the
-    /// legacy `single_alt_owner` map.
+    /// Drives `general_group_type_name` resolution.
     pub owner_rule: String,
 }
 
@@ -1301,8 +1294,7 @@ pub struct ScanRepeatElement {
     /// entry so the longest-match tournament yields to the caller in
     /// lockstep with the parse side.
     pub gate_caller_follow: bool,
-    /// True for a non-greedy `*?` / `+?`. Over a body admitting everything the
-    /// scan stops at the exit set, not a kind guard, as the parse side does.
+    /// Mirrors `RepeatOp.non_greedy`.
     pub non_greedy: bool,
     /// Mirrors the `RepeatOp` probe stamps below, so a probed Repeat
     /// decides the same on both sides — the tournament measures scan lengths
@@ -1312,10 +1304,14 @@ pub struct ScanRepeatElement {
     pub probe_asks_caller: bool = false,
     pub probe_contested: bool = false,
     pub static_exit_undecided: bool = false,
+    /// Mirrors `RepeatOp.atn_asked_kinds`.
+    pub atn_asked_kinds: List<String> = [],
     pub probe_viable: List<String> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
     pub body_scannable: bool = false,
+    /// Mirrors `RepeatOp.atn_decision`, for the exit the simulator decides.
+    pub atn_decision: i32 = -1,
     /// The same `IterationDuties` value `RepeatOp` carries, from the same
     /// `lower_iteration_duties` call shape. A scan that counts an iteration the
     /// parse refuses measures a length the tournament then commits to.
@@ -1404,41 +1400,25 @@ pub fn rule_header(rule: &Rule) -> &RuleHeader {
 /// lowered rule. For `Simple` rules `alt_index` is always `0`; for
 /// `MultiAlt` the lookup scans `alts` for the entry whose
 /// `alt_index == alt_index`; for `LeftRecursive` it searches the atom's
-/// alts first and falls back to the matching LR alt's `suffix`. Returns
-/// `null` only when no alt with that index exists on either side.
+/// alts, the only ones a pick names by index — an LR alt's `suffix` is
+/// reached through `lr_alts`. Returns `null` when no alt has that index.
 pub fn rule_alt_body(rule: &Rule, alt_index: i32) -> Option<&AltBody> {
     return match rule {
         Simple(s) => if alt_index == 0 { Option::<&AltBody>::Some(&s.body) } else { null },
         MultiAlt(m) => m.alts.iter_ref().find(|a| a.alt_index == alt_index),
-        LeftRecursive(l) => {
-            if let Some(b) = l.atom.alts.iter_ref().find(|a| a.alt_index == alt_index) {
-                Option::<&AltBody>::Some(b);
-            } else if let Some(lr) = l.lr_alts.iter_ref().find(|lr| lr.alt_index == alt_index) {
-                Option::<&AltBody>::Some(&lr.suffix);
-            } else {
-                null;
-            }
-        },
+        LeftRecursive(l) => l.atom.alts.iter_ref().find(|a| a.alt_index == alt_index),
     };
 }
 
 /// Scan-side counterpart of `rule_alt_body`. Returns the
 /// `ScanBody` for the alt at the given index — `s.scan_body` for
 /// `Simple` (alt_index 0), or the parallel `scan_alts` entry for
-/// `MultiAlt` / LR atom shapes, or `lr.scan_suffix` for LR alts.
+/// `MultiAlt` / LR atom shapes.
 pub fn rule_alt_scan_body(rule: &Rule, alt_index: i32) -> Option<&ScanBody> {
     return match rule {
         Simple(s) => if alt_index == 0 { Option::<&ScanBody>::Some(&s.scan_body) } else { null },
         MultiAlt(m) => find_scan_body_in_array(&m.alts, &m.scan_alts, alt_index),
-        LeftRecursive(l) => {
-            if let Some(b) = find_scan_body_in_array(&l.atom.alts, &l.atom.scan_alts, alt_index) {
-                Option::<&ScanBody>::Some(b);
-            } else if let Some(lr) = l.lr_alts.iter_ref().find(|lr| lr.alt_index == alt_index) {
-                Option::<&ScanBody>::Some(&lr.scan_suffix);
-            } else {
-                null;
-            }
-        },
+        LeftRecursive(l) => find_scan_body_in_array(&l.atom.alts, &l.atom.scan_alts, alt_index),
     };
 }
 

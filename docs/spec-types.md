@@ -1,39 +1,24 @@
 # Types
 
-## The Prelude
+This chapter covers the types a program declares values of: the primitives,
+strings, tuples, lists, the never type, newtypes, structs, enums, variants and
+flags, and how type arguments are inferred. Traits over these types are in
+[Traits](./spec-traits.md).
 
-The prelude (`core:prelude`) is automatically imported into every module, providing access to fundamental types without requiring explicit imports:
+## Prelude Types
 
-### Automatically Available
+These types, among others, come from the
+[prelude](./spec-modules.md#the-prelude), so they need no `use`:
 
-- `String` - UTF-8 string type
-- `List<T>` - Dynamic array type
-- `Option<T>` and its cases `Some(x)` and `None` (`null` also denotes `None`)
-- `Result<T, E>` and its cases `Ok(x)` and `Err(e)`
-- `Stream<T>` - Component Model async stream
-- `Future<T>` - Component Model async future
-- `i128`, `u128` - 128-bit integer types
+- `String`, UTF-8 text, and `StrSlice`, a view of part of one.
+- `List<T>`, a growable sequence, and `Array<T>` and `Slice<T>`, the rest of
+  [the sequence family](#the-sequence-family).
+- `Option<T>` with its cases `Some(x)` and `None`, which `null` also denotes.
+- `Result<T, E>` with its cases `Ok(x)` and `Err(e)`.
+- `Stream<T>` and `Future<T>`, the Component Model's async stream and future.
+- `i128` and `u128`, the 128-bit integers.
 
-A case is written bare (`Some(x)`) only where an expected type says which type
-it belongs to. Elsewhere it is qualified: `Option::Some(x)`.
-
-### Disabling the Prelude
-
-`#![no_prelude]` at the top of a module turns the prelude off, and the module
-imports what it uses:
-
-<!-- {"fixture":"spec_types_no_prelude.wado"} -->
-
-```wado
-#![no_prelude]
-
-use { String, List, Option, Result, Stream, Future } from "core:prelude";
-
-test {
-    let xs: List<i32> = [1, 2];
-    assert xs.len() == 2;
-}
-```
+[`core:prelude`](./stdlib-core-prelude.md) lists them all.
 
 ## Primitive Types
 
@@ -54,6 +39,11 @@ test {
 }
 ```
 
+A primitive type has
+[associated constants](./spec-functions.md#associated-constants) and static
+methods, such as `i32::MAX` and `f64::sqrt`.
+[`core:prelude`](./stdlib-core-prelude.md) lists them.
+
 ### Half Precision (`f16`, `bf16`)
 
 `f16` is IEEE 754 binary16. `bf16` is bfloat16: `f32`'s exponent range with an
@@ -62,13 +52,13 @@ arithmetic:
 
 - No arithmetic or bitwise operator applies to either, unary `-` included.
 - `as` does not convert them in either direction (see
-  [Type Cast](./spec-lexical.md#type-cast-as)). The error names the method to
+  [Type Cast](./spec-expressions.md#type-cast-as)). The error names the method to
   write instead.
 - A numeric literal coerces to either type and is rounded once (see
   [Floating-Point Literals](./spec-literals.md#floating-point-literals)).
 - A comparison widens both operands to `f32` and compares those, so `<` is
   IEEE and `Ord` is the total order (see
-  [Ord](./spec-traits.md#ord---ordering)).
+  [Ord](./spec-standard-traits.md#ord---ordering)).
 - Neither type crosses a component boundary (see
   [Type Mapping](./spec-components.md#type-mapping-at-component-boundaries)).
 
@@ -112,32 +102,10 @@ read.
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
-## Associated Constants
-
-Associated constants are compile-time constants defined in `impl` blocks using the `const` keyword. They cannot be mutated.
-
-<!-- {"fixture":"spec_types_assoc_const.wado"} -->
-
-```wado
-struct Board {
-    cells: List<i32>,
-}
-
-impl Board {
-    pub const SIZE: i32 = 8;
-}
-
-test {
-    assert Board::SIZE * Board::SIZE == 64;
-    assert f64::PI > 3.14;
-}
-```
-
-Primitive types provide built-in associated constants and static methods. See [`core:prelude`](./stdlib-core-prelude.md) for the full list.
-
 ## 128-bit Integer Types (i128/u128)
 
-Unlike primitive types, `i128` and `u128` are implemented as structs in the prelude. They can be used like primitives thanks to operator overloading:
+`i128` and `u128` are prelude types, not primitives. Literals, operators and
+casts treat them as integers all the same:
 
 <!-- {"fixture":"spec_types_wide_int.wado"} -->
 
@@ -178,7 +146,8 @@ assert (a + 256) as u8 == 42;          // wide int → int keeps the low bits
 assert (-1 as i128) as u128 == u128::MAX;  // i128 ↔ u128 reinterprets the bits
 ```
 
-Checked conversions are available through `TryFrom` (e.g. `i64::try_from(a)`, `u128::try_from(n)`), returning `Err` when the value is out of range for the target type.
+`TryFrom` gives the checked conversions, such as `i64::try_from(a)` and
+`u128::try_from(n)`. Each answers `Err` for a value out of the target's range.
 
 ## SIMD Types (v128)
 
@@ -253,20 +222,14 @@ Rationale: [WEP: SIMD v128 Types](./wep-2026-01-31-simd-v128.md).
 
 ## String Type
 
-`String` is a built-in type representing UTF-8 encoded text with value semantics and GC management.
+`String` is text: a sequence of Unicode scalar values, stored as UTF-8. Every
+`String` is valid UTF-8, so it crosses a component boundary as a Component
+Model `string` unchanged.
 
-### Design Principles
-
-- Value semantics: deep-copied on assignment, parameter passing, and return — passing a `String` to a function gives the callee its own buffer
-- Mutable through the local binding: `push_str` modifies the receiver in place and `+=` reassigns the binding, but neither reaches the caller's value
-- GC-managed: Memory is automatically managed by Wasm GC
-- UTF-8 encoding: Direct mapping to Component Model `string`
-
-### Semantics and Encoding
-
-- Semantically, a `String` is a sequence of Unicode scalar values
-- Invalid UTF-8 byte sequences are not allowed; all String values must be valid UTF-8
-- This ensures interoperability with Component Model `string` type and safe string operations
+A `String` is a value like any other
+([Value Semantics](./spec-memory.md#value-semantics)). `push_str` changes the
+receiver in place and `+=` reassigns the binding, and neither reaches a copy
+the caller holds.
 
 ### Index Access (Prohibited)
 
@@ -309,7 +272,7 @@ assert !s.is_empty();
 
 ### Iterating Bytes and Characters
 
-`bytes()` and `chars()` return iterator objects (`StrUtf8ByteIter` and `StrCharIter`) that implement both `Iterator` and `IntoIterator`, so they work with `for-of` directly:
+`bytes()` and `chars()` return iterators, so `for-of` walks them directly:
 
 <!-- {"fixture":"spec_types_string.wado"} -->
 
@@ -373,6 +336,263 @@ assert s == "hello world!";
 ```
 
 Rationale: [WEP: String Type Design](./wep-2026-01-15-string-type-design.md).
+
+### String Views
+
+`StrSlice` is a prelude type: a view of part of a string, its ends on UTF-8
+character boundaries. Creating one copies nothing, and `to_string()` is where a
+copy is made. It is an ordinary library type; nothing in the language treats
+the name specially.
+
+<!-- {"fixture":"spec_traits_str_slice.wado"} -->
+
+```wado
+let v = "banana".as_str_slice();
+let part = v.slice(1, 4);            // panics off a character boundary
+assert part == "ana";
+assert part.len() == 3;              // in bytes
+assert part.to_string() == "ana";    // copies out, here and only here
+```
+
+`slice(start, end)` takes byte offsets from the view's start. It traps when the
+range is out of bounds or either end is not a character boundary.
+`slice_unchecked` leaves both checks to the caller. A view refers to its
+string's bytes as a [slice](#slice-semantics) does, with the same snapshot and
+aliasing behavior.
+
+`StrSlice` carries the search and split methods (`contains`, `starts_with`,
+`find`, `split`, `split_once`, the trims, the `strip_*` family), and `String`'s
+own delegate to it. A method that answers with part of its input returns a view
+of it, so working on part of a string does not copy it out. `StrSlice` and
+`String` compare in either order, and two views compare and order by their
+text.
+
+A signature takes a `String`, a reference to one, or a view of one alike through
+[`AsStrSlice`](./spec-standard-traits.md#asstrslice).
+
+Rationale: [WEP: String Views](./wep-2026-09-13-string-slice.md).
+
+## Tuples
+
+Tuple types use bracket syntax `[T1, T2, ...]`. The literal that builds one is
+in [Tuple Literals](./spec-literals.md#tuple-literals).
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+let point: [i32, i32] = [10, 20];
+let record: [String, i32, bool] = ["Alice", 30, true];
+assert point.1 == 20 && record.0 == "Alice";
+```
+
+### Tuple Element Access
+
+Tuple elements are accessed by constant index using dot notation or bracket notation:
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+let t = [10, "hello", true];
+let x = t.0;      // dot notation
+let y = t[1];     // bracket notation
+let z = t.2;
+assert x == 10 && y == "hello" && z;
+```
+
+A variable index is not allowed:
+
+<!-- {"fixture":"spec_literals_tuple_index.wado"} -->
+
+```wado
+let i = 1;
+let w = t[i];     // Error: tuple index must be a constant integer
+```
+
+### Unit vs Empty Tuple
+
+The unit type `()` and empty tuple `[]` are distinct:
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+let unit: () = ();    // Unit type/value
+let empty: [] = [];   // Empty tuple (rarely used)
+assert `${unit:?}` == "()" && `${empty:?}` == "[]";
+```
+
+They take separate `impl`s, so a method defined on one is not found on the other.
+
+`[]` cannot cross a component boundary. It has no Component Model representation:
+a `tuple` carries at least one type, and `()` is the type that carries none. An
+export naming one is rejected at compile time.
+
+## Lists
+
+`List<T>` is a growable sequence of `T`. A bracket literal builds one where a
+`List` is expected ([List Literals](./spec-literals.md#list-literals)), and its
+constructors build one from a size.
+
+### List Constructors
+
+<!-- {"fixture":"spec_literals_lists.wado"} -->
+
+```wado
+let arr = List::<i32>::with_capacity(10);     // empty list with room for 10 elements
+let bools = List::<bool>::filled(100, true);  // list of 100 elements, all true
+assert arr.len() == 0 && bools.len() == 100 && bools[99];
+```
+
+### List Operations
+
+<!-- {"fixture":"spec_literals_lists.wado"} -->
+
+```wado
+let mut arr: List<i32> = [1, 2, 3];
+
+// Index access (read)
+let first = arr[0];
+assert first == 1;
+
+// Index assignment (write)
+arr[0] = 100;        // Requires a `let mut` binding
+arr[1] = 200;
+
+// List methods
+arr.push(4);         // Add element to end
+let len = arr.len(); // Get length
+assert arr == [100, 200, 3, 4] && len == 4;
+```
+
+An index outside the list traps ([Bounds Checks](#bounds-checks)).
+
+### Sorting
+
+Every sort is stable and O(n log n) in the worst case:
+
+| Method        | Mutates? | Comparator                          |
+| ------------- | -------- | ----------------------------------- |
+| `sort()`      | Yes      | `Ord::cmp` (requires `T: Ord`)      |
+| `sort_by()`   | Yes      | Custom `fn mut(&T, &T) -> Ordering` |
+| `sorted()`    | No       | `Ord::cmp` (requires `T: Ord`)      |
+| `sorted_by()` | No       | Custom `fn mut(&T, &T) -> Ordering` |
+
+On a float, `Ord` is the IEEE 754 total order rather than the order `<` gives,
+so a NaN still has a place in a sorted list. See
+[Ord - Ordering](./spec-standard-traits.md#ord---ordering).
+
+<!-- {"fixture":"spec_literals_lists.wado"} -->
+
+```wado
+let mut nums: List<i32> = [5, 3, 8, 1];
+nums.sort();                             // in-place ascending
+assert nums == [1, 3, 5, 8];
+
+let orig: List<i32> = [5, 3, 8, 1];
+let asc = orig.sorted();                // returns a new sorted list
+assert asc == [1, 3, 5, 8] && orig == [5, 3, 8, 1];
+```
+
+## The Sequence Family
+
+Three prelude types hold contiguous sequences:
+
+|                | Fixed length | Growable  |
+| -------------- | ------------ | --------- |
+| Owned          | `Array<T>`   | `List<T>` |
+| Reference view | `Slice<T>`   | —         |
+
+`Slice<T>` is the read-only vocabulary type. An algorithm that only reads is
+written once against a slice, and the owned types reach it through
+`as_slice()`. The methods the three share come from the
+[`Sequence` and `AsSlice`](./spec-standard-traits.md#sequence-and-asslice)
+traits.
+
+A conversion's name says what it costs: `as_*` returns a view of the same
+elements, and `to_*` copies them.
+
+| From → To                  | Method       | Elements copied       |
+| -------------------------- | ------------ | --------------------- |
+| `Array` / `List` → `Slice` | `as_slice()` | none                  |
+| `Slice` → `Array` / `List` | `to_*()`     | all                   |
+| `List` → `Array`           | `to_array()` | all, sized to `len()` |
+
+Indexing by a range of `i32` yields a `Slice<T>` of the elements the range
+covers, as `slice(start, end)` does: `xs[1..<4]` holds `xs[1]`, `xs[2]` and
+`xs[3]`, as does `xs[1..=3]`. Both clamp the range to the sequence.
+
+### Slice Semantics
+
+A slice refers to the whole backing array plus a start and an end. It is an
+ordinary value: assigning one copies those three fields and never the elements.
+A view reads its elements but never hands out `&mut` into the array, so nothing
+writes through it (see [Dispatch](./spec-standard-traits.md#dispatch)). Two
+consequences follow, both memory-safe:
+
+- Snapshot. A view keeps referring to the buffer it was created from, so a
+  source `List` that grows and reallocates is not observed.
+- Aliasing. A write to the source that does not reallocate is visible through
+  the view.
+
+A slice compares, orders, displays, and inspects by its elements, not by the
+buffer it refers to.
+
+### Bounds Checks
+
+`get(i)` returns `Option<T>` on all three types. `xs[i]` traps when `i` is
+outside `0..<len()`. On a slice that includes a negative index, even where the
+backing array holds an element, since a view never reads outside itself. The
+trap is the whole contract, and its message is implementation-defined.
+
+`get_unchecked(i)` leaves the check to the caller, who must guarantee
+`0 <= i < len()`. Violating that yields an unspecified value of the element type
+or traps. It is never undefined behavior and never compromises memory safety,
+because every element read is bounds-checked by the Wasm engine. Wado's
+`_unchecked` elides a semantic check, not a memory check, which is why Wado
+needs no `unsafe`.
+
+Rationale: [WEP: The Sequence Family](./wep-2026-06-02-sequence-family.md).
+
+## The Never Type `!`
+
+The never type `!` is the bottom type: it is a subtype of every type. An
+expression of type `!` never produces a value. `panic()` and `unreachable()`
+both return `!`.
+
+So an expression of type `!` may stand in any value position without a type
+mismatch:
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+// In a match arm: the None branch panics, so the match has type i32
+let opt: Option<i32> = Option::<i32>::Some(5);
+let x = match opt {
+    Some(v) => v,
+    None => panic("unexpected none"),
+};
+assert x == 5;
+
+// In a let binding with explicit type annotation
+let y: i32 = panic("unreachable");
+
+// In a binary expression: execution diverges before the addition
+let z: i32 = panic("boom") + 1;
+```
+
+The `!` type can be written explicitly as a return type:
+
+<!-- {"fixture":"spec_literals_tuples.wado"} -->
+
+```wado
+fn fail(msg: String) -> ! {
+    panic(msg);
+}
+
+test {
+    let n: i32 = if true { 1 } else { fail("unreachable") };
+    assert n == 1;
+}
+```
 
 ## Newtype
 
@@ -660,9 +880,9 @@ A literal's field values are evaluated once each, in the order the source
 writes them, not the order the struct declares them.
 `P { y: f(), x: g() }` calls `f` before `g`.
 
-Functional update (`..base`): a leading `..base` fills every field the literal
-does not list explicitly from the struct value `base` (same type). The listed
-fields override; `base` is evaluated once and left unchanged (value semantics).
+A leading `..base` is a functional update. It fills every field the literal
+does not list from the struct value `base`. The listed fields override it, and
+`base` itself is left unchanged.
 
 <!-- {"fixture":"spec_types_structs.wado"} -->
 
@@ -805,16 +1025,6 @@ for let { x, y } of points {
 assert sum == 14;
 ```
 
-### Auto-derived Traits
-
-A struct derives `Eq` field by field, and `Ord` lexicographically in field
-declaration order. A variant derives `Eq` only, not `Ord`: two values are equal
-when they are the same case and their payloads, if any, are equal.
-
-When a derived impl exists, which instantiations of a generic type it covers,
-and how a written impl overrides it are stated in
-[Derivation Policy](./spec-traits.md#derivation-policy).
-
 ### Struct Field Defaults
 
 Struct fields may declare a default expression with `= expr`. Fields with defaults may be omitted at construction sites; fields without defaults are required:
@@ -846,13 +1056,14 @@ A literal that leaves out a field with no default is an error:
 let c = ServerConfig { port: 3000 };
 ```
 
-A default expression is evaluated each time a literal omits its field. It must be effect-free and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected: destructuring sees every field regardless of defaults. A literal may omit every field that has a default, down to `ServerConfig {}` where all of them do.
+A default expression is evaluated each time a literal omits its field. It must
+perform no effect, and it cannot name another field. A literal may omit every
+field that has a default, down to `ServerConfig {}` where all of them do.
+Destructuring sees every field, defaulted or not.
 
 A default resolves its names in the module that declares the struct, not where
-the literal is written. It may name that module's private items, its import
-aliases, and a type or variant case the constructing module never imports.
-Nothing the constructing module declares, imports, or binds changes what an
-omitted field evaluates to.
+the literal is written, as a function's default does
+([Where a Default Resolves](./spec-functions.md#where-a-default-resolves)).
 
 A default may name the struct's own type parameters. Each literal settles them
 first, from a turbofish, its annotation, or the fields it lists, and the default
@@ -875,7 +1086,7 @@ A field with a default is optional in deserialization too (see
 [Missing, Repeated, and Unknown Fields](./spec-serialization.md#missing-repeated-and-unknown-fields)).
 
 Whether a struct derives `Default` from its field defaults is stated in
-[Auto-Derivation](./spec-traits.md#auto-derivation).
+[Auto-Derivation](./spec-standard-traits.md#auto-derivation).
 
 Rationale: [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
 
@@ -1077,9 +1288,12 @@ test "a partial turbofish" {
 
 ## Enums, Variants, and Flags
 
-Wado follows Component Model's distinction between enums and variants (unlike Rust):
+Wado splits what Rust's `enum` covers into three kinds, as the Component Model
+does. An `enum` has cases with no payload, a `variant` has cases that may carry
+one, and a `flags` type is a set of bits. Each crosses a component boundary as
+the Component Model type of the same name.
 
-Enums (no payloads - Component Model `enum`):
+### Enums
 
 <!-- {"fixture":"spec_types_enum.wado"} -->
 
@@ -1115,9 +1329,7 @@ A bare case with no expected type is an error:
 let red = Red;
 ```
 
-Enums auto-derive `Display` as the bare case name (`Red`), distinct from `Inspect`'s `Color::Red`. `Eq` (discriminant equality) and `Ord` (declaration order) derive the same on-demand way as for structs. See [Auto-derived Traits](#auto-derived-traits) above.
-
-Enums can have `impl` blocks:
+An enum may have `impl` blocks:
 
 <!-- {"fixture":"spec_types_enum.wado"} -->
 
@@ -1136,9 +1348,10 @@ test {
 }
 ```
 
-Variants (with payloads - Component Model `variant`):
+### Variants
 
-Wado variants have exactly one payload type per case. Unit cases have no payload, and multiple values require explicit tuple syntax `[T, U]`:
+A variant case carries one payload type or none. Several values travel as one
+tuple payload, `[T, U]`:
 
 <!-- {"fixture":"spec_types_variant.wado"} -->
 
@@ -1215,7 +1428,9 @@ test {
 
 `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
 
-Flags (bit flags - Component Model `flags`):
+### Flags
+
+Each member of a flags type is one bit, in declaration order:
 
 <!-- {"fixture":"spec_types_flags.wado"} -->
 
@@ -1246,9 +1461,9 @@ let w = Perms::Write;
 let bad = r + w;
 ```
 
-Flags auto-derive `Eq` and `Ord` over their raw bits, the same on-demand way enums derive theirs over the discriminant. See [Auto-derived Traits](#auto-derived-traits).
-
-A flags type is a newtype over `u32`: an integer literal coerces to it, `as` converts to and from `u32`, and it inherits `u32`'s methods. Member names can carry `#[cm("...")]` attributes for Component Model name mapping:
+A flags type is a newtype over `u32`: an integer literal coerces to it, `as`
+converts to and from `u32`, and it inherits `u32`'s methods. A member may carry
+a `#[cm("...")]` attribute that names it at a component boundary:
 
 <!-- {"fixture":"spec_types_flags.wado"} -->
 
@@ -1263,4 +1478,19 @@ test {
 }
 ```
 
-Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.
+## Auto-derived Traits
+
+A derived `Eq` or `Ord` compares by the type's shape:
+
+- A struct compares field by field. `Ord` is lexicographic, in field
+  declaration order.
+- An enum compares its case. `Ord` follows declaration order.
+- A flags type compares its raw bits.
+- Two values of a variant are equal when they are the same case and their
+  payloads, if any, are equal.
+
+When a derived impl exists, which instantiations of a generic type it covers,
+and how a written impl overrides it are stated in
+[Derivation Policy](./spec-traits.md#derivation-policy). Which types have
+`Display`, a plain enum among them, is stated in
+[Format Traits](./spec-traits.md#format-traits).

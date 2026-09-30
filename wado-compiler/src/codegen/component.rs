@@ -3,6 +3,7 @@
 //! canonical intrinsics, core-module instantiation, and the canonical lifting
 //! for world exports.
 
+use super::ProviderMismatch;
 use super::component_context::{CmTypeKey, ComponentModelContext};
 use crate::ast::{AstId, CmImport, NamedType, Type};
 use crate::canonical::{
@@ -32,18 +33,20 @@ use crate::wir::{ImportEntry, ImportKind, WirPackage};
 use crate::wir_build::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
 use crate::world_registry::fq_name_package;
 use crate::{ProviderComponent, ast};
+use wasm_compose::graph::Component as GraphComponent;
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
 };
 
-/// Build a complete Wasm Component from a pre-built core module and project metadata.
+/// Build a complete Wasm Component from a pre-built core module and project
+/// metadata, or name the provider that does not satisfy what it is wired to.
 pub fn build_component(
     project: &NirPackage,
     core_module: &[u8],
     wir_package: &WirPackage,
     providers: &[ProviderComponent],
-) -> Vec<u8> {
+) -> Result<Vec<u8>, ProviderMismatch> {
     let wasm_modules = &wir_package.wasm_modules;
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
@@ -3880,10 +3883,10 @@ fn compose_dependency_components(
     project: &NirPackage,
     import_plan: &[ImportEntry],
     providers: &[ProviderComponent],
-) -> Vec<u8> {
+) -> Result<Vec<u8>, ProviderMismatch> {
     use crate::wir::ImportKind;
     use wasm_compose::graph::{
-        Component, ComponentId, CompositionGraph, EncodeOptions, ImportIndex, InstanceId,
+        ComponentId, CompositionGraph, EncodeOptions, ImportIndex, InstanceId,
     };
     use wasmparser::Validator;
 
@@ -3907,14 +3910,14 @@ fn compose_dependency_components(
         .map(|(_, f)| f.wasi_func_name.clone())
         .collect();
     if dependency_fqs.is_empty() && world_func_cm_names.is_empty() && providers.is_empty() {
-        return program_bytes;
+        return Ok(program_bytes);
     }
 
-    let compose = || -> anyhow::Result<Vec<u8>> {
+    let compose = || -> Result<Vec<u8>, ComposeFailure> {
         let mut validator = Validator::new_with_features(wasmparser::WasmFeatures::all());
         let mut graph = CompositionGraph::new();
 
-        let program = Component::from_bytes(&mut validator, "program", program_bytes.clone())?;
+        let program = GraphComponent::from_bytes(&mut validator, "program", program_bytes.clone())?;
         let program_id = graph.add_component(program)?;
         let program_inst = graph.instantiate(program_id)?;
 
@@ -3938,7 +3941,7 @@ fn compose_dependency_components(
                 continue;
             }
             let collected = collect_component_asset(asset, project);
-            let dep = Component::from_bytes(&mut validator, "dependency", collected)?;
+            let dep = GraphComponent::from_bytes(&mut validator, "dependency", collected)?;
             let dep_id = graph.add_component(dep)?;
             let dep_inst = graph.instantiate(dep_id)?;
             dep_instances.push((dep_id, dep_inst));
@@ -3965,45 +3968,105 @@ fn compose_dependency_components(
             // No target means the dependency was dead-code-eliminated, not that
             // the name mismatched (`import_fq` comes from the dependency's own
             // imports): the provider is then unused, so skip it rather than fail.
-            let targets: Vec<(InstanceId, ImportIndex)> = dep_instances
+            let targets: Vec<(ComponentId, InstanceId, ImportIndex)> = dep_instances
                 .iter()
                 .filter_map(|&(dep_id, dep_inst)| {
                     graph
                         .get_component(dep_id)
                         .and_then(|c| c.import_by_name(fq))
-                        .map(|(import_idx, _)| (dep_inst, import_idx))
+                        .map(|(import_idx, _)| (dep_id, dep_inst, import_idx))
                 })
                 .collect();
             if targets.is_empty() {
                 continue;
             }
 
-            let prov = Component::from_bytes(&mut validator, "provider", provider.bytes.clone())?;
+            let prov =
+                GraphComponent::from_bytes(&mut validator, "provider", provider.bytes.clone())?;
             let prov_id = graph.add_component(prov)?;
             let prov_inst = graph.instantiate(prov_id)?;
-            let prov_export = graph
+            let mismatch = |reason: String| ProviderMismatch {
+                provider: provider.source.clone(),
+                import_fq: fq.to_string(),
+                reason,
+            };
+            let Some((prov_export, _, _)) = graph
                 .get_component(prov_id)
                 .and_then(|c| c.export_by_name(fq))
-                .map(|(idx, _, _)| idx)
-                .ok_or_else(|| anyhow::anyhow!("provider missing export `{fq}`"))?;
+            else {
+                return Err(ComposeFailure::Provider(mismatch(format!(
+                    "it exports no `{fq}`"
+                ))));
+            };
 
-            for (dep_inst, import_idx) in targets {
+            for (dep_id, dep_inst, import_idx) in targets {
+                if let Err(refused) =
+                    graph.validate_connection(prov_inst, Some(prov_export), dep_inst, import_idx)
+                {
+                    let prov = graph.get_component(prov_id).expect("added above");
+                    let dep = graph.get_component(dep_id).expect("added above");
+                    let reason =
+                        subtype_refusal(prov, dep, fq).unwrap_or_else(|| format!("{refused:#}"));
+                    return Err(ComposeFailure::Provider(mismatch(reason)));
+                }
                 graph.connect(prov_inst, Some(prov_export), dep_inst, import_idx)?;
             }
         }
 
-        graph.encode(EncodeOptions {
+        Ok(graph.encode(EncodeOptions {
             define_components: true,
             export: Some(program_inst),
             validate: false,
-        })
+        })?)
     };
 
     match compose() {
-        Ok(bytes) => bytes,
+        Ok(bytes) => Ok(bytes),
+        Err(ComposeFailure::Provider(mismatch)) => Err(mismatch),
         // Pure transform over valid components: a failure is a compiler bug.
-        Err(e) => panic!("failed to compose CM component dependencies: {e:?}"),
+        Err(ComposeFailure::Internal(e)) => {
+            panic!("failed to compose CM component dependencies: {e:?}")
+        }
     }
+}
+
+/// A composition stops either at a provider the user wrote or at a compiler bug.
+enum ComposeFailure {
+    Provider(ProviderMismatch),
+    Internal(anyhow::Error),
+}
+
+impl From<anyhow::Error> for ComposeFailure {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Internal(e)
+    }
+}
+
+/// Why wasmparser's subtype check refuses `provider`'s export `fq` for
+/// `dependency`'s import, naming the export and what differs. The composition
+/// graph's own check says only that it refuses. `None` where the subtype check
+/// passes, since the graph also maps resources across the two.
+fn subtype_refusal(
+    provider: &GraphComponent,
+    dependency: &GraphComponent,
+    fq: &str,
+) -> Option<String> {
+    use wasmparser::component_types::SubtypeCx;
+
+    let export_ty = provider
+        .types()
+        .component_item_for_export(fq)
+        .expect("the caller found the export by name")
+        .ty;
+    let import_ty = dependency
+        .types()
+        .component_item_for_import(fq)
+        .expect("the caller found the import by name")
+        .ty;
+    SubtypeCx::new_with_refs(provider.types(), dependency.types())
+        .component_entity_type(&export_ty, &import_ty, 0)
+        .err()
+        .map(|e| e.message().replace('\n', ": "))
 }
 
 /// A bare top-level `func` import per world-level function in the plan, matching

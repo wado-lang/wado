@@ -1,0 +1,40 @@
+// Every member handle implements `Member`, so code that reads a member's name
+// is written once for every kind.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+variant Shape {
+    Circle(f64),
+    Empty,
+}
+
+flags Perm {
+    Read,
+    Write,
+}
+
+fn label<M: Member>(m: &M) -> String {
+    return `<${m.name()}>`;
+}
+
+test "one helper reads a member of any kind" {
+    assert label(&ReflectStruct::<Point>::members().1) == "<y>";
+    assert label(&ReflectEnum::<Color>::members().0) == "<Red>";
+    assert label(&ReflectVariant::<Shape>::members().1) == "<Empty>";
+    assert label(&ReflectFlags::<Perm>::members().1) == "<Write>";
+}
+
+test "a flags member has no wire override" {
+    assert ReflectFlags::<Perm>::members().0.wire_name_override() matches { None };
+}
+
+__DATA__
+{"test": {}}

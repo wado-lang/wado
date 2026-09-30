@@ -76,13 +76,7 @@ fn read_baseline(path: &String) -> Option<TreeMap<String, i32>> with (Stderr, Pr
 }
 
 fn write_baseline(path: &String, counts: &TreeMap<String, i32>) -> bool with (Stderr, Preopens) {
-    let text = match to_string_pretty(counts, Option::Some('\n')) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln(`error: cannot serialize the baseline: ${e:?}`);
-            return false;
-        },
-    };
+    let text = to_string_pretty(counts, Option::Some('\n')).expect("a map of strings to integers always serializes");
     if let Err(e) = fs::write(path, &text) {
         eprintln(`error: ${e}`);
         return false;
@@ -147,12 +141,4 @@ pub fn ratchet(
     let note = if shrunk > 0 { `, ${shrunk} fewer than the baseline — run --update` } else { "" };
     println(`ok: no file gained ${noun} (${left} left${note})`);
     return 0;
-}
-
-test "line_of counts the newlines before the offset" {
-    let source = "a\nbb\nccc";
-    assert line_of(&source, 0) == 1;
-    assert line_of(&source, 2) == 2;
-    assert line_of(&source, 5) == 3;
-    assert line_of(&source, source.len()) == 3;
 }

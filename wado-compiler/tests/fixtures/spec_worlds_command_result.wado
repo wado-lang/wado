@@ -1,0 +1,19 @@
+// `run` may return the `Result<(), ()>` the world declares. `Ok(())` is a
+// successful exit, and `Err(())` a failed one.
+use { println, Stdout } from "core:cli";
+
+fn check(count: i32) -> Result<(), ()> {
+    if count < 0 {
+        return Err(());
+    }
+    return Ok(());
+}
+
+export fn run() -> Result<(), ()> with Stdout {
+    assert check(-1) == Err(());
+    println("all checks passed");
+    return check(3);
+}
+
+__DATA__
+{"stdout": "all checks passed\n", "trapped": false}

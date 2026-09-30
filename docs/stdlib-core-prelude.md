@@ -3975,7 +3975,7 @@ Uses signed division semantics:
 
 - quotient is negative if signs differ
 - remainder has the same sign as dividend
-  Panics if divisor is zero
+  Panics if divisor is zero, or on `MIN / -1`, whose quotient overflows
 
 #### `pub fn to_string(&self) -> String`
 
@@ -4076,6 +4076,8 @@ Convert i128 to String (for template string interpolation)
 #### `impl Rem for i128`
 
 ##### `pub fn rem(&self, other: &Self) -> Self::Output`
+
+Not through `div_rem`: `MIN % -1` is 0, though `MIN / -1` overflows.
 
 #### `impl Default for i128`
 

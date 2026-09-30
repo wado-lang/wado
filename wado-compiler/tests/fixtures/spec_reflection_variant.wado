@@ -1,0 +1,44 @@
+// `ReflectVariant` exposes a variant's cases: a handle per case, bridging a
+// value and its payload in both directions.
+
+variant Shape {
+    Circle(f64),
+    Rect([f64, f64]),
+    Empty,
+}
+
+test "a case handle finds, reads and builds its case" {
+    let s = Shape::Rect([3.0, 4.0]);
+    assert ReflectVariant::<Shape>::discriminant(&s) == 1;
+    let mut out = "";
+    for let c of ReflectVariant::<Shape>::members() {
+        if c.holds(&s) {
+            out = `${c.name()} ${c.discriminant()} ${c.extract(&s):?}`;
+        }
+    }
+    assert out == "Rect 1 [3.0, 4.0]";
+    let cs = ReflectVariant::<Shape>::members();
+    assert cs.0.construct(2.5) == Shape::Circle(2.5);
+}
+
+test "a unit case has the payload () and is built by make()" {
+    let cs = ReflectVariant::<Shape>::members();
+    assert cs.2.is_unit() && !cs.0.is_unit();
+    assert cs.2.make() == Shape::Empty;
+    assert cs.2.construct(()) == Shape::Empty;
+}
+
+#[expect_trap]
+test "extract traps on a case the value does not hold" {
+    let cs = ReflectVariant::<Shape>::members();
+    let _ = cs.0.extract(&Shape::Empty);
+}
+
+#[expect_trap]
+test "make traps on a case that carries a payload" {
+    let cs = ReflectVariant::<Shape>::members();
+    let _ = cs.0.make();
+}
+
+__DATA__
+{"test": {}}

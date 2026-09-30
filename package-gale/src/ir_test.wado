@@ -24,50 +24,31 @@ use {
     alias_parser_literals,
     is_lexer_members,
     is_parser_members,
+    normalize_caches,
 } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 
-test "assign_action_ids stamps distinct ids across alt actions, prequels, and lexer" {
+test "assign_action_ids numbers a rule's actions in source order and every action apart" {
     let input = "grammar Test;
 @members { int i = 0; }
 r @init { x = 0; } @after { print(x); } : A {act1();} B {p()}? C ;
+    catch [RecognitionException e] { h(); } finally { f(); }
 TOK : 'a' {more();} 'b' ;
 ";
     let mut g = parse(input).unwrap();
     assign_action_ids(&mut g);
     let rule = &g.parser_rules[0];
-    let alt = &rule.alternatives[0];
-    if let Some(a) = &rule.init_action {
-        assert a.action_id == 0, `init id: ${a.action_id}`;
-    } else {
-        panic("expected @init");
-    }
-    assert alt.actions[0].source.action_id == 1, `act1 id: ${alt.actions[0].source.action_id}`;
-    assert alt.actions[1].source.action_id == 2, `pred id: ${alt.actions[1].source.action_id}`;
-    if let Some(a) = &rule.after_action {
-        assert a.action_id >= 0, "after stamped";
-    } else {
-        panic("expected @after");
-    }
-    assert g.lexer_rules[0].body[0].actions[0].source.action_id >= 0, "lexer action stamped";
-    assert g.named_actions[0].body.action_id >= 0, "named action stamped";
-    let mut ids: List<i32> = [];
-    if let Some(a) = &rule.init_action {
-        ids.push(a.action_id);
-    }
-    for let act of &alt.actions {
+    let mut ids: List<i32> = [rule.init_action.unwrap().action_id];
+    for let act of &rule.alternatives[0].actions {
         ids.push(act.source.action_id);
     }
-    if let Some(a) = &rule.after_action {
-        ids.push(a.action_id);
-    }
-    ids.push(g.lexer_rules[0].body[0].actions[0].source.action_id);
-    ids.push(g.named_actions[0].body.action_id);
-    for let mut i = 0; i < ids.len(); i += 1 {
-        for let mut j = i + 1; j < ids.len(); j += 1 {
-            assert ids[i] != ids[j], `duplicate action_id ${ids[i]}`;
-        }
-    }
+    ids.push(rule.after_action.unwrap().action_id);
+    ids.push(rule.catches[0].body.action_id);
+    ids.push(rule.finally_action.unwrap().action_id);
+    assert ids == [0, 1, 2, 3, 4, 5], `${ids:?}`;
+    let lexer_id = g.lexer_rules[0].body[0].actions[0].source.action_id;
+    let named_id = g.named_actions[0].body.action_id;
+    assert lexer_id > 5 && named_id > 5 && lexer_id != named_id, `lexer ${lexer_id}, named ${named_id}`;
 }
 
 test "merge_grammars strips matching Lexer/Parser suffix to a common base" {
@@ -125,6 +106,28 @@ test "merge_grammars tolerates a numeric channel id with no channels block" {
         }
     }
     assert found, "rule C not found in merged grammar";
+}
+
+test "merge_grammars unions the halves' imports and keeps every source path" {
+    let mut lexer = parse("lexer grammar FooLexer;\nimport L, C;\nA : 'a' ;").unwrap();
+    lexer.source_files.push("FooLexer.g4");
+    let mut parser = parse("parser grammar FooParser;\nimport C, P;\nr : A ;").unwrap();
+    parser.source_files.push("FooParser.g4");
+    let merged = merge_grammars([parser, lexer]);
+    assert merged.imports == ["C", "P", "L"], `${merged.imports:?}`;
+    assert merged.source_files == ["FooParser.g4", "FooLexer.g4"], `${merged.source_files:?}`;
+}
+
+test "merge_grammars carries a mode command onto the merged mode table" {
+    let lexer = parse("lexer grammar FooLexer;\nA : 'a' -> mode(M) ;\nmode M;\nB : 'b' -> mode(DEFAULT_MODE) ;").unwrap(
+    );
+    let parser = parse("parser grammar FooParser;\nr : A B ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    for let r of &merged.lexer_rules {
+        let target = merged.mode_names[r.set_mode];
+        let want = if r.name == "A" { "M" } else { "DEFAULT_MODE" };
+        assert target == want, `${r.name} -> ${target}`;
+    }
 }
 
 fn compose(sources: List<String>) -> Grammar {
@@ -361,6 +364,27 @@ test "compose_grammars discards a mode left empty by an override" {
     }
 }
 
+test "compose_grammars renumbers a mode command past a discarded mode" {
+    let g = compose(
+        [
+            "lexer grammar M;\nimport S;\nIN_A : 'a' ;",
+            "lexer grammar S;\nGO : '!' -> mode(B) ;\nPUSH : '<' -> pushMode(B) ;\nmode A;\nIN_A : 'a' ;\nmode B;\nIN_B : 'b' ;",
+        ],
+    );
+    assert g.mode_names == ["DEFAULT_MODE", "B"], `${g.mode_names:?}`;
+    for let r of &g.lexer_rules {
+        if r.name == "GO" {
+            assert r.set_mode == 1, `GO set_mode=${r.set_mode}`;
+        }
+        if r.name == "PUSH" {
+            assert r.push_mode == 1, `PUSH push_mode=${r.push_mode}`;
+        }
+        if r.name == "IN_B" {
+            assert r.mode == 1, `IN_B mode=${r.mode}`;
+        }
+    }
+}
+
 test "compose_grammars gives each delegate's channels a slot of their own" {
     let g = compose([
         "lexer grammar M;\nimport S, T;\nchannels { A }\nM_C : 'm' -> channel(A) ;",
@@ -469,6 +493,56 @@ test "Element variants" {
     } else {
         panic("expected Repeat");
     }
+}
+
+test "normalize_caches fills the name caches a struct literal leaves empty" {
+    let mut g = parsed("grammar T; a : ;");
+    let body = Element::Label(LabelElement {
+        name: "loopBody",
+        list: false,
+        element: Element::RuleRef(RuleRefElement { name: "match", options: [] }),
+    });
+    let alt = Alternative {
+        label: null,
+        options: [],
+        elements: [
+            Element::RuleRef(RuleRefElement { name: "typeRef", options: [] }),
+            Element::TokenRef(TokenRefElement { name: "IF", options: [] }), body,
+        ],
+    };
+    g.parser_rules.push(ParserRule {
+        name: "exprList",
+        visibility: Visibility::Default,
+        options: [],
+        alternatives: [alt],
+    });
+    normalize_caches(&mut g);
+
+    let rule = &g.parser_rules[1];
+    assert [rule.snake_name, rule.field_name, rule.type_name] == ["expr_list", "expr_list", "ExprListNode"];
+    let es = &rule.alternatives[0].elements;
+    let RuleRef(r) = es[0] else {
+        panic("RuleRef");
+    };
+    assert [r.snake_name, r.field_name] == ["type_ref", "type_ref"];
+    let TokenRef(t) = es[1] else {
+        panic("TokenRef");
+    };
+    assert [t.lower_name, t.field_name] == ["if", "if_"], `${t.field_name}`;
+    let Label(lab) = es[2] else {
+        panic("Label");
+    };
+    assert [lab.snake_name, lab.field_name] == ["loop_body", "loop_body"];
+    let RuleRef(inner) = lab.element else {
+        panic("labeled RuleRef");
+    };
+    assert inner.field_name == "match_", inner.field_name;
+}
+
+test "a string superClass option names its base like a dotted one" {
+    // ANTLR4 emits the string verbatim (`extends my.Base`); the base is its last component.
+    let g = parsed("parser grammar P;\noptions { superClass = 'my.Base'; }\ns : ;");
+    assert g.parser_superclass == "Base", g.parser_superclass;
 }
 
 test "LexerRule construction" {

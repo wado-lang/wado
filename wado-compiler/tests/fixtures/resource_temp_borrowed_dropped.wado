@@ -1,0 +1,104 @@
+// Every temporary owned resource that is only borrowed is dropped at the end of
+// its statement, whatever borrows it and however conditionally it is evaluated.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers, FieldName } from "wasi:http";
+
+struct Holder {
+    headers: Fields,
+    n: i32,
+}
+
+fn holder() -> Holder {
+    return Holder { headers: Fields::new(), n: 7 };
+}
+
+struct Pair {
+    a: Fields,
+    b: Fields,
+}
+
+fn pair() -> Pair {
+    return Pair { a: Fields::new(), b: Fields::new() };
+}
+
+fn has_greeting(f: &Fields) -> bool {
+    return f.has("x-greeting" as FieldName);
+}
+
+fn greeting_count(request: &Request) -> i32 {
+    return request.get_headers().get("x-greeting" as FieldName).len();
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // A method receiver.
+    let n = request.get_headers().get("x-greeting" as FieldName).len();
+    assert n == 1;
+
+    // A `&` argument.
+    assert !has_greeting(&Fields::new());
+
+    // A field read of a resource-carrying struct.
+    assert holder().n == 7;
+
+    // An `if` condition.
+    if !request.get_headers().has("x-greeting" as FieldName) {
+        panic("missing greeting");
+    }
+
+    // A `return` operand.
+    assert greeting_count(&request) == 1;
+
+    // The right operand of `&&`, evaluated on one path only.
+    let flag = builtin::black_box(true) && request.get_headers().has("x-greeting" as FieldName);
+    assert flag;
+
+    // An `if` expression branch.
+    let m = if flag { request.get_headers().get("x-greeting" as FieldName).len() } else { 0 };
+    assert m == 1;
+
+    // A `match` arm.
+    let k = match m {
+        1 => Fields::new().get("a" as FieldName).len(),
+        _ => -1,
+    };
+    assert k == 0;
+
+    // A loop body, once per iteration.
+    for let _ of 0..<3 {
+        Fields::new().has("a" as FieldName);
+    }
+
+    // A loop condition, on the iteration that leaves by `break` too.
+    let mut i = 0;
+    while Fields::new().get("a" as FieldName).len() == 0 {
+        i += 1;
+        if i == 3 {
+            break;
+        }
+    }
+
+    // A resource bound by a `match` arm that only borrows it.
+    let has = match Fields::from_list([]) {
+        Ok(f) => f.has("a" as FieldName),
+        Err(_) => false,
+    };
+    assert !has;
+
+    // A discarded aggregate, whose drop reads it once per resource field.
+    pair();
+
+    // A block's value.
+    let b = sum: {
+        let x = 1;
+        x + holder().n
+    };
+    assert b == 8;
+
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"request": {"headers": [["x-greeting", "hello"]]}, "status": 200}}

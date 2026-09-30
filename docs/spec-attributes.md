@@ -1,6 +1,9 @@
 # Compiler Attributes
 
-Wado uses `#[...]` attributes (item-level) and `#![...]` inner attributes (module-level) to control compiler behavior.
+An attribute `#[...]` applies to the item it precedes, and an inner attribute
+`#![...]` to the whole module. This chapter lists them in three groups: those
+any program writes, those valid anywhere that mostly the standard library and
+generated code write, and those valid only in the standard library.
 
 ## User-Facing Attributes
 
@@ -85,7 +88,7 @@ Waives a lint on the item carrying it. As the module inner attribute
 `#[deny(...)]`. The lints are:
 
 - `dead_code`: an unused or test-only free function or global (see [The `dead_code` Lint](#the-dead_code-lint)).
-- `shadowed_name`: a binder that takes a name already reaching a known symbol.
+- `shadowed_name`: a binder that takes a name already reaching a known symbol (see [The `shadowed_name` Lint](./spec-expressions.md#the-shadowed_name-lint)).
 - `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](./spec-effects.md#the-trait-head)).
 
 <!-- {"fixture":"spec_attributes_allow.wado"} -->
@@ -316,11 +319,11 @@ Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 Each declaration reads its own keys:
 
-| Declaration                                   | Keys                            |
-| --------------------------------------------- | ------------------------------- |
-| `struct`, `enum`, `variant`, `flags`, newtype | `name_policy`                   |
-| Struct field                                  | `name`, `positional`, `default` |
-| Enum case, variant case                       | `name`                          |
+| Declaration                                   | Keys                 |
+| --------------------------------------------- | -------------------- |
+| `struct`, `enum`, `variant`, `flags`, newtype | `name_policy`        |
+| Struct field                                  | `name`, `positional` |
+| Enum case, variant case                       | `name`               |
 
 A key the declaration does not read is an error, and so is `#[wire]` anywhere
 else, a flags member included. The keys may be split across several `#[wire]`
@@ -379,7 +382,9 @@ library and generated code do.
 
 ### `#![no_prelude]`
 
-Module-level inner attribute. Prevents the automatic import of `core:prelude`. Used by low-level modules that define the prelude itself or that operate below the prelude layer.
+Module-level inner attribute. Turns off the automatic import of
+[the prelude](./spec-modules.md#the-prelude). Used by low-level modules that
+define the prelude itself or that operate below the prelude layer.
 
 <!-- {"fixture":"spec_attributes_no_prelude.wado"} -->
 
@@ -397,9 +402,9 @@ test {
 
 ### `#![generated]`
 
-Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). It does not change how the module compiles. Tools read it; Kiln's use is in [Authoring a generator](./spec-modules.md#authoring-a-generator).
+Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). It does not change how the module compiles. Tools read it; Kiln's use is in [Authoring a generator](./spec-kiln.md#authoring-a-generator).
 
-The attribute accepts optional metadata so that generators can attach provenance information directly to the attribute instead of as free-form comments. Two argument shapes are supported inside the parentheses:
+The attribute may carry metadata, so a generator records where a file came from in the attribute rather than in a comment. Two argument shapes are accepted inside the parentheses:
 
 - Scalar `key = "value"` pairs (e.g. `by = "wado-from-idl"`).
 - List `key = ["v1", "v2", ...]` pairs whose values are a comma-separated list of string literals (e.g. `sources = ["a.wit", "b.wit"]`).
@@ -602,7 +607,8 @@ called.
 
 ### `#[trap(...)]`
 
-When a call to a declaration with no body traps. Silence means it may trap.
+States when a call to a declaration with no body traps. Silence means it may
+trap.
 `#[trap(never)]` says it never traps, and a check names the one condition it
 traps on:
 
@@ -649,8 +655,8 @@ is.
 
 ### `#[linear_memory(...)]`
 
-How a call to a declaration with no body touches linear memory: `read` or
-`write`. Silence means it touches none. A linear-memory address is a plain
+States how a call to a declaration with no body touches linear memory: `read`
+or `write`. Silence means it touches none. A linear-memory address is a plain
 `i32`, so no parameter type says this, and the attribute is the only source.
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->

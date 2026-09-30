@@ -4,7 +4,7 @@
 //! canonicalised into an `Arc<str>` through [`ModuleSourceInterner`], so `clone`
 //! / `eq` / `hash` are O(1) and well-known names need no interner at all.
 
-use crate::compiler_host::DependencyIndex;
+use crate::compiler_host::{DependencyIndex, DependencyManifest};
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
 use crate::path::is_cwd_relative;
@@ -212,6 +212,12 @@ impl ModuleSourceInterner {
     #[must_use]
     pub fn unresolved_dependency(&self, name: &str) -> Option<&str> {
         self.dependencies.unresolved.get(name).map(String::as_str)
+    }
+
+    /// The `wado.toml` the dependencies were read from, if one governs the entry.
+    #[must_use]
+    pub fn dependency_manifest(&self) -> Option<&DependencyManifest> {
+        self.dependencies.manifest.as_ref()
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {

@@ -1,0 +1,14 @@
+//! A directory of its own for each test that touches the filesystem. It sits
+//! under the gitignored `target/`, which `wado test` reaches because it grants
+//! the working directory.
+
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+/// `target/<suite>/<case>`, emptied and created.
+pub fn scratch<S: AsStrSlice, C: AsStrSlice>(suite: S, case: C) -> String with Preopens {
+    let dir = `target/${suite}/${case}`;
+    fs::remove_dir_all(&dir).unwrap();
+    fs::create_dir_all(&dir).unwrap();
+    return dir;
+}

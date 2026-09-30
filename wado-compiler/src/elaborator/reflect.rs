@@ -623,10 +623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 tt.nominal_type_args(self_ty).unwrap_or_default(),
             )
         };
-        let info = self
-            .tysys
-            .type_def(self_ty)
-            .and_then(|def| self.type_lookup().struct_fields_of(def))?;
+        let info = self.struct_fields_of_type(self_ty)?;
         let declared: Vec<TypeId> = info.fields.iter().map(|(_, ty, _)| *ty).collect();
         let param_ids = info.type_param_type_ids.clone();
         Some(ReflectSubject {

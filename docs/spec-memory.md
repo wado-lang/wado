@@ -1,14 +1,12 @@
 # Memory Model
 
-## Core Principles
-
-- Wasm-GC based: Garbage collection delegated to runtime
-- Lifetime inference: No explicit lifetime annotations required
-- Value semantics: a value is deeply copied on assignment, parameter passing, and return. References (`&T`, `&mut T`) share state instead, and an affine resource moves
+This chapter covers how values are copied and shared: value semantics,
+references, and how parameters and receivers hold their arguments. Memory is
+garbage-collected, so a program writes no lifetimes and frees nothing.
 
 ## Value Semantics
 
-Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)).
+Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)).
 
 <!-- {"fixture":"spec_memory_copy.wado"} -->
 
@@ -57,7 +55,9 @@ Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value
 
 ## Reference Types
 
-References in Wado provide indirect access to values. Unlike Rust, Wado uses a GC-based memory model with no borrow checker, enabling simpler semantics at the cost of runtime overhead.
+A reference gives indirect access to a value. Unlike Rust, Wado has no borrow
+checker: the garbage collector keeps every referent alive, so a reference never
+dangles.
 
 ### Basic Reference Syntax
 
@@ -109,20 +109,9 @@ test {
 }
 ```
 
-### Key Differences from Rust (GC-Based Memory Model)
-
-| Aspect                 | Rust                       | Wado                     |
-| ---------------------- | -------------------------- | ------------------------ |
-| Memory management      | Ownership + borrow checker | Garbage collection       |
-| Multiple mutable refs  | Not allowed                | Allowed                  |
-| Returning local refs   | Not allowed (dangling)     | Allowed (GC keeps alive) |
-| Reference to reference | `&&T` (rare)               | `&&T` (fully supported)  |
-| Lifetime annotations   | Required                   | Not needed               |
-| Borrow checking        | Compile-time               | None; resources move     |
-
 ### Returning References to Local Variables
 
-Because Wado uses garbage collection, references to local variables remain valid after the function returns:
+A reference to a local variable stays valid after the function returns:
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
@@ -137,8 +126,6 @@ test {
     assert *r == 42;
 }
 ```
-
-This would be a dangling pointer error in Rust, but is safe in Wado due to garbage collection.
 
 ### Multiple Mutable References
 
@@ -174,10 +161,21 @@ A declaration with no body has nothing to infer from, so it states what it keeps
 
 Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
+### Mutable References to Fields and Elements
+
+A primitive, `enum`, `flags` or `fn` field or element keeps nothing that a write
+through a `&mut` could reach, since assignment replaces it. So taking `&mut` of
+one is an error. That holds whether it is written `&mut x.f` or `&mut xs[i]`, or
+taken implicitly by a `&mut self` receiver. A `&mut` of a local is fine, since it
+writes to the variable itself.
+
+A `variant` field or element admits `&mut`. Its payload is shared, so a mutation
+through the reference lands, though replacing the whole value does not.
+
 ### Reference Identity
 
 `==` and `!=` on two references compare the values they point to, as in Rust
-(see [Eq](./spec-traits.md#eq---equality)). The prelude function
+(see [Eq](./spec-standard-traits.md#eq---equality)). The prelude function
 `ref_eq(a: &T, b: &T) -> bool` compares identity instead: whether the two
 references point to one place. A place is where a value is stored: a variable,
 a field, an element.
@@ -261,11 +259,12 @@ impl Point {
 }
 ```
 
-A by-value `self` is passed as any parameter is. A receiver holding an affine resource moves into the method, so the caller's binding cannot be used afterward, which is how the resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). Any other receiver is copied, so `Option<i32>::unwrap` leaves its binding usable. A type that can never hold a resource has nothing to consume, so `self` by value on one is a compile error.
+A by-value `self` is passed as any parameter is. A receiver holding an affine resource moves into the method, so the caller's binding cannot be used afterward, which is how the resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). Any other receiver is copied, so `Option<i32>::unwrap` leaves its binding usable.
 
 ### `mut` Parameters
 
-A parameter can be declared `mut` to allow the function body to reassign it:
+A parameter declared `mut` may be written in the body, as a `let mut` binding
+may ([Variable Mutability](./spec-expressions.md#variable-mutability)):
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
@@ -285,7 +284,7 @@ test {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. The parameter holds the callee's own copy ([Value Semantics](#value-semantics)), so neither reassignment (`p = new_value`) nor in-place mutation of that copy reaches the caller. A parameter of type `&mut T` holds a copy of the reference, so a write through it (`*p = v`) reaches the referent, as through any reference.
+Writing a `mut` parameter changes only the callee's copy ([Value Semantics](#value-semantics)). A `&mut T` parameter holds a copy of the reference, so a write through it (`*p = v`) reaches the referent.
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 

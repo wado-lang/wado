@@ -37,6 +37,16 @@ e : ID ;
     assert refs[1].name == "ID" && refs[1].target matches { TokenRef }, "ID is a token ref";
 }
 
+test "resolve_attrs reaches a token under `~`, as ANTLR4 does" {
+    let g = parse("grammar T;
+r : ~ID ;
+ID : 'a' ;
+X : 'b' ;
+").unwrap();
+    let refs = resolve_attrs(" $ID.text ", &g.parser_rules[0], &g.parser_rules).unwrap();
+    assert refs.len() == 1 && refs[0].target matches { TokenRef }, "ID is a token ref";
+}
+
 test "resolve_attrs list label" {
     let g = parse("grammar T;
 r : (xs+=ID)* ;
@@ -44,6 +54,9 @@ r : (xs+=ID)* ;
     let refs = resolve_attrs(" $xs ", &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 1;
     assert refs[0].target matches { ListLabel }, "xs is a list label";
+    // ANTLR4 error(63): a list label has no attributes.
+    let res = resolve_attrs(" $xs.text ", &g.parser_rules[0], &g.parser_rules);
+    assert res matches { Err(m) && m.contains("invalid member") }, `${res:?}`;
 }
 
 test "resolve_attrs errors on an unknown reference" {

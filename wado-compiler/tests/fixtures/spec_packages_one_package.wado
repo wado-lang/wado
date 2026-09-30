@@ -1,0 +1,16 @@
+// Two [dependencies] keys whose sources are the same package
+use { area } from "lib:geo";
+use { Square } from "acme:geo";
+
+test {
+    assert area(Square { side: 2 }) == 4;   // one package, so one `Square`
+}
+
+__DATA__
+{
+  "test": {},
+  "dependencies": {
+    "lib:geo": "sub/spec_packages_geo/lib.wado",
+    "acme:geo": "sub/spec_packages_geo/lib.wado"
+  }
+}

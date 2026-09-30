@@ -5,7 +5,7 @@
 
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
@@ -74,8 +74,12 @@ const LINKED_INTERFACES: &[&str] = &[
 /// The binary is known by its size and modification time, as ccache knows a
 /// compiler by default. Hashing its contents costs seconds for a dev build,
 /// and every rebuild changes both anyway.
-static COMPILER_DIGEST: LazyLock<[u8; 32]> = LazyLock::new(|| {
-    let exe = std::env::current_exe().expect("locating the running `wado` binary");
+///
+/// A rebuild beneath a long `wado test` replaces the file at the binary's
+/// path, which then describes another compiler, so the digest is read when the
+/// run starts, and on Linux through the running image itself.
+fn compiler_digest() -> [u8; 32] {
+    let exe = running_exe();
     let stat = std::fs::metadata(&exe)
         .unwrap_or_else(|e| panic!("reading the running `wado` binary {}: {e}", exe.display()));
     let modified = stat
@@ -91,7 +95,17 @@ static COMPILER_DIGEST: LazyLock<[u8; 32]> = LazyLock::new(|| {
     hasher.update(nanos_since_epoch.to_le_bytes());
     hash_dev_stdlib(&mut hasher);
     hasher.finalize().into()
-});
+}
+
+#[cfg(target_os = "linux")]
+fn running_exe() -> PathBuf {
+    PathBuf::from("/proc/self/exe")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn running_exe() -> PathBuf {
+    std::env::current_exe().expect("locating the running `wado` binary")
+}
 
 #[cfg(debug_assertions)]
 fn hash_dev_stdlib(hasher: &mut Sha256) {
@@ -115,6 +129,7 @@ fn hash_field(hasher: &mut Sha256, bytes: &[u8]) {
 
 /// The `core:eval` host for one `wado test` run, shared by every test in it.
 pub struct EvalHost {
+    compiler_digest: [u8; 32],
     knobs: CompileKnobs,
     engine: OnceLock<(Engine, Linker<Program>)>,
     /// One slot per key being evaluated, so calls sharing a key at once
@@ -137,6 +152,7 @@ impl EvalHost {
     pub fn new(knobs: &CompileKnobs, cpu: Arc<Semaphore>, parallelism: usize) -> Self {
         assert!(parallelism > 0, "a CPU budget of zero never runs anything");
         Self {
+            compiler_digest: compiler_digest(),
             knobs: knobs.clone(),
             engine: OnceLock::new(),
             slots: Mutex::new(IndexMap::default()),
@@ -147,7 +163,7 @@ impl EvalHost {
 
     fn key(&self, source: &str, fuel: u64) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        hasher.update(*COMPILER_DIGEST);
+        hasher.update(self.compiler_digest);
         hash_field(
             &mut hasher,
             format!("{:?}", self.knobs.opt_level).as_bytes(),
@@ -192,19 +208,22 @@ impl EvalHost {
         source: String,
         fuel: u64,
     ) -> Outcome {
-        let path = cache_dir(caller).join(format!("{}.json", hex32(&key)));
+        let path = cache_dir(caller).map(|dir| dir.join(format!("{}.json", hex32(&key))));
         if !self.knobs.no_cache
-            && let Some(outcome) = std::fs::read(&path)
+            && let Some(path) = &path
+            && let Some(outcome) = std::fs::read(path)
                 .ok()
                 .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         {
             return outcome;
         }
         let outcome = self.evaluate(source, fuel).await;
-        if !matches!(outcome, Outcome::CompileTimedOut) {
+        if !matches!(outcome, Outcome::CompileTimedOut)
+            && let Some(path) = &path
+        {
             let bytes = serde_json::to_vec(&outcome).expect("an outcome serializes");
             // Losing the cache is never an error: the next run evaluates again.
-            let _ = write_atomic(&path, &bytes);
+            let _ = write_atomic(path, &bytes);
         }
         outcome
     }
@@ -331,18 +350,17 @@ fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
 }
 
 /// Outcomes live in `build/eval/` under the calling file's package root, or
-/// under its directory when it is in no package.
-fn cache_dir(caller: &Path) -> PathBuf {
-    let root = load_nearest_manifest(caller).map_or_else(
-        || {
-            caller
-                .parent()
-                .expect("the caller is a file, so it has a parent")
-                .to_path_buf()
-        },
-        |project| project.root,
-    );
-    build_dir(&root).join("eval")
+/// under its directory when it is in no package. `None`, and so no cache, when
+/// the package's manifest is invalid: the caller's own compile reports that.
+fn cache_dir(caller: &Path) -> Option<PathBuf> {
+    let root = match load_nearest_manifest(caller).ok()? {
+        Some(project) => project.root,
+        None => caller
+            .parent()
+            .expect("the caller is a file, so it has a parent")
+            .to_path_buf(),
+    };
+    Some(build_dir(&root).join("eval"))
 }
 
 fn current_thread_runtime() -> tokio::runtime::Runtime {

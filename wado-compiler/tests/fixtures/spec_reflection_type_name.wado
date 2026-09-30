@@ -1,0 +1,46 @@
+// `type_name()` names the declaration: a generic type answers without its
+// arguments, and a newtype answers for itself.
+
+struct Pair<T> {
+    left: T,
+    right: T,
+}
+
+variant Shape {
+    Circle(f64),
+    Empty,
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+flags Perm {
+    Read,
+    Write,
+}
+
+test "every kind names its declaration" {
+    assert Reflect::<Shape>::type_name() == "Shape";
+    assert Reflect::<Color>::type_name() == "Color";
+    assert Reflect::<Perm>::type_name() == "Perm";
+    assert Reflect::<String>::type_name() == "String";
+}
+
+test "a generic type is named without its arguments" {
+    assert Reflect::<Pair<i32>>::type_name() == "Pair";
+    assert Reflect::<Pair<String>>::type_name() == "Pair";
+    assert Reflect::<Option<i32>>::type_name() == "Option";
+}
+
+type Meters = f64;
+type Distance = Meters;
+
+test "a newtype names its own link of the chain" {
+    assert Reflect::<Meters>::type_name() == "Meters";
+    assert Reflect::<Distance>::type_name() == "Distance";
+}
+
+__DATA__
+{"test": {}}

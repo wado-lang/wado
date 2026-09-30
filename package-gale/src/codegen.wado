@@ -31,7 +31,7 @@ use {
     lexer_mode_attr_use,
     splice_suffixed_alternations,
 } from "./lexer_gen.wado";
-use { gen_parser, grammar_scans_through_atn } from "./parser_gen.wado";
+use { gen_parser, mark_at_end_conflicts_routed } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
 use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
@@ -246,10 +246,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
     }
     let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
-    if grammar_scans_through_atn(grammar, &lowered, &mut ctx) {
-        ctx.mark_needs_scan_atn();
-    }
-    ctx.set_scan_memo(!ctx.needs_scan_atn() && lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) }));
+    mark_at_end_conflicts_routed(grammar, &lowered, &mut ctx);
+    ctx.close_simulator_reach();
+    ctx.set_scan_memo(!ctx.needs_lr_atn() && lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) }));
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered);
@@ -804,16 +803,7 @@ fn gen_grammar_metadata(w: &mut CodeWriter, grammar: &Grammar) {
 fn format_option_value(v: &OptionValue) -> String {
     return match *v {
         Ident(s) => s,
-        Qualified(parts) => {
-            let mut out = String::with_capacity(16);
-            for let mut i = 0; i < parts.len(); i += 1 {
-                if i > 0 {
-                    out.push('.');
-                }
-                out.push_str(&parts[i]);
-            }
-            out;
-        },
+        Qualified(parts) => parts.join("."),
         Str(s) => `"${s}"`,
         Int(n) => `${n}`,
         Action(_) => "{ ... }",

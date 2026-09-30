@@ -9,7 +9,6 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, S
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
-use crate::optimize::arena_query::binary_op_may_trap;
 use crate::optimize::mod_ref::ModRef;
 use crate::tir::{TypeId, TypeTable};
 
@@ -173,7 +172,7 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
                 && is_select_eligible_value(body, *operand, type_table)
         }
         ValueKind::Binary { op, lhs, rhs, .. } => {
-            !binary_op_may_trap(*op)
+            !op.may_trap()
                 && is_select_eligible_value(body, *lhs, type_table)
                 && is_select_eligible_value(body, *rhs, type_table)
         }
@@ -217,9 +216,8 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
         ExprKind::Binary { op, left, right } => {
             // Both operands are duplicated into the `select`; a trapping op
             // (`Div` / `Mod`) must not be lowered, since a `select` evaluates
-            // both arms unconditionally. The trap taxonomy is shared with
-            // `arena_query` so it cannot drift from the other trap consumers.
-            !binary_op_may_trap(*op)
+            // both arms unconditionally.
+            !op.may_trap()
                 && is_select_eligible_operand(body, *left, type_table)
                 && is_select_eligible_operand(body, *right, type_table)
         }

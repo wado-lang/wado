@@ -1,5 +1,11 @@
 # Literals
 
+This chapter covers the values a program writes directly: booleans, `null`,
+characters, numbers, strings and byte strings, template strings and their
+format specifiers, tuple, list and object literals, and the compile-time
+literals that start with `#`. The types these values have are in
+[Types](./spec-types.md).
+
 ## Primitive Literals
 
 ### Boolean Literals
@@ -14,7 +20,7 @@ assert active && !disabled;
 
 ### Null Literal
 
-The `null` keyword is equivalent to `None` and represents the absence of a value:
+`null` is the `None` of an `Option`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -26,9 +32,15 @@ let also_missing = Option::<i32>::None;
 assert missing == also_missing;
 ```
 
-Note: `null` is a language keyword, while `None` is a case of the prelude's `Option`. Bare `None` needs an expected type to say which `Option` it belongs to.
+`null` is a keyword, while `None` is a case of the prelude's `Option`. A bare
+`None` needs an expected type to say which `Option` it belongs to.
 
-A `null` takes the `Option` its context expects, or the newtype over an `Option` it expects, as any literal coerces to a newtype whose base takes it: with `type Opt<T> = Option<T>`, `let a: Opt<i64> = null` holds, and so does `a == null`. With no context it has the type `Option<!>`, the `Option` with no `Some`. A `null` is never any other type, so `let x: i32 = null` is a type error.
+A `null` takes the `Option` its context expects. It also takes a newtype over an
+`Option`, as any literal coerces to a newtype whose base takes it: with
+`type Opt<T> = Option<T>`, `let a: Opt<i64> = null` holds, and so does
+`a == null`. With no context its type is `Option<!>`, the `Option` with no
+`Some`. A `null` is never any other type, so `let x: i32 = null` is a type
+error.
 
 `Option<!>` is a value of every `Option<T>`. Like an integer literal, a `null` answers a type parameter last, so a sibling argument decides which `Option` it is. A `let` settles its type at once, as it does an integer literal's:
 
@@ -95,7 +107,8 @@ assert unicode == letter && digit as u32 == 57;
 assert emoji as u32 == 0x1F600 && newline as u32 == 10;
 ```
 
-See [Escape Sequences](#escape-sequences) for the supported escapes.
+A `\u` escape writes a scalar by its code point, one of the
+[escape sequences](#escape-sequences) a character literal accepts:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -103,63 +116,6 @@ See [Escape Sequences](#escape-sequences) for the supported escapes.
 let a = '\u0041';         // 'A' (BMP)
 let smiley = '\u{1F600}'; // '😀' (non-BMP)
 assert a == 'A' && smiley == '😀';
-```
-
-#### char Casting and Conversion
-
-`char` can be cast to any integer type to extract the Unicode scalar value (possibly truncated for smaller types):
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let c = 'A';
-let code = c as i32;
-let ucode = c as u32;
-let byte = c as u8;     // truncated to low byte
-assert code == 65 && ucode == 65 && byte == 65;
-```
-
-`u8 as char` is allowed because all `u8` values (0..255) are valid Unicode scalar values:
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let b: u8 = 65;
-assert b as char == 'A';
-```
-
-All other integer-to-char casts are prohibited because not all values are valid Unicode scalar values (surrogates `0xD800..0xDFFF` and values `> 0x10FFFF` are invalid):
-
-<!-- {"fixture":"spec_literals_char_from_int.wado"} -->
-
-```wado
-let x: i32 = 65;
-let c = x as char;  // compile error
-
-let y: i8 = 65;
-let d = y as char;  // compile error (i8 can be negative)
-```
-
-Use checked conversion functions instead:
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let from_u32 = char::from_u32(65 as u32);
-let from_i32 = char::from_i32(65);
-assert from_u32 == Option::Some('A') && from_i32 == Option::Some('A');
-```
-
-See [`core:prelude`](./stdlib-core-prelude.md) for the full `char` API.
-
-Casting `char` to non-integer types is a compile error:
-
-<!-- {"fixture":"spec_literals_char_to_non_int.wado"} -->
-
-```wado
-let c = 'A';
-let f = c as f64;     // compile error: char can only be cast to integer types
-let s = c as String;  // compile error: the two types share no representation
 ```
 
 ### Integer Literals
@@ -196,6 +152,17 @@ test {
 }
 ```
 
+A cast to an integer type types the literal as an annotation does:
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+let byte: i8 = 127 as i8;
+let long: i64 = 9_223_372_036_854_775_807 as i64;
+let unsigned: u32 = 4_294_967_295 as u32;
+assert byte == i8::MAX && long == i64::MAX && unsigned == u32::MAX;
+```
+
 An expression built from literals alone, through unary `-` and `~` and the
 arithmetic, bitwise and shift operators, takes its type from its context the
 same way. As an operand, it takes the type of the other operand:
@@ -210,9 +177,10 @@ assert t & (1 << 31) == 0x8000_0000;
 
 #### Compile-time range checking
 
-The compiler rejects literal coercions whose value falls outside the target type's range. All literal bases (decimal, hex `0x`, octal `0o`, binary `0b`) use strict numeric range: the value must lie within `[MIN, MAX]` for signed types or `[0, MAX]` for unsigned types.
-
-To reinterpret a bit pattern as a signed integer, use an explicit `as` cast.
+A literal's value must lie in its type's range: `[MIN, MAX]` for a signed type,
+`[0, MAX]` for an unsigned one. This holds in every base, so a hex, octal or
+binary literal is a number, not a bit pattern. An explicit `as` cast
+reinterprets a bit pattern as a signed integer:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -270,17 +238,6 @@ let k = 4294967296;               // compile error: literal out of range for `i3
 let m = -2147483649;              // compile error: literal out of range for `i32`: -2147483649
 ```
 
-Type conversion (via `as`):
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let byte: i8 = 127 as i8;
-let long: i64 = 9_223_372_036_854_775_807 as i64;
-let unsigned: u32 = 4_294_967_295 as u32;
-assert byte == i8::MAX && long == i64::MAX && unsigned == u32::MAX;
-```
-
 ### Floating-Point Literals
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
@@ -309,6 +266,16 @@ let weights: List<bf16> = [0.5, -1.25, 3.0];
 assert f32::from(half) == 0.5 && f32::from(weights[1]) == -1.25;
 ```
 
+A cast to `f32` or `f64` types the literal the same way:
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+let single: f32 = 3.14 as f32;
+let double: f64 = 3.14159265358979 as f64;
+assert single as f64 != double;
+```
+
 A literal is rounded once, from its decimal text to the nearest value of its
 type, ties to even. One that rounds past the type's largest finite value is a
 compile error, as an integer literal past its type's range is:
@@ -320,21 +287,9 @@ let x: f16 = 65520.0;             // compile error: literal out of range for `f1
 let y: f32 = 1e39;                // compile error: literal out of range for `f32`: 1e39
 ```
 
-Type conversion (via `as`):
+## String Literals
 
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-let single: f32 = 3.14 as f32;
-let double: f64 = 3.14159265358979 as f64;
-assert single as f64 != double;
-```
-
-### String Literals
-
-String literals create `String` values.
-
-Regular strings use double quotes:
+A string literal is written in double quotes and has the type `String`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -345,8 +300,33 @@ let escaped = "Line 1\nLine 2\tTabbed";
 assert escaped.lines().count() == 2 && escaped.len() == 20;
 ```
 
-Byte strings use a `b` prefix and create a constant `ByteList` (the
-first-class byte-buffer newtype over `List<u8>`):
+A string or template string may span lines. Each newline in the source is a
+newline in the value:
+
+<!-- {"fixture":"spec_literals_primitives.wado"} -->
+
+```wado
+test "multiline" {
+    // Regular multiline string
+    let poem = "Roses are red,
+Violets are blue,
+Wado is great,
+And so are you!";
+
+    // Multiline template string
+    let name = "Alice";
+    let message = `Dear ${name},
+
+Welcome to Wado!
+
+Best regards`;
+    assert poem.lines().count() == 4;
+    assert message == "Dear Alice,\n\nWelcome to Wado!\n\nBest regards";
+}
+```
+
+Byte strings use a `b` prefix and create a constant `ByteList`, the byte-buffer
+newtype over `List<u8>`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -356,13 +336,15 @@ let raw: List<u8> = b"\x89PNG\r\n";     // Also OK: newtype literal coercion to 
 assert raw == [137, 80, 78, 71, 13, 10] && magic as List<u8> == raw;
 ```
 
-The content must be ASCII; each `\xNN` escape (two hex digits) or source
-character contributes one byte, and the standard escapes (`\n`, `\t`, `\\`,
-`\"`, `\0`, `\r`, `\'`) are also accepted. Unicode escapes (`\u{...}` /
-`\uHHHH`) are rejected, since a Unicode escape denotes a scalar, not a byte. Use
-`\xNN` for a raw byte. (`#include_bytes("path")` produces the same `ByteList` from a file.)
-The default type is `ByteList`, but newtype literal coercion lets it flow into a
-`List<u8>` context (or any type whose base is `List<u8>`) with no cast.
+Each source character and each escape contributes one byte. The source
+characters must be ASCII. A `\xNN` escape (two hex digits) writes any byte, and
+the standard escapes `\n`, `\t`, `\\`, `\"`, `\0`, `\r` and `\'` are accepted
+too. A Unicode escape (`\u{...}` or `\uHHHH`) is an error, since it denotes a
+scalar, not a byte. [`#include_bytes`](#include_str-and-include_bytes) builds
+the same `ByteList` from a file.
+
+Like any literal, a byte string coerces to the base of its newtype, so it flows
+into a `List<u8>` context, or one whose base is `List<u8>`, with no cast.
 
 Byte literals are the single-byte analog: `b'x'` is one `u8`.
 
@@ -375,10 +357,10 @@ let n: i32 = b'A';         // coerces like an integer literal
 assert a == 65 && hi == 255 && n == 65;
 ```
 
-A byte literal is an integer literal defaulting to `u8`, so it coerces like any
-integer literal (its value is always `0..=255`). Its content follows the same
-one-byte rule as a byte string (`\xNN` for `0x80..=0xFF`; no `\u`); use a char
-literal `'…'` for a Unicode scalar.
+A byte literal is an integer literal whose default type is `u8`, so it coerces
+as any integer literal does. Its value is always in `0..=255`. Its content
+follows a byte string's rule: one ASCII character or escape, with `\xNN` for
+`0x80..=0xFF` and no `\u`. A char literal `'…'` writes a Unicode scalar.
 
 ### Escape Sequences
 
@@ -404,12 +386,12 @@ except where the table names one:
 | `\uHHHH` | Unicode BMP (4 hex digits)  |
 | `\u{H+}` | Unicode full range          |
 
-A bare `{` or `}` in a template string needs no escape, as
-[Template Strings](#template-strings) states, but `\{` and `\}` are accepted.
-Use `\$` to write a literal `$` before a `{`: `` `\${x}` `` renders the text
-`${x}`.
+A bare `{` or `}` in a template string needs no escape
+([Template Strings](#template-strings)), but `\{` and `\}` are accepted. `\$`
+writes a literal `$` before a `{`: `` `\${x}` `` renders the text `${x}`.
 
-For characters outside BMP (U+10000 and above), use either:
+A character outside the Basic Multilingual Plane (U+10000 and above) is written
+as a surrogate pair of `\uHHHH` escapes, or as one `\u{H+}`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -418,31 +400,7 @@ assert "\uD83D\uDE00" == "😀";   // Surrogate pair
 assert "\u{1F600}" == "😀";      // Variable-length escape
 ```
 
-Multiline strings are supported in both regular and template strings. Literal newlines are preserved:
-
-<!-- {"fixture":"spec_literals_primitives.wado"} -->
-
-```wado
-test "multiline" {
-    // Regular multiline string
-    let poem = "Roses are red,
-Violets are blue,
-Wado is great,
-And so are you!";
-
-    // Multiline template string
-    let name = "Alice";
-    let message = `Dear ${name},
-
-Welcome to Wado!
-
-Best regards`;
-    assert poem.lines().count() == 4;
-    assert message == "Dear Alice,\n\nWelcome to Wado!\n\nBest regards";
-}
-```
-
-### Template Strings
+## Template Strings
 
 A template string is written in backticks and has the type `String`. `${expr}`
 interpolates the value of `expr`, and everything else is literal text. A bare
@@ -463,7 +421,7 @@ let debug = `${p:?}`;
 assert formatted == "Pi: 3.14" && debug == "Point { x: 10, y: 20 }";
 ```
 
-#### Interpolation
+### Interpolation
 
 An interpolation is `${expr}` or `${expr:spec}`. The expression may be any
 expression, not only a name:
@@ -486,7 +444,7 @@ or a comment does not close it.
 Whitespace around the expression and around the specifier is ignored, so
 `${ x : 5 }` reads as `${x:5}`.
 
-#### Format Specifiers
+### Format Specifiers
 
 ```text
 interpolation := '${' expression [ ':' spec ] '}'
@@ -516,7 +474,7 @@ printf-style `${x:08d}` is rejected rather than rendered as `${x:08}`:
 | `${x:.}`           | expected digits after `.` in format specifier     |
 | `${x:99999999999}` | format specifier width `99999999999` is too large |
 
-#### Format Types
+### Format Types
 
 The type character selects the trait the value renders through. A value whose
 type does not implement that trait is a compile error.
@@ -549,7 +507,7 @@ exactly that many decimal places, rounded half to even (`${1250:.1e}` renders
 `1.2e3`, `${1350:.1e}` renders `1.4e3`). A carry moves the exponent up a decade:
 `${99:.0e}` renders `1e2`.
 
-#### Width, Fill and Alignment
+### Width, Fill and Alignment
 
 `width` is a minimum length, counted in characters, not bytes or display
 columns. Padding uses the fill character, a space by default, and every type
@@ -567,7 +525,7 @@ assert `${"あい":>6}` == "    あい";  // two characters, six bytes
 assert `${42:€>8}` == "€€€€€€42";
 ```
 
-#### Sign and Zero Padding
+### Sign and Zero Padding
 
 `+` writes a sign on a non-negative number. Without it only a negative number
 carries one.
@@ -587,7 +545,7 @@ assert `${42:#08x}` == "0x00002a";
 assert `${-1200.0:012e}` == "-0000001.2e3";
 ```
 
-#### Alternate Form
+### Alternate Form
 
 `#` asks for the alternate form. It selects no trait: it sets a flag the
 implementation reads, or ignores.
@@ -608,7 +566,7 @@ A hand-written `Display` may branch on the flag. `core:temporal`'s `Instant`
 renders whole seconds plainly and milliseconds under `#`. Every primitive's
 `Display` ignores it.
 
-#### Precision
+### Precision
 
 `precision` means something different for each kind of value:
 
@@ -642,7 +600,7 @@ and width reach every element. A tuple or struct never caps its own arity, but
 its string and sequence fields honour the precision, and `${a:6?}` pads each
 element rather than the whole list.
 
-#### The Formatter
+### The Formatter
 
 Every format trait writes into a `Formatter`, which carries the parsed spec and
 the string being built. Both types are in the prelude:
@@ -726,7 +684,7 @@ place. The full method set is in [`core:prelude`](./stdlib-core-prelude.md).
 `.N` cannot write a negative number, so `PRECISION_INFINITE` is reachable only
 by building a `Formatter` directly.
 
-#### Display Output
+### Display Output
 
 The prelude's `Display` impls render as follows. Plain enums and newtypes render
 as [Format Traits](./spec-traits.md#format-traits) states.
@@ -742,11 +700,12 @@ as [Format Traits](./spec-traits.md#format-traits) states.
   form.
 - A tuple renders `[a, b]`, each element in its `Display` form. A tuple has
   `Display` only when every element does.
-- A range renders `start..<end` or `start..=end`.
+- A range renders `start..<end` or `start..=end`, as written. A range has
+  `Display` only when its bound type does.
 - A closure renders as its `Inspect` form, so `${f}` writes the signature and
   `${f:#}` the source.
 
-#### Inspect Output
+### Inspect Output
 
 `Inspect` is the debug form behind `${x:?}` and `${x:#?}`. Every type has it,
 as [Derivation Policy](./spec-traits.md#derivation-policy) states. The prelude
@@ -826,7 +785,7 @@ assert `${Option::Some(42):#?}` == "Option::Some(\n  42,\n)";
 assert `${Point { x: 1, y: 2 }:#?}` == "Point {\n  x: 1,\n  y: 2,\n}";
 ```
 
-#### Inspect Truncation
+### Inspect Truncation
 
 With no precision in the spec, `Inspect` of a string or a sequence caps it at
 `Formatter::DEFAULT_SEQ_LIMIT`, 256 characters or elements, and marks the cut as
@@ -850,7 +809,103 @@ Rationale: [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-sp
 [WEP: Format Traits](./wep-2026-02-01-format-traits.md),
 [WEP: Inspect (Debug Output)](./wep-2026-02-21-inspect-debug-output.md).
 
-### Tuple Literals
+## Tagged Template Literals
+
+A path written directly before a template literal is a tag. The template then
+denotes a call of that function on the template's holes, in their own types,
+with the literal text around them, instead of a rendered `String`:
+
+<!-- {"fixture":"spec_functions_tagged_template.wado"} -->
+
+```wado
+let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
+let s = String::raw`${dir}\bin\run.exe`;   // backslashes kept
+assert q.query == "SELECT * FROM users WHERE id = ? AND name = ?";
+assert s == "C:\\bin\\run.exe";
+```
+
+The tag is a function name or a static method path, with no whitespace before
+the backtick. The backtick is a postfix on the path and binds as a call does.
+Any other expression before a backtick, such as a call result or a
+parenthesized expression, is a syntax error. A path naming a variant case or a
+closure-typed binding is rejected as a tag. The literal is lexed exactly as an
+untagged template, so every escape must still be one the lexer knows even where
+the tag preserves it.
+
+A tag is an ordinary function whose first parameter takes the template by value
+and is bound by `ReflectTemplate`, the reflected kind of a template literal. The
+template is the call's one written argument. Trailing parameters with defaults
+are filled as in any call (see [Default Arguments](./spec-functions.md#default-arguments)). A first
+parameter of any other type, `&T` included, is reported as a tag error. Nothing
+on the declaration marks a function as a tag.
+
+Each template shape has an anonymous type of its own, holding one field per
+hole. The shape is the template's segments, specifiers, hole types and hole
+source texts. So
+`` tag`${a}` `` and `` tag`${b}` `` are two types, each instantiating the tag,
+even where `a` and `b` share a type. The type is unnameable and reached only
+through the bound; a diagnostic and `Reflect::type_name()` show it as its text
+with each hole spelled by its type and specifier, `` `id = ${i32:04}` ``, cut
+at 50 characters with `...`.
+
+`ReflectTemplate` is
+[sealed](./spec-reflection.md#sealed-traits), as the whole family is. Its
+associated type `Holes` is the tuple of hole types,
+and `Members` the tuple of hole handles `members()` returns. The tag walks the
+holes with tuple `for-of`:
+
+<!-- {"fixture":"spec_functions_tagged_template.wado"} -->
+
+```wado
+fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
+    let mut query = "";
+    let mut params: List<SqlParam> = [];
+    for let h of ReflectTemplate::<T>::members() {
+        query.push_str(h.lit());                // literal text before this hole
+        query.push_str("?");
+        params.push(h.get(&t).to_sql_param());  // the value, storage shared
+    }
+    query.push_str(ReflectTemplate::<T>::tail());
+    return SqlQuery { query, params };
+}
+
+test "the tag sees each hole in its own type" {
+    let q = sql`id = ${7} AND name = ${"ann"}`;
+    assert q.params == [SqlParam::Int(7), SqlParam::Text("ann")];
+}
+```
+
+A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
+`lit()` / `raw()` (the preceding segment, escapes processed or preserved),
+`get(&t)` (the value, `V`), `source()` (the expression text), `has_spec()`, and
+`fmt(&t, f)` (rendering as the untagged template would).
+`ReflectTemplate::<T>::tail()` and `raw_tail()` give the segment after the last
+hole. Every answer but `get` and `fmt` is a constant. A hole handle is minted
+only by `members()`.
+
+`members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
+empty tuple (`[]`, for a tag that reads only `tail()`). A concrete tuple
+(`Holes = [List<i32>]`) is an error at the call. A bound on the pack
+(`..V: ToSqlParam`) makes a hole whose type lacks it an error at the call,
+naming that type.
+
+A hole's type may not mention a type parameter of the enclosing item, since the
+shape is minted once rather than per instantiation. A generic body passes its
+tag a concrete value from its caller. The untagged template makes no shape, so
+`` `${v}` `` over a `v: X` is accepted where `` format`${v}` `` is not.
+
+Holes are evaluated once, left to right, before the tag runs. Each hole's value
+is the one it had at its own position, so a later hole that writes to its
+storage changes nothing the tag sees: `` format`${a} ${bump(&mut a)}` ``
+renders what `` `${a} ${bump(&mut a)}` `` renders. A tag may carry effects,
+which the caller declares as for any call, and return any type.
+
+An untagged template means what the prelude's `format` tag means: each hole
+rendered through its specifier into one buffer.
+
+Rationale: [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md).
+
+## Tuple Literals
 
 Bracket syntax `[...]` creates tuple values by default. This aligns with TypeScript conventions and JSON interoperability.
 
@@ -865,99 +920,38 @@ let trailing = [1, 2, 3,];            // Trailing comma allowed
 assert pair.1 == "hello" && triple.2 && single.0 == 42 && trailing.2 == 3;
 ```
 
-#### Tuple Types
+The tuple type and its element access are in [Tuples](./spec-types.md#tuples).
 
-Tuple types use bracket syntax `[T1, T2, ...]`.
+### Value Spread
 
-<!-- {"fixture":"spec_literals_tuples.wado"} -->
+`..expr` inside a tuple literal splices the elements of the tuple `expr` into
+it:
 
-```wado
-let point: [i32, i32] = [10, 20];
-let record: [String, i32, bool] = ["Alice", 30, true];
-assert point.1 == 20 && record.0 == "Alice";
-```
-
-#### Tuple Element Access
-
-Tuple elements are accessed by constant index using dot notation or bracket notation:
-
-<!-- {"fixture":"spec_literals_tuples.wado"} -->
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
 
 ```wado
-let t = [10, "hello", true];
-let x = t.0;      // dot notation
-let y = t[1];     // bracket notation
-let z = t.2;
-assert x == 10 && y == "hello" && z;
+let a = [1, "hello"];
+let b = [..a, true];   // b: [i32, String, bool]
+let c = [42, ..a];     // c: [i32, i32, String]
+assert b == [1, "hello", true];
+assert c == [42, 1, "hello"];
 ```
 
-A variable index is not allowed:
+The spread expression is evaluated exactly once:
 
-<!-- {"fixture":"spec_literals_tuple_index.wado"} -->
+<!-- {"fixture":"spec_functions_type_packs.wado"} -->
 
 ```wado
-let i = 1;
-let w = t[i];     // Error: tuple index must be a constant integer
+// make_pair() is called once, not twice
+let t = [..make_pair(), 30];
+assert PAIRS == 1;
+assert t == [10, 20, 30];
 ```
 
-#### Unit vs Empty Tuple
+A spread of a [type pack](./spec-functions.md#variadic-type-packs) value splices
+however many elements the pack holds.
 
-The unit type `()` and empty tuple `[]` are distinct:
-
-<!-- {"fixture":"spec_literals_tuples.wado"} -->
-
-```wado
-let unit: () = ();    // Unit type/value
-let empty: [] = [];   // Empty tuple (rarely used)
-assert `${unit:?}` == "()" && `${empty:?}` == "[]";
-```
-
-They take separate `impl`s, so a method defined on one is not found on the other.
-
-`[]` cannot cross a component boundary. It has no Component Model representation:
-a `tuple` carries at least one type, and `()` is the type that carries none. An
-export naming one is rejected at compile time.
-
-#### The Never Type `!`
-
-The never type `!` is the bottom type: it is a subtype of every type. An expression of type `!` never returns, because it always diverges (traps). `panic()` and `unreachable()` both return `!`.
-
-Because `!` is assignable to any type, an expression of type `!` may appear in any value position without a type mismatch:
-
-<!-- {"fixture":"spec_literals_tuples.wado"} -->
-
-```wado
-// In a match arm: the None branch panics, so the match has type i32
-let opt: Option<i32> = Option::<i32>::Some(5);
-let x = match opt {
-    Some(v) => v,
-    None => panic("unexpected none"),
-};
-assert x == 5;
-
-// In a let binding with explicit type annotation
-let y: i32 = panic("unreachable");
-
-// In a binary expression: execution diverges before the addition
-let z: i32 = panic("boom") + 1;
-```
-
-The `!` type can be written explicitly as a return type:
-
-<!-- {"fixture":"spec_literals_tuples.wado"} -->
-
-```wado
-fn fail(msg: String) -> ! {
-    panic(msg);
-}
-
-test {
-    let n: i32 = if true { 1 } else { fail("unreachable") };
-    assert n == 1;
-}
-```
-
-### List Literals
+## List Literals
 
 A bracket literal coerces to a `List` where the target type is known, as a
 function parameter or a type annotation makes it. Elsewhere it is a tuple, and
@@ -978,73 +972,33 @@ test {
 }
 ```
 
+What a `List` offers once built is in [Lists](./spec-types.md#lists).
+
 Rationale: [WEP: Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md).
 
-#### List Constructors
+## Object Literals
 
-<!-- {"fixture":"spec_literals_lists.wado"} -->
+A `{ … }` literal lists members separated by commas. A member is `key: value`,
+a shorthand `name` that stands for `name: name`, or a `..base` spread. A key is
+an identifier or a string literal, so `{ "x": 1 }` writes the key `{ x: 1 }`
+writes. Any other key is an error.
 
-```wado
-let arr = List::<i32>::with_capacity(10);     // empty list with room for 10 elements
-let bools = List::<bool>::filled(100, true);  // list of 100 elements, all true
-assert arr.len() == 0 && bools.len() == 100 && bools[99];
-```
-
-#### List Operations
-
-<!-- {"fixture":"spec_literals_lists.wado"} -->
+<!-- {"fixture":"spec_literals_objects.wado"} -->
 
 ```wado
-let mut arr: List<i32> = [1, 2, 3];
-
-// Index access (read)
-let first = arr[0];
-assert first == 1;
-
-// Index assignment (write)
-arr[0] = 100;        // Requires a `let mut` binding
-arr[1] = 200;
-
-// List methods
-arr.push(4);         // Add element to end
-let len = arr.len(); // Get length
-assert arr == [100, 200, 3, 4] && len == 4;
+// Functional-update spread: seed from a base map, then override/add keys
+let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
+assert m2["x"] == 99 && m2["y"] == 20 && m2["w"] == 40;
 ```
 
-#### Index Assignment Rules
+The type expected of the literal decides what it builds: a named struct
+([Struct Construction](./spec-types.md#struct-construction)), a collection such
+as a map ([Collection Literal Coercion](#collection-literal-coercion)), or, with
+no type expected, an [anonymous struct](./spec-types.md#anonymous-structs).
 
-- Requires the list binding to be declared with `let mut`
-- Index must be within bounds (runtime check, traps if out of bounds)
-- Works with lists of any element type
+Rationale: [WEP: JSON Literal Compatibility](./wep-2026-01-18-json-literal-compatibility.md).
 
-#### Sorting
-
-Every sort is stable and O(n log n) in the worst case:
-
-| Method        | Mutates? | Comparator                          |
-| ------------- | -------- | ----------------------------------- |
-| `sort()`      | Yes      | `Ord::cmp` (requires `T: Ord`)      |
-| `sort_by()`   | Yes      | Custom `fn mut(&T, &T) -> Ordering` |
-| `sorted()`    | No       | `Ord::cmp` (requires `T: Ord`)      |
-| `sorted_by()` | No       | Custom `fn mut(&T, &T) -> Ordering` |
-
-On a float, `Ord` is the IEEE 754 total order rather than the order `<` gives,
-so a NaN still has a place in a sorted list. See
-[Ord - Ordering](./spec-traits.md#ord---ordering).
-
-<!-- {"fixture":"spec_literals_lists.wado"} -->
-
-```wado
-let mut nums: List<i32> = [5, 3, 8, 1];
-nums.sort();                             // in-place ascending
-assert nums == [1, 3, 5, 8];
-
-let orig: List<i32> = [5, 3, 8, 1];
-let asc = orig.sorted();                // returns a new sorted list
-assert asc == [1, 3, 5, 8] && orig == [5, 3, 8, 1];
-```
-
-### Collection Literal Coercion
+## Collection Literal Coercion
 
 Sequence literals `[e0, e1, ...]` and key-value literals `{ k: v, ... }` can be
 coerced to any collection type through `From`. Coercing one materializes an
@@ -1063,8 +1017,6 @@ nominal struct with matching fields is still a struct literal.
 A key-value literal is an array of pairs, so `[["a", 1]]` builds the same map
 `{ a: 1 }` does. `Array<T>` itself needs no impl, since the array the coercion
 materializes is already the result.
-
-#### Usage
 
 <!-- {"fixture":"spec_literals_lists.wado"} -->
 
@@ -1097,7 +1049,7 @@ test {
 }
 ```
 
-#### Impl Selection
+### Impl Selection
 
 The target's `From<Array<X>>` impls decide which literal form it accepts:
 
@@ -1136,7 +1088,7 @@ let s: Scores = [90, 85];   // List::from, then `as Scores`
 assert s[1] == 85;
 ```
 
-#### Implicit Conversion
+### Implicit Conversion
 
 A literal is implicitly converted to its target type through `From`. No other
 expression is implicitly converted. A literal here is a number, string, char,
@@ -1166,7 +1118,7 @@ converts through `Value::from`. An element that reaches no conversion is
 reported with the rule that refused it: the element is not a literal, or the
 slot's type has no `From` for the element's type.
 
-#### `..base` Spread
+### `..base` Spread
 
 A key-value literal may carry `..base` members, which merge through
 `LiteralSpread`:
@@ -1205,25 +1157,26 @@ These are compile errors:
 - the same key written twice as an explicit member.
 
 A sequence literal cannot carry a spread: `[..xs, 4]` is a
-[tuple spread](./spec-functions.md#value-spread). The struct forms of `..base`
+[tuple spread](#value-spread). The struct forms of `..base`
 are in [Struct Construction](./spec-types.md#struct-construction) and
 [Anonymous Structs](./spec-types.md#composition).
 
 Rationale: [WEP: Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md),
 [WEP: Literal Spread (`..base`)](./wep-2026-07-03-literal-spread.md).
 
-## Compile-Time Location Literals
+## Compile-Time Literals
 
-Compile-time location literals provide source location information at compile time. They use the `#` prefix to clearly signal compile-time evaluation.
+A literal that starts with `#` takes its value when the program is compiled:
+where it stands in the source, or what a file holds.
 
-| Literal                  | Type       | Value                                              |
-| ------------------------ | ---------- | -------------------------------------------------- |
-| `#file`                  | `String`   | Current source file path                           |
-| `#line`                  | `i32`      | Current line number (1-indexed)                    |
-| `#function`              | `String`   | Name of the enclosing function                     |
-| `#data`                  | `String`   | `__DATA__` section content (compile error if none) |
-| `#include_str("path")`   | `String`   | External file content as string                    |
-| `#include_bytes("path")` | `ByteList` | External file content as bytes                     |
+| Literal                  | Type       | Value                             |
+| ------------------------ | ---------- | --------------------------------- |
+| `#file`                  | `String`   | Current source file path          |
+| `#line`                  | `i32`      | Current line number (1-indexed)   |
+| `#function`              | `String`   | Name of the enclosing function    |
+| `#data`                  | `String`   | The module's `__DATA__` section   |
+| `#include_str("path")`   | `String`   | External file content as a string |
+| `#include_bytes("path")` | `ByteList` | External file content as bytes    |
 
 <!-- {"fixture":"spec_literals_location.wado"} -->
 
@@ -1237,9 +1190,20 @@ test {
 }
 ```
 
+`#function` names the function without type arguments or signature:
+
+| Context                 | `#function` value            |
+| ----------------------- | ---------------------------- |
+| Free function           | `my_function`                |
+| Method                  | `Point::distance`            |
+| Method of `Box<String>` | `Box::name`                  |
+| Closure                 | `parent_function::{closure}` |
+
 ### `#data`
 
-Returns the raw text content of the `__DATA__` section as a `String`. This is useful for programs that need to access embedded metadata at runtime (e.g., configuration, test fixtures, embedded documents). Using `#data` in a file that has no `__DATA__` section is a compile error.
+`#data` is the raw text of the module's
+[data section](./spec-lexical.md#data-section). In a file with no `__DATA__`
+section it is a compile error.
 
 In a file whose `__DATA__` section is `{"test": {}}`:
 
@@ -1252,9 +1216,12 @@ assert config.starts_with("{\"test\": {}}");
 
 ### `#include_str` and `#include_bytes`
 
-`#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `ByteList` without UTF-8 validation.
+`#include_str("path")` is the content of a file as a `String`. A file that is
+not valid UTF-8 is a compile error. `#include_bytes("path")` is the raw bytes as
+a `ByteList`, with no UTF-8 check.
 
-The argument is a parenthesized string literal; any other expression is a compile error. A local path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file that does not exist is a compile error.
+The argument is a parenthesized string literal. Any other expression is a
+compile error. A local path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file that does not exist is a compile error.
 
 <!-- {"fixture":"spec_literals_location.wado"} -->
 
@@ -1268,16 +1235,26 @@ The file is read once, at compile time, and its content is a constant. Changing 
 
 Rationale: [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
-### `#function` Format
+### Embedded Data
 
-Returns the name without type arguments or signature:
+`List::<T>::from_le_bytes(bytes)` reads `bytes` as little-endian `T`s, back to
+back, for any `T: FromLeBytes`: the fixed-width integers, `f16`, `bf16`, `f32`
+and `f64`. It panics when the byte count is not a whole number of `T`s.
 
-| Context                 | `#function` value            |
-| ----------------------- | ---------------------------- |
-| Free function           | `my_function`                |
-| Method                  | `Point::distance`            |
-| Method of `Box<String>` | `Box::name`                  |
-| Closure                 | `parent_function::{closure}` |
+`builtin::array_new_data::<T>(bytes)` reads the bytes the same way into an
+`Array<T>`, for a caller building its own container. It is evaluated at compile
+time only. So its argument must be a byte string literal or `#include_bytes`,
+`T` must be a numeric primitive, and the byte count must be a whole number of
+`T`s. Each is a compile error otherwise.
+
+<!-- {"fixture":"spec_control_flow_embedded_data.wado"} -->
+
+```wado
+let weights = List::<f32>::from_le_bytes(#include_bytes("./sub/spec_control_flow_weights.bin"));
+let bias = List::<bf16>::from_le_bytes(b"\x80\x3f\x00\x40");
+let want: List<bf16> = [1.0, 2.0];
+assert weights == [1.0, 2.0] && bias == want;
+```
 
 ### Call-site evaluation in default arguments
 
@@ -1296,54 +1273,3 @@ test {
 Where a default's own call fills a default in turn (`fn outer(x = loc())`), every one of these literals reports the outermost call (`outer(...)`).
 
 `#data`, `#include_str` and `#include_bytes` in a default read the file that wrote the default. A struct field default is not redirected either: its location literals report the file that declares the struct.
-
-## Object Literals
-
-Object literal syntax supports unquoted keys and shorthand properties.
-
-For struct initialization syntax, see the [Structs](./spec-types.md#structs) section.
-
-### TreeMap (Insertion-Order Map)
-
-For associative arrays, use `TreeMap` from `core:collections`:
-
-<!-- {"fixture":"spec_literals_objects.wado"} -->
-
-```wado
-use { TreeMap } from "core:collections";
-
-test {
-    let mut map = TreeMap::<String, i32>::new();
-    map["x"] = 10;                   // insert or overwrite
-    map["y"] = 20;
-
-    let v = map["x"];                // panics if key not found
-    let opt = map.get("x");          // returns Option<V>
-    assert !map.try_insert("x", 99); // inserts only if absent; reports whether it did
-    assert v == 10 && opt == Option::Some(10) && map["x"] == 10;
-
-    // Keys preserve insertion order
-    let mut keys = map.keys();  // an iterator over the keys, in insertion order
-    assert *keys.next().unwrap() == "x" && *keys.next().unwrap() == "y";
-
-    // Functional-update spread: seed from a base map, then override/add keys
-    let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
-    assert m2["x"] == 99 && m2["y"] == 20 && m2["w"] == 40;
-}
-```
-
-The rules for a spread in a key-value literal are in
-[`..base` Spread](#base-spread).
-
-### Access Methods
-
-<!-- {"fixture":"spec_literals_objects.wado"} -->
-
-```wado
-// Struct: dot notation
-assert user.name == "Alice";
-
-// TreeMap: bracket notation or methods
-assert map["key"] == 1;                    // panics if key not found
-assert map.get("key") == Option::Some(1);  // returns Option<V>
-```

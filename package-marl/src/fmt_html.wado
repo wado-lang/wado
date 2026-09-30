@@ -42,25 +42,31 @@ pub struct HeadingInfo {
     pub text: String,
 }
 
-/// Renders a fenced code block's body to HTML. The result is inserted
-/// verbatim (not escaped), so a handler owns output safety: the default
-/// `render` escapes; a syntax highlighter emits `<span class="...">` markup.
-/// `lang` is the fence info string (empty for a plain block).
-pub interface Highlight {
+/// Where a consumer decides the HTML of what Marl does not render itself. Each
+/// result is inserted verbatim, not escaped, so the handler owns its safety.
+pub interface RenderHook {
+    /// A fenced code block's body. The default `render` escapes it; a syntax
+    /// highlighter emits `<span class="...">` markup. `lang` is the fence info
+    /// string, empty for a plain block.
     fn highlight(code: String, lang: String) -> String;
+
+    /// An HTML comment's text, between `<!--` and `-->`. A comment is the
+    /// author's note to a reader of the source, so by default it renders as
+    /// nothing.
+    fn comment(text: String) -> String {
+        return "";
+    }
 }
 
-/// The default `Highlight`: no language-specific markup, just HTML-escape —
-/// so `render` reproduces plain `<pre><code>` output.
+/// The `RenderHook` behind `render`. It HTML-escapes a code block's body, so the
+/// output is plain `<pre><code>`, and leaves comments to the default.
 struct PlainHighlight {
 }
 
-impl Highlight for PlainHighlight {
+impl RenderHook for PlainHighlight {
     fn highlight(&mut self, code: String, _lang: String) -> String {
         resume escape_text_ref(&code);
     }
-
-    ..trap
 }
 
 /// Render Markdown to HTML with plain (escaped) code blocks.
@@ -71,14 +77,14 @@ export fn render(source: String) -> RenderResult {
     };
 }
 
-/// Render Markdown to HTML, delegating each code block to a `Highlight`
-/// handler — the extension point a consumer satisfies with a syntax
-/// highlighter (e.g. a `provider` supplying `wado-lang:gale-highlight-wado`).
-export fn render_highlighted(source: String) -> RenderResult with Highlight {
+/// Render Markdown to HTML through the consumer's `RenderHook` handler, for
+/// instance a `provider` that highlights code with
+/// `wado-lang:gale-highlight-wado`.
+export fn render_highlighted(source: String) -> RenderResult with RenderHook {
     return render_document(source);
 }
 
-fn render_document<S: AsStrSlice>(source: S) -> RenderResult with Highlight {
+fn render_document<S: AsStrSlice>(source: S) -> RenderResult with RenderHook {
     let parsed = parse(&source);
     let mut r = Renderer {
         refs: parsed.refs,
@@ -101,20 +107,21 @@ struct Renderer {
 impl Renderer {
     // --- blocks ---
 
-    /// Blocks join with a single newline, and front matter / reference
-    /// definitions contribute no output — they are metadata, not content.
-    fn render_blocks(&mut self, nodes: &List<Node>) -> String with Highlight {
+    /// Blocks join with a single newline. Front matter and reference
+    /// definitions are metadata, so they take no line, and neither does a
+    /// block that renders to nothing.
+    fn render_blocks(&mut self, nodes: &List<Node>) -> String with RenderHook {
         let mut parts: List<String> = [];
         for let node of nodes {
             if node matches { Node::FrontMatter(_) | Node::LinkReferenceDef(_) } {
                 continue;
             }
-            parts.push(self.render_block(node));
+            push_nonempty(&mut parts, self.render_block(node));
         }
         return parts.join("\n");
     }
 
-    fn render_block(&mut self, node: &Node) -> String with Highlight {
+    fn render_block(&mut self, node: &Node) -> String with RenderHook {
         return match node {
             Node::Heading(h) => self.render_heading(h),
             Node::Paragraph(p) => `<p>${render_inline_seq(&p.children, &self.refs)}</p>`,
@@ -124,11 +131,12 @@ impl Renderer {
             Node::Table(t) => render_table(t, &self.refs),
             Node::ThematicBreak => "<hr />",
             Node::Html(s) => escape_text_ref(s),
+            Node::Comment(text) => RenderHook::comment(*text),
             _ => panic("marl-html: unexpected node in block position"),
         };
     }
 
-    fn render_heading(&mut self, h: &Heading) -> String {
+    fn render_heading(&mut self, h: &Heading) -> String with RenderHook {
         let text = heading_text(&h.children);
         let id = self.slugger.slug(slugify(&text));
         let inner = render_inline_seq(&h.children, &self.refs);
@@ -138,7 +146,7 @@ impl Renderer {
 
     // --- lists ---
 
-    fn render_list(&mut self, list: &MdList) -> String with Highlight {
+    fn render_list(&mut self, list: &MdList) -> String with RenderHook {
         let loose = list_is_loose(list);
         let mut parts: List<String> = [];
         for let item of list.items {
@@ -149,7 +157,7 @@ impl Renderer {
         return `${open}\n${inner}\n${close}`;
     }
 
-    fn render_item(&mut self, item: &MdItem, loose: bool) -> String with Highlight {
+    fn render_item(&mut self, item: &MdItem, loose: bool) -> String with RenderHook {
         let marker = match item.marker {
             Some(m) => if m.checked { "[x] " } else { "[ ] " },
             None => "",
@@ -171,18 +179,18 @@ impl Renderer {
         children: &List<Node>,
         loose: bool,
         marker: S,
-    ) -> String with Highlight {
+    ) -> String with RenderHook {
         let mut parts: List<String> = [];
         let mut first = true;
         for let child of children {
             let lead = if first { marker.to_string() } else { "" };
-            parts.push(self.render_item_child(child, loose, &lead));
+            push_nonempty(&mut parts, self.render_item_child(child, loose, &lead));
             first = false;
         }
         return parts.join("\n");
     }
 
-    fn render_item_child<S: AsStrSlice>(&mut self, child: &Node, loose: bool, lead: S) -> String with Highlight {
+    fn render_item_child<S: AsStrSlice>(&mut self, child: &Node, loose: bool, lead: S) -> String with RenderHook {
         match child {
             Node::Paragraph(p) => {
                 let inline = render_inline_seq(&p.children, &self.refs);
@@ -195,6 +203,12 @@ impl Renderer {
                 return `${lead}${self.render_block(child)}`;
             },
         }
+    }
+}
+
+fn push_nonempty(parts: &mut List<String>, html: String) {
+    if !html.is_empty() {
+        parts.push(html);
     }
 }
 
@@ -223,14 +237,14 @@ fn collect_heading_text(children: &List<Node>, out: &mut String) {
     }
 }
 
-fn render_code_block(cb: &CodeBlock) -> String with Highlight {
+fn render_code_block(cb: &CodeBlock) -> String with RenderHook {
     let mut out = String::new();
     out.push_str("<pre><code");
     if cb.tag.len() > 0 {
         out.push_str(` class="language-${escape_attr_ref(&cb.tag)}"`);
     }
     out.push('>');
-    out.push_str(&Highlight::highlight(cb.code, cb.tag));
+    out.push_str(&RenderHook::highlight(cb.code, cb.tag));
     out.push_str("</code></pre>");
     return out;
 }
@@ -256,7 +270,7 @@ fn list_tags(list: &MdList) -> [String, String] {
 
 // --- tables ---
 
-fn render_table(t: &MdTable, refs: &RefTable) -> String {
+fn render_table(t: &MdTable, refs: &RefTable) -> String with RenderHook {
     let ncol = t.header.cells.len();
     let mut out = String::new();
     out.push_str("<table>\n<thead>\n<tr>\n");
@@ -278,7 +292,7 @@ fn render_cells<S: AsStrSlice>(
     align: &List<ColumnAlign>,
     refs: &RefTable,
     out: &mut String,
-) {
+) with RenderHook {
     for let c of 0..<ncol {
         let inner = match row.cells.get(c) {
             Some(cell) => render_inline_seq(&cell, refs),
@@ -312,7 +326,7 @@ fn align_str(a: &ColumnAlign) -> String {
 
 // --- inline ---
 
-fn render_inline_seq(nodes: &List<Node>, refs: &RefTable) -> String {
+fn render_inline_seq(nodes: &List<Node>, refs: &RefTable) -> String with RenderHook {
     let mut out = String::new();
     for let node of nodes {
         render_inline_node(node, refs, &mut out);
@@ -320,7 +334,7 @@ fn render_inline_seq(nodes: &List<Node>, refs: &RefTable) -> String {
     return out;
 }
 
-fn render_inline_node(node: &Node, refs: &RefTable, out: &mut String) {
+fn render_inline_node(node: &Node, refs: &RefTable, out: &mut String) with RenderHook {
     match node {
         Node::Text(s) => out.push_str(&text_to_html(s)),
         Node::SoftBreak => out.push('\n'),
@@ -336,11 +350,12 @@ fn render_inline_node(node: &Node, refs: &RefTable, out: &mut String) {
         Node::InlineImage(img) => render_image(&img.alt, &img.url, &img.title, out),
         Node::ReferenceImage(img) => render_reference_image(img, refs, out),
         Node::Html(s) => out.push_str(&escape_text_ref(s)),
+        Node::Comment(text) => out.push_str(&RenderHook::comment(*text)),
         _ => panic("marl-html: unexpected node in inline position"),
     }
 }
 
-fn wrap_inline<S: AsStrSlice>(tag: S, children: &List<Node>, refs: &RefTable, out: &mut String) {
+fn wrap_inline<S: AsStrSlice>(tag: S, children: &List<Node>, refs: &RefTable, out: &mut String) with RenderHook {
     out.push_str(`<${tag}>${render_inline_seq(children, refs)}</${tag}>`);
 }
 
@@ -395,12 +410,12 @@ fn render_link<S: AsStrSlice, S1: AsStrSlice>(
     children: &List<Node>,
     refs: &RefTable,
     out: &mut String,
-) {
+) with RenderHook {
     let href = escape_attr_ref(&sanitize_url(url));
     out.push_str(`<a href="${href}"${title_attr(title)}>${render_inline_seq(children, refs)}</a>`);
 }
 
-fn render_reference_link(link: &ReferenceLinkNode, refs: &RefTable, out: &mut String) {
+fn render_reference_link(link: &ReferenceLinkNode, refs: &RefTable, out: &mut String) with RenderHook {
     match ref_table_get(refs, &link.label) {
         Some(def) => render_link(&def.url, &def.title, &link.children, refs, out),
         // The parser emits a reference/shortcut link only for a label that

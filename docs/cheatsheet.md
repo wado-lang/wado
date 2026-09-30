@@ -38,7 +38,7 @@ impl geo::Show for Local { ... }    // and on either side of an impl head
 
 ### Generated Imports
 
-Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported via a generator: `.g4`, `.proto`, a Wado dialect, and so on. Name the generator as a `[build-dependencies]` entry or as a relative path. See [the spec](./spec-modules.md#generated-imports-kiln) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
+Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported via a generator: `.g4`, `.proto`, a Wado dialect, and so on. Name the generator as a `[build-dependencies]` entry or as a relative path. See [the spec](./spec-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
 
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
@@ -50,7 +50,7 @@ use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
 
 Code a generator writes may call a runtime library. Grog's does, so a package
 lists `wado-lang:grog` under `[dependencies]` as well. See
-[the spec](./spec-modules.md#manifest).
+[the spec](./spec-kiln.md#manifest).
 
 ```wado
 use grog from "lib:grog";
@@ -64,7 +64,7 @@ let back = grog::decode::<Account, ByteList>(bytes)?;
 
 A `.wasm` / `.wat` asset is imported with `with { type: "wasm" | "wat" }`. The
 compiler detects from the binary whether the file is a core module or a
-Component Model component — both use `type: "wasm"`. See [the spec](./spec-modules.md#wasm-module-and-component-imports).
+Component Model component, so both use `type: "wasm"`. See [the spec](./spec-modules.md#wasm-module-and-component-imports).
 
 ```wado
 // Core wasm / wat: each export becomes a free function.
@@ -176,7 +176,7 @@ match x { Some(x) => ... }                        // warns: x means two things h
 
 ## Global Variables
 
-See [the spec](./spec-lexical.md#global-variables).
+See [the spec](./spec-expressions.md#global-variables).
 
 ```wado
 global PI: f64 = 3.14159;           // immutable
@@ -192,9 +192,8 @@ fn example() {
 ```
 
 An initializer must be pure: calling a function that declares an effect is a
-compile error. A user-defined effect's operation is another matter — it may be
-dispatched, and traps at module init where no `with … do` installs a handler,
-just as it would in a function body. An initializer may install its own.
+compile error. It may still dispatch a user-defined effect's operation, which
+behaves as it would in a function body, and it may install its own handler.
 
 ## Types
 
@@ -356,8 +355,8 @@ for let c of "hello".chars() {
 A `StrSlice` views part of a string without copying it. Its ends are always on
 character boundaries, which is why it is a `struct` and not a newtype over
 `ByteSlice`. `AsStrSlice` lets one signature take an owned `String`, a
-reference to one, or a view of one — Wado's answer to Rust's `AsRef<str>`. See
-[the spec](./spec-traits.md#string-views).
+reference to one, or a view of one. It is Wado's answer to Rust's `AsRef<str>`. See
+[the spec](./spec-types.md#string-views).
 
 ```wado
 let v = "banana".as_str_slice();
@@ -375,7 +374,7 @@ fn byte_len<S: AsStrSlice>(s: S) -> i32 {
 byte_len("banana");              // a String, a &String, or a StrSlice
 ```
 
-Tagged templates (see [the spec](./spec-functions.md#tagged-template-literals)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
+Tagged templates (see [the spec](./spec-literals.md#tagged-template-literals)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
 
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
@@ -602,7 +601,7 @@ Key differences from Rust:
 
 ## Operators
 
-See the spec on [precedence](./spec-lexical.md#precedence) and [overloading](./spec-traits.md#arithmetic-operator-traits).
+See the spec on [precedence](./spec-expressions.md#precedence) and [overloading](./spec-standard-traits.md#arithmetic-operator-traits).
 
 ```wado
 // Arithmetic
@@ -825,10 +824,10 @@ let first_even = find: {
 ### Branch Hints
 
 `builtin::cold_path()` marks the path containing it as rarely executed, and
-emits no code. The engine predicts the other side of the branch, and the inliner
-leaves the cold path out of its cost estimate. It is a statement rather than a
-condition wrapper, so it also works in a `match` or `if let` arm, where no
-boolean is available. See [the spec](./spec-control-flow.md#branch-hints).
+changes nothing the program computes. It hints that the other side of the
+branch is the likely one. It is a statement rather than a condition wrapper, so
+it also works in a `match` or `if let` arm, where no boolean is available. See
+[the spec](./spec-control-flow.md#branch-hints).
 
 ```wado
 if i >= len {
@@ -846,7 +845,9 @@ return slow_path(key);
 
 ## Assert
 
-`assert` behaves like power-assert.
+`assert` behaves like power-assert, in a test or in ordinary code. No build
+removes one; `-Os` (`-f bare-asserts`) drops only its message. See
+[the spec](./spec-assertions.md).
 
 ```wado
 assert x > 0;
@@ -911,7 +912,7 @@ one. It goes on a module function, an `impl` method, or a trait method.
 ### Local Items
 
 `struct` and `type` (newtype) may be declared inside a function body, scoped to
-the declaring block. See [the spec](./spec-lexical.md#local-item-definitions).
+the declaring block. See [the spec](./spec-expressions.md#local-item-definitions).
 
 ```wado
 fn area(width: i32, height: i32) -> i32 {
@@ -922,8 +923,9 @@ fn area(width: i32, height: i32) -> i32 {
 ```
 
 Always private, and shadows a same-named module-level item.
-Either may be generic. `enum`/`variant`/`flags` and a local `impl`/`trait` are
-not yet supported.
+Either may be generic. A local `enum`/`variant`/`flags` and a local
+`impl`/`trait` are specified but do not work yet; see the
+[known gaps](./wep-2026-07-09-local-item-definitions.md#known-gaps).
 
 ### Methods
 
@@ -1328,7 +1330,7 @@ let d = char::from_u32_unchecked(65); // if you have already validated the u32 v
 
 ## Iterators
 
-See [the spec](./spec-traits.md#iterator-traits).
+See [the spec](./spec-standard-traits.md#iterator-traits).
 
 `Iterator` provides `next()`. `IntoIterator` converts a collection into an iterator. Every `Iterator` automatically implements `IntoIterator` via a blanket impl, so all iterators work with `for-of`.
 
@@ -1365,7 +1367,7 @@ Implement `IntoIterator` to make custom types work with `for-of`. See [`core:pre
 
 ## Ranges
 
-See [the spec](./spec-lexical.md#ranges).
+See [the spec](./spec-expressions.md#ranges).
 
 Two range types: `RangeExclusive<T>` and `RangeInclusive<T>`. Both are generic structs in `core:prelude`.
 
@@ -1488,7 +1490,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec-effects.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are. An operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec-effects.md#default-implementations).
 
 ```wado
 interface Log {
@@ -1538,7 +1540,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 Test blocks compile to the `test` world. Files with test blocks are discovered and executed by `wado test`:
 
 ```sh
-wado test                            # walk the project for every *.wado file
+wado test                            # walk the current directory for every *.wado file
 wado test file.wado                  # run a specific file
 wado test --filter '*pattern*'       # keep files whose path matches the wildcard
 wado test --test-name 'addition'     # run only test blocks whose name contains "addition"
@@ -1550,7 +1552,7 @@ wado test --coverage                 # also report the lines, branches and funct
 `#[coverage(off)]` on a `fn` or an `impl` (`#![coverage(off)]` on a module)
 leaves code no test can reach out of the report.
 
-Discovery walks the project root for every `*.wado` file, honouring
+Discovery walks the current directory for every `*.wado` file, honouring
 `.gitignore`, `.gitmodules`, dot-prefixed entries, and nested `wado.toml`
 boundaries (each sub-package is run in its own context). Add
 `[test].exclude = ["..."]` to `wado.toml` to skip extra paths. Files without
@@ -1564,8 +1566,7 @@ or `#[TODO]` test that resolved unexpectedly.
 `--test-name <pattern>` selects individual `test "name"` blocks the way
 `cargo test <name>` does: a case-sensitive substring match against the test's
 original name (matched against the source name, so multibyte names work).
-It is repeatable and combines with OR — a test runs if its name contains any
-pattern.
+It is repeatable, and a test runs if its name contains any of the patterns.
 
 ```wado
 test {
@@ -1619,8 +1620,8 @@ let src = #include_str("./runtime.wado");  // include file as String
 let icon = #include_bytes("./icon.png");   // include file as ByteList
 ```
 
-A literal read as numbers becomes a constant, with no decode loop at startup.
-See [the spec](./spec-control-flow.md#embedded-data).
+`List::from_le_bytes` reads a byte literal as little-endian numbers. See
+[the spec](./spec-literals.md#embedded-data).
 
 ```wado
 let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s
@@ -1816,8 +1817,8 @@ let p = from_string::<Point>("{\"x\":1,\"y\":2}"); // Ok(Point { x: 1, y: 2 })
 
 ### core:cbor
 
-CBOR (RFC 8949), same serde model as JSON — any JSON-serializable type works
-unchanged. See [`core:cbor`](./stdlib-core-cbor.md).
+CBOR (RFC 8949) uses the same serde model as JSON, so any JSON-serializable type
+works unchanged. See [`core:cbor`](./stdlib-core-cbor.md).
 
 ```wado
 use { to_bytes, from_bytes, to_bytes_canonical } from "core:cbor";
@@ -1827,7 +1828,7 @@ let dec = from_bytes::<Point>(enc);          // variation-tolerant decode
 let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 ```
 
-### Other core modules
+### Other Core Modules
 
 - [`core:jsonc`](./stdlib-core-jsonc.md) — reads JSON with comments and
   trailing commas, and edits it by JSON Pointer with the comments kept

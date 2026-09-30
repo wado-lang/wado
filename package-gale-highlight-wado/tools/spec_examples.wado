@@ -71,16 +71,10 @@ pub struct Citation {
 /// What a block names in the HTML comment before it: `null` when the comment
 /// holds no JSON object, or why the object is no reference.
 pub fn reference_of(block: &FencedCode) -> Result<Option<Citation>, String> {
-    let Some(html) = block.html_before else {
+    let Some(comment) = block.comment_before else {
         return Result::Ok(null);
     };
-    let Some(inner) = html.strip_prefix("<!--") else {
-        return Result::Ok(null);
-    };
-    let Some(inner) = inner.strip_suffix("-->") else {
-        return Result::Ok(null);
-    };
-    let body = inner.trim();
+    let body = comment.trim();
     if !body.starts_with("{") {
         return Result::Ok(null);
     }

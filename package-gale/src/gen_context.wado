@@ -146,6 +146,14 @@ pub struct GenContext {
     /// reads the slots itself. `caller_follow_gate_seen`'s question, asked per
     /// rule; the seeds of the fixpoint `lower` closes.
     rule_reads_follow: List<bool>,
+    /// Per rule index: the simulator decides inside the rule's body, not only
+    /// at its left-recursion loop.
+    rule_body_predicts: List<bool>,
+    /// Per rule index: the rule makes a decision the simulator decides.
+    rule_asks_simulator: List<bool>,
+    /// Per rule index: a call to the rule can reach one that asks the
+    /// simulator, so the call pushes the return state the prediction reads.
+    rule_reaches_simulator: List<bool>,
     /// Per rule index: the callees a call in this rule hands its own
     /// continuation to. Such a call spells `follow0…` only where the callee
     /// declares the slots, which is what makes this a fixpoint rather than a
@@ -183,9 +191,6 @@ pub struct GenContext {
     /// Set where a decision routes to the runtime ATN simulator; gates its
     /// infrastructure, so a grammar without one stays byte-identical.
     needs_atn_seen: bool,
-    /// Set where a scan decides through the simulator too. Gates the scans'
-    /// `atn` parameter, so a `??`-only grammar's scans borrow nothing.
-    needs_scan_atn_seen: bool,
     /// Set where a left-recursive rule's scan answers from the parser's memo.
     scan_memo: bool,
     /// Set while the atom of a rule whose mid operands are gated emits.
@@ -284,7 +289,7 @@ pub struct GenContext {
     /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
     /// fns: `[action_id, body]`. The dispatch calls `pred_<id>(p)` instead of
     /// inlining the condition, so the same fn is callable from every decision
-    /// path (token-led / interchangeable dispatch and the ATN disabled-seed prune).
+    /// path (token-led / interchangeable dispatch and the ATN's disabled alternatives).
     predicate_fns: List<[i32, String]>,
     rule_follow_kinds: TreeMap<String, List<String>>,
     rule_follow_exact: bool,
@@ -374,6 +379,9 @@ impl GenContext {
             lr_rule_snakes: [],
             follow_rule_snakes: [],
             rule_reads_follow: false_flags(rule_count),
+            rule_body_predicts: false_flags(rule_count),
+            rule_asks_simulator: false_flags(rule_count),
+            rule_reaches_simulator: false_flags(rule_count),
             follow_forward_edges: empty_name_lists(rule_count),
             follow_mask_registry: TreeMap::new(),
             follow_mask_depths: [],
@@ -382,7 +390,6 @@ impl GenContext {
             diagnostics: [],
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
-            needs_scan_atn_seen: false,
             scan_memo: false,
             lr_cont_in_atom: false,
             needs_lr_atn_seen: false,
@@ -444,7 +451,7 @@ impl GenContext {
     }
 
     fn scan_forward_target(&self, snake: &String) -> Option<String> {
-        if self.needs_scan_atn() || self.rule_reads_follow(snake) {
+        if self.scan_reaches_simulator(snake) || self.rule_reads_follow(snake) {
             return null;
         }
         let rule = &self.parser_rules[self.snake_index[*snake]];
@@ -561,8 +568,8 @@ impl GenContext {
 
     /// Whether an action of the rule being emitted reads the binding `base`.
     pub fn reads_binding<S: AsStrSlice>(&self, base: S) -> bool {
-        let r = self.current_rule_index;
-        assert r >= 0 && r < self.binding_reads.len(), "gen_parser installs the binding reads before any rule emits";
+        let r = self.current_rule_index();
+        assert r < self.binding_reads.len(), "gen_parser installs the binding reads before any rule emits";
         return match &self.binding_reads[r] {
             Some(reads) => reads.contains_str(base),
             None => true,
@@ -570,13 +577,13 @@ impl GenContext {
     }
 
     pub fn record_alt_scan_fn<S: AsStrSlice>(&mut self, alt: i32, name: S) {
-        let key = [self.current_rule_index, alt];
-        assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${self.current_rule_index} already has a scan function`;
+        let key = [self.current_rule_index(), alt];
+        assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${key.0} already has a scan function`;
         self.alt_scan_fns[key] = name.to_string();
     }
 
     pub fn alt_scan_fn(&self, alt: i32) -> Option<String> {
-        return self.alt_scan_fns.get([self.current_rule_index, alt]);
+        return self.alt_scan_fns.get([self.current_rule_index(), alt]);
     }
 
     /// Return the next scan-group id and advance the counter. Replaces the
@@ -603,33 +610,60 @@ impl GenContext {
         return self.caller_follow_gate_seen;
     }
 
-    /// Record a decision the runtime simulator makes.
-    pub fn mark_needs_atn(&mut self) {
-        self.needs_atn_seen = true;
+    /// Record a decision the simulator makes inside the body of the rule being
+    /// lowered.
+    pub fn mark_body_predicts(&mut self) {
+        let idx = self.current_rule_index();
+        self.mark_asks_simulator(idx);
+        self.rule_body_predicts[idx] = true;
+    }
+
+    /// Whether the functions the current rule's body is emitted into, beside a
+    /// left-recursive rule's walker, take the invocation's `min_prec`: a
+    /// prediction inside the body reads it, and only a rule whose loop the
+    /// simulator decides has one to read. Asked at every declaration and every
+    /// call site.
+    pub fn helpers_take_prec(&self) -> bool {
+        let idx = self.current_rule_index();
+        return self.rule_body_predicts[idx] && self.lr_loop_entry_decision(idx) >= 0;
     }
 
     /// Whether the generated parser emits the ATN simulator infrastructure
-    /// (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack maintenance).
+    /// (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack maintenance). A scan
+    /// asks the simulator whatever the parse asks it, so every scan then
+    /// borrows the parser's ATN state.
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
     }
 
-    /// Record a scan that decides through the simulator.
-    pub fn mark_needs_scan_atn(&mut self) {
+    /// Record a decision the simulator makes in rule `rule`.
+    pub fn mark_asks_simulator(&mut self, rule: i32) {
         self.needs_atn_seen = true;
-        self.needs_scan_atn_seen = true;
+        self.rule_asks_simulator[rule] = true;
     }
 
-    /// Whether scans decide through the ATN, so every scan borrows the parser's
-    /// ATN state. (`ATN_SIM` is emitted whenever `needs_atn`.)
-    pub fn needs_scan_atn(&self) -> bool {
-        return self.needs_scan_atn_seen;
+    /// Whether the current rule makes a decision the simulator decides.
+    pub fn current_rule_asks_simulator(&self) -> bool {
+        return self.rule_asks_simulator[self.current_rule_index()];
+    }
+
+    /// Settle `scan_reaches_simulator` once every rule that asks the simulator
+    /// is marked.
+    pub fn close_simulator_reach(&mut self) {
+        self.rule_reaches_simulator = close_over_callers(&self.scannable_callees(), self.rule_asks_simulator);
+    }
+
+    /// Whether a call to the rule `snake` can reach a decision the simulator
+    /// decides, so the scan pushes the return state the prediction reads.
+    pub fn scan_reaches_simulator<S: AsStrSlice>(&self, snake: S) -> bool {
+        return self.rule_reaches_simulator[self.snake_index[snake.to_string()]];
     }
 
     /// Record an ATN-class LR rule: its loop decision reads the LR tables.
     pub fn mark_needs_lr_atn(&mut self) {
         self.needs_lr_atn_seen = true;
-        self.mark_needs_scan_atn();
+        let idx = self.current_rule_index();
+        self.mark_asks_simulator(idx);
     }
 
     /// Whether `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
@@ -643,7 +677,8 @@ impl GenContext {
         return `${self.atn_state_path()}.stack`;
     }
 
-    fn atn_state_path(&self) -> String {
+    /// The ATN state as a place.
+    pub fn atn_state_path(&self) -> String {
         return self.state_path(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
     }
 
@@ -676,7 +711,7 @@ impl GenContext {
         if self.emit_scan_gate() {
             args.push_str(`, ${self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD)}`);
         }
-        if self.needs_scan_atn() {
+        if self.needs_atn() {
             args.push_str(`, ${self.atn_state_arg()}`);
         }
         if self.scan_memo {
@@ -690,10 +725,12 @@ impl GenContext {
     /// Candidates of a scan tournament that share a prefix each scan the
     /// operand under it, so nesting one inside another doubles the work at every
     /// level. A scan decides nothing and reads only its arguments, so its answer
-    /// can be kept for the parse. A scan that borrows the ATN state reads the
-    /// caller stack too, which no key here holds.
+    /// can be kept for the parse. A prediction reads the caller stack too,
+    /// which no key here holds: the walk hides it, and an answer that needed it
+    /// is not kept. A left-recursion loop the simulator decides reads the
+    /// callers outside that, so it leaves no memo.
     pub fn set_scan_memo(&mut self, on: bool) {
-        assert !(on && self.needs_scan_atn()), "set_scan_memo: a scan that reads the ATN caller stack has no memo key";
+        assert !(on && self.needs_lr_atn()), "set_scan_memo: an LR loop decision reads callers no memo key holds";
         self.scan_memo = on;
     }
 
@@ -747,11 +784,7 @@ impl GenContext {
     }
 
     fn current_captures(&self) -> &RuleCaptures {
-        let ridx = self.current_rule_index();
-        if ridx < 0 {
-            return &NO_CAPTURES;
-        }
-        return self.rule_captures(&self.parser_rules[ridx].name);
+        return self.rule_captures(&self.current_rule().name);
     }
 
     pub fn set_rule_follow(&mut self, kinds: TreeMap<String, List<String>>, exact: bool) {
@@ -820,7 +853,7 @@ impl GenContext {
     }
 
     /// Store the ATN decision-site → decision-number correspondence after the
-    /// ATN is built (only when `needs_atn`). Read by `atn_optional_enter_cond`.
+    /// ATN is built (only when `needs_atn`). Read by `atn_enters_cond`.
     pub fn set_atn_decision_sites(&mut self, sites: &List<i32>) {
         self.atn_decision_sites = *sites;
     }
@@ -905,15 +938,18 @@ impl GenContext {
     /// position (a zero-consumption scan cycle). A mandatory group in such a
     /// rule must scan strict to break the cycle (issue #1671).
     pub fn is_rule_scan_cyclic(&self, idx: i32) -> bool {
-        if idx < 0 || idx >= self.scan_cyclic.len() {
-            return false;
-        }
         return self.scan_cyclic[idx];
     }
 
-    /// The rule currently being emitted, or -1 outside rule-body emission.
+    /// The index of `current_rule`.
     pub fn current_rule_index(&self) -> i32 {
+        assert self.current_rule_index >= 0, "lowering and the parse and scan emit loops make each rule current before walking its body";
         return self.current_rule_index;
+    }
+
+    /// The rule being lowered or emitted.
+    pub fn current_rule(&self) -> &ParserRule {
+        return &self.parser_rules[self.current_rule_index()];
     }
 
     /// Must run before any body emit: a call site may target a later rule.
@@ -933,17 +969,15 @@ impl GenContext {
     /// Record that the rule being lowered reads the continuation it was called
     /// with directly — a caller-FOLLOW gate or a probe.
     pub fn mark_rule_reads_follow(&mut self) {
-        let idx = self.current_rule_index;
-        if idx >= 0 {
-            self.rule_reads_follow[idx] = true;
-        }
+        let idx = self.current_rule_index();
+        self.rule_reads_follow[idx] = true;
     }
 
     /// Record that the rule being lowered hands its own continuation to
     /// `target`, so it reads the slots exactly when `target` declares them.
     pub fn mark_rule_forwards_follow<S: AsStrSlice>(&mut self, target: S) {
-        let idx = self.current_rule_index;
-        if idx >= 0 && !self.follow_forward_edges[idx].contains_str(target) {
+        let idx = self.current_rule_index();
+        if !self.follow_forward_edges[idx].contains_str(target) {
             self.follow_forward_edges[idx].push(target.to_string());
         }
     }
@@ -959,11 +993,7 @@ impl GenContext {
     /// The declaration side of `rule_reads_follow`, answered off the same list
     /// so a rule cannot declare what its callers do not pass.
     pub fn current_rule_reads_follow(&self) -> bool {
-        let idx = self.current_rule_index;
-        if idx < 0 {
-            return false;
-        }
-        return self.rule_reads_follow(&self.parser_rules[idx].snake_name);
+        return self.rule_reads_follow(&self.current_rule().snake_name);
     }
 
     pub fn set_follow_rule_snakes(&mut self, names: &List<String>) {
@@ -1250,14 +1280,10 @@ impl GenContext {
         self.diagnostics.push(Diagnostic { owner: *owner, kind, message: message.to_string() });
     }
 
-    /// The name of the parser rule currently being lowered / emitted, or
-    /// `""` outside a rule. Diagnostics raised from inside a rule use it as
-    /// their structured owner.
+    /// The name of `current_rule`, which diagnostics raised from inside a rule
+    /// use as their structured owner.
     pub fn current_rule_name(&self) -> String {
-        if self.current_rule_index < 0 {
-            return String::new();
-        }
-        return self.parser_rules[self.current_rule_index].name;
+        return self.current_rule().name;
     }
 
     /// Return the collected diagnostics (a value copy under Wado value
@@ -2142,7 +2168,7 @@ impl GenContext {
     /// "the first-set token is present at the input position" implies
     /// "this element will successfully consume that token (and only
     /// that token) when it matches". The criterion underlying LL repair
-    /// for nullable suffixes (Phase 5 step 3): a deep-nullable suffix
+    /// for nullable suffixes: a deep-nullable suffix
     /// can contribute its first set to a `RuleRef`'s caller-follow only
     /// when every walked element is first-exact. Otherwise the
     /// suffix's first might be a multi-element alt's leading token
@@ -2443,42 +2469,33 @@ impl GenContext {
     /// `is_element_scannable_at` — so one O(V+E) fixpoint replaces the recursive
     /// check, which was exponential on large mutual-recursion SCCs (see perf.md).
     pub fn precompute_scannability(&mut self) {
-        let n = self.parser_rules.len();
-        let mut bad: List<bool> = [];
-        for let mut i = 0; i < n; i += 1 {
-            bad.push(false);
+        let callees = self.scannable_callees();
+        let mut undefined_ref: List<bool> = [];
+        for let c of &callees {
+            undefined_ref.push(c.contains(&-1));
         }
-
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for let mut rid = 0; rid < n; rid += 1 {
-                if !bad[rid] && self.references_bad_rule(rid, &bad) {
-                    bad[rid] = true;
-                    changed = true;
-                }
-            }
-        }
-
-        for let mut rid = 0; rid < n; rid += 1 {
+        let bad = close_over_callers(&callees, undefined_ref);
+        for let mut rid = 0; rid < bad.len(); rid += 1 {
             self.scannable_cache[rid] = Option::Some(!bad[rid]);
         }
     }
 
-    /// The scannability fixpoint's step relation: rule `rid` references an
-    /// undefined rule, or one already marked bad.
-    fn references_bad_rule(&self, rid: i32, bad: &List<bool>) -> bool {
-        let mut names: List<String> = [];
-        for let alt of &self.parser_rules[rid].alternatives {
-            collect_scannable_refs(&alt.elements, &mut names);
-        }
-        for let name of &names {
-            let r = self.rule_index_of(name);
-            if r < 0 || bad[r] {
-                return true;
+    /// Per rule index, the rules a scan of it calls, `-1` standing for a name
+    /// no parser rule has.
+    fn scannable_callees(&self) -> List<List<i32>> {
+        let mut callees: List<List<i32>> = [];
+        for let rule of &self.parser_rules {
+            let mut names: List<String> = [];
+            for let alt of &rule.alternatives {
+                collect_scannable_refs(&alt.elements, &mut names);
             }
+            let mut indices: List<i32> = [];
+            for let name of &names {
+                indices.push(self.rule_index_of(name));
+            }
+            callees.push(indices);
         }
-        return false;
+        return callees;
     }
 
     /// Get the rule name that owns the general group types inside a given
@@ -3048,6 +3065,23 @@ fn visiting_index<S: AsStrSlice>(visiting: &List<String>, name: S) -> i32 {
         }
     }
     return -1;
+}
+
+/// `marked` closed over callers: a rule is marked once a rule `callees` lists
+/// for it is. A callee of `-1` names no rule and marks nothing.
+pub fn close_over_callers(callees: &List<List<i32>>, marked: List<bool>) -> List<bool> {
+    let mut out = marked;
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut r = 0; r < callees.len(); r += 1 {
+            if !out[r] && callees[r].iter_ref().any(|c| *c >= 0 && out[*c]) {
+                out[r] = true;
+                changed = true;
+            }
+        }
+    }
+    return out;
 }
 
 /// Collect the parser-rule names an element sequence references for

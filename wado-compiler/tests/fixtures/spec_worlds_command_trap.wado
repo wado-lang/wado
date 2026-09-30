@@ -1,0 +1,17 @@
+// A trap ends a command with a failed status. A failed assert logs its
+// message to stderr first, and nothing after the trap runs.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let items: List<i32> = [];
+    println("start");
+    assert items.len() > 0, "no items to process";
+    println("never printed");
+}
+
+__DATA__
+{
+    "stdout": "start\n",
+    "stderr_contains": ["no items to process"],
+    "trapped": true
+}

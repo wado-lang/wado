@@ -142,8 +142,8 @@ A `#[TODO]` rule was dropped: it asked a WEP to name every fixture marked
 gap. The example of a `#[TODO]` test is itself marked, by design.
 
 Marl's `fenced_code_blocks` gives the checker what it reads of each fenced
-block: its info string, its text, its source line, and the HTML block directly
-before it. Marl's document tree stays `internal`.
+block: its info string, its text, its source line, and the text of the comment
+block directly before it. Marl's document tree stays `internal`.
 
 ### Rollout
 
