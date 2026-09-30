@@ -904,10 +904,20 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     w.line(`return ${SCAN_MEMO_HANDLE}.end_of(memo_at);`);
     w.end();
     w.line(`let memo_gate = ${gate};`);
+    // The key holds no caller stack, so a walk whose prediction read one is
+    // not kept for another caller.
+    if ctx.needs_atn() {
+        w.line(`let memo_callers = ${ctx.atn_state_path()}.hide_callers();`);
+    }
     w.line(`let memo_end = ${walk_name}(tokens, pos${scan_trailing_args(ctx, true)}, min_prec${lr_cont_forward(
         mid_operand_gated,
     )});`);
-    w.line(`${SCAN_MEMO_HANDLE}.put(${key}, memo_gate, memo_end, ${gate});`);
+    let put = `${SCAN_MEMO_HANDLE}.put(${key}, memo_gate, memo_end, ${gate});`;
+    if ctx.needs_atn() {
+        w.line(`if !${ctx.atn_state_path()}.reveal_callers(memo_callers) { ${put} }`);
+    } else {
+        w.line(&put);
+    }
     w.line("return memo_end;");
     w.end();
     w.blank();
@@ -1842,10 +1852,11 @@ fn scan_rule_call_stmt(rc: &ScanRuleCallElement, ctx: &mut GenContext) -> String
     return `pos = scan_${ctx.scan_alias(&rc.target_snake)}(tokens, pos${ctx.scan_state_args()}${follow_arg_str}${min_prec_arg}${cont});`;
 }
 
-/// A scan's rule call. The callee's simulation sees the caller's continuation, as
-/// the parse side's entry wrapper pushes it; popping before any fail check never leaks it.
+/// A scan's rule call. A callee that can reach a simulator decision sees the
+/// caller's continuation, as the parse side's entry wrapper pushes it; popping
+/// before any fail check never leaks it.
 fn gen_scan_rule_call(w: &mut CodeWriter, rc: &ScanRuleCallElement, ctx: &mut GenContext) {
-    if !ctx.needs_atn() {
+    if !ctx.scan_reaches_simulator(&rc.target_snake) {
         w.line(&scan_rule_call_stmt(rc, ctx));
         return;
     }
@@ -2802,15 +2813,14 @@ fn admit_rule_follow_into_nullable(
     }
 }
 
-/// Whether a rule's at-end conflict routes to the simulator, which the scan of
-/// that rule then consults as the parse does.
-pub fn grammar_scans_through_atn(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> bool {
+/// Mark each rule whose at-end conflict routes to the simulator, which the scan
+/// of that rule then consults as the parse does.
+pub fn mark_at_end_conflicts_routed(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
         if rule_has_at_end_conflict(&grammar.parser_rules[r], &lowered.parser_rules[r], ctx) {
-            return true;
+            ctx.mark_asks_simulator(r);
         }
     }
-    return false;
 }
 
 fn rule_has_at_end_conflict(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> bool {
@@ -8025,17 +8035,19 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
         w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx)};`);
         return;
     }
+    assert ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator";
     w.line("let mut _atn_disabled: List<i32> = [];");
     for let g of gates {
         w.line(`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
     }
     w.line(
-        `let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &${ctx.atn_stack_place()}, ${tokens}, ${pos}, TK_EOF, 0, &_atn_disabled);`,
+        `let _atn_alt = ${ctx.atn_state_path()}.predict(&ATN_SIM, ${dec}, ${tokens}, ${pos}, TK_EOF, 0, &_atn_disabled);`,
     );
 }
 
 /// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`.
 fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(atn_dec: i32, tokens: S, pos: S1, ctx: &GenContext) -> String {
+    assert ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator";
     return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${atn_prec_arg(
         ctx,
     )})`;

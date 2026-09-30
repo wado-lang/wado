@@ -149,6 +149,11 @@ pub struct GenContext {
     /// Per rule index: the simulator decides inside the rule's body, not only
     /// at its left-recursion loop.
     rule_body_predicts: List<bool>,
+    /// Per rule index: the rule makes a decision the simulator decides.
+    rule_asks_simulator: List<bool>,
+    /// Per rule index: a call to the rule can reach one that asks the
+    /// simulator, so the call pushes the return state the prediction reads.
+    rule_reaches_simulator: List<bool>,
     /// Per rule index: the callees a call in this rule hands its own
     /// continuation to. Such a call spells `follow0…` only where the callee
     /// declares the slots, which is what makes this a fixpoint rather than a
@@ -375,6 +380,8 @@ impl GenContext {
             follow_rule_snakes: [],
             rule_reads_follow: false_flags(rule_count),
             rule_body_predicts: false_flags(rule_count),
+            rule_asks_simulator: false_flags(rule_count),
+            rule_reaches_simulator: false_flags(rule_count),
             follow_forward_edges: empty_name_lists(rule_count),
             follow_mask_registry: TreeMap::new(),
             follow_mask_depths: [],
@@ -444,7 +451,7 @@ impl GenContext {
     }
 
     fn scan_forward_target(&self, snake: &String) -> Option<String> {
-        if self.needs_atn() || self.rule_reads_follow(snake) {
+        if self.scan_reaches_simulator(snake) || self.rule_reads_follow(snake) {
             return null;
         }
         let rule = &self.parser_rules[self.snake_index[*snake]];
@@ -606,8 +613,8 @@ impl GenContext {
     /// Record a decision the simulator makes inside the body of the rule being
     /// lowered.
     pub fn mark_body_predicts(&mut self) {
-        self.mark_needs_atn();
         let idx = self.current_rule_index();
+        self.mark_asks_simulator(idx);
         self.rule_body_predicts[idx] = true;
     }
 
@@ -629,15 +636,59 @@ impl GenContext {
         return self.needs_atn_seen;
     }
 
-    /// Record a decision the simulator makes.
-    pub fn mark_needs_atn(&mut self) {
+    /// Record a decision the simulator makes in rule `rule`.
+    pub fn mark_asks_simulator(&mut self, rule: i32) {
         self.needs_atn_seen = true;
+        self.rule_asks_simulator[rule] = true;
+    }
+
+    /// Whether the current rule makes a decision the simulator decides.
+    pub fn current_rule_asks_simulator(&self) -> bool {
+        return self.rule_asks_simulator[self.current_rule_index()];
+    }
+
+    /// Settle `scan_reaches_simulator` once every rule that asks the simulator
+    /// is marked.
+    pub fn close_simulator_reach(&mut self) {
+        self.rule_reaches_simulator = self.rule_asks_simulator;
+        let mut callees: List<List<String>> = [];
+        for let rule of &self.parser_rules {
+            let mut refs: List<String> = [];
+            for let alt of &rule.alternatives {
+                collect_scannable_refs(&alt.elements, &mut refs);
+            }
+            callees.push(refs);
+        }
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for let mut r = 0; r < callees.len(); r += 1 {
+                if self.rule_reaches_simulator[r] {
+                    continue;
+                }
+                for let name of &callees[r] {
+                    let callee = self.rule_index_of(name);
+                    if callee >= 0 && self.rule_reaches_simulator[callee] {
+                        self.rule_reaches_simulator[r] = true;
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether a call to the rule `snake` can reach a decision the simulator
+    /// decides, so the scan pushes the return state the prediction reads.
+    pub fn scan_reaches_simulator<S: AsStrSlice>(&self, snake: S) -> bool {
+        return self.rule_reaches_simulator[self.snake_index[snake.to_string()]];
     }
 
     /// Record an ATN-class LR rule: its loop decision reads the LR tables.
     pub fn mark_needs_lr_atn(&mut self) {
         self.needs_lr_atn_seen = true;
-        self.mark_needs_atn();
+        let idx = self.current_rule_index();
+        self.mark_asks_simulator(idx);
     }
 
     /// Whether `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
@@ -651,7 +702,8 @@ impl GenContext {
         return `${self.atn_state_path()}.stack`;
     }
 
-    fn atn_state_path(&self) -> String {
+    /// The ATN state as a place.
+    pub fn atn_state_path(&self) -> String {
         return self.state_path(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
     }
 
@@ -698,10 +750,12 @@ impl GenContext {
     /// Candidates of a scan tournament that share a prefix each scan the
     /// operand under it, so nesting one inside another doubles the work at every
     /// level. A scan decides nothing and reads only its arguments, so its answer
-    /// can be kept for the parse. A scan that borrows the ATN state reads the
-    /// caller stack too, which no key here holds.
+    /// can be kept for the parse. A prediction reads the caller stack too,
+    /// which no key here holds: the walk hides it, and an answer that needed it
+    /// is not kept. A left-recursion loop the simulator decides reads the
+    /// callers outside that, so it leaves no memo.
     pub fn set_scan_memo(&mut self, on: bool) {
-        assert !(on && self.needs_atn()), "set_scan_memo: a scan that reads the ATN caller stack has no memo key";
+        assert !(on && self.needs_lr_atn()), "set_scan_memo: an LR loop decision reads callers no memo key holds";
         self.scan_memo = on;
     }
 

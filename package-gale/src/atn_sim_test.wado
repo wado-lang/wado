@@ -311,6 +311,46 @@ test "a recorded verdict is keyed by the caller stack" {
     assert atn_predict_once(&sim, d, &mut state, &kinds, 0, eof) == inner, "the inner question answers as before";
 }
 
+// A scan whose result is kept for other callers hides the callers it has: a
+// prediction that needs one reads the whole stack, and says so.
+test "a prediction that needs a hidden caller reads the whole stack and says so" {
+    let mut g = parse(NG_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = decode(&atn);
+    let d = optional_decision(&atn);
+    let csr = &atn.call_site_returns;
+    let kinds = to_kinds(&[
+        mk(7),
+        mk(4),
+    ]);
+    let mut state = AtnState::new();
+    state.stack = [-1, csr[0], csr[1], csr[2], csr[1]];
+    let hidden = state.hide_callers();
+    let inner = atn_predict_once(&sim, d, &mut state, &kinds, 0, eof);
+    assert state.reveal_callers(hidden);
+    assert alt_target_kind(&atn, d, inner) == ATN_BLOCK_END, "inner ?? must EXIT, as with the whole stack";
+    let again = state.hide_callers();
+    assert atn_predict_once(&sim, d, &mut state, &kinds, 0, eof) == inner;
+    assert state.reveal_callers(again), "a recorded verdict still says it read a hidden caller";
+}
+
+test "a prediction settled inside the visible frames reads no hidden caller" {
+    let mut g = parse(NG_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let tk = build_token_kinds(&g);
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 1);
+    let mut state = AtnState::new();
+    state.stack = [-1, atn.call_site_returns[0]];
+    let hidden = state.hide_callers();
+    let x = to_kinds(&[mk(4)]);
+    assert atn_predict_once(&sim, d, &mut state, &x, 0, tk.0["TK_EOF"]) == 0;
+    assert !state.reveal_callers(hidden);
+}
+
 // P4.1: the rewritten LR loop-entry form is walkable. A naive
 // pre-rewrite ATN (`expr -> RuleRef(expr) ...` at position 0) would
 // left-recurse forever in `atn_closure`; the precedence-climbing rewrite

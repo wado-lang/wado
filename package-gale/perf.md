@@ -154,10 +154,20 @@ parse-side tournaments repeat all of it.
 A scan decides nothing and reads only its arguments, so the parser now keeps
 each left-recursive rule's answer for the whole parse (`ScanMemo`, in
 `src/runtime/scan_memo.wado`). The key is the position, `min_prec`, `follow`,
-`lr_cont` and the gate. The answer is the end and the gate the scan leaves. A
-grammar whose scans read the ATN caller stack gets no memo, because the key does
-not hold the stack. One simulator decision anywhere in the grammar, a `??` or a
-`.*?` included, turns it off for every rule.
+`lr_cont` and the gate. The answer is the end and the gate the scan leaves.
+
+A simulator decision inside the walk also reads the ATN caller stack, which the
+key does not hold. The walk hides the frames below it (`AtnState::hide_callers`).
+A prediction still undecided when it pops into them reads the whole stack, and
+the walk's answer is then not kept. A left-recursion loop the simulator decides
+reads its callers outside that check, so a grammar with one has no memo.
+
+What the simulator still costs a grammar that never needs a hidden caller is the
+stack itself: a scan pushes a return state around each call that can reach a
+decision the simulator makes. TypeScript's `exportStatement` is one such
+decision, and a statement reaches it through every function body. The parse
+runs at 2.6 MB/s, against 3.1 MB/s with the pushes removed and 0.7 MB/s with no
+memo.
 
 Release host, `-O2`, one parse of Rust nested 14 deep:
 

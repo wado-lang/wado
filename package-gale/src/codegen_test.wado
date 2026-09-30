@@ -2991,6 +2991,26 @@ WS : [ \\t]+ -> skip ;
 ", got;
 }
 
+// Both alternatives of `a` scan `e` at one position, and `t` inside it decides
+// by what `a` has left: `e` ends before the `!` under the first and after it
+// under the second. The second reaches further only with its own answer, so
+// the scan memo keeps no answer that read the caller.
+test "a remembered scan answers only where no prediction read its caller" {
+    let got = parses("grammar T;
+s : a EOF ;
+a : e '!' ';' | e ';' ';' ;
+e : e '+' e | t ;
+t : ID | ID '!' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a ! ;", "a ! ; ;", "a + b ! ; ;", "a + b ! ;"]);
+    assert got == "a ! ; => (s (a (e (t a)) ! ;))
+a ! ; ; => (s (a (e (t a !)) ; ;))
+a + b ! ; ; => (s (a (e (e (t a)) + (e (t b !))) ; ;))
+a + b ! ; => (s (a (e (e (t a)) + (e (t b))) ! ;))
+", got;
+}
+
 test "a non-greedy optional in a contested alternative skips where the rest can match" {
     let lr = parses("grammar T;
 s : e EOF ;
