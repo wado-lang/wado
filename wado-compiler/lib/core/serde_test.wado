@@ -19,8 +19,10 @@ use {
     DuplicateKeyPolicy,
     report_duplicate_field,
     TextKeySerializer,
+    Visitor,
 } from "core:serde";
 use { TreeMap } from "core:collections";
+use json from "core:json";
 
 struct MockWriter {
     buf: String,
@@ -445,4 +447,163 @@ test "TextKeySerializer spells a scalar and refuses every other shape" {
     assert key_refused(&map);
     assert key_refused(&KeyPair { a: 1 });
     assert key_refused(&KeyShape::Dot(1));
+}
+
+// --- a case read by discriminant ---
+
+/// `D`, with each variant's case named by its discriminant: JSON's
+/// `{"1": 5}` reads as case 1 with payload 5. No stdlib format encodes one,
+/// and a non-self-describing format is what would.
+struct ByDisc<D: Deserializer> {
+    inner: &mut D,
+}
+
+struct ByDiscAccess<A: DeserializeVariant> {
+    inner: A,
+}
+
+#[coverage(off)]
+impl<A: DeserializeVariant> DeserializeVariant for ByDiscAccess<A> {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        return self.inner.variant_name();
+    }
+
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        return Result::Ok(i32::from_str(self.inner.variant_name()?).unwrap());
+    }
+
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return self.inner.payload();
+    }
+
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        return self.inner.is_unit();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return self.inner.end();
+    }
+}
+
+// A variant reaches only `begin_variant` and the payload's own read.
+#[coverage(off)]
+impl<D: Deserializer> Deserializer for ByDisc<D> {
+    type SeqAccess = D::SeqAccess;
+    type MapAccess = D::MapAccess;
+    type StructAccess = D::StructAccess;
+    type VariantAccess = ByDiscAccess<D::VariantAccess>;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return self.inner.deserialize_i32();
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return self.inner.deserialize_i64();
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return self.inner.deserialize_u32();
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return self.inner.deserialize_u64();
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return self.inner.deserialize_i128();
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return self.inner.deserialize_u128();
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return self.inner.deserialize_f32();
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return self.inner.deserialize_f64();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.inner.deserialize_f16();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.inner.deserialize_bf16();
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        return self.inner.deserialize_bool();
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        return self.inner.deserialize_char();
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return self.inner.deserialize_string();
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return self.inner.is_null();
+    }
+
+    fn begin_seq(&mut self) -> Result<D::SeqAccess, DeserializeError> {
+        return self.inner.begin_seq();
+    }
+
+    fn begin_map(&mut self) -> Result<D::MapAccess, DeserializeError> {
+        return self.inner.begin_map();
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<D::StructAccess, DeserializeError> {
+        return self.inner.begin_struct(name, num_fields);
+    }
+
+    fn begin_variant<S: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        num_cases: i32,
+    ) -> Result<ByDiscAccess<D::VariantAccess>, DeserializeError> {
+        return Result::Ok(ByDiscAccess { inner: self.inner.begin_variant(type_name, num_cases)? });
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return self.inner.deserialize_any(visitor);
+    }
+}
+
+/// A `T` whose cases are read by discriminant.
+struct ReadByDisc<T> {
+    value: T,
+}
+
+impl<T: Deserialize> Deserialize for ReadByDisc<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<ReadByDisc<T>, DeserializeError> {
+        let mut by_disc = ByDisc { inner: d };
+        return T::deserialize(&mut by_disc).map(|value| ReadByDisc { value });
+    }
+}
+
+enum Light {
+    Red,
+    Green,
+}
+
+variant Reading {
+    Missing,
+    Level(i32),
+}
+
+test "an enum or a variant reads its case by discriminant" {
+    assert json::from_string::<ReadByDisc<Light>>(`"1"`) matches { Ok(r) && r.value == Light::Green };
+    assert json::from_string::<ReadByDisc<Reading>>(`{"1":5}`) matches { Ok(r) && r.value matches { Level(5) } };
+    assert json::from_string::<ReadByDisc<Reading>>(`"0"`) matches { Ok(r) && r.value matches { Missing } };
+}
+
+test "a discriminant no case has is an unknown one" {
+    let e = json::from_string::<ReadByDisc<Light>>(`"7"`).unwrap_err();
+    assert e.kind == DeserializeErrorKind::UnknownVariant && e.message == "unknown variant discriminant";
+    assert json::from_string::<ReadByDisc<Reading>>(`"7"`) matches { Err(e) && e.kind == DeserializeErrorKind::UnknownVariant };
 }
