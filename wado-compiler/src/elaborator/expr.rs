@@ -719,9 +719,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The expectation a branching expression takes as its result type: one
-    /// still holding an inference variable is for its branches to answer.
+    /// still holding an inference variable, or still unknown (an unannotated
+    /// closure's return), is for its branches to answer.
     fn settled_result_expectation(&self, expected_type: Option<TypeId>) -> Option<TypeId> {
-        expected_type.filter(|&t| !self.type_has_infer_hole(t))
+        expected_type.filter(|&t| {
+            !self.type_has_infer_hole(t) && !self.tysys.type_table.borrow().is_indefinite(t)
+        })
     }
 
     /// Whether a branch's type waits on its siblings: one still unresolved,
