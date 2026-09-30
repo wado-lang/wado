@@ -3,8 +3,7 @@
 # Schema: https://mise.jdx.dev/schema/mise.json
 
 [tools]
-# Rust is absent because mise reads rust-toolchain.toml; dprint because
-# `wado-dev-tools format-md` embeds the markdown plugin as a Cargo dependency.
+# Rust is absent because mise reads rust-toolchain.toml.
 #
 # Node 26 (V8 14.6) ships stable JSPI, so `WebAssembly.Suspending` works without
 # `--experimental-wasm-jspi`, which Node 26 no longer accepts.
@@ -424,7 +423,7 @@ run = "cargo fmt --all"
 [tasks.format-md]
 description = "Format Markdown files"
 wait_for = ["format-rust"]
-run = "scripts/dev-bin.sh wado-dev-tools format-md"
+run = "scripts/dev-bin.sh wado run package-marl/src/main.wado"
 
 # Exclusions come from each package's wado.toml [format] (wado-compiler excludes
 # `tests/**`); generated/, build/, submodules and gitignored paths are automatic.
