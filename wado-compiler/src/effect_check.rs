@@ -148,9 +148,8 @@ impl PureContext {
 pub enum Impurity {
     /// The named callee declares an effect.
     Call(String),
-    /// The named operation is backed by the host, so dispatching it demands a
-    /// capability. A user-defined effect's operation demands none: it traps
-    /// where no handler answers, which is a runtime outcome, not an impurity.
+    /// The named operation demands its interface, which the position does not
+    /// hold.
     Dispatch(String),
     /// The position installs a handler for the named effect whose methods
     /// declare an effect it does not hold.
@@ -403,24 +402,27 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(sem, src, func, index, out);
+                    check_function_effects_sem(sem, src, func, index, None, out);
                 }
                 Item::Impl(impl_block) => {
                     check_impl_effect_conformance(sem, src, impl_block, index, out);
                     for method in &impl_block.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, None, out);
                     }
                 }
                 Item::Trait(trait_decl) => {
                     for method in &trait_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, None, out);
                     }
                 }
                 // An operation's default body is ordinary code, so what it
-                // performs is checked like any other function's.
+                // performs is checked like any other function's. It runs where
+                // the operation was dispatched, which held the interface.
                 Item::Interface(interface_decl) => {
+                    let def = index.resolutions.defs().def_at(interface_decl.id);
+                    let own = index.interfaces.get(&def).map(|(effect, _)| effect);
                     for method in &interface_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, own, out);
                     }
                 }
                 _ => {}
@@ -808,8 +810,8 @@ fn binding_granted_effects(
         .collect()
 }
 
-/// What a direct call of an operation `owner` declares demands of its caller.
-/// A user-defined effect demands nothing: an unhandled dispatch traps at runtime.
+/// What a direct call of an operation `owner` declares demands of its caller:
+/// the interface itself, whether a handler or the host answers it.
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
@@ -819,7 +821,7 @@ fn operation_requirements(
         return Vec::new();
     };
     let Some(fq) = cm_fq else {
-        return Vec::new();
+        return vec![effect.clone()];
     };
     if let Some(registry) = sem.cm_interface_registry()
         && registry.is_component_interface(fq)
@@ -897,6 +899,7 @@ fn check_function_effects_sem(
     module: &ModuleSource,
     func: &Function,
     index: &EffectIndex,
+    held: Option<&EffectRef>,
     out: &mut Vec<EffectError>,
 ) {
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
@@ -950,6 +953,7 @@ fn check_function_effects_sem(
         add_signature_resources(ann, caller_key, &scan, &mut current);
     }
     current.extend(benign);
+    current.extend(held.cloned());
     // A function holding `Stdout` may call operations that internally need
     // `Stream`, etc.
     let mut current = expand_through_closure(&current, index.closure);
@@ -1272,7 +1276,7 @@ fn call_site_effects(
         };
         return vec![bare(INDIRECT_CALLEE.to_string(), effects.clone())];
     }
-    // Only a free function in this program dispatches through the path: a
+    // Only a free function outside the bindings dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
     let owner = match callee {
         Expr::Ident(ident) => index.resolutions.operation_owner(ident),
@@ -1288,7 +1292,7 @@ fn call_site_effects(
             // parameter list — no self skip.
             let is_method = func_ref.method_info.is_some() && !self_in_args;
             let dispatches_through_path = func_ref.method_info.is_none()
-                && matches!(func_ref.module_source, ModuleSource::Local { .. });
+                && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
@@ -1706,12 +1710,19 @@ impl AstVisitor for SemEffectWalker<'_> {
                 // `with H => h do { body }` installs handlers, granting each
                 // handled effect to the body (calls inside it — directly or via
                 // helpers — observe the installed handler). The handler
-                // expressions themselves run outside the grant.
+                // expressions themselves run outside the grant. A binding
+                // installs inside the ones before it, so its handler holds
+                // what they grant.
+                let mut granted: Vec<EffectRef> = Vec::new();
                 for binding in &with_handler.handlers {
                     ast::walk_expr(self, &binding.handler);
                     for (handled, effects) in
                         binding_performed_effects(self.annotations, self.index, binding)
                     {
+                        let effects: Vec<EffectRef> = effects
+                            .into_iter()
+                            .filter(|effect| !granted.contains(effect))
+                            .collect();
                         self.report_missing_as(
                             &effects,
                             &handled,
@@ -1719,12 +1730,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                             EffectFault::MissingForHandler,
                         );
                     }
+                    granted.extend(self.binding_granted_effects(binding));
                 }
-                let granted: Vec<EffectRef> = with_handler
-                    .handlers
-                    .iter()
-                    .flat_map(|binding| self.binding_granted_effects(binding))
-                    .collect();
                 self.walk_granted(granted, |walker| {
                     ast::walk_block(walker, &with_handler.body);
                 });
@@ -2040,9 +2047,13 @@ impl AstVisitor for PurityWalker<'_> {
             }
             Expr::WithHandler(with_handler) => {
                 // The install discharges what its body dispatches, so the body
-                // walks under the grant. The handler expressions run outside it.
+                // walks under the grant. The handler expressions run outside it,
+                // and a binding's handler holds what the bindings before it grant.
                 for binding in &with_handler.handlers {
                     ast::walk_expr(self, &binding.handler);
+                }
+                let mut added: Vec<EffectRef> = Vec::new();
+                for binding in &with_handler.handlers {
                     for (handled, effects) in
                         binding_performed_effects(self.annotations, self.index, binding)
                     {
@@ -2050,15 +2061,12 @@ impl AstVisitor for PurityWalker<'_> {
                             self.flag(Impurity::Install(handled), binding.handler.span());
                         }
                     }
-                }
-                let added: Vec<EffectRef> = with_handler
-                    .handlers
-                    .iter()
-                    .flat_map(|binding| {
+                    added.extend(
                         binding_granted_effects(self.annotations, self.index, binding)
-                    })
-                    .filter(|effect| self.granted.insert(effect.clone()))
-                    .collect();
+                            .into_iter()
+                            .filter(|effect| self.granted.insert(effect.clone())),
+                    );
+                }
                 ast::walk_block(self, &with_handler.body);
                 for effect in added {
                     self.granted.shift_remove(&effect);

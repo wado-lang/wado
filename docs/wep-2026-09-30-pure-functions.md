@@ -75,9 +75,11 @@ An `export fn` declares its effects exactly as any other function does.
 1. Installing a handler demands what the handler performs, and a delegating
    handler method declares the effect it delegates. Done: a function declaring
    nothing no longer reaches a capability through a handler it installs.
-2. An operation of a user-defined interface demands its interface. Done when
-   the compiler rejects a call without it, and the standard library and the
-   packages declare it where they call one.
+2. An operation of a user-defined interface demands its interface. Done: the
+   compiler rejects a call without it, and the standard library and the
+   packages declare it where they call one. An operation's default body holds
+   its own interface, and a binding on a `with` line holds what the bindings
+   before it install.
 3. The specification states what pure means, and the rules above, in
    [Effect System](./spec-effects.md).
 

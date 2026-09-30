@@ -7,6 +7,7 @@ use { scratch } from "../tests/support/scratch.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { TreeMap } from "core:collections";
+use { Log } from "core:log";
 
 global SUITE: String = "gale-corpus-test";
 
@@ -14,7 +15,7 @@ global NOUN: String = "inline paths";
 global REMEDY: String = "Import them with `use`.";
 
 /// The `.rs` paths `argv` names, and what `collect_paths` printed.
-fn collect(argv: List<String>, flags: List<String>) -> [List<String>, Console] with Preopens {
+fn collect(argv: List<String>, flags: List<String>) -> [List<String>, Console] with (Preopens, Log) {
     let mut console = Console {};
     let paths = with &mut console do {
         collect_paths(&argv, ".rs", flags);
@@ -63,7 +64,7 @@ fn baseline_with<S: AsStrSlice>(case: S, text: String) -> String with Preopens {
 }
 
 /// `ratchet`'s exit status on `counts`, and what it printed.
-fn ratchet_run(baseline: &String, counts: TreeMap<String, i32>, update: bool) -> [i32, Console] with Preopens {
+fn ratchet_run(baseline: &String, counts: TreeMap<String, i32>, update: bool) -> [i32, Console] with (Preopens, Log) {
     let mut console = Console {};
     let status = with &mut console do {
         ratchet(*baseline, &counts, update, NOUN, REMEDY);

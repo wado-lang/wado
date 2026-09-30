@@ -34,7 +34,7 @@ struct OffsetCounter {
 }
 
 impl Counter for OffsetCounter {
-    fn next(&self) -> i32 {
+    fn next(&self) -> i32 with Counter {
         let outer = Counter::next();   // -> BaseCounter
         resume outer + self.offset
     }

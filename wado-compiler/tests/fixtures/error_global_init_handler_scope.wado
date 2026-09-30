@@ -1,6 +1,6 @@
 // A handler installed in one initializer covers that initializer and nothing
-// after it. The later initializer installs none of its own, so it can only be
-// answered by a leaked handler — and it traps instead.
+// after it. The later initializer installs none of its own, so it holds no
+// `Counter`, and its dispatch is rejected.
 
 use { println, Stdout } from "core:cli";
 
@@ -35,6 +35,6 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "trapped": true,
-    "stderr_contains": ["no handler installed for `Counter::next`"]
+    "compile_error": ":30:20: analysis error: global initializer must be pure (no effects), but dispatches 'next', which needs a capability the position does not hold",
+    "compile_error_codes": ["TYPE_MISMATCH"]
 }

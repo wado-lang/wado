@@ -95,7 +95,7 @@ Beyond a name, parameters and a return type, an operation declares nothing else.
 - A body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method). With no handler installed, the host answers it, so the body could never run.
 - A body on an `async` operation. A call to it evaluates to an `AsyncCall`, which a plain body does not produce.
 - A `self` receiver. An operation is called as `Effect::op(args)`, with no receiver to bind it to.
-- A `with` clause. An operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code.
+- A `with` clause. A call demands only the operation's interface, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code.
 - A `#[retain(...)]` attribute. An operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes.
 - Type parameters. An operation dispatches to one handler method, not to one per instantiation.
 
@@ -252,9 +252,10 @@ pub fn log(message: String) with (Stdout, Stderr) {
 Every function declares its effects, whatever its visibility. Nothing is inferred from the body. A call demands of its caller:
 
 - for a function, the effects in its `with` clause;
-- for an operation of a host-backed interface (one carrying `#[cm(...)]`), that interface;
-- for an operation of a resource, that resource (see [Resources as Effects](#resources-as-effects));
-- for an operation of a user-defined interface, nothing. An installed handler answers it, and it traps where none is installed (see [Handlers](#handlers)).
+- for an operation of an interface, that interface, whether a handler or the host answers it (see [Handlers](#handlers));
+- for an operation of a resource, that resource (see [Resources as Effects](#resources-as-effects)).
+
+An operation's default body holds its own interface, since it runs where the operation was dispatched.
 
 <!-- {"fixture":"spec_effects_propagation_missing.wado"} -->
 
@@ -267,8 +268,8 @@ fn helper() {
 <!-- {"fixture":"spec_effects_propagation.wado"} -->
 
 ```wado
-fn next_id() -> i32 {
-    return Counter::next();   // OK: `Counter` is a user-defined interface
+fn next_id() -> i32 with Counter {
+    return Counter::next();   // `Counter` answered by a handler still demands it
 }
 
 pub fn report() with (Stdout, Preopens) {   // `pub` changes nothing
@@ -677,7 +678,9 @@ A handler runs on behalf of the code that installs it, so installing one demands
 what it performs: every effect its methods declare, and `E` itself where the
 block ends in `..forward` (see
 [Operations a Handler Leaves Out](#operations-a-handler-leaves-out)). A handler
-cannot reach a capability its installer does not hold.
+cannot reach a capability its installer does not hold. Bindings on one `with`
+install in source order, each inside the ones before it, so a binding's handler
+also holds the effects the earlier bindings install.
 
 `with ... do` is an expression. Its value is the body's, as a block's is:
 
@@ -808,7 +811,7 @@ The rest clause is the block's last item, and a block may hold nothing else. A b
 struct Filter { min: i32 }
 
 impl Log for Filter {                      // a layer: decorate one operation
-    fn enabled(&self, level: i32) -> bool {
+    fn enabled(&self, level: i32) -> bool with Log {
         resume level >= self.min && Log::enabled(level)
     }
     ..forward                              // everything else → the outer `Log`

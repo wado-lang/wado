@@ -191,9 +191,9 @@ fn example() {
 }
 ```
 
-An initializer must be pure: calling a function that declares an effect is a
-compile error. It may still dispatch a user-defined effect's operation, which
-behaves as it would in a function body, and it may install its own handler.
+An initializer must be pure: calling a function that declares an effect, or
+dispatching an operation, is a compile error. It may install its own handler,
+whose body may then dispatch that handler's operations.
 
 ## Types
 

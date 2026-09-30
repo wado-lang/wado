@@ -1,5 +1,5 @@
-// A call demands the callee's declared effects; an operation of a user-defined
-// interface demands nothing.
+// A call demands the callee's declared effects; an operation demands its
+// interface, whether a handler or the host answers it.
 use { println, Stdout } from "core:cli";
 use { Preopens } from "core:fs";
 
@@ -18,8 +18,8 @@ impl Counter for Seq {
     }
 }
 
-fn next_id() -> i32 {
-    return Counter::next();   // OK: `Counter` is a user-defined interface
+fn next_id() -> i32 with Counter {
+    return Counter::next();   // `Counter` answered by a handler still demands it
 }
 
 pub fn report() with (Stdout, Preopens) {   // `pub` changes nothing
