@@ -8035,22 +8035,29 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
         w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx)};`);
         return;
     }
-    assert ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator";
     w.line("let mut _atn_disabled: List<i32> = [];");
     for let g of gates {
         w.line(`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
     }
-    w.line(
-        `let _atn_alt = ${ctx.atn_state_path()}.predict(&ATN_SIM, ${dec}, ${tokens}, ${pos}, TK_EOF, 0, &_atn_disabled);`,
-    );
+    w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx, "_atn_disabled")};`);
 }
 
-/// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`.
-fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(atn_dec: i32, tokens: S, pos: S1, ctx: &GenContext) -> String {
+/// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`, with the
+/// alternatives the list `disabled` names left out. Only a verdict nothing
+/// disables is kept for the parse.
+fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(
+    atn_dec: i32,
+    tokens: S,
+    pos: S1,
+    ctx: &GenContext,
+    disabled: String = "",
+) -> String {
     assert ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator";
-    return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${atn_prec_arg(
-        ctx,
-    )})`;
+    let prec = atn_prec_arg(ctx);
+    if disabled.is_empty() {
+        return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${prec})`;
+    }
+    return `${ctx.atn_state_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &${disabled})`;
 }
 
 global UNSCANNABLE_ALT: String = "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";

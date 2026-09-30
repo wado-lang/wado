@@ -85,8 +85,12 @@ impl AtnState {
         disabled_alts: &List<i32>,
     ) -> i32 {
         let [alt, reach] = self.predict_reaching(sim, decision, tokens, pos, eof, min_prec, disabled_alts);
-        self.reach = i32::min(self.reach, reach);
+        self.read_down_to(reach);
         return alt;
+    }
+
+    fn read_down_to(&mut self, depth: i32) {
+        self.reach = i32::min(self.reach, depth);
     }
 
     fn predict_reaching(
@@ -791,11 +795,11 @@ pub fn atn_predict_once(
     let depth = atn.stack.len();
     let v = atn.recorded_verdict(atn.question_hash(decision, pos, min_prec, depth), decision, pos, min_prec, depth);
     if v >= 0 {
-        atn.reach = i32::min(atn.reach, atn.verdict_reach[v]);
+        atn.read_down_to(atn.verdict_reach[v]);
         return atn.verdict_alt[v];
     }
     let [alt, reach] = atn.predict_reaching(sim, decision, tokens, pos, eof, min_prec, &ATN_NO_DISABLED);
-    atn.reach = i32::min(atn.reach, reach);
+    atn.read_down_to(reach);
     atn.record_verdict(decision, pos, min_prec, depth, alt, reach);
     return alt;
 }

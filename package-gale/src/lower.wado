@@ -83,7 +83,14 @@ use {
     subtract_sets,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { GenContext, is_nullable, union_kind_arrays, sets_overlap, FOLLOW_MASK_MAX_K } from "./gen_context.wado";
+use {
+    GenContext,
+    close_over_callers,
+    is_nullable,
+    union_kind_arrays,
+    sets_overlap,
+    FOLLOW_MASK_MAX_K,
+} from "./gen_context.wado";
 use { dedup_append_arr, strip_suffix } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use {
@@ -531,31 +538,21 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
 /// declaration and the arguments cannot disagree.
 fn follow_rule_snakes(grammar: &Grammar, ctx: &GenContext) -> List<String> {
     let count = grammar.parser_rules.len();
-    let mut reads: List<bool> = [];
+    let mut seeds: List<bool> = [];
+    let mut forwards: List<List<i32>> = [];
     for let mut i = 0; i < count; i += 1 {
-        reads.push(ctx.rule_index_reads_follow(i));
-    }
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for let mut i = 0; i < count; i += 1 {
-            if reads[i] {
-                continue;
-            }
-            for let target of &ctx.rule_forward_targets(i) {
-                for let mut j = 0; j < count; j += 1 {
-                    if reads[j] && grammar.parser_rules[j].snake_name == *target {
-                        reads[i] = true;
-                        changed = true;
-                        break;
-                    }
-                }
-                if reads[i] {
-                    break;
+        seeds.push(ctx.rule_index_reads_follow(i));
+        let mut targets: List<i32> = [];
+        for let target of &ctx.rule_forward_targets(i) {
+            for let mut j = 0; j < count; j += 1 {
+                if grammar.parser_rules[j].snake_name == *target {
+                    targets.push(j);
                 }
             }
         }
+        forwards.push(targets);
     }
+    let reads = close_over_callers(&forwards, seeds);
     let mut snakes: List<String> = [];
     for let mut i = 0; i < count; i += 1 {
         if reads[i] {

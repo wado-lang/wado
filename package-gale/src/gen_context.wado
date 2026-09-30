@@ -629,8 +629,8 @@ impl GenContext {
     }
 
     /// Whether the generated parser emits the ATN simulator infrastructure
-    /// (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack maintenance). Every
-    /// decision the simulator makes, the scan asks it too, so every scan then
+    /// (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack maintenance). A scan
+    /// asks the simulator whatever the parse asks it, so every scan then
     /// borrows the parser's ATN state.
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
@@ -650,32 +650,7 @@ impl GenContext {
     /// Settle `scan_reaches_simulator` once every rule that asks the simulator
     /// is marked.
     pub fn close_simulator_reach(&mut self) {
-        self.rule_reaches_simulator = self.rule_asks_simulator;
-        let mut callees: List<List<String>> = [];
-        for let rule of &self.parser_rules {
-            let mut refs: List<String> = [];
-            for let alt of &rule.alternatives {
-                collect_scannable_refs(&alt.elements, &mut refs);
-            }
-            callees.push(refs);
-        }
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for let mut r = 0; r < callees.len(); r += 1 {
-                if self.rule_reaches_simulator[r] {
-                    continue;
-                }
-                for let name of &callees[r] {
-                    let callee = self.rule_index_of(name);
-                    if callee >= 0 && self.rule_reaches_simulator[callee] {
-                        self.rule_reaches_simulator[r] = true;
-                        changed = true;
-                        break;
-                    }
-                }
-            }
-        }
+        self.rule_reaches_simulator = close_over_callers(&self.scannable_callees(), self.rule_asks_simulator);
     }
 
     /// Whether a call to the rule `snake` can reach a decision the simulator
@@ -2494,42 +2469,33 @@ impl GenContext {
     /// `is_element_scannable_at` — so one O(V+E) fixpoint replaces the recursive
     /// check, which was exponential on large mutual-recursion SCCs (see perf.md).
     pub fn precompute_scannability(&mut self) {
-        let n = self.parser_rules.len();
-        let mut bad: List<bool> = [];
-        for let mut i = 0; i < n; i += 1 {
-            bad.push(false);
+        let callees = self.scannable_callees();
+        let mut undefined_ref: List<bool> = [];
+        for let c of &callees {
+            undefined_ref.push(c.contains(&-1));
         }
-
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for let mut rid = 0; rid < n; rid += 1 {
-                if !bad[rid] && self.references_bad_rule(rid, &bad) {
-                    bad[rid] = true;
-                    changed = true;
-                }
-            }
-        }
-
-        for let mut rid = 0; rid < n; rid += 1 {
+        let bad = close_over_callers(&callees, undefined_ref);
+        for let mut rid = 0; rid < bad.len(); rid += 1 {
             self.scannable_cache[rid] = Option::Some(!bad[rid]);
         }
     }
 
-    /// The scannability fixpoint's step relation: rule `rid` references an
-    /// undefined rule, or one already marked bad.
-    fn references_bad_rule(&self, rid: i32, bad: &List<bool>) -> bool {
-        let mut names: List<String> = [];
-        for let alt of &self.parser_rules[rid].alternatives {
-            collect_scannable_refs(&alt.elements, &mut names);
-        }
-        for let name of &names {
-            let r = self.rule_index_of(name);
-            if r < 0 || bad[r] {
-                return true;
+    /// Per rule index, the rules a scan of it calls, `-1` standing for a name
+    /// no parser rule has.
+    fn scannable_callees(&self) -> List<List<i32>> {
+        let mut callees: List<List<i32>> = [];
+        for let rule of &self.parser_rules {
+            let mut names: List<String> = [];
+            for let alt of &rule.alternatives {
+                collect_scannable_refs(&alt.elements, &mut names);
             }
+            let mut indices: List<i32> = [];
+            for let name of &names {
+                indices.push(self.rule_index_of(name));
+            }
+            callees.push(indices);
         }
-        return false;
+        return callees;
     }
 
     /// Get the rule name that owns the general group types inside a given
@@ -3099,6 +3065,23 @@ fn visiting_index<S: AsStrSlice>(visiting: &List<String>, name: S) -> i32 {
         }
     }
     return -1;
+}
+
+/// `marked` closed over callers: a rule is marked once a rule `callees` lists
+/// for it is. A callee of `-1` names no rule and marks nothing.
+pub fn close_over_callers(callees: &List<List<i32>>, marked: List<bool>) -> List<bool> {
+    let mut out = marked;
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut r = 0; r < callees.len(); r += 1 {
+            if !out[r] && callees[r].iter_ref().any(|c| *c >= 0 && out[*c]) {
+                out[r] = true;
+                changed = true;
+            }
+        }
+    }
+    return out;
 }
 
 /// Collect the parser-rule names an element sequence references for
