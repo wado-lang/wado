@@ -976,7 +976,7 @@ fn check_function_effects_sem(
     }
     current.extend(benign);
     current.extend(held.cloned());
-    if annotations.is_some_and(|ann| starts_async_call(body, ann, &sem.types)) {
+    if starts_async_call(annotations, &sem.types, |v| ast::walk_block(v, body)) {
         current.extend(index.waiting.iter().cloned());
     }
     // A function holding `Stdout` may call operations that internally need
@@ -1174,35 +1174,49 @@ fn add_narrowed_resources(
     }
 }
 
-/// Whether `body` starts an async call, so it may wait on the call there.
-fn starts_async_call(body: &Block, annotations: &TypeAnnotations, types: &TypeTable) -> bool {
-    struct Starts<'a> {
-        annotations: &'a TypeAnnotations,
-        types: &'a TypeTable,
-        found: bool,
-    }
-    impl AstVisitor for Starts<'_> {
-        fn visit_expr(&mut self, expr: &Expr) {
-            if matches!(expr, Expr::Call(_) | Expr::MethodCall(_))
-                && self
-                    .annotations
-                    .all(|facts| &facts.expression_types, expr.id())
-                    .any(|&ty| {
-                        self.types
-                            .is_compiler_item_type(ty, CompilerItem::AsyncCall)
-                    })
-            {
-                self.found = true;
-            }
-            ast::walk_expr(self, expr);
+/// Finds whether a body starts an async call, so it may wait on the call there.
+/// A closure is a body of its own, so the search stops at one.
+struct StartsAsyncCall<'a> {
+    annotations: &'a TypeAnnotations,
+    types: &'a TypeTable,
+    found: bool,
+}
+
+impl AstVisitor for StartsAsyncCall<'_> {
+    fn visit_expr(&mut self, expr: &Expr) {
+        if matches!(expr, Expr::Closure(_)) {
+            return;
         }
+        if matches!(expr, Expr::Call(_) | Expr::MethodCall(_))
+            && self
+                .annotations
+                .all(|facts| &facts.expression_types, expr.id())
+                .any(|&ty| {
+                    self.types
+                        .is_compiler_item_type(ty, CompilerItem::AsyncCall)
+                })
+        {
+            self.found = true;
+        }
+        ast::walk_expr(self, expr);
     }
-    let mut starts = Starts {
+}
+
+/// Whether the body `walk` visits starts an async call.
+fn starts_async_call(
+    annotations: Option<&TypeAnnotations>,
+    types: &TypeTable,
+    walk: impl FnOnce(&mut StartsAsyncCall),
+) -> bool {
+    let Some(annotations) = annotations else {
+        return false;
+    };
+    let mut starts = StartsAsyncCall {
         annotations,
         types,
         found: false,
     };
-    ast::walk_block(&mut starts, body);
+    walk(&mut starts);
     starts.found
 }
 
@@ -1810,12 +1824,17 @@ impl AstVisitor for SemEffectWalker<'_> {
             Expr::Closure(closure) => {
                 // A closure's body performs what its type carries, not what the
                 // function it is written in holds: it runs wherever it is called.
-                let declared: IndexSet<EffectRef> = self
+                let mut declared: IndexSet<EffectRef> = self
                     .annotations
                     .into_iter()
                     .flat_map(|ann| ann.all(|facts| &facts.closure_captures, closure.id))
                     .flat_map(|info| info.declared_effects.iter().cloned())
                     .collect();
+                if starts_async_call(self.annotations, &self.sem.types, |v| {
+                    v.visit_expr(&closure.body);
+                }) {
+                    declared.extend(self.index.waiting.iter().cloned());
+                }
                 let carried = expand_through_closure(&declared, self.index.closure);
                 self.walk_granted(carried, |walker| ast::walk_expr(walker, expr));
                 return;

@@ -57,8 +57,10 @@ handler out declares `with E`.
 
 ### Waiting where the call starts
 
-A function that starts an async call also holds the effects `AsyncCall`'s
-methods declare, so it waits on the call with nothing more to declare.
+A function or closure that starts an async call also holds the effects
+`AsyncCall`'s methods declare, so it waits on the call with nothing more to
+declare. A closure is a body of its own, so a call it starts grants nothing to
+the function around it.
 
 ### Globals
 

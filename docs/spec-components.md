@@ -112,8 +112,9 @@ call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 - `.join(&set)` adds the call to a `WaitableSet`, so one wait covers several
   calls and streams.
 
-A function that starts an async call also holds the effects these methods
-declare, so it waits on the call where the call starts.
+A function or closure that starts an async call also holds the effects these
+methods declare, so it waits on the call where the call starts. A closure is a
+body of its own: a call it starts grants nothing to the function around it.
 
 <!-- {"fixture":"spec_components_async_import.wado"} -->
 

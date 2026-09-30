@@ -1,13 +1,19 @@
-// A function that starts an async call waits on it with nothing more to
-// declare; one handed the call declares what waiting performs.
+// A function or closure that starts an async call waits on it with nothing
+// more to declare; one handed the call declares what waiting performs.
 fn finish(call: AsyncCall<i32>) -> i32 with (Subtask, WaitableSet) {
     return call.wait();
+}
+
+fn size_in_closure() -> i32 with Fetch {
+    let size = || Fetch::get("/ab").wait();
+    return size();
 }
 
 test {
     with Fetch => &Canned {} do {
         assert Fetch::get("/abc").wait() == 4;  // where the call starts
         assert finish(Fetch::get("/a")) == 2;   // handed on
+        assert size_in_closure() == 3;          // a closure starts it
     }
 }
 
