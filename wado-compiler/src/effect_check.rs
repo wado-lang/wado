@@ -559,7 +559,6 @@ impl OwnedEffectData {
         // Effect / resource propagation closure: holding effect `E` admits the
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
         let closure = build_propagation_closure_sem(sem, state, &members);
-        let waiting = async_call_effects(sem, state);
 
         // An empty entry is meaningful: the method exists and grants nothing.
         // A declaration has no body, so `fn_effects` holds nothing for it.
@@ -590,6 +589,8 @@ impl OwnedEffectData {
         let mut impl_effects: IndexMap<ImplKey, Vec<EffectRef>> = IndexMap::default();
         let mut block_effects: IndexMap<DefId, IndexSet<EffectRef>> = IndexMap::default();
         let mut forwarding_blocks: IndexSet<DefId> = IndexSet::default();
+        let mut waiting: IndexSet<EffectRef> = IndexSet::default();
+        let async_call = sem.types.compiler_item_def(CompilerItem::AsyncCall);
         for (src, module) in &sem.modules {
             let annotations = state.module_semantics.get(src).map(|m| &m.types);
             for item in &module.items {
@@ -608,13 +609,19 @@ impl OwnedEffectData {
                             .flatten()
                             .cloned()
                             .collect();
-                        if let Some(key) = annotations
-                            .and_then(|ann| ann.impl_facts.get(&block.id))
-                            .and_then(|facts| {
-                                let trait_name = facts.trait_name.as_ref()?;
-                                impl_key(&facts.struct_name, trait_name)
-                            })
-                        {
+                        let facts = annotations.and_then(|ann| ann.impl_facts.get(&block.id));
+                        // Waiting on an `AsyncCall` demands what its methods declare.
+                        if facts.is_some_and(|facts| {
+                            facts.trait_name.is_none()
+                                && async_call
+                                    .is_some_and(|def| facts.struct_name.head().def() == Some(def))
+                        }) {
+                            waiting.extend(declared.iter().cloned());
+                        }
+                        if let Some(key) = facts.and_then(|facts| {
+                            let trait_name = facts.trait_name.as_ref()?;
+                            impl_key(&facts.struct_name, trait_name)
+                        }) {
                             let entry: &mut Vec<EffectRef> = impl_effects.entry(key).or_default();
                             for effect in &declared {
                                 if !entry.contains(effect) {
@@ -1000,38 +1007,6 @@ fn check_function_effects_sem(
     ast::walk_block(&mut walker, body);
 }
 
-/// What waiting on an `AsyncCall` demands: the effects its inherent methods
-/// declare.
-fn async_call_effects(sem: &Semantics, state: &AnnotateState) -> IndexSet<EffectRef> {
-    let Some(async_call) = sem.types.compiler_item_def(CompilerItem::AsyncCall) else {
-        return IndexSet::default();
-    };
-    let resolutions = &*state.tysys.resolutions;
-    let mut effects = IndexSet::default();
-    for (src, module) in &sem.modules {
-        for item in &module.items {
-            let Item::Impl(block) = item else {
-                continue;
-            };
-            let targets_async_call = impl_facts(sem, src, block).is_some_and(|facts| {
-                facts.trait_name.is_none() && facts.struct_name.head().def() == Some(async_call)
-            });
-            if !targets_async_call {
-                continue;
-            }
-            for method in &block.methods {
-                effects.extend(
-                    method
-                        .effects
-                        .iter()
-                        .map(|effect| resolutions.effect_named(effect, src)),
-                );
-            }
-        }
-    }
-    effects
-}
-
 /// Build the effect / resource propagation closure from `Semantics`: for each
 /// effect or resource declaration, the resources its operations' parameter and
 /// return types reference, transitively closed. Reads the resolved operation
@@ -1414,14 +1389,7 @@ impl EffectIndex<'_> {
         // dispatch has no impl to read: the declaration is what a call requires.
         let mut effects = match self.declared_by_trait(func_ref) {
             Some(declared) => declared.to_vec(),
-            None => match self.declaration_of(func_ref) {
-                Some(decl) => self.fn_effects.get(&decl).cloned().unwrap_or_default(),
-                None => self
-                    .mangled_index
-                    .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-                    .cloned()
-                    .unwrap_or_default(),
-            },
+            None => self.callee_entry(func_ref, self.fn_effects, self.mangled_index),
         };
         effects = self.resolve_open_head(func_ref, effects);
         if let Some(method_info) = &func_ref.method_info
@@ -1513,23 +1481,27 @@ impl EffectIndex<'_> {
 
     /// Parameter type ids for a method / static dispatch target.
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
-        match self.declaration_of(func_ref) {
-            Some(decl) => self.fn_params.get(&decl).cloned().unwrap_or_default(),
-            None => self
-                .mangled_params
-                .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-                .cloned()
-                .unwrap_or_default(),
-        }
+        self.callee_entry(func_ref, self.fn_params, self.mangled_params)
     }
 
-    /// The declaration a dispatch selected. Its name carries the receiver's
-    /// type arguments, so only a callee no declaration names is looked up by it.
-    fn declaration_of(&self, func_ref: &FunctionRef) -> Option<AstId> {
-        match &func_ref.template {
-            Some(TemplateId::Declared { def, .. }) => Some(self.resolutions.defs().ast_id(*def)),
-            Some(TemplateId::Synthesized { .. }) | None => None,
-        }
+    /// `func_ref`'s entry, looked up by the declaration the dispatch selected.
+    /// Its name carries the receiver's type arguments, so only a callee no
+    /// declaration names is looked up by name.
+    fn callee_entry<V: Clone + Default>(
+        &self,
+        func_ref: &FunctionRef,
+        by_decl: &IndexMap<AstId, V>,
+        by_name: &IndexMap<(ModuleSource, String), V>,
+    ) -> V {
+        let entry = match &func_ref.template {
+            Some(TemplateId::Declared { def, .. }) => {
+                by_decl.get(&self.resolutions.defs().ast_id(*def))
+            }
+            Some(TemplateId::Synthesized { .. }) | None => {
+                by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            }
+        };
+        entry.cloned().unwrap_or_default()
     }
 }
 
