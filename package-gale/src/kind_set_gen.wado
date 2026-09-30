@@ -3,7 +3,6 @@
 //! Module-level emit: `codegen` writes the tables once, rule bodies only
 //! intern sets and build conditions.
 
-use { LoweredGrammar } from "./gir.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { join_kinds, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
@@ -84,10 +83,8 @@ pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -
 /// Emit the `_kind_set_<id>(k) -> bool` helper of each interned kind set the
 /// emitted code names.
 pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext) {
-    for let entry of ctx.kind_sets() {
-        if ctx.kind_set_is_named(entry.id) {
-            gen_kind_set_helper_raw(w, entry.id, &ctx.token_names_of(&entry.tokens));
-        }
+    for let entry of ctx.named_kind_sets() {
+        gen_kind_set_helper_raw(w, entry.id, &ctx.token_names_of(&entry.tokens));
     }
 }
 

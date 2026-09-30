@@ -2608,9 +2608,9 @@ impl GenContext {
         return self.kind_set_registry.values().iter_value().collect();
     }
 
-    /// Whether emitted code calls `_kind_set_<id>`.
-    pub fn kind_set_is_named(&self, id: i32) -> bool {
-        return is_named(&self.kind_sets_named, id);
+    /// The kind sets emitted code calls, in `_kind_set_<id>` order.
+    pub fn named_kind_sets(&self) -> List<KindSetEntry> {
+        return self.kind_set_registry.values().iter_value().filter(|e| is_named(&self.kind_sets_named, e.id)).collect();
     }
 
     /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
