@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790744854490,
+  "lastUpdate": 1790764227799,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62200,6 +62200,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 22798,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6efd09a120de2c2cc8e3fd0e87b4dcd8b2dd5133",
+          "message": "Merge pull request #2229 from wado-lang/compound-assign\n\nfeat(serde)!: map keys of any scalar type, with core:json, core:cbor and core:value fully tested",
+          "timestamp": "2026-09-30T18:59:43+09:00",
+          "tree_id": "a71f6760b9b469eb23e911ad425efd194079e3ed",
+          "url": "https://github.com/wado-lang/wado/commit/6efd09a120de2c2cc8e3fd0e87b4dcd8b2dd5133"
+        },
+        "date": 1790764226867,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22806,
             "unit": "bytes"
           },
           {
