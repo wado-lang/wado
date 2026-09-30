@@ -320,6 +320,35 @@ fn full_scope_reconstructs_an_import_the_program_declares() {
     assert!(text.contains("tag: func(self: f64) -> string;"), "\n{text}");
 }
 
+/// A type declared in an interface no function of the program's imports is
+/// reconstructed with that interface, where the `use` naming it finds it.
+#[test]
+fn full_scope_reconstructs_the_interface_a_used_type_is_declared_in() {
+    let text = emit_scope(
+        "#[cm(\"example:demo/types#name-or-code\")]\n\
+         variant NameOrCode {\n\
+             #[cm(\"as-name\")]\n\
+             AsName(String),\n\
+             #[cm(\"as-code\")]\n\
+             AsCode(i32),\n\
+         }\n\
+         #[cm(\"example:demo/global\")]\n\
+         interface Dom {\n\
+             #[cm(\"example:demo/global#touch\")]\n\
+             fn touch(v: NameOrCode);\n\
+         }\n\
+         export fn run() with Dom {\n\
+             Dom::touch(NameOrCode::AsCode(1));\n\
+         }",
+        WitScope::Full,
+    );
+    assert!(text.contains("interface types {"), "\n{text}");
+    let mut resolve = wit_parser::Resolve::new();
+    resolve
+        .push_str("emitted.wit", &text)
+        .expect("emitted WIT failed to re-parse");
+}
+
 /// An unrestricted resource has no CM handle type: one interface per Wado type,
 /// every handle position the same `f64`, and nothing naming the
 /// `extends` relation. See `docs/wep-2026-04-28-resource-inheritance.md`.

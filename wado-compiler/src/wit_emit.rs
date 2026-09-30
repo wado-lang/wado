@@ -21,7 +21,7 @@ use crate::component_model::{
     parse_resource_func,
 };
 use crate::hashmap::IndexMap;
-use crate::module_source::{ModuleSource, is_bundled_specifier};
+use crate::module_source::ModuleSource;
 use crate::name::to_kebab;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
@@ -1264,7 +1264,7 @@ fn primitive_by_name(name: &str) -> Option<Type> {
 
 /// Collect the source-interface FQs of every CM-defined named type referenced
 /// by `ty` (recursing through generics, tuples, references, and function
-/// types). Only `wasi:` / `core:` sources are CM interfaces worth importing.
+/// types).
 fn collect_named_type_sources(
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
@@ -1274,7 +1274,7 @@ fn collect_named_type_sources(
     match ty {
         Type::Named(named) => {
             if let Some(src) = registry.source_interface(named)
-                && is_bundled_specifier(&src)
+                && registry.is_cm_source_of(&src, &named.name)
             {
                 out.push(src);
             }

@@ -3287,7 +3287,7 @@ impl CmInterfaceRegistry {
             .filter(|hint| self.declares_wado_name(hint, name))
             .map(str::to_string);
         self.source_interface(named)
-            .filter(|source| self.is_cm_source(source) || self.declares_wado_name(source, name))
+            .filter(|source| self.is_cm_source_of(source, name))
             .or(declared_at_hint)
             .or_else(|| {
                 self.find_unique_source_across_kinds(name, &|src| {
@@ -3775,6 +3775,13 @@ impl CmInterfaceRegistry {
         CmNamespace::split_specifier(source).is_some()
             || stdlib::is_wit_core_interface(source)
             || self.component_interfaces.contains(source)
+    }
+
+    /// Whether `source`, recorded for a reference to `name`, is a CM interface:
+    /// one [`Self::is_cm_source`] admits, or one a `#[cm]` declaration of
+    /// `name` names.
+    pub fn is_cm_source_of(&self, source: &str, name: &str) -> bool {
+        self.is_cm_source(source) || self.declares_wado_name(source, name)
     }
 
     /// Flatten a CM type into its canonical-ABI core value sequence. Single
