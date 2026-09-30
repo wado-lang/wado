@@ -47,8 +47,7 @@ transitive closure of its supertraits — so a derivation that binds
 consumer that only names binds `T: Reflect` and admits every nameable type,
 reflected kind or not.
 
-Every kind that has members spells its member channel the same way: `type
-Members` plus `fn members()`. A kind that has payloads adds a payload pack
+Every kind that has members spells its member channel the same way: `type Members` plus `fn members()`. A kind that has payloads adds a payload pack
 alongside it. The type's scalar facts and the value→member build direction round
 out each trait. Every per-member fact — name, wire override, doc, `is_unit` /
 `has_default` / `is_secret`, value access — lives on the member, so no kind
@@ -142,8 +141,7 @@ entry (`T::from_wire(…)`) dispatches the same way a walk does. A variant is no
 exception: `Variant::Case` owns that namespace, but a name that is not a case
 falls through to the blanket.
 
-A free function may carry the same bound (`fn render<L: ReflectFlags<Members =
-[..M]>, ..M>(v: &L)`) and is called without naming either parameter: the pack
+A free function may carry the same bound (`fn render<L: ReflectFlags<Members = [..M]>, ..M>(v: &L)`) and is called without naming either parameter: the pack
 projects from the subject's member channel, which the call site computes since
 the synthesized impls are not registered until after elaboration. A derivation
 itself stays an `impl` — only that is picked up by a bound.
@@ -236,8 +234,7 @@ Identity sits on the root rather than on each kind. A kind bound gates a name
 behind [Visibility](#visibility), so a type whose fields are private
 (`TreeMap<String,i32>`) could not be named by the library that must key it; and
 it would force a derivation to widen its bound to a kind just to name its
-subject, which a schema library's `impl<T: Constrained + Reflect> JsonSchema for
-T` cannot do — a constrained type may be a newtype or a struct wrapper, and
+subject, which a schema library's `impl<T: Constrained + Reflect> JsonSchema for T` cannot do — a constrained type may be a newtype or a struct wrapper, and
 `Reflect` admits both.
 
 `type_name()` sits beside `type_info()` on the root: the allocation-free

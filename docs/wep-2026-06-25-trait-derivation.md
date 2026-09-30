@@ -76,8 +76,7 @@ for every kind, including the three that erase to a scalar: an `enum`, a
 most, since it exists to be a type distinct from its base. This is rank 1 of
 the selection order in [Trait Resolution](./wep-2026-09-01-trait-resolution.md).
 
-A written impl wins only for the instances it reaches. `impl<T> Eq for
-Pair<T, i32>` answers for `Pair<String, i32>`, and `Pair<i32, i64>` still
+A written impl wins only for the instances it reaches. `impl<T> Eq for Pair<T, i32>` answers for `Pair<String, i32>`, and `Pair<i32, i64>` still
 derives. Every derived trait behaves this way, `Inspect` included
 (`impl_reach_partial_eq_ord_derives_elsewhere.wado`,
 `impl_reach_partial_serialize_derives_elsewhere.wado`,

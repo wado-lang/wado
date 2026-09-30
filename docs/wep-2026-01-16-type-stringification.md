@@ -54,7 +54,7 @@ what makes the two forms distinguishable at a glance.
 ### Known gaps
 
 - [ ] Depth limit for recursive types — see
-      [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md).
+  [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md).
 
 ## References
 

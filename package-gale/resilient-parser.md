@@ -122,8 +122,7 @@ Diagnostic { severity, code, message, span, line, col,
 
 - `MissingToken`, `ExtraToken`, `UnexpectedToken`, `NoViableAlternative`.
 - `UnterminatedConstruct`: the input ended inside a construct.
-- `LexError`: no lexer rule matched a character. It reads `token recognition
-  error at: 'x'`, one per `LexError` token.
+- `LexError`: no lexer rule matched a character. It reads `token recognition error at: 'x'`, one per `LexError` token.
 
 `diagnostics` is in source order, lex errors included. The `max_errors` cap
 applies after sorting, so it keeps the earliest errors.

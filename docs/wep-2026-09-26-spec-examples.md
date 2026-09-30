@@ -165,33 +165,33 @@ The last two are what this WEP is for. The migration will find them.
 ## Roadmap
 
 1. [x] Extend Marl with a public read of the fenced code blocks: info string,
-       text, source line, and the HTML block directly preceding each. An HTML
-       comment now ends at `-->`, not at the next blank line, as CommonMark
-       says.
+   text, source line, and the HTML block directly preceding each. An HTML
+   comment now ends at `-->`, not at the next blank line, as CommonMark
+   says.
 2. [x] Write the checker, TDD against small Markdown and fixture cases: the
-       reference, the indented substring match, the `assert` rule, the `#[TODO]`
-       rule and the baseline.
+   reference, the indented substring match, the `assert` rule, the `#[TODO]`
+   rule and the baseline.
 3. [x] Add `mise run check-spec-examples` and its CI job, and record the baseline
-       of all 353 blocks.
+   of all 353 blocks.
 4. [x] Migrate one file first, `spec-types.md`, and decide the `assert` rule from
-       it: keep it, or drop it and say why here. Kept. Its 42 blocks became 55
-       quotations and one `` ```text ``, since a rejected example is now a
-       block of its own; 8 quote a `compile_error` fixture. In most of the rest
-       the assert replaced a comment that stated a value. A block made
-       only of declarations quotes the `test` that uses them, which closes the
-       first known gap for that block. The assert was artificial in three: a
-       type-level claim of inference, a field visibility, and a `#[cm]` name.
-       The migration found one block wrong in the specification: a float
-       vector's comparison mask is the integer vector of the same width, not
-       the float one.
+   it: keep it, or drop it and say why here. Kept. Its 42 blocks became 55
+   quotations and one `` ```text ``, since a rejected example is now a
+   block of its own; 8 quote a `compile_error` fixture. In most of the rest
+   the assert replaced a comment that stated a value. A block made
+   only of declarations quotes the `test` that uses them, which closes the
+   first known gap for that block. The assert was artificial in three: a
+   type-level claim of inference, a field visibility, and a `#[cm]` name.
+   The migration found one block wrong in the specification: a float
+   vector's comparison mask is the integer vector of the same width, not
+   the float one.
 5. [x] Migrate the other twelve spec files, one change per file. The migration
-       found compiler bugs, fixed on the way: a trait turbofish counting
-       parameters the trait does not write, an associated type's bound pinning
-       a type to `Self`, the locals of a body other than a function's, and a
-       standard library attribute accepted in a program. It found
-       two gaps, each now a WEP known gap: a CM operation bound by its spelling,
-       and an inline `with { path }`. A block with no fixture to run could
-       still quote a real file, so a reference may name a `source`.
+   found compiler bugs, fixed on the way: a trait turbofish counting
+   parameters the trait does not write, an associated type's bound pinning
+   a type to `Self`, the locals of a body other than a function's, and a
+   standard library attribute accepted in a program. It found
+   two gaps, each now a WEP known gap: a CM operation bound by its spelling,
+   and an inline `with { path }`. A block with no fixture to run could
+   still quote a real file, so a reference may name a `source`.
 6. [x] Delete the baseline, so the rule holds with no exceptions.
 
 ## Known gaps

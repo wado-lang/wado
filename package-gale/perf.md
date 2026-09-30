@@ -328,23 +328,23 @@ re-measure before committing. Candidates read off the profile above:
 Found by reading generated code (2026-09), not yet measured on a benchmark:
 
 - [ ] **Left-recursive wraps shift the event columns.** `start_node_at` inserts
-      into four columns at the loop's checkpoint on every LR iteration, so a
-      chain of N operators moves O(N²) rows. A forward-parent record resolved in
-      `finish()` would make each wrap O(1).
+  into four columns at the loop's checkpoint on every LR iteration, so a
+  chain of N operators moves O(N²) rows. A forward-parent record resolved in
+  `finish()` would make each wrap O(1).
 - [ ] **`atn_predict` allocates per prediction.** Each call builds a fresh
-      `CtxArena` and `ClosureScratch`, and each step a new `AtnKeyMap`, move list
-      and one `AtnConfig` per work item. Keeping the scratch in `AtnState` and
-      clearing it would remove most of that.
+  `CtxArena` and `ClosureScratch`, and each step a new `AtnKeyMap`, move list
+  and one `AtnConfig` per work item. Keeping the scratch in `AtnState` and
+  clearing it would remove most of that.
 - [ ] **The LR scan gate runs before every suffix.** `scan_<rule>_lr_N` re-scans
-      the right operand even where the suffix's first token already decides.
-      Emitting it only when FIRST(suffix) meets the atom's FIRST or the non-LR
-      FOLLOW would skip it on plain arithmetic.
+  the right operand even where the suffix's first token already decides.
+  Emitting it only when FIRST(suffix) meets the atom's FIRST or the non-LR
+  FOLLOW would skip it on plain arithmetic.
 - [ ] **A loop-reserve probe can scan to EOF.** After Rust's last `#![..]`, the
-      `innerAttribute*` reserve check scans `item* EOF`, the whole file. Two
-      tokens (`# !` against `# [`) already decide it.
+  `innerAttribute*` reserve check scans `item* EOF`, the whole file. Two
+  tokens (`# !` against `# [`) already decide it.
 - [ ] **The lexer ATN re-walks its closure per character.** Rules without
-      recursion are regular, so a DFA built lazily per (state set, char class)
-      would make an ATN-routed string rule as cheap as a static one.
+  recursion are regular, so a DFA built lazily per (state set, char class)
+  would make an ATN-routed string rule as cheap as a static one.
 
 ### Generation-time cost: the generator itself (2026-07)
 
@@ -473,26 +473,25 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   `TokenRefElement` 3.5%, `Alternative` 2.8% — prediction paying 10.1% of it and
   `lower` 7.0%. Two shapes:
 
-  - `SllConfig.elements` / `SllReturn.elements` are now `&List<Element>`.
-    Prediction rebuilds a config per token per alternative (`SllConfig { ..*c,
-    pos }`) and deep-copied the element list — every `String` of every
-    `RuleRefElement` — per rebuild. `push_return` / `build_prediction` hand the
-    borrow out rather than copying it.
-  - Five by-value `for` bindings became `for … of &…` (`lexer_elem_refs_rule`,
-    `collect_literal_tokens`, `merge_grammars`, `sll_advance`,
-    `try_expand_opaque`). A by-value binding deep-copies each element inside
-    `SliceValueIter<T>::next`; a by-ref one SROAs to a bare indexed load.
+- `SllConfig.elements` / `SllReturn.elements` are now `&List<Element>`.
+  Prediction rebuilds a config per token per alternative (`SllConfig { ..*c, pos }`) and deep-copied the element list — every `String` of every
+  `RuleRefElement` — per rebuild. `push_return` / `build_prediction` hand the
+  borrow out rather than copying it.
+- Five by-value `for` bindings became `for … of &…` (`lexer_elem_refs_rule`,
+  `collect_literal_tokens`, `merge_grammars`, `sll_advance`,
+  `try_expand_opaque`). A by-value binding deep-copies each element inside
+  `SliceValueIter<T>::next`; a by-ref one SROAs to a bare indexed load.
 
-  Alternating A/B best-of-five, `-O2`: **222.6 → 294.5 KB/s** (154.5 → 116.3
-  ms/iter, **+32%**), 5/5 rounds; the by-ref loops are ~5 points of it. Generated
-  Rust parser byte-identical. Copies fall to 13.9% of the profile and
-  by-value-`for` copies to 1.3%; the top frame is now string-keyed `TreeMap`
-  probing (`String^Ord::cmp` 8.8%, `Eq::eq` 4.3%, `find_index` 3.1%,
-  rebalancing ~5%) — the id-carrying lever above, applied to the name-keyed maps
-  that are left.
+Alternating A/B best-of-five, `-O2`: **222.6 → 294.5 KB/s** (154.5 → 116.3
+ms/iter, **+32%**), 5/5 rounds; the by-ref loops are ~5 points of it. Generated
+Rust parser byte-identical. Copies fall to 13.9% of the profile and
+by-value-`for` copies to 1.3%; the top frame is now string-keyed `TreeMap`
+probing (`String^Ord::cmp` 8.8%, `Eq::eq` 4.3%, `find_index` 3.1%,
+rebalancing ~5%) — the id-carrying lever above, applied to the name-keyed maps
+that are left.
 
-  This borrows a list that is already a root, so it adds nothing to the live set
-  — unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md)).
+This borrows a list that is already a root, so it adds nothing to the live set
+— unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md)).
 
 ## Tried and didn't pan out
 

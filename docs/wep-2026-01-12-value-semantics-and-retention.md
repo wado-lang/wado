@@ -148,8 +148,7 @@ without the attribute grammar growing a way to group them:
 
 A bare name is the parameter as a whole, and `elements_of = p` is that
 parameter's elements — the difference a copy between arrays needs, where what
-reaches the destination is what the source holds rather than the source. `into =
-q` names where it lands; without it the destination is unknown, so the reference
+reaches the destination is what the source holds rather than the source. `into = q` names where it lands; without it the destination is unknown, so the reference
 takes both unbounded channels, the result being one of the places it could be.
 Every form names a parameter rather than a position, reusing the shape `part_of`
 already has, and an argument naming no parameter is reported.
@@ -267,8 +266,7 @@ precision claim about it is worth only what a measurement says it is.
 
 A closure auto-captures each free variable by reference, and the reference kind
 is inferred from body usage: `&T` where the body only reads, `&mut T` where it
-writes. The closure's type follows — `fn` when every capture is read-only, `fn
-mut` when any is mutating. See
+writes. The closure's type follows — `fn` when every capture is read-only, `fn mut` when any is mutating. See
 [Closure Implementation](./wep-2026-01-16-closure-implementation.md).
 
 ```wado

@@ -88,8 +88,8 @@ boundaries are:
 | a statement that can leave its block early[^1] | the statements after it                           |
 
 [^1]: One that contains `return`, `break`, `continue` or `?` outside a closure.
-    A call typed `!` starts no region: it traps or never returns, so nothing
-    after it runs.
+A call typed `!` starts no region: it traps or never returns, so nothing
+after it runs.
 
 The three reports derive from regions:
 
@@ -350,37 +350,37 @@ host call on every run is too slow for loops.
 ## Roadmap
 
 1. [x] The region plan: the AST walk, `#[coverage(off)]`, and
-       `wado dump --coverage-plan`.
+   `wado dump --coverage-plan`.
 2. [x] Probes: `core:rt::coverage_probe` and reify inserting it.
 3. [x] The custom section and the `core:coverage/coverage-host` import in the
-       test world.
+   test world.
 4. [x] The runner: collecting hits, merging plans, the summary, LCOV and JSON.
 5. [x] Fixtures with `uncovered_lines`, `uncovered_branches` and
-       `uncovered_functions`, and the `-O0`/`-O3` check over the stdlib tests
-       (`mise run check-coverage-levels`).
+   `uncovered_functions`, and the `-O0`/`-O3` check over the stdlib tests
+   (`mise run check-coverage-levels`).
 6. [x] The standard library: its snapshot skipped when measured,
-       `--coverage-baseline`, and the CI job with its first baseline.
+   `--coverage-baseline`, and the CI job with its first baseline.
 7. [ ] 100% for the standard library: the baseline emptied.
 8. [x] Derived regions: the plan marks them, reify leaves them without a probe,
-       and the runner derives them. The `-O0`/`-O3` check and the fixtures pass
-       unchanged, and the probes saved on the standard library are measured.
+   and the runner derives them. The `-O0`/`-O3` check and the fixtures pass
+   unchanged, and the probes saved on the standard library are measured.
 
 ## Known gaps
 
 - [ ] A trap cuts a region short, and the report does not see where. A trap in
-      the middle of a region marks the whole region as run, and a trap before a
-      derived region reaches its choice marks it as not run. Wado cannot catch
-      a trap, so any other test that traps fails the run; only an
-      `#[expect_trap]` or `#[TODO]` test reports coverage past one.
+  the middle of a region marks the whole region as run, and a trap before a
+  derived region reaches its choice marks it as not run. Wado cannot catch
+  a trap, so any other test that traps fails the run; only an
+  `#[expect_trap]` or `#[TODO]` test reports coverage past one.
 - [ ] Hit or not only, no execution counts. `FNDA` and `DA` report `1` or `0`.
 - [ ] `core:allocator` is not measured. Its tests are e2e fixtures, which
-      `wado test` does not run.
+  `wado test` does not run.
 - [ ] Kiln generators run at compile time and are not measured, nor is a
-      program `core:eval` compiles.
+  program `core:eval` compiles.
 - [ ] `wado run` and `wado serve` have no `--coverage`.
 - [ ] The `-O0`/`-O3` check runs over the stdlib tests only. The e2e fixtures
-      reach optimizer paths the stdlib does not, and only the `coverage_*`
-      fixtures are measured, at each level against their own expectations.
+  reach optimizer paths the stdlib does not, and only the `coverage_*`
+  fixtures are measured, at each level against their own expectations.
 
 ## References
 

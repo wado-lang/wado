@@ -221,24 +221,24 @@ trailers_tx.write(Result::Ok(null));
 ## Implementation status
 
 - [x] `AsyncCall<T>` added to `prelude/types.wado`; non-generic `Subtask`
-      retained as an internal resource.
+  retained as an internal resource.
 - [x] Compiler representation: `AsyncCall<T>` is a struct-like type with the
-      hidden `i32` fields plus the lift `fn` pointer; type elaborator,
-      monomorphization, and WIR lowering construct and read it. Hardcoded
-      under the name `"AsyncCall"` in `cm_binding/import_adapter.rs`,
-      `cm_binding/types.rs`, `elaborator/call.rs`, and `component_model.rs`.
+  hidden `i32` fields plus the lift `fn` pointer; type elaborator,
+  monomorphization, and WIR lowering construct and read it. Hardcoded
+  under the name `"AsyncCall"` in `cm_binding/import_adapter.rs`,
+  `cm_binding/types.rs`, `elaborator/call.rs`, and `component_model.rs`.
 - [x] `AsyncCall<T>::wait` / `cancel` / `join` written in Wado in
-      `prelude/types.wado`, reusing `wait_for_subtask`-style logic.
+  `prelude/types.wado`, reusing `wait_for_subtask`-style logic.
 - [x] `needs_async_lower` branch in `cm_binding.rs` returns `AsyncCall<T>`
-      without waiting.
+  without waiting.
 - [x] `wado-from-idl` emits `AsyncCall<…>` for `is_async` functions.
 - [x] Existing `Client::send` fixtures migrated to add `.wait()`.
 - [ ] Make `AsyncCall<T>` a `resource` (affine, non-copyable) and change
-      `wait` / `cancel` to consuming `self` receivers — removes the documented
-      use-after-free. Tracked by WEP 2026-05-21.
+  `wait` / `cancel` to consuming `self` receivers — removes the documented
+  use-after-free. Tracked by WEP 2026-05-21.
 - [ ] Restrict `as` casts between `i32` and resources to `internal`-only
-      code so user code cannot forge or alias resource handles. Tracked by
-      WEP 2026-05-21.
+  code so user code cannot forge or alias resource handles. Tracked by
+  WEP 2026-05-21.
 
 ## References
 

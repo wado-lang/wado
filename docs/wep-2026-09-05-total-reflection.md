@@ -441,7 +441,7 @@ land on and the notation "runs both ways" today.
 
 - [ ] Render every `TypeInfo` case in `symbol_notation`.
 - [ ] Decide what `wado query "core:prelude#&Point"` answers — the target's
-      declaration, a synthesized view, or a diagnostic naming the limit.
+  declaration, a synthesized view, or a diagnostic naming the limit.
 
 ### An arm with no trait behind it binds nothing
 
@@ -451,7 +451,7 @@ arms have neither, so an `array` arm cannot name its element type and a
 `type_info()` and gets a value, not a type it can call a bound method on.
 
 - [ ] Decide whether these arms bind (a second binder form, over the case's own
-      components) or stay value-only.
+  components) or stay value-only.
 
 ### An anonymous struct has no declaration to report
 
@@ -463,7 +463,7 @@ purpose, so that pair is a sound identity. It is still not a declaration, and
 nothing states how it renders in symbol notation.
 
 - [ ] State what `name()` and `module()` answer for an anonymous struct, and how
-      `canonical_name()` spells one.
+  `canonical_name()` spells one.
 
 ### The type/value split is unwritten
 
@@ -471,7 +471,7 @@ Reflection answers for the type and `core:value::Value` for the value. The spec
 does not say so, and this WEP is not where a reader of the language will look.
 
 - [ ] State it in `docs/spec-*.md`, so it is not rediscovered as a missing
-      reflection feature.
+  reflection feature.
 
 ## Related WEPs
 

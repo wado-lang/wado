@@ -22,8 +22,7 @@ on.
   time zone.
 - `monotonic-clock.mark` — `u64`, elapsed time for measurement, not wall time.
 - `types.duration` — `u64` nanoseconds.
-- `timezone` (unstable, `feature = clocks-timezone`) — only `iana-id() ->
-  option<string>`, `utc-offset(instant) -> option<s64>`, and a debug string. No
+- `timezone` (unstable, `feature = clocks-timezone`) — only `iana-id() -> option<string>`, `utc-offset(instant) -> option<s64>`, and a debug string. No
   civil datetime, no calendar arithmetic, and no transition list.
 
 Crucially, the WIT comment on `instant` names TC39 Temporal as the conceptual
@@ -291,8 +290,7 @@ cannot be one at that size. Querying it confirms the shape: `America/New_York`
 answers `standard=-05:00 daylight=-04:00` at both 2005-06-15 and 2005-01-15 —
 the pair a formatter needs to pick a display name, never which one is in effect.
 `utc_offset(instant)` is not derivable from it. ICU4X says as much itself: the
-API is `#[deprecated(since = "2.1.0", note = "this API is a bad approximation of
-a time zone database")]`. Its history is no better than a truncated tzdb either
+API is `#[deprecated(since = "2.1.0", note = "this API is a bad approximation of a time zone database")]`. Its history is no better than a truncated tzdb either
 — `Asia/Tokyo` at 1950 reads +09:00, and `Europe/London` reports BST as
 _standard_ +01:00.
 

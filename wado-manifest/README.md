@@ -21,13 +21,13 @@ specification.
 ## Status
 
 - [x] Open-coordinate registry deps (`"ns:pkg" = { version = "^x" }`) and `lib:`
-      nicknames; bare keys are accepted with a deprecation warning.
+  nicknames; bare keys are accepted with a deprecation warning.
 - [x] Resolver: registry deps (highest-compatible + transitive); path deps are
-      traversed but never locked.
+  traversed but never locked.
 - [x] `DependencyProvider` seam + in-memory provider; `wado update` (in
-      `wado-cli`) resolves and writes the lock.
+  `wado-cli`) resolves and writes the lock.
 - [ ] OCI registry fetch — the live backend, implemented in `wado-cli`. (warg is
-      dropped: `bytecodealliance/registry` is archived and OCI is the direction;
-      wa.dev's warg registry is reachable only via `wkg`.)
+  dropped: `bytecodealliance/registry` is archived and OCI is the direction;
+  wa.dev's warg registry is reachable only via `wkg`.)
 - [ ] Git and workspace resolution.
 - [ ] Full PubGrub conflict resolution (current: highest-compatible, first-wins).

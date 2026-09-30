@@ -435,8 +435,7 @@ introduces a mechanism; each item names the existing one it extends.
 - `#[compiler_item("reflect_template")] pub trait ReflectTemplate: Reflect`
   with `Holes`, `Members`, `members()`, `tail()`, `raw_tail()`, each method
   carrying its own `compiler_item`.
-- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, lit, raw, source,
-  has_spec }` with the constant accessors reading fields, and two bridged ones:
+- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, lit, raw, source, has_spec }` with the constant accessors reading fields, and two bridged ones:
   `get` is `builtin::hole_get::<T, V>(t, self.index)`, `fmt` is
   `builtin::hole_fmt::<T>(t, self.index, f)`. Both builtins are bodyless
   markers beside `struct_field_get`. `core:prelude` re-exports it with the
@@ -448,8 +447,7 @@ introduces a mechanism; each item names the existing one it extends.
 
 ### Parser and AST
 
-- `Expr::TaggedTemplate(Box<TaggedTemplateExpr { id, tag: Expr, template:
-  TemplateStringExpr, span }>)`, the tag always an `Expr::Ident`. A new variant
+- `Expr::TaggedTemplate(Box<TaggedTemplateExpr { id, tag: Expr, template: TemplateStringExpr, span }>)`, the tag always an `Expr::Ident`. A new variant
   rather than a field on `TemplateStringExpr`: a tagged template is a call, and
   the arms that treat a template as a string literal (overload classification's
   `ArgClass::StrLit`, newtype literal coercion) must not see it. Every
@@ -461,8 +459,7 @@ introduces a mechanism; each item names the existing one it extends.
   non-path receiver is a syntax error naming the rule; a gap falls through to
   the ordinary unexpected-token error.
 - `unparse` prints the tag then the template with nothing between, in both
-  printers. `Wado.g4` adds `taggedTemplate : (tagOwner '::')* tagName
-  templateString` to `primary` and `primaryNoStruct`; the grammar cannot see
+  printers. `Wado.g4` adds `taggedTemplate : (tagOwner '::')* tagName templateString` to `primary` and `primaryNoStruct`; the grammar cannot see
   the gap, so the whitespace case is a `compile_error` fixture under
   `check-grammar`'s second invariant. `Wado.highlights.scm` captures `tagName`
   as `@function`, and the LSP's call heuristic reads an adjacent template as a
@@ -511,8 +508,7 @@ serial advances on read, so a template nested inside a hole mints its own
   method names off the registry, reached through the `ReflectTemplate` arm of
   `reflect_dispatch_of`.
 - `reflect_template_holes` reads hole types off the shape. The concrete
-  resolver types `members()` as `payload_members_ty(ReflectTemplateHole, T,
-  holes)` and `tail()` / `raw_tail()` as `String`. The generic resolver, for a
+  resolver types `members()` as `payload_members_ty(ReflectTemplateHole, T, holes)` and `tail()` / `raw_tail()` as `String`. The generic resolver, for a
   body written against `T: ReflectTemplate<Holes = [..V]>`, types `members()`
   as the mapped pack `[..TemplateHole<T, V>]` through `payload_member_pack_bound_ty`,
   and `emit_missing_pack_bound` spells `Holes = [..V]`.
@@ -529,8 +525,7 @@ serial advances on read, so a template nested inside a hole mints its own
 
 - `collect_reflect_targets` routes a template-shaped `TirStruct` to
   `generate_template_reflect_impls` instead of the struct kind. Per shape it
-  emits `type_name` and `wire_name_policy` under the root, registers `Holes =
-  [V_k]` and `Members = [TemplateHole<T, V_k>]`, and emits `members()` through
+  emits `type_name` and `wire_name_policy` under the root, registers `Holes = [V_k]` and `Members = [TemplateHole<T, V_k>]`, and emits `members()` through
   `generate_template_members_fn` with one `TemplateHole` literal per hole (`lit`
   cooked through `unescape_template_string`, `raw` verbatim), plus `tail()`
   and `raw_tail()` returning literals. The impl is recorded into `TraitEnv`

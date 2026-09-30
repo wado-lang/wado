@@ -380,10 +380,10 @@ only.
 ### Open work
 
 - [ ] Seeding the default threshold from `WADO_LOG` — see
-      [Default sink and scoped overrides](#default-sink-and-scoped-overrides).
+  [Default sink and scoped overrides](#default-sink-and-scoped-overrides).
 - [ ] Stamping the default sink in worlds that have a clock, without costing a
-      clock-free world its guarantee — see
-      [Timestamp and sequence](#timestamp-and-sequence).
+  clock-free world its guarantee — see
+  [Timestamp and sequence](#timestamp-and-sequence).
 - [ ] Forwarding a local bound to a constant global read.
 - [ ] Sinking pure definitions into the branch that uses them.
 - [ ] Optional: native `with <span> do { … }` sugar.

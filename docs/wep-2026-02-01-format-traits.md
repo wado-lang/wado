@@ -219,7 +219,7 @@ program does not use.
 ### Known gaps
 
 - [ ] Dynamic width/precision (`${value:${width}.${precision}}`) — see
-      [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md).
+  [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md).
 
 ## References
 

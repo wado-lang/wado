@@ -73,8 +73,7 @@ than for one.
   Rejected: it would not normalize the non-constant case, would diverge from
   `TupleLiteral`, and would force the node to carry a value representation NIR
   does not otherwise use.
-- Reconstruct the node in the optimizer from an inlined `array_new(N) + N ×
-  push` window. Rejected: `lower` emits the node directly, so the matcher would
+- Reconstruct the node in the optimizer from an inlined `array_new(N) + N × push` window. Rejected: `lower` emits the node directly, so the matcher would
   only be re-deriving what it was already told, and a shape-sensitive matcher
   breaks whenever the lowering it keys on moves. Every benchmark's `-O2` WIR is
   identical without it.

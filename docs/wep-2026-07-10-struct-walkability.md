@@ -182,13 +182,13 @@ coherence Rules 1–2). Struct walkability needs nothing beyond them; the
 `#[secret]` security upgrade needs the two staged items below.
 
 - [ ] Extend `ReflectStruct` to project a `#[secret]` field as `Secret<T>` in `Fields`
-      and add `StructField::is_secret` (blocked on `ReflectStruct` synthesis).
+  and add `StructField::is_secret` (blocked on `ReflectStruct` synthesis).
 - [ ] Land the `#[secret]` security upgrade in one step — not piecemeal in the
-      bespoke synthesizers ahead of the rest: serialize skip (in the
-      `ReflectStruct`-based serde, reading `StructField::is_secret`), require
-      default/`Option` for serializability, and `Eq`/`Ord` auto-derive + marker
-      refusal (a guard in trait synthesis). Resolve the unrolled-loop skip open
-      question above. Deserialize is unchanged.
+  bespoke synthesizers ahead of the rest: serialize skip (in the
+  `ReflectStruct`-based serde, reading `StructField::is_secret`), require
+  default/`Option` for serializability, and `Eq`/`Ord` auto-derive + marker
+  refusal (a guard in trait synthesis). Resolve the unrolled-loop skip open
+  question above. Deserialize is unchanged.
 - [ ] Document the walk/nesting idiom in the cheatsheet once `ReflectStruct` lands.
 
 ## Consequences

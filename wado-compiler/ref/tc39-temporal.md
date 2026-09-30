@@ -7614,15 +7614,15 @@ The following table is taken from ECMA-402 (Table 29) but with the addition of s
 | Table 28: Rounding modes Rounding Mode | String Identifier | Description                                     | Examples: Round to 0 fraction digits |
 | -------------------------------------- | ----------------- | ----------------------------------------------- | ------------------------------------ |
 | -1.5                                   | 0.4               | 0.5                                             | 0.6                                  |
-| ceil                                   | "ceil"            | Toward positive infinity                        | ⬆️ [-1]                              |
-| floor                                  | "floor"           | Toward negative infinity                        | ⬇️ [-2]                              |
-| expand                                 | "expand"          | Away from zero                                  | ⬇️ [-2]                              |
-| trunc                                  | "trunc"           | Toward zero                                     | ⬆️ [-1]                              |
-| half-ceil                              | "halfCeil"        | Ties toward positive infinity                   | ⬆️ [-1]                              |
-| half-floor                             | "halfFloor"       | Ties toward negative infinity                   | ⬇️ [-2]                              |
-| half-expand                            | "halfExpand"      | Ties away from zero                             | ⬇️ [-2]                              |
-| half-trunc                             | "halfTrunc"       | Ties toward zero                                | ⬆️ [-1]                              |
-| half-even                              | "halfEven"        | Ties toward an even rounding increment multiple | ⬇️ [-2]                              |
+| ceil                                   | "ceil"            | Toward positive infinity                        | ⬆️ [-1]                               |
+| floor                                  | "floor"           | Toward negative infinity                        | ⬇️ [-2]                               |
+| expand                                 | "expand"          | Away from zero                                  | ⬇️ [-2]                               |
+| trunc                                  | "trunc"           | Toward zero                                     | ⬆️ [-1]                               |
+| half-ceil                              | "halfCeil"        | Ties toward positive infinity                   | ⬆️ [-1]                               |
+| half-floor                             | "halfFloor"       | Ties toward negative infinity                   | ⬇️ [-2]                               |
+| half-expand                            | "halfExpand"      | Ties away from zero                             | ⬇️ [-2]                               |
+| half-trunc                             | "halfTrunc"       | Ties toward zero                                | ⬆️ [-1]                               |
+| half-even                              | "halfEven"        | Ties toward an even rounding increment multiple | ⬇️ [-2]                               |
 | Note                                   |                   |                                                 |                                      |
 
 The examples are illustrative of the unique behaviour of each option. ⬆️ means "resolves toward positive infinity"; ⬇️ means "resolves toward negative infinity".
@@ -8019,15 +8019,15 @@ The abstract operation GetOption takes arguments options (an Object), property (
 | ~~ Table 29: Rounding modes in Intl.NumberFormat Identifier | Description                                     | Examples: Round to 0 fraction digits |
 | ----------------------------------------------------------- | ----------------------------------------------- | ------------------------------------ |
 | -1.5                                                        | 0.4                                             | 0.5                                  |
-| "ceil"                                                      | Toward positive infinity                        | ⬆️ [-1]                              |
-| "floor"                                                     | Toward negative infinity                        | ⬇️ [-2]                              |
-| "expand"                                                    | Away from zero                                  | ⬇️ [-2]                              |
-| "trunc"                                                     | Toward zero                                     | ⬆️ [-1]                              |
-| "halfCeil"                                                  | Ties toward positive infinity                   | ⬆️ [-1]                              |
-| "halfFloor"                                                 | Ties toward negative infinity                   | ⬇️ [-2]                              |
-| "halfExpand"                                                | Ties away from zero                             | ⬇️ [-2]                              |
-| "halfTrunc"                                                 | Ties toward zero                                | ⬆️ [-1]                              |
-| "halfEven"                                                  | Ties toward an even rounding increment multiple | ⬇️ [-2]                              |
+| "ceil"                                                      | Toward positive infinity                        | ⬆️ [-1]                               |
+| "floor"                                                     | Toward negative infinity                        | ⬇️ [-2]                               |
+| "expand"                                                    | Away from zero                                  | ⬇️ [-2]                               |
+| "trunc"                                                     | Toward zero                                     | ⬆️ [-1]                               |
+| "halfCeil"                                                  | Ties toward positive infinity                   | ⬆️ [-1]                               |
+| "halfFloor"                                                 | Ties toward negative infinity                   | ⬇️ [-2]                               |
+| "halfExpand"                                                | Ties away from zero                             | ⬇️ [-2]                               |
+| "halfTrunc"                                                 | Ties toward zero                                | ⬆️ [-1]                               |
+| "halfEven"                                                  | Ties toward an even rounding increment multiple | ⬇️ [-2]                               |
 | Note                                                        |                                                 |                                      |
 
 The examples are illustrative of the unique behaviour of each option. ⬆️ means "resolves toward positive infinity"; ⬇️ means "resolves toward negative infinity".

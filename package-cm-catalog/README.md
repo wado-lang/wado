@@ -35,14 +35,14 @@ Full intended scope; checked items are implemented.
 - [x] Named types (`record`, `variant`, `enum`, `flags`, newtype)
 - [x] Nested compositions
 - [x] `flags` inside `option` / `list` / `tuple` — the CM width (one byte at ≤8
-      labels) only shows up where the ABI reads a stride or an offset
+  labels) only shows up where the ABI reads a stride or an offset
 - [x] A `variant` with no payload-bearing case, bare and inside
-      `option` / `list` / `tuple` — it lays out as its bare discriminant, and
-      the same stride-or-offset reads are what show that width
+  `option` / `list` / `tuple` — it lays out as its bare discriminant, and
+  the same stride-or-offset reads are what show that width
 - [x] `map<k, v>`: the same bytes as `list<tuple<k, v>>` under its own type
-      constructor. One row per key shape that lowers differently (`string`,
-      a scalar), a repeated-key round trip for the last-wins rule, and a `map`
-      in an async call's params buffer
+  constructor. One row per key shape that lowers differently (`string`,
+  a scalar), a repeated-key round trip for the last-wins rule, and a `map`
+  in an async call's params buffer
 
 ### `future<T>` (consume/produce)
 
@@ -51,8 +51,8 @@ Full intended scope; checked items are implemented.
 - [x] `record`
 - [x] `option<_>`
 - [x] `result<_, _>`, including the unit-Ok form — `future<result<_, string>>`
-      has the shape of the WASI transmission future, and only a WASI error-code
-      on the Err side makes it one
+  has the shape of the WASI transmission future, and only a WASI error-code
+  on the Err side makes it one
 - [x] `list<_>`
 - [x] `tuple<…>`
 - [x] `variant` / `enum` / `flags` payloads
@@ -68,25 +68,25 @@ Full intended scope; checked items are implemented.
 ### Embedded handles (pass-through)
 
 - [x] `option<future>`, `result<future, _>`, `list<future>`, `list<stream>`,
-      `tuple<future, _>`, a record with a `future` field
+  `tuple<future, _>`, a record with a `future` field
 
 ### Calling conventions
 
 - [x] Narrow scalars in the indirect params buffer. Past four flat params an
-      async call puts every param in one buffer, each at its tuple-layout
-      offset, so a scalar stored wider than its CM size writes past its slot
+  async call puts every param in one buffer, each at its tuple-layout
+  offset, so a scalar stored wider than its CM size writes past its slot
 
 ### Test oracle
 
 - [x] Async value read-back — assert the payload survives the round-trip, not
-      only the handle
+  only the handle
 
 ### Handles
 
 - [ ] `own<resource>` / `borrow<resource>` identity. A resource does travel as
-      `own<r>` inside a `future` / `stream` payload
-      (`wasi_tls_send_done_future.wado`), but the catalog declares no resource of
-      its own to write an identity export against
+  `own<r>` inside a `future` / `stream` payload
+  (`wasi_tls_send_done_future.wado`), but the catalog declares no resource of
+  its own to write an identity export against
 
 ## Regenerating the WIT
 

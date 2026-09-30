@@ -20,8 +20,7 @@ altogether: not "the next value" but "the value at this key". Terrain
 regenerated on a revisit and an entity keyed by its id both need the draw order
 to belong to the caller, and need no two callers to agree on who draws first.
 
-The effect system is the fourth pressure. An operation that declares `with
-Random` forces the declaration up through every caller, and a simulation whose
+The effect system is the fourth pressure. An operation that declares `with Random` forces the declaration up through every caller, and a simulation whose
 inner loop draws a number should not carry a capability through forty
 signatures to do it. But randomness genuinely is a capability at the point where
 entropy enters the process, and pretending otherwise would be the wrong kind of
@@ -328,8 +327,7 @@ left over is unowned, so it is listed under Known gaps instead.
   expands the seed through SplitMix64 and keeps the reference's thirteen
   discarded rounds rather than its table of digits of phi, so its stream is not
   the reference's and no published vector applies to it as it stands.
-- A generic consumer over `R: VectorRng<Batch = [..V]>, ..V: BitXor<u64x2,
-  Output = u64x2>` compiles and runs, so the fixed sixteen-word batch is a
+- A generic consumer over `R: VectorRng<Batch = [..V]>, ..V: BitXor<u64x2, Output = u64x2>` compiles and runs, so the fixed sixteen-word batch is a
   choice rather than a workaround: what it costs is a width the library names
   instead of the engine, and the measurements above are why it is named.
   Reaching a member of the batch still puts the pack on the left of the

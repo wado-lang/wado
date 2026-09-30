@@ -167,6 +167,7 @@ Walk the pass pipeline like this:
 1. Get the failing fixture compiling at `-O0` first to confirm it is an
    optimization-introduced bug (not a lower/codegen bug).
 2. List the passes that run at the failing `-Ox` level:
+
    ```sh
    WADO_LIST_PASSES=1 cargo run --bin wado --quiet -- compile -O1 fixture.wado -o /tmp/out.wasm 2>&1 | grep '\[pass\]'
    ```

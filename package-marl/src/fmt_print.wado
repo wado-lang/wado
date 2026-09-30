@@ -47,11 +47,9 @@ internal fn print_document(doc: &Node) -> String {
 // --- block sequencing ---
 
 /// `tight` allows single-newline (no blank line) spacing between sibling
-/// blocks, used for a list item's own children — but never between two
-/// adjacent paragraphs (would merge into one on re-parse) or before an
-/// indented code block (would become paragraph lazy-continuation instead of
-/// code on re-parse): both are genuine round-trip-safety hazards, not a
-/// style choice, so they always keep their blank line regardless of `tight`.
+/// blocks, used for a list item's own children. Two adjacent paragraphs still
+/// keep their blank line, since they would merge into one on re-parse. A code
+/// block or a table keeps one on both sides as a style rule.
 fn print_block_sequence(nodes: &List<Node>, out: &mut String, tight: bool) {
     let mut first = true;
     let mut prev_is_paragraph = false;
@@ -60,14 +58,11 @@ fn print_block_sequence(nodes: &List<Node>, out: &mut String, tight: bool) {
     for let node of nodes {
         let is_ref_def = node matches { Node::LinkReferenceDef(_) };
         let is_paragraph = node matches { Node::Paragraph(_) };
-        let is_indented_code = match node {
-            Node::CodeBlock(cb) => !cb.fenced,
-            _ => false,
-        };
+        let stands_apart = node matches { Node::CodeBlock(_) | Node::Table(_) };
         if !first {
             if prev_is_ref_def && is_ref_def {
                 out.push('\n');
-            } else if tight && !(prev_is_paragraph && is_paragraph) && !is_indented_code && !prev_needs_boundary {
+            } else if tight && !(prev_is_paragraph && is_paragraph) && !stands_apart && !prev_needs_boundary {
                 out.push('\n');
             } else {
                 out.push_str("\n\n");
@@ -77,14 +72,15 @@ fn print_block_sequence(nodes: &List<Node>, out: &mut String, tight: bool) {
         print_block(node, out);
         prev_is_paragraph = is_paragraph;
         prev_is_ref_def = is_ref_def;
-        // A List, Table, BlockQuote, or Html block doesn't reliably
-        // self-terminate on reparse: without a blank line, a following
-        // under-indented line can be lazily absorbed as more content of the
-        // block's own last (still "open") leaf, rather than starting the
-        // next sibling — found via a real corpus idempotency check where a
-        // dropped blank line let a List's trailing paragraph get reparsed as
-        // part of the list's last item. Always force the boundary for these.
-        prev_needs_boundary = node matches { Node::List(_) | Node::Table(_) | Node::BlockQuote(_) | Node::Html(_) | Node::Comment(_) };
+        // A List, BlockQuote, or Html block doesn't reliably self-terminate on
+        // reparse: without a blank line, a following under-indented line can
+        // be lazily absorbed as more content of the block's own last (still
+        // "open") leaf, rather than starting the next sibling — found via a
+        // real corpus idempotency check where a dropped blank line let a
+        // List's trailing paragraph get reparsed as part of the list's last
+        // item. Always force the boundary for these.
+        prev_needs_boundary = stands_apart
+            || node matches { Node::List(_) | Node::BlockQuote(_) | Node::Html(_) | Node::Comment(_) };
     }
 }
 

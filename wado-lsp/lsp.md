@@ -70,7 +70,9 @@ The following TypeScript definitions describe the base JSON-RPC protocol:
 
 The protocol uses the following definitions for integers, unsigned integers, decimal numbers, objects and arrays:
 
-<div class="anchorHolder"><a href="#integer" name="integer" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#integer" name="integer" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 /**
@@ -79,7 +81,9 @@ The protocol uses the following definitions for integers, unsigned integers, dec
 export type integer = number;
 ```
 
-<div class="anchorHolder"><a href="#uinteger" name="uinteger" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#uinteger" name="uinteger" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 /**
@@ -88,7 +92,9 @@ export type integer = number;
 export type uinteger = number;
 ```
 
-<div class="anchorHolder"><a href="#decimal" name="decimal" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#decimal" name="decimal" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 /**
@@ -101,7 +107,9 @@ export type uinteger = number;
 export type decimal = number;
 ```
 
-<div class="anchorHolder"><a href="#lspAny" name="lspAny" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#lspAny" name="lspAny" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 /**
@@ -113,7 +121,9 @@ export type LSPAny = LSPObject | LSPArray | string | integer | uinteger |
 	decimal | boolean | null;
 ```
 
-<div class="anchorHolder"><a href="#lspObject" name="lspObject" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#lspObject" name="lspObject" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 /**
@@ -124,7 +134,9 @@ export type LSPAny = LSPObject | LSPArray | string | integer | uinteger |
 export type LSPObject = { [key: string]: LSPAny };
 ```
 
-<div class="anchorHolder"><a href="#lspArray" name="lspArray" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#lspArray" name="lspArray" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 /**
@@ -139,7 +151,9 @@ export type LSPArray = LSPAny[];
 
 A general message as defined by JSON-RPC. The language server protocol always uses "2.0" as the `jsonrpc` version.
 
-<div class="anchorHolder"><a href="#message" name="message" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#message" name="message" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 interface Message {
@@ -195,7 +209,9 @@ interface ResponseMessage extends Message {
 }
 ```
 
-<div class="anchorHolder"><a href="#responseError" name="responseError" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#responseError" name="responseError" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 interface ResponseError {
@@ -217,7 +233,9 @@ interface ResponseError {
 }
 ```
 
-<div class="anchorHolder"><a href="#errorCodes" name="errorCodes" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a href="#errorCodes" name="errorCodes" class="linkableAnchor"></a>
+</div>
 
 ```typescript
 export namespace ErrorCodes {
@@ -502,7 +520,13 @@ Controls whether text document synchronization supports dynamic registration.
 - property path (optional): `textDocumentSync`
 - property type: `TextDocumentSyncKind | TextDocumentSyncOptions`. The below definition of the `TextDocumentSyncOptions` only covers the properties specific to the open, change and close notifications. A complete definition covering all properties can be found [here](#textDocument_didClose):
 
-<div class="anchorHolder"><a href="#textDocumentSyncKind" name="textDocumentSyncKind" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a
+    href="#textDocumentSyncKind"
+    name="textDocumentSyncKind"
+    class="linkableAnchor"
+  ></a>
+</div>
 
 ```typescript
 /**
@@ -532,7 +556,13 @@ export namespace TextDocumentSyncKind {
 export type TextDocumentSyncKind = 0 | 1 | 2;
 ```
 
-<div class="anchorHolder"><a href="#textDocumentSyncOptions" name="textDocumentSyncOptions" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a
+    href="#textDocumentSyncOptions"
+    name="textDocumentSyncOptions"
+    class="linkableAnchor"
+  ></a>
+</div>
 
 ```typescript
 export interface TextDocumentSyncOptions {
@@ -562,7 +592,13 @@ export interface TextDocumentSyncOptions {
 
 The final structure of the `TextDocumentSyncClientCapabilities` and the `TextDocumentSyncOptions` server options look like this
 
-<div class="anchorHolder"><a href="#textDocumentSyncClientCapabilities" name="textDocumentSyncClientCapabilities" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a
+    href="#textDocumentSyncClientCapabilities"
+    name="textDocumentSyncClientCapabilities"
+    class="linkableAnchor"
+  ></a>
+</div>
 
 ```typescript
 export interface TextDocumentSyncClientCapabilities {
@@ -590,7 +626,13 @@ export interface TextDocumentSyncClientCapabilities {
 }
 ```
 
-<div class="anchorHolder"><a href="#textDocumentSyncOptions" name="textDocumentSyncOptions" class="linkableAnchor"></a></div>
+<div class="anchorHolder">
+  <a
+    href="#textDocumentSyncOptions"
+    name="textDocumentSyncOptions"
+    class="linkableAnchor"
+  ></a>
+</div>
 
 ```typescript
 export interface TextDocumentSyncOptions {

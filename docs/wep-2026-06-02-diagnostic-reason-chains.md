@@ -182,10 +182,10 @@ Shipped and validated:
 
 - [x] `OperatorNotApplicable`: symmetric, correctly-labeled operator errors.
 - [x] Trait-bound reason chains for `Eq`/`Ord` auto-derive (struct, generic
-      struct, variant), recursive and on by default at all five bound-check
-      sites.
+  struct, variant), recursive and on by default at all five bound-check
+  sites.
 - [x] Unit tests plus E2E fixtures (`operator_not_applicable_*`,
-      `trait_bound_reason_*`); no regressions in the `wado-compiler` suite.
+  `trait_bound_reason_*`); no regressions in the `wado-compiler` suite.
 
 Trade-offs and known limits:
 
@@ -203,11 +203,11 @@ Trade-offs and known limits:
 Next steps, in priority order toward the paper's `all` level:
 
 - [ ] Give `Diagnostic` structured notes with their own spans (builder or
-      `Default` to avoid editing all construction sites), so a note can point
-      at the field definition.
+  `Default` to avoid editing all construction sites), so a note can point
+  at the field definition.
 - [ ] Track inference provenance through unification so a `TypeMismatch` from
-      generic inference can show where a type variable was bound.
+  generic inference can show where a type variable was bound.
 - [ ] Explain a missing user-written `impl` (candidate impls, near-misses).
 - [x] Extend reason chains beyond `Eq`/`Ord` to other structural bounds —
-      `Serialize`/`Deserialize` (`on_bound` policy), see
-      [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+  `Serialize`/`Deserialize` (`on_bound` policy), see
+  [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).

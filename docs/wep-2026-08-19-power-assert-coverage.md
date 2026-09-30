@@ -129,36 +129,35 @@ not yet reach — a defect or an open question, never a boundary.
 ### Rule 1: the mechanism changes evaluation
 
 - [ ] **Capture a receiver that is not a place.** A place receiver renders
-      today, the failure branch re-reading it. Every other receiver — `f().m()`,
-      `(a..<b).contains(&a)` — renders nothing, and needs the value kept without
-      a copy. Unpinned; the fixtures that pinned it now pin the place half:
-      `assert_method_receiver`, `assert_subscript_receiver`,
-      `assert_matches_scrutinee`.
+  today, the failure branch re-reading it. Every other receiver — `f().m()`,
+  `(a..<b).contains(&a)` — renders nothing, and needs the value kept without
+  a copy. Unpinned; the fixtures that pinned it now pin the place half:
+  `assert_method_receiver`, `assert_subscript_receiver`,
+  `assert_matches_scrutinee`.
 
 ### Rule 3: operand positions that render nothing
 
 - [ ] **Render a `WithHandler` or `Resume` operand.** A closure renders its
-      signature now (`assert_closure_operand`); these two render nothing. Their
-      _children_ stay unwalked for a reason that does hold: a sub-expression of
-      a body has no value at the moment the condition failed. Unpinned.
+  signature now (`assert_closure_operand`); these two render nothing. Their
+  _children_ stay unwalked for a reason that does hold: a sub-expression of
+  a body has no value at the moment the condition failed. Unpinned.
 
 - [ ] **Capture the operands inside the branch a run took.** The scan stops at
-      an `If` / `Match` branch body and at a block's statements, since the
-      enclosing node's capture already renders what the run produced — which
-      holds only for a single-leaf body. Measured: `assert (if c { f() + g() }
-      else { 0 }) == 99` renders `c` and the `if`'s value `5`, nothing for
-      `f()`, `g()` or `f() + g()`. What a compound body should show is
-      undecided, so this stays unpinned.
+  an `If` / `Match` branch body and at a block's statements, since the
+  enclosing node's capture already renders what the run produced — which
+  holds only for a single-leaf body. Measured: `assert (if c { f() + g() }     else { 0 }) == 99` renders `c` and the `if`'s value `5`, nothing for
+  `f()`, `g()` or `f() + g()`. What a compound body should show is
+  undecided, so this stays unpinned.
 
       A `Spread` needs nothing: it only ever sits inside a literal the scan
       already walks.
 
 - [ ] **Say which half of a comparison chain failed.** A chain renders its
-      operands and no per-comparison result, since the comparisons are the
-      chain's own and not operands the source wrote. Measured: `0 <= a < b`
-      takes one slot per operand, where `0 <= a && a < b` also renders
-      `0 <= a`. A reader infers the failing half from the values. Whether a
-      chain should report each comparison is undecided, so this stays unpinned.
+  operands and no per-comparison result, since the comparisons are the
+  chain's own and not operands the source wrote. Measured: `0 <= a < b`
+  takes one slot per operand, where `0 <= a && a < b` also renders
+  `0 <= a`. A reader infers the failing half from the values. Whether a
+  chain should report each comparison is undecided, so this stays unpinned.
 
 ## Consequences
 

@@ -67,8 +67,7 @@ defaults — including the allocator — depend on the target world.
 `--world <name>` overrides it on `compile`, `check`, `dump`, and `wit` (`check`
 defaults to the library world instead — see Check).
 `--world test` exports the entry module's `test` blocks and drops everything
-else. `run`, `serve`, and `test` pick their world automatically. `build --world
-<fq>` is a different flag: it selects which of `wado.toml`'s declared worlds to
+else. `run`, `serve`, and `test` pick their world automatically. `build --world <fq>` is a different flag: it selects which of `wado.toml`'s declared worlds to
 build.
 
 ```sh
@@ -264,18 +263,15 @@ wado format -w file.wado  # rewrite in place
 ```
 
 In the wado repository, `mise run format` formats the whole workspace. Every
-package skips `**/generated/**` and `**/build/**` plus its own `[format]
-exclude`; `[format] include` opts any of those back in. `wado-compiler` excludes
+package skips `**/generated/**` and `**/build/**` plus its own `[format] exclude`; `[format] include` opts any of those back in. `wado-compiler` excludes
 `tests/**`, so the e2e fixtures and the golden format fixtures keep the
 hand-authored layouts that are part of the test.
 
 A directory argument is walked from the package that encloses it, so the globs
-match as authored whichever subdirectory you name. `wado format -w
-wado-compiler/tests` formats nothing and reports that directory as empty.
+match as authored whichever subdirectory you name. `wado format -w wado-compiler/tests` formats nothing and reports that directory as empty.
 
 **Caution:** naming a file bypasses the filters. The golden-fixture scripts
-rewrite excluded fixtures that way, so `wado format -w
-wado-compiler/tests/fixtures/x.wado` reformats it too, silently discarding a
+rewrite excluded fixtures that way, so `wado format -w wado-compiler/tests/fixtures/x.wado` reformats it too, silently discarding a
 layout the test depends on. When the syntax is updated, make sure to add tests
 to `wado-compiler/tests/format.rs`.
 

@@ -172,8 +172,7 @@ make a single dispatch stub serve every parameter shape with the same
 ```
 
 `$canonical_callback_fn = (env: structref, f: structref) -> ()` is uniform
-across signatures. The supertype prefix means `ref.cast self to
-$canonical_inspectable_base` succeeds for any inspectable closure value,
+across signatures. The supertype prefix means `ref.cast self to $canonical_inspectable_base` succeeds for any inspectable closure value,
 regardless of `K` — so two distinct function types like `fn(i32) -> i32` and
 `fn(String) -> i32` (same `(arity, return_type)`, different parameter types)
 reach the same dispatch stub without per-signature tables.
@@ -256,7 +255,7 @@ wrapper function and the signature and source strings per literal.
 ### Known gaps
 
 - [ ] Depth limit: a recursive type inspects until it runs out of stack.
-      Nothing caps nesting depth the way `DEFAULT_SEQ_LIMIT` caps length.
+  Nothing caps nesting depth the way `DEFAULT_SEQ_LIMIT` caps length.
 
 ## Known gaps
 

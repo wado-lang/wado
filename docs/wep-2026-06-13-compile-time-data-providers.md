@@ -269,30 +269,30 @@ capability only its authors can use is not one.
 ## Open questions
 
 - [ ] The declaration surface: how a package states which components are
-      provider-backed, which provider serves them, and where its data assets
-      live. The manifest is the obvious home, alongside Kiln's `generator` field.
+  provider-backed, which provider serves them, and where its data assets
+  live. The manifest is the obvious home, alongside Kiln's `generator` field.
 - [ ] The options protocol, per "Options".
 - [ ] Method-level reachability in the `liveness` pass, without which a live type
-      implies every method.
+  implies every method.
 - [ ] Whether a provider may depend on another provider's output. Kiln allows
-      generator DAGs; the analogous case here has no motivating example yet, and
-      forbidding it keeps invocation a single flat step.
+  generator DAGs; the analogous case here has no motivating example yet, and
+  forbidding it keeps invocation a single flat step.
 - [ ] The fuel and deadline defaults, and whether a consumer can raise them for a
-      provider they trust.
+  provider they trust.
 
 ## Implementation
 
 - [ ] The `data-provider` world and `provider-host`, with the shared diagnostic
-      types hoisted out of `core:kiln/kiln-host` so both hosts use one shape.
+  types hoisted out of `core:kiln/kiln-host` so both hosts use one shape.
 - [ ] The declaration surface and its manifest schema.
 - [ ] The provisioning phase: aggregate live symbols and options off `liveness`,
-      invoke the provider, embed each blob into its component, compose, and cache
-      by content.
+  invoke the provider, embed each blob into its component, compose, and cache
+  by content.
 - [ ] The resource ceiling: fuel plus a wall-clock deadline, with the failure
-      reported against the use site.
+  reported against the use site.
 - [ ] Per-symbol data-cost reporting.
 - [ ] [`core:icu`](./wep-2026-08-09-core-icu.md) as the first consumer, which is
-      what proves the contract against a real slicer rather than a toy one.
+  what proves the contract against a real slicer rather than a toy one.
 
 ## References
 

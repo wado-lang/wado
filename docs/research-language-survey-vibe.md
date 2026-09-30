@@ -343,22 +343,22 @@ Learned:
 Take:
 
 - [ ] A measured-pitfalls section for the cheatsheet, written vibe's way rather
-      than Almide's. The difference is three rules about how each entry is
-      written. State the date it was measured against the compiler. Name the
-      fixture that pins it. And where an earlier version of the entry turned out
-      to be wrong, say so. A list written from memory decays into folklore. This
-      kind cannot, because every row can be re-run.
+  than Almide's. The difference is three rules about how each entry is
+  written. State the date it was measured against the compiler. Name the
+  fixture that pins it. And where an earlier version of the entry turned out
+  to be wrong, say so. A list written from memory decays into folklore. This
+  kind cannot, because every row can be re-run.
 - [ ] Gates over documentation, not only over code. vibe compiles every code
-      block in its docs against the current compiler, checks documented
-      signatures against the compiler, and verifies that file paths cited in docs
-      still exist. Wado's cheatsheet and spec have no gate like this, and the
-      third one is a shell script's worth of work. What makes the first one
-      workable is a skip marker that requires a reason, so an example of what
-      _not_ to write can stay in the document without quietly exempting itself
-      from the gate.
+  block in its docs against the current compiler, checks documented
+  signatures against the compiler, and verifies that file paths cited in docs
+  still exist. Wado's cheatsheet and spec have no gate like this, and the
+  third one is a shell script's worth of work. What makes the first one
+  workable is a skip marker that requires a reason, so an example of what
+  _not_ to write can stay in the document without quietly exempting itself
+  from the gate.
 - [ ] Gate self-tests and a gate registry. A check script with no test is a claim
-      nobody checked. vibe pairs most of its gates with a `_test.sh`, and keeps a
-      registry gate over the whole set.
+  nobody checked. vibe pairs most of its gates with a `_test.sh`, and keeps a
+  registry gate over the whole set.
 
 Refuse:
 

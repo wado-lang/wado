@@ -249,6 +249,7 @@ pub fn compile_command(path: &Path, options: CompileOptions) -> Result<()> {
    - No heavy runtime (tokio) needed for CLI
 
 3. **Conditional compilation for targets**
+
    ```rust
    #[cfg(not(target_arch = "wasm32"))]
    pub struct CliCompilerHost { ... }

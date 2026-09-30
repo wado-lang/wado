@@ -351,8 +351,7 @@ instead); the benefit is that `Value` stays a clean, format-neutral model.
 A decoded integer goes into the smallest arm that holds it, so equal numbers
 have one representation and canonical re-encoding is shortest-form:
 
-- non-negative: `≤ i64::MAX` → `Int`; else `≤ u64::MAX` → `UInt`; else `≤
-  i128::MAX` → `Int128`; else `≤ u128::MAX` → `UInt128`.
+- non-negative: `≤ i64::MAX` → `Int`; else `≤ u64::MAX` → `UInt`; else `≤ i128::MAX` → `Int128`; else `≤ u128::MAX` → `UInt128`.
 - negative: `≥ i64::MIN` → `Int`; else → `Int128` (covers CBOR's
   `-2^64 .. -2^63-1`).
 - bignum (tag 2/3) within these ranges decodes to the matching arm; beyond
@@ -422,59 +421,59 @@ type are complete. The remaining items are lossy CBOR→JSON conversion and CWT.
 
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
 - [x] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
-      today (also impl'd for `String`, so `from_bytes("...")` accepts a literal)
+  today (also impl'd for `String`, so `from_bytes("...")` accepts a literal)
 - [x] prelude: `ByteArray`/`ByteList`/`ByteSlice` newtypes and their
-      `AsByteSlice` and `Serialize`/`Deserialize` impls
+  `AsByteSlice` and `Serialize`/`Deserialize` impls
 - [x] serde: `serialize_bytes`/`deserialize_bytes`; `visit_i64`/`u64`/`i128`/
-      `u128`/`bytes`/`unknown` with defaults; `FieldSchema::lookup(ByteSlice)`
+  `u128`/`bytes`/`unknown` with defaults; `FieldSchema::lookup(ByteSlice)`
 - [x] compiler: emit the new `lookup` signature from the struct-deserialize
-      synthesizer (reads the key via the generic `Slice<u8>` ops,
-      monomorphized at `u8`)
+  synthesizer (reads the key via the generic `Slice<u8>` ops,
+  monomorphized at `u8`)
 - [x] `core:json`: bytes-primary API
-      (`from_bytes`/`to_bytes`/`to_bytes_pretty`/`to_bytes_canonical`); the
-      deserializer scans a `ByteSlice` view (no byte copy, UTF-8 validation
-      localized to string tokens); `core:router` shares the bytes `FieldSchema`.
-      The string entries (`from_string`/`to_string`/`to_string_pretty`) are kept
-      as thin convenience wrappers rather than removed.
+  (`from_bytes`/`to_bytes`/`to_bytes_pretty`/`to_bytes_canonical`); the
+  deserializer scans a `ByteSlice` view (no byte copy, UTF-8 validation
+  localized to string tokens); `core:router` shares the bytes `FieldSchema`.
+  The string entries (`from_string`/`to_string`/`to_string_pretty`) are kept
+  as thin convenience wrappers rather than removed.
 - [x] `core:value` (replacing `core:json_value`)
 - [x] `to_bytes_canonical` for JSON (sorted keys, RFC 8785-style)
 - [x] serde: `visit_undefined` (default → `visit_null`) so `core:value` can
-      realize `Value::Undefined` from CBOR simple value 23 — a gap in the
-      original `Visitor` completion, found while implementing the decoder.
+  realize `Value::Undefined` from CBOR simple value 23 — a gap in the
+  original `Visitor` completion, found while implementing the decoder.
 - [x] `core:cbor` encoder (preferred serialization) in `lib/core/cbor.wado`
 - [x] `core:cbor` decoder (variation-tolerant, definite + indefinite, bounded
-      recursion, no length-driven preallocation, duplicate/trailing/UTF-8
-      checks)
+  recursion, no length-driven preallocation, duplicate/trailing/UTF-8
+  checks)
 - [x] `to_bytes_canonical` for CBOR (encoded-key bytewise sort, shortest forms;
-      float ladder stops at binary32 — documented binary16 caveat)
+  float ladder stops at binary32 — documented binary16 caveat)
 - [x] tags: bignum (2/3, encode + decode); self-described (55799) unwrap;
-      date/time tag 0 (RFC 3339 text) unwraps on decode so a tag-0-wrapped
-      `ZonedDateTime`/`Instant` decodes via its string `Deserialize`. In
-      `core:value`, tags 0/1/21/22/23/55799 decode by their content per
-      RFC 8949 §6.1.
+  date/time tag 0 (RFC 3339 text) unwraps on decode so a tag-0-wrapped
+  `ZonedDateTime`/`Instant` decodes via its string `Deserialize`. In
+  `core:value`, tags 0/1/21/22/23/55799 decode by their content per
+  RFC 8949 §6.1.
 - [x] tests: RFC 8949 Appendix A vectors, round-trip, canonical determinism,
-      well-formedness/Appendix F rejection, security limits
-      (`lib/core/cbor_test.wado`)
+  well-formedness/Appendix F rejection, security limits
+  (`lib/core/cbor_test.wado`)
 - [x] compiler fixes uncovered by the format work (CBOR is the first
-      length-prefixed serde format, so it exercised paths JSON never did):
-      (1) variant-return SROA now rewrites `Return`s hidden inside an `if`/
-      `while` condition (the `?`-in-condition shape in synthesized
-      `next_field`), instead of changing the signature and leaving a boxed
-      return; (2) `[..T].len()` in a generic body now yields the monomorphized
-      arity rather than the unsubstituted pack count of 1 (deferred via a new
-      `TirExprKind::TupleLen`, mirroring `TupleZip`).
+  length-prefixed serde format, so it exercised paths JSON never did):
+  (1) variant-return SROA now rewrites `Return`s hidden inside an `if`/
+  `while` condition (the `?`-in-condition shape in synthesized
+  `next_field`), instead of changing the signature and leaving a boxed
+  return; (2) `[..T].len()` in a generic body now yields the monomorphized
+  arity rather than the unsubstituted pack count of 1 (deferred via a new
+  `TirExprKind::TupleLen`, mirroring `TupleZip`).
 - [x] typed date/time mapping: `Instant`/`ZonedDateTime` emit tag 0 (RFC 3339
-      text) via a `Serializer::serialize_tag` hook, and decode a string (tag 0)
-      or a numeric epoch (tag 1) through a `deserialize_any` visitor. The impls
-      live in `core:temporal`.
+  text) via a `Serializer::serialize_tag` hook, and decode a string (tag 0)
+  or a numeric epoch (tag 1) through a `deserialize_any` visitor. The impls
+  live in `core:temporal`.
 - [x] map keys of any key type: `SerializeMap::key` writes the key as the value
-      it is and `DeserializeMap::next_key::<K>()` reads it back, so an
-      integer-keyed map such as a CWT claims set round-trips.
+  it is and `DeserializeMap::next_key::<K>()` reads it back, so an
+  integer-keyed map such as a CWT claims set round-trips.
 - [ ] lossy CBOR→JSON via `Value` (RFC 8949 §6.1 substitution: bytes→base64,
-      `undefined`/non-finite→`null`); the default still errors.
+  `undefined`/non-finite→`null`); the default still errors.
 - [ ] CWT (RFC 8392): a claims set is read and written with its integer labels
-      (`iss` is 1, `sub` is 2) through a type that names each claim, and keeps
-      those labels through CBOR → `Value` → CBOR.
+  (`iss` is 1, `sub` is 2) through a type that names each claim, and keeps
+  those labels through CBOR → `Value` → CBOR.
 
 ## Known gaps
 

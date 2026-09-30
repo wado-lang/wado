@@ -34,7 +34,7 @@ lower is then available to each interface the slice adds.
 ### 1. Sequences and variadics
 
 - [ ] Lower `sequence<T>` and `FrozenArray<T>` to `List<T>`, in the bindings and
-      in the glue
+  in the glue
 - [x] Lower a variadic argument to a `List<T>`
 - [ ] `SurfaceDom` answers the members this unlocks that the slice already has
 
@@ -42,15 +42,15 @@ lower is then available to each interface the slice adds.
 
 - [ ] The compiler accepts a default argument on a `#[cm]` operation
 - [ ] `wado-from-idl` emits `= null` for an `optional` without a default, and
-      the WebIDL default where one is given, so `create_element("div")` and
-      `clone_node()` compile
+  the WebIDL default where one is given, so `create_element("div")` and
+  `clone_node()` compile
 
 ### 3. Overloads and unions
 
 - [ ] Merge overloads into one member where they differ by trailing optional
-      arguments (`Window.alert()` and `alert(message)`)
+  arguments (`Window.alert()` and `alert(message)`)
 - [ ] Lower a union of two or more typable constituents to a `variant`, named
-      after its typedef where it has one (`(Node or DOMString)`)
+  after its typedef where it has one (`(Node or DOMString)`)
 
 ### 4. Promises
 
@@ -60,13 +60,13 @@ lower is then available to each interface the slice adds.
 ### 5. A wider slice
 
 - [ ] Tree: `Text`, `CharacterData`, `Comment`, `DocumentFragment`, `NodeList`,
-      `HTMLCollection`
+  `HTMLCollection`
 - [ ] Style and classes: `DOMTokenList`, `CSSStyleDeclaration`, `DOMRect`
 - [ ] Elements: `HTMLButtonElement`, `HTMLAnchorElement`, `HTMLFormElement`,
-      `HTMLSelectElement`, `HTMLTextAreaElement`, `HTMLCanvasElement`,
-      `CanvasRenderingContext2D`
+  `HTMLSelectElement`, `HTMLTextAreaElement`, `HTMLCanvasElement`,
+  `CanvasRenderingContext2D`
 - [ ] Events: `UIEvent`, `MouseEvent`, `KeyboardEvent`, `InputEvent`,
-      `FocusEvent`
+  `FocusEvent`
 - [ ] Window: `Location`, `Storage`, `setTimeout` and `setInterval`
 - [ ] `SurfaceDom` and `lib.wado` follow each addition
 

@@ -1,7 +1,6 @@
 mod bundled_asset;
 mod compiler_host;
 mod data_section;
-mod format_md;
 mod grammar_corpus;
 mod highlight_corpus;
 mod highlight_vocab;
@@ -11,22 +10,21 @@ mod template;
 use lexopt::Arg::{Long, Short, Value};
 use wado_compiler::OptLevel;
 
+const COMMANDS: &str =
+    "golden-dump, bundled-asset, grammar-corpus, highlight-corpus, highlight-vocab";
+
 fn main() {
     let mut parser = lexopt::Parser::from_env();
     let cmd = match parser.next().expect("failed to parse args") {
         Some(Value(v)) => v.to_string_lossy().into_owned(),
-        Some(other) => panic!(
-            "expected subcommand as first argument, got {other:?} \
-             (commands: golden-dump, bundled-asset, format-md, grammar-corpus, highlight-corpus, highlight-vocab)"
-        ),
-        None => panic!(
-            "command is required (golden-dump, bundled-asset, format-md, grammar-corpus, highlight-corpus, highlight-vocab)"
-        ),
+        Some(other) => {
+            panic!("expected subcommand as first argument, got {other:?} (commands: {COMMANDS})")
+        }
+        None => panic!("command is required ({COMMANDS})"),
     };
     match cmd.as_str() {
         "golden-dump" => golden_dump(parser),
         "bundled-asset" => bundled_asset::run(parser),
-        "format-md" => format_md::run(parser),
         "grammar-corpus" => grammar_corpus::run(parser),
         "highlight-corpus" => highlight_corpus::run(parser),
         "highlight-vocab" => highlight_vocab::run(parser),

@@ -53,8 +53,7 @@ name, so no entry file is needed — relative modules anchor at `--base` (defaul
 - `Semantics::resolve_symbol_notation` — notation → `Definition`.
 - `Engine::{definition,references,document_highlight,hover}_by_symbol` — drive
   resolution over a synthetic entry that `use`s the module.
-- `wado query {definition,references,document-highlight,hover} --symbol
-  <notation> [--base <dir>]`. `hover` also works position-based
+- `wado query {definition,references,document-highlight,hover} --symbol <notation> [--base <dir>]`. `hover` also works position-based
   (`--line`/`--column`), rendering the signature / type.
 
 Name-based results are bounded by what the analysis loads. `references` loads
@@ -66,37 +65,36 @@ target module's import graph.
 
 - [x] Parse the notation (`wado_compiler::symbol_notation`).
 - [x] `--symbol` locator for `definition` / `references` / `document-highlight`
-      / `hover` on free / module-level symbols.
+  / `hover` on free / module-level symbols.
 - [x] `hover` kind: notation (or position) → signature / type. The signature
-      is the Wado definition with the body omitted, rendered by the same
-      `unparse::*_signature` helpers that `wado doc` uses.
-- [x] Two views via `wado query --all`: default = public-API (matches `wado
-      doc`, private fields elided as `..`); `--all` = everything. A type's hover
-      also lists its `impl` blocks (method / assoc-const signatures) as Wado.
+  is the Wado definition with the body omitted, rendered by the same
+  `unparse::*_signature` helpers that `wado doc` uses.
+- [x] Two views via `wado query --all`: default = public-API (matches `wado     doc`, private fields elided as `..`); `--all` = everything. A type's hover
+  also lists its `impl` blocks (method / assoc-const signatures) as Wado.
 - [x] `wado doc --all` mirrors the view, documenting private items/fields/
-      inherent methods (default stays public).
+  inherent methods (default stays public).
 - [x] Resolve members: `Type::m` / `Type.m` / `Type^Trait::m` (and generic
-      types by base name) → methods and associated constants, by scanning the
-      module's `impl` blocks and `trait` declarations. A member miss suggests
-      the type's members.
+  types by base name) → methods and associated constants, by scanning the
+  module's `impl` blocks and `trait` declarations. A member miss suggests
+  the type's members.
 - [x] `references` spans the whole workspace by default: the synthetic entry
-      `use`s every `.wado` under `--base` (default cwd), so use→def edges from
-      sibling files are recorded. The combined load is all-or-nothing, so if it
-      fails the query re-imports only the files that analyze on their own,
-      dropping any that can't load (e.g. a compile-time-codegen module without a
-      build cache).
+  `use`s every `.wado` under `--base` (default cwd), so use→def edges from
+  sibling files are recorded. The combined load is all-or-nothing, so if it
+  fails the query re-imports only the files that analyze on their own,
+  dropping any that can't load (e.g. a compile-time-codegen module without a
+  build cache).
 - [ ] Name a reference and a function type. Alone among types they have no
-      declaration to name them: a primitive, `()`, `!`, `Array<T>` and the tuple
-      family are all prelude declarations. So `MODULE` is `core:prelude` and
-      `SYMBOL` is the surface spelling — `core:prelude#&Point`,
-      `core:prelude#&mut Point`, `core:prelude#fn(i32) -> i32` — which is what
-      a type argument already does one level down (`core:prelude#List<String>`),
-      with the operator outermost. `TypeInfo::canonical_name` is the first
-      consumer ([Total Reflection](./wep-2026-09-05-total-reflection.md)) and
-      needs rendering alone; resolving one back has no `AstId` to land on and is
-      the open half. Nor is the rendering a key: `&Point` renders its pointee
-      bare, so two `Point` declarations collide in one string.
+  declaration to name them: a primitive, `()`, `!`, `Array<T>` and the tuple
+  family are all prelude declarations. So `MODULE` is `core:prelude` and
+  `SYMBOL` is the surface spelling — `core:prelude#&Point`,
+  `core:prelude#&mut Point`, `core:prelude#fn(i32) -> i32` — which is what
+  a type argument already does one level down (`core:prelude#List<String>`),
+  with the operator outermost. `TypeInfo::canonical_name` is the first
+  consumer ([Total Reflection](./wep-2026-09-05-total-reflection.md)) and
+  needs rendering alone; resolving one back has no `AstId` to land on and is
+  the open half. Nor is the rendering a key: `&Point` renders its pointee
+  bare, so two `Point` declarations collide in one string.
 - [ ] Include doc-comment summaries in `hover` output.
 - [ ] `wado doc` anchors / type cross-links keyed by the notation.
 - [ ] Convert internal `name.rs` names back into this notation (so optimizer
-      remarks / profiler / dumps can print queryable names).
+  remarks / profiler / dumps can print queryable names).

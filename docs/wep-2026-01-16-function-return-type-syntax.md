@@ -14,6 +14,7 @@ Wado needed to decide on the syntax for specifying function return types. Two pr
    ```
 
 2. **Colon syntax (`:`)** - Used by TypeScript, Kotlin, and other JavaScript-adjacent languages
+
    ```wado
    fn add(a: i32, b: i32): i32 { ... }
    ```

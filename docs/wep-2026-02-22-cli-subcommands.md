@@ -195,16 +195,16 @@ driver, analyze), never to the pure primitives:
 Consistency TODOs (do not implement piecemeal — land them together in Phase 3):
 
 - [ ] Add `--locked` / `--offline` / `--frozen` to every graph-reading tier:
-      resolve (`update`, `add`, `remove`, `fetch`), orchestrator (`build`),
-      driver (`run`, `serve`, `test`, `publish`, `exec`), and analyze (`check`,
-      `doc`, `wit`, `dump`, `query`). Reject them on the primitives (`compile`,
-      `format`, `init`, `syntax`, `lsp`) so the flag surface stays honest.
+  resolve (`update`, `add`, `remove`, `fetch`), orchestrator (`build`),
+  driver (`run`, `serve`, `test`, `publish`, `exec`), and analyze (`check`,
+  `doc`, `wit`, `dump`, `query`). Reject them on the primitives (`compile`,
+  `format`, `init`, `syntax`, `lsp`) so the flag surface stays honest.
 - [ ] `publish` must verify against a full, fresh lock before uploading (a stale
-      or partial lock is an error, like `cargo publish`'s verification build).
+  or partial lock is an error, like `cargo publish`'s verification build).
 - [ ] `exec` consumes the same resolved graph (lock + cache) as the other
-      drivers — no separate resolution path (Phase 5).
+  drivers — no separate resolution path (Phase 5).
 - [ ] Decide whether `doc` gains a resolving mode or stays syntactic; record the
-      choice in the [doc WEP](./wep-2026-02-28-doc-command.md).
+  choice in the [doc WEP](./wep-2026-02-28-doc-command.md).
 
 ### `wado init`
 
