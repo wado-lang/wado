@@ -374,7 +374,7 @@ type "functype//core:serde/serde_field_lookup_tree.wado/Keys^core:serde/Deserial
 
 type "functype//core:json/core:json/JsonDeserializer^core:serde/Deserializer::begin_struct<&core:prelude/string.wado/String>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:json//JsonStructAccess", ref null "core:serde//DeserializeError"];  // TypeId(124)
 
-type "functype//core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> ref "core:serde//DeserializeError";  // TypeId(125)
+type "functype//core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> ref "core:serde//DeserializeError";  // TypeId(125)
 
 type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(126)
 
@@ -456,7 +456,7 @@ global global:core:prelude/traits.wado::$const_obj_60: ref null Array<u8> = arra
 global global:core:prelude/traits.wado::$const_obj_61: ref null Array<u8> = array.new_fixed<u8>(44);
 global global:core:prelude/traits.wado::$const_obj_70: ref null Array<u8> = array.new_fixed<u8>(32, 123);
 global mut global:core:prelude/traits.wado::$const_obj_72: ref null "tuple//[core:prelude/traits.wado/StructField<core:serde/DeserializeError,core:serde/DeserializeErrorKind>, core:prelude/traits.wado/StructField<core:serde/DeserializeError,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<core:serde/DeserializeError,i64>]" = ref.null none;
-global global:core:serde::$const_obj_75: ref null Array<u8> = array.new_fixed<u8>(100, 117, 112, 108, 105, 99, 97, 116, 101, 32, 107, 101, 121, 58, 32);
+global global:core:serde::$const_obj_75: ref null Array<u8> = array.new_fixed<u8>(100, 117, 112, 108, 105, 99, 97, 116, 101, 32, 102, 105, 101, 108, 100, 58, 32);
 global global:core:json::$const_obj_76: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:core:json::$const_obj_77: ref null Array<u8> = array.new_fixed<u8>(98, 58, 32);
 global global:core:json::$const_obj_78: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 98, 32, 60, 32, 54, 52, 10);
@@ -6428,7 +6428,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Degenerate^core:serde/Deserialize::d
                             s_132;
                         });
                         cold_path;
-                        $qm_e_15 = "core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>"(key_71);
+                        $qm_e_15 = "core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>"(key_71);
                         cold_path;
                         return 1, ref.null none, $qm_e_15;
                     }
@@ -6460,7 +6460,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Degenerate^core:serde/Deserialize::d
                             s_216;
                         });
                         cold_path;
-                        $local_33 = "core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>"(key_80);
+                        $local_33 = "core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>"(key_80);
                         cold_path;
                         return 1, ref.null none, $local_33;
                     }
@@ -6492,7 +6492,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Degenerate^core:serde/Deserialize::d
                             s_300;
                         });
                         cold_path;
-                        $local_40 = "core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>"(key_89);
+                        $local_40 = "core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>"(key_89);
                         cold_path;
                         return 1, ref.null none, $local_40;
                     }
@@ -6842,7 +6842,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Keys^core:serde/Deserialize::deseria
                 if index_10 == 0 {
                     if @unlikely(let $match_scrut_16: i32; local.tee $match_scrut_16($sroa_$sroa_slots_0_838_0_859) == 0) {
                         cold_path;
-                        $qm_e_15 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate key: \"ab\""), used: 19 }, offset: -1_i64 };
+                        $qm_e_15 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"ab\""), used: 21 }, offset: -1_i64 };
                         cold_path;
                         return 1, ref.null none, $qm_e_15;
                     }
@@ -6867,7 +6867,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Keys^core:serde/Deserialize::deseria
                 } else if index_10 == 1 {
                     if @unlikely(let $match_scrut_14: i32; local.tee $match_scrut_14($sroa_$sroa_slots_1_839_0_861) == 0) {
                         cold_path;
-                        $local_33 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate key: \"ac\""), used: 19 }, offset: -1_i64 };
+                        $local_33 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"ac\""), used: 21 }, offset: -1_i64 };
                         cold_path;
                         return 1, ref.null none, $local_33;
                     }
@@ -6892,7 +6892,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Keys^core:serde/Deserialize::deseria
                 } else if index_10 == 2 {
                     if @unlikely(let $match_scrut_12: i32; local.tee $match_scrut_12($sroa_$sroa_slots_2_840_0_863) == 0) {
                         cold_path;
-                        $local_40 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate key: \"abc\""), used: 20 }, offset: -1_i64 };
+                        $local_40 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"abc\""), used: 22 }, offset: -1_i64 };
                         cold_path;
                         return 1, ref.null none, $local_40;
                     }
@@ -6917,7 +6917,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Keys^core:serde/Deserialize::deseria
                 } else if index_10 == 3 {
                     if @unlikely(let $match_scrut_10: i32; local.tee $match_scrut_10($sroa_$sroa_slots_3_841_0_865) == 0) {
                         cold_path;
-                        $local_47 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate key: \"xyz\""), used: 20 }, offset: -1_i64 };
+                        $local_47 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"xyz\""), used: 22 }, offset: -1_i64 };
                         cold_path;
                         return 1, ref.null none, $local_47;
                     }
@@ -6942,7 +6942,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Keys^core:serde/Deserialize::deseria
                 } else if index_10 == 4 {
                     if @unlikely(let $match_scrut_8: i32; local.tee $match_scrut_8($sroa_$sroa_slots_4_842_0_867) == 0) {
                         cold_path;
-                        $local_54 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate key: \"xya\""), used: 20 }, offset: -1_i64 };
+                        $local_54 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"xya\""), used: 22 }, offset: -1_i64 };
                         cold_path;
                         return 1, ref.null none, $local_54;
                     }
@@ -6967,7 +6967,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Keys^core:serde/Deserialize::deseria
                 } else if index_10 == 5 {
                     if @unlikely(let $match_scrut_6: i32; local.tee $match_scrut_6($sroa_$sroa_slots_5_843_0_869) == 0) {
                         cold_path;
-                        $local_61 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate key: \"long_field_name_one\""), used: 36 }, offset: -1_i64 };
+                        $local_61 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"long_field_name_one\""), used: 38 }, offset: -1_i64 };
                         cold_path;
                         return 1, ref.null none, $local_61;
                     }
@@ -6992,7 +6992,7 @@ fn "core:serde/serde_field_lookup_tree.wado/Keys^core:serde/Deserialize::deseria
                 } else if index_10 == 6 {
                     if @unlikely(let $match_scrut_4: i32; local.tee $match_scrut_4($sroa_$sroa_slots_6_844_0_871) == 0) {
                         cold_path;
-                        $local_68 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate key: \"long_field_name_two\""), used: 36 }, offset: -1_i64 };
+                        $local_68 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"long_field_name_two\""), used: 38 }, offset: -1_i64 };
                         cold_path;
                         return 1, ref.null none, $local_68;
                     }
@@ -7456,14 +7456,14 @@ fn "core:json/core:json/JsonDeserializer^core:serde/Deserializer::begin_struct<&
     return 0, struct.new "core:json//JsonStructAccess" { de: self, depth: depth_5, first: 1 }, ref.null none;
 }
 
-fn "core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>"(key) {
+fn "core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>"(key) {
     let $local_1: ref "core:prelude/string.wado//String";
     let new_used: i32;
     let start_15: i32;
-    return struct.new "core:serde//DeserializeError" { kind: 3, message: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; new_used = 0 + 15; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
+    return struct.new "core:serde//DeserializeError" { kind: 3, message: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; new_used = 0 + 17; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used);
-    }; start_15 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_15, global:core:serde::$const_obj_75, 0, 15); "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar"($local_1, key.repr, key.used); $local_1), offset: -1_i64 };
+    }; start_15 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_15, global:core:serde::$const_obj_75, 0, 17); "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar"($local_1, key.repr, key.used); $local_1), offset: -1_i64 };
 }
 
 fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {

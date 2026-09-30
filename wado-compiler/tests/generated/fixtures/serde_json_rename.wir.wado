@@ -328,7 +328,7 @@ type "functype//core:serde/serde_json_rename.wado/ApiResponse^core:serde/Deseria
 
 type "functype//core:json/core:json/JsonDeserializer^core:serde/Deserializer::begin_struct<&core:prelude/string.wado/String>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:json//JsonStructAccess", ref null "core:serde//DeserializeError"];  // TypeId(119)
 
-type "functype//core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> ref "core:serde//DeserializeError";  // TypeId(120)
+type "functype//core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> ref "core:serde//DeserializeError";  // TypeId(120)
 
 type "functype//core:json/core:json/JsonDeserializer::key_quote_error$scalar" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(121)
 
@@ -413,7 +413,7 @@ global global:core:json::$const_obj_42: ref null Array<u8> = array.new_fixed<u8>
 global global:core:json::$const_obj_43: ref null Array<u8> = array.new_fixed<u8>(92, 34);
 global global:core:json::$const_obj_45: ref null Array<u8> = array.new_fixed<u8>(34, 58);
 global global:core:json::$const_obj_47: ref null Array<u8> = array.new_fixed<u8>(44, 34);
-global global:core:serde::$const_obj_50: ref null Array<u8> = array.new_fixed<u8>(100, 117, 112, 108, 105, 99, 97, 116, 101, 32, 107, 101, 121, 58, 32);
+global global:core:serde::$const_obj_50: ref null Array<u8> = array.new_fixed<u8>(100, 117, 112, 108, 105, 99, 97, 116, 101, 32, 102, 105, 101, 108, 100, 58, 32);
 global global:core:json::$const_obj_51: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:core:json::$const_obj_52: ref null Array<u8> = array.new_fixed<u8>(98, 58, 32);
 global global:core:json::$const_obj_53: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 98, 32, 60, 32, 54, 52, 10);
@@ -5899,7 +5899,7 @@ fn "core:serde/serde_json_rename.wado/ApiResponse^core:serde/Deserialize::deseri
                             s_100;
                         });
                         cold_path;
-                        $qm_e_15 = "core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>"(key_57);
+                        $qm_e_15 = "core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>"(key_57);
                         cold_path;
                         return 1, ref.null none, $qm_e_15;
                     }
@@ -5931,7 +5931,7 @@ fn "core:serde/serde_json_rename.wado/ApiResponse^core:serde/Deserialize::deseri
                             s_184;
                         });
                         cold_path;
-                        $local_33 = "core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>"(key_66);
+                        $local_33 = "core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>"(key_66);
                         cold_path;
                         return 1, ref.null none, $local_33;
                     }
@@ -6217,14 +6217,14 @@ fn "core:json/core:json/JsonDeserializer^core:serde/Deserializer::begin_struct<&
     return 0, struct.new "core:json//JsonStructAccess" { de: self, depth: depth_5, first: 1 }, ref.null none;
 }
 
-fn "core:serde/core:serde/DeserializeError::duplicate_key<core:prelude/string.wado/String>"(key) {
+fn "core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>"(key) {
     let $local_1: ref "core:prelude/string.wado//String";
     let new_used: i32;
     let start_15: i32;
-    return struct.new "core:serde//DeserializeError" { kind: 3, message: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; new_used = 0 + 15; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
+    return struct.new "core:serde//DeserializeError" { kind: 3, message: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; new_used = 0 + 17; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used);
-    }; start_15 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_15, global:core:serde::$const_obj_50, 0, 15); "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar"($local_1, key.repr, key.used); $local_1), offset: -1_i64 };
+    }; start_15 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_15, global:core:serde::$const_obj_50, 0, 17); "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar"($local_1, key.repr, key.used); $local_1), offset: -1_i64 };
 }
 
 fn "core:json/core:json/JsonDeserializer::key_quote_error$scalar"(self, b) {
