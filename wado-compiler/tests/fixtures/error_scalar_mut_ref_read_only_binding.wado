@@ -1,0 +1,17 @@
+// Under a `&mut` scrutinee a scalar payload cannot bind even to be read, and
+// the report says nothing of an assignment, since there is none.
+
+fn read(o: &mut Option<i32>) -> i32 {
+    if let Some(x) = o {
+        return *x;
+    }
+    return 0;
+}
+
+export fn run() {
+    let mut o: Option<i32> = Some(3);
+    read(&mut o);
+}
+
+__DATA__
+{"compile_error": ":5:17: analysis error: cannot bind 'x' as a mutable reference to a replace-on-assign type (primitive, enum, flags, fn): destructure by value, or take the reference to the whole value", "compile_error_codes": ["IMMUTABLE_ASSIGNMENT"]}

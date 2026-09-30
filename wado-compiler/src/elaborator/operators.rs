@@ -979,7 +979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if unary.op == UnaryOp::MutRef {
             self.record_mut_borrow(&unary.expr, ctx);
             if let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx) {
-                let _ = self.emit(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot take &mut of immutable variable '{binding}'"),
                     span: unary.span,
                 });
@@ -987,7 +987,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
                 && self.tysys.is_replace_on_assign_place_type(expr_type)
             {
-                let _ = self.emit(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: format!(
                         "cannot take a mutable reference to {}",
                         replace_on_assign_place()
@@ -1158,7 +1158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .find_map(|id| self.subscript_write_refusal(*id))
         {
-            let _ = self.emit(TypeError::CannotAssign {
+            let _ = self.emit(TypeError::CannotMutate {
                 message: refusal.to_string(),
                 span: target.span(),
             });
@@ -1197,7 +1197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|d| d.needs_deref);
         if let Some(needs_deref) = needs_deref {
             if needs_deref {
-                let _ = self.emit(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: "cannot assign through immutable reference".to_string(),
                     span: index_expr.span,
                 });
@@ -1240,7 +1240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Ref(_)
         );
         if is_immutable_ref {
-            let _ = self.emit(TypeError::CannotAssign {
+            let _ = self.emit(TypeError::CannotMutate {
                 message: "cannot assign through immutable reference".to_string(),
                 span,
             });
@@ -1276,14 +1276,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Ref(_)
             ) || self.place_roots_at_immutable_ref(&index_expr.expr);
             if indexed_immutable {
-                let _ = self.emit(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: "cannot assign through immutable reference".to_string(),
                     span: target_ast.span(),
                 });
                 return TypeTable::ERROR;
             }
             if let Some(binding) = self.place_roots_at_immutable_binding(&index_expr.expr, ctx) {
-                let _ = self.emit(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot assign into immutable '{binding}'"),
                     span: target_ast.span(),
                 });
@@ -1430,7 +1430,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if let Some((name, is_mut)) = global_assign {
             if !is_mut {
-                let _ = self.emit(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot assign to immutable global variable '{name}'"),
                     span: target_ast.span(),
                 });
@@ -1447,14 +1447,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // one diagnostic.
         if matches!(target_ast, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)) {
             if self.place_roots_at_immutable_ref(target_ast) {
-                let _ = self.emit(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: "cannot assign through immutable reference".to_string(),
                     span: target_ast.span(),
                 });
                 return TypeTable::ERROR;
             }
             if let Some(binding) = self.place_roots_at_immutable_binding(target_ast, ctx) {
-                let _ = self.emit(TypeError::CannotAssign {
+                let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot assign into immutable '{binding}'"),
                     span: target_ast.span(),
                 });
@@ -1492,7 +1492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if through_mut_ref {
                             true
                         } else {
-                            let _ = self.emit(TypeError::CannotAssign {
+                            let _ = self.emit(TypeError::CannotMutate {
                                 message: "cannot assign through immutable reference".to_string(),
                                 span: target_ast.span(),
                             });
@@ -1507,8 +1507,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if !is_valid_lvalue {
             // Report error for invalid assignment target
-            let _ = self.emit(TypeError::CannotAssign {
-                message: "expression is not assignable".to_string(),
+            let _ = self.emit(TypeError::CannotMutate {
+                message: "cannot assign to an expression that is not a place".to_string(),
                 span: target_ast.span(),
             });
             return TypeTable::ERROR;
