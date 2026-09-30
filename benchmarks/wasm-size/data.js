@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790764227799,
+  "lastUpdate": 1790772934995,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62229,6 +62229,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6efd09a120de2c2cc8e3fd0e87b4dcd8b2dd5133"
         },
         "date": 1790764226867,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22806,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d18f7f39cefd4d3a3f5a514494ac5bdf6cd0f55",
+          "message": "Merge pull request #2232 from wado-lang/gfx/update-npm-deps-2026-09\n\nchore: update npm deps",
+          "timestamp": "2026-09-30T21:23:52+09:00",
+          "tree_id": "016bb7480afd34ace7550e0bfae4dcbe9437fd0f",
+          "url": "https://github.com/wado-lang/wado/commit/8d18f7f39cefd4d3a3f5a514494ac5bdf6cd0f55"
+        },
+        "date": 1790772933969,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
