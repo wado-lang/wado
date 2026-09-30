@@ -1500,8 +1500,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         (scope, self_slot, next_slot)
     }
 
-    /// The trait each method call in `func`, a default body of `trait_decl`,
-    /// reaches through a bound the declaration states, by the call's node.
+    /// What each method call in `func`, a default body of `trait_decl`, selects
+    /// through a bound the declaration states, by the call's node.
     ///
     /// The body is walked once per impl inheriting it, standing on that impl's
     /// types, where a projection is only the type it binds: `Self::SeqAccess`

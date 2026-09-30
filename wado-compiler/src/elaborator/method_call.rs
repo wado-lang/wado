@@ -241,9 +241,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The trait the call `call` reaches through a declared bound, where the
-    /// walk is a trait's default body standing on one impl: the one its
-    /// author's reading selected ([`Elaborator::abstract_selections`]).
+    /// What the call `call` selected through a declared bound, where the walk
+    /// is a trait's default body standing on one impl: as its author's reading
+    /// selected it ([`Elaborator::abstract_selections`]).
     pub(super) fn abstract_selection(&self, call: AstId) -> Option<AbstractSelection> {
         let selections = self.annotate_ctx.trait_ctx.abstract_selections.as_ref()?;
         selections.get(&call).copied()

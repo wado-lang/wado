@@ -238,8 +238,8 @@ pub(super) struct TraitContext {
     /// there is no `Self` bound to read the declaring trait off.
     pub(super) self_trait: Option<DefId>,
     /// Set while the body under walk is a trait's default body, written
-    /// against the trait's `Self` rather than this concrete one: the trait
-    /// each of its calls reaches through a declared bound, by the call's node.
+    /// against the trait's `Self` rather than this concrete one: what each
+    /// of its calls selected through a declared bound, by the call's node.
     /// See [`Elaborator::abstract_selections`].
     pub(super) abstract_selections: Option<Rc<AbstractSelections>>,
     /// The `impl` block whose type parameters are in scope, paired with the
