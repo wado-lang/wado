@@ -290,8 +290,9 @@ pub(super) struct Scope {
     /// among overloads leaves no trace, and the real walk records them.
     pub(super) suppress_reference_recording: bool,
     /// Set while a trait's default body is walked as its author wrote it: each
-    /// method call a declared bound alone answers records that bound's trait.
-    pub(super) bound_selections: Option<IndexMap<AstId, DefId>>,
+    /// method call a declared bound alone answers records that bound's trait,
+    /// the table [`TraitContext::abstract_selections`] later reads.
+    pub(super) abstract_selections: Option<IndexMap<AstId, DefId>>,
     /// The `(base, assoc)` pairs whose binding is being resolved right now.
     /// Two assoc types bounded through each other have no fixpoint.
     pub(super) assoc_binding_stack: IndexSet<(TypeId, String)>,

@@ -1539,7 +1539,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let walk = Scope {
             resolving_home: Some(self.home_module(func.id)),
             suppress_reference_recording: true,
-            bound_selections: Some(hashmap::IndexMap::default()),
+            abstract_selections: Some(hashmap::IndexMap::default()),
             ..Scope::default()
         };
         let logger = self.logger;
@@ -1575,7 +1575,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls = decls;
         let selections = Rc::new(
             walked
-                .bound_selections
+                .abstract_selections
                 .expect("the walk records into the table it was given"),
         );
         self.abstract_selection_cache

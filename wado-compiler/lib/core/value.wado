@@ -36,7 +36,6 @@ use {
     DuplicateKeyPolicy,
     TextKeyDeserializer,
     TextKeySerializer,
-    report_duplicate_key,
 } from "core:serde";
 
 use { TreeMap, TreeMapEntriesRefIter } from "core:collections";
@@ -305,10 +304,7 @@ impl Visitor for ValueVisitor {
         while let Some(scalar) = map.next_key::<Value>()? {
             let key = object_key(scalar)?;
             let val = map.next_value::<Value>()?;
-            if !obj.try_insert(key, val) {
-                report_duplicate_key(self.on_duplicate, &key)?;
-                obj[key] = val;
-            }
+            obj.insert_decoded(self.on_duplicate, key, val)?;
         }
         map.end()?;
         return Result::Ok(Value::Object(obj));

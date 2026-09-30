@@ -94,49 +94,6 @@ Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
 
 ## Structs
 
-### `pub struct JsonKeySerializer`
-
-Writes an object key: a string as itself, any other scalar as the string of
-its JSON spelling, which `JsonKeyDeserializer` parses back.
-
-_Fields are private._
-
-#### `impl Serializer for JsonKeySerializer`
-
-##### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
-
-##### `fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError>`
-
-##### `fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError>`
-
-##### `fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError>`
-
-##### `fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError>`
-
-##### `fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError>`
-
-##### `fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError>`
-
-##### `fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>`
-
-##### `fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>`
-
-##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
-
-##### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
-
-##### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
-
-##### `fn begin_seq(&mut self, len: i32) -> Result<NoCompound, SerializeError>`
-
-##### `fn begin_map(&mut self, len: i32) -> Result<NoCompound, SerializeError>`
-
-##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<NoCompound, SerializeError>`
-
-##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
-
-##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<NoCompound, SerializeError>`
-
 ### `pub struct JsonSeqSerializer`
 
 _Fields are private._
@@ -443,53 +400,6 @@ _Fields are private._
 ##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
-
-### `pub struct JsonKeyDeserializer`
-
-Reads an object key as the scalar `JsonKeySerializer` wrote: a string as
-itself, any other scalar parsed from the string's text.
-
-_Fields are private._
-
-#### `impl Deserializer for JsonKeyDeserializer`
-
-##### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
-
-##### `fn deserialize_i64(&mut self) -> Result<i64, DeserializeError>`
-
-##### `fn deserialize_u32(&mut self) -> Result<u32, DeserializeError>`
-
-##### `fn deserialize_u64(&mut self) -> Result<u64, DeserializeError>`
-
-##### `fn deserialize_i128(&mut self) -> Result<i128, DeserializeError>`
-
-##### `fn deserialize_u128(&mut self) -> Result<u128, DeserializeError>`
-
-##### `fn deserialize_f32(&mut self) -> Result<f32, DeserializeError>`
-
-##### `fn deserialize_f64(&mut self) -> Result<f64, DeserializeError>`
-
-##### `fn deserialize_f16(&mut self) -> Result<f16, DeserializeError>`
-
-##### `fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError>`
-
-##### `fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>`
-
-##### `fn deserialize_char(&mut self) -> Result<char, DeserializeError>`
-
-##### `fn deserialize_string(&mut self) -> Result<String, DeserializeError>`
-
-##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
-
-##### `fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError>`
-
-##### `fn begin_map(&mut self) -> Result<NoCompound, DeserializeError>`
-
-##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NoCompound, DeserializeError>`
-
-##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError>`
-
-##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
 ### `pub struct JsonStructAccess`
 

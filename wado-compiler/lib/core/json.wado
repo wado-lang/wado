@@ -194,7 +194,8 @@ fn write_json_u64(buf: &mut String, v: u64) -> Result<(), SerializeError> {
 }
 
 fn write_json_i128(buf: &mut String, v: i128) -> Result<(), SerializeError> {
-    // 128-bit values always exceed the f64 safe-integer range: always a string.
+    // A string whatever the value, since the type's range exceeds the f64
+    // safe-integer range and the wire form must not depend on the value.
     return write_quoted_display(buf, &v);
 }
 
@@ -258,7 +259,7 @@ fn write_json_null(buf: &mut String) -> Result<(), SerializeError> {
 /// `TextKeySerializer` spells, which `JsonKeyDeserializer` parses back. Only a
 /// string and a char can hold a byte JSON escapes, so only they are written
 /// here; the rest, refusals included, are `TextKeySerializer`'s.
-pub struct JsonKeySerializer {
+struct JsonKeySerializer {
     buf: &mut String,
 }
 
@@ -1014,9 +1015,9 @@ fn checked_int_f64<S: AsStrSlice>(
     return Result::Ok(v);
 }
 
-/// The error for a number token that ends at `pos`, where a digit must be, in
-/// an input of `len` bytes.
-fn number_digit_error<S: AsStrSlice>(pos: i32, len: i32, message: S) -> DeserializeError {
+/// The error for a token that stops at `pos` short of what it needs, in an
+/// input of `len` bytes: the end of input, else `message` about the byte there.
+fn token_stop_error<S: AsStrSlice>(pos: i32, len: i32, message: S) -> DeserializeError {
     if pos >= len {
         return DeserializeError::eof(pos as i64);
     }
@@ -1299,15 +1300,6 @@ impl JsonDeserializer {
         return StringRunScan { end: pos, stop, valid };
     }
 
-    /// The error for `stop`, a byte `scan_string_run` stopped on at `pos` that
-    /// neither closes the string nor starts an escape.
-    fn string_stop_error(&self, pos: i32, stop: i32) -> DeserializeError {
-        if stop < 0 {
-            return DeserializeError::eof(pos as i64);
-        }
-        return DeserializeError::malformed("unescaped control character in string", pos as i64);
-    }
-
     /// Append `input[start..end)` to `dst` in a single copy. `valid` must come
     /// from the `scan_string_run` that produced the range.
     fn append_scanned_run(&self, dst: &mut String, start: i32, end: i32, valid: bool) -> Result<(), DeserializeError> {
@@ -1374,7 +1366,7 @@ impl JsonDeserializer {
         }
         if stop != b'"' {
             builtin::cold_path();
-            return Result::Err(self.string_stop_error(self.pos, stop));
+            return Result::Err(token_stop_error(self.pos, self.input.len(), "unescaped control character in string"));
         }
         self.pos += 1;
         return Result::Ok(result);
@@ -1595,7 +1587,7 @@ impl JsonDeserializer {
             if pos == point_end {
                 builtin::cold_path();
                 self.pos = pos;
-                return Result::Err(number_digit_error(pos, len, "expected digit after '.'"));
+                return Result::Err(token_stop_error(pos, len, "expected digit after '.'"));
             }
         }
         let mantissa_end = pos;
@@ -1631,7 +1623,7 @@ impl JsonDeserializer {
                 if pos == exp_start {
                     builtin::cold_path();
                     self.pos = pos;
-                    return Result::Err(number_digit_error(pos, len, "expected digit in exponent"));
+                    return Result::Err(token_stop_error(pos, len, "expected digit in exponent"));
                 }
                 if exp_neg {
                     exp = -exp;
@@ -1861,7 +1853,9 @@ impl JsonDeserializer {
             }
             if scan.stop != b'\\' {
                 builtin::cold_path();
-                return Result::Err(self.string_stop_error(self.pos, scan.stop));
+                return Result::Err(
+                    token_stop_error(self.pos, self.input.len(), "unescaped control character in string"),
+                );
             }
             self.read_escape()?;
         }
@@ -2039,7 +2033,7 @@ pub struct JsonMapAccess {
 
 /// Reads an object key as the scalar `JsonKeySerializer` wrote: a string as
 /// itself, any other scalar parsed from the string's text.
-pub struct JsonKeyDeserializer {
+struct JsonKeyDeserializer {
     de: &mut JsonDeserializer,
 }
 

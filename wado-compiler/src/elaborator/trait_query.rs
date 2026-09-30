@@ -2162,7 +2162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Find a method in the trait declarations the bound names give, read in
     /// elaborated form: `T: Ord` searches `Ord` and its supertraits. `call` is
-    /// the node [`Scope::bound_selections`] records the selection under.
+    /// the node [`Scope::abstract_selections`] records the selection under.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
         call: Option<AstId>,
@@ -2264,7 +2264,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = candidate;
         if selects_one_trait
             && let (Some(call), Some(selections)) =
-                (call, self.annotate_ctx.bound_selections.as_mut())
+                (call, self.annotate_ctx.abstract_selections.as_mut())
         {
             selections.insert(call, decl);
         }
