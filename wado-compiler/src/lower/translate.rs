@@ -26,7 +26,7 @@ use crate::compiler_item::CompilerItem;
 use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
-use crate::lower::{bare_asserts, wide_int_literal};
+use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
 use crate::name::{
     FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
     field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name, variant_tag_helper_name,
@@ -81,6 +81,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     // build never collects the dropped diagnostic literals into the data section
     // (and a default build routes the marker back to a plain `panic`).
     bare_asserts::lower(&flat, flat.codegen_flags.bare_asserts);
+    wide_arith::lower(&flat, flat.codegen_flags.wide_arithmetic);
     let strings = string::plan(&flat);
     let FlatPackage {
         entry_module_source,

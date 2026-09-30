@@ -19,9 +19,6 @@ use wasm_encoder::{
     RefType, StorageType, StructType, SubType, TypeSection, ValType,
 };
 
-/// Software lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
-mod wide_arith_downlevel;
-
 /// Scratch slot for the `ArrayClone` loop, keyed by array type so sites of the
 /// same shape share slots. The declaring walker and the emitter must spell
 /// these identically, so both come through here.
@@ -852,48 +849,48 @@ impl<'a> WirEmitter<'a> {
     }
 
     /// Declare the scratch locals the emitter's inlined lowerings need but that
-    /// are not `DeclareLocal`s in the WIR: every `ArrayClone` clone loop, and
-    /// the `-f no-wide-arithmetic` 128-bit software pool. Slot names are keyed
-    /// per type and deduped through `scratch_local_names`, so sites sharing a
-    /// shape share slots.
+    /// are not `DeclareLocal`s in the WIR: every `ArrayClone` clone loop. Slot
+    /// names are keyed per type and deduped through `scratch_local_names`, so
+    /// sites sharing a shape share slots.
     fn collect_scratch_locals(&mut self, instr: &WirInstr, locals: &mut Vec<(String, ValType)>) {
-        match instr {
-            WirInstr::ArrayClone { type_id, .. } => {
-                let arr = ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(self.resolve_type_index(type_id.index())),
+        if let WirInstr::ArrayClone { type_id, .. } = instr {
+            let arr = ValType::Ref(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(self.resolve_type_index(type_id.index())),
+            });
+            let idx = type_id.index();
+            if self
+                .scratch_local_names
+                .insert(array_clone_slot("src", idx))
+            {
+                let elem_val = self.array_element_val_type(idx).unwrap_or_else(|| {
+                    panic!("[WIR emit] ArrayClone on non-array WIR type {idx}")
                 });
-                let idx = type_id.index();
-                if self
-                    .scratch_local_names
-                    .insert(array_clone_slot("src", idx))
-                {
-                    let elem_val = self.array_element_val_type(idx).unwrap_or_else(|| {
-                        panic!("[WIR emit] ArrayClone on non-array WIR type {idx}")
-                    });
-                    for (role, ty) in [
-                        ("src", arr),
-                        ("dst", arr),
-                        ("len", ValType::I32),
-                        ("i", ValType::I32),
-                        ("elem", elem_val),
-                    ] {
-                        self.scratch_local_names.insert(array_clone_slot(role, idx));
-                        locals.push((array_clone_slot(role, idx), ty));
-                    }
+                for (role, ty) in [
+                    ("src", arr),
+                    ("dst", arr),
+                    ("len", ValType::I32),
+                    ("i", ValType::I32),
+                    ("elem", elem_val),
+                ] {
+                    self.scratch_local_names.insert(array_clone_slot(role, idx));
+                    locals.push((array_clone_slot(role, idx), ty));
                 }
             }
-            WirInstr::I64MulWideU(..)
-            | WirInstr::I64MulWideS(..)
-            | WirInstr::I64Add128(..)
-            | WirInstr::I64Sub128(..)
-                if !self.codegen_flags.wide_arithmetic =>
-            {
-                self.declare_wide_arith_scratch(locals);
-            }
-            _ => {}
         }
         instr.for_each_child(&mut |child| self.collect_scratch_locals(child, locals));
+    }
+
+    /// Emit a wide-arithmetic op, which pushes `[low, high]`.
+    fn emit_wide_op(&mut self, f: &mut Function, operands: &[&WirInstr], op: Instruction) {
+        assert!(
+            self.codegen_flags.wide_arithmetic,
+            "[WIR emit] `lower::wide_arith` leaves no wide op under -f no-wide-arithmetic"
+        );
+        for operand in operands {
+            self.emit_instr(f, operand);
+        }
+        f.instruction(&op);
     }
 
     /// Emit a single WIR instruction to the Wasm function.
@@ -2191,47 +2188,17 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-            // 128-bit ops push [low, high]; `-f no-wide-arithmetic` open-codes
-            // them as plain i64 for V8 (see wide_arith_downlevel.rs).
             WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi) => {
-                if self.codegen_flags.wide_arithmetic {
-                    self.emit_instr(f, a_lo);
-                    self.emit_instr(f, a_hi);
-                    self.emit_instr(f, b_lo);
-                    self.emit_instr(f, b_hi);
-                    f.instruction(&Instruction::I64Add128);
-                } else {
-                    self.emit_add_sub_128_soft(f, a_lo, a_hi, b_lo, b_hi, false);
-                }
+                self.emit_wide_op(f, &[a_lo, a_hi, b_lo, b_hi], Instruction::I64Add128);
             }
             WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi) => {
-                if self.codegen_flags.wide_arithmetic {
-                    self.emit_instr(f, a_lo);
-                    self.emit_instr(f, a_hi);
-                    self.emit_instr(f, b_lo);
-                    self.emit_instr(f, b_hi);
-                    f.instruction(&Instruction::I64Sub128);
-                } else {
-                    self.emit_add_sub_128_soft(f, a_lo, a_hi, b_lo, b_hi, true);
-                }
+                self.emit_wide_op(f, &[a_lo, a_hi, b_lo, b_hi], Instruction::I64Sub128);
             }
             WirInstr::I64MulWideU(a, b) => {
-                if self.codegen_flags.wide_arithmetic {
-                    self.emit_instr(f, a);
-                    self.emit_instr(f, b);
-                    f.instruction(&Instruction::I64MulWideU);
-                } else {
-                    self.emit_mul_wide_soft(f, a, b, false);
-                }
+                self.emit_wide_op(f, &[a, b], Instruction::I64MulWideU);
             }
             WirInstr::I64MulWideS(a, b) => {
-                if self.codegen_flags.wide_arithmetic {
-                    self.emit_instr(f, a);
-                    self.emit_instr(f, b);
-                    f.instruction(&Instruction::I64MulWideS);
-                } else {
-                    self.emit_mul_wide_soft(f, a, b, true);
-                }
+                self.emit_wide_op(f, &[a, b], Instruction::I64MulWideS);
             }
             // Multi-value local bind (tuple elision): emit the multi-value instr,
             // then local.set for each target in reverse order (top of stack first).

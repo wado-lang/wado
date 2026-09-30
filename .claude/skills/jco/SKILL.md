@@ -89,11 +89,11 @@ V8 implements it** (checked through Node 26; no flag, `--wasm-staging` no help),
 so any component containing those opcodes fails `WebAssembly.compile` with
 `invalid numeric opcode: 0xfc16`.
 
-`-f no-wide-arithmetic` lowers them to plain 32-bit-limb i64 sequences in
-`wado-compiler/src/codegen/emit/wide_arith_downlevel.rs` (delete that file once
-V8 ships the proposal). The WIR still shows the wide ops; only the final Wasm
-changes. **Compile every Node-bound Wado program with this flag** — a bare
-`println` of a float needs it.
+`-f no-wide-arithmetic` rewrites each such builtin call, before NIR, to a
+32-bit-limb software form in `core:rt` (`i64_mul_wide_u_soft` and so on;
+`wado-compiler/src/lower/wide_arith.rs`). NIR and WIR then show ordinary calls,
+which the optimizer inlines. **Compile every Node-bound Wado program with this
+flag** — a bare `println` of a float needs it.
 
 ## WASI shims
 

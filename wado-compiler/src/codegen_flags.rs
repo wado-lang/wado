@@ -31,8 +31,8 @@ pub struct CodegenFlags {
 
     /// Emit native Wasm wide-arithmetic (`i64.mul_wide_u/s`, `i64.add128`,
     /// `i64.sub128`) — the default, best on wasmtime. `-f no-wide-arithmetic`
-    /// open-codes them as 32-bit-limb i64 sequences
-    /// (`codegen/emit/wide_arith_downlevel.rs`) for V8, which lacks the proposal.
+    /// calls their `core:rt` software forms instead (`lower::wide_arith`), for
+    /// V8, which lacks the proposal.
     pub wide_arithmetic: bool,
 }
 
