@@ -1511,7 +1511,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// each impl's walk takes the bound its author's reading selected. That
     /// walk decides only this: its diagnostics are each impl's walk's to
     /// report, and every fact it records is dropped, the declarations it wrote
-    /// against the abstract `Self` included.
+    /// against the abstract `Self` included. An anonymous struct shape it mints
+    /// is the exception, being interned where nothing is dropped.
     fn abstract_selections(
         &mut self,
         trait_decl: DefId,
@@ -1572,7 +1573,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 },
             )
         });
-        self.sem.decls = decls;
+        // A shape the walk minted is interned in the shared type table, so its
+        // fields stay: the next sighting finds the type and mints nothing.
+        let walked_decls = std::mem::replace(&mut self.sem.decls, decls);
+        self.sem.decls.anon_struct_fields = walked_decls.anon_struct_fields;
+        self.sem.decls.pending_anonymous_structs = walked_decls.pending_anonymous_structs;
         let selections = Rc::new(
             walked
                 .abstract_selections
