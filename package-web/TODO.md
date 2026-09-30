@@ -34,16 +34,8 @@ lower is then available to each interface the slice adds.
 ### 1. Sequences and variadics
 
 - [ ] Lower `sequence<T>` and `FrozenArray<T>` to `List<T>`, in the bindings and
-<<<<<<< HEAD
   in the glue
-- [ ] Lower a variadic argument to a `List<T>`
-||||||| 6efd09a12
-      in the glue
-- [ ] Lower a variadic argument to a `List<T>`
-=======
-      in the glue
 - [x] Lower a variadic argument to a `List<T>`
->>>>>>> origin/main
 - [ ] `SurfaceDom` answers the members this unlocks that the slice already has
 
 ### 2. Default arguments on a `#[cm]` operation
