@@ -430,7 +430,7 @@ test "i64 decimal formatting at every digit-count boundary" {
     while digits <= 18 {
         assert `${p - 1}`.len() == digits - 1;
         assert `${p}`.len() == digits;
-        p = p * 10;
+        p *= 10;
         digits += 1;
     }
     assert `${0 as i64}` == "0";
@@ -583,6 +583,13 @@ test "from_str reads a view without copying out of it" {
     let view = "id=42,on=true,k=x".as_str_slice();
     assert bool::from_str(view.slice(9, 13)) matches { Ok(v) && v == true };
     assert char::from_str(view.slice(16, 17)) matches { Ok(v) && v == 'x' };
+}
+
+test "to_string spells a primitive as its Display" {
+    assert true.to_string() == "true";
+    assert false.to_string() == "false";
+    assert i64::MIN.to_string() == "-9223372036854775808";
+    assert u64::MAX.to_string() == "18446744073709551615";
 }
 
 test "BITS is the width in bits" {

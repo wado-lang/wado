@@ -36,7 +36,7 @@ impl SplitMix64 {
     }
 
     fn next(&mut self) -> u64 {
-        self.state = self.state + SPLITMIX_GAMMA;
+        self.state += SPLITMIX_GAMMA;
         return mix64(self.state);
     }
 }
@@ -122,7 +122,7 @@ fn spill_batch(out: &mut List<u64>, at: i32, batch: [u64x2, u64x2, u64x2, u64x2,
 fn drain_scalar<R: Rng>(rng: &mut R, n: i32) -> u64 {
     let mut acc: u64 = 0;
     for let mut i = 0; i < n; i += 1 {
-        acc = acc ^ rng.next_u64();
+        acc ^= rng.next_u64();
     }
     return acc;
 }
@@ -153,7 +153,7 @@ fn drain_scalar_fill<R: Rng>(rng: &mut R, buffer: &mut List<u64>, n: i32) -> u64
             buffer[k] = rng.next_u64();
         }
         for let mut k = 0; k < buffer.len(); k += 1 {
-            acc = acc ^ buffer[k];
+            acc ^= buffer[k];
         }
     }
     return acc;
@@ -168,7 +168,7 @@ fn drain_batch_fill<R: VectorRng>(rng: &mut R, buffer: &mut List<u64>, n: i32) -
             spill_batch(buffer, at, rng.next_batch());
         }
         for let mut k = 0; k < buffer.len(); k += 1 {
-            acc = acc ^ buffer[k];
+            acc ^= buffer[k];
         }
     }
     return acc;
@@ -232,8 +232,8 @@ fn philox4x32(key0: u32, key1: u32, counter: u32) -> [u32, u32, u32, u32] {
         x1 = p1 as u32;
         x2 = (p0 >> 32) as u32 ^ x3 ^ k1;
         x3 = p0 as u32;
-        k0 = k0 + PHILOX_W0;
-        k1 = k1 + PHILOX_W1;
+        k0 += PHILOX_W0;
+        k1 += PHILOX_W1;
     }
     return [x0, x1, x2, x3];
 }
@@ -253,40 +253,40 @@ fn threefry2x64(key0: u64, key1: u64, ctr0: u64, ctr1: u64) -> [u64, u64] {
     let mut x0 = ctr0 + key0;
     let mut x1 = ctr1 + key1;
 
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 16) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 42) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 12) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 31) ^ x0;
-    x0 = x0 + key1;
+    x0 += key1;
     x1 = x1 + ks2 + 1;
 
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 16) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 32) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 24) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 21) ^ x0;
-    x0 = x0 + ks2;
+    x0 += ks2;
     x1 = x1 + key0 + 2;
 
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 16) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 42) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 12) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 31) ^ x0;
-    x0 = x0 + key0;
+    x0 += key0;
     x1 = x1 + key1 + 3;
 
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = rotl(x1, 16) ^ x0;
     return [x0, x1];
 }
@@ -302,40 +302,40 @@ fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2,
     let mut x0 = ctr0 + key0;
     let mut x1 = ctr1 + key1;
 
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 16) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 42) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 12) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 31) ^ x0;
-    x0 = x0 + key1;
+    x0 += key1;
     x1 = x1 + ks2 + one;
 
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 16) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 32) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 24) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 21) ^ x0;
-    x0 = x0 + ks2;
+    x0 += ks2;
     x1 = x1 + key0 + two;
 
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 16) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 42) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 12) ^ x0;
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 31) ^ x0;
-    x0 = x0 + key0;
+    x0 += key0;
     x1 = x1 + key1 + three;
 
-    x0 = x0 + x1;
+    x0 += x1;
     x1 = vrotl(x1, 16) ^ x0;
     return [x0, x1];
 }
@@ -392,8 +392,8 @@ fn philox4x32x4(key0: u32, key1: u32, counter: u32x4) -> [u32x4, u32x4, u32x4, u
         x1 = lo1;
         x2 = hi0 ^ x3 ^ k1;
         x3 = lo0;
-        k0 = k0 + w0;
-        k1 = k1 + w1;
+        k0 += w0;
+        k1 += w1;
     }
     return [x0, x1, x2, x3];
 }
@@ -401,7 +401,7 @@ fn philox4x32x4(key0: u32, key1: u32, counter: u32x4) -> [u32x4, u32x4, u32x4, u
 fn drain_mix(n: i32) -> u64 {
     let mut acc: u64 = 0;
     for let mut i = 0; i < n; i += 1 {
-        acc = acc ^ mix64(i as i64 as u64);
+        acc ^= mix64(i as i64 as u64);
     }
     return acc;
 }
@@ -411,8 +411,8 @@ fn drain_mix_simd(n: i32) -> u64 {
     let mut key: u64x2 = [0, 1];
     let mut acc: u64x2 = [0, 0];
     for let mut i = 0; i < n; i += 2 {
-        acc = acc ^ mix64x2(key);
-        key = key + step;
+        acc ^= mix64x2(key);
+        key += step;
     }
     return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
 }
@@ -424,7 +424,7 @@ fn drain_value_at(side: i32) -> u64 {
     let mut acc: u64 = 0;
     for let mut y = 0; y < side; y += 1 {
         for let mut x = 0; x < side; x += 1 {
-            acc = acc ^ value_at(0x5EED, x, y);
+            acc ^= value_at(0x5EED, x, y);
         }
     }
     return acc;
@@ -442,7 +442,7 @@ fn drain_philox(n: i32) -> u64 {
 fn drain_squares(keyed: &Squares64, n: i32) -> u64 {
     let mut acc: u64 = 0;
     for let mut i = 0; i < n; i += 1 {
-        acc = acc ^ keyed.at(i as i64 as u64);
+        acc ^= keyed.at(i as i64 as u64);
     }
     return acc;
 }
@@ -466,7 +466,7 @@ fn drain_threefry_simd(n: i32) -> u64 {
     for let mut i = 0; i < n; i += 4 {
         let [a, b] = threefry2x64x2(key0, key1, ctr, zero);
         acc = acc ^ a ^ b;
-        ctr = ctr + step;
+        ctr += step;
     }
     return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
 }
@@ -478,11 +478,11 @@ fn drain_philox_simd(n: i32) -> u64 {
     for let mut i = 0; i < n; i += 8 {
         let [a, b, c, d] = philox4x32x4(0x5EED, 0, ctr);
         acc = acc ^ a ^ b ^ c ^ d;
-        ctr = ctr + step;
+        ctr += step;
     }
     let mut out: u64 = 0;
     for let mut lane = 0; lane < 4; lane += 1 {
-        out = out ^ acc.extract_lane(lane) as i64 as u64;
+        out ^= acc.extract_lane(lane) as i64 as u64;
     }
     return out;
 }
@@ -503,7 +503,7 @@ fn drain_squares_grid(keyed: &Squares64, side: i32) -> u64 {
     let mut acc: u64 = 0;
     for let mut y = 0; y < side; y += 1 {
         for let mut x = 0; x < side; x += 1 {
-            acc = acc ^ keyed.at(coord_key(x, y));
+            acc ^= keyed.at(coord_key(x, y));
         }
     }
     return acc;
@@ -515,7 +515,7 @@ fn drain_threefry_grid(side: i32) -> u64 {
     for let mut y = 0; y < side; y += 1 {
         for let mut x = 0; x < side; x += 1 {
             let [a, _] = threefry2x64(0x5EED, 0, coord_key(x, y), 0);
-            acc = acc ^ a;
+            acc ^= a;
         }
     }
     return acc;
@@ -527,7 +527,7 @@ fn drain_philox_grid(side: i32) -> u64 {
     for let mut y = 0; y < side; y += 1 {
         for let mut x = 0; x < side; x += 1 {
             let [a, b, _, _] = philox4x32(0x5EED, 0, coord_key(x, y) as u32);
-            acc = acc ^ (b as u64 << 32 | a as u64);
+            acc ^= b as u64 << 32 | a as u64;
         }
     }
     return acc;

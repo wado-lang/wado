@@ -886,9 +886,9 @@ test "u128 division by a divisor above 64 bits" {
 /// xorshift64 — a deterministic operand stream for the division properties.
 fn next_rand(state: u64) -> u64 {
     let mut x = state;
-    x = x ^ x << 13;
-    x = x ^ x >> 7;
-    x = x ^ x << 17;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
     return x;
 }
 

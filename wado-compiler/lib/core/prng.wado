@@ -142,7 +142,7 @@ fn read_le_u64(slice: &ByteSlice, at: i32) -> u64 {
     let mut word: u64 = 0;
     let available = i32::min(8, slice.len() - at);
     for let mut i = 0; i < available; i += 1 {
-        word = word | slice[at + i] as u64 << (i * 8) as u64;
+        word |= slice[at + i] as u64 << (i * 8) as u64;
     }
     return word;
 }
@@ -374,11 +374,11 @@ impl Rng for Xoshiro256pp {
     fn next_u64(&mut self) -> u64 {
         let result = rotl(self.s0 + self.s3, 23) + self.s0;
         let t = self.s1 << 17;
-        self.s2 = self.s2 ^ self.s0;
-        self.s3 = self.s3 ^ self.s1;
-        self.s1 = self.s1 ^ self.s2;
-        self.s0 = self.s0 ^ self.s3;
-        self.s2 = self.s2 ^ t;
+        self.s2 ^= self.s0;
+        self.s3 ^= self.s1;
+        self.s1 ^= self.s2;
+        self.s0 ^= self.s3;
+        self.s2 ^= t;
         self.s3 = rotl(self.s3, 45);
         return result;
     }
@@ -407,10 +407,10 @@ impl Xoshiro256pp {
             let word = polynomial[w];
             for let mut b: u64 = 0; b < 64; b += 1 {
                 if word >> b & 1 == 1 {
-                    j0 = j0 ^ self.s0;
-                    j1 = j1 ^ self.s1;
-                    j2 = j2 ^ self.s2;
-                    j3 = j3 ^ self.s3;
+                    j0 ^= self.s0;
+                    j1 ^= self.s1;
+                    j2 ^= self.s2;
+                    j3 ^= self.s3;
                 }
                 self.next_u64();
             }
@@ -573,26 +573,26 @@ impl XoshiroSimd {
         let tc = self.s1c << 17;
         let td = self.s1d << 17;
 
-        self.s2a = self.s2a ^ self.s0a;
-        self.s2b = self.s2b ^ self.s0b;
-        self.s2c = self.s2c ^ self.s0c;
-        self.s2d = self.s2d ^ self.s0d;
-        self.s3a = self.s3a ^ self.s1a;
-        self.s3b = self.s3b ^ self.s1b;
-        self.s3c = self.s3c ^ self.s1c;
-        self.s3d = self.s3d ^ self.s1d;
-        self.s1a = self.s1a ^ self.s2a;
-        self.s1b = self.s1b ^ self.s2b;
-        self.s1c = self.s1c ^ self.s2c;
-        self.s1d = self.s1d ^ self.s2d;
-        self.s0a = self.s0a ^ self.s3a;
-        self.s0b = self.s0b ^ self.s3b;
-        self.s0c = self.s0c ^ self.s3c;
-        self.s0d = self.s0d ^ self.s3d;
-        self.s2a = self.s2a ^ ta;
-        self.s2b = self.s2b ^ tb;
-        self.s2c = self.s2c ^ tc;
-        self.s2d = self.s2d ^ td;
+        self.s2a ^= self.s0a;
+        self.s2b ^= self.s0b;
+        self.s2c ^= self.s0c;
+        self.s2d ^= self.s0d;
+        self.s3a ^= self.s1a;
+        self.s3b ^= self.s1b;
+        self.s3c ^= self.s1c;
+        self.s3d ^= self.s1d;
+        self.s1a ^= self.s2a;
+        self.s1b ^= self.s2b;
+        self.s1c ^= self.s2c;
+        self.s1d ^= self.s2d;
+        self.s0a ^= self.s3a;
+        self.s0b ^= self.s3b;
+        self.s0c ^= self.s3c;
+        self.s0d ^= self.s3d;
+        self.s2a ^= ta;
+        self.s2b ^= tb;
+        self.s2c ^= tc;
+        self.s2d ^= td;
 
         self.s3a = vrotl(self.s3a, 45);
         self.s3b = vrotl(self.s3b, 45);
@@ -657,14 +657,14 @@ impl Shishua {
     // 128 bytes of output, and a state no input of which is read twice. The
     // order below is the reference's, which that property depends on.
     fn round(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2] {
-        self.s1l = self.s1l + self.counter_l;
-        self.s1h = self.s1h + self.counter_h;
-        self.s3l = self.s3l + self.counter_l;
-        self.s3h = self.s3h + self.counter_h;
+        self.s1l += self.counter_l;
+        self.s1h += self.counter_h;
+        self.s3l += self.counter_l;
+        self.s3h += self.counter_h;
         let increment_l: u64x2 = [7, 5];
         let increment_h: u64x2 = [3, 1];
-        self.counter_l = self.counter_l + increment_l;
-        self.counter_h = self.counter_h + increment_h;
+        self.counter_l += increment_l;
+        self.counter_h += increment_h;
 
         let u0l = self.s0l >> 1;
         let u0h = self.s0h >> 1;

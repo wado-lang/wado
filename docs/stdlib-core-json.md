@@ -295,13 +295,13 @@ the input costs another bounds check and load.
 
 #### `pub fn read_number_raw(&mut self) -> Result<String, DeserializeError>`
 
-Reads a JSON number token as a String. Validates the token's prefix
-(optional '-' followed by a digit), then delegates the scan to
-`skip_number`.
+Reads a JSON number token as a String, held to the grammar every
+number read is.
 
-#### `pub fn skip_number(&mut self)`
+#### `pub fn skip_number(&mut self) -> Result<(), DeserializeError>`
 
-Advances past a JSON number in `self.input` without allocating a String.
+Advances past the JSON number at `pos` without allocating a String,
+held to the grammar every number read is.
 
 #### `pub fn parse_i32_direct(&mut self) -> Result<i32, DeserializeError>`
 
@@ -329,9 +329,9 @@ intermediate String allocation.
 
 #### `pub fn skip_string(&mut self) -> Result<(), DeserializeError>`
 
-Skips a string token without allocating. Shares `scan_string_run` with
-the reading path, so a skipped string is held to the same UTF-8 rule as
-a materialized one.
+Skips a string token without allocating. Shares `scan_string_run` and
+`read_escape` with the reading path, so a skipped string is held to the
+same rules as a materialized one.
 
 #### `pub fn skip_value(&mut self, depth: i32) -> Result<(), DeserializeError>`
 
@@ -395,7 +395,7 @@ _Fields are private._
 
 #### `impl DeserializeMap for JsonMapAccess`
 
-##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+##### `fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>`
 
 ##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
 

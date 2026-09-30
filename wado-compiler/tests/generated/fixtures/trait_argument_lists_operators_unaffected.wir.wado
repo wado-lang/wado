@@ -368,7 +368,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/slice.w
     let e: i32;
     let a_26: i32;
     let end_30: i32;
+    let $sroa_self_repr_31: ref Array<i32>;
     end_30 = self.used;
+    $sroa_self_repr_31 = self.repr;
     if @unlikely(0 > end_30) {
         cold_path;
         "core:prelude/primitive.wado/i32::clamp$cold0"(0, end_30);
@@ -382,7 +384,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/slice.w
     }
     a_26 = select i32(2 > s, 2, s);
     e = select i32(a_26 < end_30, a_26, end_30);
-    return self.repr, s, e;
+    return $sroa_self_repr_31, s, e;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {

@@ -1,7 +1,8 @@
 // `closure_devirt` turns the `call_ref` an iterator adaptor leaves into a
 // direct call to the functor's `$call`. The shape is microgpt's: `map` parks
 // the functor in `IterMap.f`, and the dispatch only appears once `inline`
-// copies `from_iter` and `IterMap::next` into this loop.
+// copies `from_iter` and `IterMap::next` into this loop. Once direct, the
+// call is small enough to inline, so no call to the functor remains.
 //
 // It also covers `let_block_flatten`'s reference case, which hoists the
 // functor binding out of the `&mut { …; IterMap { … } }` the adaptor leaves
@@ -33,10 +34,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "50 110\n",
-    "wir_expect:O2": [
-        "$Closure_0::$call\"("
-    ],
     "wir_not_expect:O2": [
-        "call_ref"
+        "call_ref",
+        "$Closure_0::$call\"("
     ]
 }

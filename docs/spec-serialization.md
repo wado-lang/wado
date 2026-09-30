@@ -23,8 +23,8 @@ test {
 
 A format implements `Serializer`, `Deserializer`, or both, and a value's
 `Serialize` / `Deserialize` impl works with any of them. The formats in the
-standard library are `core:json`, `core:json_nsd` and `core:cbor`, which do
-both, and `core:args`, which only deserializes.
+standard library are `core:json` and `core:cbor`, which do both, and
+`core:args`, which only deserializes.
 [`core:serde`](./stdlib-core-serde.md) lists each trait's methods.
 
 `Deserialize::deserialize` has no `self`: it builds a new value from what the
@@ -57,8 +57,8 @@ A format is self-describing (SD) when the input names what it holds, such as
 `core:json` writing a struct as an object keyed by field name. A
 self-describing format resolves each key to a field by its wire name. A
 non-self-describing (NSD) format leaves the reader to know what the input holds,
-as [`core:json_nsd`](#json-nsd-module-corejson_nsd) does. The same
-`Deserialize` impl reads both.
+as [`core:args`](#command-line-arguments-coreargs) does. The same `Deserialize`
+impl reads both.
 
 Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
@@ -104,7 +104,15 @@ The standard library's own impls:
 | `Option<T>`                          | null for `None`; the held value for `Some` |
 | `Result<T, E>`                       | a variant with cases `Ok` and `Err`        |
 | `List<T>`                            | a sequence                                 |
-| `TreeMap<String, V>`                 | a map                                      |
+| `TreeMap<K, V>`                      | a map                                      |
+| `TreeSet<T>`                         | a sequence                                 |
+
+A text format spells every map key as a string, so a key there must be a scalar:
+an integer, a float, `bool`, `char` or a string. A non-string key is written as
+the string of its spelling (`{"1": …}` for the integer `1`) and parsed back from
+it. Any other key type is an `UnsupportedValue` error on writing and an
+`UnexpectedType` error on reading. A binary format with keys of its own, such as
+`core:cbor`, writes the key as the value it is.
 
 A format with no byte string of its own writes one as a sequence of `u8`. `()`
 and `None` both write null, so `Option<()>` carries no information: `Some(())`
@@ -141,8 +149,11 @@ test {
 `#[wire(default)]` does not exist. Writing it is a compile error that points to
 a field default instead.
 
-Deserialization rejects a repeated field or key by default. A format that
-overrides `Deserializer::on_duplicate_key` may accept one instead.
+Deserialization rejects a repeated field or key by default. A set's element is
+its key, so a `TreeSet<T>` read from a sequence that repeats an element is
+rejected the same way. A format that overrides `Deserializer::on_duplicate_field`
+may accept one instead. An accepted repeat keeps the last value, and a map key
+or set element as first read.
 
 A self-describing format skips a key that names no field, whatever value it
 holds.
@@ -207,33 +218,6 @@ input, a type mismatch, or input with trailing data is an `Err`.
 magnitude is at most 2^53 - 1, the largest integer a JavaScript number holds
 exactly, and as a JSON string of decimal digits beyond it. Reading any integer
 type accepts either form.
-
-## JSON NSD Module (`core:json_nsd`)
-
-`core:json_nsd` is a non-self-describing JSON format. It writes a struct as an
-array of its fields in declaration order, with no field names. It writes a unit
-variant case as its discriminant integer, and a payload case as
-`[discriminant, payload]`.
-
-<!-- {"fixture":"spec_serialization_json_nsd.wado"} -->
-
-```wado
-use { to_string, from_string } from "core:json_nsd";
-
-struct User { name: String, age: i32 }
-
-test {
-    let user = User { name: "Alice", age: 30 };
-
-    // Struct as positional array
-    let json = to_string::<User>(&user);
-    assert json.unwrap() == `["Alice",30]`;
-
-    // Deserialize from positional array
-    let back = from_string::<User>(`["Alice",30]`).unwrap();
-    assert back.name == "Alice" && back.age == 30;
-}
-```
 
 ## Command-Line Arguments (`core:args`)
 

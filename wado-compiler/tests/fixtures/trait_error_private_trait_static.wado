@@ -1,0 +1,11 @@
+// A trait private to another module is in scope nowhere else, so no module
+// reaches its static methods, as none reaches its methods.
+
+use { Plant } from "./sub/trait_scope_static_lib.wado";
+
+export fn run() {
+    assert Plant::hidden() == 9;
+}
+
+__DATA__
+{"compile_error": "unknown function 'Plant::hidden'"}

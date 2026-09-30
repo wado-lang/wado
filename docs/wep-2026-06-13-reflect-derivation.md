@@ -212,8 +212,8 @@ without bound. They are not reflectable, by the same seal that rejects a user
 
 A member carries no validation. A value's permitted range is a fact about the
 field's _type_, not about the field, so it is declared once on that type through
-`core:serde`'s `Constrained` and read from there by every boundary and by a
-schema library alike (see [Serde](./wep-2026-02-28-serde.md)). Reflection stays
+Jade's `Constrained` and read from there by a boundary and a schema alike (see
+[Jade](./wep-2026-06-13-jade.md#constrained)). Reflection stays
 what the compiler alone can answer: a type's structure.
 
 ## Type identity

@@ -1,0 +1,46 @@
+//! A trait whose default bodies reach traits the inheriting module never
+//! imports: one through an associated type's bound, one on a concrete type.
+
+pub trait Access with () {
+    fn next_item(&mut self) -> i32;
+}
+
+pub struct Counter {
+    n: i32,
+}
+
+impl Access for Counter {
+    fn next_item(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+pub fn counter() -> Counter {
+    return Counter { n: 41 };
+}
+
+trait Twice with () {
+    fn twice(&self) -> i32;
+}
+
+impl Twice for i32 {
+    fn twice(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+pub trait Source with () {
+    type Seq: Access;
+    fn seq(&self) -> Self::Seq;
+
+    fn first(&self) -> i32 {
+        let mut s = self.seq();
+        return s.next_item();
+    }
+
+    fn doubled(&self) -> i32 {
+        let n: i32 = 21;
+        return n.twice();
+    }
+}

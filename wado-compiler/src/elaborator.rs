@@ -61,9 +61,7 @@ use crate::elaborator::item::OperationOwner;
 use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
-use crate::elaborator::sem::{
-    DefaultMethodFacts, ModuleBindings, ModuleSemantics, TypeAnnotations,
-};
+use crate::elaborator::sem::{DefaultMethodFacts, ModuleSemantics};
 use crate::elaborator::trait_query::{OnBoundTrait, SelfBinding};
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
@@ -188,7 +186,26 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.
     pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
+    /// [`Self::abstract_selections`] by default body, shared by every module
+    /// (`AnnotateState::abstract_selections`).
+    pub(super) abstract_selection_cache: Rc<RefCell<AbstractSelectionCache>>,
 }
+
+/// What a default body's author selected at one call through a bound.
+#[derive(Clone, Copy)]
+pub(crate) struct AbstractSelection {
+    /// The trait the bound names.
+    pub(crate) trait_decl: DefId,
+    /// The receiver was a reference to the bound's subject, so an impl for
+    /// the reference answers no call the author wrote.
+    pub(crate) through_ref: bool,
+}
+
+/// Each call's [`AbstractSelection`] in one default body, by the call's node.
+pub(crate) type AbstractSelections = hashmap::IndexMap<ast::AstId, AbstractSelection>;
+
+/// [`AbstractSelections`] keyed by the body.
+pub(crate) type AbstractSelectionCache = hashmap::IndexMap<ast::AstId, Rc<AbstractSelections>>;
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// Bind an `impl` block's type parameters to the slots its methods resolve
@@ -246,17 +263,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
-    /// A [`TypeLookup`] standing in the frame the AST under resolution was written in.
-    pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
-        // The frame is where the AST under resolution was written, so a
-        // travelled expression reads names as its author did — and its aliases
-        // too, since `nsb::Thing` is one name that only the author's `use ns`
-        // table can spell out.
-        let frame = self
-            .annotate_ctx
+    /// The module that wrote the AST under resolution. A travelled walk reads
+    /// names, aliases and traits in scope as its author did.
+    pub(super) fn frame_module(&self) -> &ModuleSource {
+        self.annotate_ctx
             .resolving_home
             .as_ref()
-            .unwrap_or(&self.current_module_source);
+            .unwrap_or(&self.current_module_source)
+    }
+
+    /// A [`TypeLookup`] standing in the frame the AST under resolution was written in.
+    pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
+        let frame = self.frame_module();
         let namespace_imports = self
             .namespace_imports_in(frame)
             .expect("a module the walk resolves in is one `TraitEnv` indexed");
@@ -2092,54 +2110,57 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or_default();
 
             // One default body serves every impl taking it, so each impl records its
-            // per-node facts apart; declarations and imports stay the impl module's
-            // own, lent to the walk and taken back.
+            // per-node facts apart.
             for default_method in &default_methods {
-                let synthetic = ModuleSemantics {
-                    bindings: ModuleBindings::default(),
-                    imports: std::mem::take(&mut scope.sem.imports),
-                    types: TypeAnnotations::default(),
-                    decls: std::mem::take(&mut scope.sem.decls),
-                    default_method_facts: hashmap::IndexMap::default(),
-                };
-                let ((), populated) = util::replaced(
-                    &mut *scope,
-                    |elab| &mut elab.sem,
-                    synthetic,
-                    |scope| {
-                        scope.resolve_method(
-                            default_method,
-                            &struct_name,
-                            &impl_block.ty,
-                            Some(trait_n),
-                            Some(trait_ast),
-                            impl_is_concrete,
-                            &impl_block.type_params,
-                            None,
-                            impl_owner,
-                        );
-                    },
-                );
-
-                let ModuleSemantics {
-                    bindings,
-                    imports,
-                    types,
-                    decls,
-                    default_method_facts,
-                } = populated;
-                assert!(
-                    default_method_facts.is_empty(),
-                    "a default method's walk synthesises no default methods of its own"
-                );
-                scope.sem.imports = imports;
-                scope.sem.decls = decls;
-                scope.sem.default_method_facts.insert(
-                    (impl_block.id, default_method.id),
-                    DefaultMethodFacts { bindings, types },
-                );
+                let ((), facts) = scope.with_lent_semantics(|scope| {
+                    scope.resolve_method(
+                        default_method,
+                        &struct_name,
+                        &impl_block.ty,
+                        Some(trait_n),
+                        Some(trait_ast),
+                        impl_is_concrete,
+                        &impl_block.type_params,
+                        None,
+                        impl_owner,
+                    );
+                });
+                scope
+                    .sem
+                    .default_method_facts
+                    .insert((impl_block.id, default_method.id), facts);
             }
         }
+    }
+
+    /// Run `body`, a walk of a trait default body, recording into a fresh
+    /// [`ModuleSemantics`], and answer the per-node facts it recorded. The
+    /// declarations and imports are this module's own, lent to the walk and
+    /// taken back.
+    pub(super) fn with_lent_semantics<R>(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> (R, DefaultMethodFacts) {
+        let lent = ModuleSemantics {
+            imports: std::mem::take(&mut self.sem.imports),
+            decls: std::mem::take(&mut self.sem.decls),
+            ..ModuleSemantics::default()
+        };
+        let (result, walked) = util::replaced(self, |e| &mut e.sem, lent, body);
+        let ModuleSemantics {
+            bindings,
+            imports,
+            types,
+            decls,
+            default_method_facts,
+        } = walked;
+        assert!(
+            default_method_facts.is_empty(),
+            "a default method's walk synthesises no default methods of its own"
+        );
+        self.sem.imports = imports;
+        self.sem.decls = decls;
+        (result, DefaultMethodFacts { bindings, types })
     }
 }
 

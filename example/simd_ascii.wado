@@ -32,7 +32,7 @@ fn to_lowercase_simd(input: String) -> String {
 
         // Append 16 bytes to result
         lowered.store_to_string(&mut result);
-        i = i + 16;
+        i += 16;
     }
 
     // Handle remaining bytes
@@ -43,7 +43,7 @@ fn to_lowercase_simd(input: String) -> String {
         } else {
             result.push(char::from_u32_unchecked(b as u32));
         }
-        i = i + 1;
+        i += 1;
     }
 
     return result;
@@ -63,16 +63,16 @@ fn count_byte_simd(input: String, target: u8) -> i32 {
         let mask = chunk.eq(&target_vec);
 
         // bitmask: one bit per lane (high bit), then popcount to count matches
-        count = count + i32::popcnt(mask.bitmask());
-        i = i + 16;
+        count += i32::popcnt(mask.bitmask());
+        i += 16;
     }
 
     // Remaining bytes
     while i < len {
         if input.get_byte_unchecked(i) == target {
-            count = count + 1;
+            count += 1;
         }
-        i = i + 1;
+        i += 1;
     }
 
     return count;
@@ -98,7 +98,7 @@ fn is_ascii_printable_simd(input: String) -> bool {
         if !in_range.all_true() {
             return false;
         }
-        i = i + 16;
+        i += 16;
     }
 
     while i < len {
@@ -106,7 +106,7 @@ fn is_ascii_printable_simd(input: String) -> bool {
         if b < 0x20 as u8 || b > 0x7E as u8 {
             return false;
         }
-        i = i + 1;
+        i += 1;
     }
 
     return true;
@@ -130,16 +130,16 @@ fn count_digits_simd(input: String) -> i32 {
         let is_digit = ge_0 & le_9;
 
         // bitmask + popcount: count matching lanes in two instructions
-        count = count + i32::popcnt(is_digit.bitmask());
-        i = i + 16;
+        count += i32::popcnt(is_digit.bitmask());
+        i += 16;
     }
 
     while i < len {
         let b = input.get_byte_unchecked(i);
         if b >= b'0' && b <= b'9' {
-            count = count + 1;
+            count += 1;
         }
-        i = i + 1;
+        i += 1;
     }
 
     return count;

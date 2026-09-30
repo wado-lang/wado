@@ -569,7 +569,8 @@ impl Emitter {
                 };
                 return match named.kind {
                     Message => Result::Ok(Resolved::Message([
-                        named.name, ty matches { Group(_) } || self.delimited(decl, field),
+                        named.name,
+                        ty matches { Group(_) } || self.delimited(decl, field),
                     ])),
                     Enum(first) => Result::Ok(Resolved::Scalar([named.name, `${RUNTIME}::Enum<${named.name}>`, first])),
                 };

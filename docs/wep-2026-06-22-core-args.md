@@ -32,8 +32,8 @@ irreducible core: tokenize argv, pull values, honor `--`.
 ## Decision
 
 `core:args` is a non-self-describing, parse-only `Deserializer` over argv, peer
-to `core:json` and `core:json_nsd`. The synthesized `Deserialize` code is reused
-verbatim; only the format is new.
+to `core:json`. The synthesized `Deserialize` code is reused verbatim; only the
+format is new.
 
 ### Implementation Status
 

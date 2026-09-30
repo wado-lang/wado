@@ -458,10 +458,10 @@ fn "int_div_overflow_traps.wado/$test_11_min____1_is_0"() {
     let other_44: ref "core:prelude/int128.wado//u128";
     let lo_52: i64;
     let hi_53: i64;
-    let lo_62: i64;
-    let hi_63: i64;
-    let lo_70: i64;
-    let hi_71: i64;
+    let lo_66: i64;
+    let hi_67: i64;
+    let lo_76: i64;
+    let hi_77: i64;
     $v1_0 = black_box(-128);
     $v2_1 = black_box(-1);
     $v3_2 = builtin::i32_extend8_s($v1_0 % $v2_1);
@@ -498,15 +498,15 @@ fn "int_div_overflow_traps.wado/$test_11_min____1_is_0"() {
     $v2_17 = black_box(struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 });
     self_43 = $inline_core_prelude_int128_wado_i128__abs_u128_5: block -> ref "core:prelude/int128.wado//u128" {
         if local.tee $load_0($v1_16.high) < 0_i64 {
-            multivalue_bind [lo_62, hi_63] = i64.sub128(0_i64, 0_i64, $v1_16.low, $load_0);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_5: struct.new "core:prelude/int128.wado//u128" { low: lo_62, high: hi_63 };
+            multivalue_bind [lo_66, hi_67] = i64.sub128(0_i64, 0_i64, $v1_16.low, $load_0);
+            break $inline_core_prelude_int128_wado_i128__abs_u128_5: struct.new "core:prelude/int128.wado//u128" { low: lo_66, high: hi_67 };
         }
         break $inline_core_prelude_int128_wado_i128__abs_u128_5: struct.new "core:prelude/int128.wado//u128" { low: $v1_16.low, high: $load_0 };
     };
     other_44 = $inline_core_prelude_int128_wado_i128__abs_u128_6: block -> ref "core:prelude/int128.wado//u128" {
         if local.tee $load_3($v2_17.high) < 0_i64 {
-            multivalue_bind [lo_70, hi_71] = i64.sub128(0_i64, 0_i64, $v2_17.low, $load_3);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_6: struct.new "core:prelude/int128.wado//u128" { low: lo_70, high: hi_71 };
+            multivalue_bind [lo_76, hi_77] = i64.sub128(0_i64, 0_i64, $v2_17.low, $load_3);
+            break $inline_core_prelude_int128_wado_i128__abs_u128_6: struct.new "core:prelude/int128.wado//u128" { low: lo_76, high: hi_77 };
         }
         break $inline_core_prelude_int128_wado_i128__abs_u128_6: struct.new "core:prelude/int128.wado//u128" { low: $v2_17.low, high: $load_3 };
     };
@@ -572,14 +572,14 @@ fn "int_div_overflow_traps.wado/$test_12_folded_min____1_is_0"() {
     let other_32: ref "core:prelude/int128.wado//u128";
     let lo_40: i64;
     let hi_41: i64;
-    let lo_49: i64;
-    let hi_50: i64;
-    let lo_55: i64;
-    let hi_56: i64;
-    multivalue_bind [lo_49, hi_50] = i64.sub128(0_i64, 0_i64, 0_i64, -9223372036854775808_i64);
-    self_31 = struct.new "core:prelude/int128.wado//u128" { low: lo_49, high: hi_50 };
-    multivalue_bind [lo_55, hi_56] = i64.sub128(0_i64, 0_i64, -1_i64, -1_i64);
-    other_32 = struct.new "core:prelude/int128.wado//u128" { low: lo_55, high: hi_56 };
+    let lo_53: i64;
+    let hi_54: i64;
+    let lo_61: i64;
+    let hi_62: i64;
+    multivalue_bind [lo_53, hi_54] = i64.sub128(0_i64, 0_i64, 0_i64, -9223372036854775808_i64);
+    self_31 = struct.new "core:prelude/int128.wado//u128" { low: lo_53, high: hi_54 };
+    multivalue_bind [lo_61, hi_62] = i64.sub128(0_i64, 0_i64, -1_i64, -1_i64);
+    other_32 = struct.new "core:prelude/int128.wado//u128" { low: lo_61, high: hi_62 };
     let $mv$result$0: ref "core:prelude/int128.wado//u128";
     let $mv$result$1: ref "core:prelude/int128.wado//u128";
     multivalue_bind [$mv$result$0, $mv$result$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self_31, other_32);
@@ -2438,15 +2438,14 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
     let hi_28: i64;
     let p0_lo: i64;
     let p0_hi: i64;
-    let p1_low: u64;
-    let p2_low: u64;
     let lo_42: i64;
     let hi_43: i64;
-    let $av_45: u64;
-    let $av_46: u64;
+    let $sroa_other_high_46: u64;
     let $av_47: u64;
     let $av_48: u64;
     let $av_49: u64;
+    let $av_50: u64;
+    let $av_51: u64;
     if @unlikely((if local.tee $load_0(divisor.low) == 0_i64 -> i32 {
         divisor.high == 0_i64;
     } else {
@@ -2459,17 +2458,17 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
         unreachable;
     }
     if local.tee $load_4(divisor.high) == 0_i64 {
-        $av_45 = self.high;
-        $av_46 = self.low;
-        if $av_45 == 0_i64 {
-            $av_47 = $load_0;
-            return ref.as_non_null(struct.new "core:prelude/int128.wado//u128" { low: local.tee value_17($av_46 /u $av_47), high: 0_i64 }), ref.as_non_null(struct.new "core:prelude/int128.wado//u128" { low: local.tee value_18($av_46 %u $av_47), high: 0_i64 });
+        $av_47 = self.high;
+        $av_48 = self.low;
+        if $av_47 == 0_i64 {
+            $av_49 = $load_0;
+            return ref.as_non_null(struct.new "core:prelude/int128.wado//u128" { low: local.tee value_17($av_48 /u $av_49), high: 0_i64 }), ref.as_non_null(struct.new "core:prelude/int128.wado//u128" { low: local.tee value_18($av_48 %u $av_49), high: 0_i64 });
         } else {
             d = $load_0;
             let $mv$$pattern_temp_0$0: u64;
             let $mv$$pattern_temp_0$1: u64;
-            multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide"($av_45 %u d, $av_46, d);
-            return ref.as_non_null(high = $av_45 /u d; struct.new "core:prelude/int128.wado//u128" { low: $mv$$pattern_temp_0$0, high: high }), struct.new "core:prelude/int128.wado//u128" { low: $mv$$pattern_temp_0$1, high: 0_i64 };
+            multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide"($av_47 %u d, $av_48, d);
+            return ref.as_non_null(high = $av_47 /u d; struct.new "core:prelude/int128.wado//u128" { low: $mv$$pattern_temp_0$0, high: high }), struct.new "core:prelude/int128.wado//u128" { low: $mv$$pattern_temp_0$1, high: 0_i64 };
         }
     } else if $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_4: block -> "core:prelude/traits.wado//enum:Ordering" {
         if local.tee $load_7(self.high) <u $load_4 {
@@ -2488,15 +2487,15 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
     } == 0 {
         return struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 }, ref.as_non_null(struct.new "core:prelude/int128.wado//u128" { low: self.low, high: self.high });
     } else {
-        n = builtin::i64_clz(local.tee $av_48($load_4));
-        dn = $av_48 << n;
+        n = builtin::i64_clz(local.tee $av_50($load_4));
+        dn = $av_50 << n;
         if n != 0_i64 {
             dn = dn | ($load_0 >>u (64_i64 - n));
         }
-        $av_49 = self.high;
+        $av_51 = self.high;
         let $mv$$pattern_temp_1$0: u64;
         let $mv$$pattern_temp_1$1: u64;
-        multivalue_bind [$mv$$pattern_temp_1$0, $mv$$pattern_temp_1$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide"($av_49 >>u 1_i64, (self.low >>u 1_i64) | ($av_49 << 63_i64), dn);
+        multivalue_bind [$mv$$pattern_temp_1$0, $mv$$pattern_temp_1$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide"($av_51 >>u 1_i64, (self.low >>u 1_i64) | ($av_51 << 63_i64), dn);
         q = $mv$$pattern_temp_1$0 >>u (63_i64 - n);
         if @unlikely(q == 0_i64) {
             cold_path;
@@ -2505,9 +2504,8 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
         }
         q = q - 1_i64;
         multivalue_bind [p0_lo, p0_hi] = i64.mul_wide_u(q, local.tee $load_13(divisor.low));
-        p1_low = q * local.tee $load_14(divisor.high);
-        p2_low = 0_i64 * $load_13;
-        multivalue_bind [lo_27, hi_28] = i64.sub128(self.low, self.high, p0_lo, (p0_hi + p1_low) + p2_low);
+        $sroa_other_high_46 = (p0_hi + (q * local.tee $load_14(divisor.high))) + (0_i64 * $load_13);
+        multivalue_bind [lo_27, hi_28] = i64.sub128(self.low, self.high, p0_lo, $sroa_other_high_46);
         rem = struct.new "core:prelude/int128.wado//u128" { low: lo_27, high: hi_28 };
         if $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_10: block -> "core:prelude/traits.wado//enum:Ordering" {
             if local.tee $load_17(rem.high) <u $load_14 {

@@ -31,7 +31,7 @@ fn bisect(f: fn(f64) -> f64, mut lo: f64, mut hi: f64) -> f64 {
 fn newton(f: fn(f64) -> f64, df: fn(f64) -> f64, x0: f64) -> f64 {
     let mut x = x0;
     for let mut i = 0; i < 50; i += 1 {
-        x = x - f(x) / df(x);
+        x -= f(x) / df(x);
     }
     return x;
 }
@@ -43,7 +43,7 @@ fn integrate(f: fn(f64) -> f64, a: f64, b: f64, n: i32) -> f64 {
     for let mut i = 1; i < n; i += 1 {
         let x = a + i as f64 * h;
         let weight = if i % 2 == 0 { 2.0 } else { 4.0 };
-        sum = sum + weight * f(x);
+        sum += weight * f(x);
     }
     return sum * h / 3.0;
 }

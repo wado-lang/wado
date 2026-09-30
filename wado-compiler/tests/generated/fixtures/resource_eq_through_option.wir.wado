@@ -277,9 +277,9 @@ fn "resource_eq_through_option.wado/run"() {
     let a_56: u64;
     let b_57: u64;
     let elements_70: ref "Array<resource_eq_through_option.wado/Node>";
-    let other_72: ref "core:prelude//List<resource_eq_through_option.wado/Node>";
     let elements_73: ref "Array<resource_eq_through_option.wado/Node>";
     let $sroa_nodes_used_78: i32;
+    let $sroa_other_used_80: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:resource_eq_through_option.wado::$modules_initialized);
         cold_path;
@@ -459,8 +459,8 @@ condition: Pair { left: a, right: b } != Pair { left: b, right: a }
     elements_70 = array.new_fixed<u64>(a_0, b_1);
     $sroa_nodes_used_78 = builtin::array_len(elements_70);
     elements_73 = array.new_fixed<u64>(a_0, b_1);
-    other_72 = struct.new "core:prelude//List<resource_eq_through_option.wado/Node>" { repr: elements_73, used: builtin::array_len(elements_73) };
-    $cond_13 = "core:prelude/array.wado/core/prelude/array.wado/seq_eq<resource_eq_through_option.wado/Node>"(elements_70, $sroa_nodes_used_78, other_72.repr, other_72.used);
+    $sroa_other_used_80 = builtin::array_len(elements_73);
+    $cond_13 = "core:prelude/array.wado/core/prelude/array.wado/seq_eq<resource_eq_through_option.wado/Node>"(elements_70, $sroa_nodes_used_78, elements_73, $sroa_other_used_80);
     if @unlikely($cond_13 == 0) {
         cold_path;
         $local_24 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(165);
@@ -2894,9 +2894,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
     let $licm_buf_119: ref "core:prelude/string.wado//String";
     let $licm_arith_120: i32;
     let repr: ref Array<u8>;
-    let $licm_repr_126: ref Array<u8>;
-    let $licm_repr_127: ref Array<u8>;
-    let $av_128: i32;
+    let $licm_repr_129: ref Array<u8>;
+    let $licm_repr_130: ref Array<u8>;
+    let $av_131: i32;
     content_bytes_2 = local.tee $load_0(self.buf).used - start_pos;
     self_12 = $load_0;
     self_17 = self_12.used;
@@ -2913,11 +2913,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
         };
     };
     content_len = count;
-    $av_128 = self.width;
-    if content_len >= $av_128 {
+    $av_131 = self.width;
+    if content_len >= $av_131 {
         return;
     }
-    padding = $av_128 - content_len;
+    padding = $av_131 - content_len;
     if self.zero_pad {
         sign_len = $inline_core_prelude_format_wado_leading_sign_byte_len__mut_core_prelude_string_wado_String__5: block -> i32 {
             s = $load_0;
@@ -3004,13 +3004,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
         i_62 = content_bytes_2 - 1;
         $licm_buf_117 = local.tee $load_19(self.buf);
         $licm_arith_118 = start_pos + gap_61;
-        $licm_repr_126 = $licm_buf_117.repr;
+        $licm_repr_129 = $licm_buf_117.repr;
         b268: block {
             l269: loop {
                 break_if b268 i_62 < 0;
                 index_75 = $licm_arith_118 + i_62;
-                value_76 = builtin::array_get_value<u8>($licm_repr_126, start_pos + i_62);
-                builtin::array_set_u8($licm_repr_126, index_75, value_76);
+                value_76 = builtin::array_get_value<u8>($licm_repr_129, start_pos + i_62);
+                builtin::array_set_u8($licm_repr_129, index_75, value_76);
                 i_62 = i_62 - 1;
                 continue l269;
             };
@@ -3054,13 +3054,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
         i_92 = content_bytes_2 - 1;
         $licm_buf_119 = local.tee $load_26(self.buf);
         $licm_arith_120 = start_pos + gap_91;
-        $licm_repr_127 = $licm_buf_119.repr;
+        $licm_repr_130 = $licm_buf_119.repr;
         b276: block {
             l277: loop {
                 break_if b276 i_92 < 0;
                 index_105 = $licm_arith_120 + i_92;
-                value_106 = builtin::array_get_value<u8>($licm_repr_127, start_pos + i_92);
-                builtin::array_set_u8($licm_repr_127, index_105, value_106);
+                value_106 = builtin::array_get_value<u8>($licm_repr_130, start_pos + i_92);
+                builtin::array_set_u8($licm_repr_130, index_105, value_106);
                 i_92 = i_92 - 1;
                 continue l277;
             };

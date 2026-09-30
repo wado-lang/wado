@@ -15,7 +15,6 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-use super::Elaborator;
 use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
 use super::scope::{
@@ -30,6 +29,7 @@ use super::types::{
 };
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
+use super::{AbstractSelection, Elaborator};
 use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
 use crate::elaborator::sig::TraitSig;
@@ -2161,9 +2161,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Find a method in the trait declarations the bound names give, read in
-    /// elaborated form: `T: Ord` searches `Ord` and its supertraits.
+    /// elaborated form: `T: Ord` searches `Ord` and its supertraits. `call` is
+    /// the node [`Scope::abstract_selections`] records the selection under,
+    /// and `through_ref` whether its receiver was a reference to `self_type_id`.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
+        call: Option<AstId>,
+        through_ref: bool,
         bounds: &[ScopedBound],
         method_name: &str,
         self_type_id: TypeId,
@@ -2206,6 +2210,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let mut candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
+        // Two traits declaring the method select neither.
+        let selects_one_trait = candidates.len() == 1;
         // A reserved name answers only where no method of its kind does.
         let header = |c: &BoundCandidate| self.tysys.trait_method_header_of(&c.decl, method_name);
         let answers = |receiver: bool| {
@@ -2258,6 +2264,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             decl,
             written_self,
         } = candidate;
+        if selects_one_trait
+            && let (Some(call), Some(selections)) =
+                (call, self.annotate_ctx.abstract_selections.as_mut())
+        {
+            selections.insert(
+                call,
+                AbstractSelection {
+                    trait_decl: decl,
+                    through_ref,
+                },
+            );
+        }
         let fq_trait_name = FqTraitName::declared(self.tysys.resolutions.defs(), decl);
         // The arguments the bound writes name the trait the way the impl that
         // answers it is named, so `T: Eq<String>` reaches `impl Eq<String>`.

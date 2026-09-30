@@ -1043,7 +1043,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let in_scope = |trait_: DefId| {
             self.tysys
                 .resolutions
-                .decl_in_scope(&self.current_module_source, trait_)
+                .decl_in_scope(self.frame_module(), trait_)
         };
         let mut candidates = Vec::new();
         for def in trait_env.all_impl_keys(&key) {
@@ -2254,7 +2254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bridge.select(
             &self.tysys,
             &self.annotate_ctx,
-            &self.current_module_source,
+            self.frame_module(),
             receiver_type_id?,
             through_ref,
             method_name,

@@ -1446,11 +1446,9 @@ impl SolverBridge {
         // An out-of-scope candidate suggests importing its trait, so a trait the
         // call site cannot name is dropped and the call reads as a missing method.
         let defs = tysys.resolutions.defs();
-        found.out_of_scope.retain(|c| {
-            let trait_ = self.lowering.trait_def_of(c.trait_);
-            let same_package = defs.module(trait_).same_package(module);
-            defs.visibility(trait_).reachable_from(same_package)
-        });
+        found
+            .out_of_scope
+            .retain(|c| defs.nameable_from(self.lowering.trait_def_of(c.trait_), module));
         // Both sets: an out-of-scope candidate of another trait would otherwise
         // stand in for the named one, asking for an import that cannot make the
         // named trait apply.

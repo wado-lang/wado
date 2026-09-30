@@ -135,13 +135,13 @@ Returns a reference to the value stored under text equal to `key`.
 
 ##### `fn spread_literal(&mut self, base: TreeMap<String, V>)`
 
-#### `impl Serialize for TreeMap<String, V>`
+#### `impl Serialize for TreeMap<K, V>`
 
 ##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
 
-#### `impl Deserialize for TreeMap<String, V>`
+#### `impl Deserialize for TreeMap<K, V>`
 
-##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError>`
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<K, V>, DeserializeError>`
 
 #### `impl Inspect for TreeMap<K, V>`
 
@@ -289,6 +289,14 @@ The elements, in insertion order.
 #### `impl From<Array<T>> for TreeSet<T>`
 
 ##### `fn from(elements: Array<T>) -> TreeSet<T>`
+
+#### `impl Serialize for TreeSet<T>`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for TreeSet<T>`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeSet<T>, DeserializeError>`
 
 #### `impl Inspect for TreeSet<T>`
 

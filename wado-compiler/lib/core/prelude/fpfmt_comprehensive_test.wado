@@ -25,7 +25,7 @@ fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
     let mut idx = nd - 1;
     while idx >= 0 {
         digit_chars[idx] = b'0' + (val % 10) as u8;
-        val = val / 10;
+        val /= 10;
         idx -= 1;
     }
 
@@ -100,7 +100,7 @@ fn run_batch(bits: &List<u64>, expected: &List<String>, batch_name: String) -> i
         let exp = expected[i];
 
         if actual != exp {
-            failures = failures + 1;
+            failures += 1;
             if failures <= 10 {
                 println(`FAIL [${batch_name}][${i}]: expected="${exp}", got="${actual}"`);
             }
@@ -108,7 +108,7 @@ fn run_batch(bits: &List<u64>, expected: &List<String>, batch_name: String) -> i
 
         let parsed = f64::from_str(&actual);
         if !parsed matches { Ok(v) && v == f } {
-            failures = failures + 1;
+            failures += 1;
             if failures <= 10 {
                 println(`FAIL [${batch_name}][${i}]: f64::from_str("${actual}") did not round-trip`);
             }

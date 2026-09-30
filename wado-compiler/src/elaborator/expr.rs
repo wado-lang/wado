@@ -4187,23 +4187,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // that only the struct's own TypeParam TypeIds are replaced. Index-based
             // substitution incorrectly replaces TypeParams from outer scopes (e.g., impl
             // type params) that happen to share the same index as the struct's TypeParams.
-            let mut fields: Vec<ResolvedField> = if type_args.is_empty() {
-                fields
-            } else {
-                let slots = self
-                    .struct_fields_of_written_decl(struct_decl)
-                    .map(|info| info.type_param_type_ids.clone())
-                    .unwrap_or_default();
-                let subst = SubstitutionContext::new().bind(&slots, &type_args);
-                fields
-                    .into_iter()
-                    .map(|mut field| {
-                        field.type_id = subst
-                            .substitute(field.type_id, &mut self.tysys.type_table.borrow_mut());
-                        field
-                    })
-                    .collect()
-            };
+            let slots = self
+                .struct_fields_of_written_decl(struct_decl)
+                .map(|info| info.type_param_type_ids.clone())
+                .unwrap_or_default();
+            let subst = SubstitutionContext::new().bind(&slots, &type_args);
+            let mut fields: Vec<ResolvedField> = fields
+                .into_iter()
+                .map(|mut field| {
+                    field.type_id =
+                        subst.substitute(field.type_id, &mut self.tysys.type_table.borrow_mut());
+                    field
+                })
+                .collect();
 
             // Second pass: coerce and check what the first pass deferred, now
             // that the type arguments are known. `[10, 20, 30]` in
@@ -4216,13 +4212,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(concrete_type) = struct_field_types
                     .iter()
                     .find(|(name, _)| name == &ast_field.name)
-                    .map(|(_, type_id)| {
-                        if type_args.is_empty() {
-                            *type_id
-                        } else {
-                            self.substitute_in_frame(*type_id, &type_args)
-                        }
-                    })
+                    .map(|(_, type_id)| self.substitute_ctx_in_frame(&subst, *type_id))
                 else {
                     continue;
                 };
