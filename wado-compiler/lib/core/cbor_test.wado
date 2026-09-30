@@ -671,6 +671,18 @@ test "skipping an unknown field is depth-bounded like the typed path" {
     assert from_bytes::<Small, ByteList>(nested_skip(5)) matches { Ok(_) };
 }
 
+test "a skipped chain of tags is one level however long" {
+    // { "z": 6(6(…6(0))) }, as a skipped field and as a lenient Value's unknown
+    // tag. A tag opens no container, so neither may recurse per tag.
+    let mut chain = hex("a1 617a");
+    for let _ of 0..<200000 {
+        chain.push(0xc6);
+    }
+    chain.push(0x00);
+    assert from_bytes::<Small, ByteList>(chain) matches { Ok(s) && s.a == 0 };
+    assert from_bytes::<Value, ByteList>(chain, false) matches { Ok(_) };
+}
+
 test "skipping nested maps is depth-bounded" {
     // { "z": {0: {0: ... }} }, definite and indefinite.
     let mut definite = hex("a1 617a");

@@ -1302,7 +1302,13 @@ impl CborDeserializer {
     /// for capturing the raw bytes of an unrepresentable item. Skipping checks
     /// only well-formedness, never validity (so it does not UTF-8-validate).
     fn skip_item(&mut self, depth: i32) -> Result<(), DeserializeError> {
-        let [major, ai, arg, indef] = self.read_head()?;
+        // A tag's content is the item it wraps, at the same level, so a chain
+        // of them is read off in a loop rather than one call per tag.
+        let mut head = self.read_head()?;
+        while head.0 == MAJOR_TAG {
+            head = self.read_head()?;
+        }
+        let [major, ai, arg, indef] = head;
         match major {
             MAJOR_UINT | MAJOR_NINT => {
                 return Result::Ok(());
@@ -1316,9 +1322,6 @@ impl CborDeserializer {
             },
             MAJOR_BYTES | MAJOR_TEXT => {
                 return self.skip_string_raw(arg, indef, major);
-            },
-            MAJOR_TAG => {
-                return self.skip_item(depth);
             },
             MAJOR_ARRAY => {
                 // The threaded `depth`, not `self.depth`: skipping does not
