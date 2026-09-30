@@ -171,20 +171,20 @@ impl From<PurityError> for Diagnostic {
         let noun = e.context.noun();
         let message = match &e.impurity {
             Impurity::Call(callee) => {
-                format!("{noun} must be pure (no effects), but calls effectful function '{callee}'")
+                format!("{noun} cannot perform effects, but calls effectful function '{callee}'")
             }
             Impurity::Dispatch(op) => format!(
-                "{noun} must be pure (no effects), but dispatches '{op}', which needs a \
+                "{noun} cannot perform effects, but dispatches '{op}', which needs a \
                  capability the position does not hold"
             ),
             Impurity::Install(effect) => format!(
-                "{noun} must be pure (no effects), but installs a handler for '{effect}' \
+                "{noun} cannot perform effects, but installs a handler for '{effect}' \
                  whose methods need a capability the position does not hold"
             ),
         };
         Diagnostic {
             severity: Severity::Error,
-            code: Code::ImpureExpression,
+            code: Code::EffectNotAllowed,
             message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }

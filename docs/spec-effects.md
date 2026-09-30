@@ -95,7 +95,7 @@ Beyond a name, parameters and a return type, an operation declares nothing else.
 - A body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method). With no handler installed, the host answers it, so the body could never run.
 - A body on an `async` operation. A call to it evaluates to an `AsyncCall`, which a plain body does not produce.
 - A `self` receiver. An operation is called as `Effect::op(args)`, with no receiver to bind it to.
-- A `with` clause. A call demands only the operation's interface, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code.
+- A `with` clause. A call demands only the operation's interface, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means code that performs no effects, or `#[ambient]` code.
 - A `#[retain(...)]` attribute. An operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes.
 - Type parameters. An operation dispatches to one handler method, not to one per instantiation.
 
@@ -130,7 +130,7 @@ A function that calls an async operation is not itself async. `async` marks only
 ## Effect Declaration in Functions
 
 A function or method lists the effects it performs in a `with` clause after its
-return type. A function without one is pure:
+return type. A function without one performs no effects:
 
 <!-- {"fixture":"spec_effects_declaration.wado"} -->
 
@@ -153,7 +153,7 @@ impl Logger {
     }
 }
 
-// No effects = pure function
+// No `with` = no effects
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
@@ -390,7 +390,7 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
-`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade.
+`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. What an ambient body performs is not an effect of its caller, so a call whose result goes unused may be removed, and its output never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 
@@ -411,7 +411,7 @@ test {
 
 ### Non-Effects
 
-`panic` and `unreachable` are not effects. Both return `!`, so a pure function may call them.
+The effect system tracks effects and nothing else. A trap is not an effect: `panic`, `unreachable`, a failed `assert` and any other trap may happen in a function that declares none. `panic` and `unreachable` return `!`. Nor is what an [ambient function](#ambient-functions) writes an effect of its caller.
 
 ## Generic Effects (Effect Polymorphism)
 
@@ -541,7 +541,7 @@ A `with` clause on the trait itself says what every impl of it may do. A method'
 | Head                          | Every impl of it       |
 | ----------------------------- | ---------------------- |
 | `trait Foo { … }`             | as `with _`, diagnosed |
-| `trait Foo with () { … }`     | is pure                |
+| `trait Foo with () { … }`     | performs no effects    |
 | `trait Foo with Stdout { … }` | gets exactly `Stdout`  |
 | `trait Foo with _ { … }`      | brings its own effects |
 
@@ -580,7 +580,7 @@ fn pure_draw() -> i32 {                             // `Quiet`'s impl declares n
 
 A fixed head demands the same effects of every caller. An open one is resolved from the type each call names, so `draw(&mut quiet)` demands nothing when `Quiet`'s impl declares nothing. Inside `draw`, `s.next()` names only the bound `S: Source`, which has no impl to read. Its effects stay unresolved, and `draw` forwards them with `with _`. A generic caller of `draw` that forwards them again writes its own `with _`.
 
-A head that writes nothing reads as `with _`, so a bare trait is open rather than pure. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
+A head that writes nothing reads as `with _`, so a bare trait is open rather than effect-free. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
 
 Every trait in the standard library says `with ()`. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
 

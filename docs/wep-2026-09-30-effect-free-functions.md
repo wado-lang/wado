@@ -1,9 +1,9 @@
-# WEP: A Function Without `with` Is Pure
+# WEP: A Function Without `with` Performs No Effects
 
 ## Context
 
-The specification said a function without a `with` clause is pure. The effect
-system did not hold that promise, in three ways.
+The specification said a function without a `with` clause performs no effects.
+The effect system did not hold that promise, in three ways.
 
 - An operation of a user-defined interface demanded nothing of its caller. A
   function declaring nothing could call `Counter::next()`, and the handler
@@ -20,16 +20,20 @@ The effect system also tracks no global: a function reads and writes a
 
 ## Decision
 
-A function without a `with` clause is pure. Its result depends only on its
-arguments, and it changes nothing a caller can observe. The effect system holds
+A function without a `with` clause performs no effects. The effect system holds
 this by the rules below.
 
-### What pure admits
+The specification speaks of effects and nothing else. It does not call such a
+function pure: the word promises more than Wado gives, such as never trapping
+and never writing output.
 
-A pure function may still trap. A `panic`, a failed `assert` or any other trap
-is not an effect.
+### What an effect is not
 
-The optimizer may treat a pure call as having no effect, and remove one whose
+A trap is not an effect. A `panic`, a failed `assert` or any other trap may
+happen in a function that declares no effects. Neither is what an `#[ambient]`
+function writes.
+
+The optimizer may remove a call to a function that declares no effects when its
 result is unused. It does not remove a call that may trap, or one that may not
 return. Removing either would change what the program does.
 
@@ -62,9 +66,9 @@ effect a global access demands, are not decided, so they are a known gap of
 ### `#[ambient]` stays
 
 `#[ambient]` exempts a body from effect checking, as before. The optimizer
-treats an ambient function as pure, so it may remove a call whose result is
-unused. Ambient output such as `log_stderr` is therefore best-effort: it may
-not appear.
+treats a call to an ambient function as it treats one that declares no effects,
+so it may remove one whose result is unused. Ambient output such as
+`log_stderr` is therefore best-effort: it may not appear.
 
 ### Exports are not special
 
@@ -80,11 +84,12 @@ An `export fn` declares its effects exactly as any other function does.
    packages declare it where they call one. An operation's default body holds
    its own interface, and a binding on a `with` line holds what the bindings
    before it install.
-3. The specification states what pure means, and the rules above, in
-   [Effect System](./spec-effects.md).
+3. The specification and the diagnostics speak of effects, not purity. Done:
+   [Effect System](./spec-effects.md) states the rules above, and a position
+   that admits no effects reports `EFFECT_NOT_ALLOWED`.
 
 ## Known gaps
 
 - A global access performs no effect yet. Which effect it performs is
   undecided (see [Globals](#globals)).
-- The optimizer does not yet use purity to remove calls.
+- The optimizer does not yet remove a call by its callee's declared effects.

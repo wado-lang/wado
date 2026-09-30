@@ -191,7 +191,7 @@ fn example() {
 }
 ```
 
-An initializer must be pure: calling a function that declares an effect, or
+An initializer cannot perform effects: calling a function that declares one, or
 dispatching an operation, is a compile error. It may install its own handler,
 whose body may then dispatch that handler's operations.
 
@@ -1390,7 +1390,7 @@ See [the spec](./spec-effects.md#effect-declaration-in-functions).
 ```wado
 fn write_file(path: String, data: String) with FileSystem { ... }
 fn main() with (Stdout, FileSystem) { ... }        // more than one → parentheses
-fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
+fn add(a: i32, b: i32) -> i32 { return a + b; }  // no `with` = no effects
 
 // Same rule in every position, so a comma after a bare effect is the list's.
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T { ... }   // two parameters

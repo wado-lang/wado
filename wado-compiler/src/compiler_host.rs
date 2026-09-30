@@ -123,7 +123,7 @@ pub enum Code {
     /// An impl method declaring an effect its trait method leaves out
     EffectNotInTrait,
     /// A default value or a global initializer that performs an effect
-    ImpureExpression,
+    EffectNotAllowed,
     /// Unknown type name
     UnknownType,
     /// Invalid type cast
@@ -297,7 +297,7 @@ impl std::fmt::Display for Code {
             Code::EffectHandlerInvalid => "EFFECT_HANDLER_INVALID",
             Code::MissingEffect => "MISSING_EFFECT",
             Code::EffectNotInTrait => "EFFECT_NOT_IN_TRAIT",
-            Code::ImpureExpression => "IMPURE_EXPRESSION",
+            Code::EffectNotAllowed => "EFFECT_NOT_ALLOWED",
             Code::UnknownType => "UNKNOWN_TYPE",
             Code::InvalidCast => "INVALID_CAST",
             Code::ModuleNotFound => "MODULE_NOT_FOUND",

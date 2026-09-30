@@ -14,6 +14,11 @@ JIT do the work, and produces smaller output. Examples are `select` for
 branchless conditionals, `array.copy` and `array.fill` for bulk operations, and
 `br_table` for dense matches.
 
+A call to a function that declares no effects, or to an `#[ambient]` one, may be
+removed when its result is unused. A call that may trap or may not return stays,
+since removing it changes what the program does. See
+[Non-Effects](./spec-effects.md#non-effects).
+
 ## Optimization Levels
 
 | Flag            | Iterations | Inline threshold | Notes                                                 |
@@ -224,6 +229,8 @@ Architectural work is tracked in
 - [ ] Bounds-check elimination across sequential accesses (`a[0]; a[1]; a[2]`).
 - [ ] Folding an effect-free call on constants whose callee exceeds the inline
       budget.
+- [ ] Removing an unused call by its callee's declared effects, without
+      inlining it first.
 - [ ] Pricing a splice by what its call site keeps: one arm of a dispatch
       every site decides (`$hole_fmt`), or one element of a returned tuple
       (`default_slot`). Both carry a synthesized `#[inline(always)]` until then.
