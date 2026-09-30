@@ -173,8 +173,14 @@ one is an error. That holds whether it is written `&mut x.f` or `&mut xs[i]`, or
 taken implicitly by a `&mut self` receiver. A `&mut` of a local is fine, since it
 writes to the variable itself.
 
-A `variant` field or element admits `&mut`. Its payload is shared, so a mutation
-through the reference lands, though replacing the whole value does not.
+A `variant` field or element admits `&mut`. The reference points to a copy of
+the variant that shares its payload with the original. So a mutation reached
+through [match ergonomics](./spec-patterns.md#match-ergonomics), such as
+`if let A(b) = r { b.n = 1; }`, lands. Replacing the whole value through the
+reference would not, so it is an error.
+
+These rules for references to replace-on-assign values are not settled. They are
+being relaxed toward what Rust allows, so expect them to change.
 
 ### Reference Identity
 
