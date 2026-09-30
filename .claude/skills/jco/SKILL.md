@@ -58,8 +58,9 @@ await m.run.run();
 await new Promise((r) => setTimeout(r, 1000));
 ```
 
-Resolve the shim from the output directory's `node_modules` symlink, so the
-program and the runner share one preopen table.
+Import the shim the output links to through its `node_modules` symlink. A
+second copy of the shim holds its own preopen table, which the program never
+reads.
 
 mise tasks:
 
@@ -77,7 +78,7 @@ mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transp
 | Transpile (GC component)  | ✅ works, `wasi:http/service` included                                                                                                               |
 | JSPI                      | ✅ native (Node 26 no flag; Node 24 needs the flag)                                                                                                  |
 | Wide-arithmetic component | ❌ `transpile` rejects it (`wide arithmetic support is not enabled`); even if forced, V8 rejects the opcode at runtime → use `-f no-wide-arithmetic` |
-| Stdout via stream         | ✅ jco's own shim delivers it, flushed after `run()` resolves                                                                                        |
+| Stdout via stream         | ✅ jco's own shim delivers it, if the runner holds the event loop open after `run()` resolves                                                        |
 | Filesystem read stream    | ✅ reads through a preopen set with `_setPreopens` (zlib benchmark verified)                                                                         |
 
 ## wide-arithmetic (`-f no-wide-arithmetic`)
