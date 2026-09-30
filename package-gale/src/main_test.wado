@@ -14,6 +14,7 @@ use { generate as kiln_generate, Options } from "./generator.wado";
 use { Console } from "../tests/support/console.wado";
 use { scratch } from "../tests/support/scratch.wado";
 use { Environment, Exit } from "core:cli";
+use { Log } from "core:log";
 use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use fs from "core:fs";
 use {
@@ -75,7 +76,7 @@ struct Grants {
 }
 
 impl Preopens for Grants {
-    fn get_directories(&self) -> List<[Descriptor, String]> {
+    fn get_directories(&self) -> List<[Descriptor, String]> with Preopens {
         let cwd = Preopens::get_directories()[0].0;
         let mut granted: List<[Descriptor, String]> = [];
         for let dir of &self.dirs {
@@ -119,7 +120,7 @@ impl Run {
 }
 
 /// Run `gale argv` with `grants` preopened.
-fn gale_with(grants: List<String>, argv: List<String>) -> Run with Preopens {
+fn gale_with(grants: List<String>, argv: List<String>) -> Run with (Preopens, Environment, Log) {
     let line = CommandLine { argv };
     let dirs = Grants { dirs: grants };
     let mut console = Console {};
@@ -130,7 +131,7 @@ fn gale_with(grants: List<String>, argv: List<String>) -> Run with Preopens {
 }
 
 /// Run `gale argv` with `dir` as the only grant.
-fn gale_in<S: AsStrSlice>(dir: S, argv: List<String>) -> Run with Preopens {
+fn gale_in<S: AsStrSlice>(dir: S, argv: List<String>) -> Run with (Preopens, Environment, Log) {
     return gale_with([dir.to_string()], argv);
 }
 

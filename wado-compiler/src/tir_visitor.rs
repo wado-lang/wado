@@ -924,9 +924,7 @@ impl TirMutVisitor for ShiftLocals {
     }
 
     fn visit_pattern(&mut self, pattern: &mut TirPattern) {
-        if let TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } =
-            pattern
-        {
+        if let Some(local_index) = pattern.declared_local_index_mut() {
             *local_index += self.offset;
         }
         self.walk_pattern(pattern);

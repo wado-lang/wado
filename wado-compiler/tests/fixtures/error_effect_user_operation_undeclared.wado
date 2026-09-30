@@ -1,0 +1,19 @@
+// An operation of a user-defined interface demands its interface, as a host
+// one does: a function declaring nothing is pure, so it cannot dispatch one.
+interface Counter {
+    fn next() -> i32;
+}
+
+fn next_id() -> i32 {
+    return Counter::next();
+}
+
+export fn run() {
+    let _ = next_id();
+}
+
+__DATA__
+{
+    "compile_error": ":8:12: analysis error: missing effect 'Counter' required by 'Counter::next'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

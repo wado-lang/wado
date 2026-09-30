@@ -1,0 +1,25 @@
+// A global initializer cannot perform effects, so it may not install a handler whose
+// methods perform a capability.
+
+use { Random } from "wasi:random";
+
+interface Dice {
+    fn roll() -> u64;
+}
+
+struct HostDice {}
+
+impl Dice for HostDice {
+    fn roll(&self) -> u64 with Random {
+        resume Random::get_random_u64();
+    }
+}
+
+global SEED: u64 = with Dice => &HostDice {} do { Dice::roll() };
+
+export fn run() {
+    let _ = SEED;
+}
+
+__DATA__
+{"compile_error": ":18:33: analysis error: global initializer cannot perform effects, but installs a handler for 'Dice' whose methods need a capability the position does not hold", "compile_error_codes": ["EFFECT_NOT_ALLOWED"]}

@@ -1,6 +1,7 @@
 // The purity check reads the same segment the elaborator does, so an operation
 // reached through a namespace alias resolves to its interface and gets the same
-// answer a bare spelling does: it compiles, and traps with no handler installed.
+// answer a bare spelling does: the initializer holds no `Counter`, so the
+// dispatch is rejected.
 
 use { println, Stdout } from "core:cli";
 use c from "./sub/ns_counter.wado";
@@ -13,6 +14,6 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "trapped": true,
-    "stderr_contains": ["no handler installed for `Counter::next`"]
+    "compile_error": ":9:23: analysis error: global initializer cannot perform effects, but dispatches 'next', which needs a capability the position does not hold",
+    "compile_error_codes": ["EFFECT_NOT_ALLOWED"]
 }

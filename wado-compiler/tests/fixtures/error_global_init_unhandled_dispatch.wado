@@ -1,0 +1,21 @@
+// A user-defined effect's operation demands its interface, and a global
+// initializer holds none, so the dispatch is rejected rather than trapping at
+// module init.
+
+use { println, Stdout } from "core:cli";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+global COUNTED: i32 = Counter::next();
+
+export fn run() with Stdout {
+    println(`${COUNTED}`);
+}
+
+__DATA__
+{
+    "compile_error": ":11:23: analysis error: global initializer cannot perform effects, but dispatches 'next', which needs a capability the position does not hold",
+    "compile_error_codes": ["EFFECT_NOT_ALLOWED"]
+}

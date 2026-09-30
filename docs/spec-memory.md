@@ -6,7 +6,11 @@ garbage-collected, so a program writes no lifetimes and frees nothing.
 
 ## Value Semantics
 
-Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)).
+Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, variants, `String`, and `List<T>` all follow this rule.
+
+The copy stops at a reference. A `&T` or `&mut T`, wherever it appears, is copied as a reference, and the copy aliases the same value. So a `Slice<T>` or a `StrSlice`, which is a struct holding a reference to its backing array, shares its elements with the value it views.
+
+A resource is a handle to something the host owns, not a Wado value, so it is never deep-copied. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)).
 
 <!-- {"fixture":"spec_memory_copy.wado"} -->
 
@@ -169,8 +173,14 @@ one is an error. That holds whether it is written `&mut x.f` or `&mut xs[i]`, or
 taken implicitly by a `&mut self` receiver. A `&mut` of a local is fine, since it
 writes to the variable itself.
 
-A `variant` field or element admits `&mut`. Its payload is shared, so a mutation
-through the reference lands, though replacing the whole value does not.
+A `variant` field or element admits `&mut`. The reference points to a copy of
+the variant that shares its payload with the original. So a mutation reached
+through [match ergonomics](./spec-patterns.md#match-ergonomics), such as
+`if let A(b) = r { b.n = 1; }`, lands. Replacing the whole value through the
+reference would not, so it is an error.
+
+These rules for references to replace-on-assign values are not settled. They are
+being relaxed toward what Rust allows, so expect them to change.
 
 ### Reference Identity
 

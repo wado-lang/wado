@@ -1,0 +1,15 @@
+// A `fn(..)` field typed by a parameter is concrete only once the struct is
+// instantiated, so its `Inspect` reaches a function type no source spells.
+struct Holder<T> {
+    f: fn(i32) -> T,
+}
+
+fn make<T: Default>() -> Holder<T> {
+    return Holder::<T> { f: |x| T::default() };
+}
+
+test {
+    let h = make::<i64>();
+    assert `${h:?}`.starts_with("Holder { f: ");
+    assert (h.f)(1) == 0;
+}

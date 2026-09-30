@@ -253,7 +253,10 @@ default in worlds that have one is a compatible change, left as open work.
 `Log` is an ordinary effect, so an inner `with Log => &sink do` overrides the
 outermost handler for a scope. The facade functions are `#[ambient]`, so
 performing `Log` adds no `with Log` to callers — logging is callable anywhere
-without infecting signatures.
+without infecting signatures. `Filter` and `Context` pass events on to the next
+handler out, so the function installing one declares `with Log`, as
+[WEP: A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
+requires of every delegating handler.
 
 Something must own the default, since `info()` must never be the reason a
 program stops. The library owns it: every `Log` operation carries a default

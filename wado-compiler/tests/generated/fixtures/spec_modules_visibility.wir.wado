@@ -116,17 +116,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(37)
 
-type "functype//spec_modules_visibility.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(38)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(39)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(39)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(40)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(40)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(41)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>") -> ref "core:prelude//List<i32>";  // TypeId(41)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>") -> ref "core:prelude//List<i32>";  // TypeId(42)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(42)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(43)
+type "functype//spec_modules_visibility.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
 type "functype//spec_modules_visibility.wado/spec_modules_visibility.wado/$Closure_0::$call" = fn(i32) -> i32;  // TypeId(44)
 
@@ -783,12 +783,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "spec_modules_visibility.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {
     let $load_0: bool;
     let $load_2: i32;
@@ -1274,6 +1268,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<i32>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
+}
+
+fn "spec_modules_visibility.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "spec_modules_visibility.wado/spec_modules_visibility.wado/$Closure_0::$call"(x) {

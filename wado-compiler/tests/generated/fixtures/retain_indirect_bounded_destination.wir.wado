@@ -124,15 +124,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(41)
 
-type "functype//retain_indirect_bounded_destination.wado/fn(retain_indirect_bounded_destination.wado/Slot,retain_indirect_bounded_destination.wado/Bag)->()^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(retain_indirect_bounded_destination.wado/Slot,retain_indirect_bounded_destination.wado/Bag)->()>", ref "core:prelude/format.wado//Formatter");  // TypeId(42)
+type "functype//core:prelude/traits.wado/retain_indirect_bounded_destination.wado/Bag^core:prelude/traits.wado/Inspect::inspect" = fn(ref "retain_indirect_bounded_destination.wado//Bag", ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
-type "functype//core:prelude/traits.wado/retain_indirect_bounded_destination.wado/Bag^core:prelude/traits.wado/Inspect::inspect" = fn(ref "retain_indirect_bounded_destination.wado//Bag", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(43)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(44)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(44)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(45)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<retain_indirect_bounded_destination.wado/Bag>::grow" = fn(ref "core:prelude//List<retain_indirect_bounded_destination.wado/Bag>");  // TypeId(45)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<retain_indirect_bounded_destination.wado/Bag>::grow" = fn(ref "core:prelude//List<retain_indirect_bounded_destination.wado/Bag>");  // TypeId(46)
+type "functype//retain_indirect_bounded_destination.wado/fn(retain_indirect_bounded_destination.wado/Slot,retain_indirect_bounded_destination.wado/Bag)->()^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(retain_indirect_bounded_destination.wado/Slot,retain_indirect_bounded_destination.wado/Bag)->()>", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
 type "functype//retain_indirect_bounded_destination.wado/retain_indirect_bounded_destination.wado/$Closure_1::$call" = fn(ref "retain_indirect_bounded_destination.wado//Slot", ref "retain_indirect_bounded_destination.wado//Bag");  // TypeId(47)
 
@@ -1288,12 +1288,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "retain_indirect_bounded_destination.wado/fn(retain_indirect_bounded_destination.wado/Slot,retain_indirect_bounded_destination.wado/Bag)->()^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
 fn "core:prelude/traits.wado/retain_indirect_bounded_destination.wado/Bag^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
@@ -1797,6 +1791,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<retain_indirect_bounded_d
     new_repr = builtin::array_new<ref "retain_indirect_bounded_destination.wado//Bag">(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<ref "retain_indirect_bounded_destination.wado//Bag">(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
+}
+
+fn "retain_indirect_bounded_destination.wado/fn(retain_indirect_bounded_destination.wado/Slot,retain_indirect_bounded_destination.wado/Bag)->()^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "retain_indirect_bounded_destination.wado/retain_indirect_bounded_destination.wado/$Closure_1::$call"(slot, b) {

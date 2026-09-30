@@ -122,19 +122,19 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(43)
 
-type "functype//default_arg_trait_own_type_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//default_arg_trait_own_type_param.wado/default_arg_trait_own_type_param.wado/Box1<core:prelude/string.wado/String>^default_arg_trait_own_type_param.wado/Two<T,T>::both" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(44)
 
-type "functype//default_arg_trait_own_type_param.wado/default_arg_trait_own_type_param.wado/Box1<core:prelude/string.wado/String>^default_arg_trait_own_type_param.wado/Two<T,T>::both" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(45)
+type "functype//default_arg_trait_own_type_param.wado/default_arg_trait_own_type_param.wado/Box1<i32>^default_arg_trait_own_type_param.wado/Two<T,T>::both" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(45)
 
-type "functype//default_arg_trait_own_type_param.wado/default_arg_trait_own_type_param.wado/Box1<i32>^default_arg_trait_own_type_param.wado/Two<T,T>::both" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(46)
+type "functype//core:prelude/traits.wado/default_arg_trait_own_type_param.wado/Box1<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "default_arg_trait_own_type_param.wado//Box1<core:prelude/string.wado/String>", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
-type "functype//core:prelude/traits.wado/default_arg_trait_own_type_param.wado/Box1<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "default_arg_trait_own_type_param.wado//Box1<core:prelude/string.wado/String>", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
+type "functype//core:prelude/traits.wado/default_arg_trait_own_type_param.wado/Box1<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "default_arg_trait_own_type_param.wado//Box1<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//core:prelude/traits.wado/default_arg_trait_own_type_param.wado/Box1<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "default_arg_trait_own_type_param.wado//Box1<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(48)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(49)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(49)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(50)
+type "functype//default_arg_trait_own_type_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(50)
 
 type "functype//default_arg_trait_own_type_param.wado/default_arg_trait_own_type_param.wado/$Closure_0::$call" = fn(i32) -> i32;  // TypeId(51)
 
@@ -1716,12 +1716,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "default_arg_trait_own_type_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
 fn "default_arg_trait_own_type_param.wado/default_arg_trait_own_type_param.wado/Box1<core:prelude/string.wado/String>^default_arg_trait_own_type_param.wado/Two<T,T>::both"(a, b) {
     let $local_7: ref "core:prelude/string.wado//String";
     let new_used: i32;
@@ -2296,6 +2290,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
         self.used = new_used;
         builtin::array_copy<u8>(self.repr, start_11, $mv$other$repr, 0, $mv$other$used);
     };
+}
+
+fn "default_arg_trait_own_type_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "default_arg_trait_own_type_param.wado/default_arg_trait_own_type_param.wado/$Closure_0::$call"(x) {

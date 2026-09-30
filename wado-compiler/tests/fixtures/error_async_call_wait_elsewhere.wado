@@ -1,0 +1,20 @@
+// Only the function that starts an async call may wait on it undeclared.
+#[cm("example:demo/fetch")]
+interface Fetch {
+    #[cm("example:demo/fetch#get")]
+    async fn get(url: String) -> AsyncCall<i32>;
+}
+
+fn finish(call: AsyncCall<i32>) -> i32 {
+    return call.wait();
+}
+
+export fn run() with Fetch {
+    let _ = finish(Fetch::get("/a"));
+}
+
+__DATA__
+{
+    "compile_error": ":9:12: analysis error: missing resource 'Subtask' required by 'wait'; 9:12: missing resource 'WaitableSet' required by 'wait'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

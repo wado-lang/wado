@@ -1,0 +1,19 @@
+// A block closure with no return annotation takes its return type from a
+// returned `if`, `match` or labeled block, as it does from any other value.
+
+fn classify(n: i32) -> i32 {
+    let by_match = |m: i32| { return match m { 0 => 10, _ => 20 }; };
+    let by_if = |m: i32| { return if m == 0 { 1 } else { 2 }; };
+    let by_block = |m: i32| {
+        return found: {
+            if m == 0 { break found: 100; }
+            200
+        };
+    };
+    return by_match(n) + by_if(n) + by_block(n);
+}
+
+test {
+    assert classify(0) == 111;
+    assert classify(5) == 222;
+}

@@ -643,14 +643,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Invalid assignment target (not a valid l-value)
-    CannotAssign {
-        message: String,
-        span: Span,
-    },
-
-    /// Mutation of a place rooted at an immutable reference (a `&mut self`
-    /// method call or a field/index assignment through a `&T`)
+    /// A write or a `&mut` that reaches no mutable place: an assignment to a
+    /// non-place or an immutable one, a `&mut self` call or a `&mut` taken
+    /// through a `&T`, or a `&mut` onto a replace-on-assign value.
     CannotMutate {
         message: String,
         span: Span,
@@ -1802,11 +1797,6 @@ impl TypeError {
                 *span,
             ),
 
-            TypeError::CannotAssign { message, span } => (
-                Code::ImmutableAssignment,
-                format!("cannot assign: {message}"),
-                *span,
-            ),
             TypeError::CannotMutate { message, span } => {
                 (Code::ImmutableAssignment, message.clone(), *span)
             }

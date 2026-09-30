@@ -23,7 +23,7 @@ fn mock_socket() -> TcpSocket with TcpSocket {
 struct Filter { min: i32 }
 
 impl Log for Filter {                      // a layer: decorate one operation
-    fn enabled(&self, level: i32) -> bool {
+    fn enabled(&self, level: i32) -> bool with Log {
         resume level >= self.min && Log::enabled(level)
     }
     ..forward                              // everything else → the outer `Log`

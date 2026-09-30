@@ -1,0 +1,43 @@
+// A function holding the effect may install a handler that forwards it, or
+// one whose method delegates to it under a declared `with`.
+
+use { Random } from "wasi:random";
+
+struct OnlyBytes {}
+
+impl Random for OnlyBytes {
+    fn get_random_bytes(&self, len: u64) -> List<u8> {
+        resume [7];
+    }
+    ..forward
+}
+
+struct Counting {
+    calls: i32,
+}
+
+impl Random for Counting {
+    fn get_random_bytes(&mut self, len: u64) -> List<u8> with Random {
+        self.calls += 1;
+        resume Random::get_random_bytes(len);
+    }
+    fn get_random_u64(&mut self) -> u64 with Random {
+        self.calls += 1;
+        resume Random::get_random_u64();
+    }
+}
+
+export fn run() with Random {
+    let mut counting = Counting { calls: 0 };
+    with Random => &OnlyBytes {} do {
+        assert Random::get_random_bytes(1) == [7];
+        with Random => &mut counting do {
+            assert Random::get_random_bytes(1) == [7];
+            Random::get_random_u64();
+        }
+    }
+    assert counting.calls == 2;
+}
+
+__DATA__
+{}

@@ -1116,7 +1116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .intern(ResolvedType::Ref(type_id)),
             RefBinding::MutRef => {
                 if self.tysys.is_replace_on_assign_place_type(type_id) {
-                    let _ = self.emit(TypeError::CannotAssign {
+                    let _ = self.emit(TypeError::CannotMutate {
                         message: format!(
                             "cannot bind '{name}' as a mutable reference to {REPLACE_ON_ASSIGN_TYPE}: \
                              destructure by value, or take the reference to the whole value"

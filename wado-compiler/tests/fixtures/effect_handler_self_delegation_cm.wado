@@ -25,14 +25,14 @@ struct DoublingRandom {
 }
 
 impl Random for DoublingRandom {
-    fn get_random_bytes(&self, max_len: u64) -> List<u8> {
+    fn get_random_bytes(&self, max_len: u64) -> List<u8> with Random {
         resume Random::get_random_bytes(max_len * 2);
     }
 
     ..forward
 }
 
-export fn run() with Stdout {
+export fn run() with (Stdout, Random) {
     let inner = FixedRandom { byte: 7 };
     with Random => &inner do {
         let outer = DoublingRandom {};

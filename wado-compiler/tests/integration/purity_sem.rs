@@ -11,7 +11,9 @@ fn violations(source: &str) -> Vec<String> {
     reported(source)
         .into_iter()
         .map(|(_, impurity)| match impurity {
-            Impurity::Call(callee) | Impurity::Dispatch(callee) => callee,
+            Impurity::Call(callee) | Impurity::Dispatch(callee) | Impurity::Install(callee) => {
+                callee
+            }
         })
         .collect()
 }
@@ -112,11 +114,9 @@ export fn run() with Stdout {
     );
 }
 
-/// A user-defined effect's operation demands nothing of the position: an
-/// installed handler answers it, and a dispatch with none traps, in an
-/// initializer as in a function body.
+/// A user-defined effect's operation demands its interface, as a host one does.
 #[test]
-fn interface_operation_in_global_initializer_is_not_reported() {
+fn interface_operation_in_global_initializer_is_reported() {
     let source = r#"
 interface Counter {
     fn next() -> i32;
@@ -130,8 +130,10 @@ export fn run() {
 "#;
     let found = in_global(source);
     assert!(
-        found.is_empty(),
-        "an unhandled dispatch traps rather than failing to compile: {found:?}"
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "next")),
+        "a user-defined operation demands its interface: {found:?}"
     );
 }
 
@@ -225,10 +227,10 @@ export fn run() {
     );
 }
 
-/// An operation declaring a default body needs no handler — the default is what
-/// a dispatch with none installed runs.
+/// A default body answers a dispatch with no handler, but the call still demands
+/// the interface.
 #[test]
-fn defaulted_operation_in_global_initializer_is_not_reported() {
+fn defaulted_operation_in_global_initializer_is_reported() {
     let source = r#"
 interface Log {
     fn level() -> i32 {
@@ -243,7 +245,12 @@ export fn run() {
 }
 "#;
     let found = in_global(source);
-    assert!(found.is_empty(), "the default body runs: {found:?}");
+    assert!(
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "level")),
+        "a defaulted operation demands its interface: {found:?}"
+    );
 }
 
 /// An `effect E` bound through a named argument, where no closure body is

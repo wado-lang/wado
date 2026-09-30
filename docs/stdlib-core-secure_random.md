@@ -75,6 +75,6 @@ _Fields are private._
 
 #### `impl Random for BufferedRandom`
 
-##### `fn get_random_bytes(&mut self, max_len: u64) -> List<u8>`
+##### `fn get_random_bytes(&mut self, max_len: u64) -> List<u8> with Random`
 
-##### `fn get_random_u64(&mut self) -> u64`
+##### `fn get_random_u64(&mut self) -> u64 with Random`
