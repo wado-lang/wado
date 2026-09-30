@@ -153,7 +153,7 @@ a field default instead.
 
 Deserialization rejects a repeated field or key by default. A set's element is
 its key, so a `TreeSet<T>` read from a sequence that repeats an element is
-rejected the same way. A format that overrides `Deserializer::on_duplicate_key`
+rejected the same way. A format that overrides `Deserializer::on_duplicate_field`
 may accept one instead.
 
 A self-describing format skips a key that names no field, whatever value it

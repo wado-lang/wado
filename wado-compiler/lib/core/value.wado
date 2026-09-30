@@ -428,7 +428,7 @@ impl Inspect for Value {
 
 impl Deserialize for Value {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Value, DeserializeError> {
-        let mut visitor = ValueVisitor { on_duplicate: d.on_duplicate_key() };
+        let mut visitor = ValueVisitor { on_duplicate: d.on_duplicate_field() };
         return d.deserialize_any::<ValueVisitor>(&mut visitor);
     }
 }

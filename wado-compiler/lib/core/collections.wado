@@ -13,7 +13,7 @@ use {
     DeserializeErrorKind,
     SerializeErrorKind,
     DuplicateKeyPolicy,
-    report_duplicate_key,
+    report_duplicate_field,
 } from "core:serde";
 
 #[synopsis]
@@ -752,7 +752,7 @@ impl<K: Ord + Serialize, V: Serialize> Serialize for TreeMap<K, V> {
 
 impl<K: Ord + Deserialize + Inspect, V: Deserialize> Deserialize for TreeMap<K, V> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<K, V>, DeserializeError> {
-        let on_duplicate = d.on_duplicate_key();
+        let on_duplicate = d.on_duplicate_field();
         let mut map = d.begin_map()?;
         let mut result = TreeMap::<K, V>::new();
         while let Some(key) = map.next_key::<K>()? {
@@ -770,7 +770,7 @@ impl<K: Ord + Inspect, V> TreeMap<K, V> {
     internal fn insert_decoded(&mut self, policy: DuplicateKeyPolicy, key: K, value: V) -> Result<(), DeserializeError> {
         // The losing insert keeps the first value, so a repeat re-assigns.
         if !self.try_insert(key, value) {
-            report_duplicate_key(policy, &key)?;
+            report_duplicate_field(policy, &key)?;
             self[key] = value;
         }
         return Result::Ok(());
@@ -789,12 +789,12 @@ impl<T: Ord + Serialize> Serialize for TreeSet<T> {
 
 impl<T: Ord + Deserialize + Inspect> Deserialize for TreeSet<T> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeSet<T>, DeserializeError> {
-        let on_duplicate = d.on_duplicate_key();
+        let on_duplicate = d.on_duplicate_field();
         let mut seq = d.begin_seq()?;
         let mut result = TreeSet::<T>::new();
         while let Some(element) = seq.next_element::<T>()? {
             if !result.insert(element) {
-                report_duplicate_key(on_duplicate, &element)?;
+                report_duplicate_field(on_duplicate, &element)?;
             }
         }
         seq.end()?;

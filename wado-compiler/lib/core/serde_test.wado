@@ -17,7 +17,7 @@ use {
     DeserializeErrorKind,
     apply_case,
     DuplicateKeyPolicy,
-    report_duplicate_key,
+    report_duplicate_field,
     TextKeySerializer,
 } from "core:serde";
 use { TreeMap } from "core:collections";
@@ -400,19 +400,19 @@ test "apply_case heck-parity edge corpus" {
     assert apply_case(CaseStyle::Camel, "userID") == "userId";
 }
 
-test "report_duplicate_key rejects under Error, naming the key as Inspect does" {
+test "report_duplicate_field rejects under Error, naming the key as Inspect does" {
     let role: String = "role";
-    let e = report_duplicate_key(DuplicateKeyPolicy::Error, &role).unwrap_err();
+    let e = report_duplicate_field(DuplicateKeyPolicy::Error, &role).unwrap_err();
     assert e.kind == DeserializeErrorKind::DuplicateField && e.message == `duplicate field: "role"`;
-    assert report_duplicate_key(DuplicateKeyPolicy::Error, &7) matches { Err(e) && e.message == "duplicate field: 7" };
+    assert report_duplicate_field(DuplicateKeyPolicy::Error, &7) matches { Err(e) && e.message == "duplicate field: 7" };
 }
 
-test "report_duplicate_key continues under Warn" {
-    assert report_duplicate_key(DuplicateKeyPolicy::Warn, &7) matches { Ok };
+test "report_duplicate_field continues under Warn" {
+    assert report_duplicate_field(DuplicateKeyPolicy::Warn, &7) matches { Ok };
 }
 
-test "report_duplicate_key continues under PassThru" {
-    assert report_duplicate_key(DuplicateKeyPolicy::PassThru, &7) matches { Ok };
+test "report_duplicate_field continues under PassThru" {
+    assert report_duplicate_field(DuplicateKeyPolicy::PassThru, &7) matches { Ok };
 }
 
 struct KeyPair {

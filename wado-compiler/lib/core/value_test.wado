@@ -1025,7 +1025,7 @@ struct LastWins<D: Deserializer> {
 }
 
 // The trait asks for every method, but reading a `Value` or a map reaches only
-// `on_duplicate_key` and `deserialize_any` or `begin_map`.
+// `on_duplicate_field` and `deserialize_any` or `begin_map`.
 #[coverage(off)]
 impl<D: Deserializer> Deserializer for LastWins<D> {
     type SeqAccess = D::SeqAccess;
@@ -1033,7 +1033,7 @@ impl<D: Deserializer> Deserializer for LastWins<D> {
     type StructAccess = D::StructAccess;
     type VariantAccess = D::VariantAccess;
 
-    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
+    fn on_duplicate_field(&self) -> DuplicateKeyPolicy {
         return DuplicateKeyPolicy::PassThru;
     }
 

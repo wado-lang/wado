@@ -237,7 +237,7 @@ pub enum DuplicateKeyPolicy {
 /// Applies `policy` to a key the wire already wrote. Detecting the repeat is
 /// the caller's job: a struct sees a filled slot, a map asks `try_insert`, a
 /// set asks `insert`, whose element is its key.
-pub fn report_duplicate_key<K: Inspect>(policy: DuplicateKeyPolicy, key: &K) -> Result<(), DeserializeError> {
+pub fn report_duplicate_field<K: Inspect>(policy: DuplicateKeyPolicy, key: &K) -> Result<(), DeserializeError> {
     match policy {
         DuplicateKeyPolicy::Error => {
             builtin::cold_path();
@@ -574,7 +574,7 @@ pub trait Deserializer with () {
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
 
     /// What this format does when the wire repeats a field or key.
-    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
+    fn on_duplicate_field(&self) -> DuplicateKeyPolicy {
         return DuplicateKeyPolicy::Error;
     }
 
@@ -1498,7 +1498,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
         let members = ReflectStruct::<T>::members();
         let policy = Reflect::<T>::wire_name_policy();
-        let on_duplicate = d.on_duplicate_key();
+        let on_duplicate = d.on_duplicate_field();
         // Starting empty is what makes a filled slot mean "the wire wrote
         // this", so a repeat needs no second record to detect.
         let mut slots = ReflectStruct::<T>::empty_slots();
@@ -1508,7 +1508,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
             for let [i, _] of slots.enumerate() {
                 if i == index {
                     if slots[i] matches { Some(_) } {
-                        report_duplicate_key(
+                        report_duplicate_field(
                             on_duplicate,
                             &wire_name(&members[i], policy),
                         )?;
