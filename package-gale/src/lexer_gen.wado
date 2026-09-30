@@ -4186,10 +4186,10 @@ pub fn collect_keyword_rules(lexer_rules: &List<LexerRule>, grammar_opts: &List<
         if is_keyword_rule_name(&rule.name, &candidates) {
             continue;
         }
-        let try_call = build_rule_try_call(rule, lexer_rules, false, false, false, false, grammar_opts);
+        let [first_chars, is_wildcard] = rule_first_chars(rule, lexer_rules, grammar_opts);
         carrier_indices.push(i);
-        carrier_first_chars.push(try_call.first_chars);
-        carrier_is_wildcard.push(try_call.is_wildcard);
+        carrier_first_chars.push(first_chars);
+        carrier_is_wildcard.push(is_wildcard);
     }
     let mut result: List<KeywordInfo> = [];
     for let mut c = 0; c < candidates.len(); c += 1 {
@@ -4473,9 +4473,9 @@ fn keyword_carrier_kinds(
             continue;
         }
         let kind = lexer_rule_token_kind(rule);
-        let try_call = build_rule_try_call(rule, lexer_rules, false, false, false, false, grammar_opts);
+        let [first_chars, is_wildcard] = rule_first_chars(rule, lexer_rules, grammar_opts);
         let carries = keywords.iter_ref().any(
-            |kw| keyword_first_char_covered(kw, &try_call.first_chars, try_call.is_wildcard)
+            |kw| keyword_first_char_covered(kw, &first_chars, is_wildcard)
                 && lexer_rule_matches_keyword(rule, lexer_rules, grammar_opts, kw, KeywordReading::Possible),
         );
         if carries && !kinds.contains(&kind) {
@@ -4936,8 +4936,7 @@ fn build_rule_try_call(
         has_more_rules,
         has_channel_rules,
     );
-    let mut chars: List<[char, char]> = [];
-    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci, grammar_opts).0;
+    let [chars, is_wc] = rule_first_chars(rule, all_rules, grammar_opts);
     // A catch-all (`UNEXPECTED_CHAR : .`) matches any single character, so it
     // is redundant only in a branch whose rules all match on their first
     // character — see `branch_catch_all_calls`.
@@ -4955,6 +4954,17 @@ fn build_rule_try_call(
         total_on_first_char: lexer_rule_total_on_first_char(rule, all_rules),
         second_chars: lexer_second_chars(&rule.body, all_rules, casing_of(ci)),
     };
+}
+
+/// A rule's first-char ranges, and whether its first char is unbounded.
+fn rule_first_chars(
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    grammar_opts: &List<GrammarOption>,
+) -> [List<[char, char]>, bool] {
+    let mut chars: List<[char, char]> = [];
+    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, resolve_ci(grammar_opts, &rule.options), grammar_opts).0;
+    return [chars, is_wc];
 }
 
 /// Analyze first elements of rule body alternatives to find first-char set.
