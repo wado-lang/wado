@@ -1388,11 +1388,6 @@ impl GenContext {
         return self.token_kinds.names_of(ids);
     }
 
-    /// The kind id of a `TK_*` name, or -1 if it names no token kind.
-    pub fn token_id(&self, name: &String) -> i32 {
-        return self.token_kinds.id_of(name);
-    }
-
     /// Recover a single terminal name for an interned id.
     pub fn token_name(&self, id: i32) -> String {
         return self.token_kinds.name_of(id);
@@ -2584,12 +2579,7 @@ impl GenContext {
     /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
     /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
     /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
-    pub fn intern_sync_set(&mut self, tokens: &List<String>) -> Option<i32> {
-        return self.intern_sync_ids(self.names_to_ids(tokens));
-    }
-
-    /// `intern_sync_set` over kind ids.
-    pub fn intern_sync_ids(&mut self, ids: List<i32>) -> Option<i32> {
+    fn intern_sync_set(&mut self, ids: List<i32>) -> Option<i32> {
         let ids = self.canonical_ids(ids);
         if ids.is_empty() {
             return null;
@@ -2624,33 +2614,22 @@ impl GenContext {
         return if value.is_empty() { `break ${label};` } else { `break ${label}: ${value};` };
     }
 
-    /// `SYNC_<id>`, the set as the bits a membership test reads, or
-    /// `EMPTY_SYNC`.
-    pub fn sync_bits_ref(&mut self, tokens: &List<String>) -> String {
-        return sync_bits_name(self.intern_sync_set(tokens));
+    /// The globals naming one token set: `SYNC_<id>`, the bits a membership
+    /// test reads, and `EXPECTED_<id>`, the kind list a diagnostic names; both
+    /// `EMPTY_SYNC` for an empty set.
+    pub fn sync_refs(&mut self, ids: &List<i32>) -> [String, String] {
+        let Some(id) = self.intern_sync_set(*ids) else {
+            return [
+                String::from("EMPTY_SYNC"),
+                String::from("EMPTY_SYNC"),
+            ];
+        };
+        return [`SYNC_${id}`, `EXPECTED_${id}`];
     }
 
-    /// `sync_bits_ref` over kind ids.
-    pub fn sync_id_bits_ref(&mut self, ids: &List<i32>) -> String {
-        return sync_bits_name(self.intern_sync_ids(*ids));
-    }
-
-    /// `EXPECTED_<id>`, the set as the kind list a diagnostic names, or
-    /// `EMPTY_SYNC`.
-    pub fn sync_list_ref(&mut self, tokens: &List<String>) -> String {
-        return sync_list_name(self.intern_sync_set(tokens));
-    }
-
-    /// `sync_bits_ref` and `sync_list_ref` of one set, interned once.
-    pub fn sync_refs(&mut self, tokens: &List<String>) -> [String, String] {
-        let id = self.intern_sync_set(tokens);
-        return [sync_bits_name(id), sync_list_name(id)];
-    }
-
-    /// `sync_refs` over kind ids.
-    pub fn sync_id_refs(&mut self, ids: &List<i32>) -> [String, String] {
-        let id = self.intern_sync_ids(*ids);
-        return [sync_bits_name(id), sync_list_name(id)];
+    /// `sync_refs` of a set of `TK_*` names.
+    pub fn sync_name_refs(&mut self, tokens: &List<String>) -> [String, String] {
+        return self.sync_refs(&self.names_to_ids(tokens));
     }
 
     /// The interned sync sets, in id order.
@@ -2909,28 +2888,6 @@ impl GenContext {
 
 /// Join a canonical id list with `|` into a registry key. Ids are stable for
 /// the lifetime of the table (append-only), so the key is unambiguous.
-fn sync_bits_name(id: Option<i32>) -> String {
-    let Some(id) = id else {
-        return String::from("EMPTY_SYNC");
-    };
-    return `SYNC_${id}`;
-}
-
-fn sync_list_name(id: Option<i32>) -> String {
-    let Some(id) = id else {
-        return String::from("EMPTY_SYNC");
-    };
-    return `EXPECTED_${id}`;
-}
-
-fn expect_ids(sets: &List<Option<List<i32>>>, i: i32) -> Option<List<i32>> {
-    // `Atn.decision_sites` is sparse: a site past its end marks no decision.
-    if i < 0 || i >= sets.len() {
-        return null;
-    }
-    return sets[i];
-}
-
 fn join_ids(ids: &List<i32>) -> String {
     let mut s = String::with_capacity(32);
     for let mut i = 0; i < ids.len(); i += 1 {
@@ -2940,6 +2897,14 @@ fn join_ids(ids: &List<i32>) -> String {
         s.push_display(&ids[i]);
     }
     return s;
+}
+
+fn expect_ids(sets: &List<Option<List<i32>>>, i: i32) -> Option<List<i32>> {
+    // `Atn.decision_sites` is sparse: a site past its end marks no decision.
+    if i < 0 || i >= sets.len() {
+        return null;
+    }
+    return sets[i];
 }
 
 /// Registry key of a canonical K-prefix mask: depths joined with `;`,

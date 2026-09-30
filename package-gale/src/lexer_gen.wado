@@ -4963,7 +4963,13 @@ fn rule_first_chars(
     grammar_opts: &List<GrammarOption>,
 ) -> [List<[char, char]>, bool] {
     let mut chars: List<[char, char]> = [];
-    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, resolve_ci(grammar_opts, &rule.options), grammar_opts).0;
+    let is_wc = compute_elem_first_chars(
+        &rule.body,
+        all_rules,
+        &mut chars,
+        resolve_ci(grammar_opts, &rule.options),
+        grammar_opts,
+    ).0;
     return [chars, is_wc];
 }
 

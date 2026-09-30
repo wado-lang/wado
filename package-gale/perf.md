@@ -494,6 +494,24 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   This borrows a list that is already a root, so it adds nothing to the live set
   — unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md)).
 
+Open levers on `benchmark/gale_gen`, read off a 2026-09-30 profile taken after
+the recovery sync sets started going to the registry as ids:
+
+- [ ] **Kind sets and FOLLOW masks still arrive as names.** `kind_check_str`
+      and `intern_follow_mask` get `TK_*` names from the lowered IR, so each
+      name is looked up in a string-keyed `TreeMap` again (~4.5%). The
+      rule-name maps behind `first_of_rule_at` and `rule_is_nullable_at` cost
+      about as much again. Fixing this means threading ids through `lower` and
+      prediction.
+- [ ] **Referenced names are recovered by re-lexing the output** (~8%).
+      `called_scan_chunks` and the `_kind_set_` / `SYNC_` / `EXPECTED_` /
+      `FOLLOW_MASK_` pass in `generate` both run `collect_names` over
+      megabytes of generated text. The byte loop is already one checked get
+      per byte, so the only saving left is to scan less text: record each
+      reference when the chunk that holds it is emitted.
+- [ ] **`lexer_alts_can_collide` recomputes second chars per alternative**
+      (~2.5%), through `is_spliced_token_ref` on each spliced token reference.
+
 ## Tried and didn't pan out
 
 ### Flat green-tree + cursor CST — NO-GO (2026-06), later done right
