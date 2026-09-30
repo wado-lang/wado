@@ -2868,6 +2868,7 @@ test "every strategy the dump reports is one the emitter emitted" {
     for let src of &[
         "grammar T;\nr : A ;\nA : ('a' | 'ab') ;\nB : . ;", "grammar T;\nr : A ;\nA : 'a' (~'b')+ 'c' ;\nB : . ;",
         "grammar T;\nr : A ;\nA : 'a' .*? 'c' ;\nB : . ;", "grammar T;\nr : A ;\nA : ('a' | 'ab') 'c' ;\nB : . ;",
+        "grammar T;\nr : A ;\nA : 'a' 'b'? 'b' ;\nB : . ;",
         "grammar T;\nr : A B ;\nA : 'a' (~'b')+ 'c' | ('x' | 'xy') 'z' ;\nB : 'q' .*? 'r' ;\nC : . ;",
     ] {
         let report = lexer_dump(src);
@@ -2968,12 +2969,95 @@ x(y)[z]{w,}<> => (s (e (e (e (e (e x) ( y )) [ z ]) { w , }) < >))
 ", got;
 }
 
-// The jar keeps looping past the first `)`, since only the last one leaves a
-// token `s` can take; Gale's static exit takes the first and then fails.
-#[TODO]
 test "a non-greedy wildcard in a left-recursive suffix exits only where the rest can match" {
-    let got = parses(LR_SUFFIX_LOOPS, "s", ["x(a ) b)"]);
-    assert got == "x(a ) b) => (s (e (e x) ( a ) b )))\n", got;
+    let got = parses(LR_SUFFIX_LOOPS, "s", ["x(a ) b)", "x(a)(b)", "x(a ) [b])"]);
+    assert got == "x(a ) b) => (s (e (e x) ( a ) b )))
+x(a)(b) => (s (e (e (e x) ( a )) ( b )))
+x(a ) [b]) => (s (e (e x) ( a ) [ b ] )))
+", got;
+}
+
+// The atom's alternatives share `(`, so each one gets a function of its own,
+// and the simulator deciding the loop inside it reads the rule's precedence.
+test "a non-greedy wildcard in a contested atom alternative decides at the rule's precedence" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e '+' e | '(' .*? ')' | '(' ID ')' ']' | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["(a b) + (c)", "(a ) b ) + c"]);
+    assert got == "(a b) + (c) => (s (e (e ( a b )) + (e ( c ))))
+(a ) b ) + c => (s (e (e ( a ) b )) + (e c)))
+", got;
+}
+
+// Both alternatives of `a` scan `e` at one position, and `t` inside it decides
+// by what `a` has left: `e` ends before the `!` under the first and after it
+// under the second. The second reaches further only with its own answer, so
+// the scan memo keeps no answer that read the caller.
+test "a remembered scan answers only where no prediction read its caller" {
+    let got = parses("grammar T;
+s : a EOF ;
+a : e '!' ';' | e ';' ';' ;
+e : e '+' e | t ;
+t : ID | ID '!' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a ! ;", "a ! ; ;", "a + b ! ; ;", "a + b ! ;"]);
+    assert got == "a ! ; => (s (a (e (t a)) ! ;))
+a ! ; ; => (s (a (e (t a !)) ; ;))
+a + b ! ; ; => (s (a (e (e (t a)) + (e (t b !))) ; ;))
+a + b ! ; => (s (a (e (e (t a)) + (e (t b))) ! ;))
+", got;
+}
+
+test "a non-greedy optional in a contested alternative skips where the rest can match" {
+    let lr = parses("grammar T;
+s : e EOF ;
+e : e '+' e | '(' ID?? ID ')' | '(' ID ')' ']' | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["(a)", "(a b)", "(a)+(a b)"]);
+    let plain = parses("grammar T;
+s : e EOF ;
+e : '(' ID?? ID ')' | '(' ID ')' ']' | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["(a)", "(a b)"]);
+    let got = `${lr}${plain}`;
+    assert got == "(a) => (s (e ( a )))
+(a b) => (s (e ( a b )))
+(a)+(a b) => (s (e (e ( a )) + (e ( a b ))))
+(a) => (s (e ( a )))
+(a b) => (s (e ( a b )))
+", got;
+}
+
+test "a non-greedy wildcard exits only where the whole rest of the input can match" {
+    let rule = parses("grammar T;
+s : '(' .*? ')' ';' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["( a ) b ) ;", "( a ) ;"]);
+    let group = parses("grammar T;
+s : ( '(' .*? ')' | 'x' ) ';' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["( a ) b ) ;", "x ;"]);
+    let caller = parses("grammar T;
+s : e 'b' 'c' EOF ;
+e : '(' .*? ')' ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["( a ) b ) b c", "( a ) b c"]);
+    let got = `${rule}${group}${caller}`;
+    assert got == "( a ) b ) ; => (s ( a ) b ) ;)
+( a ) ; => (s ( a ) ;)
+( a ) b ) ; => (s ( a ) b ) ;)
+x ; => (s x ;)
+( a ) b ) b c => (s (e ( a ) b )) b c)
+( a ) b c => (s (e ( a )) b c)
+", got;
 }
 
 test "a redundant group around a loop body keeps the loop's decision" {
@@ -3582,9 +3666,53 @@ WS : ' ' -> skip ;
     assert got == "Select FOO selects => SELECT:Select ID:FOO ID:selects\n", got;
 }
 
-// Gale peeks no suffix carrying a predicate, so the plain `.+` eats the `z` the
-// fragment needs and the rule fails.
-#[TODO]
+// The jar's tokens, over the same rules with `getText().equals(…)`: a predicate
+// after a construct decides where it stops, the trailing one included.
+test "a predicate after a loop, an optional or an alternation decides where it stops" {
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+MID : 'a' .+ { $text == \"azz\" }? 'z' ;
+END : 'b' .+ 'z' { $text == \"bzz\" }? ;
+TAIL : 'c' .+ { $text == \"czz\" }? ;
+OPT : 'd' 'z'? { $text == \"d\" }? ;
+ARM : ('e' | 'ez') { $text == \"e\" }? 'z' ;
+LAST : ('f' | 'fz') { $text == \"fz\" }? ;
+X : . ;
+", ["azzzz", "bzzzz", "czzzz", "dz", "ezz", "fz"]);
+    assert got == "azzzz => MID:azzz X:z
+bzzzz => END:bzz X:z X:z
+czzzz => TAIL:czz X:z X:z
+dz => OPT:d X:z
+ezz => ARM:ez X:z
+fz => LAST:fz
+", got;
+}
+
+test "an optional leaves the char the rest of the rule needs" {
+    let got = lexes("lexer grammar L;
+OVER : 'g' 'z'? 'z' ;
+X : . ;
+", ["gz", "gzz"]);
+    assert got == "gz => OVER:gz\ngzz => OVER:gzz\n", got;
+}
+
+// The jar's tokens; its predicates read `getText().equals(…)`.
+test "a repeat over a string leaves the iterations the rest of the rule needs" {
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+OPT : 'x' ('ab')? 'ab' ;
+LOOP : 'y' ('ab')* 'ab' 'q' ;
+PRED_OPT : 'b' ('xy')? { $text == \"b\" }? ;
+PRED_LOOP : 'c' ('xy')+ { $text == \"cxy\" }? ;
+X : . ;
+", ["xab", "yababq", "bxy", "cxyxy"]);
+    assert got == "xab => OPT:xab
+yababq => LOOP:yababq
+bxy => PRED_OPT:b X:x X:y
+cxyxy => PRED_LOOP:cxy X:x X:y
+", got;
+}
+
 test "a greedy loop hands back the chars a predicate-carrying suffix needs" {
     let got = lexes("lexer grammar L;
 options { language = Wado; }
@@ -3594,9 +3722,6 @@ fragment END : { true }? 'z' ;
     assert got == "abz => S:abz\n", got;
 }
 
-// Gale scores no alternation that a predicate follows or whose suffix carries
-// one, so the first arm to match wins and the rule fails.
-#[TODO]
 test "an alternation before a predicate takes the arm the rest of the rule needs" {
     let after = lexes("lexer grammar L;
 options { language = Wado; }
@@ -3745,4 +3870,26 @@ STR : '\"' (~('\\\\' | '\"') | '\\\\' . | '\\\\x' HEX HEX? | '\\\\u{' HEX+ '}')*
 fragment HEX : '0'..'9' | 'a'..'f' ;
 ", ["\"a\\x41\"", "\"\\\"\"", "\"\\x\"", "\"\\u{1f600}\""]);
     assert got == "\"a\\x41\" => STR:\"a\\x41\"\n\"\\\"\" => STR:\"\\\"\"\n\"\\x\" => STR:\"\\x\"\n\"\\u{1f600}\" => STR:\"\\u{1f600}\"\n", got;
+}
+
+// Each alternative that competes with a loop agrees with two of its
+// iterations, so only a walk that re-enters the loop tells them apart.
+test "a prediction walks a loop through more than one iteration" {
+    let got = parses("grammar T;
+t : s EOF ;
+s : ('x' 'y' | 'x' 'z')* 'p' | 'x' 'y' 'x' 'w' | u | v ;
+u : 'a'* 'p' | 'a' 'a' 'w' ;
+v : ('b' 'c' | 'b' 'd')+ 'q' | 'b' 'c' 'b' 'w' ;
+WS : [ \\t]+ -> skip ;
+", "t", ["x y x z p", "x y x w", "x y x y p", "a a p", "a a w", "a a a p", "b c b d q", "b c b w", "b d q"]);
+    assert got == "x y x z p => (t (s x y x z p))
+x y x w => (t (s x y x w))
+x y x y p => (t (s x y x y p))
+a a p => (t (s (u a a p)))
+a a w => (t (s (u a a w)))
+a a a p => (t (s (u a a a p)))
+b c b d q => (t (s (v b c b d q)))
+b c b w => (t (s (v b c b w)))
+b d q => (t (s (v b d q)))
+", got;
 }

@@ -144,7 +144,10 @@ test "predict resolves a two-token shared-prefix decision" {
     assert adaptive_predict(&sim, d, &to_kinds(&brack), 0, eof) == 1, "ID '[' ']' should pick alt 1";
 }
 
-test "predict excludes a disabled alternative" {
+// ANTLR4 finds the viable alternatives first and only then drops the ones a
+// false predicate gates (`doc/predicates.md`), so disabling the only viable alt
+// leaves none rather than handing the decision to one the input cannot take.
+test "predict drops a disabled alternative from the viable ones" {
     let g = parse(K2_G4).unwrap();
     let atn = build_atn(&g);
     let sim = decode(&atn);
@@ -156,15 +159,48 @@ test "predict excludes a disabled alternative" {
         mk(0),
         mk(4),
         mk(5),
-    ];  // ID '(' ')' — normally alt 0
-    // Baseline: the shared-prefix decision picks alt 0.
-    assert atn_predict_with_stack(&sim, d, &empty, &to_kinds(&paren), 0, eof) == 0, "baseline picks alt 0";
-    // A false context-free semantic predicate on alt 0 excludes it from the
-    // seed set (the `disabled_alts` argument), so the predictor cannot return
-    // it — only alt 1 remains.
-    let disabled: List<i32> = [0];
-    let alt = atn_predict_with_stack(&sim, d, &empty, &to_kinds(&paren), 0, eof, 0, &disabled);
-    assert alt == 1, `disabling alt 0 must leave alt 1 (got ${alt})`;
+    ];  // ID '(' ')' — only alt 0 is viable
+    let kinds = to_kinds(&paren);
+    let pick = |disabled: List<i32>| atn_predict_with_stack(&sim, d, &empty, &kinds, 0, eof, 0, &disabled);
+    assert pick([]) == 0;
+    assert pick([1]) == 0;
+    assert pick([0]) == -1;
+}
+
+global COVER_G4: String = "grammar C;
+s : a EOF ;
+a : X Y? | X ;
+X : 'x' ;
+Y : 'y' ;
+";
+
+// After `x` the first alternative holds every state the second does, which
+// settles the decision only while the first may win it.
+test "a disabled alternative covering the others does not settle the decision" {
+    let mut g = parse(COVER_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let tk = build_token_kinds(&g);
+    let eof = tk.0["TK_EOF"];
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 1);
+    let stack: List<i32> = [-1, atn.call_site_returns[0]];
+    let x_only = ([tk.0["TK_X"], eof] as List<i32>).to_array();
+    let x_y = ([tk.0["TK_X"], tk.0["TK_Y"], eof] as List<i32>).to_array();
+    let pick = |kinds: &Array<i32>, disabled: List<i32>| atn_predict_with_stack(
+        &sim,
+        d,
+        &stack,
+        kinds,
+        0,
+        eof,
+        0,
+        &disabled,
+    );
+    assert pick(&x_only, []) == 0;
+    assert pick(&x_only, [0]) == 1;
+    assert pick(&x_y, []) == 0;
+    assert pick(&x_y, [0]) == -1;
 }
 
 test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
@@ -273,6 +309,46 @@ test "a recorded verdict is keyed by the caller stack" {
     assert alt_target_kind(&atn, d, outer) != ATN_BLOCK_END, "outer ?? must ENTER, not reuse the inner verdict";
     state.stack = [-1, csr[0], csr[1], csr[2], csr[1]];
     assert atn_predict_once(&sim, d, &mut state, &kinds, 0, eof) == inner, "the inner question answers as before";
+}
+
+// A scan whose result is kept for other callers hides the callers it has: a
+// prediction that needs one reads the whole stack, and says so.
+test "a prediction that needs a hidden caller reads the whole stack and says so" {
+    let mut g = parse(NG_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let sim = decode(&atn);
+    let d = optional_decision(&atn);
+    let csr = &atn.call_site_returns;
+    let kinds = to_kinds(&[
+        mk(7),
+        mk(4),
+    ]);
+    let mut state = AtnState::new();
+    state.stack = [-1, csr[0], csr[1], csr[2], csr[1]];
+    let hidden = state.hide_callers();
+    let inner = atn_predict_once(&sim, d, &mut state, &kinds, 0, eof);
+    assert state.reveal_callers(hidden);
+    assert alt_target_kind(&atn, d, inner) == ATN_BLOCK_END, "inner ?? must EXIT, as with the whole stack";
+    let again = state.hide_callers();
+    assert atn_predict_once(&sim, d, &mut state, &kinds, 0, eof) == inner;
+    assert state.reveal_callers(again), "a recorded verdict still says it read a hidden caller";
+}
+
+test "a prediction settled inside the visible frames reads no hidden caller" {
+    let mut g = parse(NG_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let tk = build_token_kinds(&g);
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 1);
+    let mut state = AtnState::new();
+    state.stack = [-1, atn.call_site_returns[0]];
+    let hidden = state.hide_callers();
+    let x = to_kinds(&[mk(4)]);
+    assert atn_predict_once(&sim, d, &mut state, &x, 0, tk.0["TK_EOF"]) == 0;
+    assert !state.reveal_callers(hidden);
 }
 
 // P4.1: the rewritten LR loop-entry form is walkable. A naive

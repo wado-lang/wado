@@ -92,26 +92,40 @@ test "lexer dump shortens a class of many ranges" {
 r : ID ;
 ID : [a-zA-Z_$0-9\\u00C0-\\u00D6\\u00D8-\\u00F6]+ ;");
 
-    assert report.contains("repeat [a-zA-Z_$0-9À-Ö…]+ — plain loop: nothing follows the repeat"), report;
+    assert report.contains("repeat [a-zA-Z_$0-9À-Ö…]+ — plain: nothing follows the repeat"), report;
 }
 
-test "lexer dump says a predicate kept a construct from peeking what follows it" {
+test "lexer dump says a predicate after a construct makes it consult what follows" {
+    // `[0-9]` cannot eat the `'z'` and nothing follows the alternation, so only
+    // the predicate has a say in where each stops.
     let report = lexer_dump("grammar T;
-r : S I J ;
-S : 'a' .+ END ;
-I : ('a' | 'ab') {true}? 'bc' ;
-J : ('a' | 'ab') END ;
-fragment END : {true}? 'z' ;");
+r : S I ;
+S : 'a' [0-9]+ {true}? 'z' ;
+I : ('a' | 'ab') {true}? ;");
 
-    assert report.contains(
-        "repeat .+ then END — plain loop: the suffix carries a semantic predicate, so it cannot be peeked",
-    ), report;
-    assert report.contains(
-        "alternation ('a' | 'ab') then 'bc' — first-match: a semantic predicate follows the alternation",
-    ), report;
-    assert report.contains(
-        "alternation ('a' | 'ab') then END — first-match: the suffix carries a semantic predicate, so it cannot be peeked",
-    ), report;
+    assert report.contains("repeat [0-9]+ then 'z' — lookahead-aware"), report;
+    assert report.contains("alternation ('a' | 'ab') — arm scoring"), report;
+}
+
+test "lexer dump leaves a repeat plain when a predicate follows only behind a char it cannot eat" {
+    // The predicate runs only after `'z'`, which `[0-9]` cannot eat, so the loop
+    // already stops where the predicate could run. An optional `'z'` lets it run
+    // right where the loop stops.
+    let report = lexer_dump("grammar T;
+r : S O ;
+S : 'a' [0-9]+ 'z' {true}? ;
+O : 'b' [0-9]+ 'z'? {true}? ;");
+
+    assert report.contains("repeat [0-9]+ then 'z' — plain: the inner cannot eat the suffix's first char"), report;
+    assert report.contains("repeat [0-9]+ then 'z'? — lookahead-aware"), report;
+}
+
+test "lexer dump gives a repeat over a string the lookahead-aware scan" {
+    let report = lexer_dump("grammar T;
+r : S ;
+S : 'x' ('ab')* 'ab' ;");
+
+    assert report.contains("repeat ('ab')* then 'ab' — lookahead-aware"), report;
 }
 
 test "lexer dump escapes a quote and an unprinted char" {
@@ -154,7 +168,7 @@ test "lexer dump reports a greedy repeat whose inner cannot eat the suffix" {
 r : CMT ;
 CMT : '/*' ~'*'* '*/' ;");
 
-    assert report.contains("repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
+    assert report.contains("repeat ~'*'* then '*/' — plain: the inner cannot eat the suffix's first char"), report;
     assert report.contains("plain 1, lookahead-aware 0"), report;
 }
 
@@ -202,13 +216,13 @@ I : ('a' | 'ab') [0-9]* 'z' ;");
 
 test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
     // The non-greedy emit carries the alt's later predicates onto its rest, so the
-    // `{true}?` lands after the `.*` and keeps that repeat on the plain loop.
+    // `{true}?` lands after the `[0-9]*` and makes that repeat consult it.
     let report = lexer_dump("grammar T;
 r : S ;
-S : 'a' .*? .* {true}? 'x' ;");
+S : 'a' .*? [0-9]* {true}? 'x' ;");
 
-    assert report.contains("repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
-    assert report.contains("plain 1, lookahead-aware 0"), report;
+    assert report.contains("repeat [0-9]* then 'x' — lookahead-aware"), report;
+    assert report.contains("plain 0, lookahead-aware 1"), report;
 }
 
 test "lexer dump reports disjoint arms with a suffix as first-match" {
@@ -489,5 +503,5 @@ r : WS ;
 WS : [ \\t\\r\\n]+ -> skip ;");
 
     assert report.contains("repeat [ \\t\\r\\n]+"), report;
-    assert report.contains("plain loop: nothing follows the repeat"), report;
+    assert report.contains("plain: nothing follows the repeat"), report;
 }

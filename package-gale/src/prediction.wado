@@ -11,7 +11,7 @@
 //! translation from `PredictionNode` to source lives in
 //! `parser_gen.wado` (`gen_prediction_code_inner`).
 
-use { Element, RepeatElement, Alternative } from "./ir.wado";
+use { Element, RepeatElement, RepeatKind, Alternative } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { sort_group_by_specificity } from "./alt_grouping.wado";
@@ -431,20 +431,39 @@ fn sll_step(c: &SllConfig, pos: i32) -> List<SllConfig> {
     ];
 }
 
-/// Move `c` past the `Repeat` at `at` on `token`, which its body admits: a
-/// single-token body is stepped past, a multi-token one walked into
-/// (invariant 6), and one that cannot be walked turns the config opaque.
+/// Where a walk resumes once an iteration of `rep`, at `at` in `elements`,
+/// ends: past a `?`, and back at a loop, which may run again or stop. A `+`
+/// resumes as a `*`, since its one required iteration is behind it.
+fn after_iteration(elements: &List<Element>, at: i32, rep: &RepeatElement) -> SllReturn {
+    return match rep.kind {
+        Optional => SllReturn { elements, pos: at + 1 },
+        Star => SllReturn { elements, pos: at },
+        Plus => {
+            let mut looped = *elements;
+            looped[at] = Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star });
+            SllReturn { elements: &looped, pos: at };
+        },
+    };
+}
+
+/// Move `c` through one iteration of the `Repeat` at `at` on `token`, which its
+/// body admits: a single-token body is stepped over, a multi-token one walked
+/// into (invariant 6), and one that cannot be walked turns the config opaque.
+/// Either way the walk then resumes where `after_iteration` says.
 fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_depth: i32) -> List<SllConfig> {
     let Repeat(rep) = &c.elements[at] else {
         panic("walk_repeat: not a repeat");
     };
+    let next = after_iteration(c.elements, at, rep);
     let Some(inner_alts) = repeat_entry_alts(rep, ctx) else {
-        return sll_step(c, at + 1);
+        return [
+            SllConfig { ..*c, elements: next.elements, pos: next.pos },
+        ];
     };
     if inner_alts.len() > 8 {
         return sll_step(c, SLL_POS_OPAQUE);
     }
-    let new_stack = push_return(&c.return_stack, c.elements, at + 1);
+    let new_stack = push_return(&c.return_stack, next.elements, next.pos);
     let mut body_results: List<SllConfig> = [];
     for let alt of &inner_alts {
         let mut v: List<String> = [];
@@ -460,12 +479,6 @@ fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_
         for let a of sll_advance(&exp, token, ctx, inline_depth + 1) {
             body_results.push(a);
         }
-    }
-    // Entered configs all carry this config's alt index, so `sll_dedup_by_alt`
-    // would keep one and drop the rest — a walk over a subset of the body.
-    // Opacity is the honest answer: it hands the decision to the tournament.
-    if body_results.len() > 1 {
-        return sll_step(c, SLL_POS_OPAQUE);
     }
     return body_results;
 }
@@ -634,19 +647,34 @@ fn sll_unique_alts(configs: &List<SllConfig>) -> List<i32> {
     return alts;
 }
 
-/// Deduplicate configs: merge configs with the same (alt_index) that reach
-/// the same prediction outcome. For SLL, two configs with the same alt_index
-/// are equivalent for prediction purposes.
-fn sll_dedup_by_alt(configs: &List<SllConfig>) -> List<SllConfig> {
-    let mut seen_alts: List<i32> = [];
+/// Drop the configs another one already stands for. One alternative can sit at
+/// several positions — an optional entered and skipped — and each reads the
+/// next token apart, so only a config at the same place with the same returns
+/// is the same.
+fn sll_dedup(configs: &List<SllConfig>) -> List<SllConfig> {
     let mut result: List<SllConfig> = [];
     for let c of configs {
-        if !seen_alts.contains(&c.alt_index) {
-            seen_alts.push(c.alt_index);
+        if !result.iter_ref().any(|kept| sll_same_config(kept, c)) {
             result.push(*c);
         }
     }
     return result;
+}
+
+fn sll_same_config(a: &SllConfig, b: &SllConfig) -> bool {
+    if a.alt_index != b.alt_index || a.pos != b.pos || !ref_eq(a.elements, b.elements) {
+        return false;
+    }
+    if a.return_stack.len() != b.return_stack.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.return_stack.len(); i += 1 {
+        let [ra, rb] = [&a.return_stack[i], &b.return_stack[i]];
+        if ra.pos != rb.pos || !ref_eq(ra.elements, rb.elements) {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn build_sll_node(
@@ -723,8 +751,7 @@ fn build_sll_node(
             continue;
         }
 
-        // Dedup: keep one config per alt (SLL ignores context).
-        let deduped = sll_dedup_by_alt(&next_configs);
+        let deduped = sll_dedup(&next_configs);
         let mut next_alts = sll_unique_alts(&deduped);
         // Add opaque alts (they survive regardless of further lookahead).
         for let oa of opaque_alts {

@@ -16,9 +16,6 @@ test "a true predicate leaves the ATN-selected longer alt" {
     assert r.output == "abc", `expected the longer alt to run: '${r.output}'`;
 }
 
-// Gale drops a false-gated alt before predicting, so the shorter alt wins the
-// re-prediction and runs `ab`.
-#[TODO]
 test "a false predicate on the only viable ATN alt leaves no alternative" {
     let r = ap::parse_rejects("abcc");
     assert !r.ok(), "the predicate drops the only viable alt";
@@ -44,8 +41,6 @@ test "a context-dependent predicate is honoured at the ATN decision" {
     assert keep.output == "abc", `expected the longer alt ($mode == 1): '${keep.output}'`;
 }
 
-// As for `rejects`: the false-gated alt is dropped before predicting, so `ab` runs.
-#[TODO]
 test "a false context-dependent predicate on the only viable ATN alt leaves no alternative" {
     let drop = ap::parse_ctxdrop("abcc");
     assert !drop.ok(), "$mode == 0 is false, which drops the only viable alt";

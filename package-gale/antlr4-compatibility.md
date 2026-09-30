@@ -646,12 +646,16 @@ Fixture `nullable_first_alt.g4`.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
-greedy `+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`),
-the emitter peeks the suffix each iteration and rewinds once to the latest
-legal suffix start. The peek lowers the suffix through the same path the
-commit will run, so what it proves is what then happens. A suffix carrying a
-semantic predicate keeps the plain greedy loop instead: the peek would
-evaluate the predicate once per iteration and again on commit.
+greedy `?`/`+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`,
+`'x' ('ab')? 'ab'`), the emitter peeks the suffix after each iteration and
+rewinds once to the latest legal suffix start. The peek lowers the suffix
+through the same path the commit will run, so what it proves is what then
+happens. A semantic predicate the suffix can reach without consuming a char
+takes the same path, since it too decides where the repeat stops: the peek
+evaluates it once per iteration and again on commit, which
+`doc/predicates.md` allows. The inner must match each iteration along one
+path, a string or a char set; one that can end an iteration in two places
+keeps the plain greedy loop.
 
 The first-character dispatch that picks which rules to try is a filter, not a
 decision: a rule admitted by its first character can still fail on the rest of
@@ -668,8 +672,8 @@ rule's. With a suffix after it neither first-match nor longest-arm is right —
 `xyz` needs the first — so each arm is scanned from the same start, its suffix
 peeked without consuming, and the arm whose arm-plus-suffix reaches furthest
 wins, ties to the first. Scoring on the suffix rather than the arm is what
-makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same peek and
-the same predicate limit as the repeat path. Fixtures:
+makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. The peek and
+its predicates are the repeat path's. Fixtures:
 `lexer_alt_suffix_longest.g4`, `lexer_alt_suffix_shapes.g4`,
 `lexer_suffix_peek_limits.g4`.
 
@@ -832,9 +836,13 @@ relevant sites.
    every depth, a rule-ref expansion included: Wado's `if x matches {`
    reached `(tagOwner '::')* tagName` through one and, skipped past, the
    repeat claimed `matches` for the tag. Where the body cannot be walked,
-   the config turns opaque rather than lossy. Fixture
-   `tests/grammars/scan_optional_lookahead_restore.g4`; the expansion case
-   is pinned in `src/dump_test.wado`.
+   the config turns opaque rather than lossy. An iteration, walked or
+   stepped over, ends back at a `*` or `+` loop, which may run again or
+   stop. Resuming past it would kill every config on the loop's second
+   iteration. Fixture `tests/grammars/scan_optional_lookahead_restore.g4`.
+   The expansion case is pinned in `src/dump_test.wado`, the second
+   iteration in `src/codegen_test.wado` ("a prediction walks a loop
+   through more than one iteration").
 7. A scan-side optional rewinds to its entry position when its body
    fails, because a failed optional means "skip". Leaving the callee's
    `-1` in the scan position both mis-scans the elements after it and
@@ -984,7 +992,8 @@ the compiled fast path:**
    here — the surface-element walker from `RepeatElement.non_greedy`, the
    op-only walker (LR-suffix bodies) from `RepeatOp.non_greedy`; a `??` lowers
    to `strategy: Plain`, so the flag is what tells the two apart from a greedy
-   `?`. Fixtures: `ll_optional_non_greedy{,_multi}.g4`, plus
+   `?`. A caller's scan asks the same question, so it skips where the parse
+   will. Fixtures: `ll_optional_non_greedy{,_multi}.g4`, plus
    `lr_dangling_else.g4` (atom alternative) and
    `lr_suffix_non_greedy_opt.g4` (LR-suffix alternative).
 3. A **context-dependent multi-alt at-end conflict** — one alternative
@@ -1011,11 +1020,22 @@ the compiled fast path:**
 4. A **group whose nullable alternative competes** with another for the
    tokens that follow the group (see "A nullable alternative is admitted by
    what follows the group" above).
+5. A **non-greedy `*?` / `+?` over a body taking every token** (`.*?`,
+   `~X*?`). Such a body can match whatever the exit needs, so only the whole
+   rest of the input decides where it stops: in an LR suffix, a group or a
+   caller's continuation alike, the loop exits at the first position from
+   which the parse can finish. Both the parse and the scan ask the simulator
+   (`non_greedy_exit_by_atn`), and only on a token that could also start the
+   continuation, where its first tokens are all known; any other token only
+   the body takes. The tests are in `codegen_test.wado`
+   (`LR_SUFFIX_LOOPS` and "a non-greedy wildcard exits only where the whole
+   rest of the input can match").
 
 Two more sites _would_ belong here on correctness grounds and are left out on
 cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
-(fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop no
-lookahead separates (`ll_non_greedy_plus_loop.g4`). A prediction per occurrence
+(fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
+narrower body that no lookahead separates (`ll_non_greedy_plus_loop.g4`,
+SQLite's `name+?`). A prediction per occurrence
 costs a full closure over the grammar, which took SQLite's DDL-heavy benchmark
 corpus from 2.6 ms to 402 ms per parse; neither gating it behind the ambiguous
 lookahead nor bounding the lookahead recovers that. The two are also coupled —

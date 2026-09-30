@@ -258,7 +258,7 @@ fn render_repeat(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: 
         LookaheadAware => {
             o.repeat_lookahead += 1;
         },
-        PlainOptional | PlainNoSuffix | PlainInnerNotPerChar | PlainPredicateAfter | PlainSuffixDisjoint | PlainSuffixNotPeekable => {
+        PlainNoSuffix | PlainInnerChooses | PlainSuffixDisjoint => {
             o.repeat_plain += 1;
         },
     }
@@ -351,23 +351,16 @@ fn group_emit_label(emit: LexerGroupEmit) -> Option<String> {
         FirstMatchSingleArm | FirstMatchNoSuffix => null,
         FirstMatchFixedLenArms => Option::Some("first-match: every arm consumes the same fixed length"),
         FirstMatchArmsDisjoint => Option::Some("first-match: no two arms can match at the same position"),
-        FirstMatchPredicateAfter => Option::Some("first-match: a semantic predicate follows the alternation"),
-        FirstMatchSuffixNotPeekable => Option::Some(
-            "first-match: the suffix carries a semantic predicate, so it cannot be peeked",
-        ),
     };
 }
 
 fn repeat_emit_label(emit: LexerRepeatEmit) -> String {
     return match emit {
         NonGreedy => "non-greedy: min-match loop, the rest of the alternative is tried first",
-        LookaheadAware => "lookahead-aware: the inner can eat a char the suffix needs",
-        PlainOptional => "plain loop: one optional element, no loop to overshoot with",
-        PlainNoSuffix => "plain loop: nothing follows the repeat",
-        PlainInnerNotPerChar => "plain loop: the inner does not consume exactly one char per iteration",
-        PlainPredicateAfter => "plain loop: a semantic predicate follows the repeat",
-        PlainSuffixDisjoint => "plain loop: the inner cannot eat the suffix's first char",
-        PlainSuffixNotPeekable => "plain loop: the suffix carries a semantic predicate, so it cannot be peeked",
+        LookaheadAware => "lookahead-aware: the inner can eat a char the suffix needs, or a predicate follows",
+        PlainNoSuffix => "plain: nothing follows the repeat",
+        PlainInnerChooses => "plain: an iteration of the inner can end in more than one place",
+        PlainSuffixDisjoint => "plain: the inner cannot eat the suffix's first char",
     };
 }
 
