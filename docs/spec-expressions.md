@@ -514,15 +514,15 @@ result is stated in these terms, which follow the Rust Reference:
 
 Each pair of types gets one of them:
 
-| Source → target                   | Result                                                  |
-| --------------------------------- | ------------------------------------------------------- |
-| integer → integer of equal width  | transmute                                               |
-| integer → narrower integer        | truncate                                                |
-| unsigned integer → wider integer  | zero-extend                                             |
-| signed integer → wider integer    | sign-extend                                             |
-| float → integer                   | round toward zero, then saturate; NaN becomes 0         |
-| integer → float                   | round to nearest                                        |
-| float → float                     | round to nearest; exact where the target holds the value |
+| Source → target                  | Result                                                   |
+| -------------------------------- | -------------------------------------------------------- |
+| integer → integer of equal width | transmute                                                |
+| integer → narrower integer       | truncate                                                 |
+| unsigned integer → wider integer | zero-extend                                              |
+| signed integer → wider integer   | sign-extend                                              |
+| float → integer                  | round toward zero, then saturate; NaN becomes 0          |
+| integer → float                  | round to nearest                                         |
+| float → float                    | round to nearest; exact where the target holds the value |
 
 A float-to-float cast keeps a NaN a NaN. No numeric cast traps.
 

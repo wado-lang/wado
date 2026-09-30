@@ -271,8 +271,11 @@ fn scalar_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<St
     }
     let is_number = |id| tt.is_numeric(id) || tt.is_half(id) || tt.is_wide_int(id);
     let enum_name = |id| {
-        matches!(tt.get(tt.representation_head(id)), ResolvedType::Enum { .. })
-            .then(|| tt.type_name(id))
+        matches!(
+            tt.get(tt.representation_head(id)),
+            ResolvedType::Enum { .. }
+        )
+        .then(|| tt.type_name(id))
     };
     if tt.representation_head(target) == TypeTable::BOOL {
         return Some("nothing casts to `bool`; compare instead, as `x != 0`".to_string());
@@ -823,7 +826,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Parse an integer literal, reporting a malformed or wider-than-`u128`
     /// one. Always this walk's job: nothing downstream reports it, and reify
     /// reads such a literal as `0`.
-
     pub(super) fn check_int_literal_parses(&mut self, repr: &str, span: Span) -> Option<u128> {
         match util::parse_u128_literal(repr) {
             Ok(value) => Some(value),

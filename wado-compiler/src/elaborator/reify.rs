@@ -66,8 +66,7 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    parse_i128_literal, parse_int_bits, parse_u128_literal,
-    range_endpoint_to_i128,
+    parse_i128_literal, parse_int_bits, parse_u128_literal, range_endpoint_to_i128,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -8520,25 +8519,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if source_half.is_none() && target_half.is_none() {
             return ControlFlow::Continue(inner);
         }
-        let call = |item, arg: TirExpr, result_type| {
-            let func = method_ref(&self.tysys.type_table.borrow(), item);
-            TirExpr::new(
-                TirExprKind::Call {
-                    func: Box::new(func),
-                    type_args: vec![],
-                    args: CallArgs::free(vec![CallArg::new(arg, false)]),
-                },
-                result_type,
-                span,
-            )
-        };
         let source = match source_half {
-            Some(half) => {
-                let (base, widen) = match half {
-                    PrimitiveType::F16 => (TypeTable::F16, CompilerItem::F16Widen),
-                    _ => (TypeTable::BF16, CompilerItem::Bf16Widen),
-                };
-                call(widen, bare_cast(inner, base, span), TypeTable::F32)
+            Some(PrimitiveType::F16) => {
+                let base = bare_cast(inner, TypeTable::F16, span);
+                self.compiler_item_call(CompilerItem::F16Widen, base, TypeTable::F32, span)
+            }
+            Some(_) => {
+                let base = bare_cast(inner, TypeTable::BF16, span);
+                self.compiler_item_call(CompilerItem::Bf16Widen, base, TypeTable::F32, span)
             }
             None => inner,
         };
@@ -8548,17 +8536,50 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (base, item, via) = {
             let tt = self.tysys.type_table.borrow();
             let source_base = tt.representation_head(source.type_id);
-            match (half, tt.primitive_head(source_base), tt.wide_int_item(source_base)) {
-                (PrimitiveType::F16, _, _) => (TypeTable::F16, CompilerItem::F16FromF64, TypeTable::F64),
-                (_, _, Some(CompilerItem::I128)) => (TypeTable::BF16, CompilerItem::Bf16FromI128, source_base),
+            match (
+                half,
+                tt.primitive_head(source_base),
+                tt.wide_int_item(source_base),
+            ) {
+                (PrimitiveType::F16, _, _) => {
+                    (TypeTable::F16, CompilerItem::F16FromF64, TypeTable::F64)
+                }
+                (_, _, Some(CompilerItem::I128)) => {
+                    (TypeTable::BF16, CompilerItem::Bf16FromI128, source_base)
+                }
                 (_, _, Some(_)) => (TypeTable::BF16, CompilerItem::Bf16FromU128, source_base),
-                (_, Some(PrimitiveType::I64), _) => (TypeTable::BF16, CompilerItem::Bf16FromI64, TypeTable::I64),
-                (_, Some(PrimitiveType::U64), _) => (TypeTable::BF16, CompilerItem::Bf16FromU64, TypeTable::U64),
+                (_, Some(PrimitiveType::I64), _) => {
+                    (TypeTable::BF16, CompilerItem::Bf16FromI64, TypeTable::I64)
+                }
+                (_, Some(PrimitiveType::U64), _) => {
+                    (TypeTable::BF16, CompilerItem::Bf16FromU64, TypeTable::U64)
+                }
                 _ => (TypeTable::BF16, CompilerItem::Bf16FromF64, TypeTable::F64),
             }
         };
-        let converted = call(item, self.lower_cast(source, via, span), base);
+        let arg = self.lower_cast(source, via, span);
+        let converted = self.compiler_item_call(item, arg, base, span);
         ControlFlow::Break(bare_cast(converted, target_type, span))
+    }
+
+    /// A call of the static compiler item `item` on `arg`.
+    fn compiler_item_call(
+        &self,
+        item: CompilerItem,
+        arg: TirExpr,
+        result_type: TypeId,
+        span: Span,
+    ) -> TirExpr {
+        let func = method_ref(&self.tysys.type_table.borrow(), item);
+        TirExpr::new(
+            TirExprKind::Call {
+                func: Box::new(func),
+                type_args: vec![],
+                args: CallArgs::free(vec![CallArg::new(arg, false)]),
+            },
+            result_type,
+            span,
+        )
     }
 
     /// A cast with a wide integer on either side, `inner` already read through
@@ -8664,25 +8685,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
         };
 
-        // Repr-compatible `Cast` bridging a newtype boundary (no-op in
-        // codegen); identity when the types already match.
-        let bridge = |expr: TirExpr, to: TypeId, span: Span| {
-            if expr.type_id == to {
-                return expr;
-            }
-            TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(expr),
-                    target_type: to,
-                },
-                to,
-                span,
-            )
-        };
-
-        // A newtype source first reinterprets to its wide base so the
-        // prelude calls below see their declared receiver/argument type.
-        let inner = bridge(inner, source_base, span);
+        // A newtype source first steps to its wide base so the prelude calls
+        // below see their declared receiver/argument type.
+        let inner = bare_cast(inner, source_base, span);
         match lowering {
             Lowering::Identity => ControlFlow::Break(inner),
             Lowering::Method(item) => {
@@ -8695,7 +8700,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     &self.tysys.type_table,
                 );
                 let call = build_tir_method_call(receiver, func, vec![], vec![], target_base, span);
-                ControlFlow::Break(bridge(call, target_type, span))
+                ControlFlow::Break(bare_cast(call, target_type, span))
             }
             Lowering::LowThenCast => {
                 let item = if signed_source {
@@ -8725,20 +8730,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         span,
                     )
                 };
-                ControlFlow::Break(bridge(converted, target_type, span))
+                ControlFlow::Break(bare_cast(converted, target_type, span))
             }
             Lowering::Reinterpret(item) => {
-                let func = method_ref(&self.tysys.type_table.borrow(), item);
-                let call = TirExpr::new(
-                    TirExprKind::Call {
-                        func: Box::new(func),
-                        type_args: vec![],
-                        args: CallArgs::free(vec![CallArg::new(inner, false)]),
-                    },
-                    target_base,
-                    span,
-                );
-                ControlFlow::Break(bridge(call, target_type, span))
+                let call = self.compiler_item_call(item, inner, target_base, span);
+                ControlFlow::Break(bare_cast(call, target_type, span))
             }
         }
     }

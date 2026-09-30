@@ -572,28 +572,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // above, and the gate admits no other struct.
         if !util::is_float_only_literal(repr) {
             let wide = self.tysys.type_table.borrow().wide_int_item(target_type);
-            if wide == Some(CompilerItem::U128)
-                && neg.is_some()
-                && util::parse_u128_literal(repr) != Ok(0)
-            {
-                let _ = self.emit(TypeError::InvalidLiteral {
-                    message: format!("literal out of range for `u128`: -{repr}"),
-                    span: whole_span,
-                });
-                return Some(target_type);
-            }
             if let Some(item) = wide {
-                let name = item.attr_name();
-                let parsed = if neg.is_some() {
-                    util::parse_i128_literal(&format!("-{repr}")).is_ok()
-                } else if item == CompilerItem::U128 {
-                    util::parse_u128_literal(repr).is_ok()
-                } else {
-                    util::parse_i128_literal(repr).is_ok()
+                let in_range = match (item, neg.is_some()) {
+                    (CompilerItem::U128, true) => util::parse_u128_literal(repr) == Ok(0),
+                    (CompilerItem::U128, false) => util::parse_u128_literal(repr).is_ok(),
+                    (_, true) => util::parse_i128_literal(&format!("-{repr}")).is_ok(),
+                    (_, false) => util::parse_i128_literal(repr).is_ok(),
                 };
-                if !parsed {
+                if !in_range {
+                    let name = item.attr_name();
                     let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!("invalid {name} literal: {sign}{repr}"),
+                        message: format!("literal out of range for `{name}`: {sign}{repr}"),
                         span: whole_span,
                     });
                 }
