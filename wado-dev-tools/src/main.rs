@@ -10,17 +10,17 @@ mod template;
 use lexopt::Arg::{Long, Short, Value};
 use wado_compiler::OptLevel;
 
+const COMMANDS: &str =
+    "golden-dump, bundled-asset, grammar-corpus, highlight-corpus, highlight-vocab";
+
 fn main() {
     let mut parser = lexopt::Parser::from_env();
     let cmd = match parser.next().expect("failed to parse args") {
         Some(Value(v)) => v.to_string_lossy().into_owned(),
-        Some(other) => panic!(
-            "expected subcommand as first argument, got {other:?} \
-             (commands: golden-dump, bundled-asset, grammar-corpus, highlight-corpus, highlight-vocab)"
-        ),
-        None => panic!(
-            "command is required (golden-dump, bundled-asset, grammar-corpus, highlight-corpus, highlight-vocab)"
-        ),
+        Some(other) => {
+            panic!("expected subcommand as first argument, got {other:?} (commands: {COMMANDS})")
+        }
+        None => panic!("command is required ({COMMANDS})"),
     };
     match cmd.as_str() {
         "golden-dump" => golden_dump(parser),

@@ -47,12 +47,9 @@ internal fn print_document(doc: &Node) -> String {
 // --- block sequencing ---
 
 /// `tight` allows single-newline (no blank line) spacing between sibling
-/// blocks, used for a list item's own children — but never between two
-/// adjacent paragraphs (would merge into one on re-parse), and never on either
-/// side of a code block or a table, which always stand apart from their
-/// neighbours. Before an indented code block the blank line is also a
-/// round-trip hazard: without it the code reparses as paragraph
-/// lazy-continuation.
+/// blocks, used for a list item's own children. Two adjacent paragraphs still
+/// keep their blank line, since they would merge into one on re-parse. A code
+/// block or a table keeps one on both sides as a style rule.
 fn print_block_sequence(nodes: &List<Node>, out: &mut String, tight: bool) {
     let mut first = true;
     let mut prev_is_paragraph = false;
