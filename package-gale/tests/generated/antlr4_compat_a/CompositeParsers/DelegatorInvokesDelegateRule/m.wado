@@ -1473,18 +1473,13 @@ impl Parser {
     }
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
-    p.site = 0;
-    _parse_a(p);
-    return;
-}
-
 fn _parse_s(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    p.site = 0;
+    _parse_a(p);
     if p.recovering { let _ = p.recover_rule(RK_S, "s", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();

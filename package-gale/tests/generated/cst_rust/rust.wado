@@ -13902,18 +13902,13 @@ fn _parse_macro_match_token(p: &mut Parser) -> () with RustParserBase {
     p.sites.pop();
 }
 
-fn _parse_macro_frag_spec__inner(p: &mut Parser) -> () with RustParserBase {
-    p.site = 42;
-    _parse_identifier(p);
-    return;
-}
-
 fn _parse_macro_frag_spec(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_MACRO_FRAG_SPEC, _start);
-    _parse_macro_frag_spec__inner(p);
+    p.site = 42;
+    _parse_identifier(p);
     if p.recovering { let _ = p.recover_rule(RK_MACRO_FRAG_SPEC, "macroFragSpec", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -14015,18 +14010,13 @@ fn _parse_macro_rep_op(p: &mut Parser) -> () with RustParserBase {
     p.sites.pop();
 }
 
-fn _parse_macro_transcriber__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.site = 46;
-    _parse_delim_token_tree(p, follow);
-    return;
-}
-
 fn _parse_macro_transcriber(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_MACRO_TRANSCRIBER, _start);
-    _parse_macro_transcriber__inner(p, follow);
+    p.site = 46;
+    _parse_delim_token_tree(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_MACRO_TRANSCRIBER, "macroTranscriber", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -17812,10 +17802,7 @@ fn _parse_attr_input(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase 
 }
 
 fn scan_statement__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_item(tokens, pos, gate, memo);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_item(tokens, pos, gate, memo);
 }
 
 fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -18162,9 +18149,7 @@ fn scan_expression__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, me
             }
         }
     }
-    pos = scan_expression(tokens, pos, gate, memo, follow, 22);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expression(tokens, pos, gate, memo, follow, 22);
 }
 
 fn _parse_expression__inner_alt_38(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -18196,11 +18181,8 @@ fn _parse_expression__inner_alt_36(p: &mut Parser, follow: i64 = 0) -> () with R
 }
 
 fn scan_expression__alt_36(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
     if !((gate.no_struct == 0)) { return -1; }
-    pos = scan_struct_expression(tokens, pos, gate, memo, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_struct_expression(tokens, pos, gate, memo, follow);
 }
 
 fn _parse_expression__inner_alt_37(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -18211,11 +18193,8 @@ fn _parse_expression__inner_alt_37(p: &mut Parser, follow: i64 = 0) -> () with R
 }
 
 fn scan_expression__alt_37(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
     if !((gate.no_struct == 0)) { return -1; }
-    pos = scan_enumeration_variant_expression(tokens, pos, gate, memo, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_enumeration_variant_expression(tokens, pos, gate, memo, follow);
 }
 
 fn _parse_expression__inner_alt_40(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -18245,9 +18224,7 @@ fn scan_expression__alt_10(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
     pos += 1;
     if pos >= tokens.len() || !_kind_set_65(tokens[pos]) { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, gate, memo, follow, 15);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expression(tokens, pos, gate, memo, follow, 15);
 }
 
 fn _parse_expression__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -18270,9 +18247,7 @@ fn scan_expression__alt_11(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, m
     if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
         pos += 1;
     }
-    pos = scan_expression(tokens, pos, gate, memo, follow, 15);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expression(tokens, pos, gate, memo, follow, 15);
 }
 
 fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -19818,10 +19793,7 @@ fn scan_statements__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, me
 }
 
 fn scan_statements__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expression(tokens, pos, gate, memo, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expression(tokens, pos, gate, memo, follow, 0);
 }
 
 fn _parse_statements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -20033,9 +20005,7 @@ fn scan_array_elements__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, gate, memo, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expression(tokens, pos, gate, memo, follow, 0);
 }
 
 fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> ArrayElementsVals with RustParserBase {
@@ -20840,18 +20810,13 @@ fn _parse_struct_expr_tuple(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     p.sites.pop();
 }
 
-fn _parse_struct_expr_unit__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.site = 340;
-    _parse_path_in_expression(p, follow);
-    return;
-}
-
 fn _parse_struct_expr_unit(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_STRUCT_EXPR_UNIT, _start);
-    _parse_struct_expr_unit__inner(p, follow);
+    p.site = 340;
+    _parse_path_in_expression(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_STRUCT_EXPR_UNIT, "structExprUnit", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -21031,9 +20996,7 @@ fn scan_enum_expr_field__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, gate, memo, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expression(tokens, pos, gate, memo, follow, 0);
 }
 
 fn _parse_enum_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -21180,18 +21143,13 @@ fn _parse_enum_expr_tuple(p: &mut Parser, follow: i64 = 0) -> () with RustParser
     p.sites.pop();
 }
 
-fn _parse_enum_expr_fieldless__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    p.site = 355;
-    _parse_path_in_expression(p, follow);
-    return;
-}
-
 fn _parse_enum_expr_fieldless(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_ENUM_EXPR_FIELDLESS, _start);
-    _parse_enum_expr_fieldless__inner(p, follow);
+    p.site = 355;
+    _parse_path_in_expression(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_ENUM_EXPR_FIELDLESS, "enumExprFieldless", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -22861,9 +22819,7 @@ fn scan_range_pattern__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOTEQ { return -1; }
     pos += 1;
-    pos = scan_range_pattern_bound(tokens, pos, gate, memo, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_range_pattern_bound(tokens, pos, gate, memo, follow);
 }
 
 fn _parse_range_pattern__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -22899,9 +22855,7 @@ fn scan_range_pattern__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { return -1; }
     pos += 1;
-    pos = scan_range_pattern_bound(tokens, pos, gate, memo, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_range_pattern_bound(tokens, pos, gate, memo, follow);
 }
 
 fn _parse_range_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -26624,18 +26578,13 @@ fn _parse_macro_identifier_like_token(p: &mut Parser) -> () with RustParserBase 
     p.sites.pop();
 }
 
-fn _parse_macro_literal_token__inner(p: &mut Parser) -> () with RustParserBase {
-    p.site = 578;
-    _parse_literal_expression(p);
-    return;
-}
-
 fn _parse_macro_literal_token(p: &mut Parser) -> () with RustParserBase {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_MACRO_LITERAL_TOKEN, _start);
-    _parse_macro_literal_token__inner(p);
+    p.site = 578;
+    _parse_literal_expression(p);
     if p.recovering { let _ = p.recover_rule(RK_MACRO_LITERAL_TOKEN, "macroLiteralToken", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();

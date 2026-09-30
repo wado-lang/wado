@@ -12113,13 +12113,6 @@ fn _parse_type_argument_list(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
     p.sites.pop();
 }
 
-fn _parse_type_argument__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
-    p.site = 15;
-    p.atn_ret_pending = 416;
-    _parse_type_(p, follow);
-    return;
-}
-
 fn _parse_type_argument(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
@@ -12128,7 +12121,9 @@ fn _parse_type_argument(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_TYPE_ARGUMENT, _start);
-    _parse_type_argument__inner(p, follow);
+    p.site = 15;
+    p.atn_ret_pending = 416;
+    _parse_type_(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_TYPE_ARGUMENT, "typeArgument", -1); }
     p.b.finish_node(p.last_end());
     p.atn.stack.pop();
@@ -13380,9 +13375,7 @@ fn scan_type_query_expression__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut At
             if !rs_6_ok { pos = sp; break; }
         }
     }
-    pos = scan_identifier_name(tokens, pos, atn, memo);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_identifier_name(tokens, pos, atn, memo);
 }
 
 fn _parse_type_query_expression__inner(p: &mut Parser) -> () with TypeScriptParserBase {
@@ -15118,10 +15111,7 @@ fn scan_statement__alt_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
 }
 
 fn scan_statement__alt_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_debugger_statement(tokens, pos, atn, memo);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_debugger_statement(tokens, pos, atn, memo);
 }
 
 fn scan_statement__alt_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
@@ -17041,13 +17031,13 @@ fn scan_export_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Export { return -1; }
     pos += 1;
-    let mut cont_done_0 = false;
     if pos < tokens.len() && tokens[pos] == TK_Default {
         let sp = pos;
         pos += 1;
         if pos < 0 {
             pos = sp;
         } else {
+            let bp = pos;
             let mut opt_ok: bool = false;
             opt_probe: {
                 let gp_19 = pos;
@@ -17095,58 +17085,50 @@ fn scan_export_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if _kind_set_37(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_ok = true; }
             }
-            if opt_ok {
-                cont_done_0 = true;
-            } else {
-                pos = sp;
-            }
+            pos = if opt_ok { bp } else { sp };
         }
     }
-    if !cont_done_0 {
-        let gp_20 = pos;
-        let sgk_20 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let mut sg_20_best = -1;
-        if _kind_set_51(sgk_20) {
-            pos = gp_20;
-            sg_20_0: {
-                pos = scan_export_from_block(tokens, pos, atn, memo, 0);
-                if pos < 0 { break sg_20_0; }
-                if pos > sg_20_best { sg_20_best = pos; }
-            }
-        } else if _kind_set_52(sgk_20) {
-            pos = gp_20;
-            sg_20_0: {
-                pos = scan_export_from_block(tokens, pos, atn, memo, 0);
-                if pos < 0 { break sg_20_0; }
-                if pos > sg_20_best { sg_20_best = pos; }
-            }
-            pos = gp_20;
-            sg_20_1: {
-                atn.stack.push(1555);
-                pos = scan_declaration(tokens, pos, atn, memo, 0);
-                atn.stack.pop();
-                if pos < 0 { break sg_20_1; }
-                if pos > sg_20_best { sg_20_best = pos; }
-            }
-        } else if _kind_set_53(sgk_20) {
-            pos = gp_20;
-            sg_20_1: {
-                atn.stack.push(1555);
-                pos = scan_declaration(tokens, pos, atn, memo, 0);
-                atn.stack.pop();
-                if pos < 0 { break sg_20_1; }
-                if pos > sg_20_best { sg_20_best = pos; }
-            }
+    let gp_20 = pos;
+    let sgk_20 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    let mut sg_20_best = -1;
+    if _kind_set_51(sgk_20) {
+        pos = gp_20;
+        sg_20_0: {
+            pos = scan_export_from_block(tokens, pos, atn, memo, 0);
+            if pos < 0 { break sg_20_0; }
+            if pos > sg_20_best { sg_20_best = pos; }
         }
-        if sg_20_best >= 0 {
-            pos = sg_20_best;
-        } else {
-            return -1;
+    } else if _kind_set_52(sgk_20) {
+        pos = gp_20;
+        sg_20_0: {
+            pos = scan_export_from_block(tokens, pos, atn, memo, 0);
+            if pos < 0 { break sg_20_0; }
+            if pos > sg_20_best { sg_20_best = pos; }
         }
-        pos = scan_eos(tokens, pos, atn, memo);
-        if pos < 0 { return -1; }
+        pos = gp_20;
+        sg_20_1: {
+            atn.stack.push(1555);
+            pos = scan_declaration(tokens, pos, atn, memo, 0);
+            atn.stack.pop();
+            if pos < 0 { break sg_20_1; }
+            if pos > sg_20_best { sg_20_best = pos; }
+        }
+    } else if _kind_set_53(sgk_20) {
+        pos = gp_20;
+        sg_20_1: {
+            atn.stack.push(1555);
+            pos = scan_declaration(tokens, pos, atn, memo, 0);
+            atn.stack.pop();
+            if pos < 0 { break sg_20_1; }
+            if pos > sg_20_best { sg_20_best = pos; }
+        }
     }
-    return pos;
+    if sg_20_best >= 0 {
+        pos = sg_20_best;
+    } else {
+        return -1;
+    }
+    return scan_eos(tokens, pos, atn, memo);
 }
 
 fn _parse_export_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
@@ -17172,9 +17154,7 @@ fn scan_export_statement__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     pos = scan_single_expression(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_26)), 0);
     atn.stack.pop();
     if pos < 0 { return -1; }
-    pos = scan_eos(tokens, pos, atn, memo);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_eos(tokens, pos, atn, memo);
 }
 
 fn _parse_export_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
@@ -21122,10 +21102,7 @@ fn _parse_property_assignment__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn scan_property_assignment__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_identifier_or_key_word(tokens, pos, atn, memo);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_identifier_or_key_word(tokens, pos, atn, memo);
 }
 
 fn _parse_property_assignment__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {

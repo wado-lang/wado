@@ -11270,9 +11270,7 @@ fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, foll
             pos = sol_16_save;
         }
     }
-    pos = scan_any_name(tokens, pos, memo);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_any_name(tokens, pos, memo);
 }
 
 fn _parse_expr__inner_alt_3(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
@@ -11287,9 +11285,7 @@ fn scan_expr__alt_3(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, foll
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_27(tokens[pos]) { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos, memo, follow, 15, lr_cont);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expr(tokens, pos, memo, follow, 15, lr_cont);
 }
 
 fn _parse_expr__inner_alt_13(p: &mut Parser, follow: i64 = 0, lr_cont: i64 = 0) -> () {
@@ -11780,10 +11776,7 @@ fn scan_expr__alt_22(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fol
 }
 
 fn scan_expr__alt_23(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_raise_function(tokens, pos, memo);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_raise_function(tokens, pos, memo);
 }
 
 fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> () {
@@ -13304,10 +13297,7 @@ fn _parse_ordering_term(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn scan_pragma_value__alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_any_name(tokens, pos, memo);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_any_name(tokens, pos, memo);
 }
 
 fn _parse_pragma_value__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
@@ -14551,10 +14541,7 @@ fn _parse_error_message(p: &mut Parser) -> () {
 }
 
 fn scan_module_argument__alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expr(tokens, pos, memo, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expr(tokens, pos, memo, follow, 0);
 }
 
 fn _parse_module_argument__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -14658,27 +14645,16 @@ fn _parse_keyword(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn _parse_name__inner(p: &mut Parser) -> () {
-    p.site = 313;
-    _parse_any_name(p);
-    return;
-}
-
 fn _parse_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_NAME, _start);
-    _parse_name__inner(p);
+    p.site = 313;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_NAME, "name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_function_name__inner(p: &mut Parser) -> () {
-    p.site = 314;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_function_name(p: &mut Parser) -> () {
@@ -14686,16 +14662,11 @@ fn _parse_function_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_FUNCTION_NAME, _start);
-    _parse_function_name__inner(p);
+    p.site = 314;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_FUNCTION_NAME, "function_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_database_name__inner(p: &mut Parser) -> () {
-    p.site = 315;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_database_name(p: &mut Parser) -> () {
@@ -14703,16 +14674,11 @@ fn _parse_database_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_DATABASE_NAME, _start);
-    _parse_database_name__inner(p);
+    p.site = 315;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_DATABASE_NAME, "database_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_schema_name__inner(p: &mut Parser) -> () {
-    p.site = 316;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_schema_name(p: &mut Parser) -> () {
@@ -14720,16 +14686,11 @@ fn _parse_schema_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_SCHEMA_NAME, _start);
-    _parse_schema_name__inner(p);
+    p.site = 316;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_SCHEMA_NAME, "schema_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_table_function_name__inner(p: &mut Parser) -> () {
-    p.site = 317;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_table_function_name(p: &mut Parser) -> () {
@@ -14737,16 +14698,11 @@ fn _parse_table_function_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_TABLE_FUNCTION_NAME, _start);
-    _parse_table_function_name__inner(p);
+    p.site = 317;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_TABLE_FUNCTION_NAME, "table_function_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_table_name__inner(p: &mut Parser) -> () {
-    p.site = 318;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_table_name(p: &mut Parser) -> () {
@@ -14754,16 +14710,11 @@ fn _parse_table_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_TABLE_NAME, _start);
-    _parse_table_name__inner(p);
+    p.site = 318;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_TABLE_NAME, "table_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_table_or_index_name__inner(p: &mut Parser) -> () {
-    p.site = 319;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_table_or_index_name(p: &mut Parser) -> () {
@@ -14771,16 +14722,11 @@ fn _parse_table_or_index_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_TABLE_OR_INDEX_NAME, _start);
-    _parse_table_or_index_name__inner(p);
+    p.site = 319;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_TABLE_OR_INDEX_NAME, "table_or_index_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_new_table_name__inner(p: &mut Parser) -> () {
-    p.site = 320;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_new_table_name(p: &mut Parser) -> () {
@@ -14788,16 +14734,11 @@ fn _parse_new_table_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_NEW_TABLE_NAME, _start);
-    _parse_new_table_name__inner(p);
+    p.site = 320;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_NEW_TABLE_NAME, "new_table_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_column_name__inner(p: &mut Parser) -> () {
-    p.site = 321;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_column_name(p: &mut Parser) -> () {
@@ -14805,16 +14746,11 @@ fn _parse_column_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_COLUMN_NAME, _start);
-    _parse_column_name__inner(p);
+    p.site = 321;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_COLUMN_NAME, "column_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_collation_name__inner(p: &mut Parser) -> () {
-    p.site = 322;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_collation_name(p: &mut Parser) -> () {
@@ -14822,16 +14758,11 @@ fn _parse_collation_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_COLLATION_NAME, _start);
-    _parse_collation_name__inner(p);
+    p.site = 322;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_COLLATION_NAME, "collation_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_foreign_table__inner(p: &mut Parser) -> () {
-    p.site = 323;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_foreign_table(p: &mut Parser) -> () {
@@ -14839,16 +14770,11 @@ fn _parse_foreign_table(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_FOREIGN_TABLE, _start);
-    _parse_foreign_table__inner(p);
+    p.site = 323;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_FOREIGN_TABLE, "foreign_table", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_index_name__inner(p: &mut Parser) -> () {
-    p.site = 324;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_index_name(p: &mut Parser) -> () {
@@ -14856,16 +14782,11 @@ fn _parse_index_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_INDEX_NAME, _start);
-    _parse_index_name__inner(p);
+    p.site = 324;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_INDEX_NAME, "index_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_trigger_name__inner(p: &mut Parser) -> () {
-    p.site = 325;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_trigger_name(p: &mut Parser) -> () {
@@ -14873,16 +14794,11 @@ fn _parse_trigger_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_TRIGGER_NAME, _start);
-    _parse_trigger_name__inner(p);
+    p.site = 325;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_TRIGGER_NAME, "trigger_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_view_name__inner(p: &mut Parser) -> () {
-    p.site = 326;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_view_name(p: &mut Parser) -> () {
@@ -14890,16 +14806,11 @@ fn _parse_view_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_VIEW_NAME, _start);
-    _parse_view_name__inner(p);
+    p.site = 326;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_VIEW_NAME, "view_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_module_name__inner(p: &mut Parser) -> () {
-    p.site = 327;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_module_name(p: &mut Parser) -> () {
@@ -14907,16 +14818,11 @@ fn _parse_module_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_MODULE_NAME, _start);
-    _parse_module_name__inner(p);
+    p.site = 327;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_MODULE_NAME, "module_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_pragma_name__inner(p: &mut Parser) -> () {
-    p.site = 328;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_pragma_name(p: &mut Parser) -> () {
@@ -14924,16 +14830,11 @@ fn _parse_pragma_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_PRAGMA_NAME, _start);
-    _parse_pragma_name__inner(p);
+    p.site = 328;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_PRAGMA_NAME, "pragma_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
-}
-
-fn _parse_savepoint_name__inner(p: &mut Parser) -> () {
-    p.site = 329;
-    _parse_any_name(p);
-    return;
 }
 
 fn _parse_savepoint_name(p: &mut Parser) -> () {
@@ -14941,7 +14842,8 @@ fn _parse_savepoint_name(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_SAVEPOINT_NAME, _start);
-    _parse_savepoint_name__inner(p);
+    p.site = 329;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_SAVEPOINT_NAME, "savepoint_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -14979,18 +14881,13 @@ fn _parse_table_alias(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn _parse_transaction_name__inner(p: &mut Parser) -> () {
-    p.site = 331;
-    _parse_any_name(p);
-    return;
-}
-
 fn _parse_transaction_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_TRANSACTION_NAME, _start);
-    _parse_transaction_name__inner(p);
+    p.site = 331;
+    _parse_any_name(p);
     if p.recovering { let _ = p.recover_rule(RK_TRANSACTION_NAME, "transaction_name", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();

@@ -3890,11 +3890,6 @@ fn scan_lexer_alt__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     return pos;
 }
 
-fn scan_lexer_alt__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    return pos;
-}
-
 fn scan_lexer_alt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -4366,18 +4361,14 @@ fn scan_not_set__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_NOT { return -1; }
     pos += 1;
-    pos = scan_set_element(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_set_element(tokens, pos, follow);
 }
 
 fn scan_not_set__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_NOT { return -1; }
     pos += 1;
-    pos = scan_block_set(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_block_set(tokens, pos, follow);
 }
 
 fn scan_not_set(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
@@ -5568,18 +5559,13 @@ fn _parse_rule_modifier(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn _parse_rule_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.site = 57;
-    _parse_rule_alt_list(p, follow);
-    return;
-}
-
 fn _parse_rule_block(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_RULE_BLOCK, _start);
-    _parse_rule_block__inner(p, follow);
+    p.site = 57;
+    _parse_rule_alt_list(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_RULE_BLOCK, "ruleBlock", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -5659,18 +5645,13 @@ fn _parse_lexer_rule_spec(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_lexer_rule_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.site = 64;
-    _parse_lexer_alt_list(p, follow);
-    return;
-}
-
 fn _parse_lexer_rule_block(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_LEXER_RULE_BLOCK, _start);
-    _parse_lexer_rule_block__inner(p, follow);
+    p.site = 64;
+    _parse_lexer_alt_list(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_LEXER_RULE_BLOCK, "lexerRuleBlock", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -5718,10 +5699,6 @@ fn _parse_lexer_alt__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 68;
         _parse_lexer_commands(p, follow);
     }
-    return;
-}
-
-fn _parse_lexer_alt__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
@@ -6423,18 +6400,13 @@ fn _parse_ebnf(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_block_suffix__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.site = 104;
-    _parse_ebnf_suffix(p, follow);
-    return;
-}
-
 fn _parse_block_suffix(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_BLOCK_SUFFIX, _start);
-    _parse_block_suffix__inner(p, follow);
+    p.site = 104;
+    _parse_ebnf_suffix(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_BLOCK_SUFFIX, "blockSuffix", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -6470,10 +6442,7 @@ fn _parse_ebnf_suffix(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn scan_lexer_atom__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_character_range(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_character_range(tokens, pos);
 }
 
 fn _parse_lexer_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -6726,10 +6695,7 @@ fn scan_set_element__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
 }
 
 fn scan_set_element__alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_character_range(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_character_range(tokens, pos);
 }
 
 fn _parse_set_element__inner(p: &mut Parser, follow: i64 = 0) -> () {

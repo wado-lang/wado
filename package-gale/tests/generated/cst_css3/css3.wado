@@ -25972,9 +25972,7 @@ fn scan_charset__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_charset__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
@@ -25996,9 +25994,7 @@ fn scan_charset__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_String_ { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_charset__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -26094,9 +26090,7 @@ fn scan_imports__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_imports__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
@@ -26146,9 +26140,7 @@ fn scan_imports__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_imports__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
@@ -26195,9 +26187,7 @@ fn scan_imports__alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     pos = scan_ws(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_7)));
     if pos < 0 { return -1; }
-    pos = scan_media_query_list(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_media_query_list(tokens, pos, follow);
 }
 
 fn _parse_imports__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
@@ -26240,9 +26230,7 @@ fn scan_imports__alt_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         return -1;
     }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_imports__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -26380,9 +26368,7 @@ fn scan_namespace___alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
@@ -26455,9 +26441,7 @@ fn scan_namespace___alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         }
         return -1;
     }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_namespace___inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -26502,18 +26486,13 @@ fn _parse_namespace_(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_namespace_prefix__inner(p: &mut Parser) -> () {
-    p.site = 37;
-    _parse_ident(p);
-    return;
-}
-
 fn _parse_namespace_prefix(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_NAMESPACE_PREFIX, _start);
-    _parse_namespace_prefix__inner(p);
+    p.site = 37;
+    _parse_ident(p);
     if p.recovering { let _ = p.recover_rule(RK_NAMESPACE_PREFIX, "namespacePrefix", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -26740,18 +26719,13 @@ fn _parse_media_query(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_media_type__inner(p: &mut Parser) -> () {
-    p.site = 54;
-    _parse_ident(p);
-    return;
-}
-
 fn _parse_media_type(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_MEDIA_TYPE, _start);
-    _parse_media_type__inner(p);
+    p.site = 54;
+    _parse_ident(p);
     if p.recovering { let _ = p.recover_rule(RK_MEDIA_TYPE, "mediaType", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -27163,18 +27137,13 @@ fn _parse_type_namespace_prefix(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_element_name__inner(p: &mut Parser) -> () {
-    p.site = 96;
-    _parse_ident(p);
-    return;
-}
-
 fn _parse_element_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_ELEMENT_NAME, _start);
-    _parse_element_name__inner(p);
+    p.site = 96;
+    _parse_ident(p);
     if p.recovering { let _ = p.recover_rule(RK_ELEMENT_NAME, "elementName", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -27661,9 +27630,7 @@ fn scan_ruleset__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
@@ -27707,9 +27674,7 @@ fn scan_ruleset__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
     pos += 1;
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_ruleset__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -27936,9 +27901,7 @@ fn scan_declaration__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     pos += 1;
     pos = scan_ws(tokens, pos, FOLLOW_MASK_32);
     if pos < 0 { return -1; }
-    pos = scan_value(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_value(tokens, pos, follow);
 }
 
 fn _parse_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -28164,9 +28127,7 @@ fn scan_term__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_number(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_term__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
@@ -28182,9 +28143,7 @@ fn scan_term__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_term__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
@@ -28200,9 +28159,7 @@ fn scan_term__alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_term__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () {
@@ -28218,9 +28175,7 @@ fn scan_term__alt_11(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_term__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -28519,9 +28474,7 @@ fn scan_any___alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_number(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_any___inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
@@ -28536,9 +28489,7 @@ fn scan_any___alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_any___inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
@@ -28553,9 +28504,7 @@ fn scan_any___alt_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_any___inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () {
@@ -28570,9 +28519,7 @@ fn scan_any___alt_4(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_any___inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -29341,10 +29288,7 @@ fn scan_supports_condition_in_parens__alt_0(tokens: &Array<i32>, pos: i32, follo
 }
 
 fn scan_supports_condition_in_parens__alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_general_enclosed(tokens, pos);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_general_enclosed(tokens, pos);
 }
 
 fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -29804,9 +29748,7 @@ fn scan_calc_value__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     pos = scan_number(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_calc_value__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
@@ -29821,9 +29763,7 @@ fn scan_calc_value__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     pos = scan_dimension(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_calc_value__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
@@ -29838,9 +29778,7 @@ fn scan_calc_value__alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     pos = scan_unknown_dimension(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_calc_value__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
@@ -29855,9 +29793,7 @@ fn scan_calc_value__alt_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     pos = scan_percentage(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_ws(tokens, pos, follow);
 }
 
 fn _parse_calc_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -30012,9 +29948,7 @@ fn scan_font_face_declaration__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 
     pos += 1;
     pos = scan_ws(tokens, pos, FOLLOW_MASK_15);
     if pos < 0 { return -1; }
-    pos = scan_expr(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_expr(tokens, pos, follow);
 }
 
 fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
@@ -30037,9 +29971,7 @@ fn scan_font_face_declaration__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 
     pos += 1;
     pos = scan_ws(tokens, pos, FOLLOW_MASK_32);
     if pos < 0 { return -1; }
-    pos = scan_value(tokens, pos, follow);
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_value(tokens, pos, follow);
 }
 
 fn _parse_font_face_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {

@@ -1906,18 +1906,13 @@ fn _parse_order_by_clause(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.site = 5;
-    _parse_expr(p, follow);
-    return;
-}
-
 fn _parse_path(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_PATH, _start);
-    _parse_path__inner(p, follow);
+    p.site = 5;
+    _parse_expr(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_PATH, "path", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();

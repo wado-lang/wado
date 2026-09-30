@@ -2555,13 +2555,6 @@ struct BVals {
     i: i32 = 0,
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
-    p.site = 0;
-    p.atn_ret_pending = 12;
-    _parse_a(p, 99);
-    return;
-}
-
 fn _parse_s(p: &mut Parser) -> () {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
@@ -2570,7 +2563,9 @@ fn _parse_s(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    p.site = 0;
+    p.atn_ret_pending = 12;
+    _parse_a(p, 99);
     if p.recovering { let _ = p.recover_rule(RK_S, "s", -1); }
     p.b.finish_node(p.last_end());
     p.atn.stack.pop();
@@ -2649,20 +2644,8 @@ fn _parse_e__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_e__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_e__inner_alt_1(p: &mut Parser) -> () {
     return;
-}
-
-fn scan_e__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    return pos;
 }
 
 fn _parse_e__inner(p: &mut Parser) -> () {

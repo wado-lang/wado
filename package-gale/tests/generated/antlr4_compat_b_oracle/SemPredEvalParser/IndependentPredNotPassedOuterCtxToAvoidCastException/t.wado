@@ -1645,18 +1645,13 @@ fn _parse_s(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn _parse_b__inner(p: &mut Parser) -> () {
-    p.site = 2;
-    _parse_a(p);
-    return;
-}
-
 fn _parse_b(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_B, _start);
-    _parse_b__inner(p);
+    p.site = 2;
+    _parse_a(p);
     if p.recovering { let _ = p.recover_rule(RK_B, "b", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();

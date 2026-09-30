@@ -325,10 +325,16 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
         }
     }
-    gen_kind_set_helpers(&mut w, &ctx);
-    gen_sync_set_globals(&mut w, &ctx);
+    for let name of ctx.take_root_refs().iter_value() {
+        w.note(&name);
+    }
+    w.prune();
+    // The tables go in after pruning, so only what kept code names is built.
+    let used = w.references();
+    gen_kind_set_helpers(&mut w, &ctx, &used);
+    gen_sync_set_globals(&mut w, &ctx, &used);
     if emit_follow {
-        gen_follow_mask_globals(&mut w, &ctx);
+        gen_follow_mask_globals(&mut w, &ctx, &used);
     }
     if ctx.needs_atn() {
         gen_atn_data_global(&mut w, &atn, ctx.needs_lr_atn());
