@@ -64,8 +64,7 @@ use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { recovery_sets } from "./recovery_sets.wado";
-use { TreeMap, TreeSet } from "core:collections";
-use { collect_referenced_names } from "./gen_util.wado";
+use { TreeMap } from "core:collections";
 use {
     LoweredGrammar,
     Diagnostic,
@@ -326,12 +325,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
         }
     }
-    let mut named = TreeSet::<String>::new();
-    collect_referenced_names(&w.to_string(), &["_kind_set_", "SYNC_", "EXPECTED_", "FOLLOW_MASK_"], &mut named);
-    gen_kind_set_helpers(&mut w, &lowered, &ctx, &named);
-    gen_sync_set_globals(&mut w, &ctx, &named);
+    gen_kind_set_helpers(&mut w, &ctx);
+    gen_sync_set_globals(&mut w, &ctx);
     if emit_follow {
-        gen_follow_mask_globals(&mut w, &ctx, &named);
+        gen_follow_mask_globals(&mut w, &ctx);
     }
     if ctx.needs_atn() {
         gen_atn_data_global(&mut w, &atn, ctx.needs_lr_atn());

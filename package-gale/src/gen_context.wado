@@ -171,6 +171,12 @@ pub struct GenContext {
     /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
     /// terminal on the valid hot path never rebuilds or copies the set.
     sync_set_registry: TreeMap<String, KindSetEntry>,
+    /// Per interned id, whether emitted code names it: only a named set's
+    /// definition is emitted.
+    kind_sets_named: List<bool>,
+    sync_bits_named: List<bool>,
+    sync_lists_named: List<bool>,
+    follow_masks_named: List<bool>,
     /// Cache of `tail_greedy_first(rule)` indexed by dense rule id (see
     /// the memo caches above).
     tail_greedy_cache: List<Option<List<String>>>,
@@ -386,6 +392,10 @@ impl GenContext {
             follow_mask_registry: TreeMap::new(),
             follow_mask_depths: [],
             sync_set_registry: TreeMap::new(),
+            kind_sets_named: [],
+            sync_bits_named: [],
+            sync_lists_named: [],
+            follow_masks_named: [],
             tail_greedy_cache: none_list_cache(rule_count),
             diagnostics: [],
             caller_follow_gate_seen: false,
@@ -2576,6 +2586,11 @@ impl GenContext {
         return self.kind_set_registry.values().iter_value().collect();
     }
 
+    /// Whether emitted code calls `_kind_set_<id>`.
+    pub fn kind_set_is_named(&self, id: i32) -> bool {
+        return is_named(&self.kind_sets_named, id);
+    }
+
     /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
     /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
     /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
@@ -2614,27 +2629,46 @@ impl GenContext {
         return if value.is_empty() { `break ${label};` } else { `break ${label}: ${value};` };
     }
 
-    /// The globals naming one token set: `SYNC_<id>`, the bits a membership
-    /// test reads, and `EXPECTED_<id>`, the kind list a diagnostic names; both
-    /// `EMPTY_SYNC` for an empty set.
-    pub fn sync_refs(&mut self, ids: &List<i32>) -> [String, String] {
-        let Some(id) = self.intern_sync_set(*ids) else {
-            return [
-                String::from("EMPTY_SYNC"),
-                String::from("EMPTY_SYNC"),
-            ];
+    /// The interned sync set of kind ids `ids`; `null` for an empty one.
+    pub fn sync_set(&mut self, ids: &List<i32>) -> Option<i32> {
+        return self.intern_sync_set(*ids);
+    }
+
+    /// `sync_set` of a set of `TK_*` names.
+    pub fn sync_name_set(&mut self, tokens: &List<String>) -> Option<i32> {
+        return self.intern_sync_set(self.names_to_ids(tokens));
+    }
+
+    /// `SYNC_<id>`, the set as the bits a membership test reads, or
+    /// `EMPTY_SYNC`.
+    pub fn sync_bits_ref(&mut self, set: Option<i32>) -> String {
+        let Some(id) = set else {
+            return String::from("EMPTY_SYNC");
         };
-        return [`SYNC_${id}`, `EXPECTED_${id}`];
+        mark_named(&mut self.sync_bits_named, id);
+        return `SYNC_${id}`;
     }
 
-    /// `sync_refs` of a set of `TK_*` names.
-    pub fn sync_name_refs(&mut self, tokens: &List<String>) -> [String, String] {
-        return self.sync_refs(&self.names_to_ids(tokens));
+    /// `EXPECTED_<id>`, the set as the kind list a diagnostic names, or
+    /// `EMPTY_SYNC`.
+    pub fn sync_list_ref(&mut self, set: Option<i32>) -> String {
+        let Some(id) = set else {
+            return String::from("EMPTY_SYNC");
+        };
+        mark_named(&mut self.sync_lists_named, id);
+        return `EXPECTED_${id}`;
     }
 
-    /// The interned sync sets, in id order.
-    pub fn sync_sets(&self) -> List<KindSetEntry> {
-        return self.sync_set_registry.values().iter_value().collect();
+    /// The interned sync sets, in id order, with whether emitted code names
+    /// their bits and their kind list.
+    pub fn sync_sets(&self) -> List<[KindSetEntry, bool, bool]> {
+        return self.sync_set_registry.values().iter_value().map(
+            |e: KindSetEntry| [
+                e,
+                is_named(&self.sync_bits_named, e.id),
+                is_named(&self.sync_lists_named, e.id),
+            ],
+        ).collect();
     }
 
     /// Intern a runtime FOLLOW-continuation mask. The same canonical mask
@@ -2688,13 +2722,16 @@ impl GenContext {
     }
 
     /// The global naming FOLLOW mask `id`.
-    pub fn follow_mask_ref(&self, id: i32) -> String {
+    pub fn follow_mask_ref(&mut self, id: i32) -> String {
+        mark_named(&mut self.follow_masks_named, id);
         return `FOLLOW_MASK_${id}`;
     }
 
-    /// The interned FOLLOW masks, in `FOLLOW_MASK_<id>` order.
-    pub fn follow_masks(&self) -> List<FollowMaskEntry> {
-        return self.follow_mask_registry.values().iter_value().collect();
+    /// The FOLLOW masks emitted code names, in `FOLLOW_MASK_<id>` order.
+    pub fn named_follow_masks(&self) -> List<FollowMaskEntry> {
+        return self.follow_mask_registry.values().iter_value().filter(
+            |e| is_named(&self.follow_masks_named, e.id),
+        ).collect();
     }
 
     /// Render a token-set membership check on `expr`.
@@ -2713,8 +2750,13 @@ impl GenContext {
         if tokens.len() == 1 {
             return `${expr} == ${tokens[0]}`;
         }
+        return `${self.kind_set_fn(tokens)}(${expr})`;
+    }
+
+    fn kind_set_fn(&mut self, tokens: &List<String>) -> String {
         let id = self.intern_kind_set(tokens);
-        return `_kind_set_${id}(${expr})`;
+        mark_named(&mut self.kind_sets_named, id);
+        return `_kind_set_${id}`;
     }
 
     /// Render a guard: enter, or go round again, while the lookahead is in
@@ -2881,8 +2923,7 @@ impl GenContext {
         if tokens.len() == 1 {
             return `${expr} != ${tokens[0]}`;
         }
-        let id = self.intern_kind_set(tokens);
-        return `!_kind_set_${id}(${expr})`;
+        return `!${self.kind_set_fn(tokens)}(${expr})`;
     }
 }
 
@@ -2897,6 +2938,17 @@ fn join_ids(ids: &List<i32>) -> String {
         s.push_display(&ids[i]);
     }
     return s;
+}
+
+fn mark_named(named: &mut List<bool>, id: i32) {
+    while named.len() <= id {
+        named.push(false);
+    }
+    named[id] = true;
+}
+
+fn is_named(named: &List<bool>, id: i32) -> bool {
+    return id < named.len() && named[id];
 }
 
 fn expect_ids(sets: &List<Option<List<i32>>>, i: i32) -> Option<List<i32>> {

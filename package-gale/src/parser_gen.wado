@@ -367,7 +367,7 @@ fn called_scan_chunks(chunks: &List<String>, parse_text: &String) -> List<String
 }
 
 /// The `lr_cont` argument a self-reference passes, with its leading comma.
-fn lr_cont_arg(mask: i32, ctx: &GenContext) -> String {
+fn lr_cont_arg(mask: i32, ctx: &mut GenContext) -> String {
     if mask == LR_CONT_FORWARD {
         return lr_cont_forward(true);
     }
@@ -3894,8 +3894,13 @@ fn gen_decision_sync<S: AsStrSlice>(
     if !proven.is_empty() && proves(proven, &ctx.token_names_of(&ids)) {
         return;
     }
-    let [bits, list] = ctx.sync_refs(&ids);
-    w.line(`if !kind_set_has(&${bits}, p.kinds[p.pos]) { builtin::cold_path(); p.${method}(&${bits}, &${list}); }`);
+    let set = ctx.sync_set(&ids);
+    let bits = ctx.sync_bits_ref(set);
+    w.line(
+        `if !kind_set_has(&${bits}, p.kinds[p.pos]) { builtin::cold_path(); p.${method}(&${bits}, &${ctx.sync_list_ref(
+            set,
+        )}); }`,
+    );
 }
 
 fn gen_rule_entry_sync(w: &mut CodeWriter, ctx: &mut GenContext, rule: &ParserRule) {
@@ -4036,7 +4041,7 @@ fn gen_op_leaf(
 fn expect_call<S: AsStrSlice>(kind: S, leaf_site: i32, ctx: &mut GenContext) -> String {
     let [follow, ends] = ctx.leaf_follow(leaf_site);
     assert ends || !follow.is_empty(), "a terminal the rule cannot end after has a successor";
-    return `p.expect(${kind}, &${ctx.sync_refs(&follow).0}, ${ends})`;
+    return `p.expect(${kind}, &${ctx.sync_bits_ref(ctx.sync_set(&follow))}, ${ends})`;
 }
 
 // === GIR-op body emission ===
@@ -6494,7 +6499,7 @@ fn follow_arg_expr(ctx: &mut GenContext, arg: &FollowArg) -> String {
 }
 
 /// The open reading a `ForwardOpen` adds: the kinds it starts with, or any.
-fn follow_open_set_expr(ctx: &GenContext, first: Option<i32>) -> String {
+fn follow_open_set_expr(ctx: &mut GenContext, first: Option<i32>) -> String {
     return match first {
         Some(id) => `follow_open_set(${ctx.follow_mask_ref(id)})`,
         None => "FOLLOW_OPEN_READING",
