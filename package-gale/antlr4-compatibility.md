@@ -836,9 +836,13 @@ relevant sites.
    every depth, a rule-ref expansion included: Wado's `if x matches {`
    reached `(tagOwner '::')* tagName` through one and, skipped past, the
    repeat claimed `matches` for the tag. Where the body cannot be walked,
-   the config turns opaque rather than lossy. Fixture
-   `tests/grammars/scan_optional_lookahead_restore.g4`; the expansion case
-   is pinned in `src/dump_test.wado`.
+   the config turns opaque rather than lossy. An iteration, walked or
+   stepped over, ends back at a `*` or `+` loop, which may run again or
+   stop. Resuming past it would kill every config on the loop's second
+   iteration. Fixture `tests/grammars/scan_optional_lookahead_restore.g4`.
+   The expansion case is pinned in `src/dump_test.wado`, the second
+   iteration in `src/codegen_test.wado` ("a prediction walks a loop
+   through more than one iteration").
 7. A scan-side optional rewinds to its entry position when its body
    fails, because a failed optional means "skip". Leaving the callee's
    `-1` in the scan position both mis-scans the elements after it and

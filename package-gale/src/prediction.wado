@@ -11,7 +11,7 @@
 //! translation from `PredictionNode` to source lives in
 //! `parser_gen.wado` (`gen_prediction_code_inner`).
 
-use { Element, RepeatElement, Alternative } from "./ir.wado";
+use { Element, RepeatElement, RepeatKind, Alternative } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { sort_group_by_specificity } from "./alt_grouping.wado";
@@ -431,20 +431,39 @@ fn sll_step(c: &SllConfig, pos: i32) -> List<SllConfig> {
     ];
 }
 
-/// Move `c` past the `Repeat` at `at` on `token`, which its body admits: a
-/// single-token body is stepped past, a multi-token one walked into
-/// (invariant 6), and one that cannot be walked turns the config opaque.
+/// Where a walk resumes once an iteration of `rep`, at `at` in `elements`,
+/// ends: past a `?`, and back at a loop, which may run again or stop. A `+`
+/// resumes as a `*`, since its one required iteration is behind it.
+fn after_iteration(elements: &List<Element>, at: i32, rep: &RepeatElement) -> SllReturn {
+    return match rep.kind {
+        Optional => SllReturn { elements, pos: at + 1 },
+        Star => SllReturn { elements, pos: at },
+        Plus => {
+            let mut looped = *elements;
+            looped[at] = Element::Repeat(RepeatElement { ..*rep, kind: RepeatKind::Star });
+            SllReturn { elements: &looped, pos: at };
+        },
+    };
+}
+
+/// Move `c` through one iteration of the `Repeat` at `at` on `token`, which its
+/// body admits: a single-token body is stepped over, a multi-token one walked
+/// into (invariant 6), and one that cannot be walked turns the config opaque.
+/// Either way the walk then resumes where `after_iteration` says.
 fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_depth: i32) -> List<SllConfig> {
     let Repeat(rep) = &c.elements[at] else {
         panic("walk_repeat: not a repeat");
     };
+    let next = after_iteration(c.elements, at, rep);
     let Some(inner_alts) = repeat_entry_alts(rep, ctx) else {
-        return sll_step(c, at + 1);
+        return [
+            SllConfig { ..*c, elements: next.elements, pos: next.pos },
+        ];
     };
     if inner_alts.len() > 8 {
         return sll_step(c, SLL_POS_OPAQUE);
     }
-    let new_stack = push_return(&c.return_stack, c.elements, at + 1);
+    let new_stack = push_return(&c.return_stack, next.elements, next.pos);
     let mut body_results: List<SllConfig> = [];
     for let alt of &inner_alts {
         let mut v: List<String> = [];

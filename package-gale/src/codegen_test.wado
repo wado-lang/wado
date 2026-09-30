@@ -3871,3 +3871,25 @@ fragment HEX : '0'..'9' | 'a'..'f' ;
 ", ["\"a\\x41\"", "\"\\\"\"", "\"\\x\"", "\"\\u{1f600}\""]);
     assert got == "\"a\\x41\" => STR:\"a\\x41\"\n\"\\\"\" => STR:\"\\\"\"\n\"\\x\" => STR:\"\\x\"\n\"\\u{1f600}\" => STR:\"\\u{1f600}\"\n", got;
 }
+
+// Each alternative that competes with a loop agrees with two of its
+// iterations, so only a walk that re-enters the loop tells them apart.
+test "a prediction walks a loop through more than one iteration" {
+    let got = parses("grammar T;
+t : s EOF ;
+s : ('x' 'y' | 'x' 'z')* 'p' | 'x' 'y' 'x' 'w' | u | v ;
+u : 'a'* 'p' | 'a' 'a' 'w' ;
+v : ('b' 'c' | 'b' 'd')+ 'q' | 'b' 'c' 'b' 'w' ;
+WS : [ \\t]+ -> skip ;
+", "t", ["x y x z p", "x y x w", "x y x y p", "a a p", "a a w", "a a a p", "b c b d q", "b c b w", "b d q"]);
+    assert got == "x y x z p => (t (s x y x z p))
+x y x w => (t (s x y x w))
+x y x y p => (t (s x y x y p))
+a a p => (t (s (u a a p)))
+a a w => (t (s (u a a w)))
+a a a p => (t (s (u a a a p)))
+b c b d q => (t (s (v b c b d q)))
+b c b w => (t (s (v b c b w)))
+b d q => (t (s (v b d q)))
+", got;
+}
