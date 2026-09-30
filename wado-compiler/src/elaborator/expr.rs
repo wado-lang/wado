@@ -4187,14 +4187,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // that only the struct's own TypeParam TypeIds are replaced. Index-based
             // substitution incorrectly replaces TypeParams from outer scopes (e.g., impl
             // type params) that happen to share the same index as the struct's TypeParams.
+            let slots = self
+                .struct_fields_of_written_decl(struct_decl)
+                .map(|info| info.type_param_type_ids.clone())
+                .unwrap_or_default();
+            let subst = SubstitutionContext::new().bind(&slots, &type_args);
             let mut fields: Vec<ResolvedField> = if type_args.is_empty() {
                 fields
             } else {
-                let slots = self
-                    .struct_fields_of_written_decl(struct_decl)
-                    .map(|info| info.type_param_type_ids.clone())
-                    .unwrap_or_default();
-                let subst = SubstitutionContext::new().bind(&slots, &type_args);
                 fields
                     .into_iter()
                     .map(|mut field| {
@@ -4216,13 +4216,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(concrete_type) = struct_field_types
                     .iter()
                     .find(|(name, _)| name == &ast_field.name)
-                    .map(|(_, type_id)| {
-                        if type_args.is_empty() {
-                            *type_id
-                        } else {
-                            self.substitute_in_frame(*type_id, &type_args)
-                        }
-                    })
+                    .map(|(_, type_id)| self.substitute_ctx_in_frame(&subst, *type_id))
                 else {
                     continue;
                 };

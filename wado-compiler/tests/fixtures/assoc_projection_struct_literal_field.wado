@@ -1,0 +1,56 @@
+// A struct literal whose type argument is a projection (`Wrap<S::Item>`) reads
+// its field as that projection once. It was projected again, so the field
+// expected `S::Item::Item` and rejected the `S::Item` it was given.
+
+use { println, Stdout } from "core:cli";
+
+trait Src with () {
+    type Item;
+    fn get(&mut self) -> Self::Item;
+}
+
+struct Wrap<A> {
+    inner: A,
+}
+
+struct Holder<S: Src> {
+    src: &mut S,
+}
+
+impl<S: Src> Holder<S> {
+    fn wrap(&mut self) -> Wrap<S::Item> {
+        return Wrap { inner: self.src.get() };
+    }
+}
+
+fn annotated<S: Src>(s: &mut S) -> Wrap<S::Item> {
+    let w: Wrap<S::Item> = Wrap { inner: s.get() };
+    return w;
+}
+
+fn turbofish<S: Src>(s: &mut S) -> Wrap<S::Item> {
+    return Wrap::<S::Item> { inner: s.get() };
+}
+
+struct Num {
+    n: i32,
+}
+
+impl Src for Num {
+    type Item = i32;
+    fn get(&mut self) -> i32 {
+        return self.n;
+    }
+}
+
+export fn run() with Stdout {
+    let mut n = Num { n: 7 };
+    let mut h = Holder { src: &mut n };
+    println(`${h.wrap().inner}`);
+    println(`${annotated(&mut n).inner} ${turbofish(&mut n).inner}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n7 7\n"
+}
