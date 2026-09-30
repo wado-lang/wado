@@ -425,6 +425,12 @@ picked rather than to pick it.
 
 ## Known gaps
 
+- A static call through an associated type is not one of the spellings the
+  walk admits. With `T: Has` and `Has` declaring `type Out: Make`,
+  `T::Out::make()` is rejected as `unknown function 'T::Out::make'`, in a
+  generic function as in a default body, although the bound names the trait
+  that declares `make`.
+
 - The identity question resolves twice. `is_static_method_at` runs the whole
   walk and keeps only whether it answered, and the branch it guards then runs it
   again. It has one caller and runs once per static call, never in a loop, and

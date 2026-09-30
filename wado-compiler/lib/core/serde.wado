@@ -99,6 +99,22 @@ pub struct SerializeError {
     pub message: String,
 }
 
+impl SerializeError {
+    /// A value the format has no way to write.
+    pub fn unsupported_value<S: AsStrSlice>(msg: S) -> SerializeError {
+        return SerializeError { kind: SerializeErrorKind::UnsupportedValue, message: msg.to_string() };
+    }
+
+    /// A map key whose type is not a scalar, which a text format has no one
+    /// string to spell as.
+    pub fn non_scalar_key() -> SerializeError {
+        builtin::cold_path();
+        return SerializeError::unsupported_value(NON_SCALAR_KEY_MESSAGE);
+    }
+}
+
+global NON_SCALAR_KEY_MESSAGE: String = "a map key must be a scalar";
+
 impl Display for SerializeError {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(&self.message);
@@ -192,37 +208,47 @@ impl DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg.to_string(), offset };
     }
 
-    pub fn duplicate_field<S: AsStrSlice>(name: S) -> DeserializeError {
+    /// A repeated field or key, named as `Inspect` spells it: a string key is
+    /// quoted, so it reads apart from a number.
+    pub fn duplicate_field<K: Inspect>(key: &K) -> DeserializeError {
         return DeserializeError {
             kind: DeserializeErrorKind::DuplicateField,
-            message: `duplicate field: ${name}`,
+            message: `duplicate field: ${key:?}`,
             offset: -1,
         };
+    }
+
+    /// `SerializeError::non_scalar_key`, for a key being read.
+    pub fn non_scalar_key(offset: i64) -> DeserializeError {
+        builtin::cold_path();
+        return DeserializeError::unexpected_type(NON_SCALAR_KEY_MESSAGE, offset);
     }
 }
 
 /// What to do when the wire repeats a field or key. A repeat is how two
 /// readers of the same bytes are made to disagree, so rejecting is the
-/// default; `Warn` and `PassThru` both keep the last occurrence.
-pub enum DuplicateKeyPolicy {
+/// default. `Warn` and `PassThru` both keep the last value, and a map key
+/// or set element as first read.
+pub enum DuplicateFieldPolicy {
     Error,
     Warn,
     PassThru,
 }
 
 /// Applies `policy` to a key the wire already wrote. Detecting the repeat is
-/// the caller's job: a struct sees a filled slot, a map asks `try_insert`.
-pub fn report_duplicate_key<S: AsStrSlice>(policy: DuplicateKeyPolicy, name: S) -> Result<(), DeserializeError> {
+/// the caller's job: a struct sees a filled slot, a map asks `try_insert`, a
+/// set asks `insert`, whose element is its key.
+pub fn report_duplicate_field<K: Inspect>(policy: DuplicateFieldPolicy, key: &K) -> Result<(), DeserializeError> {
     match policy {
-        DuplicateKeyPolicy::Error => {
+        DuplicateFieldPolicy::Error => {
             builtin::cold_path();
-            return Result::Err(DeserializeError::duplicate_field(name));
+            return Result::Err(DeserializeError::duplicate_field(key));
         },
-        DuplicateKeyPolicy::Warn => {
+        DuplicateFieldPolicy::Warn => {
             builtin::cold_path();
-            log_stderr(`warning: duplicate key: ${name}`);
+            log_stderr(`warning: ${DeserializeError::duplicate_field(key)}`);
         },
-        DuplicateKeyPolicy::PassThru => {
+        DuplicateFieldPolicy::PassThru => {
         },
     }
     return Result::Ok(());
@@ -382,7 +408,9 @@ pub trait DeserializeSeq with () {
 }
 
 pub trait DeserializeMap with () {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>;
+    /// The next entry's key, or `null` past the last one. A text format spells
+    /// every key as a string, so a key there is a scalar parsed back as `K`.
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>;
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>;
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
@@ -547,8 +575,8 @@ pub trait Deserializer with () {
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
 
     /// What this format does when the wire repeats a field or key.
-    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
-        return DuplicateKeyPolicy::Error;
+    fn on_duplicate_field(&self) -> DuplicateFieldPolicy {
+        return DuplicateFieldPolicy::Error;
     }
 
 
@@ -944,11 +972,340 @@ impl Visitor for IgnoredAnyVisitor {
     }
 
     fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<IgnoredAny, DeserializeError> {
-        while let Some(_) = map.next_key_string()? {
+        while let Some(_) = map.next_key::<IgnoredAny>()? {
             let _ = map.next_value::<IgnoredAny>()?;
         }
         map.end()?;
         return Result::Ok(IgnoredAny {});
+    }
+}
+
+/// The compound access of a serializer or deserializer that has none, such as
+/// a map key's. The private field keeps it unbuilt outside this module, so the
+/// `begin_*` that would hand one out always fails first.
+pub struct NoCompound {
+    unbuilt: (),
+}
+
+#[coverage(off)]
+impl SerializeSeq for NoCompound {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl SerializeMap for NoCompound {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl SerializeStruct for NoCompound {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl SerializeVariant for NoCompound {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl DeserializeSeq for NoCompound {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl DeserializeMap for NoCompound {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
+        return unreachable();
+    }
+
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl DeserializeStruct for NoCompound {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        return unreachable();
+    }
+
+    fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return unreachable();
+    }
+
+    fn skip(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+}
+
+#[coverage(off)]
+impl DeserializeVariant for NoCompound {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        return unreachable();
+    }
+
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        return unreachable();
+    }
+
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return unreachable();
+    }
+
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return unreachable();
+    }
+}
+
+/// Spells a map key as the text `TextKeyDeserializer` reads back: a string as
+/// itself, any other scalar as its `Display`.
+pub struct TextKeySerializer {
+    pub out: &mut String,
+}
+
+impl TextKeySerializer {
+    fn display<T: Display>(&mut self, v: &T) -> Result<(), SerializeError> {
+        self.out.push_display(v);
+        return Result::Ok(());
+    }
+}
+
+impl Serializer for TextKeySerializer {
+    type SeqSerializer = NoCompound;
+    type MapSerializer = NoCompound;
+    type StructSerializer = NoCompound;
+    type VariantSerializer = NoCompound;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        return self.display(&v);
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        self.out.push(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
+        self.out.push_str(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<NoCompound, SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        variant_name: S1,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        variant_name: S1,
+        disc: i32,
+    ) -> Result<NoCompound, SerializeError> {
+        return Result::Err(SerializeError::non_scalar_key());
+    }
+}
+
+/// Reads a map key a text format spelled as a string, parsed as the scalar the
+/// key type asks for.
+pub struct TextKeyDeserializer {
+    pub key: String,
+    /// Where the key starts in the input, or -1 where it has no position.
+    pub offset: i64,
+}
+
+impl TextKeyDeserializer {
+    fn parse<T: FromStr, S: AsStrSlice>(&self, type_name: S) -> Result<T, DeserializeError> {
+        return match T::from_str(&self.key) {
+            Ok(v) => Result::Ok(v),
+            Err(e) => {
+                builtin::cold_path();
+                Result::Err(DeserializeError::invalid_value(
+                    `map key "${self.key}" is not a valid ${type_name}: ${e}`,
+                    self.offset,
+                ));
+            },
+        };
+    }
+}
+
+impl Deserializer for TextKeyDeserializer {
+    type SeqAccess = NoCompound;
+    type MapAccess = NoCompound;
+    type StructAccess = NoCompound;
+    type VariantAccess = NoCompound;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return self.parse::<i32>("i32");
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return self.parse::<i64>("i64");
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return self.parse::<u32>("u32");
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return self.parse::<u64>("u64");
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return self.parse::<i128>("i128");
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return self.parse::<u128>("u128");
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return self.parse::<f32>("f32");
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return self.parse::<f64>("f64");
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.parse::<f16>("f16");
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.parse::<bf16>("bf16");
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        return self.parse::<bool>("bool");
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        return self.parse::<char>("char");
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return Result::Ok(self.key);
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(false);
+    }
+
+    fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(DeserializeError::non_scalar_key(self.offset));
+    }
+
+    fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(DeserializeError::non_scalar_key(self.offset));
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(DeserializeError::non_scalar_key(self.offset));
+    }
+
+    fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(DeserializeError::non_scalar_key(self.offset));
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return visitor.visit_string(&self.key);
     }
 }
 
@@ -1051,10 +1408,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
                 return var.end();
             }
         }
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::UnsupportedValue,
-            message: `unknown case of ${type_name}`,
-        });
+        return Result::Err(SerializeError::unsupported_value(`unknown case of ${type_name}`));
     }
 }
 
@@ -1072,10 +1426,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
                 );
             }
         }
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::UnsupportedValue,
-            message: `unknown discriminant of ${Reflect::<E>::type_name()}`,
-        });
+        return Result::Err(SerializeError::unsupported_value(`unknown discriminant of ${Reflect::<E>::type_name()}`));
     }
 }
 
@@ -1148,7 +1499,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
         let members = ReflectStruct::<T>::members();
         let policy = Reflect::<T>::wire_name_policy();
-        let on_duplicate = d.on_duplicate_key();
+        let on_duplicate = d.on_duplicate_field();
         // Starting empty is what makes a filled slot mean "the wire wrote
         // this", so a repeat needs no second record to detect.
         let mut slots = ReflectStruct::<T>::empty_slots();
@@ -1158,7 +1509,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
             for let [i, _] of slots.enumerate() {
                 if i == index {
                     if slots[i] matches { Some(_) } {
-                        report_duplicate_key(
+                        report_duplicate_field(
                             on_duplicate,
                             &wire_name(&members[i], policy),
                         )?;
@@ -1256,7 +1607,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Deserialize for L {
                 let mut found = false;
                 for let bit of ReflectFlags::<L>::members() {
                     if wire_name(&bit, policy) == name {
-                        raw = raw | bit.bit();
+                        raw |= bit.bit();
                         found = true;
                     }
                 }

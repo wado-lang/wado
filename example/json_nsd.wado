@@ -1,10 +1,11 @@
-#![stdlib("core:json_nsd")]
-//! JSON NSD (Non-Self-Describing) serialization and deserialization.
+//! JSON NSD (Non-Self-Describing) serialization and deserialization: a demo of
+//! a `core:serde` format written outside the standard library.
 //!
 //! Structs are encoded as positional arrays (field names omitted).
 //! Unit variants (enums) are encoded as integer discriminants.
 //! Payload variants are encoded as `[disc, payload]`.
-
+//!
+//! Run its tests with `wado test example/json_nsd.wado`.
 
 use {
     Serialize,
@@ -21,35 +22,20 @@ use {
     DeserializeVariant,
     FieldSchema,
     SerializeError,
-    SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
+    TextKeyDeserializer,
+    TextKeySerializer,
     deeper,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
 use { write_escaped_string, JsonDeserializer } from "core:json";
+use { TreeMap } from "core:collections";
 
-#[synopsis]
-test {
-    struct Point {
-        x: i32,
-        y: i32,
-    }
-    impl Serialize for Point;
-    impl Deserialize for Point;
-
-    assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == "[1,2]" };
-    assert from_string::<Point>("[1,2]") matches { Ok(p) && p.x == 1 && p.y == 2 };
-}
-
-// Sub-serializers hold `&mut String` so writes flow back to the
-// outer buffer the caller still owns. A value-typed `String` field
-// would deep-copy on construction (Wado value semantics deep-copy
-// `String`'s `repr`), and the previous `self.buf = ser.buf` save-
-// back trick (still in older revisions) doesn't recover the bytes
-// the sub-serializer wrote to its own copy.
+// Sub-serializers hold `&mut String` so writes flow back to the outer buffer
+// the caller owns: a `String` field would be a copy of it.
 pub struct NsdSeqSerializer {
     buf: &mut String,
     count: i32,
@@ -58,7 +44,6 @@ pub struct NsdSeqSerializer {
 pub struct NsdMapSerializer {
     buf: &mut String,
     count: i32,
-    need_value: bool,
 }
 
 pub struct NsdStructSerializer {
@@ -96,18 +81,17 @@ impl SerializeMap for NsdMapSerializer {
         if self.count > 0 {
             self.buf.push_str(",");
         }
-        let mut ser = NsdSerializer { buf: self.buf };
-        let r = key.serialize::<NsdSerializer>(&mut ser);
+        let mut spelled = String::new();
+        key.serialize(&mut TextKeySerializer { out: &mut spelled })?;
+        write_escaped_string(self.buf, &spelled);
         self.buf.push_str(":");
-        self.need_value = true;
-        return r;
+        return Result::Ok(());
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = NsdSerializer { buf: self.buf };
         let r = value.serialize::<NsdSerializer>(&mut ser);
         self.count += 1;
-        self.need_value = false;
         return r;
     }
 
@@ -139,8 +123,7 @@ impl SerializeVariant for NsdVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         self.buf.push_str(",");
         let mut ser = NsdSerializer { buf: self.buf };
-        let r = value.serialize::<NsdSerializer>(&mut ser);
-        return r;
+        return value.serialize::<NsdSerializer>(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -194,34 +177,19 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        if v.is_nan() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "NaN is not allowed in JSON",
-            });
-        }
         if !v.is_finite() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Infinity is not allowed in JSON",
-            });
+            return self.serialize_f64(v as f64);
         }
-        self.buf.push_str(`${v as f64}`);
+        self.buf.push_display(&v);
         return Result::Ok(());
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
         if v.is_nan() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "NaN is not allowed in JSON",
-            });
+            return Result::Err(SerializeError::unsupported_value("NaN is not allowed in JSON"));
         }
         if !v.is_finite() {
-            return Result::Err(SerializeError {
-                kind: SerializeErrorKind::UnsupportedValue,
-                message: "Infinity is not allowed in JSON",
-            });
+            return Result::Err(SerializeError::unsupported_value("Infinity is not allowed in JSON"));
         }
         self.buf.push_str(`${v}`);
         return Result::Ok(());
@@ -265,7 +233,6 @@ impl Serializer for NsdSerializer {
         return Result::Ok(NsdMapSerializer {
             buf: self.buf,
             count: 0,
-            need_value: false,
         });
     }
 
@@ -319,7 +286,6 @@ pub struct NsdStructAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     index: i32,
-    num_fields: i32,
     first: bool,
 }
 
@@ -330,9 +296,36 @@ pub struct NsdVariantAccess {
     is_unit: bool,
 }
 
+fn inner_depth(de: &JsonDeserializer) -> Result<i32, DeserializeError> {
+    return deeper(de.depth, de.max_depth, de.pos as i64);
+}
+
+/// The head every container entry starts with: `close` ends the container,
+/// and every entry but the first is preceded by a comma this consumes.
+/// Leaves `pos` on the entry's first byte; false means the container ended.
+fn entry_head(de: &mut JsonDeserializer, close: i32, first: bool) -> Result<bool, DeserializeError> {
+    let b = de.peek_after_whitespace();
+    if b < 0 {
+        return Result::Err(DeserializeError::eof(de.pos as i64));
+    }
+    if b == close {
+        return Result::Ok(false);
+    }
+    if !first {
+        if b != b',' {
+            return Result::Err(DeserializeError::malformed(
+                `expected ',' or '${close as u8 as char}'`,
+                de.pos as i64,
+            ));
+        }
+        de.advance();
+    }
+    return Result::Ok(true);
+}
+
 impl DeserializeSeq for NsdSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
-        if !self.de.entry_head(b']', self.first)? {
+        if !entry_head(self.de, b']', self.first)? {
             return Result::Ok(null);
         }
         self.first = false;
@@ -347,12 +340,13 @@ impl DeserializeSeq for NsdSeqAccess {
 }
 
 impl DeserializeMap for NsdMapAccess {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        if !self.de.entry_head(b'}', self.first)? {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
+        if !entry_head(self.de, b'}', self.first)? {
             return Result::Ok(null);
         }
         self.first = false;
-        let key = self.de.read_json_string()?;
+        let offset = self.de.pos as i64;
+        let key = K::deserialize(&mut TextKeyDeserializer { key: self.de.read_json_string()?, offset })?;
         self.de.expect_char(b':')?;
         return Result::Ok(Option::Some(key));
     }
@@ -372,7 +366,7 @@ impl DeserializeStruct for NsdStructAccess {
     // the signature to satisfy the `DeserializeStruct` trait; the same generated
     // `next_field::<StructType>()` call site drives both SD and NSD formats.
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
-        if !self.de.entry_head(b']', self.first)? {
+        if !entry_head(self.de, b']', self.first)? {
             return Result::Ok(null);
         }
         self.first = false;
@@ -494,7 +488,7 @@ impl Deserializer for NsdDeserializer {
 
     fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> {
         self.de.expect_char(b'[')?;
-        let depth = self.de.inner_depth()?;
+        let depth = inner_depth(self.de)?;
         return Result::Ok(NsdSeqAccess {
             de: self.de,
             depth,
@@ -504,7 +498,7 @@ impl Deserializer for NsdDeserializer {
 
     fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> {
         self.de.expect_char(b'{')?;
-        let depth = self.de.inner_depth()?;
+        let depth = inner_depth(self.de)?;
         return Result::Ok(NsdMapAccess {
             de: self.de,
             depth,
@@ -515,12 +509,11 @@ impl Deserializer for NsdDeserializer {
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NsdStructAccess, DeserializeError> {
         // NSD: struct encoded as array
         self.de.expect_char(b'[')?;
-        let depth = self.de.inner_depth()?;
+        let depth = inner_depth(self.de)?;
         return Result::Ok(NsdStructAccess {
             de: self.de,
             depth,
             index: 0,
-            num_fields,
             first: true,
         });
     }
@@ -537,7 +530,7 @@ impl Deserializer for NsdDeserializer {
         if b == b'[' {
             // Payload variant: [disc, payload]
             self.de.pos += 1;
-            let depth = self.de.inner_depth()?;
+            let depth = inner_depth(self.de)?;
             let disc = self.de.parse_i32_direct()?;
             self.de.expect_char(b',')?;
             return Result::Ok(NsdVariantAccess {
@@ -568,13 +561,7 @@ impl Deserializer for NsdDeserializer {
 /// Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
 /// `trailing_char`, when `Some`, is appended after the value.
 pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError> {
-    let mut buf: String = "";
-    let mut ser = NsdSerializer { buf: &mut buf };
-    value.serialize::<NsdSerializer>(&mut ser)?;
-    if let Some(c) = trailing_char {
-        buf.push(c);
-    }
-    return Result::Ok(buf.as_bytes());
+    return Result::Ok(to_string(value, trailing_char)?.as_bytes());
 }
 
 /// Serializes a value to a JSON NSD string. Convenience over `to_bytes` for
@@ -616,4 +603,341 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
         return Result::Err(DeserializeError::trailing(de.pos as i64));
     }
     return Result::Ok(v);
+}
+
+// --- Primitive serialization (same as JSON) ---
+
+test "serialize i32" {
+    let n = 42;
+    let r = to_string(&n);
+    assert r matches { Ok(s) && s == "42" };
+}
+
+test "serialize negative i32" {
+    let n = -123;
+    let r = to_string(&n);
+    assert r matches { Ok(s) && s == "-123" };
+}
+
+test "serialize i64" {
+    let n: i64 = 1000000000000;
+    let r = to_string(&n);
+    assert r matches { Ok(s) && s == "1000000000000" };
+}
+
+test "serialize u32" {
+    let n: u32 = 255;
+    let r = to_string(&n);
+    assert r matches { Ok(s) && s == "255" };
+}
+
+test "serialize f64" {
+    let n = 3.14;
+    let r = to_string(&n);
+    assert r matches { Ok(s) && s == "3.14" };
+}
+
+test "serialize bool" {
+    let v = true;
+    let r = to_string(&v);
+    assert r matches { Ok(s) && s == "true" };
+}
+
+test "serialize string" {
+    let v = "hello";
+    let r = to_string(&v);
+    assert r matches { Ok(s) && s == `"hello"` };
+}
+
+test "serialize string with escapes" {
+    let v = "line1\nline2";
+    let r = to_string(&v);
+    assert r matches { Ok(s) && s == `"line1\\nline2"` };
+}
+
+test "serialize null" {
+    let v: Option<i32> = null;
+    let r = to_string(&v);
+    assert r matches { Ok(s) && s == "null" };
+}
+
+// --- Struct serialization (NSD: positional array) ---
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Serialize for Point;
+impl Deserialize for Point;
+
+test "serialize struct as array" {
+    let p = Point { x: 10, y: 20 };
+    let r = to_string(&p);
+    assert r matches { Ok(s) && s == "[10,20]" };
+}
+
+struct Person {
+    name: String,
+    age: i32,
+    active: bool,
+}
+
+impl Serialize for Person;
+impl Deserialize for Person;
+
+test "serialize struct with mixed types" {
+    let p = Person { name: "Alice", age: 30, active: true };
+    let r = to_string(&p);
+    assert r matches { Ok(s) && s == `["Alice",30,true]` };
+}
+
+// --- Nested struct serialization ---
+
+struct Line {
+    start: Point,
+    end: Point,
+}
+
+impl Serialize for Line;
+impl Deserialize for Line;
+
+test "serialize nested struct" {
+    let l = Line {
+        start: Point { x: 1, y: 2 },
+        end: Point { x: 3, y: 4 },
+    };
+    let r = to_string(&l);
+    assert r matches { Ok(s) && s == "[[1,2],[3,4]]" };
+}
+
+// --- Enum (unit variant) serialization ---
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+impl Serialize for Color;
+impl Deserialize for Color;
+
+test "serialize unit variant as discriminant" {
+    let c = Color::Red;
+    let r = to_string(&c);
+    assert r matches { Ok(s) && s == "0" };
+}
+
+test "serialize unit variant Green" {
+    let c = Color::Green;
+    let r = to_string(&c);
+    assert r matches { Ok(s) && s == "1" };
+}
+
+test "serialize unit variant Blue" {
+    let c = Color::Blue;
+    let r = to_string(&c);
+    assert r matches { Ok(s) && s == "2" };
+}
+
+// --- Variant (with payload) serialization ---
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
+
+impl Serialize for Shape;
+impl Deserialize for Shape;
+
+test "serialize payload variant" {
+    let s = Shape::Circle(5.0);
+    let r = to_string(&s);
+    assert r matches { Ok(v) && v == "[0,5]" };
+}
+
+test "serialize tuple-payload variant" {
+    let s = Shape::Rectangle([10.0, 20.0]);
+    let r = to_string(&s);
+    assert r matches { Ok(v) && v == "[1,[10,20]]" };
+}
+
+test "serialize unit variant in variant type" {
+    let s = Shape::Point;
+    let r = to_string(&s);
+    assert r matches { Ok(v) && v == "2" };
+}
+
+// --- Option serialization ---
+
+test "serialize Option Some" {
+    let v: Option<i32> = Option::Some(42);
+    let r = to_string(&v);
+    assert r matches { Ok(s) && s == "42" };
+}
+
+test "serialize Option None" {
+    let v: Option<i32> = null;
+    let r = to_string(&v);
+    assert r matches { Ok(s) && s == "null" };
+}
+
+// --- List serialization ---
+
+test "serialize List" {
+    let v: List<i32> = [1, 2, 3];
+    let r = to_string(&v);
+    assert r matches { Ok(s) && s == "[1,2,3]" };
+}
+
+test "serialize List of structs" {
+    let v: List<Point> = [
+        Point { x: 1, y: 2 },
+        Point { x: 3, y: 4 },
+    ];
+    let r = to_string(&v);
+    assert r matches { Ok(s) && s == "[[1,2],[3,4]]" };
+}
+
+// --- Primitive deserialization (same as JSON) ---
+
+test "deserialize i32" {
+    let r: Result<i32, DeserializeError> = from_string("42");
+    assert r matches { Ok(v) && v == 42 };
+}
+
+test "deserialize f64" {
+    let r: Result<f64, DeserializeError> = from_string("3.14");
+    assert r matches { Ok(v) && v == 3.14 };
+}
+
+test "deserialize bool" {
+    let r: Result<bool, DeserializeError> = from_string("true");
+    assert r matches { Ok(v) && v == true };
+}
+
+test "deserialize string" {
+    let r: Result<String, DeserializeError> = from_string(`"hello"`);
+    assert r matches { Ok(v) && v == "hello" };
+}
+
+// --- Struct deserialization (NSD: from positional array) ---
+
+test "deserialize struct from array" {
+    assert from_string::<Point>("[10,20]") == Result::Ok(Point { x: 10, y: 20 });
+}
+
+test "deserialize struct with mixed types" {
+    let alice = Person { name: "Alice", age: 30, active: true };
+    assert from_string::<Person>(`["Alice",30,true]`) == Result::Ok(alice);
+}
+
+test "deserialize nested struct" {
+    let line = Line {
+        start: Point { x: 1, y: 2 },
+        end: Point { x: 3, y: 4 },
+    };
+    assert from_string::<Line>("[[1,2],[3,4]]") == Result::Ok(line);
+}
+
+// --- Enum deserialization ---
+
+test "deserialize unit variant Red" {
+    assert from_string::<Color>("0") == Result::Ok(Color::Red);
+}
+
+test "deserialize unit variant Blue" {
+    assert from_string::<Color>("2") == Result::Ok(Color::Blue);
+}
+
+// --- Variant deserialization ---
+
+test "deserialize payload variant" {
+    assert from_string::<Shape>("[0,5.0]") == Result::Ok(Shape::Circle(5.0));
+}
+
+test "deserialize unit variant in variant type" {
+    assert from_string::<Shape>("2") == Result::Ok(Shape::Point);
+}
+
+// --- Round-trip tests ---
+
+test "round-trip struct" {
+    let orig = Point { x: 42, y: -7 };
+    assert from_string::<Point>(to_string(&orig).unwrap()) == Result::Ok(orig);
+}
+
+test "round-trip nested struct" {
+    let orig = Line {
+        start: Point { x: 1, y: 2 },
+        end: Point { x: 3, y: 4 },
+    };
+    assert from_string::<Line>(to_string(&orig).unwrap()) == Result::Ok(orig);
+}
+
+test "round-trip a map with scalar keys" {
+    let mut ints = TreeMap::<i32, String>::new();
+    ints[1] = "one";
+    assert to_string(&ints) == Result::Ok(`{"1":"one"}`);
+    let back: TreeMap<i32, String> = from_string(`{"1":"one"}`).unwrap();
+    assert back[1] == "one";
+    let mut names = TreeMap::<String, i32>::new();
+    names["a"] = 1;
+    assert to_string(&names) == Result::Ok(`{"a":1}`);
+    let mut lists = TreeMap::<List<i32>, i32>::new();
+    lists[[1]] = 1;
+    assert to_string(&lists) matches { Err(_) };
+}
+
+test "round-trip enum" {
+    assert from_string::<Color>(to_string(&Color::Green).unwrap()) == Result::Ok(Color::Green);
+}
+
+// --- Error cases ---
+
+test "deserialize struct wrong type" {
+    let r: Result<Point, DeserializeError> = from_string("42");
+    assert r matches { Err(_) };
+}
+
+test "deserialize trailing data" {
+    let r: Result<i32, DeserializeError> = from_string("42 extra");
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData };
+}
+
+variant Tree {
+    Leaf(i32),
+    Node(List<Tree>),
+}
+impl Deserialize for Tree;
+
+fn nested_tree(depth: i32) -> String {
+    // NSD variant payload form: [disc, payload]. `Node` wraps a one-element list.
+    let mut s = String::new();
+    for let mut i = 0; i < depth; i += 1 {
+        s.push_str("[1,[");
+    }
+    s.push_str("[0,7]");
+    for let mut i = 0; i < depth; i += 1 {
+        s.push_str("]]");
+    }
+    return s;
+}
+
+test "a recursive type is depth-limited, not stack-exhausting" {
+    let r: Result<Tree, DeserializeError> = from_string(nested_tree(400));
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded };
+}
+
+test "nesting within max_depth still parses" {
+    let r: Result<Tree, DeserializeError> = from_string(nested_tree(3));
+    assert r matches { Ok(_) };
+}
+
+test "a StrSlice parses without copying out" {
+    let owner = `  [0,7]  `;
+    let view = owner.as_str_slice().trim_ascii();
+    let r: Result<Tree, DeserializeError> = from_string(view);
+    assert r matches { Ok(Tree::Leaf(7)) };
 }

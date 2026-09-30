@@ -31,10 +31,10 @@ fn compute_stats(data: &List<f64>) -> Stats {
     let mut i = 0;
     while i + 2 <= len {
         let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
-        sum_vec = sum_vec + chunk;
+        sum_vec += chunk;
         min_vec = min_vec.min(&chunk);
         max_vec = max_vec.max(&chunk);
-        i = i + 2;
+        i += 2;
     }
 
     // Reduce SIMD lanes to scalars
@@ -44,7 +44,7 @@ fn compute_stats(data: &List<f64>) -> Stats {
 
     // Handle odd element
     if i < len {
-        sum = sum + (*data)[i];
+        sum += (*data)[i];
         min_val = f64::min(min_val, (*data)[i]);
         max_val = f64::max(max_val, (*data)[i]);
     }
@@ -59,14 +59,14 @@ fn compute_stats(data: &List<f64>) -> Stats {
     while i + 2 <= len {
         let chunk: f64x2 = [(*data)[i], (*data)[i + 1]];
         let diff = chunk - mean_vec;
-        sq_sum_vec = sq_sum_vec + diff * diff;
-        i = i + 2;
+        sq_sum_vec += diff * diff;
+        i += 2;
     }
 
     let mut sq_sum = sq_sum_vec.extract_lane(0) + sq_sum_vec.extract_lane(1);
     if i < len {
         let diff = (*data)[i] - mean;
-        sq_sum = sq_sum + diff * diff;
+        sq_sum += diff * diff;
     }
 
     let variance = sq_sum / len as f64;
@@ -94,7 +94,7 @@ fn normalize(data: &List<f64>) -> List<f64> {
         let normalized = (chunk - mean_vec) / sd_vec;
         result.push(normalized.extract_lane(0));
         result.push(normalized.extract_lane(1));
-        i = i + 2;
+        i += 2;
     }
 
     if i < len {
@@ -113,13 +113,13 @@ fn dot_product(a: &List<f64>, b: &List<f64>) -> f64 {
     while i + 2 <= len {
         let va: f64x2 = [(*a)[i], (*a)[i + 1]];
         let vb: f64x2 = [(*b)[i], (*b)[i + 1]];
-        sum_vec = sum_vec + va * vb;
-        i = i + 2;
+        sum_vec += va * vb;
+        i += 2;
     }
 
     let mut sum = sum_vec.extract_lane(0) + sum_vec.extract_lane(1);
     if i < len {
-        sum = sum + (*a)[i] * (*b)[i];
+        sum += (*a)[i] * (*b)[i];
     }
 
     return sum;

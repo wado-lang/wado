@@ -79,6 +79,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:generic_impls_at_two_trait_args.wado::$const_obj_1: ref null "Array<generic_impls_at_two_trait_args.wado/W<i32>>" = array.new_fixed<ref "generic_impls_at_two_trait_args.wado//W<i32>">(struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 2 }, struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 3 });
+
 fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
     let p_1: ref "generic_impls_at_two_trait_args.wado//W<i32>";
     let $cond: bool;
@@ -92,13 +94,14 @@ fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
     let packed: i64;
     let rx_26: i32;
     let tx_27: i32;
-    let $sroa_xs_repr_50: ref "Array<generic_impls_at_two_trait_args.wado/W<i32>>";
-    let n_67: i32;
-    let new_used_71: i32;
-    let start_72: i32;
-    $sroa_xs_repr_50 = array.new_fixed<ref "generic_impls_at_two_trait_args.wado//W<i32>">(struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 2 }, struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 3 });
+    let $sroa_self_repr_52: ref "Array<generic_impls_at_two_trait_args.wado/W<i32>>";
+    let $sroa_self_repr_55: ref "Array<generic_impls_at_two_trait_args.wado/W<i32>>";
+    let n_73: i32;
+    let new_used_77: i32;
+    let start_78: i32;
     let $match_scrut_0: ref null "generic_impls_at_two_trait_args.wado//W<i32>";
-    self_10 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: $sroa_xs_repr_50, index: 0, end: 2 };
+    $sroa_self_repr_52 = global:generic_impls_at_two_trait_args.wado::$const_obj_1;
+    self_10 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: $sroa_self_repr_52, index: 0, end: 2 };
     $match_scrut_0 = "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:prelude/traits.wado/Product::product_iter<core:prelude/slice.wado/SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>>"(self_10);
     $cond = (if ref.is_null($match_scrut_0) == 0 -> bool {
         p_1 = ref.as_non_null($match_scrut_0);
@@ -113,7 +116,8 @@ fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
     }
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     let $match_scrut_1: ref null "generic_impls_at_two_trait_args.wado//W<i32>";
-    self_21 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: $sroa_xs_repr_50, index: 0, end: 2 };
+    $sroa_self_repr_55 = global:generic_impls_at_two_trait_args.wado::$const_obj_1;
+    self_21 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: $sroa_self_repr_55, index: 0, end: 2 };
     $match_scrut_1 = "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:prelude/traits.wado/Product::product_iter<core:prelude/slice.wado/SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>>"(self_21);
     self_22 = (if ref.is_null($match_scrut_1) == 0 -> bool {
         p_3 = ref.as_non_null($match_scrut_1);
@@ -128,16 +132,16 @@ fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
     });
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            n_67 = text.used;
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2 n_67 == 0;
-            new_used_71 = 0 + n_67;
-            if @unlikely(new_used_71 > builtin::array_len($local_6.repr)) {
+            n_73 = text.used;
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2 n_73 == 0;
+            new_used_77 = 0 + n_73;
+            if @unlikely(new_used_77 > builtin::array_len($local_6.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_71);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_77);
             }
-            start_72 = $local_6.used;
-            $local_6.used = new_used_71;
-            builtin::array_copy<u8>($local_6.repr, start_72, text.repr, 0, n_67);
+            start_78 = $local_6.used;
+            $local_6.used = new_used_77;
+            builtin::array_copy<u8>($local_6.repr, start_78, text.repr, 0, n_73);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0;
     };

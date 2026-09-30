@@ -286,7 +286,7 @@ pub fn add_parser_super_effect(f: &mut FnSpec, ctx: &GenContext) {
 /// Emit each context-free gated predicate as a standalone fn
 /// `fn pred_<id>(p: &Parser) -> bool { return <body>; }`. Registered during the
 /// per-rule marking pass; a `&Parser` receiver keeps it read-only (the same fn
-/// the ATN disabled-seed prune calls). No-op when none were registered.
+/// the ATN's disabled alternatives call). No-op when none were registered.
 pub fn gen_predicate_fns(w: &mut CodeWriter, ctx: &GenContext) {
     for let entry of ctx.predicate_fns() {
         let mut f = FnSpec::new(&pred_fn_name(entry.0));
@@ -873,8 +873,8 @@ pub fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alterna
 /// Walks the whole tree, not just its root, to stay symmetric with emit (which
 /// gates a node nested under a `Dispatch` too). A node is gated when it either
 /// dispatches by the grammar-order predicate chain (interchangeable), or routes
-/// through the runtime ATN — where a gate's alts are excluded from the seed set
-/// (`disabled_alts`) instead.
+/// through the runtime ATN — where a false gate drops its alts from the viable
+/// set the simulator finds (`disabled_alts`) instead.
 fn collect_gated_ambiguous_alts(
     node: &PredictionNode,
     alts: &List<Alternative>,
@@ -904,7 +904,7 @@ fn collect_gated_ambiguous_alts(
 
 /// Whether an `Ambiguous` node routes through the runtime ATN *and* carries a
 /// gateable predicate — so its gate alts feed the simulator's `disabled_alts`
-/// prune rather than an inline dispatch chain.
+/// rather than an inline dispatch chain.
 fn ambiguous_group_atn_predicate_gated(
     a: &AmbiguousNode,
     alts: &List<Alternative>,
@@ -1079,10 +1079,11 @@ pub fn emit_alt_helper_exit<S: AsStrSlice>(w: &mut CodeWriter, fn_name: S, idx: 
         w.line(&ctx.alt_exit(forwarded.call));
         return;
     }
+    let prec = if ctx.helpers_take_prec() { ", min_prec" } else { "" };
     w.line(
-        &ctx.alt_exit(`${helper}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)}${lr_cont_forward(
-            ctx.lr_cont_in_atom(),
-        )})`),
+        &ctx.alt_exit(`${helper}(p${prec}${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
+            ctx,
+        )}${lr_cont_forward(ctx.lr_cont_in_atom())})`),
     );
 }
 

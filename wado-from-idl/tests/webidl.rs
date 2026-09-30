@@ -1,7 +1,7 @@
 //! The `WebIDL` frontend, over a hand-written webidl2 snapshot.
 
 use wado_from_idl::WadoCodeGenerator;
-use wado_from_idl::webidl::{Snapshot, WebIdlOutput, transform};
+use wado_from_idl::webidl::{Snapshot, WebIdlOutput, generate, transform};
 
 /// The definitions of a snapshot, as the JSON text `snapshot.mjs` writes.
 #[derive(Default)]
@@ -74,7 +74,7 @@ fn argument(name: &str, ty: &str, optional: bool, default: &str) -> String {
 }
 
 fn variadic(name: &str, ty: &str) -> String {
-    argument(name, ty, true, "null").replace(r#""variadic": false"#, r#""variadic": true"#)
+    argument(name, ty, false, "null").replace(r#""variadic": false"#, r#""variadic": true"#)
 }
 
 fn operation(name: &str, ret: &str, args: &[String], special: &str) -> String {
@@ -336,7 +336,7 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
         operation(
             "prepend",
             &plain("undefined"),
-            &[variadic("nodes", &plain("Node"))],
+            &[variadic("nodes", &plain("NodeList"))],
             "",
         ),
         // Two overloads that both lower are ambiguous, so neither is emitted.
@@ -370,10 +370,57 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             "Element.attributes: `NamedNodeMap` is outside the slice",
             "Element.request_fullscreen: `Promise<…>`",
             "Element.append: `nodes`: union of 2 expressible types",
-            "Element.prepend: `nodes`: variadic",
+            "Element.prepend: `nodes`: `NodeList` is outside the slice",
             "Element.alert: 2 overloads",
             "Element.(getter): getter operation",
         ]
+    );
+}
+
+#[test]
+fn a_variadic_argument_is_a_list_the_glue_spreads() {
+    let mut defs = chain();
+    defs.interfaces.push(partial(
+        "Element",
+        &[
+            operation(
+                "append",
+                &plain("undefined"),
+                &[variadic("nodes", &plain("Node"))],
+                "",
+            ),
+            operation(
+                "write",
+                &plain("undefined"),
+                &[
+                    argument("prefix", &plain("DOMString"), false, "null"),
+                    variadic("text", &plain("DOMString")),
+                ],
+                "",
+            ),
+        ],
+    ));
+    let (code, skipped) = defs.generate();
+    assert!(
+        code.contains("fn append(&self, nodes: List<Node>);"),
+        "{code}"
+    );
+    assert!(
+        code.contains("fn write(&self, prefix: String, text: List<String>);"),
+        "{code}"
+    );
+    assert_eq!(skipped, Vec::<String>::new());
+
+    let glue = generate(&defs.build(), "test.json")
+        .expect("the slice should transform")
+        .glue;
+    assert!(
+        glue.contains("  append(self, nodes) {\n    $object(self).append(...Array.from(nodes, (x) => $object(x)));\n  },"),
+        "{glue}"
+    );
+    assert!(
+        glue.contains("$object(self).write(prefix, ...text);"),
+        "{glue}"
     );
 }
 

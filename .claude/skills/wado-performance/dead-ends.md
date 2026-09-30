@@ -18,6 +18,37 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Rejecting control bytes in `core:json` without paying per byte (2026-09-29)
+
+RFC 8259 forbids an unescaped byte below 0x20 in a string, so
+`scan_string_run` has to stop on one. Every plain byte then pays for a third
+test. Two shapes, each against the same release base, four alternating
+rounds:
+
+| ASCII branch of `scan_string_run`                                    | json-twitter de |
+| -------------------------------------------------------------------- | --------------- |
+| `b < 0x80`, then `json_plain_byte(b as u8)`                          | -4.8%           |
+| `((b - 0x20) as u32) < 0x60`, then `"` or `\`; controls after (kept) | -1.5%           |
+
+`json_plain_byte` compiles to a mask, three compares and two `and`s per byte,
+where the old test was two compares. The range shape adds one subtract to a
+plain byte and one compare to a multibyte lead. Twelve back-to-back
+twitter-only runs put it about 1% behind, losing all six pairs. twitter.json
+holds 271K ASCII string bytes, 32K multibyte leads and 1.2K escapes, so the
+per-byte test is the whole cost. json-catalog and json-canada deserialize
+measured flat.
+
+Separately, `scan_number_into` lost 4.4% on json-canada deserialize when the
+integer digit loop moved into an `else` arm and an error builder took `&self`,
+keeping the input reference live across the function. Rejecting a leading zero
+before the unchanged loop, with a free function building the error, measured
+flat. Both changes went into one build, so this does not say which of them
+cost what.
+
+Generalizes: a new check in a scan loop goes where the rare bytes branch, not
+into the test every byte takes. Read the loop's WAT for what a plain byte
+executes before and after.
+
 ## Breaking `adler32`'s dependency chain (2026-09-29)
 
 `adler32` in `core:zlib` adds each byte into `s1` and then `s1` into `s2`, so

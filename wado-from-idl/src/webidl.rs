@@ -150,11 +150,28 @@ enum Flow {
 pub struct WebIdlOutput {
     pub module: WadoModule,
     /// Each function's JavaScript half, keyed by its `#[cm]` path.
-    pub js: IndexMap<String, JsMember>,
+    pub js: IndexMap<String, JsFunction>,
     /// Each resource's `WebIDL` interface name, keyed by its Wado name.
     pub interfaces: IndexMap<String, String>,
     /// `Interface.member: reason`, in source order.
     pub skipped: Vec<String>,
+}
+
+/// A function's JavaScript half.
+#[derive(Debug)]
+pub struct JsFunction {
+    pub member: JsMember,
+    /// The last parameter is a variadic argument's `List`, spread into the call.
+    pub variadic: bool,
+}
+
+impl From<JsMember> for JsFunction {
+    fn from(member: JsMember) -> Self {
+        Self {
+            member,
+            variadic: false,
+        }
+    }
 }
 
 /// What a function does with the JavaScript object it reaches. `Get`, `Set` and
@@ -189,7 +206,7 @@ struct Merged<'a> {
 
 /// A member's lowering: a function and its JavaScript half, or the Wado name it
 /// would have had and why there is none.
-type Lowered = std::result::Result<(WadoFunction, JsMember), (String, String)>;
+type Lowered = std::result::Result<(WadoFunction, JsFunction), (String, String)>;
 
 /// A callback's return type and arguments, or why no function stands in for it.
 type Signature<'a> = std::result::Result<(&'a IdlType, &'a [Argument]), String>;
@@ -328,8 +345,8 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
 
 /// The functions of `bindings`, their JavaScript halves moved into `js`.
 fn split_js(
-    bindings: Vec<(WadoFunction, JsMember)>,
-    js: &mut IndexMap<String, JsMember>,
+    bindings: Vec<(WadoFunction, JsFunction)>,
+    js: &mut IndexMap<String, JsFunction>,
 ) -> Vec<WadoFunction> {
     bindings
         .into_iter()
@@ -503,8 +520,8 @@ impl Lowering<'_> {
         path: &str,
         merged: &Merged<'_>,
         skipped: &mut Vec<String>,
-    ) -> Vec<(WadoFunction, JsMember)> {
-        let mut candidates: IndexMap<String, (Vec<(WadoFunction, JsMember)>, Vec<String>)> =
+    ) -> Vec<(WadoFunction, JsFunction)> {
+        let mut candidates: IndexMap<String, (Vec<(WadoFunction, JsFunction)>, Vec<String>)> =
             IndexMap::new();
         for member in &merged.members {
             for lowered in self.lower_member(iface, path, member) {
@@ -558,7 +575,7 @@ impl Lowering<'_> {
                             vec![self_param(iface)],
                             Some(ty),
                         ),
-                        JsMember::Get(name.clone()),
+                        JsMember::Get(name.clone()).into(),
                     )),
                     Err(reason) => Err((getter, reason)),
                 }];
@@ -577,7 +594,7 @@ impl Lowering<'_> {
                             vec![self_param(iface), value],
                             None,
                         ),
-                        JsMember::Set(name.clone()),
+                        JsMember::Set(name.clone()).into(),
                     )));
                 }
                 out
@@ -641,7 +658,7 @@ impl Lowering<'_> {
     fn lower_operation(
         &self,
         iface: &str,
-        (wado_name, js): (String, JsMember),
+        (wado_name, member): (String, JsMember),
         cm_attr: String,
         receiver: Option<WadoParam>,
         arguments: &[Argument],
@@ -657,26 +674,33 @@ impl Lowering<'_> {
             },
         };
         let mut params: Vec<WadoParam> = receiver.into_iter().collect();
+        let mut variadic = false;
         for arg in arguments {
-            if arg.variadic {
-                return skip(format!("`{}`: variadic", arg.name));
-            }
+            assert!(!variadic, "WebIDL admits a variadic argument only last");
             let ty = match self.lower_type(&arg.idl_type, Flow::In) {
-                Ok(ty) => ty,
+                // An empty list leaves the argument out.
+                Ok(ty) if arg.variadic => {
+                    variadic = true;
+                    WadoType::List(Box::new(ty))
+                }
+                // `None` is the argument left out, so the WebIDL default applies
+                // in the browser. A CM operation admits no default argument.
+                Ok(ty) => optional(ty, arg.optional),
                 // A trailing optional the slice cannot express is left to
                 // its WebIDL default; a required one takes the member with it.
                 Err(_) if arg.optional => break,
                 Err(reason) => return skip(format!("`{}`: {reason}", arg.name)),
             };
-            // `None` is the argument left out, so the WebIDL default applies in
-            // the browser. A CM operation admits no default argument.
             params.push(WadoParam {
                 name: to_wado_identifier(&arg.name),
-                ty: optional(ty, arg.optional),
+                ty,
                 wit_name: to_kebab_case(&arg.name),
             });
         }
-        Ok((function(wado_name, cm_attr, params, return_type), js))
+        Ok((
+            function(wado_name, cm_attr, params, return_type),
+            JsFunction { member, variadic },
+        ))
     }
 
     /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
@@ -786,7 +810,7 @@ impl Lowering<'_> {
         &self,
         merged: &IndexMap<&str, Merged<'_>>,
         resources: &IndexMap<&str, WadoResource>,
-    ) -> Result<Option<Vec<(WadoFunction, JsMember)>>> {
+    ) -> Result<Option<Vec<(WadoFunction, JsFunction)>>> {
         let mut globals = merged.iter().filter(|(_, iface)| iface.global);
         let Some((name, global)) = globals.next() else {
             return Ok(None);
@@ -806,7 +830,7 @@ impl Lowering<'_> {
         let global_type = to_upper_camel_case(name);
         let mut bindings = vec![(
             accessor(to_wado_identifier(name), &to_kebab_case(name), &global_type),
-            JsMember::Global,
+            JsMember::Global.into(),
         )];
         let methods: IndexSet<&str> = resources[name]
             .methods
@@ -827,7 +851,7 @@ impl Lowering<'_> {
                 if methods.contains(wado_name.as_str()) {
                     bindings.push((
                         accessor(wado_name, &to_kebab_case(name), &ty),
-                        JsMember::GlobalGet(name.clone()),
+                        JsMember::GlobalGet(name.clone()).into(),
                     ));
                 }
             }

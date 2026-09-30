@@ -214,7 +214,7 @@ impl TokenStream {
     }
 
     pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
-        self.flags[i] = self.flags[i] | flag;
+        self.flags[i] |= flag;
     }
 
     pub fn mark_skipped(&mut self, i: i32) {
@@ -548,7 +548,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
         if end[child] > end[parent] {
             end[parent] = end[child];
         }
-        flags[parent] = flags[parent] | flags[child] & NodeFlags::Error;
+        flags[parent] |= flags[child] & NodeFlags::Error;
     }
 }
 
@@ -731,7 +731,7 @@ impl TreeBuilder {
                 },
                 Skip => {
                     let oi = stack[stack.len() - 1];
-                    flags[oi] = flags[oi] | NodeFlags::Error;
+                    flags[oi] |= NodeFlags::Error;
                 },
                 Close => {
                     let oi = stack[stack.len() - 1];
@@ -989,22 +989,52 @@ impl Lexer {
 fn apply_ENUM_actions(lx: &mut Lexer, start: i32, end: i32) {
     let chars = &lx.chars;
     let mut pos = start;
+    let la_start_0 = pos;
+    let mut accept_0: i32 = -1;
     if pos >= chars.len() { return; }
     if !((chars[pos] matches { 'a'..='z' })) { return; }
     pos += 1;
-    if pos > end { return; }
+    let peek_save_1 = pos;
+    let mut peek_ok_1 = false;
+    peek_1: {
+        if !((chars_text(chars, start, pos) == "enum")) { break peek_1; }
+        peek_ok_1 = true;
+    }
+    pos = peek_save_1;
+    if peek_ok_1 {
+        accept_0 = peek_save_1;
+    }
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_0; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= chars.len() { break la_rep_0; }
+            if !((chars[pos] matches { 'a'..='z' })) { break la_rep_0; }
             pos += 1;
-            if pos > end { break rep_0; }
+            let peek_save_2 = pos;
+            let mut peek_ok_2 = false;
+            peek_2: {
+                if !((chars_text(chars, start, pos) == "enum")) { break peek_2; }
+                peek_ok_2 = true;
+            }
+            pos = peek_save_2;
+            if peek_ok_2 {
+                accept_0 = peek_save_2;
+            }
             continue;
         }
-        pos = rep_saved_0;
+        pos = la_saved_0;
         break;
     }
+    if accept_0 < 0 {
+        return;
+    }
+    pos = la_start_0;
+    while pos < accept_0 {
+        if pos >= chars.len() { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
+        if !((chars[pos] matches { 'a'..='z' })) { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
+        pos += 1;
+    }
+    if pos != accept_0 { panic("lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted"); }
     lx.emit(`enum!\n`);
 }
 
@@ -1016,15 +1046,15 @@ fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     if pos > end { return; }
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_2; }
+        let rep_saved_3 = pos;
+        rep_3: {
+            if pos >= chars.len() { break rep_3; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_3; }
             pos += 1;
-            if pos > end { break rep_2; }
+            if pos > end { break rep_3; }
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_3;
         break;
     }
     lx.emit(`ID ${chars_text(chars, start, pos)}\n`);
@@ -1032,21 +1062,46 @@ fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {
 
 fn try_ENUM(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
+    let mut accept_5: i32 = -1;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
+    let peek_save_6 = pos;
+    let mut peek_ok_6 = false;
+    peek_6: {
+        if !((chars_text(chars, start, pos) == "enum")) { break peek_6; }
+        peek_ok_6 = true;
+    }
+    pos = peek_save_6;
+    if peek_ok_6 {
+        accept_5 = peek_save_6;
+    }
     loop {
-        let rep_saved_4 = pos;
-        rep_4: {
-            if pos >= chars.len() { break rep_4; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_4; }
+        let la_saved_5 = pos;
+        la_rep_5: {
+            if pos >= chars.len() { break la_rep_5; }
+            if !((chars[pos] matches { 'a'..='z' })) { break la_rep_5; }
             pos += 1;
+            let peek_save_7 = pos;
+            let mut peek_ok_7 = false;
+            peek_7: {
+                if !((chars_text(chars, start, pos) == "enum")) { break peek_7; }
+                peek_ok_7 = true;
+            }
+            pos = peek_save_7;
+            if peek_ok_7 {
+                accept_5 = peek_save_7;
+            }
             continue;
         }
-        pos = rep_saved_4;
+        pos = la_saved_5;
         break;
     }
-    if !((chars_text(chars, start, pos) == "enum")) { return -1; }
+    if accept_5 < 0 {
+        return -1;
+    }
+    pos = accept_5;
+    if !((chars_text(chars, start, pos) == "enum")) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     return pos;
 }
 
@@ -1056,14 +1111,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_6 = pos;
-        rep_6: {
-            if pos >= chars.len() { break rep_6; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_6; }
+        let rep_saved_8 = pos;
+        rep_8: {
+            if pos >= chars.len() { break rep_8; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_8; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_6;
+        pos = rep_saved_8;
         break;
     }
     return pos;

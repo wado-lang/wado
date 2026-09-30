@@ -29,7 +29,6 @@ use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
 use crate::elaborator::types::RequiredTrait;
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::FqTraitName;
-use crate::resolve::Resolution;
 
 /// An operand whose operators come from its bounds.
 struct BoundedOperand {
@@ -314,12 +313,7 @@ impl TypeSystem {
 
     /// The operator trait a dispatch means, as a requirement the bound search must match.
     fn required_operator_trait(&self, item: CompilerItem) -> Option<RequiredTrait> {
-        let def = self.compiler_trait_def(item)?;
-        Some(RequiredTrait {
-            decl: Resolution::Def(def),
-            args: None,
-            display: self.resolutions.defs().name(def).to_string(),
-        })
+        Some(self.required_trait(self.compiler_trait_def(item)?))
     }
 }
 
@@ -1838,6 +1832,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => ArgSource::NoArguments,
         };
         self.find_method_in_trait_bounds(
+            None,
+            false,
             bounds,
             method_name,
             receiver,

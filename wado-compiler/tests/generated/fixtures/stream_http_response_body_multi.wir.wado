@@ -1131,16 +1131,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let a_108: i32;
     let a_118: i32;
     let i_128: i32;
-    let $licm_arith_134: i64;
-    let $licm_arith_139: bool;
+    let $licm_arith_137: i64;
+    let $licm_arith_142: bool;
     if local.tee $load_0(data.used) == 0 {
         return;
     }
     offset = 0;
     $licm_used_85 = $load_0;
     $licm_repr_86 = data.repr;
-    $licm_arith_134 = builtin::i64_extend_i32_s($licm_used_85) << 32_i64;
-    $licm_arith_139 = 0 > $licm_used_85;
+    $licm_arith_137 = builtin::i64_extend_i32_s($licm_used_85) << 32_i64;
+    $licm_arith_142 = 0 > $licm_used_85;
     block {
         l118: loop {
             written_4 = (if offset == 0 -> ref "core:prelude/types.wado//StreamWrite" {
@@ -1151,7 +1151,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                         i_93 = i_93 + 1;
                         continue l121;
                     };
-                }; builtin::i64_extend_i32_u(ptr_20) | $licm_arith_134));
+                }; builtin::i64_extend_i32_u(ptr_20) | $licm_arith_137));
                 len_10 = builtin::i32_wrap_i64(packed_8 >> 32_i64);
                 result_24 = "wasi/stream-write"(self, ptr_9, select i32(len_10 < 268435455, len_10, 268435455));
                 if result_24 == -1 {
@@ -1180,7 +1180,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 written_11;
             } else {
                 end_3 = offset + b_37 = $licm_used_85 - offset; select i32(4096 < b_37, 4096, b_37);
-                if @unlikely($licm_arith_139) {
+                if @unlikely($licm_arith_142) {
                     cold_path;
                     "core:prelude/primitive.wado/i32::clamp$cold0"(0, $licm_used_85);
                     unreachable;

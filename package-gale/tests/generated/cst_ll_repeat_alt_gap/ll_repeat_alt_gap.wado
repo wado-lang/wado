@@ -214,7 +214,7 @@ impl TokenStream {
     }
 
     pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
-        self.flags[i] = self.flags[i] | flag;
+        self.flags[i] |= flag;
     }
 
     pub fn mark_skipped(&mut self, i: i32) {
@@ -548,7 +548,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
         if end[child] > end[parent] {
             end[parent] = end[child];
         }
-        flags[parent] = flags[parent] | flags[child] & NodeFlags::Error;
+        flags[parent] |= flags[child] & NodeFlags::Error;
     }
 }
 
@@ -731,7 +731,7 @@ impl TreeBuilder {
                 },
                 Skip => {
                     let oi = stack[stack.len() - 1];
-                    flags[oi] = flags[oi] | NodeFlags::Error;
+                    flags[oi] |= NodeFlags::Error;
                 },
                 Close => {
                     let oi = stack[stack.len() - 1];
@@ -1449,7 +1449,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_X {
         let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
-        if la_1 == TK_Y {
+        if _kind_set_0(la_1) {
             return scan_a_alt_0(tokens, start);
         } else if la_1 == TK_Z {
             return scan_a_alt_1(tokens, start);
@@ -1505,7 +1505,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_X {
-        if p.peek_at(1) == TK_Y {
+        if _kind_set_0(p.peek_at(1)) {
             return _parse_a__inner_alt_0(p);
         } else if p.peek_at(1) == TK_Z {
             return _parse_a__inner_alt_1(p);
@@ -1601,6 +1601,10 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
     return String::new();
+}
+
+fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_X | TK_Y };
 }
 
 global EMPTY_SYNC: List<i32> = [];

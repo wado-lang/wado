@@ -1,4 +1,6 @@
 use { TreeSet } from "core:collections";
+use { to_string, from_string } from "core:json";
+use { DeserializeErrorKind, SerializeErrorKind } from "core:serde";
 
 test "empty set" {
     let s: TreeSet<i32> = TreeSet::new();
@@ -166,7 +168,7 @@ test "for-of loop" {
     s.insert(7);
     let mut sum = 0;
     for let x of s {
-        sum = sum + x;
+        sum += x;
     }
     assert sum == 15;
 }
@@ -212,7 +214,7 @@ test "empty set iteration yields nothing" {
     let s: TreeSet<i32> = TreeSet::new();
     let mut count = 0;
     for let _ of s {
-        count = count + 1;
+        count += 1;
     }
     assert count == 0;
 }
@@ -300,7 +302,7 @@ test "large set insert and lookup" {
     let mut i = 0;
     while i < 100 {
         s.insert(i);
-        i = i + 1;
+        i += 1;
     }
     assert s.len() == 100;
     assert s.contains(0);
@@ -351,12 +353,12 @@ test "compaction after many removals" {
     let mut i = 0;
     while i < 50 {
         s.insert(i);
-        i = i + 1;
+        i += 1;
     }
     i = 0;
     while i < 40 {
         s.remove(i);
-        i = i + 1;
+        i += 1;
     }
     assert s.len() == 10;
     assert s.contains(40);
@@ -370,4 +372,19 @@ test "compaction after many removals" {
     assert result.len() == 10;
     assert result[0] == 40;
     assert result[9] == 49;
+}
+
+test "a set is a sequence" {
+    let set = [3, 1, 2] as TreeSet<i32>;
+    assert to_string(&set) == Result::Ok("[3,1,2]");
+    let back: TreeSet<i32> = from_string("[3,1,2]").unwrap();
+    assert back.len() == 3 && back.contains(1);
+}
+
+test "a set passes on what its elements and its sequence fail with" {
+    assert from_string::<TreeSet<i32>>("{}") matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert from_string::<TreeSet<i32>>(`["x"]`) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_string::<TreeSet<i32>>("[1,2,1]") matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+    let nan = [f64::NAN] as TreeSet<f64>;
+    assert to_string(&nan) matches { Err(e) && e.kind == SerializeErrorKind::UnsupportedValue };
 }

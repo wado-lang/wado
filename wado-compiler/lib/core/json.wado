@@ -23,10 +23,12 @@ use {
     DeserializeVariant,
     FieldSchema,
     SerializeError,
-    SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
+    NoCompound,
+    TextKeyDeserializer,
+    TextKeySerializer,
     deeper,
     DEFAULT_MAX_DEPTH,
 } from "core:serde";
@@ -71,8 +73,9 @@ fn write_base64_string(buf: &mut String, v: ByteSlice) {
     buf.push('"');
 }
 
-/// Whether `b` passes through a JSON string body as itself. The one statement
-/// of what JSON escapes, which the scan, the writer, and the fold all ask.
+/// Whether `b` passes through a JSON string body as itself. The statement of
+/// what JSON escapes, which the writer and the fold ask; `scan_string_run`
+/// tests the same set split by the branch each byte takes.
 fn json_plain_byte(b: u8) -> bool {
     return b >= 0x20 && b != 0x22 && b != 0x5C;
 }
@@ -156,18 +159,23 @@ fn write_json_i32(buf: &mut String, v: i32) -> Result<(), SerializeError> {
     return Result::Ok(());
 }
 
+/// Writes the integer `v` as a JSON string of its digits, which hold no byte
+/// JSON escapes.
+fn write_quoted_display<T: Display>(buf: &mut String, v: &T) -> Result<(), SerializeError> {
+    buf.push('"');
+    buf.push_display(v);
+    buf.push('"');
+    return Result::Ok(());
+}
+
 fn write_json_i64(buf: &mut String, v: i64) -> Result<(), SerializeError> {
     // Values outside the f64 safe-integer range are serialized as strings
-    // so JS consumers don't lose precision. The decimal form of an integer
-    // needs no JSON escaping, so the digits are quoted verbatim.
+    // so JS consumers don't lose precision.
     if f64::MIN_SAFE_INTEGER as i64 <= v <= f64::MAX_SAFE_INTEGER as i64 {
         buf.push_display(&v);
-    } else {
-        buf.push('"');
-        buf.push_display(&v);
-        buf.push('"');
+        return Result::Ok(());
     }
-    return Result::Ok(());
+    return write_quoted_display(buf, &v);
 }
 
 fn write_json_u32(buf: &mut String, v: u32) -> Result<(), SerializeError> {
@@ -177,53 +185,44 @@ fn write_json_u32(buf: &mut String, v: u32) -> Result<(), SerializeError> {
 
 fn write_json_u64(buf: &mut String, v: u64) -> Result<(), SerializeError> {
     // Values above the f64 safe-integer range are serialized as strings
-    // so JS consumers don't lose precision. The decimal form of an integer
-    // needs no JSON escaping, so the digits are quoted verbatim.
+    // so JS consumers don't lose precision.
     if v <= f64::MAX_SAFE_INTEGER as u64 {
         buf.push_display(&v);
-    } else {
-        buf.push('"');
-        buf.push_display(&v);
-        buf.push('"');
+        return Result::Ok(());
     }
-    return Result::Ok(());
+    return write_quoted_display(buf, &v);
 }
 
 fn write_json_i128(buf: &mut String, v: i128) -> Result<(), SerializeError> {
-    // 128-bit values always exceed the f64 safe-integer range: always a string.
-    buf.push('"');
-    buf.push_display(&v);
-    buf.push('"');
-    return Result::Ok(());
+    // A string whatever the value, since the type's range exceeds the f64
+    // safe-integer range and the wire form must not depend on the value.
+    return write_quoted_display(buf, &v);
 }
 
 fn write_json_u128(buf: &mut String, v: u128) -> Result<(), SerializeError> {
-    buf.push('"');
-    buf.push_display(&v);
-    buf.push('"');
-    return Result::Ok(());
+    return write_quoted_display(buf, &v);
 }
 
 fn write_json_f64(buf: &mut String, v: f64) -> Result<(), SerializeError> {
     if v.is_nan() {
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::UnsupportedValue,
-            message: "NaN is not allowed in JSON",
-        });
+        return Result::Err(SerializeError::unsupported_value("NaN is not allowed in JSON"));
     }
     if !v.is_finite() {
-        return Result::Err(SerializeError {
-            kind: SerializeErrorKind::UnsupportedValue,
-            message: "Infinity is not allowed in JSON",
-        });
+        return Result::Err(SerializeError::unsupported_value("Infinity is not allowed in JSON"));
     }
     buf.push_display(&v);
     return Result::Ok(());
 }
 
+/// An f32 in its own shortest form, which a reader rounding the decimal once
+/// into binary32 reads back exactly. Widening would spell `0.1` as
+/// `0.10000000149011612`.
 fn write_json_f32(buf: &mut String, v: f32) -> Result<(), SerializeError> {
-    // f32 widens losslessly; the NaN / Infinity checks and formatting are shared.
-    return write_json_f64(buf, v as f64);
+    if !v.is_finite() {
+        return write_json_f64(buf, v as f64);
+    }
+    buf.push_display(&v);
+    return Result::Ok(());
 }
 
 fn write_json_bool(buf: &mut String, v: bool) -> Result<(), SerializeError> {
@@ -256,6 +255,112 @@ fn write_json_null(buf: &mut String) -> Result<(), SerializeError> {
     return Result::Ok(());
 }
 
+/// Writes an object key: a string as itself, any other scalar as the string
+/// `TextKeySerializer` spells, which `JsonKeyDeserializer` parses back. Only a
+/// string and a char can hold a byte JSON escapes, so only they are written
+/// here; the rest, refusals included, are `TextKeySerializer`'s.
+struct JsonKeySerializer {
+    buf: &mut String,
+}
+
+impl JsonKeySerializer {
+    fn text(&mut self) -> TextKeySerializer {
+        return TextKeySerializer { out: self.buf };
+    }
+
+    fn quoted<T: Serialize>(&mut self, v: &T) -> Result<(), SerializeError> {
+        self.buf.push('"');
+        let spelled = v.serialize(&mut self.text());
+        self.buf.push('"');
+        return spelled;
+    }
+}
+
+impl Serializer for JsonKeySerializer {
+    type SeqSerializer = NoCompound;
+    type MapSerializer = NoCompound;
+    type StructSerializer = NoCompound;
+    type VariantSerializer = NoCompound;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        return self.quoted(&v);
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        return write_json_char(self.buf, v);
+    }
+
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
+        return write_json_string(self.buf, v);
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        return self.text().serialize_null();
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
+        return self.text().begin_seq(len);
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<NoCompound, SerializeError> {
+        return self.text().begin_map(len);
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<NoCompound, SerializeError> {
+        return self.text().begin_struct(name, fields);
+    }
+
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        variant_name: S1,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
+        return self.text().serialize_unit_variant(type_name, variant_name, disc);
+    }
+
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        variant_name: S1,
+        disc: i32,
+    ) -> Result<NoCompound, SerializeError> {
+        return self.text().begin_variant(type_name, variant_name, disc);
+    }
+}
+
 pub struct JsonSeqSerializer {
     buf: &mut String,
     count: i32,
@@ -264,7 +369,6 @@ pub struct JsonSeqSerializer {
 pub struct JsonMapSerializer {
     buf: &mut String,
     count: i32,
-    need_value: bool,
 }
 
 pub struct JsonStructSerializer {
@@ -287,8 +391,8 @@ fn write_pretty_newline_and_indent<S: AsStrSlice>(buf: &mut String, indent: S, d
     }
 }
 
-/// Serializes one nested value into `buf`, wrapping and unwrapping the
-/// `JsonSerializer` the compact container writers share.
+/// Serializes one nested value into `buf` as compact JSON, for the compact
+/// container writers.
 fn serialize_into<T: Serialize>(buf: &mut String, value: &T) -> Result<(), SerializeError> {
     let mut ser = JsonSerializer { buf: buf };
     return value.serialize(&mut ser);
@@ -315,16 +419,14 @@ impl SerializeMap for JsonMapSerializer {
         if self.count > 0 {
             self.buf.push_str(",");
         }
-        let r = serialize_into(self.buf, key);
+        let r = key.serialize(&mut JsonKeySerializer { buf: self.buf });
         self.buf.push_str(":");
-        self.need_value = true;
         return r;
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let r = serialize_into(self.buf, value);
         self.count += 1;
-        self.need_value = false;
         return r;
     }
 
@@ -484,7 +586,6 @@ impl Serializer for JsonSerializer {
         return Result::Ok(JsonMapSerializer {
             buf: self.buf,
             count: 0,
-            need_value: false,
         });
     }
 
@@ -531,7 +632,6 @@ pub struct PrettyJsonSeqSerializer {
 pub struct PrettyJsonMapSerializer {
     buf: &mut String,
     count: i32,
-    need_value: bool,
     indent: &String,
     depth: i32,
 }
@@ -567,7 +667,6 @@ impl SerializeSeq for PrettyJsonSeqSerializer {
             depth: self.depth,
         };
         let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -587,15 +686,8 @@ impl SerializeMap for PrettyJsonMapSerializer {
             self.buf.push_str(",");
         }
         write_pretty_newline_and_indent(self.buf, self.indent, self.depth);
-        let mut ser = PrettyJsonSerializer {
-            buf: self.buf,
-            indent: self.indent,
-            depth: self.depth,
-        };
-        let r = key.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = key.serialize(&mut JsonKeySerializer { buf: self.buf });
         self.buf.push_str(": ");
-        self.need_value = true;
         return r;
     }
 
@@ -606,9 +698,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
             depth: self.depth,
         };
         let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
-        self.need_value = false;
         return r;
     }
 
@@ -634,7 +724,6 @@ impl SerializeStruct for PrettyJsonStructSerializer {
             depth: self.depth,
         };
         let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -655,9 +744,7 @@ impl SerializeVariant for PrettyJsonVariantSerializer {
             indent: self.indent,
             depth: self.depth,
         };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -740,7 +827,6 @@ impl Serializer for PrettyJsonSerializer {
         return Result::Ok(PrettyJsonMapSerializer {
             buf: self.buf,
             count: 0,
-            need_value: false,
             indent: self.indent,
             depth: self.depth + 1,
         });
@@ -929,6 +1015,15 @@ fn checked_int_f64<S: AsStrSlice>(
     return Result::Ok(v);
 }
 
+/// The error for a token that stops at `pos` short of what it needs, in an
+/// input of `len` bytes: the end of input, else `message` about the byte there.
+fn token_stop_error<S: AsStrSlice>(pos: i32, len: i32, message: S) -> DeserializeError {
+    if pos >= len {
+        return DeserializeError::eof(pos as i64);
+    }
+    return DeserializeError::malformed(message, pos as i64);
+}
+
 /// Maps an integer `from_str` failure onto a deserialize error.
 fn int_from_str_error<S: AsStrSlice>(e: ParseIntError, range_msg: S, start: i64) -> DeserializeError {
     return match e.kind() {
@@ -992,16 +1087,16 @@ fn parse_u64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<u64, DeserializeE
     };
 }
 
-/// Result of scanning a JSON string run. `at_escape` distinguishes stopping on
-/// a `\` from stopping on a `"` or EOF.
+/// Result of scanning a JSON string run. `stop` is the byte at `end`: a `"`, a
+/// `\`, an unescaped control byte, or -1 at end of input.
 struct StringRunScan {
     end: i32,
-    at_escape: bool,
+    stop: i32,
     valid: bool,
 }
 
 impl JsonDeserializer {
-    internal fn inner_depth(&self) -> Result<i32, DeserializeError> {
+    fn inner_depth(&self) -> Result<i32, DeserializeError> {
         return deeper(self.depth, self.max_depth, self.pos as i64);
     }
 
@@ -1105,7 +1200,7 @@ impl JsonDeserializer {
     /// not call it: that caller needs the byte, and returning it here means
     /// re-reading it after the comma for every seq element and map key, which
     /// costs json-catalog deserialize 2% against a flat reading for this shape.
-    internal fn entry_head(&mut self, close: i32, first: bool) -> Result<bool, DeserializeError> {
+    fn entry_head(&mut self, close: i32, first: bool) -> Result<bool, DeserializeError> {
         let b = self.peek_after_whitespace();
         if b < 0 {
             builtin::cold_path();
@@ -1165,20 +1260,31 @@ impl JsonDeserializer {
         return DeserializeError::malformed("invalid UTF-8 in string", start as i64);
     }
 
-    /// Scan `input` from `from` up to the next `"` or `\` (or EOF), validating
-    /// UTF-8 in the same pass. Does not move `self.pos`; the caller advances.
+    /// Scan `input` from `from` up to the next byte a string body cannot hold
+    /// as itself (or EOF), validating UTF-8 in the same pass. Does not move
+    /// `self.pos`; the caller advances.
     fn scan_string_run(&self, from: i32) -> StringRunScan {
         let len = self.input.len();
         let mut pos = from;
         let mut valid = true;
+        let mut stop = -1;
         while pos < len {
             let b = self.input.get_unchecked(pos) as i32;
-            if b < 0x80 {
+            // Printable ASCII in one unsigned compare, so a plain byte pays one
+            // subtract for the control check and controls take the rarer
+            // branch below. Testing `json_plain_byte` here instead measured 3%
+            // slower on json-twitter deserialize, whose strings are long.
+            if ((b - 0x20) as u32) < 0x60 {
                 if b == b'"' || b == b'\\' {
+                    stop = b;
                     break;
                 }
                 pos += 1;
                 continue;
+            }
+            if b < 0x20 {
+                stop = b;
+                break;
             }
             let advance = String::utf8_sequence_len(&self.input, pos, len);
             // The document ends at `len`, so a sequence short there is as
@@ -1191,8 +1297,7 @@ impl JsonDeserializer {
             }
             pos += advance;
         }
-        let at_escape = pos < len && self.input.get_unchecked(pos) as i32 == b'\\';
-        return StringRunScan { end: pos, at_escape, valid };
+        return StringRunScan { end: pos, stop, valid };
     }
 
     /// Append `input[start..end)` to `dst` in a single copy. `valid` must come
@@ -1215,7 +1320,6 @@ impl JsonDeserializer {
 
     pub fn read_json_string(&mut self) -> Result<String, DeserializeError> {
         let quote = self.peek_after_whitespace();
-        let input_len = self.input.len();
         if quote < 0 {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
@@ -1234,13 +1338,13 @@ impl JsonDeserializer {
 
         // Fast path: no escapes. The token is `input[prefix_start..<prefix.end]`;
         // only string *content* can be multi-byte — JSON structure is ASCII.
-        if prefix.end < input_len && !prefix.at_escape {
+        if prefix.stop == b'"' {
             let result = self.take_scanned_run(prefix_start, prefix.end, prefix.valid)?;
             self.pos = prefix.end + 1;
             return Result::Ok(result);
         }
 
-        // Slow path: has escape sequences (or hit EOF). Escapes are rare in
+        // Slow path: has escape sequences (or is malformed). Escapes are rare in
         // typical JSON (citm_catalog: 1 of ~26k string tokens), so the whole
         // tail is cold — the marker hints the fast-path dispatch above
         // likely-taken and lets the engine lay this path out of line. Build the
@@ -1248,58 +1352,55 @@ impl JsonDeserializer {
         builtin::cold_path();
         let mut result = self.take_scanned_run(prefix_start, prefix.end, prefix.valid)?;
         self.pos = prefix.end;
-
-        loop {
-            // Each run between escapes is appended in a single copy; the `"` / `\`
-            // delimiters are ASCII, so a multi-byte sequence never straddles a
-            // chunk boundary.
+        let mut stop = prefix.stop;
+        while stop == b'\\' {
+            result.push(self.read_escape()?);
+            // Each run between escapes is appended in a single copy; every stop
+            // byte is ASCII, so a multi-byte sequence never straddles a chunk
+            // boundary.
             let chunk_start = self.pos;
             let chunk = self.scan_string_run(chunk_start);
             self.pos = chunk.end;
             self.append_scanned_run(&mut result, chunk_start, chunk.end, chunk.valid)?;
-
-            if self.pos >= self.input.len() {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
-            }
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if b == b'"' {
-                self.pos += 1;
-                return Result::Ok(result);
-            }
-            // b == '\\'
-            self.pos += 1;
-            if self.pos >= self.input.len() {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
-            }
-            let esc = self.input.get_unchecked(self.pos) as u8 as char;
-            match esc {
-                '"' => result.push('"'),
-                '\\' => result.push('\\'),
-                '/' => result.push('/'),
-                'n' => result.push('\n'),
-                'r' => result.push('\r'),
-                't' => result.push('\t'),
-                'b' => result.push('\u0008'),
-                'f' => result.push('\u000C'),
-                'u' => {
-                    // read_unicode_escape consumes through the last hex digit
-                    // (including a trailing low-surrogate escape), so skip the
-                    // shared `pos += 1` below.
-                    result.push(self.read_unicode_escape()?);
-                    continue;
-                },
-                _ => {
-                    builtin::cold_path();
-                    return Result::Err(DeserializeError::malformed(
-                        `invalid escape '\\${esc}'`,
-                        self.pos as i64,
-                    ));
-                },
-            }
-            self.pos += 1;
+            stop = chunk.stop;
         }
+        if stop != b'"' {
+            builtin::cold_path();
+            return Result::Err(token_stop_error(self.pos, self.input.len(), "unescaped control character in string"));
+        }
+        self.pos += 1;
+        return Result::Ok(result);
+    }
+
+    /// Reads the escape whose `\` is at `pos`, leaving `pos` past it. The one
+    /// decoder of escapes, so a skipped string is held to a read one's rules.
+    fn read_escape(&mut self) -> Result<char, DeserializeError> {
+        self.pos += 1;
+        if self.pos >= self.input.len() {
+            builtin::cold_path();
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let esc = self.input.get_unchecked(self.pos);
+        let decoded: u8 = match esc {
+            b'"' | b'\\' | b'/' => esc,
+            b'n' => b'\n',
+            b'r' => b'\r',
+            b't' => b'\t',
+            b'b' => 0x08,
+            b'f' => 0x0C,
+            b'u' => {
+                return self.read_unicode_escape();
+            },
+            _ => {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::malformed(
+                    `invalid escape '\\${esc as char}'`,
+                    self.pos as i64,
+                ));
+            },
+        };
+        self.pos += 1;
+        return Result::Ok(decoded as char);
     }
 
     /// Reads exactly four hex digits at `pos`, advancing past them.
@@ -1358,90 +1459,28 @@ impl JsonDeserializer {
             }
             code = 0x10000 + (hi - 0xD800 << 10) + (lo - 0xDC00);
         }
-        return match char::from_u32(code) {
-            Some(c) => Result::Ok(c),
-            None => {
-                builtin::cold_path();
-                Result::Err(DeserializeError::malformed(
-                    "invalid unicode codepoint",
-                    start,
-                ));
-            },
-        };
+        return Result::Ok(
+            char::from_u32(code).expect("a lone surrogate is rejected above, so `code` is a scalar value"),
+        );
     }
 
-    /// Reads a JSON number token as a String. Validates the token's prefix
-    /// (optional '-' followed by a digit), then delegates the scan to
-    /// `skip_number`.
+    /// Reads a JSON number token as a String, held to the grammar every
+    /// number read is.
     pub fn read_number_raw(&mut self) -> Result<String, DeserializeError> {
         let lead = self.peek_after_whitespace();
         let start = self.pos;
-        let mut probe = self.pos;
-        if lead == b'-' {
-            probe += 1;
-        }
-        if probe >= self.input.len() {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(probe as i64));
-        }
-        let first = self.input.get_unchecked(probe) as i32;
-        if digit_value(first) > 9 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type(
-                "expected number",
-                probe as i64,
-            ));
-        }
-        self.skip_number();
+        let n = &mut self.scratch;
+        self.scan_number_into(lead, n)?;
         // A number token is ASCII (digits, sign, '.', 'e'/'E'), so it is valid
         // UTF-8 by construction — copy it in one pass, no validation.
         return self.take_scanned_run(start, self.pos, true);
     }
 
-    /// Advances past a JSON number in `self.input` without allocating a String.
-    pub fn skip_number(&mut self) {
-        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == b'-' {
-            self.pos += 1;
-        }
-        while self.pos < self.input.len() {
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if digit_value(b) <= 9 {
-                self.pos += 1;
-            } else {
-                break;
-            }
-        }
-        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == b'.' {
-            self.pos += 1;
-            while self.pos < self.input.len() {
-                let b = self.input.get_unchecked(self.pos) as i32;
-                if digit_value(b) <= 9 {
-                    self.pos += 1;
-                } else {
-                    break;
-                }
-            }
-        }
-        if self.pos < self.input.len() {
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if b == b'e' || b == b'E' {
-                self.pos += 1;
-                if self.pos < self.input.len() {
-                    let sign = self.input.get_unchecked(self.pos) as i32;
-                    if sign == b'+' || sign == b'-' {
-                        self.pos += 1;
-                    }
-                }
-                while self.pos < self.input.len() {
-                    let b2 = self.input.get_unchecked(self.pos) as i32;
-                    if digit_value(b2) <= 9 {
-                        self.pos += 1;
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
+    /// Advances past the JSON number at `pos` without allocating a String,
+    /// held to the grammar every number read is.
+    pub fn skip_number(&mut self) -> Result<(), DeserializeError> {
+        let n = &mut self.scratch;
+        return self.scan_number_into(self.peek(), n);
     }
 
     /// Scans the number token at `pos`, whose byte `peek_after_whitespace` gave
@@ -1474,17 +1513,19 @@ impl JsonDeserializer {
                 pos as i64,
             ));
         }
-        // Integer part, in three runs so the accumulating loop carries neither
-        // a significance test nor a budget test per digit: leading zeros, the
-        // digits that fit the mantissa budget, then the ones past it.
-        let zeros_start = pos;
+        // Integer part: a lone `0`, or digits led by a nonzero one. They are read
+        // in two runs so the accumulating loop carries no budget test per digit:
+        // the digits that fit the mantissa budget, then the ones past it.
+        let int_start = pos;
         let mut inexact = false;
         if first == b'0' {
-            while pos < len && input.get_unchecked(pos) as i32 == b'0' {
-                pos += 1;
+            pos += 1;
+            if pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
+                builtin::cold_path();
+                self.pos = int_start;
+                return Result::Err(DeserializeError::malformed("leading zero in number", int_start as i64));
             }
         }
-        let mut int_digits = pos - zeros_start;
         let sig_start = pos;
         let mut cap = pos + FPFMT_DIGITS_MAX;
         if cap > len {
@@ -1506,13 +1547,14 @@ impl JsonDeserializer {
                 pos += 1;
             }
         }
-        int_digits += pos - sig_start;
+        let int_digits = pos - int_start;
         let mut frac_digits = 0;
         let mut frac_lead_zeros = 0;
         let mut has_frac_or_exp = false;
         if pos < len && input.get_unchecked(pos) as i32 == b'.' {
             has_frac_or_exp = true;
             pos += 1;
+            let point_end = pos;
             if digits == 0 {
                 // Leading fraction zeros shift the scale, not the mantissa.
                 let lead_start = pos;
@@ -1542,6 +1584,11 @@ impl JsonDeserializer {
                     pos += 1;
                 }
             }
+            if pos == point_end {
+                builtin::cold_path();
+                self.pos = pos;
+                return Result::Err(token_stop_error(pos, len, "expected digit after '.'"));
+            }
         }
         let mantissa_end = pos;
         let mut exp: i64 = 0;
@@ -1564,6 +1611,7 @@ impl JsonDeserializer {
                         },
                     }
                 }
+                let exp_start = pos;
                 while pos < len {
                     let d = digit_value(input.get_unchecked(pos) as i32);
                     if d > 9 {
@@ -1571,6 +1619,11 @@ impl JsonDeserializer {
                     }
                     exp = push_exponent_digit(exp, d as i32);
                     pos += 1;
+                }
+                if pos == exp_start {
+                    builtin::cold_path();
+                    self.pos = pos;
+                    return Result::Err(token_stop_error(pos, len, "expected digit in exponent"));
                 }
                 if exp_neg {
                     exp = -exp;
@@ -1586,7 +1639,7 @@ impl JsonDeserializer {
         out.exp = exp;
         out.has_frac_or_exp = has_frac_or_exp;
         out.inexact = inexact;
-        out.mantissa_start = zeros_start;
+        out.mantissa_start = int_start;
         out.mantissa_end = mantissa_end;
         return Result::Ok(());
     }
@@ -1780,9 +1833,9 @@ impl JsonDeserializer {
         return Result::Ok(scanned_to_bits(n, &self.input, format));
     }
 
-    /// Skips a string token without allocating. Shares `scan_string_run` with
-    /// the reading path, so a skipped string is held to the same UTF-8 rule as
-    /// a materialized one.
+    /// Skips a string token without allocating. Shares `scan_string_run` and
+    /// `read_escape` with the reading path, so a skipped string is held to the
+    /// same rules as a materialized one.
     pub fn skip_string(&mut self) -> Result<(), DeserializeError> {
         // Assumes pos is at the opening '"'
         self.pos += 1;
@@ -1794,24 +1847,17 @@ impl JsonDeserializer {
                 return Result::Err(self.invalid_utf8_string(start));
             }
             self.pos = scan.end;
-            if self.pos >= self.input.len() {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
-            }
-            if !scan.at_escape {
+            if scan.stop == b'"' {
                 self.pos += 1;
                 return Result::Ok(());
             }
-            self.pos += 1;
-            if self.pos >= self.input.len() {
+            if scan.stop != b'\\' {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::eof(self.pos as i64));
+                return Result::Err(
+                    token_stop_error(self.pos, self.input.len(), "unescaped control character in string"),
+                );
             }
-            if self.input.get_unchecked(self.pos) as u8 as char == 'u' {
-                // \uXXXX — skip 4 hex digits
-                self.pos += 4;
-            }
-            self.pos += 1;
+            self.read_escape()?;
         }
     }
 
@@ -1881,7 +1927,6 @@ impl JsonDeserializer {
                 },
             }
         }
-        unreachable();
     }
 
     /// Skips object members through the closing `}`; `depth` is their level.
@@ -1921,7 +1966,6 @@ impl JsonDeserializer {
                 },
             }
         }
-        unreachable();
     }
 
     /// Skips the next JSON value without allocating.
@@ -1955,13 +1999,8 @@ impl JsonDeserializer {
                 let inner = deeper(depth, self.max_depth, self.pos as i64)?;
                 return self.skip_object_body(inner);
             },
-            '-' => {
-                self.skip_number();
-                return Result::Ok(());
-            },
-            c && '0' <= c <= '9' => {
-                self.skip_number();
-                return Result::Ok(());
+            '-' | '0'..='9' => {
+                return self.skip_number();
             },
             _ => {
                 builtin::cold_path();
@@ -1990,6 +2029,105 @@ pub struct JsonMapAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     first: bool,
+}
+
+/// Reads an object key as the scalar `JsonKeySerializer` wrote: a string as
+/// itself, any other scalar parsed from the string's text.
+struct JsonKeyDeserializer {
+    de: &mut JsonDeserializer,
+}
+
+impl JsonKeyDeserializer {
+    fn text(&mut self) -> Result<TextKeyDeserializer, DeserializeError> {
+        let offset = self.de.pos as i64;
+        return Result::Ok(TextKeyDeserializer { key: self.de.read_json_string()?, offset });
+    }
+}
+
+impl Deserializer for JsonKeyDeserializer {
+    type SeqAccess = NoCompound;
+    type MapAccess = NoCompound;
+    type StructAccess = NoCompound;
+    type VariantAccess = NoCompound;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return self.text()?.deserialize_i32();
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return self.text()?.deserialize_i64();
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return self.text()?.deserialize_u32();
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return self.text()?.deserialize_u64();
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return self.text()?.deserialize_i128();
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return self.text()?.deserialize_u128();
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return self.text()?.deserialize_f32();
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return self.text()?.deserialize_f64();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.text()?.deserialize_f16();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.text()?.deserialize_bf16();
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        return self.text()?.deserialize_bool();
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        return self.text()?.deserialize_char();
+    }
+
+    // Read straight into place: going through `text()` like the other
+    // scalars copies the key once more.
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return self.de.read_json_string();
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(false);
+    }
+
+    fn begin_seq(&mut self) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(DeserializeError::non_scalar_key(self.de.pos as i64));
+    }
+
+    fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(DeserializeError::non_scalar_key(self.de.pos as i64));
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(DeserializeError::non_scalar_key(self.de.pos as i64));
+    }
+
+    fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError> {
+        return Result::Err(DeserializeError::non_scalar_key(self.de.pos as i64));
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        let key = self.de.read_json_string()?;
+        return visitor.visit_string(key);
+    }
 }
 
 pub struct JsonStructAccess {
@@ -2022,12 +2160,12 @@ impl DeserializeSeq for JsonSeqAccess {
 }
 
 impl DeserializeMap for JsonMapAccess {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
         if !self.de.entry_head(b'}', self.first)? {
             return Result::Ok(null);
         }
         self.first = false;
-        let key = self.de.read_json_string()?;
+        let key = K::deserialize(&mut JsonKeyDeserializer { de: self.de })?;
         self.de.expect_char(b':')?;
         return Result::Ok(Option::Some(key));
     }
@@ -2076,7 +2214,7 @@ impl DeserializeStruct for JsonStructAccess {
         let scan = self.de.scan_string_run(key_start);
         self.de.pos = scan.end;
 
-        if !scan.at_escape {
+        if scan.stop == b'"' {
             // Fast path: key has no escapes, compare directly from input buffer
             if !scan.valid {
                 builtin::cold_path();
@@ -2093,7 +2231,7 @@ impl DeserializeStruct for JsonStructAccess {
         }
         builtin::cold_path();
 
-        // Slow path: key has escape sequences, must parse fully.
+        // Slow path: key has escape sequences or is malformed, must parse fully.
         // Reset position to before the key and use read_json_string.
         self.de.pos = key_start - 1;
         let key = self.de.read_json_string()?;
@@ -2498,7 +2636,6 @@ impl SerializeSeq for CanonicalSeqSerializer {
         }
         let mut ser = CanonicalJsonSerializer { buf: self.buf };
         let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
         self.count += 1;
         return r;
     }
@@ -2512,8 +2649,7 @@ impl SerializeSeq for CanonicalSeqSerializer {
 impl SerializeMap for CanonicalMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         let mut kbuf = String::with_capacity(16);
-        let mut ser = JsonSerializer { buf: &mut kbuf };
-        key.serialize(&mut ser)?;
+        key.serialize(&mut JsonKeySerializer { buf: &mut kbuf })?;
         self.pending_key = kbuf;
         return Result::Ok(());
     }
@@ -2548,9 +2684,7 @@ impl SerializeStruct for CanonicalStructSerializer {
 impl SerializeVariant for CanonicalVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CanonicalJsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
-        return r;
+        return value.serialize(&mut ser);
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {

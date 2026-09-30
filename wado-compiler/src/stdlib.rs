@@ -145,7 +145,6 @@ stdlib_table! {
     "core:benchmark" => "core/benchmark.wado",
     "core:serde" => "core/serde.wado",
     "core:json" => "core/json.wado",
-    "core:json_nsd" => "core/json_nsd.wado",
     "core:jsonc" => "core/jsonc.wado",
     "core:args" => "core/args.wado",
     "core:value" => "core/value.wado",

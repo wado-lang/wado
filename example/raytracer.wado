@@ -195,7 +195,8 @@ impl Scene {
         return [
             c.x(),
             c.y(),
-            c.z(), self.radii[i] * self.radii[i],
+            c.z(),
+            self.radii[i] * self.radii[i],
         ];
     }
 
@@ -340,7 +341,7 @@ fn trace(scene: &Scene, ray: Ray, depth: i32, rng: &mut Xoshiro256pp, rays: &mut
         let Some([dir, attenuation]) = scatter(&ray, &hit, rng) else {
             return splat(0.0);
         };
-        throughput = throughput * attenuation;
+        throughput *= attenuation;
         ray = Ray { origin: hit.point, dir: dir.unit() };
     }
     return splat(0.0);
@@ -426,7 +427,7 @@ fn render(opts: &Options, scene: &Scene, camera: &Camera, rays: &mut i64) -> Ima
                 let s = (x as f32 + rand(&mut rng)) / opts.width as f32;
                 let t = ((opts.height - 1 - y) as f32 + rand(&mut rng)) / opts.height as f32;
                 let ray = camera.ray(s, t, &mut rng);
-                color = color + trace(scene, ray, opts.depth, &mut rng, rays);
+                color += trace(scene, ray, opts.depth, &mut rng, rays);
             }
             // Gamma 2: the square root of the linear average.
             let c = color.scale(weight).max(&splat(0.0)).sqrt();

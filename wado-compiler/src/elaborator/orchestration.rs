@@ -28,7 +28,6 @@ use crate::symbol::SymbolTable;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable, positional_substitution};
 use crate::world_registry::WorldRegistry;
 
-use super::Elaborator;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::types::{
@@ -36,6 +35,7 @@ use super::types::{
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
+use super::{AbstractSelectionCache, Elaborator};
 use crate::ast::{CmImport, GenericType, NamedType, UseItem, cm_import_of};
 use crate::compiler_item::{CompilerItemKind, Resolved};
 use crate::component_model::SourceInterfaceBatch;
@@ -404,6 +404,9 @@ pub(crate) struct AnnotateState {
     /// `&self` elaborator methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
+    /// [`Elaborator::abstract_selections`] by default body. A selection is the
+    /// body's own, so every module with an impl inheriting it shares one walk.
+    pub(crate) abstract_selections: Rc<RefCell<AbstractSelectionCache>>,
     /// Source-level liveness computed between `annotate_bodies` and `reify`
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
     /// reify item gating and the unused-diagnostics emitter.
@@ -1129,6 +1132,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             module_semantics,
             invocations,
             interner,
+            abstract_selections: Rc::default(),
             liveness: Liveness::default(),
         })
     }
@@ -1177,6 +1181,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             interner: Rc::clone(&state.interner),
             infer_holes: InferHoleTable::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
+            abstract_selection_cache: Rc::clone(&state.abstract_selections),
         }
     }
 

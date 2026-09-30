@@ -7,6 +7,13 @@ Unicode character properties, from the ICU4X component bundled with the
 toolchain. A name it does not answer is `null`, never an approximate set:
 `Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
 
+## Synopsis
+
+```wado
+assert has(BinaryProperty::Uppercase, 'À');
+assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
+```
+
 ## Functions
 
 ### `pub fn has(property: BinaryProperty, ch: char) -> bool`

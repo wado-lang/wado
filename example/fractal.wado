@@ -102,10 +102,14 @@ fn escape_time(set: &Set, x: f64x2, y: f64x2, max_iter: i32) -> [Option<f64>, Op
     let [mut zr, mut zi, cr, ci] = match *set {
         Mandelbrot => [
             f64x2::splat(0.0),
-            f64x2::splat(0.0), x, y,
+            f64x2::splat(0.0),
+            x,
+            y,
         ],
         Julia([re, im]) => [
-            x, y, f64x2::splat(re),
+            x,
+            y,
+            f64x2::splat(re),
             f64x2::splat(im),
         ],
     };
@@ -125,7 +129,7 @@ fn escape_time(set: &Set, x: f64x2, y: f64x2, max_iter: i32) -> [Option<f64>, Op
         let next_i = two * zr * zi + ci;
         zr = next_r.bitselect(&alive, &zr);
         zi = next_i.bitselect(&alive, &zi);
-        count = count + one.bitselect(&alive, &zero);
+        count += one.bitselect(&alive, &zero);
     }
     let mag = zr * zr + zi * zi;
     return [

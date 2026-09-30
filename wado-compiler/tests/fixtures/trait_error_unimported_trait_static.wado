@@ -1,0 +1,12 @@
+// A static call is gated on trait scope as a method call is. The module below
+// imports `Plant` and never names `Seeded`, so `Plant::seed()` does not resolve
+// (WEP 2026-09-01, "Scope").
+
+use { Plant } from "./sub/trait_scope_static_lib.wado";
+
+export fn run() {
+    assert Plant::seed() == 7;
+}
+
+__DATA__
+{"compile_error": "'Seeded' is not imported here: 'Plant' has 'seed' through it; import the trait to call it", "compile_error_codes": ["TRAIT_NOT_IMPORTED"]}

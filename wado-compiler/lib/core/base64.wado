@@ -142,9 +142,9 @@ fn decode_impl(input: ByteSlice, table: &ByteList, canonical: bool) -> Option<By
     let remainder = end % 4;
     let mut out_len = full_groups * 3;
     if remainder == 2 {
-        out_len = out_len + 1;
+        out_len += 1;
     } else if remainder == 3 {
-        out_len = out_len + 2;
+        out_len += 2;
     }
 
     let mut out = ByteList::with_capacity(out_len);

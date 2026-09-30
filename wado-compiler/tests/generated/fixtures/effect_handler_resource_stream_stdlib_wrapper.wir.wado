@@ -1849,6 +1849,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let repr_59: ref Array<u8>;
     let a_68: i32;
     let a_78: i32;
+    let $sroa_self_repr_84: ref Array<u8>;
     if local.tee $load_0(data.used) == 0 {
         return;
     }
@@ -1906,12 +1907,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                     e = select i32(a_78 < len_34, a_78, len_34);
                     $licm_repr_56 = $load_8;
                     $licm_used_57 = $load_9;
+                    $sroa_self_repr_84 = self_31.repr;
                     a_37 = e - s;
                     len_29 = select i32(a_37 > 0, a_37, 0);
                     len_40 = e - s;
                     out = builtin::array_new<u8>(select i32(len_40 > 0, len_40, 0));
                     if len_40 > 0 {
-                        builtin::array_copy<u8>(out, 0, self_31.repr, s, len_40);
+                        builtin::array_copy<u8>(out, 0, $sroa_self_repr_84, s, len_40);
                     }
                     data_24 = struct.new "core:prelude//List<u8>" { repr: out, used: len_29 };
                     $local_2_25 = global:effect_handler_resource_stream_stdlib_wrapper.wado::$effect_StreamWritable<u8>;

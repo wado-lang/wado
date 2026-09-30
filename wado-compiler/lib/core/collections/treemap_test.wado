@@ -1,6 +1,15 @@
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { to_string, from_string } from "core:json";
-use { SerializeError } from "core:serde";
+use {
+    SerializeError,
+    Deserialize,
+    Deserializer,
+    DeserializeError,
+    DeserializeMap,
+    DeserializeSeq,
+    NoCompound,
+    Visitor,
+} from "core:serde";
 
 test "empty map" {
     let map: TreeMap<String, i32> = TreeMap::new();
@@ -425,7 +434,7 @@ test "for-of over values" {
     map["y"] = 20;
     let mut sum = 0;
     for let v of map.values() {
-        sum = sum + *v;
+        sum += *v;
     }
     assert sum == 30;
 }
@@ -514,6 +523,128 @@ test "serde Serializer" {
 
     let result: Result<String, SerializeError> = to_string(&map);
     assert result matches { Ok(s) && s == `{"foo":"1","bar":"2","baz":"3"}` };
+}
+
+/// An empty map or sequence whose close fails. No stdlib format's does once
+/// its entries are drained, but a format may.
+struct FailingClose {
+}
+
+impl DeserializeMap for FailingClose {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
+        return Result::Ok(null);
+    }
+
+    #[coverage(off)]
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        return unreachable();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Err(DeserializeError::invalid_value("unclosed"));
+    }
+}
+
+impl DeserializeSeq for FailingClose {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        return Result::Ok(null);
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Err(DeserializeError::invalid_value("unclosed"));
+    }
+}
+
+// The trait asks for every method, but a collection reaches only `begin_map`
+// or `begin_seq`.
+#[coverage(off)]
+impl Deserializer for FailingClose {
+    type SeqAccess = FailingClose;
+    type MapAccess = FailingClose;
+    type StructAccess = NoCompound;
+    type VariantAccess = NoCompound;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return unreachable();
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return unreachable();
+    }
+
+    fn begin_seq(&mut self) -> Result<FailingClose, DeserializeError> {
+        return Result::Ok(FailingClose {});
+    }
+
+    fn begin_map(&mut self) -> Result<FailingClose, DeserializeError> {
+        return Result::Ok(FailingClose {});
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NoCompound, DeserializeError> {
+        return unreachable();
+    }
+
+    fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<NoCompound, DeserializeError> {
+        return unreachable();
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return unreachable();
+    }
+}
+
+test "a map or a set passes on the error its close raises" {
+    let unclosed = DeserializeError::invalid_value("unclosed");
+    assert TreeMap::<String, i32>::deserialize(&mut FailingClose {}).unwrap_err() == unclosed;
+    assert TreeSet::<i32>::deserialize(&mut FailingClose {}).unwrap_err() == unclosed;
 }
 
 test "try_insert reports whether the key was new" {

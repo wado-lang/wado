@@ -206,7 +206,6 @@
 - [core:fs](./stdlib-core-fs.md)
 - [core:icu](./stdlib-core-icu.md)
 - [core:json](./stdlib-core-json.md)
-- [core:json_nsd](./stdlib-core-json_nsd.md)
 - [core:jsonc](./stdlib-core-jsonc.md)
 - [core:jwt](./stdlib-core-jwt.md)
 - [core:kiln](./stdlib-core-kiln.md)

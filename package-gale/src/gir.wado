@@ -993,6 +993,9 @@ pub struct RepeatOp {
     /// recomputed so the two emit walkers and the scan side cannot answer
     /// it differently.
     pub static_exit_undecided: bool = false,
+    /// For a loop the simulator decides, the only tokens it needs asking
+    /// about; any other enters. Empty where every token asks.
+    pub atn_asked_kinds: List<String> = [],
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
     /// verdict: its continuation scan ends at the rule's tail, and a token
     /// outside this set cannot continue any caller from there. Empty leaves
@@ -1291,8 +1294,7 @@ pub struct ScanRepeatElement {
     /// entry so the longest-match tournament yields to the caller in
     /// lockstep with the parse side.
     pub gate_caller_follow: bool,
-    /// True for a non-greedy `*?` / `+?`. Over a body admitting everything the
-    /// scan stops at the exit set, not a kind guard, as the parse side does.
+    /// Mirrors `RepeatOp.non_greedy`.
     pub non_greedy: bool,
     /// Mirrors the `RepeatOp` probe stamps below, so a probed Repeat
     /// decides the same on both sides — the tournament measures scan lengths
@@ -1302,10 +1304,14 @@ pub struct ScanRepeatElement {
     pub probe_asks_caller: bool = false,
     pub probe_contested: bool = false,
     pub static_exit_undecided: bool = false,
+    /// Mirrors `RepeatOp.atn_asked_kinds`.
+    pub atn_asked_kinds: List<String> = [],
     pub probe_viable: List<String> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
     pub body_scannable: bool = false,
+    /// Mirrors `RepeatOp.atn_decision`, for the exit the simulator decides.
+    pub atn_decision: i32 = -1,
     /// The same `IterationDuties` value `RepeatOp` carries, from the same
     /// `lower_iteration_duties` call shape. A scan that counts an iteration the
     /// parse refuses measures a length the tournament then commits to.

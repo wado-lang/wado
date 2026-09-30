@@ -5,11 +5,11 @@
 
 Command-line argument parsing (WEP `wep-2026-06-22-core-args.md`).
 
-`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`,
-peer to `core:json_nsd`. Argument types are ordinary `struct`s with
-`impl Deserialize for T;` — no bespoke derive. Struct fields become `--long`
-options; fields marked `#[wire(positional)]` are filled from bare tokens in
-declaration order. Scalar tokens are converted with `LenientFromStr`.
+`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`.
+Argument types are ordinary `struct`s with `impl Deserialize for T;` — no
+bespoke derive. Struct fields become `--long` options; fields marked
+`#[wire(positional)]` are filled from bare tokens in declaration order.
+Scalar tokens are converted with `LenientFromStr`.
 
 Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
 `Option<T> = null`, required/optional/variadic positionals, repeatable
@@ -40,7 +40,7 @@ confusing `MissingArgument`, not a crash):
 
 - Declare required positionals before optional (defaulted) ones. An optional
   positional placed first greedily takes the token, starving a later required
-  one. (This footgun is shared by any ordinal format, e.g. `core:json_nsd`.)
+  one. (This footgun is shared by any ordinal format.)
 - At most one variadic (`List<T>`) positional, and it must be last. The first
   variadic consumes every remaining bare token, leaving later positionals
   empty or unfilled.
@@ -107,7 +107,7 @@ _Fields are private._
 
 #### `impl Deserializer for ArgvDeserializer`
 
-##### `fn on_duplicate_key(&self) -> DuplicateKeyPolicy`
+##### `fn on_duplicate_field(&self) -> DuplicateFieldPolicy`
 
 A command line is last-wins by convention, so a wrapper can append an
 override. A repeatable option never reaches this — `gather_option_values`
@@ -143,7 +143,7 @@ consumes its later occurrences.
 
 ##### `fn begin_seq(&mut self) -> Result<ArgvSeqAccess, DeserializeError>`
 
-##### `fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError>`
+##### `fn begin_map(&mut self) -> Result<NoCompound, DeserializeError>`
 
 ##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<ArgvStructAccess, DeserializeError>`
 
@@ -174,18 +174,6 @@ _Fields are private._
 #### `impl DeserializeSeq for ArgvSeqAccess`
 
 ##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
-
-##### `fn end(&mut self) -> Result<(), DeserializeError>`
-
-### `pub struct ArgvMapAccess`
-
-_Fields are private._
-
-#### `impl DeserializeMap for ArgvMapAccess`
-
-##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
-
-##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 

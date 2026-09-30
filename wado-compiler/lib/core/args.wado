@@ -1,11 +1,11 @@
 #![stdlib("core:args")]
 //! Command-line argument parsing (WEP `wep-2026-06-22-core-args.md`).
 //!
-//! `core:args` is a non-self-describing, parse-only `Deserializer` over `argv`,
-//! peer to `core:json_nsd`. Argument types are ordinary `struct`s with
-//! `impl Deserialize for T;` — no bespoke derive. Struct fields become `--long`
-//! options; fields marked `#[wire(positional)]` are filled from bare tokens in
-//! declaration order. Scalar tokens are converted with `LenientFromStr`.
+//! `core:args` is a non-self-describing, parse-only `Deserializer` over `argv`.
+//! Argument types are ordinary `struct`s with `impl Deserialize for T;` — no
+//! bespoke derive. Struct fields become `--long` options; fields marked
+//! `#[wire(positional)]` are filled from bare tokens in declaration order.
+//! Scalar tokens are converted with `LenientFromStr`.
 //!
 //! Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
 //! `Option<T> = null`, required/optional/variadic positionals, repeatable
@@ -36,7 +36,7 @@
 //!
 //! - Declare required positionals before optional (defaulted) ones. An optional
 //!   positional placed first greedily takes the token, starving a later required
-//!   one. (This footgun is shared by any ordinal format, e.g. `core:json_nsd`.)
+//!   one. (This footgun is shared by any ordinal format.)
 //! - At most one variadic (`List<T>`) positional, and it must be last. The first
 //!   variadic consumes every remaining bare token, leaving later positionals
 //!   empty or unfilled.
@@ -53,13 +53,13 @@ use {
     Deserialize,
     Deserializer,
     DeserializeSeq,
-    DeserializeMap,
     DeserializeStruct,
     DeserializeVariant,
     FieldSchema,
     DeserializeError,
     DeserializeErrorKind,
-    DuplicateKeyPolicy,
+    DuplicateFieldPolicy,
+    NoCompound,
     Visitor,
 } from "core:serde";
 
@@ -308,10 +308,6 @@ pub struct ArgvSeqAccess {
     cursor: i32,
 }
 
-pub struct ArgvMapAccess {
-    de: &mut ArgvDeserializer,
-}
-
 pub struct ArgvVariantAccess {
     de: &mut ArgvDeserializer,
     /// The leading bare token selecting the case (externally tagged).
@@ -424,20 +420,6 @@ impl DeserializeSeq for ArgvSeqAccess {
     }
 }
 
-impl DeserializeMap for ArgvMapAccess {
-    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        return Result::Err(unsupported("map"));
-    }
-
-    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
-        return Result::Err(unsupported("map"));
-    }
-
-    fn end(&mut self) -> Result<(), DeserializeError> {
-        return Result::Err(unsupported("map"));
-    }
-}
-
 impl DeserializeVariant for ArgvVariantAccess {
     fn variant_name(&mut self) -> Result<String, DeserializeError> {
         return Result::Ok(self.tag);
@@ -483,15 +465,15 @@ fn unsupported<S: AsStrSlice>(what: S) -> DeserializeError {
 
 impl Deserializer for ArgvDeserializer {
     type SeqAccess = ArgvSeqAccess;
-    type MapAccess = ArgvMapAccess;
+    type MapAccess = NoCompound;
     type StructAccess = ArgvStructAccess;
     type VariantAccess = ArgvVariantAccess;
 
     /// A command line is last-wins by convention, so a wrapper can append an
     /// override. A repeatable option never reaches this — `gather_option_values`
     /// consumes its later occurrences.
-    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
-        return DuplicateKeyPolicy::PassThru;
+    fn on_duplicate_field(&self) -> DuplicateFieldPolicy {
+        return DuplicateFieldPolicy::PassThru;
     }
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
@@ -576,7 +558,7 @@ impl Deserializer for ArgvDeserializer {
         });
     }
 
-    fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError> {
+    fn begin_map(&mut self) -> Result<NoCompound, DeserializeError> {
         return Result::Err(unsupported("map"));
     }
 

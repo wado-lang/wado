@@ -13,7 +13,6 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Elaborator;
 use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
 };
@@ -32,6 +31,7 @@ use super::synth::ArgClass;
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
+use super::{AbstractSelection, Elaborator};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
 use crate::elaborator::call::slot_type_bindings;
@@ -241,6 +241,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
+    /// What the call `call` selected through a declared bound, where the walk
+    /// is a trait's default body standing on one impl: as its author's reading
+    /// selected it ([`Elaborator::abstract_selections`]).
+    pub(super) fn abstract_selection(&self, call: AstId) -> Option<AbstractSelection> {
+        let selections = self.annotate_ctx.trait_ctx.abstract_selections.as_ref()?;
+        selections.get(&call).copied()
+    }
+
     pub(super) fn resolve_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -327,13 +335,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
             required_trait,
         } = input;
-        // A qualified call names one trait, so the inherent-method step — a
-        // different namespace — is skipped; only that trait's impls may
-        // answer. The ref-impl priority step still runs (with the filter):
-        // it is trait-impl lookup too, and skipping it would send
-        // `IntoIterator::into_iter(&list)` to the base type's impl where
-        // `(&list).into_iter()` selects `impl IntoIterator for &List<T>`.
-        let required_trait = required_trait.as_ref();
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
@@ -347,6 +348,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let error = self.resolve_args_without_callee(args_ast, ctx);
             return MethodCallOutcome::no_dispatch(error);
         }
+
+        // A default body's author reached this call through a bound, which
+        // names its trait as a qualified call names one.
+        let selection = match (&required_trait, call_id) {
+            (None, Some(call)) => self.abstract_selection(call),
+            _ => None,
+        };
+        let declared_trait = selection.map(|s| self.tysys.required_trait(s.trait_decl));
+        // A qualified call names one trait, so the inherent-method step — a
+        // different namespace — is skipped; only that trait's impls may
+        // answer. The ref-impl priority step still runs (with the filter):
+        // it is trait-impl lookup too, and skipping it would send
+        // `IntoIterator::into_iter(&list)` to the base type's impl where
+        // `(&list).into_iter()` selects `impl IntoIterator for &List<T>`.
+        let required_trait = required_trait.as_ref().or(declared_trait.as_ref());
 
         // The handle argument-directed selection classifies through (WEP
         // 2026-07-31). Constructing it costs nothing: a class is synthesized
@@ -413,48 +429,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
         // `Receiver::Ref` without re-inspecting the string.
         let mut matched_ref_kind: Option<RefKind> = None;
+        let is_ref = matches!(
+            self.tysys.type_table.borrow().get(receiver),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        );
 
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
-        {
-            let is_ref = matches!(
-                self.tysys.type_table.borrow().get(receiver),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        // A default body's call whose author reached the bound's subject
+        // through a reference is the exception: no `&T` impl answers what the
+        // author wrote, so every impl reads it alike.
+        if is_ref && !selection.is_some_and(|s| s.through_ref) {
+            let ref_kind =
+                RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone())
+                    .expect("ref classify");
+            let result = self.find_trait_method_for_type(
+                &ImplTargetKey::Ref(ref_kind),
+                method_name,
+                receiver_type_args_for_trait.as_deref(),
+                Some(base_type_id),
+                span,
+                required_trait,
+                Some(&mut probe),
             );
-            if is_ref {
-                let ref_kind =
-                    RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone())
-                        .expect("ref classify");
-                let result = self.find_trait_method_for_type(
-                    &ImplTargetKey::Ref(ref_kind),
-                    method_name,
-                    receiver_type_args_for_trait.as_deref(),
-                    Some(base_type_id),
-                    span,
-                    required_trait,
-                    Some(&mut probe),
-                );
-                // Only use ref-type impls that target a concrete container type
-                // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
-                // (e.g., impl Inspect for &T where the inner type is just a type param).
-                if let Some(trait_match) = result
-                    && !trait_match.is_blanket_ref_impl
-                {
-                    let owner =
-                        trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
-                    matched_impl_decl = trait_match.impl_struct_fq.head().def();
-                    trait_impl_struct_name = Some(trait_match.impl_struct_fq);
-                    matched_ref_kind = Some(ref_kind);
-                    trait_name = Some(trait_match.trait_name);
-                    let mut info = trait_match.method_info;
-                    info.is_ref_impl = true;
-                    info.owner = owner;
-                    method_info = Some(info);
-                    trait_impl_module_source = Some(trait_match.impl_module_source);
-                    blanket_type_param = trait_match.blanket_type_param;
-                    blanket_binder = trait_match.blanket_binder;
-                }
+            // Only use ref-type impls that target a concrete container type
+            // (e.g., impl IntoIterator for &List<T>), NOT blanket ref impls
+            // (e.g., impl Inspect for &T where the inner type is just a type param).
+            if let Some(trait_match) = result
+                && !trait_match.is_blanket_ref_impl
+            {
+                let owner = trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
+                matched_impl_decl = trait_match.impl_struct_fq.head().def();
+                trait_impl_struct_name = Some(trait_match.impl_struct_fq);
+                matched_ref_kind = Some(ref_kind);
+                trait_name = Some(trait_match.trait_name);
+                let mut info = trait_match.method_info;
+                info.is_ref_impl = true;
+                info.owner = owner;
+                method_info = Some(info);
+                trait_impl_module_source = Some(trait_match.impl_module_source);
+                blanket_type_param = trait_match.blanket_type_param;
+                blanket_binder = trait_match.blanket_binder;
             }
         }
 
@@ -537,6 +553,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let bounds = self.carried_bounds(base_type_id, span);
             if !bounds.is_empty()
                 && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    call_id,
+                    is_ref,
                     &bounds,
                     method_name,
                     base_type_id,
@@ -1358,7 +1376,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
     /// which is what a `Trait::<T>::method(…)` spelling names.
-    fn resolve_static_method_call_of_trait(
+    pub(super) fn resolve_static_method_call_of_trait(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
         required_trait: Option<DefId>,
@@ -1622,7 +1640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => StaticLookup::NotStatic,
         };
-        if self.report_ambiguous_static(&resolved, &static_call.method, static_call.span) {
+        if self.report_unanswered_static(&resolved, &static_call.method, static_call.span) {
             return TypeTable::ERROR;
         }
         let (callee_params, declares_params) = resolved.params();
@@ -1970,6 +1988,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }
             ResolvedType::Primitive(prim) => primitive_receiver(prim),
+            // `()` has its impl blocks in core:prelude/primitive, as a method
+            // call on it finds them.
+            ResolvedType::Unit => (
+                UNIT_TYPE_NAME.to_string(),
+                ModuleSource::primitive(),
+                FqTypeName::builtin(UNIT_TYPE_NAME),
+                vec![],
+            ),
             ResolvedType::BuiltinArray(elem) => {
                 let arg = self.tysys.type_table.borrow().fq_type_name(elem);
                 (
@@ -3270,6 +3296,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
+    /// A requirement naming the trait `decl`, with no argument list pinned.
+    pub(super) fn required_trait(&self, decl: DefId) -> RequiredTrait {
+        RequiredTrait {
+            decl: Resolution::Def(decl),
+            args: None,
+            display: self.resolutions.defs().name(decl).to_string(),
+        }
+    }
+
     /// An impl header's target head as a declaration name, resolved through the
     /// impl's own imports unless one of its type parameters shadows the spelling.
     fn impl_head_decl_name(&self, header: &ImplHeader, impl_module: &ModuleSource) -> String {
@@ -3282,11 +3317,14 @@ impl TypeSystem {
 
     /// The impl block a selection came from, when written for one instantiation.
     /// Read off target arguments: `impl Default for List<T>` declares no parameters.
+    /// A block inheriting its trait's default supplies it without declaring it.
     fn concrete_impl_of(&self, selected: Option<&StaticMethodRef>) -> Option<DefId> {
-        let impl_def = self
-            .signatures
-            .method_sig(selected?.method_id?)?
-            .declaring_impl?;
+        let selected = selected?;
+        let impl_def = selected.supplying_block.or_else(|| {
+            self.signatures
+                .method_sig(selected.method_id?)?
+                .declaring_impl
+        })?;
         let table = self.type_table.borrow();
         let open = table
             .impl_target_args(impl_def)
@@ -3367,14 +3405,14 @@ impl TypeSystem {
             // Keyed on what they wrap, not on themselves: a newtype's impls are
             // looked up on its base, and `flags`' on `u32`.
             let head = table.representation_head(target_type_id);
-            if matches!(table.get(head), ResolvedType::BuiltinArray(_)) {
-                Some(ImplTargetKey::Builtin(
+            match table.get(head) {
+                ResolvedType::BuiltinArray(_) => Some(ImplTargetKey::Builtin(
                     TypeTable::ARRAY_TYPE_NAME.to_string(),
-                ))
-            } else {
-                table
+                )),
+                ResolvedType::Unit => Some(ImplTargetKey::Builtin(UNIT_TYPE_NAME.to_string())),
+                _ => table
                     .nominal_def(head)
-                    .map(|def| ImplTargetKey::of_decl(self.resolutions.defs(), def))
+                    .map(|def| ImplTargetKey::of_decl(self.resolutions.defs(), def)),
             }
         };
         let name = key

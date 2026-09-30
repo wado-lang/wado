@@ -616,6 +616,15 @@ impl TypeSystem {
         if prefix == "Self"
             && let Some(self_type_id) = ctx.trait_ctx.self_type
         {
+            // In a trait's own frame `Self` is the slot the trait bounds, so
+            // `Self::m()` goes through that bound as `T::m()` does. A blanket's
+            // `Self` is its receiver `T`, which the rewrite below keeps reaching
+            // the blanket itself.
+            if self.binder_name(self_type_id).as_deref() == Some("Self")
+                && ctx.trait_ctx.type_params.contains_key("Self")
+            {
+                return self.callee_ident_for_type_param("Self", suffix, self_type_id);
+            }
             let self_name = self.type_table.borrow().type_name(self_type_id);
             // `Self` names the receiver, not one of its bounds: an impl
             // *provides* the trait whose default body this is.
@@ -630,7 +639,8 @@ impl TypeSystem {
     }
 
     /// A `Param::method()` call, where `Param` is the type parameter bound to
-    /// `type_id`. Reached for `Self` too: a blanket's `Self` *is* its receiver.
+    /// `type_id`. Reached for `Self` too, in a trait's own frame, where `Self` is
+    /// the slot the trait bounds.
     fn callee_ident_for_type_param<'a>(
         &self,
         prefix: &str,
@@ -1089,6 +1099,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
+        // A default body's author reached `Self::m()` through a bound. `Self`
+        // still names this impl's target, which supplies the body; the bound
+        // names the trait, as `Trait::<Self>::m()` would. A blanket's `Self` is
+        // its receiver parameter, which only the rewrite below reaches.
+        if given_args.is_none()
+            && let [head, method] = ident.segments.as_slice()
+            && head.name == "Self"
+            && let Some(required) = self.abstract_selection(call.id).map(|s| s.trait_decl)
+            && self
+                .annotate_ctx
+                .trait_ctx
+                .self_type
+                .is_some_and(|ty| self.tysys.binder_name(ty).is_none())
+        {
+            let on_self = ast::StaticMethodCallExpr {
+                id: call.id,
+                target_type: ast::Type::Named(ast::NamedType::new(
+                    head.id,
+                    head.name.clone(),
+                    head.span,
+                )),
+                method: method.name.clone(),
+                method_id: method.id,
+                method_span: method.span,
+                type_args: call.type_args.clone(),
+                args: call.args.clone(),
+                has_trailing_comma: call.has_trailing_comma,
+                span: call.span,
+            };
+            return self.resolve_static_method_call_of_trait(
+                &on_self,
+                Some(required),
+                ctx,
+                expected_type,
+            );
+        }
         let mut callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
         // A bare case constructs (`Some(x)`) only where the expected type
         // supplies it, and then ahead of any function of that name.
@@ -1507,7 +1553,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &args,
                     None,
                 );
-                if self.report_ambiguous_static(&resolved, suffix, call.span) {
+                if self.report_unanswered_static(&resolved, suffix, call.span) {
                     return TypeTable::ERROR;
                 }
                 // No candidate the arguments admitted — the same report the
@@ -1748,7 +1794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         receiver_args: &impl_type_args_inferred,
                         ..StaticQuery::of(type_name, method_name)
                     });
-                    if self.report_ambiguous_static(&resolved, method_name, call.span) {
+                    if self.report_unanswered_static(&resolved, method_name, call.span) {
                         return TypeTable::ERROR;
                     }
                     if !resolved.resolves() {
@@ -4140,7 +4186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_type: Some(receiver_ty),
             ..StaticQuery::of(type_name, method)
         });
-        if self.report_ambiguous_static(&ranked, method, span) {
+        if self.report_unanswered_static(&ranked, method, span) {
             return Some(TypeTable::ERROR);
         }
         // The blanket would key on the argument-less head, which carries no
@@ -4447,6 +4493,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) = {
                 self.find_method_in_trait_bounds(
+                    Some(call.id),
+                    false,
                     &bounds,
                     method_name,
                     type_param_type_id,

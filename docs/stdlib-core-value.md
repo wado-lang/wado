@@ -210,7 +210,7 @@ _Fields are private._
 
 #### `impl DeserializeMap for ValueObjectAccess`
 
-##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+##### `fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>`
 
 ##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
 

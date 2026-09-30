@@ -217,7 +217,7 @@ impl TokenStream {
     }
 
     pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
-        self.flags[i] = self.flags[i] | flag;
+        self.flags[i] |= flag;
     }
 
     pub fn mark_skipped(&mut self, i: i32) {
@@ -551,7 +551,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
         if end[child] > end[parent] {
             end[parent] = end[child];
         }
-        flags[parent] = flags[parent] | flags[child] & NodeFlags::Error;
+        flags[parent] |= flags[child] & NodeFlags::Error;
     }
 }
 
@@ -734,7 +734,7 @@ impl TreeBuilder {
                 },
                 Skip => {
                     let oi = stack[stack.len() - 1];
-                    flags[oi] = flags[oi] | NodeFlags::Error;
+                    flags[oi] |= NodeFlags::Error;
                 },
                 Close => {
                     let oi = stack[stack.len() - 1];
@@ -959,36 +959,65 @@ impl Lexer {
 
 fn try_A(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
+    let mut accept_0: i32 = -1;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'a'..='b' })) { return -1; }
     pos += 1;
+    let peek_save_1 = pos;
+    let mut peek_ok_1 = false;
+    peek_1: {
+        if !( pos > start ) { break peek_1; }
+        pos = try_B(chars, pos);
+        if pos < 0 { break peek_1; }
+        peek_ok_1 = true;
+    }
+    pos = peek_save_1;
+    if peek_ok_1 {
+        accept_0 = peek_save_1;
+    }
     loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !((chars[pos] matches { 'a'..='b' })) { break rep_0; }
+        let la_saved_0 = pos;
+        la_rep_0: {
+            if pos >= chars.len() { break la_rep_0; }
+            if !((chars[pos] matches { 'a'..='b' })) { break la_rep_0; }
             pos += 1;
+            let peek_save_2 = pos;
+            let mut peek_ok_2 = false;
+            peek_2: {
+                if !( pos > start ) { break peek_2; }
+                pos = try_B(chars, pos);
+                if pos < 0 { break peek_2; }
+                peek_ok_2 = true;
+            }
+            pos = peek_save_2;
+            if peek_ok_2 {
+                accept_0 = peek_save_2;
+            }
             continue;
         }
-        pos = rep_saved_0;
+        pos = la_saved_0;
         break;
     }
-    if !( pos > start ) { return -1; }
+    if accept_0 < 0 {
+        return -1;
+    }
+    pos = accept_0;
+    if !( pos > start ) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     pos = try_B(chars, pos);
-    if pos < 0 { return -1; }
+    if pos < 0 { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     return pos;
 }
 
 fn try_B(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= chars.len() || chars[pos] != 'b' { break rep_2; }
+        let rep_saved_3 = pos;
+        rep_3: {
+            if pos >= chars.len() || chars[pos] != 'b' { break rep_3; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_2;
+        pos = rep_saved_3;
         break;
     }
     if pos >= chars.len() || chars[pos] != 'z' { return -1; }

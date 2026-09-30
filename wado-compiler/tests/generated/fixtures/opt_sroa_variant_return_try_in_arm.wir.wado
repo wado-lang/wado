@@ -945,16 +945,16 @@ fn "core:prelude/fpfmt.wado/parse_text_bits"(s, format) {
     let a_157: i64;
     let repr: ref Array<u8>;
     let start_162: i32;
-    let $av_168: i32;
-    $av_168 = local.tee $load_0(s.start);
-    len_2 = local.tee $load_1(s.end) - $av_168;
+    let $av_171: i32;
+    $av_171 = local.tee $load_0(s.start);
+    len_2 = local.tee $load_1(s.end) - $av_171;
     if len_2 == 0 {
         return 1, 0_i64;
     }
     sign = 0_i64;
     i = 0;
     self_35 = local.tee $load_2(s.repr);
-    first = builtin::array_get_value<u8>(self_35, $av_168);
+    first = builtin::array_get_value<u8>(self_35, $av_171);
     if first == 45 {
         sign = 1_i64 << builtin::i64_extend_i32_s((format.exponent_bits + format.precision) - 1);
         i = 1;
@@ -966,7 +966,7 @@ fn "core:prelude/fpfmt.wado/parse_text_bits"(s, format) {
     }
     remaining = len_2 - i;
     self_40 = $load_2;
-    c0 = builtin::array_get_value<u8>(self_40, $av_168 + i);
+    c0 = builtin::array_get_value<u8>(self_40, $av_171 + i);
     if @unlikely(select i32((c0 | (((c0 - 65) <u 26) * 32)) == 105, remaining >= 3, 0)) {
         cold_path;
         c1_8 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::get_byte_unchecked"(s, i + 1);
@@ -1052,7 +1052,7 @@ fn "core:prelude/fpfmt.wado/parse_text_bits"(s, format) {
         return 1, 0_i64;
     }
     if (if i < len_2 -> i32 {
-        self_135 = $load_2; builtin::array_get_value<u8>(self_135, $av_168 + i) == 46;
+        self_135 = $load_2; builtin::array_get_value<u8>(self_135, $av_171 + i) == 46;
     } else {
         0;
     }) {
@@ -1087,10 +1087,10 @@ fn "core:prelude/fpfmt.wado/parse_text_bits"(s, format) {
     mantissa_end = i;
     written_27 = 0_i64;
     if (if i < len_2 -> i32 {
-        if self_142 = $load_2; builtin::array_get_value<u8>(self_142, $av_168 + i) == 101 -> i32 {
+        if self_142 = $load_2; builtin::array_get_value<u8>(self_142, $av_171 + i) == 101 -> i32 {
             1;
         } else {
-            self_144 = $load_2; builtin::array_get_value<u8>(self_144, $av_168 + i) == 69;
+            self_144 = $load_2; builtin::array_get_value<u8>(self_144, $av_171 + i) == 69;
         }
     } else {
         0;
@@ -1098,11 +1098,11 @@ fn "core:prelude/fpfmt.wado/parse_text_bits"(s, format) {
         i = i + 1;
         negative = 0;
         if i < len_2 {
-            if self_146 = $load_2; builtin::array_get_value<u8>(self_146, $av_168 + i) == 45 {
+            if self_146 = $load_2; builtin::array_get_value<u8>(self_146, $av_171 + i) == 45 {
                 negative = 1;
                 i = i + 1;
             } else {
-                i = i + (self_148 = $load_2; builtin::array_get_value<u8>(self_148, $av_168 + i) == 43);
+                i = i + (self_148 = $load_2; builtin::array_get_value<u8>(self_148, $av_171 + i) == 43);
             }
         }
         exp_start = i;

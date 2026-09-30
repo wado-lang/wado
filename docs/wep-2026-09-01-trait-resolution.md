@@ -591,13 +591,15 @@ other shape answers it — `Uses<P::Item>` and `Uses<List<P::Item>>` both
 dispatch. This admits a valid program the compiler rejects, at that one shape,
 naming a parameter the call site never wrote.
 
-### Scope gates method calls, not the bounds path
+### Scope does not gate a call through a bound
 
-A method call is gated: an impl that applies while its trait is unimported is
-reported as "not imported here", naming the trait
-(`trait_error_unimported_trait_method.wado`, `trait_error_unimported_blanket.wado`).
-A call through a bound is not: `T: Sub` still reaches `Base`'s methods with
-`Base` unnamed, since the bounds path resolves without the order (above).
+A method call and a static call are gated: an impl that applies while its trait
+is unimported is reported as "not imported here", naming the trait
+(`trait_error_unimported_trait_method.wado`, `trait_error_unimported_blanket.wado`,
+`trait_error_unimported_trait_static.wado`), and one private to another module
+answers nowhere else (`trait_error_private_trait_static.wado`). A call through a
+bound is not: `T: Sub` still reaches `Base`'s methods with `Base` unnamed, since
+the bounds path resolves without the order (above).
 
 - [ ] Gate the bounds path on the supertrait's declaration being in scope
       (`trait_error_unimported_supertrait_method.wado`).

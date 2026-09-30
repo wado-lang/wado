@@ -1,0 +1,26 @@
+//! A trait's default body is walked in each inheriting impl's module, but its
+//! calls are its author's: a trait they reach is in scope where the body was
+//! written, not where the impl is. This module imports neither `Access` nor
+//! the private `Twice`.
+
+use { Source, Counter, counter } from "./sub/assoc_default_body_scope_lib.wado";
+
+struct Mine {}
+
+impl Source for Mine {
+    type Seq = Counter;
+    fn seq(&self) -> Counter {
+        return counter();
+    }
+}
+
+test "a bound's trait is in scope where the default body was written" {
+    assert Mine {}.first() == 42;
+}
+
+test "a concrete call's trait is in scope where the default body was written" {
+    assert Mine {}.doubled() == 42;
+}
+
+__DATA__
+{"test": {}}

@@ -1268,6 +1268,12 @@ export const document = {
   close(self) {
     $object(self).close();
   },
+  write(self, text) {
+    $object(self).write(...text);
+  },
+  writeln(self, text) {
+    $object(self).writeln(...text);
+  },
   hasFocus(self) {
     return $object(self).hasFocus();
   },

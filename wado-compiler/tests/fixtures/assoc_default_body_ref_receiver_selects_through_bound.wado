@@ -1,0 +1,70 @@
+//! A default body reaches a call through the bound its trait declares, at the
+//! level the bound names. `Item: Named` answers for the item, so `a.label()` on
+//! `a: &Self::Item` takes `Named for Cat` whatever `Item` is, even where a
+//! `Named for &Cat` would answer the same call written on a concrete `&Cat`.
+
+trait Named with () {
+    fn label(&self) -> String;
+}
+
+struct Cat {
+    n: i32,
+}
+
+impl Named for Cat {
+    fn label(&self) -> String {
+        return "cat";
+    }
+}
+
+impl Named for &Cat {
+    fn label(&self) -> String {
+        return "ref-cat";
+    }
+}
+
+trait Holder with () {
+    type Item: Named;
+
+    fn get(&self) -> Self::Item;
+
+    fn show_ref(&self) -> String {
+        let a = &self.get();
+        return a.label();
+    }
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Named> Holder for Wrap<T> {
+    type Item = T;
+
+    fn get(&self) -> T {
+        return self.v;
+    }
+}
+
+struct Kennel {
+    c: Cat,
+}
+
+impl Holder for Kennel {
+    type Item = Cat;
+
+    fn get(&self) -> Cat {
+        return self.c;
+    }
+}
+
+test {
+    assert Wrap { v: Cat { n: 1 } }.show_ref() == "cat";
+    assert Kennel { c: Cat { n: 2 } }.show_ref() == "cat";
+    let c = Cat { n: 3 };
+    let r = &c;
+    assert r.label() == "ref-cat";
+}
+
+__DATA__
+{"test": {}}

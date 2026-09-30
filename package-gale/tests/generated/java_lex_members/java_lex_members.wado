@@ -217,7 +217,7 @@ impl TokenStream {
     }
 
     pub fn set_flag(&mut self, i: i32, flag: TokenFlags) {
-        self.flags[i] = self.flags[i] | flag;
+        self.flags[i] |= flag;
     }
 
     pub fn mark_skipped(&mut self, i: i32) {
@@ -551,7 +551,7 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
         if end[child] > end[parent] {
             end[parent] = end[child];
         }
-        flags[parent] = flags[parent] | flags[child] & NodeFlags::Error;
+        flags[parent] |= flags[child] & NodeFlags::Error;
     }
 }
 
@@ -734,7 +734,7 @@ impl TreeBuilder {
                 },
                 Skip => {
                     let oi = stack[stack.len() - 1];
-                    flags[oi] = flags[oi] | NodeFlags::Error;
+                    flags[oi] |= NodeFlags::Error;
                 },
                 Close => {
                     let oi = stack[stack.len() - 1];
@@ -1038,7 +1038,7 @@ fn follow_heads_have(
             }
             head = false;
         }
-        c = c >> FOLLOW_SLOT_BITS;
+        c >>= FOLLOW_SLOT_BITS;
     }
     return false;
 }
@@ -1064,7 +1064,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
             }
             depth += 1;
         }
-        c = c >> FOLLOW_SLOT_BITS;
+        c >>= FOLLOW_SLOT_BITS;
     }
     return alive && constrained;
 }
