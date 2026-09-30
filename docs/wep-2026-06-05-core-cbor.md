@@ -50,7 +50,9 @@ integers — the data-model gap serde currently has. This WEP closes both.
 ### Module and public API
 
 `core:cbor` is self-describing (structs encode as maps with text-string keys),
-mirroring `core:json`. The API is bytes-only.
+mirroring `core:json`. A map's keys are whatever its key type writes, so
+`TreeMap<i32, V>` has integer keys, which CWT (RFC 8392) and COSE (RFC 9052)
+need: their claim and header labels are integers. The API is bytes-only.
 
 ```wado
 #![stdlib("core:cbor")]
@@ -68,7 +70,11 @@ pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, Serialize
 /// cannot represent; `strict = false` is only meaningful when deserializing
 /// into `core:value`'s `Value`, where unrepresentable items fall to
 /// `Value::Unknown` instead of erroring.
-pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true) -> Result<T, DeserializeError>;
+pub fn from_bytes<T: Deserialize, B: AsByteSlice>(
+    input: B,
+    strict: bool = true,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError>;
 ```
 
 There is no `to_bytes_pretty` (CBOR is binary). Diagnostic notation (RFC 8949
@@ -107,7 +113,8 @@ Convention, applied to both `core:cbor` and `core:json`:
 - `from_*` accept any of the three byte types via `B: AsByteSlice`. `T` is
   normally inferred from context, so `let v: Foo = from_bytes(bytes)?` needs no
   turbofish.
-- `to_*` always return an owned `ByteList`.
+- `to_*` return the bytes they wrote: an owned `ByteList` from `core:cbor`, and
+  from `core:json` a `ByteSlice` over the buffer it filled.
 
 `Serialize` is implemented for all three (each encodes as a byte string).
 `Deserialize` is implemented for `ByteList` (primary) and `ByteArray` (sized to
@@ -163,8 +170,9 @@ fn lookup(key: ByteSlice) -> Option<i32>;                          // after
 A `String` input is wrong once deserializer input is bytes (below). The new
 signature takes the text-key byte range directly. The lookup is synthesized per
 type by the compiler, so the change is mechanical in the struct-deserialize
-synthesizer; hand-written `Deserializer` impls (`core:json`, `core:json_nsd`,
-`core:router`) pass a `ByteSlice` of their buffer.
+synthesizer; hand-written `Deserializer` impls (`core:json`, `core:router`, and
+the NSD JSON format in `example/json_nsd.wado`) pass a `ByteSlice` of their
+buffer.
 
 #### Bytes-primary deserialization for `core:json`
 
@@ -172,9 +180,9 @@ serde crosses the I/O boundary, and that boundary is bytes (UTF-8), not
 `String`. The serialize side already hands back a raw byte buffer (`to_bytes`).
 The deserialize side is made symmetric:
 
-- `JsonDeserializer.input` changes from `String` to `ByteList` (scanning is
-  already byte-based via `get_byte_unchecked`, so the logic barely changes).
-- `from_bytes` becomes the primary entry; there is no `from_string`.
+- `JsonDeserializer.input` is a `ByteSlice` view of the caller's bytes, which
+  scanning reads byte by byte as it did a `String`.
+- `from_bytes` is the primary entry.
 - UTF-8 validation is localized to string-token construction: JSON structure is
   ASCII, so only string _content_ can be multi-byte. `read_json_string` builds a
   `String` from the token's byte range with checked construction, rejecting
@@ -184,19 +192,19 @@ With bytes-based input, `FieldSchema::lookup(ByteSlice)` is satisfied identicall
 by JSON and CBOR — the `String`/bytes impedance mismatch that the original serde
 design papered over disappears.
 
-#### `core:json` becomes bytes-only
+#### `core:json` is bytes-primary
 
 ```wado
-pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>;
-pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>;   // sorted keys, RFC 8785-style
-pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>;
-pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B) -> Result<T, DeserializeError>;
+pub fn to_bytes<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>;
+pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>;   // sorted keys, RFC 8785-style
+pub fn to_bytes_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>;
+pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>;
 ```
 
-The string-returning entries (`to_string`, `to_string_pretty`, `from_string`)
-are removed. `core:json` gains `to_bytes_canonical` (lexicographically sorted
-keys) for parity with CBOR and for canonical JSON use cases. `core:json_nsd` and
-`core:router` follow the same input/`FieldSchema` migration.
+The string entries (`to_string`, `to_string_pretty`, `from_string`) stay as
+thin wrappers over these. `core:json` has `to_bytes_canonical`
+(lexicographically sorted keys) for parity with CBOR and for canonical JSON use
+cases. `core:router` reads its input and resolves fields the same way.
 
 #### `core:value` replaces `core:json_value`
 
@@ -209,7 +217,7 @@ A single dynamic value type serves both formats; see below.
 | `serialize_i32` / `serialize_i64`   | major type 0 (≥ 0) or 1 (< 0), preferred shortest argument                                                                             |
 | `serialize_u32` / `serialize_u64`   | major type 0, preferred shortest                                                                                                       |
 | `serialize_i128` / `serialize_u128` | major 0/1 if it fits the u64 magnitude range; otherwise bignum tag 2 (non-negative) / 3 (negative) wrapping the big-endian byte string |
-| `serialize_f32`                     | `f9`/`fa` head, IEEE-754 binary32 (additional info 26)                                                                                 |
+| `serialize_f32`                     | `fa` head, IEEE-754 binary32 (additional info 26)                                                                                      |
 | `serialize_f64`                     | binary64 (additional info 27)                                                                                                          |
 | `serialize_bool`                    | `0xf4` (false) / `0xf5` (true)                                                                                                         |
 | `serialize_null`                    | `0xf6` (null)                                                                                                                          |
@@ -240,7 +248,8 @@ preferred or not.
 - Integers: read any argument width (0..23 inline, 1/2/4/8 trailing bytes) for
   major types 0/1; range-check into the requested target (`deserialize_i32`
   etc.), returning `Overflow` if out of range.
-- Floats: binary16 → widen to `f32`; binary32 → `f32`; binary64 → `f64`.
+- Floats: binary16, binary32 and binary64 each decode into the float type the
+  target asks for (`f16`, `bf16`, `f32`, `f64`), rounded once.
 - Text strings (major 3): UTF-8 validated — a string with invalid UTF-8 is
   well-formed but invalid (RFC 8949 §3.1), reported as `MalformedInput`.
 - Byte strings (major 2): decoded to `ByteList`.
@@ -252,6 +261,9 @@ preferred or not.
   is a `strict`-mode error, or is preserved by `core:value` (below).
 - Struct fields: each map key's text-byte range is matched via
   `FieldSchema::lookup(ByteSlice)`; unknown keys are skipped.
+- Map keys: `next_key::<K>()` decodes the key item as `K`, as it would any
+  value, so an integer key fills `TreeMap<i32, V>` and a text key
+  `TreeMap<String, V>`.
 - Simple values: 20/21/22/23 → false/true/null/undefined; others are
   `strict`-mode errors or preserved by `core:value`.
 
@@ -282,9 +294,7 @@ a fully-conformant encoder would emit a binary16.
 Consequently `to_bytes_canonical` is byte-identical to a reference deterministic
 encoder for integers, map ordering, and lengths, but **may differ on
 float-bearing values**. For COSE/CWT signing over data containing floats, this is
-a real interoperability hazard and must be documented at the call site. Narrowing
-to a binary16 in canonical mode is a possible future refinement; Wado now has
-[`f16`](./wep-2026-09-22-half-precision-primitives.md).
+a real interoperability hazard and must be documented at the call site.
 
 ### `core:value`: the unified dynamic value
 
@@ -357,7 +367,7 @@ format writes it (`1` becomes `"1"`), the rule
 map and its JSON rendering read back as the same `Value`. Two keys that spell
 alike, `1` and `"1"`, are a repeated key, which the default `DuplicateKeyPolicy`
 rejects: that is RFC 8949 §6.1's collision caveat. A compound key is a
-`DeserializeError`.
+`DeserializeError`. Re-encoding such a `Value` writes text keys (Known gaps).
 
 #### `null`/`undefined` and typed targets
 
@@ -392,8 +402,7 @@ for tagless formats).
 The encoder/decoder live in `lib/core/cbor.wado`, with the value type in
 `lib/core/value.wado` (replacing `json_value.wado`). Shared low-level helpers
 (argument/length varint read/write, UTF-8 validation already in `core:json`) are
-reused via `pub` functions where practical, as `core:json` and `core:json_nsd`
-already share code.
+reused via `pub` functions where practical.
 
 ### Security considerations (RFC 8949 §10)
 
@@ -401,33 +410,15 @@ already share code.
   than exhausting the stack.
 - Never pre-allocate a container from an untrusted declared length (a 2-byte
   header can claim a billion elements); grow incrementally as items are read.
-- Reject duplicate map keys and trailing data so a decode result is unambiguous.
+- Reject duplicate map keys (by default; `DuplicateKeyPolicy`) and trailing
+  data so a decode result is unambiguous.
 - Validate UTF-8 in text strings.
 
-## Consequences
-
-- Binary interchange with the same derived `Serialize`/`Deserialize` as JSON; no
-  per-type work for users.
-- The serde data model finally has a bytes entry (`ByteArray`/`ByteList`/
-  `ByteSlice` + `serialize_bytes`/`deserialize_bytes`/`visit_bytes`), benefiting
-  any binary format.
-- Migration touches `core:json`, `core:json_nsd`, and `core:router`
-  (`FieldSchema` signature, bytes-based input, bytes-only `core:json` API) plus
-  the struct-deserialize synthesizer in the compiler. `core:json_value` becomes
-  `core:value`.
-- The `Visitor` gains lossless integer/bytes entries, removing the prior
-  precision loss for large CBOR integers.
-- `to_bytes_canonical` is deterministic for integers, lengths, and map order but
-  not byte-identical to a reference encoder for floats (no binary16) — a
-  documented COSE caveat.
-- This WEP specifies the design; the format and its typed date/time mapping are
-  implemented. Lossy CBOR→JSON via `Value` remains deferred (see TODO).
-
-## TODO
+## Roadmap
 
 The groundwork, the `core:cbor` format itself (encoder, decoder, canonical
-encoding), and the typed `core:temporal` date/time mapping are complete. The
-remaining item is lossy CBOR→JSON conversion.
+encoding), the typed `core:temporal` date/time mapping and map keys of any key
+type are complete. The remaining item is lossy CBOR→JSON conversion.
 
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
 - [x] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
@@ -476,5 +467,28 @@ remaining item is lossy CBOR→JSON conversion.
       text) via a `Serializer::serialize_tag` hook, and decode a string (tag 0)
       or a numeric epoch (tag 1) through a `deserialize_any` visitor. The impls
       live in `core:temporal`.
+- [x] map keys of any key type: `SerializeMap::key` writes the key as the value
+      it is and `DeserializeMap::next_key::<K>()` reads it back, so an
+      integer-keyed map such as a CWT claims set round-trips.
 - [ ] lossy CBOR→JSON via `Value` (RFC 8949 §6.1 substitution: bytes→base64,
       `undefined`/non-finite→`null`); the default still errors.
+
+## Known gaps
+
+### Canonical floats stop at binary32
+
+`to_bytes_canonical` never emits a binary16. A float that a reference
+deterministic encoder narrows to binary16 encodes differently here, so a
+signature over float-bearing data does not verify against one.
+
+### `Value` has text keys only
+
+`Value::Object` is a `TreeMap<String, Value>`, so a CBOR map with integer keys
+read into a `Value` comes back with text keys: `{1: -7}` re-encodes as
+`{"1": -7}`. A CWT claims set does not survive CBOR → `Value` → CBOR.
+
+### A struct field has a text key only
+
+A struct field is written under its name, and `#[wire(name = …)]` takes a
+string, so no struct spells CWT's integer claim labels (`iss` is 1, `sub` is
+2). A claims set is read and written as a map.
