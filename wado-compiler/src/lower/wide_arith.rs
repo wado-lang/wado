@@ -6,7 +6,7 @@
 use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
-use crate::tir::{FunctionRef, TirExpr, TirExprKind};
+use crate::tir::{TirExpr, TirExprKind};
 use crate::tir_visitor::TirMutVisitor;
 
 /// Each wide-arithmetic builtin, with the compiler item that computes it
@@ -31,38 +31,24 @@ pub fn lower(flat: &FlatPackage, wide_arithmetic: bool) {
             (builtin, module.clone(), name.to_string())
         })
     };
-    let mut visitor = WideArithLowering { soft_forms };
-    for func_rc in &flat.functions {
-        if let Some(body) = func_rc.borrow_mut().body.as_mut() {
-            visitor.visit_block(body);
-        }
-    }
+    flat.visit_bodies_mut(&mut WideArithLowering { soft_forms });
 }
 
 struct WideArithLowering {
     soft_forms: [(&'static str, ModuleSource, String); 4],
 }
 
-impl WideArithLowering {
-    fn soft_form(&self, func: &FunctionRef) -> Option<(&ModuleSource, &str)> {
-        if func.module_source != ModuleSource::builtin() {
-            return None;
-        }
-        self.soft_forms
-            .iter()
-            .find(|(builtin, _, _)| func.name == *builtin)
-            .map(|(_, module, name)| (module, name.as_str()))
-    }
-}
-
 impl TirMutVisitor for WideArithLowering {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         if let TirExprKind::Call { func, .. } = &mut expr.kind
-            && let Some((module, name)) = self.soft_form(func)
+            && func.module_source == ModuleSource::builtin()
+            && let Some((_, module, name)) = self
+                .soft_forms
+                .iter()
+                .find(|(builtin, _, _)| func.name == *builtin)
         {
-            let (module, name) = (module.clone(), name.to_string());
-            func.module_source = module;
-            func.name = name;
+            func.module_source = module.clone();
+            func.name.clone_from(name);
         }
         self.walk_expr(expr);
     }

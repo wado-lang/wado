@@ -863,9 +863,9 @@ impl<'a> WirEmitter<'a> {
                 .scratch_local_names
                 .insert(array_clone_slot("src", idx))
             {
-                let elem_val = self.array_element_val_type(idx).unwrap_or_else(|| {
-                    panic!("[WIR emit] ArrayClone on non-array WIR type {idx}")
-                });
+                let elem_val = self
+                    .array_element_val_type(idx)
+                    .unwrap_or_else(|| panic!("[WIR emit] ArrayClone on non-array WIR type {idx}"));
                 for (role, ty) in [
                     ("src", arr),
                     ("dst", arr),

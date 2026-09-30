@@ -6,13 +6,14 @@
 //! which [`CodegenFlags::parse`] reads into this struct. Each flag is a boolean,
 //! and a leading `no-` inverts it.
 
+use crate::OptLevel;
+
 /// Codegen feature flags toggled from the CLI via `-f <flag>`.
 ///
 /// Unlike a plain `#[derive(Default)]`, the default here is *not* uniformly
 /// `false`: each field's default encodes the compiler's current preferred
 /// codegen strategy. `-f <flag>` forces it on and `-f no-<flag>` forces it
 /// off, so an empty flag set reproduces [`CodegenFlags::default`].
-use crate::OptLevel;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodegenFlags {
     /// Emit `metadata.code.branch_hint` entries (the default);
@@ -60,18 +61,8 @@ impl CodegenFlags {
         }
     }
 
-    /// Parse raw `-f` flag strings into a [`CodegenFlags`], starting from the
-    /// [`for_opt_level`](Self::for_opt_level) defaults and applying each flag in
-    /// order.
-    ///
-    /// Flags follow the clang-style convention: `name` enables a flag and
-    /// `no-name` disables it (so `-f no-branch-hinting` overrides the
-    /// on-by-default `branch_hinting`, and a later flag wins over an earlier
-    /// one). An
-    /// unrecognized flag yields `Err(flag)`, carrying the offending string so
-    /// the caller can surface a diagnostic.
-    /// Every flag [`Self::parse`] accepts, in help-text order. The single
-    /// source of truth for the CLI's `-f` help and [`Self::unknown_flag_message`],
+    /// Every flag [`Self::parse`] accepts, in help-text order. The CLI's `-f`
+    /// help is tested against it and [`Self::unknown_flag_message`] reads it,
     /// so a new flag cannot be added and left undiscoverable.
     pub const SUPPORTED: &'static [&'static str] =
         &["branch-hinting", "bare-asserts", "wide-arithmetic"];
@@ -90,6 +81,14 @@ impl CodegenFlags {
         )
     }
 
+    /// Parse raw `-f` flag strings into a [`CodegenFlags`], starting from the
+    /// [`for_opt_level`](Self::for_opt_level) defaults and applying each flag in
+    /// order.
+    ///
+    /// Flags follow the clang-style convention: `name` enables a flag and
+    /// `no-name` disables it, and a later flag wins over an earlier one. An
+    /// unrecognized flag yields `Err(flag)`, carrying the offending string so
+    /// the caller can surface a diagnostic.
     pub fn parse<I, S>(flags: I, opt_level: OptLevel) -> Result<Self, String>
     where
         I: IntoIterator<Item = S>,
