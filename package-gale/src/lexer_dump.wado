@@ -258,7 +258,7 @@ fn render_repeat(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: 
         LookaheadAware => {
             o.repeat_lookahead += 1;
         },
-        PlainNoSuffix | PlainInnerNotPerChar | PlainSuffixDisjoint => {
+        PlainNoSuffix | PlainInnerChooses | PlainSuffixDisjoint => {
             o.repeat_plain += 1;
         },
     }
@@ -358,9 +358,9 @@ fn repeat_emit_label(emit: LexerRepeatEmit) -> String {
     return match emit {
         NonGreedy => "non-greedy: min-match loop, the rest of the alternative is tried first",
         LookaheadAware => "lookahead-aware: the inner can eat a char the suffix needs, or a predicate follows",
-        PlainNoSuffix => "plain loop: nothing follows the repeat",
-        PlainInnerNotPerChar => "plain loop: the inner does not consume exactly one char per iteration",
-        PlainSuffixDisjoint => "plain loop: the inner cannot eat the suffix's first char",
+        PlainNoSuffix => "plain: nothing follows the repeat",
+        PlainInnerChooses => "plain: an iteration of the inner can end in more than one place",
+        PlainSuffixDisjoint => "plain: the inner cannot eat the suffix's first char",
     };
 }
 

@@ -646,12 +646,16 @@ Fixture `nullable_first_alt.g4`.
 
 The lexer follows the same principle: a single-pass forward DFA with
 explicit accept-state tracking, never a remembered-position retry. When a
-greedy `+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`),
-the emitter peeks the suffix each iteration and rewinds once to the latest
-legal suffix start. The peek lowers the suffix through the same path the
-commit will run, so what it proves is what then happens. A suffix carrying a
-semantic predicate keeps the plain greedy loop instead: the peek would
-evaluate the predicate once per iteration and again on commit.
+greedy `?`/`+`/`*` inner can eat a char the suffix needs (`'a' ~('b')+ 'c'`,
+`'x' ('ab')? 'ab'`), the emitter peeks the suffix after each iteration and
+rewinds once to the latest legal suffix start. The peek lowers the suffix
+through the same path the commit will run, so what it proves is what then
+happens. A semantic predicate the suffix can reach without consuming a char
+takes the same path, since it too decides where the repeat stops: the peek
+evaluates it once per iteration and again on commit, which
+`doc/predicates.md` allows. The inner must match each iteration along one
+path, a string or a char set; one that can end an iteration in two places
+keeps the plain greedy loop.
 
 The first-character dispatch that picks which rules to try is a filter, not a
 decision: a rule admitted by its first character can still fail on the rest of
@@ -668,8 +672,8 @@ rule's. With a suffix after it neither first-match nor longest-arm is right —
 `xyz` needs the first — so each arm is scanned from the same start, its suffix
 peeked without consuming, and the arm whose arm-plus-suffix reaches furthest
 wins, ties to the first. Scoring on the suffix rather than the arm is what
-makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. Same peek and
-the same predicate limit as the repeat path. Fixtures:
+makes `('p' | 'pq') ('qrs' | 'r')` take the short arm on `pqrs`. The peek and
+its predicates are the repeat path's. Fixtures:
 `lexer_alt_suffix_longest.g4`, `lexer_alt_suffix_shapes.g4`,
 `lexer_suffix_peek_limits.g4`.
 
@@ -984,7 +988,8 @@ the compiled fast path:**
    here — the surface-element walker from `RepeatElement.non_greedy`, the
    op-only walker (LR-suffix bodies) from `RepeatOp.non_greedy`; a `??` lowers
    to `strategy: Plain`, so the flag is what tells the two apart from a greedy
-   `?`. Fixtures: `ll_optional_non_greedy{,_multi}.g4`, plus
+   `?`. A caller's scan asks the same question, so it skips where the parse
+   will. Fixtures: `ll_optional_non_greedy{,_multi}.g4`, plus
    `lr_dangling_else.g4` (atom alternative) and
    `lr_suffix_non_greedy_opt.g4` (LR-suffix alternative).
 3. A **context-dependent multi-alt at-end conflict** — one alternative
@@ -1016,7 +1021,9 @@ the compiled fast path:**
    rest of the input decides where it stops: in an LR suffix, a group or a
    caller's continuation alike, the loop exits at the first position from
    which the parse can finish. Both the parse and the scan ask the simulator
-   (`non_greedy_exit_by_atn`); the tests are in `codegen_test.wado`
+   (`non_greedy_exit_by_atn`), and only on a token that could also start the
+   continuation, when that continuation cannot match empty; any other token
+   only the body takes. The tests are in `codegen_test.wado`
    (`LR_SUFFIX_LOOPS` and "a non-greedy wildcard exits only where the whole
    rest of the input can match").
 

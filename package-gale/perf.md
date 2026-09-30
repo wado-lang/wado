@@ -156,7 +156,8 @@ each left-recursive rule's answer for the whole parse (`ScanMemo`, in
 `src/runtime/scan_memo.wado`). The key is the position, `min_prec`, `follow`,
 `lr_cont` and the gate. The answer is the end and the gate the scan leaves. A
 grammar whose scans read the ATN caller stack gets no memo, because the key does
-not hold the stack.
+not hold the stack. One simulator decision anywhere in the grammar, a `??` or a
+`.*?` included, turns it off for every rule.
 
 Release host, `-O2`, one parse of Rust nested 14 deep:
 
@@ -179,7 +180,7 @@ not Gale's, and live in the `wado-performance` skill with the evidence from here
 
 What is Gale's: the decoded ATN is the module-lifetime data those rules are
 about. `state_cont_*` is flat offset/count columns and the LR fixpoint is gated
-behind `needs_scan_atn` for exactly that reason (#1475) — a change that puts one
+behind `needs_lr_atn` for exactly that reason (#1475) — a change that puts one
 `List` per ATN state back into a global will cost 3–6× on `sqlite_parse` however
 fast its own code is.
 

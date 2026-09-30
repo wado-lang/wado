@@ -2977,6 +2977,42 @@ x(a ) [b]) => (s (e (e x) ( a ) [ b ] )))
 ", got;
 }
 
+// The atom's alternatives share `(`, so each one gets a function of its own,
+// and the simulator deciding the loop inside it reads the rule's precedence.
+test "a non-greedy wildcard in a contested atom alternative decides at the rule's precedence" {
+    let got = parses("grammar T;
+s : e EOF ;
+e : e '+' e | '(' .*? ')' | '(' ID ')' ']' | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["(a b) + (c)", "(a ) b ) + c"]);
+    assert got == "(a b) + (c) => (s (e (e ( a b )) + (e ( c ))))
+(a ) b ) + c => (s (e (e ( a ) b )) + (e c)))
+", got;
+}
+
+test "a non-greedy optional in a contested alternative skips where the rest can match" {
+    let lr = parses("grammar T;
+s : e EOF ;
+e : e '+' e | '(' ID?? ID ')' | '(' ID ')' ']' | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["(a)", "(a b)", "(a)+(a b)"]);
+    let plain = parses("grammar T;
+s : e EOF ;
+e : '(' ID?? ID ')' | '(' ID ')' ']' | ID ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["(a)", "(a b)"]);
+    let got = `${lr}${plain}`;
+    assert got == "(a) => (s (e ( a )))
+(a b) => (s (e ( a b )))
+(a)+(a b) => (s (e (e ( a )) + (e ( a b ))))
+(a) => (s (e ( a )))
+(a b) => (s (e ( a b )))
+", got;
+}
+
 test "a non-greedy wildcard exits only where the whole rest of the input can match" {
     let rule = parses("grammar T;
 s : '(' .*? ')' ';' ;
@@ -3638,6 +3674,23 @@ OVER : 'g' 'z'? 'z' ;
 X : . ;
 ", ["gz", "gzz"]);
     assert got == "gz => OVER:gz\ngzz => OVER:gzz\n", got;
+}
+
+// The jar's tokens; its predicates read `getText().equals(…)`.
+test "a repeat over a string leaves the iterations the rest of the rule needs" {
+    let got = lexes("lexer grammar L;
+options { language = Wado; }
+OPT : 'x' ('ab')? 'ab' ;
+LOOP : 'y' ('ab')* 'ab' 'q' ;
+PRED_OPT : 'b' ('xy')? { $text == \"b\" }? ;
+PRED_LOOP : 'c' ('xy')+ { $text == \"cxy\" }? ;
+X : . ;
+", ["xab", "yababq", "bxy", "cxyxy"]);
+    assert got == "xab => OPT:xab
+yababq => LOOP:yababq
+bxy => PRED_OPT:b X:x X:y
+cxyxy => PRED_LOOP:cxy X:x X:y
+", got;
 }
 
 test "a greedy loop hands back the chars a predicate-carrying suffix needs" {

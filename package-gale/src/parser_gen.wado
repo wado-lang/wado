@@ -483,31 +483,32 @@ fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
 }
 
 /// What a scan call passes after the position: the parser state it borrows,
-/// the live `min_prec` for a left-recursive rule's own helper whose simulator
-/// reads it, the caller's follow where the rule reads one, and `lr_cont` inside
-/// an atom that owes it.
-fn scan_trailing_args(ctx: &GenContext, lr_helper: bool = false) -> String {
-    let prec = if lr_helper && atn_reads_prec(ctx) { ", min_prec" } else { "" };
+/// the live `min_prec` where the callee is a helper that takes it, the caller's
+/// follow where the rule reads one, and `lr_cont` inside an atom that owes it.
+/// The walker takes its `min_prec` after these, so a call to it passes that
+/// itself.
+fn scan_trailing_args(ctx: &GenContext, to_walker: bool = false) -> String {
+    let prec = if !to_walker && ctx.helpers_take_prec() { ", min_prec" } else { "" };
     return `${ctx.scan_state_args()}${prec}${follow_sep(ctx.current_rule_reads_follow())}${lr_cont_forward(
         ctx.lr_cont_in_atom(),
     )}`;
 }
 
-/// A scan function's parameters up to `min_prec`: the token kinds, the
-/// position, and those `scan_trailing_args` passes.
-fn add_scan_params(f: &mut FnSpec, ctx: &GenContext, lr_helper: bool = false) {
+/// A scan function's parameters up to the walker's `min_prec`: the token kinds,
+/// the position, and those `scan_trailing_args` passes.
+fn add_scan_params(f: &mut FnSpec, ctx: &GenContext, walker: bool = false) {
     f.add_param("tokens", "&Array<i32>");
     f.add_param("pos", "i32");
     if ctx.emit_scan_gate() {
         f.add_param(&SCAN_GATE_HANDLE, `&mut ${SCAN_GATE_TYPE}`);
     }
-    if ctx.needs_scan_atn() {
+    if ctx.needs_atn() {
         f.add_param(&ATN_STATE_HANDLE, `&mut ${ATN_STATE_TYPE}`);
     }
     if ctx.scan_memo() {
         f.add_param(&SCAN_MEMO_HANDLE, `&mut ${ctx.scan_memo_type()}`);
     }
-    if lr_helper && atn_reads_prec(ctx) {
+    if !walker && ctx.helpers_take_prec() {
         f.add_param("min_prec", "i32");
     }
     if ctx.current_rule_reads_follow() {
@@ -812,7 +813,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 
     // scan_X_atom: the choice among the non-LR alternatives.
     let mut fa = FnSpec::new(&atom_name);
-    add_scan_params(&mut fa, ctx, true);
+    add_scan_params(&mut fa, ctx);
     fa.set_return_type("i32");
     fa.emit_begin(w);
     if non_lr_indices.len() == 0 {
@@ -848,7 +849,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     // named scan_X__walk where the memo stands in front of it.
     let walk_name = if ctx.scan_memo() { `${fn_name}__walk` } else { fn_name.to_string() };
     let mut f2 = FnSpec::new(&walk_name);
-    add_scan_params(&mut f2, ctx);
+    add_scan_params(&mut f2, ctx, true);
     f2.add_param_spec(ParamSpec {
         name: "min_prec",
         type_str: "i32",
@@ -863,7 +864,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     }
     f2.emit_begin(w);
     w.line(
-        `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx, true)}${lr_cont_forward(mid_operand_gated)});`,
+        `let mut pos = ${atom_name}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`,
     );
     w.line("if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
@@ -903,7 +904,7 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     w.line(`return ${SCAN_MEMO_HANDLE}.end_of(memo_at);`);
     w.end();
     w.line(`let memo_gate = ${gate};`);
-    w.line(`let memo_end = ${walk_name}(tokens, pos${scan_trailing_args(ctx)}, min_prec${lr_cont_forward(
+    w.line(`let memo_end = ${walk_name}(tokens, pos${scan_trailing_args(ctx, true)}, min_prec${lr_cont_forward(
         mid_operand_gated,
     )});`);
     w.line(`${SCAN_MEMO_HANDLE}.put(${key}, memo_gate, memo_end, ${gate});`);
@@ -936,7 +937,7 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
         let suffix_fn = `${fn_name}_lr_${lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        add_scan_params(&mut f, ctx, true);
+        add_scan_params(&mut f, ctx);
         if mid_operand_gated {
             add_lr_cont_param(&mut f);
         }
@@ -989,7 +990,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr = &lr_alts[valid[i]];
-        let suffix_call = `${fn_name}_lr_${lr.alt_index}(tokens, pos${scan_trailing_args(ctx, true)})`;
+        let suffix_call = `${fn_name}_lr_${lr.alt_index}(tokens, pos${scan_trailing_args(ctx)})`;
         if is_first {
             w.begin(`if _atn_alt == ${i}`);
             is_first = false;
@@ -1110,7 +1111,7 @@ fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     parse_launched: bool,
     ctx: &GenContext,
 ) {
-    let trailing = scan_trailing_args(ctx, true);
+    let trailing = scan_trailing_args(ctx);
     for let group of &lr_dispatch.groups {
         if group.len() < 2 {
             continue;
@@ -1192,7 +1193,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
             gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos <= lr_saved_pos");
         }
     } else {
-        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx, true)}${lr_cont_forward(mid_operand_gated)});`);
+        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`);
         gen_scan_rewind_break(w, ctx, "lr_saved_pos", if may_match_empty { "pos <= lr_saved_pos" } else { "pos < 0" });
     }
     if mid_operand_gated {
@@ -1488,7 +1489,7 @@ fn emit_lr_overlap(
                     }
                     first_candidate = false;
                     w.line(
-                        `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${scan_trailing_args(ctx, true)}${lr_cont_forward(
+                        `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${scan_trailing_args(ctx)}${lr_cont_forward(
                             mid_operand_gated,
                         )});`,
                     );
@@ -1844,7 +1845,7 @@ fn scan_rule_call_stmt(rc: &ScanRuleCallElement, ctx: &mut GenContext) -> String
 /// A scan's rule call. The callee's simulation sees the caller's continuation, as
 /// the parse side's entry wrapper pushes it; popping before any fail check never leaks it.
 fn gen_scan_rule_call(w: &mut CodeWriter, rc: &ScanRuleCallElement, ctx: &mut GenContext) {
-    if !ctx.needs_scan_atn() {
+    if !ctx.needs_atn() {
         w.line(&scan_rule_call_stmt(rc, ctx));
         return;
     }
@@ -2109,6 +2110,12 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         return;
     }
     if let Optional = re.kind {
+        if re.non_greedy {
+            w.begin(`if ${atn_enters_cond(ctx, re.atn_decision, "tokens", "pos")}`);
+            gen_scan_iteration(w, re, &loop_admits, ctx, false);
+            w.end();
+            return;
+        }
         // OptionalLookahead doesn't reach this path (it's a
         // ScanElement::OptionalLookahead, not a ScanElement::Repeat).
         let body_is_rulecall = re.body matches { RuleCall(_) };
@@ -2162,7 +2169,20 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         return;
     }
     let guard = if non_greedy_exit_by_atn(re.non_greedy, re.kind, &loop_admits) {
-        atn_enters_cond(ctx, re.atn_decision, "tokens", "pos");
+        let refused = match &re.body {
+            Wildcard => Option::Some([] as List<String>),
+            Excluded(e) => Option::Some(e.kinds),
+            _ => null,
+        };
+        let predicts = atn_enters_cond(ctx, re.atn_decision, "tokens", "pos");
+        atn_loop_enter_cond(
+            re.exit_first_complete,
+            &re.caller_follow_first,
+            refused,
+            `(${kind_at("tokens", "pos")})`,
+            predicts,
+            ctx,
+        );
     } else {
         scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx);
     };
@@ -3216,6 +3236,9 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     let mut f = FnSpec::new(&helper_name);
                     add_parser_super_effect(&mut f, ctx);
                     f.add_param(&PARSER_HANDLE, "&mut Parser");
+                    if ctx.helpers_take_prec() {
+                        f.add_param("min_prec", "i32");
+                    }
                     if ctx.current_rule_reads_follow() {
                         add_follow_param(&mut f);
                     }
@@ -4356,7 +4379,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
         if scan_body_can_match_empty(&lr.scan_suffix.elements, ctx) {
             gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
             w.line(
-                `if scan_${rule.snake_name}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx, true)}) == p.pos { break; }`,
+                `if scan_${rule.snake_name}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}) == p.pos { break; }`,
             );
         }
         emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, &mut nc, &lr.suffix_first);
@@ -4405,7 +4428,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx, true)}${lr_cont_forward(
+        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}${lr_cont_forward(
             mid_operand_gated,
         )})`;
     };
@@ -4496,10 +4519,10 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     }
 }
 
-/// Non-greedy `*?` / `+?` under the emitter: loop only while the
-/// lowered static exit condition holds, so the inner yields the closing
-/// delimiter to the continuation (the same gate cst_gen computes). `??` lowers
-/// to `Plain` + `mark_needs_atn` and so never reaches here.
+/// Non-greedy `*?` / `+?` under the emitter: loop only while
+/// `compute_non_greedy_condition` says to enter, so the inner yields the
+/// closing delimiter to the continuation. `??` lowers to `Plain` and so never
+/// reaches here.
 fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
     if non_greedy_probe_decides(r, ctx) {
@@ -5195,14 +5218,36 @@ fn atn_enters_cond<S: AsStrSlice, S1: AsStrSlice>(ctx: &GenContext, site: i32, t
     return `${atn_predict_call(decision, tokens, pos, ctx)} == 1`;
 }
 
+/// The condition entering a loop the simulator decides, asking it only for a
+/// token that could also start the continuation. Any other token only the `.`
+/// or `~X` body (`refused` is what that body refuses) can take, so the
+/// prediction would enter too. That needs `exit_first` to name every token the
+/// continuation starts with.
+fn atn_loop_enter_cond<S: AsStrSlice>(
+    exit_first_complete: bool,
+    exit_first: &List<String>,
+    refused: Option<List<String>>,
+    lookahead: S,
+    predicts: String,
+    ctx: &mut GenContext,
+) -> String {
+    let Some(refused) = refused else {
+        return predicts;
+    };
+    if !exit_first_complete {
+        return predicts;
+    }
+    let mut avoid = union_kind_arrays(exit_first, &refused);
+    if !avoid.contains_str("TK_EOF") {
+        avoid.push("TK_EOF");
+    }
+    return `(${ctx.kind_negate_check_str(&avoid, lookahead)} || ${predicts})`;
+}
+
 /// The precedence a prediction prunes LR enter edges below, or it keeps an
 /// impossible suffix: the live `min_prec`, which only a left-recursive rule has.
 fn atn_prec_arg(ctx: &GenContext) -> String {
-    return if atn_reads_prec(ctx) { "min_prec" } else { "0" };
-}
-
-fn atn_reads_prec(ctx: &GenContext) -> bool {
-    return ctx.lr_loop_entry_decision(ctx.current_rule_index()) >= 0;
+    return if ctx.lr_loop_entry_decision(ctx.current_rule_index()) >= 0 { "min_prec" } else { "0" };
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
@@ -5953,11 +5998,16 @@ fn gen_op_repeat_with_follow_override(
 ) {
     gen_decision_sync(w, ctx, ctx.decision_entry_expect(rep.atn_decision), "sync_enter");
     if rep.non_greedy {
-        // `??` routes through the greedy Optional emitter because lower
-        // already picked a greedy strategy for it (see `lower_repeat_op`).
-        // `*?` / `+?` keep the dedicated non-greedy emit path.
+        // A `??` asks the simulator, as under the op-only walker
+        // (`gen_op_optional`); a group body's emitters ask it themselves.
         if let Optional = rep.kind {
-            gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
+            if rep_op.body_shape matches { LeafRuleCall | LeafOther } {
+                let _ = dedup_name(&rep_op.field, name_counts);
+                let enters = atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos");
+                gen_optional_present(w, &rep_op.body, "", &enters, ctx, &EMPTY_SYNC);
+            } else {
+                gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
+            }
             return;
         }
         gen_op_repeat_non_greedy(w, rep, rep_op, ctx, name_counts, follow);
@@ -7159,7 +7209,20 @@ fn compute_non_greedy_condition(
     ctx: &mut GenContext,
 ) -> String {
     if non_greedy_exit_by_atn(rep_op.non_greedy, rep_op.kind, &rep_op.body_admits) {
-        return atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos");
+        let refused = match &rep_op.body {
+            Wildcard(_) => Option::Some([] as List<String>),
+            Excluded(e) => Option::Some(e.kinds),
+            _ => null,
+        };
+        let predicts = atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos");
+        return atn_loop_enter_cond(
+            rep_op.exit_first_complete,
+            &rep_op.caller_follow_first,
+            refused,
+            &PEEK_KIND,
+            predicts,
+            ctx,
+        );
     }
     assert !admits_tests_nothing(&rep_op.body_admits), "a body taking every token exits by the simulator, and `check_epsilon_closure` rejects one taking none";
     let raw_first = &admits_kinds(&rep_op.body_admits);
@@ -8690,7 +8753,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             }
             if ambiguous_node_routes_via_atn(a, rule_display, ctx) {
                 let in_scan = side matches { Scan };
-                assert !in_scan || ctx.needs_scan_atn(), "a scan picks through the ATN only where every scan borrows its state";
+                assert !in_scan || ctx.needs_atn(), "a scan picks through the ATN only where every scan borrows its state";
                 let gates = atn_decision_gates(&a.alts, alts, ctx, in_scan);
                 let dec = ctx.atn_rule_body_decision(ctx.current_rule_index());
                 if in_scan {

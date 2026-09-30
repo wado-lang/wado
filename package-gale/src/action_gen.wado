@@ -1079,10 +1079,11 @@ pub fn emit_alt_helper_exit<S: AsStrSlice>(w: &mut CodeWriter, fn_name: S, idx: 
         w.line(&ctx.alt_exit(forwarded.call));
         return;
     }
+    let prec = if ctx.helpers_take_prec() { ", min_prec" } else { "" };
     w.line(
-        &ctx.alt_exit(`${helper}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)}${lr_cont_forward(
-            ctx.lr_cont_in_atom(),
-        )})`),
+        &ctx.alt_exit(`${helper}(p${prec}${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
+            ctx,
+        )}${lr_cont_forward(ctx.lr_cont_in_atom())})`),
     );
 }
 

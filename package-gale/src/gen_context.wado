@@ -146,6 +146,9 @@ pub struct GenContext {
     /// reads the slots itself. `caller_follow_gate_seen`'s question, asked per
     /// rule; the seeds of the fixpoint `lower` closes.
     rule_reads_follow: List<bool>,
+    /// Per rule index: the simulator decides inside the rule's body, not only
+    /// at its left-recursion loop.
+    rule_body_predicts: List<bool>,
     /// Per rule index: the callees a call in this rule hands its own
     /// continuation to. Such a call spells `follow0…` only where the callee
     /// declares the slots, which is what makes this a fixpoint rather than a
@@ -183,9 +186,6 @@ pub struct GenContext {
     /// Set where a decision routes to the runtime ATN simulator; gates its
     /// infrastructure, so a grammar without one stays byte-identical.
     needs_atn_seen: bool,
-    /// Set where a scan decides through the simulator too. Gates the scans'
-    /// `atn` parameter, so a `??`-only grammar's scans borrow nothing.
-    needs_scan_atn_seen: bool,
     /// Set where a left-recursive rule's scan answers from the parser's memo.
     scan_memo: bool,
     /// Set while the atom of a rule whose mid operands are gated emits.
@@ -374,6 +374,7 @@ impl GenContext {
             lr_rule_snakes: [],
             follow_rule_snakes: [],
             rule_reads_follow: false_flags(rule_count),
+            rule_body_predicts: false_flags(rule_count),
             follow_forward_edges: empty_name_lists(rule_count),
             follow_mask_registry: TreeMap::new(),
             follow_mask_depths: [],
@@ -382,7 +383,6 @@ impl GenContext {
             diagnostics: [],
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
-            needs_scan_atn_seen: false,
             scan_memo: false,
             lr_cont_in_atom: false,
             needs_lr_atn_seen: false,
@@ -444,7 +444,7 @@ impl GenContext {
     }
 
     fn scan_forward_target(&self, snake: &String) -> Option<String> {
-        if self.needs_scan_atn() || self.rule_reads_follow(snake) {
+        if self.needs_atn() || self.rule_reads_follow(snake) {
             return null;
         }
         let rule = &self.parser_rules[self.snake_index[*snake]];
@@ -603,33 +603,42 @@ impl GenContext {
         return self.caller_follow_gate_seen;
     }
 
-    /// Record a decision the runtime simulator makes.
-    pub fn mark_needs_atn(&mut self) {
-        self.needs_atn_seen = true;
+    /// Record a decision the simulator makes inside the body of the rule being
+    /// lowered. The scan asks it too, or a tournament measures a length the
+    /// parse does not take.
+    pub fn mark_body_predicts(&mut self) {
+        self.mark_needs_atn();
+        let idx = self.current_rule_index();
+        self.rule_body_predicts[idx] = true;
+    }
+
+    /// Whether the functions the current rule's body is emitted into, beside a
+    /// left-recursive rule's walker, take the invocation's `min_prec`: a
+    /// prediction inside the body reads it, and only a rule whose loop the
+    /// simulator decides has one to read. Asked at every declaration and every
+    /// call site.
+    pub fn helpers_take_prec(&self) -> bool {
+        let idx = self.current_rule_index();
+        return self.rule_body_predicts[idx] && self.lr_loop_entry_decision(idx) >= 0;
     }
 
     /// Whether the generated parser emits the ATN simulator infrastructure
-    /// (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack maintenance).
+    /// (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack maintenance). Every
+    /// decision the simulator makes, the scan asks it too, so every scan then
+    /// borrows the parser's ATN state.
     pub fn needs_atn(&self) -> bool {
         return self.needs_atn_seen;
     }
 
-    /// Record a scan that decides through the simulator.
-    pub fn mark_needs_scan_atn(&mut self) {
+    /// Record a decision the simulator makes.
+    pub fn mark_needs_atn(&mut self) {
         self.needs_atn_seen = true;
-        self.needs_scan_atn_seen = true;
-    }
-
-    /// Whether scans decide through the ATN, so every scan borrows the parser's
-    /// ATN state. (`ATN_SIM` is emitted whenever `needs_atn`.)
-    pub fn needs_scan_atn(&self) -> bool {
-        return self.needs_scan_atn_seen;
     }
 
     /// Record an ATN-class LR rule: its loop decision reads the LR tables.
     pub fn mark_needs_lr_atn(&mut self) {
         self.needs_lr_atn_seen = true;
-        self.mark_needs_scan_atn();
+        self.mark_needs_atn();
     }
 
     /// Whether `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
@@ -676,7 +685,7 @@ impl GenContext {
         if self.emit_scan_gate() {
             args.push_str(`, ${self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD)}`);
         }
-        if self.needs_scan_atn() {
+        if self.needs_atn() {
             args.push_str(`, ${self.atn_state_arg()}`);
         }
         if self.scan_memo {
@@ -693,7 +702,7 @@ impl GenContext {
     /// can be kept for the parse. A scan that borrows the ATN state reads the
     /// caller stack too, which no key here holds.
     pub fn set_scan_memo(&mut self, on: bool) {
-        assert !(on && self.needs_scan_atn()), "set_scan_memo: a scan that reads the ATN caller stack has no memo key";
+        assert !(on && self.needs_atn()), "set_scan_memo: a scan that reads the ATN caller stack has no memo key";
         self.scan_memo = on;
     }
 

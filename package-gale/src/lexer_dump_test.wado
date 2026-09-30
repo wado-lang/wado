@@ -92,7 +92,7 @@ test "lexer dump shortens a class of many ranges" {
 r : ID ;
 ID : [a-zA-Z_$0-9\\u00C0-\\u00D6\\u00D8-\\u00F6]+ ;");
 
-    assert report.contains("repeat [a-zA-Z_$0-9À-Ö…]+ — plain loop: nothing follows the repeat"), report;
+    assert report.contains("repeat [a-zA-Z_$0-9À-Ö…]+ — plain: nothing follows the repeat"), report;
 }
 
 test "lexer dump says a predicate after a construct makes it consult what follows" {
@@ -105,6 +105,27 @@ I : ('a' | 'ab') {true}? ;");
 
     assert report.contains("repeat [0-9]+ then 'z' — lookahead-aware"), report;
     assert report.contains("alternation ('a' | 'ab') — arm scoring"), report;
+}
+
+test "lexer dump leaves a repeat plain when a predicate follows only behind a char it cannot eat" {
+    // The predicate runs only after `'z'`, which `[0-9]` cannot eat, so the loop
+    // already stops where the predicate could run. An optional `'z'` lets it run
+    // right where the loop stops.
+    let report = lexer_dump("grammar T;
+r : S O ;
+S : 'a' [0-9]+ 'z' {true}? ;
+O : 'b' [0-9]+ 'z'? {true}? ;");
+
+    assert report.contains("repeat [0-9]+ then 'z' — plain: the inner cannot eat the suffix's first char"), report;
+    assert report.contains("repeat [0-9]+ then 'z'? — lookahead-aware"), report;
+}
+
+test "lexer dump gives a repeat over a string the lookahead-aware scan" {
+    let report = lexer_dump("grammar T;
+r : S ;
+S : 'x' ('ab')* 'ab' ;");
+
+    assert report.contains("repeat ('ab')* then 'ab' — lookahead-aware"), report;
 }
 
 test "lexer dump escapes a quote and an unprinted char" {
@@ -147,7 +168,7 @@ test "lexer dump reports a greedy repeat whose inner cannot eat the suffix" {
 r : CMT ;
 CMT : '/*' ~'*'* '*/' ;");
 
-    assert report.contains("repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
+    assert report.contains("repeat ~'*'* then '*/' — plain: the inner cannot eat the suffix's first char"), report;
     assert report.contains("plain 1, lookahead-aware 0"), report;
 }
 
@@ -482,5 +503,5 @@ r : WS ;
 WS : [ \\t\\r\\n]+ -> skip ;");
 
     assert report.contains("repeat [ \\t\\r\\n]+"), report;
-    assert report.contains("plain loop: nothing follows the repeat"), report;
+    assert report.contains("plain: nothing follows the repeat"), report;
 }

@@ -247,9 +247,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     }
     let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
     if grammar_scans_through_atn(grammar, &lowered, &mut ctx) {
-        ctx.mark_needs_scan_atn();
+        ctx.mark_needs_atn();
     }
-    ctx.set_scan_memo(!ctx.needs_scan_atn() && lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) }));
+    ctx.set_scan_memo(!ctx.needs_atn() && lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) }));
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered);

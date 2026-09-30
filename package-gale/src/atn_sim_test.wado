@@ -167,6 +167,42 @@ test "predict drops a disabled alternative from the viable ones" {
     assert pick([0]) == -1;
 }
 
+global COVER_G4: String = "grammar C;
+s : a EOF ;
+a : X Y? | X ;
+X : 'x' ;
+Y : 'y' ;
+";
+
+// After `x` the first alternative holds every state the second does, which
+// settles the decision only while the first may win it.
+test "a disabled alternative covering the others does not settle the decision" {
+    let mut g = parse(COVER_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let tk = build_token_kinds(&g);
+    let eof = tk.0["TK_EOF"];
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 1);
+    let stack: List<i32> = [-1, atn.call_site_returns[0]];
+    let x_only = ([tk.0["TK_X"], eof] as List<i32>).to_array();
+    let x_y = ([tk.0["TK_X"], tk.0["TK_Y"], eof] as List<i32>).to_array();
+    let pick = |kinds: &Array<i32>, disabled: List<i32>| atn_predict_with_stack(
+        &sim,
+        d,
+        &stack,
+        kinds,
+        0,
+        eof,
+        0,
+        &disabled,
+    );
+    assert pick(&x_only, []) == 0;
+    assert pick(&x_only, [0]) == 1;
+    assert pick(&x_y, []) == 0;
+    assert pick(&x_y, [0]) == -1;
+}
+
 test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
     let g = parse(NG_G4).unwrap();
     let atn = build_atn(&g);

@@ -2257,9 +2257,9 @@ pub enum LexerRepeatEmit {
     LookaheadAware,
     /// Nothing follows the repeat, so it cannot strand a suffix.
     PlainNoSuffix,
-    /// The inner does not consume exactly one char per iteration, so there is
-    /// no per-iteration position for the scan to record.
-    PlainInnerNotPerChar,
+    /// An iteration of the inner can end in more than one place, so the end
+    /// of each is a choice the scan does not make.
+    PlainInnerChooses,
     /// The inner cannot eat a char the suffix needs, and no predicate follows
     /// to reject where it stops, so the plain loop already stops where the
     /// suffix must start.
@@ -2273,12 +2273,12 @@ pub fn lexer_repeat_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Le
     if rep.non_greedy {
         return LexerRepeatEmit::NonGreedy;
     }
-    let predicate_follows = lexer_predicate_follows(alt, index);
+    let predicate_follows = lexer_predicate_follows(alt, index, all_rules, ci);
     if index + 1 >= alt.elements.len() && !predicate_follows {
         return LexerRepeatEmit::PlainNoSuffix;
     }
-    if !lexer_element_can_consume_simple(&rep.element) {
-        return LexerRepeatEmit::PlainInnerNotPerChar;
+    if !lexer_element_one_path(&rep.element) {
+        return LexerRepeatEmit::PlainInnerChooses;
     }
     if !predicate_follows && !lexer_repeat_can_eat_suffix(&rep.element, &lexer_alt_suffix(alt, index), all_rules, ci) {
         return LexerRepeatEmit::PlainSuffixDisjoint;
@@ -2311,7 +2311,7 @@ pub fn lexer_group_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Lex
     if g_alts.len() < 2 {
         return LexerGroupEmit::FirstMatchSingleArm;
     }
-    if index + 1 >= alt.elements.len() && !lexer_predicate_follows(alt, index) {
+    if index + 1 >= alt.elements.len() && !lexer_predicate_follows(alt, index, all_rules, ci) {
         return LexerGroupEmit::FirstMatchNoSuffix;
     }
     // An arm carrying a predicate is measured here, unlike in
@@ -2361,11 +2361,30 @@ fn lexer_alt_last_is_tail(alt: &LexerAlternative, tail: bool) -> bool {
     return tail && !lexer_alt_has_predicate_at(alt, alt.elements.len());
 }
 
-/// Whether a semantic predicate of `alt` comes after element `after`, the
-/// trailing one included. ANTLR4 simulates the whole rule, so such a predicate
-/// has a say in where the element stops.
-fn lexer_predicate_follows(alt: &LexerAlternative, after: i32) -> bool {
-    return alt.actions.iter_ref().any(|a| a.kind matches { Predicate } && a.before_index > after);
+/// Whether a semantic predicate of `alt`, the trailing one included, can run
+/// right where element `after` stops. ANTLR4 simulates the whole rule, so such
+/// a predicate has a say in where the element stops. One behind an element
+/// that cannot match empty runs only where that element can start, which the
+/// suffix's leading chars already account for.
+fn lexer_predicate_follows(alt: &LexerAlternative, after: i32, all_rules: &List<LexerRule>, ci: bool) -> bool {
+    for let a of &alt.actions {
+        if !a.kind matches { Predicate } || a.before_index <= after {
+            continue;
+        }
+        let mut between: List<LexerElement> = [];
+        for let mut j = after + 1; j < a.before_index; j += 1 {
+            between.push(alt.elements[j]);
+        }
+        let mut visiting: List<String> = [];
+        let reached = match lexer_seq_leading_chars(&between, all_rules, casing_of(ci), true, &mut visiting) {
+            Some(s) => s.nullable,
+            None => true,
+        };
+        if reached {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ==========================================================================
@@ -3342,11 +3361,22 @@ fn ranges_intersect(a: &List<[i32, i32]>, b: &List<[i32, i32]>) -> List<[i32, i3
     return out;
 }
 
-/// The `Plus` / `Star` inner of a lookahead-aware repeat must consume
-/// exactly one char per iteration, so the loop's per-iteration peek records
-/// a position one char past the last successful inner. A RuleRef escapes
-/// into a rule call and a nested Repeat runs its own loop, so neither has a
-/// per-char iteration to record against.
+/// Whether `elem` matches, where it matches at all, along one path of
+/// non-empty length: a string, a char set, or a sequence of those. A
+/// lookahead-aware repeat records where each iteration ends, so an inner that
+/// could end one in two places (`'a' | 'ab'`, a nested repeat, a rule call)
+/// would leave the scan a choice it does not make.
+fn lexer_element_one_path(elem: &LexerElement) -> bool {
+    return match elem {
+        Literal(text) => !text.is_empty(),
+        Group(alts) && alts.len() == 1 => {
+            !alts[0].elements.is_empty() && alts[0].elements.iter_ref().all(|e| lexer_element_one_path(e));
+        },
+        _ => lexer_element_can_consume_simple(elem),
+    };
+}
+
+/// Whether `elem` consumes exactly one char.
 ///
 /// `~('b')` parses as `Not(Group([Alt([Literal("b")])]))` and `~('b' | ' ')`
 /// as `Not(Group([Alt(['b']), Alt([' '])]))`; either consumes exactly one
@@ -3448,10 +3478,8 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     w.end();
 
     if replay {
-        // Each iteration consumes exactly one char (`PlainInnerNotPerChar` is
-        // the alternative emit otherwise), so the accept position alone says how
-        // many of them the match kept.
-        assert lexer_element_can_consume_simple(&rep.element), "a lookahead-aware repeat's inner consumes exactly one char per iteration";
+        // The accept position alone says how many iterations the match kept.
+        assert lexer_element_one_path(&rep.element), "a lookahead-aware repeat's inner matches each iteration along one path";
         w.line(`pos = la_start_${id};`);
         gen_lexer_replay_to(w, &rep.element, inner, all_rules, &accept_var, ci, hm);
         gen_lexer_alt_seq(w, alt, plan, from, all_rules, fail_action, ci, ea, hm, /*replay=*/ true);
@@ -3463,7 +3491,7 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     // mismatch is a codegen bug: trap rather than degrade to "rule rejected".
     let assert_msg = `lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)`;
     let assert_fail = `panic("${assert_msg}")`;
-    gen_lexer_suffix_seq(w, alt, plan, from, all_rules, &assert_fail, ci, ea, hm);
+    gen_lexer_alt_seq(w, alt, plan, from, all_rules, &assert_fail, ci, ea, hm, /*replay=*/ false);
 }
 
 /// Re-walk `inner` from the cursor to `bound`, with its actions on. The scan
@@ -3577,32 +3605,14 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     w.end();
 }
 
-/// Lower what follows `alt.elements[from - 1]` the way the sequence itself
-/// would: the same steps of the same plan, from the same index, predicates
-/// included. Both the peek and the commit go through here, so what a peek
-/// proves is what the commit then runs — and neither can pick a strategy the
-/// sequence would not have.
-///
-/// The alternative's other actions stay with it: only a replay runs them, and
-/// a replay walks the whole sequence rather than cutting here.
-fn gen_lexer_suffix_seq<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    alt: &LexerAlternative,
-    plan: &LexerSeqPlan,
-    from: i32,
-    all_rules: &List<LexerRule>,
-    fail_action: S,
-    ci: bool,
-    ea: bool,
-    hm: bool,
-) {
-    gen_lexer_alt_seq(w, alt, plan, from, all_rules, fail_action, ci, ea, hm, /*replay=*/ false);
-}
-
 /// Emit a save / try-suffix / restore block that records a position in
 /// `accept_var` iff the suffix would match starting here. Pos is restored
 /// unconditionally so the surrounding forward scan continues without
 /// committing the peeked suffix.
+///
+/// The suffix is the sequence's own steps from `from`, predicates included,
+/// which is also what the commit runs: what a peek proves is what the commit
+/// then does, and neither can pick a strategy the sequence would not have.
 ///
 /// `record_end` picks which position: a repeat wants where the suffix would
 /// START, to resume its cursor there; an alternation wants where it would END,
@@ -3626,7 +3636,7 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
     let label = `peek_${id}`;
     w.line(`let ${save_var} = pos;`);
     if lexer_suffix_always_matches(alt, plan, from) {
-        gen_lexer_suffix_seq(w, alt, plan, from, all_rules, "unreachable()", ci, ea, hm);
+        gen_lexer_alt_seq(w, alt, plan, from, all_rules, "unreachable()", ci, ea, hm, /*replay=*/ false);
         w.line(`${accept_var} = ${if record_end { "pos" } else { save_var }};`);
         w.line(`pos = ${save_var};`);
         return;
@@ -3636,7 +3646,7 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
         w.line(`let mut ${end_var}: i32 = -1;`);
     }
     w.begin(`${label}:`);
-    gen_lexer_suffix_seq(w, alt, plan, from, all_rules, `break ${label}`, ci, ea, hm);
+    gen_lexer_alt_seq(w, alt, plan, from, all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ false);
     if record_end {
         w.line(`${end_var} = pos;`);
     }
