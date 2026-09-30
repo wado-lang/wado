@@ -1,0 +1,14 @@
+// A provider's operation must take and return exactly what the dependency
+// imports. One whose signature differs is reported against the provider.
+use { println, Stdout } from "core:cli";
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_wrong_signature.wado" };
+
+export fn run() with Stdout {
+    println(Hlc::wrap("x", "wado").text);
+}
+
+__DATA__
+{
+    "compile_error": "provider `./sub/hl_wrong_signature.wado` does not implement `test:hlc/highlight@0.1.0`: type mismatch in instance export `highlight`: expected 2 parameters, found 1",
+    "compile_error_codes": ["EFFECT_HANDLER_INVALID"]
+}

@@ -23,6 +23,8 @@ use {
     ImageNode,
     ReferenceLinkNode,
     ReferenceImageNode,
+    COMMENT_OPEN,
+    COMMENT_CLOSE,
 } from "./fmt_ast.wado";
 use { display_width } from "./unicode_width.wado";
 
@@ -82,7 +84,7 @@ fn print_block_sequence(nodes: &List<Node>, out: &mut String, tight: bool) {
         // next sibling — found via a real corpus idempotency check where a
         // dropped blank line let a List's trailing paragraph get reparsed as
         // part of the list's last item. Always force the boundary for these.
-        prev_needs_boundary = node matches { Node::List(_) | Node::Table(_) | Node::BlockQuote(_) | Node::Html(_) };
+        prev_needs_boundary = node matches { Node::List(_) | Node::Table(_) | Node::BlockQuote(_) | Node::Html(_) | Node::Comment(_) };
     }
 }
 
@@ -109,6 +111,7 @@ fn print_block(node: &Node, out: &mut String) {
         Node::Table(t) => print_table(t, out),
         Node::ThematicBreak => out.push_str("---"),
         Node::Html(s) => out.push_str(s),
+        Node::Comment(text) => print_comment(text, out),
         Node::LinkReferenceDef(def) => print_link_ref_def(def, out),
         _ => panic("marl-format: unexpected node in block position"),
     }
@@ -419,8 +422,15 @@ fn print_inline_node(node: &Node, out: &mut String) {
         Node::InlineImage(img) => print_inline_image(img, out),
         Node::ReferenceImage(img) => print_reference_image(img, out),
         Node::Html(s) => out.push_str(s),
+        Node::Comment(text) => print_comment(text, out),
         _ => panic("marl-format: unexpected node in inline position"),
     }
+}
+
+fn print_comment(text: &String, out: &mut String) {
+    out.push_str(&COMMENT_OPEN);
+    out.push_str(text);
+    out.push_str(&COMMENT_CLOSE);
 }
 
 fn print_emphasis(em: &EmphasisNode, out: &mut String) {

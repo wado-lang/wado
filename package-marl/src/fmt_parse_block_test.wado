@@ -324,17 +324,17 @@ test "parse_document lets an HTML comment interrupt an open paragraph" {
     let children = doc_children(&source);
     assert children.len() == 2;
     assert children.get(0) matches { Some(Node::Paragraph(_)) };
-    assert children.get(1) matches { Some(Node::Html(_)) };
+    assert children.get(1) matches { Some(Node::Comment(_)) };
 }
 
 test "parse_document ends an HTML comment at its closing marker" {
     let source = "<!-- c -->\n```wado\nlet x = 1;\n```";
     let children = doc_children(&source);
     assert children.len() == 2;
-    if let Some(Node::Html(s)) = children.get(0) {
-        assert s == "<!-- c -->";
+    if let Some(Node::Comment(s)) = children.get(0) {
+        assert s == " c ";
     } else {
-        panic("expected an Html node");
+        panic("expected a Comment node");
     }
     assert children.get(1) matches { Some(Node::CodeBlock(_)) };
 }
@@ -343,12 +343,37 @@ test "parse_document keeps a blank line inside a multi-line HTML comment" {
     let source = "<!-- a\n\nb -->\nafter";
     let children = doc_children(&source);
     assert children.len() == 2;
-    if let Some(Node::Html(s)) = children.get(0) {
-        assert s == "<!-- a\n\nb -->";
+    if let Some(Node::Comment(s)) = children.get(0) {
+        assert s == " a\n\nb ";
     } else {
-        panic("expected an Html node");
+        panic("expected a Comment node");
     }
     assert children.get(1) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document keeps a comment block that holds more than the comment as HTML" {
+    for let source of ["<!-- c --> <b>", "<!-- a --><!-- b -->"] {
+        let children = doc_children(&source);
+        assert children.len() == 1;
+        if let Some(Node::Html(s)) = children.get(0) {
+            assert s == source;
+        } else {
+            panic("expected an Html node");
+        }
+    }
+}
+
+test "parse_document reads an empty or indented comment block as a comment" {
+    for let [source, text] of [
+        ["<!-->\nafter", ""],
+        ["<!--->\nafter", ""],
+        ["   <!-- c -->\nafter", " c "],
+    ] {
+        let children = doc_children(&source);
+        assert children.len() == 2;
+        assert children.get(0) == Option::Some(Node::Comment(text));
+        assert children.get(1) matches { Some(Node::Paragraph(_)) };
+    }
 }
 
 test "parse_document ends a processing instruction, declaration, and CDATA at their markers" {

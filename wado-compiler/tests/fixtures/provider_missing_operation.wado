@@ -1,0 +1,14 @@
+// A provider must export every operation the dependency imports. One that
+// leaves an operation out is reported against the provider, by name.
+use { println, Stdout } from "core:cli";
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_misnamed.wado" };
+
+export fn run() with Stdout {
+    println(Hlc::wrap("x", "wado").text);
+}
+
+__DATA__
+{
+    "compile_error": "provider `./sub/hl_misnamed.wado` does not implement `test:hlc/highlight@0.1.0`: missing expected export `highlight`",
+    "compile_error_codes": ["EFFECT_HANDLER_INVALID"]
+}

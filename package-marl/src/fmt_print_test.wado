@@ -182,6 +182,11 @@ test "print_document reproduces YAML front matter verbatim" {
     assert roundtrip(&source) == "---\ntitle: x\n---\n\nBody.\n";
 }
 
+test "print_document reproduces a comment, block or inline, verbatim" {
+    let source = "<!-- a\n\nb -->\n\ntext <!--x--> y\n";
+    assert roundtrip(&source) == source;
+}
+
 test "print_document reproduces a raw HTML block verbatim" {
     let source = "<div class=\"x\">\n  <span>y</span>\n</div>";
     assert roundtrip(&source) == "<div class=\"x\">\n  <span>y</span>\n</div>\n";
