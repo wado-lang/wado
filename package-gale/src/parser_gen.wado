@@ -47,8 +47,6 @@ use {
     follow_yields_call_if,
     follow_yields_call_of,
     rule_kind_const,
-    collect_called_names,
-    defined_fn_names,
     join_kinds,
 } from "./gen_util.wado";
 use {
@@ -283,7 +281,6 @@ pub fn gen_parser(
     if ctx.is_trace() {
         gen_trace_helpers(w);
     }
-    let scan_chunks = gen_scan_functions(grammar, lowered, ctx);
     let mut parse_w = CodeWriter::new();
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
@@ -297,11 +294,12 @@ pub fn gen_parser(
         gen_recover_helpers(&mut parse_w, &entries, ctx);
     }
     gen_parse_entry(&mut parse_w, lowered, ctx);
-    let parse_text = parse_w.to_string();
-    for let chunk of &called_scan_chunks(&scan_chunks, &parse_text) {
-        w.raw(chunk);
+    for let chunk of &gen_called_scan_functions(grammar, lowered, ctx) {
+        if let Some(text) = chunk {
+            w.raw(text);
+        }
     }
-    w.raw(&parse_text);
+    w.raw(&parse_w.to_string());
     gen_call_follow_tables(w, ctx);
     warn_unhandled_actions(grammar, ctx);
 }
@@ -332,38 +330,6 @@ fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &GenContext) {
     }
     w.line(`global CALL_FOLLOW_ENDS: List<bool> = [${join_kinds(&ends)}];`);
     w.blank();
-}
-
-/// The scan chunks something calls, in emit order: a chunk is kept when the
-/// parse code or a kept chunk calls a function it defines.
-fn called_scan_chunks(chunks: &List<String>, parse_text: &String) -> List<String> {
-    let mut called = TreeSet::<String>::new();
-    collect_called_names(parse_text, &mut called);
-    let mut kept: List<bool> = [];
-    let mut defined: List<List<String>> = [];
-    for let chunk of chunks {
-        kept.push(false);
-        defined.push(defined_fn_names(chunk));
-    }
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for let mut i = 0; i < chunks.len(); i += 1 {
-            if kept[i] || !defined[i].iter_ref().any(|n| called.contains(*n)) {
-                continue;
-            }
-            kept[i] = true;
-            changed = true;
-            collect_called_names(&chunks[i], &mut called);
-        }
-    }
-    let mut out: List<String> = [];
-    for let mut i = 0; i < chunks.len(); i += 1 {
-        if kept[i] {
-            out.push(chunks[i]);
-        }
-    }
-    return out;
 }
 
 /// The `lr_cont` argument a self-reference passes, with its leading comma.
@@ -405,24 +371,18 @@ fn scannable_prefix_len(elements: &List<Element>, ctx: &mut GenContext) -> i32 {
     return count;
 }
 
-/// Emit `name`, the scan function of the current rule's `alt_index`, unless
-/// the rule already has one.
-fn ensure_alt_scan_fn<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    alt: &Alternative,
-    lowered_rule: &Rule,
-    name: S,
-    alt_index: i32,
-    ctx: &mut GenContext,
-) {
+/// Emit the scan function of `rule`'s `alt_index`, unless the rule already
+/// has one. The scan side and the parse side share it, whichever reaches it
+/// first.
+fn ensure_alt_scan_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, alt_index: i32, ctx: &mut GenContext) {
     if ctx.alt_scan_fn(alt_index) matches { Some(_) } {
         return;
     }
-    assert alt_scan_is_full(&alt.elements, ctx), `a picked alternative ${alt_index} scans in full`;
+    assert alt_scan_is_full(&rule.alternatives[alt_index].elements, ctx), `a picked alternative ${alt_index} scans in full`;
     let Some(scan_body) = rule_alt_scan_body(lowered_rule, alt_index) else {
         panic(`ensure_alt_scan_fn: no scan body for alt ${alt_index}`);
     };
-    gen_alt_scan_fn(w, name, scan_body, alt_index, ctx);
+    gen_alt_scan_fn(w, `scan_${rule.snake_name}__alt_${alt_index}`, scan_body, alt_index, ctx);
 }
 
 /// The one emitter of a whole-alternative scan function, which both the scan
@@ -530,16 +490,21 @@ fn alt_scan_is_full(elements: &List<Element>, ctx: &mut GenContext) -> bool {
 // successful recognition, or -1 on failure. Used to disambiguate Ambiguous
 // alternatives without expensive speculative parsing.
 
-/// Each rule's scan functions, as one chunk per rule.
-fn gen_scan_functions(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> List<String> {
+/// Per rule, its scan functions where emitted code calls one of them. Emitting
+/// a rule's scan functions can call another rule's, so this drains the calls
+/// until none is left unemitted.
+fn gen_called_scan_functions(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> List<Option<String>> {
     let was_scan = ctx.set_in_scan_fn(true);
-    let mut chunks: List<String> = [];
+    let mut chunks: List<Option<String>> = [];
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        chunks.push(null);
+    }
+    while let Some(i) = ctx.next_called_scan() {
         ctx.set_current_rule_index(i);
         ctx.set_lr_continuation(lr_continuation_of(&lowered.parser_rules[i]));
         let mut w = CodeWriter::with_capacity(1024);
         gen_scan_function(&mut w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
-        chunks.push(w.to_string());
+        chunks[i] = Option::Some(w.to_string());
     }
     ctx.set_lr_continuation([]);
     ctx.set_in_scan_fn(was_scan);
@@ -715,7 +680,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
     let multi_alt = if rule.alternatives.len() > 1 {
         assert lowered_rule matches { MultiAlt(_) }, "gen_scan_function_named: lowering gives a multi-alt rule a MultiAlt body";
         let og = rule_overlap_groups(rule, lowered_rule, ctx);
-        gen_group_alt_scan_fns(w, rule, &og, lowered_rule, ctx, fn_name);
+        gen_group_alt_scan_fns(w, rule, &og, lowered_rule, ctx);
         Option::Some(og);
     } else {
         Option::<RuleOverlap>::None;
@@ -805,7 +770,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 
     let atom_og = if non_lr_indices.len() > 1 {
         let og = rule_overlap_groups(rule, lowered_rule, ctx);
-        gen_group_alt_scan_fns(w, rule, &og, lowered_rule, ctx, &atom_name);
+        gen_group_alt_scan_fns(w, rule, &og, lowered_rule, ctx);
         Option::Some(og);
     } else {
         Option::<RuleOverlap>::None;
@@ -1576,22 +1541,20 @@ fn gen_scan_pick<S: AsStrSlice>(
 }
 
 /// The scan function of every alternative a contested overlap group chooses
-/// between, emitted before the scan `base` that calls them.
-fn gen_group_alt_scan_fns<S: AsStrSlice>(
+/// between, emitted before the scan that calls them.
+fn gen_group_alt_scan_fns(
     w: &mut CodeWriter,
     rule: &ParserRule,
     og: &RuleOverlap,
     lowered_rule: &Rule,
     ctx: &mut GenContext,
-    base: S,
 ) {
     for let group of &og.groups {
         if group.len() < 2 {
             continue;
         }
         for let gi of group {
-            let idx = og.non_lr_indices[*gi];
-            ensure_alt_scan_fn(w, &rule.alternatives[idx], lowered_rule, `${base}_alt_${idx}`, idx, ctx);
+            ensure_alt_scan_fn(w, rule, lowered_rule, og.non_lr_indices[*gi], ctx);
         }
     }
 }
@@ -1850,7 +1813,7 @@ fn scan_rule_call_stmt(rc: &ScanRuleCallElement, ctx: &mut GenContext) -> String
     };
     let cont = lr_cont_arg(rc.lr_cont_mask, ctx);
     assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
-    return `pos = scan_${ctx.scan_alias(&rc.target_snake)}(tokens, pos${ctx.scan_state_args()}${follow_arg_str}${min_prec_arg}${cont});`;
+    return `pos = ${ctx.scan_fn_of(ctx.scan_alias(&rc.target_snake))}(tokens, pos${ctx.scan_state_args()}${follow_arg_str}${min_prec_arg}${cont});`;
 }
 
 /// A scan's rule call. A callee that can reach a simulator decision sees the
@@ -3288,7 +3251,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     // Emit the per-alt scan helper only when the dispatch
                     // actually calls it; a token-led group leaves it dead.
                     if referenced_scans.contains(&alt_index) {
-                        ensure_alt_scan_fn(w, alt, lowered_rule, `${fn_name}_scan_${alt_index}`, alt_index, ctx);
+                        ensure_alt_scan_fn(w, rule, lowered_rule, alt_index, ctx);
                     }
                 }
             }
@@ -4303,7 +4266,7 @@ fn gen_lr_fn<S: AsStrSlice>(
         w.blank();
         return;
     }
-    let scan_fn = `scan_${rule.snake_name}`;
+    let scan_fn = ctx.scan_fn_of(&rule.snake_name);
     let labeled = rule_alts_labeled(&rule.alternatives);
     w.begin("loop");
     w.line("if p.recovering { break; }");
@@ -4369,7 +4332,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
         w,
         lr_alts,
         lr_dispatch,
-        `scan_${rule.snake_name}`,
+        ctx.scan_fn_of(&rule.snake_name),
         "&p.kinds",
         "p.pos",
         /*parse_launched=*/ true,
@@ -4388,7 +4351,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
         if scan_body_can_match_empty(&lr.scan_suffix.elements, ctx) {
             gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
             w.line(
-                `if scan_${rule.snake_name}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}) == p.pos { break; }`,
+                `if ${ctx.scan_fn_of(&rule.snake_name)}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}) == p.pos { break; }`,
             );
         }
         emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, &mut nc, &lr.suffix_first);

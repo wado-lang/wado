@@ -1611,25 +1611,25 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         try_0: {
             if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                 let sp = pos;
-                sg_1_done: {
-                    sg_1: {
+                sg_2_done: {
+                    sg_2: {
                         pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | ((FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | ((FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK) & FOLLOW_OPEN_FIELD);
-                        if pos < 0 { break sg_1; }
+                        if pos < 0 { break sg_2; }
                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                             let sp = pos;
-                            sg_2_done: {
-                                sg_2: {
+                            sg_3_done: {
+                                sg_3: {
                                     pos += 1;
                                     pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
-                                    if pos < 0 { break sg_2; }
-                                    break sg_2_done;
+                                    if pos < 0 { break sg_3; }
+                                    break sg_3_done;
                                 }
                                 pos = -1;
                             }
                             if pos < 0 { pos = sp; break; }
                             if pos == sp { break; }
                         }
-                        break sg_1_done;
+                        break sg_2_done;
                     }
                     pos = -1;
                 }
@@ -1663,12 +1663,12 @@ fn scan_targs(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
         let sp = pos;
-        sg_3_done: {
-            sg_3: {
+        sg_1_done: {
+            sg_1: {
                 pos += 1;
                 pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
-                if pos < 0 { break sg_3; }
-                break sg_3_done;
+                if pos < 0 { break sg_1; }
+                break sg_1_done;
             }
             pos = -1;
         }
@@ -1735,12 +1735,12 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
-                sg_4_done: {
-                    sg_4: {
+                sg_0_done: {
+                    sg_0: {
                         pos += 1;
                         pos = scan_item(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
-                        if pos < 0 { break sg_4; }
-                        break sg_4_done;
+                        if pos < 0 { break sg_0; }
+                        break sg_0_done;
                     }
                     pos = -1;
                 }

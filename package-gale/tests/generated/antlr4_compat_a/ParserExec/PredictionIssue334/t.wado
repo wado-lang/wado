@@ -1690,13 +1690,13 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_2_done: {
-                sg_2: {
-                    if pos >= tokens.len() || tokens[pos] != TK_SEMICOLON { break sg_2; }
+            sg_0_done: {
+                sg_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_SEMICOLON { break sg_0; }
                     pos += 1;
                     pos = scan_item(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
-                    if pos < 0 { break sg_2; }
-                    break sg_2_done;
+                    if pos < 0 { break sg_0; }
+                    break sg_0_done;
                 }
                 break rep_scan;
             }

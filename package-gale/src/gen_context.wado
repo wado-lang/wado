@@ -330,6 +330,10 @@ pub struct GenContext {
     /// By rule name, the ways a rule begins that `first2_of_element` found
     /// without meeting a cycle.
     first2_cache: TreeMap<String, Heads>,
+    /// Per rule index, whether emitted code calls one of the rule's scan
+    /// functions; `scan_queue` holds the called rules not yet emitted.
+    scan_called: List<bool>,
+    scan_queue: List<i32>,
 }
 
 /// A forwarding helper's one call, and the call-site stamps it sets first.
@@ -442,7 +446,25 @@ impl GenContext {
             alt_exit_label: null,
             forwarded_calls: TreeMap::new(),
             first2_cache: TreeMap::new(),
+            scan_called: false_flags(rule_count),
+            scan_queue: [],
         };
+    }
+
+    /// `scan_<snake>`, the name of a scan function rule `snake` defines, for
+    /// a call: the call is what has the rule's scan functions emitted.
+    pub fn scan_fn_of<S: AsStrSlice>(&mut self, snake: S) -> String {
+        let rule = self.snake_index[snake.to_string()];
+        if !self.scan_called[rule] {
+            self.scan_called[rule] = true;
+            self.scan_queue.push(rule);
+        }
+        return `scan_${snake}`;
+    }
+
+    /// The next rule whose scan functions are called and not yet emitted.
+    pub fn next_called_scan(&mut self) -> Option<i32> {
+        return self.scan_queue.pop();
     }
 
     /// The rule whose scan a scan call to `snake` can call instead: past every

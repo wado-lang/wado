@@ -503,12 +503,12 @@ the recovery sync sets started going to the registry as ids:
       rule-name maps behind `first_of_rule_at` and `rule_is_nullable_at` cost
       about as much again. Fixing this means threading ids through `lower` and
       prediction.
-- [ ] **Referenced names are recovered by re-lexing the output** (~8%).
-      `called_scan_chunks` and the `_kind_set_` / `SYNC_` / `EXPECTED_` /
-      `FOLLOW_MASK_` pass in `generate` both run `collect_names` over
-      megabytes of generated text. The byte loop is already one checked get
-      per byte, so the only saving left is to scan less text: record each
-      reference when the chunk that holds it is emitted.
+- [ ] **Forwarding helpers are found by reading their emitted text.**
+      `forwarded_scan_callee`, `forwarded_rule_call` and
+      `single_statement_fn_body` in `parser_gen.wado` build a helper's whole
+      body, then pattern-match the text to decide whether to drop the helper
+      for the one call it makes. Deciding this from the lowered IR, before any
+      text exists, would stop building the bodies that get dropped.
 - [ ] **`lexer_alts_can_collide` recomputes second chars per alternative**
       (~2.5%), through `is_spliced_token_ref` on each spliced token reference.
 

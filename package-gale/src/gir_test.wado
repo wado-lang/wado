@@ -52,7 +52,6 @@ use {
     ScanRepeatElement,
     FieldDecl,
     FieldKind,
-    KindSet,
     FollowArg,
     rule_header,
 } from "./gir.wado";
@@ -102,12 +101,10 @@ test "LoweredGrammar empty construction" {
         channels: [],
         lit_tokens: [],
         parser_rules: [],
-        kind_sets: [],
         diagnostics: [],
     };
     assert g.name == "Empty";
     assert g.parser_rules.is_empty();
-    assert g.kind_sets.is_empty();
     assert g.mode_names.len() == 1;
     assert g.diagnostics.is_empty();
 }
@@ -455,7 +452,7 @@ test "ScanElement variants round-trip" {
     }
 }
 
-test "FieldDecl and KindSet" {
+test "FieldDecl" {
     let f = FieldDecl {
         name: "expr_2",
         type_str: "Option<ExprNode>",
@@ -467,13 +464,6 @@ test "FieldDecl and KindSet" {
         panic("Optional");
     }
     assert f.name == "expr_2";
-
-    let ks = KindSet {
-        id: 0,
-        tokens: [0, 1],
-    };
-    assert ks.id == 0;
-    assert ks.tokens.len() == 2;
 }
 
 test "rule_header reaches every Rule variant" {

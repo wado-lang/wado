@@ -51,11 +51,8 @@ use {
     alt_classes_of,
     compute_overlap_groups,
     compute_overlap_groups_of,
-    DecisionBranch,
     decision_partition,
-    dispatch_branches,
     identity_slots,
-    scan_decision_branches,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
 use { alt_has_gate, alt_scan_gate_conditions } from "./action_gen.wado";
@@ -141,7 +138,6 @@ use {
     ListLabelOp,
     FieldDecl,
     FieldKind,
-    KindSet,
     FollowArg,
     CallerLoop,
     DiagnosticKind,
@@ -501,20 +497,16 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
     &grammar.parser_rules,
     lit_tokens,
 )) -> LoweredGrammar {
-    // `ctx` is shared with downstream emit. The follow-mask and
-    // kind-set registries lower writes into ctx are the same ones
-    // emit reads from later: the per-rule lower walk below interns a
-    // FOLLOW mask at every `RuleRef` site through
-    // `ctx.intern_follow_mask` (idempotent on the canonical mask), and
-    // emit's `gen_follow_mask_globals` emits one `FOLLOW_MASK_<id>`
-    // global per distinct mask. Caches (first / nullable / single-token
+    // `ctx` is shared with downstream emit. The FOLLOW masks the per-rule
+    // walk below interns at each `RuleRef` site are the ones emit names,
+    // and `gen_follow_mask_globals` emits a `FOLLOW_MASK_<id>` for each
+    // mask emitted code names. Caches (first / nullable / single-token
     // / scannable / tail-greedy) survive across the lower-then-emit
     // boundary and only get computed once.
     let mut parser_rules: List<Rule> = [];
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx));
     }
-    let kind_sets = intern_kind_sets(&parser_rules, ctx);
     ctx.set_follow_rule_snakes(&follow_rule_snakes(grammar, ctx));
     return LoweredGrammar {
         name: grammar.name,
@@ -526,7 +518,6 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
         channels: grammar.channels,
         lit_tokens: *lit_tokens,
         parser_rules,
-        kind_sets,
         diagnostics: ctx.copy_diagnostics(),
     };
 }
@@ -560,199 +551,6 @@ fn follow_rule_snakes(grammar: &Grammar, ctx: &GenContext) -> List<String> {
         }
     }
     return snakes;
-}
-
-/// Walk every lowered `Rule` and intern every multi-element
-/// token-kind set into a single `KindSet` registry. The resulting
-/// `List<KindSet>` is keyed by registration order — single-token
-/// sets are not interned (emit renders those as `<expr> == TK_X`
-/// directly), and identical sets share a single `id` so the
-/// generated `_kind_set_<id>` helper is shared.
-///
-/// Covers the `Direct` dispatch (multi-token branch.tokens) and
-/// `Op::Excluded.kinds`. `Tournament` carries only alt indices and
-/// has no kind set to intern. Strategy-internal token sets
-/// (`NonGreedy.exit_*`, `OptionalLookahead.sigs`) are consumed inline
-/// by emit and don't need helper-function interning.
-fn intern_kind_sets(parser_rules: &List<Rule>, ctx: &mut GenContext) -> List<KindSet> {
-    // Prime ctx's kind-set registry with every multi-element token
-    // set the lowered IR carries. ctx is also where emit interns
-    // sets at gen_parse_fn time via `kind_check_str`; sharing the
-    // registry means lower's helper ids match emit's call sites
-    // exactly — `_kind_set_<id>` references resolve to the
-    // helper this pre-pass produced.
-    for let rule of parser_rules {
-        walk_rule_for_kind_sets(rule, ctx);
-    }
-    // Snapshot ctx's current state. Emit may grow this registry
-    // further when `kind_check_str` hits a set lower didn't see
-    // (e.g. token sets that surface only from the emit walks over
-    // surface IR). Those tail entries
-    // remain reachable via `ctx.kind_sets()` and the kind-set
-    // helper emitter handles them via the salvage tail.
-    let entries = ctx.kind_sets();
-    let mut sets: List<KindSet> = [];
-    for let entry of &entries {
-        sets.push(KindSet { id: entry.id, tokens: entry.tokens });
-    }
-    return sets;
-}
-
-fn walk_rule_for_kind_sets(rule: &Rule, ctx: &mut GenContext) {
-    match *rule {
-        Simple(s) => {
-            walk_alt_body_for_kind_sets(&s.body, ctx);
-            walk_scan_body_for_kind_sets(&s.scan_body, ctx);
-        },
-        MultiAlt(m) => {
-            walk_dispatch_for_kind_sets(&m.dispatch, ctx);
-            for let alt of &m.alts {
-                walk_alt_body_for_kind_sets(alt, ctx);
-            }
-            for let sb of &m.scan_alts {
-                walk_scan_body_for_kind_sets(sb, ctx);
-            }
-        },
-        LeftRecursive(l) => {
-            walk_dispatch_for_kind_sets(&l.atom.dispatch, ctx);
-            for let alt of &l.atom.alts {
-                walk_alt_body_for_kind_sets(alt, ctx);
-            }
-            for let sb of &l.atom.scan_alts {
-                walk_scan_body_for_kind_sets(sb, ctx);
-            }
-            for let lr of &l.lr_alts {
-                walk_alt_body_for_kind_sets(&lr.suffix, ctx);
-                walk_scan_body_for_kind_sets(&lr.scan_suffix, ctx);
-            }
-        },
-    }
-}
-
-/// Walk a `ScanBody` and pre-register every kind set the op-driven
-/// scan emit will consult at `kind_check_str` time. Keeps the
-/// registry in lock-step with the IR so `_kind_set_<id>` names
-/// don't shift when emit-time intern call orders change between
-/// refactors.
-fn walk_scan_body_for_kind_sets(body: &ScanBody, ctx: &mut GenContext) {
-    for let elem of &body.elements {
-        walk_scan_element_for_kind_sets(elem, ctx);
-    }
-}
-
-fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
-    match *elem {
-        Token(_) => {
-        },
-        RuleCall(_) => {
-        },
-        Wildcard => {
-        },
-        Excluded(e) => {
-            if e.kinds.len() >= 2 {
-                ctx.intern_kind_set(&e.kinds);
-            }
-        },
-        Repeat(r) => {
-            // `gen_scan_op_repeat` reads `inner_admits` for the
-            // while-loop guard. For Optional + RuleRef bodies the emit
-            // additionally subtracts `caller_follow_first` from the
-            // loop's first set — pre-register that derived set too so
-            // the `_kind_set_<id>` registry stays anchored to the
-            // lower walk order.
-            let loop_first = admits_kinds(&r.inner_admits);
-            if loop_first.len() >= 2 {
-                ctx.intern_kind_set(&loop_first);
-            }
-            if let Optional = r.kind {
-                let body_is_rulecall = r.body matches { RuleCall(_) };
-                if body_is_rulecall && !r.caller_follow_first.is_empty() {
-                    let effective = subtract_sets(&loop_first, &r.caller_follow_first);
-                    if effective.len() >= 2 {
-                        ctx.intern_kind_set(&effective);
-                    }
-                }
-            }
-            walk_scan_element_for_kind_sets(&r.body, ctx);
-        },
-        Group(g) => {
-            // The very branches `gen_scan_op_group` renders: a test rendered
-            // from a set this walker did not intern references no id.
-            intern_branch_tests(&scan_decision_branches(&g), ctx);
-            for let b of &g.alts {
-                walk_scan_body_for_kind_sets(b, ctx);
-            }
-        },
-        OptionalLookahead(ole) => {
-            // Per-shape per-position kind sets feed
-            // `gen_scan_lookahead_condition`. Walk every signature so
-            // emit hits existing entries.
-            for let sig of &ole.sigs {
-                for let pos_set of sig {
-                    if pos_set.len() >= 2 {
-                        ctx.intern_kind_set(pos_set);
-                    }
-                }
-            }
-            for let b of &ole.bodies {
-                walk_scan_body_for_kind_sets(b, ctx);
-            }
-        },
-    }
-}
-
-fn walk_dispatch_for_kind_sets(d: &MultiAltDispatch, ctx: &mut GenContext) {
-    intern_branch_tests(&dispatch_branches(d), ctx);
-}
-
-/// Intern the kind set behind every branch test emit will render, so the id it
-/// names exists.
-fn intern_branch_tests(branches: &List<DecisionBranch>, ctx: &mut GenContext) {
-    for let b of branches {
-        if let Kinds(tokens) = &b.test {
-            if tokens.len() >= 2 {
-                ctx.intern_kind_set(tokens);
-            }
-        }
-    }
-}
-
-fn walk_alt_body_for_kind_sets(alt: &AltBody, ctx: &mut GenContext) {
-    for let op of &alt.ops {
-        walk_op_for_kind_sets(op, ctx);
-    }
-}
-
-fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
-    match *op {
-        Excluded(e) => {
-            if e.kinds.len() >= 2 {
-                ctx.intern_kind_set(&e.kinds);
-            }
-        },
-        Repeat(r) => {
-            walk_op_for_kind_sets(&r.body, ctx);
-            // Also walk the nested scan mirror: kind sets that surface
-            // only through `RepeatOp.scan_body` (e.g. an inner Repeat's
-            // `inner_first`) would otherwise be interned late by emit,
-            // shifting `_kind_set_<id>` ids out of the anchor walk.
-            walk_scan_element_for_kind_sets(&r.scan_body, ctx);
-        },
-        Group(go) => {
-            walk_dispatch_for_kind_sets(&go.dispatch, ctx);
-            for let inner_alt of &go.alts {
-                walk_alt_body_for_kind_sets(inner_alt, ctx);
-            }
-            // Likewise anchor sets reachable only through the group's
-            // nested scan mirror (`GroupOp.scan_group`).
-            for let sb of &go.scan_group.alts {
-                walk_scan_body_for_kind_sets(sb, ctx);
-            }
-        },
-        ListLabel(ll) => walk_op_for_kind_sets(&ll.inner, ctx),
-        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) => {
-        },
-    }
 }
 
 /// Classify a parser rule by shape and dispatch to the matching
