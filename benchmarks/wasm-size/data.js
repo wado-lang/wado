@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790739564856,
+  "lastUpdate": 1790744854490,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62141,6 +62141,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/67a3b4b52383201aa09f44c11eae4c060d9f7ece"
         },
         "date": 1790739564368,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22798,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78b0562023eaf28f10c1102f621c7fbed5a10901",
+          "message": "Merge pull request #2226 from wado-lang/ccr-fd64d001-e4xu7u\n\nfix(gale): match ANTLR4 on non-greedy wildcards and trailing lexer predicates",
+          "timestamp": "2026-09-30T13:36:31+09:00",
+          "tree_id": "2250f0cea076dd36f2e9e5ff83265dcaea75b18e",
+          "url": "https://github.com/wado-lang/wado/commit/78b0562023eaf28f10c1102f621c7fbed5a10901"
+        },
+        "date": 1790744853676,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
