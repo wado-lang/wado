@@ -1444,7 +1444,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
         let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
         if la_1 == TK_LIT_b {
             let la_2 = if pos + 2 < tokens.len() { tokens[pos + 2] } else { TK_EOF };
-            if la_2 == TK_LIT_c {
+            if _kind_set_0(la_2) {
                 return scan_a_alt_0(tokens, start);
             } else if la_2 == TK_LIT_d {
                 return scan_a_alt_1(tokens, start);
@@ -1486,7 +1486,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         if p.peek_at(1) == TK_LIT_b {
-            if p.peek_at(2) == TK_LIT_c {
+            if _kind_set_0(p.peek_at(2)) {
                 return _parse_a__inner_alt_0(p);
             } else if p.peek_at(2) == TK_LIT_d {
                 return _parse_a__inner_alt_1(p);
@@ -1596,6 +1596,10 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
     return String::new();
+}
+
+fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_LIT_b | TK_LIT_c };
 }
 
 global EMPTY_SYNC: List<i32> = [];
