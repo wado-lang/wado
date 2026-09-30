@@ -292,7 +292,7 @@ The standard library provides `From` impls for common lossless conversions:
 | `as` casts              | Unchanged | `as` = bit cast; `From` = semantic conversion           |
 | Literal coercion        | Unchanged | Literals still coerce to target type without `From`     |
 | `null` → `Option::None` | Unchanged | Syntactic sugar, not a `From` call                      |
-| Template strings        | Unchanged | `\`{x}\``uses`Display`, not`From`                       |
+| Template strings        | Unchanged | `` `${x}` `` uses `Display`, not `From`                 |
 | Newtype `as`            | Unchanged | `as` still works; `From` is additionally auto-generated |
 
 ## Consequences

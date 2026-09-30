@@ -103,7 +103,7 @@ All four are avoidable without changing what the benchmark measures. Items 1 and
 2. Redundant clone when lifting a CM string: the binding allocates a fresh array
    from linear memory and then clones it into another one before wrapping it in a
    `String`. The culprit is the newtype cast in `String { repr: bytes as
-ByteArray, used: len }` — freshness read through a cast but the move side did
+   ByteArray, used: len }` — freshness read through a cast but the move side did
    not, so the cast alone forced the copy. Fixed, which also drops the second
    allocation in `String::substring`, the per-parameter path-capture cost.
 3. `resp.body` copied on last use: `body_tx.write(resp.body)` compiled to an

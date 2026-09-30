@@ -144,7 +144,7 @@ Each doc type (`DocTrait`, `DocStruct`, etc.) has a `signature` field (rendered 
 The CLI (`wado-cli/src/doc.rs`) renders this DOM in three formats:
 
 - **markdown**: Structured markdown with headings, doc comments, fields, methods
-- **simple**: Cheatsheet-style pseudo-code in `\`\`\`wado` blocks
+- **simple**: Cheatsheet-style pseudo-code in ` ```wado ` blocks
 - **json**: Pretty-printed JSON of the DOM (single module or array)
 
 ### Output Formats
@@ -290,7 +290,7 @@ Fields with `null` values or empty arrays are omitted from the output (`#[serde(
 
 #### Simple (`--format simple`)
 
-Compressed markdown in the style of `docs/cheatsheet.md`. Uses `##` headings and `` ```wado `` code blocks to pack signatures densely. Designed for generating stdlib cheatsheets.
+Compressed markdown in the style of `docs/cheatsheet.md`. Uses `##` headings and ` ```wado ` code blocks to pack signatures densely. Designed for generating stdlib cheatsheets.
 
 Output (`wado doc --format simple file.wado`):
 
@@ -363,7 +363,7 @@ export fn run();
 Rules for simple format:
 
 - Same markdown structure as full (`#` module, `##` categories) but no `###` per item
-- All items of the same category grouped into a single `` ```wado `` block
+- All items of the same category grouped into a single ` ```wado ` block
 - Doc comments omitted entirely — signatures only
 - `impl` blocks rendered as separate code blocks under their type's category
 - Function bodies replaced with `;`, globals omit initializers
