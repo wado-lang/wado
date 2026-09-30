@@ -449,11 +449,6 @@ impl GenContext {
         return self.noted(scan_fn_name(snake));
     }
 
-    /// The name of the rule `snake`'s scan function, where it is defined.
-    pub fn scan_fn_name<S: AsStrSlice>(&self, snake: S) -> String {
-        return scan_fn_name(snake);
-    }
-
     /// The next rule whose scan functions are called and not yet emitted.
     pub fn next_called_scan(&mut self) -> Option<i32> {
         return self.scan_queue.pop();
@@ -730,17 +725,7 @@ impl GenContext {
     /// The trailing arguments of a scan call for the parser state it borrows:
     /// the gate, the ATN state, then the memo. Empty where the scan borrows
     /// none of them.
-    pub fn scan_state_args(&self) -> String {
-        let mut args = String::new();
-        for let a of &self.scan_state_arg_list() {
-            args.push_str(", ");
-            args.push_str(a);
-        }
-        return args;
-    }
-
-    /// `scan_state_args`, one argument each.
-    pub fn scan_state_arg_list(&self) -> List<String> {
+    pub fn scan_state_args(&self) -> List<String> {
         let mut args: List<String> = [];
         if self.emit_scan_gate() {
             args.push(self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD));
@@ -2646,7 +2631,7 @@ impl GenContext {
     /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
     /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
     /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
-    fn intern_sync_set(&mut self, ids: List<i32>) -> Option<i32> {
+    pub fn sync_set(&mut self, ids: List<i32>) -> Option<i32> {
         let ids = self.canonical_ids(ids);
         if ids.is_empty() {
             return null;
@@ -2678,14 +2663,9 @@ impl GenContext {
         return if value.is_empty() { `break ${label};` } else { `break ${label}: ${value};` };
     }
 
-    /// The interned sync set of kind ids `ids`; `null` for an empty one.
-    pub fn sync_set(&mut self, ids: &List<i32>) -> Option<i32> {
-        return self.intern_sync_set(*ids);
-    }
-
     /// `sync_set` of a set of `TK_*` names.
     pub fn sync_name_set(&mut self, tokens: &List<String>) -> Option<i32> {
-        return self.intern_sync_set(self.names_to_ids(tokens));
+        return self.sync_set(self.names_to_ids(tokens));
     }
 
     /// `SYNC_<id>`, the set as the bits a membership test reads, or
@@ -2976,7 +2956,9 @@ fn join_ids(ids: &List<i32>) -> String {
     return s;
 }
 
-fn scan_fn_name<S: AsStrSlice>(snake: S) -> String {
+/// `scan_<snake>`, the name of the rule `snake`'s scan function where it is
+/// defined. A call takes the name from `GenContext::scan_fn_of`.
+pub fn scan_fn_name<S: AsStrSlice>(snake: S) -> String {
     return `scan_${snake}`;
 }
 

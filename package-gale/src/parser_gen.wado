@@ -55,6 +55,7 @@ use {
     GenContext,
     SCAN_MEMO_HANDLE,
     is_nullable,
+    scan_fn_name,
     sets_overlap,
     union_kind_arrays,
 } from "./gen_context.wado";
@@ -459,7 +460,7 @@ fn scan_trailing_args(ctx: &GenContext, to_walker: bool = false) -> String {
 
 /// `scan_trailing_args`, one argument each.
 fn scan_trailing_arg_list(ctx: &GenContext, to_walker: bool = false) -> List<String> {
-    let mut args = ctx.scan_state_arg_list();
+    let mut args = ctx.scan_state_args();
     if !to_walker && ctx.helpers_take_prec() {
         args.push("min_prec");
     }
@@ -717,7 +718,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
     add_scan_params(&mut f, ctx);
     f.set_return_type("i32");
     // A gate scope's `__scoped` body is called by name from its wrapper.
-    if f.name == ctx.scan_fn_name(&rule.snake_name) {
+    if f.name == scan_fn_name(&rule.snake_name) {
         f.set_prunable();
     }
     f.emit_begin(w);
@@ -1840,7 +1841,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
 /// and the LR continuation.
 fn scan_rule_call(rc: &ScanRuleCallElement, ctx: &mut GenContext, form: CallForm) -> CallStmt {
     let mut args: List<String> = ["tokens", "pos"];
-    args.extend(&ctx.scan_state_arg_list());
+    args.extend(&ctx.scan_state_args());
     if ctx.rule_reads_follow(&rc.target_snake) {
         args.push(follow_arg_expr(ctx, &rc.follow_arg));
     }
@@ -3837,7 +3838,7 @@ fn gen_decision_sync<S: AsStrSlice>(
     if !proven.is_empty() && proves(proven, &ctx.token_names_of(&ids)) {
         return;
     }
-    let set = ctx.sync_set(&ids);
+    let set = ctx.sync_set(ids);
     let bits = ctx.sync_bits_ref(set);
     w.line(
         `if !kind_set_has(&${bits}, p.kinds[p.pos]) { builtin::cold_path(); p.${method}(&${bits}, &${ctx.sync_list_ref(
@@ -3997,7 +3998,7 @@ fn gen_op_leaf(
 fn expect_call<S: AsStrSlice>(kind: S, leaf_site: i32, ctx: &mut GenContext) -> String {
     let [follow, ends] = ctx.leaf_follow(leaf_site);
     assert ends || !follow.is_empty(), "a terminal the rule cannot end after has a successor";
-    return `p.expect(${kind}, &${ctx.sync_bits_ref(ctx.sync_set(&follow))}, ${ends})`;
+    return `p.expect(${kind}, &${ctx.sync_bits_ref(ctx.sync_set(follow))}, ${ends})`;
 }
 
 // === GIR-op body emission ===

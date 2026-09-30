@@ -335,8 +335,12 @@ impl CodeWriter {
     /// body forwards every parameter in order and runs nothing before.
     pub fn prune(&mut self) {
         self.flush_text();
+        let mut specs = TreeMap::<String, FnSpec>::new();
+        for let item of &self.items() {
+            specs[item.spec.name] = item.spec;
+        }
         for let mut round = 0; round < MAX_FORWARD_ROUNDS; round += 1 {
-            if !self.forward_calls() {
+            if !self.forward_calls(&specs) {
                 break;
             }
         }
@@ -345,11 +349,13 @@ impl CodeWriter {
 
     /// Every name the text `note`s or a call statement calls.
     pub fn references(&self) -> TreeSet<String> {
-        let mut names = TreeSet::<String>::new();
+        let mut found: List<String> = [];
         for let seg of &self.segs {
-            seg.collect_refs(&mut names);
+            seg.collect_refs(&mut found);
         }
-        for let r of &self.cur.refs {
+        found.extend(&self.cur.refs);
+        let mut names = TreeSet::<String>::new();
+        for let r of &found {
             names.insert(*r);
         }
         return names;
@@ -387,13 +393,11 @@ impl CodeWriter {
         return items;
     }
 
-    /// One round of forwarding. Whether any call changed.
-    fn forward_calls(&mut self) -> bool {
-        let items = self.items();
+    /// One round of forwarding, `specs` holding each function by name. Whether
+    /// any call changed.
+    fn forward_calls(&mut self, specs: &TreeMap<String, FnSpec>) -> bool {
         let mut forwards = TreeMap::<String, Forward>::new();
-        let mut specs = TreeMap::<String, FnSpec>::new();
-        for let item of &items {
-            specs[item.spec.name] = item.spec;
+        for let item of &self.items() {
             if item.spec.prunable {
                 if let Some(fw) = self.forward_of(item) {
                     forwards[item.spec.name] = fw;
@@ -417,7 +421,7 @@ impl CodeWriter {
             let Some(spec) = specs.get_str(&site.call.callee) else {
                 unreachable();
             };
-            if forward_site(&mut out, site, &spec, &fw, &specs) {
+            if forward_site(&mut out, site, &spec, &fw, specs) {
                 changed = true;
             } else {
                 out.push(*seg);
@@ -479,7 +483,7 @@ impl CodeWriter {
                 queue.push(k);
             }
         }
-        let mut roots = TreeSet::<String>::new();
+        let mut names: List<String> = [];
         let mut next_item = 0;
         for let mut i = 0; i < self.segs.len(); i += 1 {
             if next_item < items.len() && i == items[next_item].start {
@@ -487,18 +491,18 @@ impl CodeWriter {
                 next_item += 1;
                 continue;
             }
-            self.segs[i].collect_refs(&mut roots);
+            self.segs[i].collect_refs(&mut names);
         }
-        for let name of roots.iter_value() {
-            reach(&name, &item_of, &mut kept, &mut queue);
+        for let name of &names {
+            reach(name, &item_of, &mut kept, &mut queue);
         }
         while let Some(k) = queue.pop() {
-            let mut names = TreeSet::<String>::new();
+            names.clear();
             for let mut i = items[k].start; i <= items[k].end; i += 1 {
                 self.segs[i].collect_refs(&mut names);
             }
-            for let name of names.iter_value() {
-                reach(&name, &item_of, &mut kept, &mut queue);
+            for let name of &names {
+                reach(name, &item_of, &mut kept, &mut queue);
             }
         }
         let mut out: List<Seg> = [];
@@ -639,21 +643,12 @@ impl Seg {
         };
     }
 
-    fn collect_refs(&self, names: &mut TreeSet<String>) {
+    /// Push the names this segment references, repeats included.
+    fn collect_refs(&self, names: &mut List<String>) {
         match self {
-            Text(t) => {
-                for let r of &t.refs {
-                    names.insert(*r);
-                }
-            },
-            Line(l) => {
-                for let r of &l.refs {
-                    names.insert(*r);
-                }
-            },
-            Call(c) => {
-                names.insert(c.call.callee);
-            },
+            Text(t) => names.extend(&t.refs),
+            Line(l) => names.extend(&l.refs),
+            Call(c) => names.push(c.call.callee),
             FnOpen(_) | Close(_) | Return(_) => {
             },
         }
