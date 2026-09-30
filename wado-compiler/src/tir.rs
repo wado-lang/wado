@@ -4464,6 +4464,17 @@ impl TypeTable {
         self.render_type_name(id, false)
     }
 
+    /// [`Self::type_name`] as the type read before `boxing::prepare_types`
+    /// redefined a borrow into `Box<T>`: what the source wrote, `&i32`.
+    #[must_use]
+    pub fn type_name_unboxed(&self, id: TypeId) -> String {
+        match self.spelled_borrow(id) {
+            Some((payload, RefKind::Shared)) => format!("&{}", self.type_name_unboxed(payload)),
+            Some((payload, RefKind::Mut)) => format!("&mut {}", self.type_name_unboxed(payload)),
+            None => self.type_name(id),
+        }
+    }
+
     /// [`Self::type_name`] with every declared head written in the spec's
     /// `MODULE#SYMBOL` notation.
     ///

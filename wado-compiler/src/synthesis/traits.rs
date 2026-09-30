@@ -23,7 +23,7 @@ use crate::tir::{
     TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStructField, TirTypeParam, TraitRef, TypeId, TypeTable,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 use super::common::{
@@ -4100,44 +4100,76 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 }
 
 /// Mint the `fn(..)^Inspect` dispatch stubs the monomorphized program calls,
-/// each in the module whose call names it. A `fn(..)` type spelled through a
-/// type parameter, as a generic struct's field is, is concrete only here.
+/// each in the module whose call names it. A call is renamed first after its
+/// receiver's type: one written in a generic body is spelled through the
+/// body's parameters (`fn(T)->i32`, `fn(I::Item)->i32`), which only an
+/// instance's receiver has answered.
 pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
     let names = TraitsStdlibNames::from_type_table(&flat.type_table.borrow());
-    let signatures: hashmap::IndexMap<String, FnSignature> =
-        collect_canonical_fn_signatures(&flat.type_table.borrow())
-            .into_iter()
-            .map(|sig| {
-                let info =
-                    trait_method_info(&sig.receiver, &names.inspect_fq, &names.inspect_method);
-                (info.to_mangled_name(), sig)
-            })
-            .collect();
 
     struct CalledStubs<'a> {
-        signatures: &'a hashmap::IndexMap<String, FnSignature>,
-        called: IndexSet<(ModuleSource, String)>,
+        tt: &'a TypeTable,
+        names: &'a TraitsStdlibNames,
+        /// `(module, stub name)` per call, and the signature each name stands for.
+        called: hashmap::IndexMap<(ModuleSource, String), FnSignature>,
     }
-    impl TirRefVisitor for CalledStubs<'_> {
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            if let TirExprKind::Call { func, .. } = &expr.kind
-                && self.signatures.contains_key(&func.name)
-            {
-                self.called
-                    .insert((func.module_source.clone(), func.name.clone()));
-            }
+    impl TirMutVisitor for CalledStubs<'_> {
+        fn visit_expr(&mut self, expr: &mut TirExpr) {
             self.walk_expr(expr);
+            let TirExprKind::Call { func, args, .. } = &mut expr.kind else {
+                return;
+            };
+            let inspect = self.names.inspect_fq.called_decl();
+            let is_inspect = func.method_info.as_ref().is_some_and(|info| {
+                info.trait_decl() == Some(inspect) && info.method_name == self.names.inspect_method
+            });
+            if !is_inspect {
+                return;
+            }
+            let receiver_type = self.tt.peel_refs(args[0].expr.type_id);
+            let ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } = self.tt.get(receiver_type)
+            else {
+                return;
+            };
+            assert!(
+                self.tt.is_concrete(receiver_type),
+                "a monomorphized call inspects a concrete fn type"
+            );
+            let receiver = self.tt.fn_receiver_name(self.tt.get(receiver_type));
+            let respelled = trait_method_info(
+                &receiver,
+                &self.names.inspect_fq,
+                &self.names.inspect_method,
+            );
+            func.name = respelled.to_mangled_name();
+            func.method_info = Some(respelled);
+            self.called
+                .entry((func.module_source.clone(), func.name.clone()))
+                .or_insert(FnSignature {
+                    repr_type_id: receiver_type,
+                    arity: params.len(),
+                    return_type: *return_type,
+                    receiver,
+                });
         }
     }
+    let tt = flat.type_table.borrow();
     let mut calls = CalledStubs {
-        signatures: &signatures,
-        called: IndexSet::default(),
+        tt: &tt,
+        names: &names,
+        called: hashmap::IndexMap::default(),
     };
     for func_rc in &flat.functions {
-        if let Some(body) = &func_rc.borrow().body {
+        if let Some(body) = &mut func_rc.borrow_mut().body {
             calls.visit_block(body);
         }
     }
+    let called = calls.called;
+    drop(tt);
     let defined: IndexSet<(ModuleSource, String)> = flat
         .functions
         .iter()
@@ -4151,11 +4183,10 @@ pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
     let formatter_type = tt.make_compiler_struct(CompilerItem::Formatter);
     let fmt_type = tt.make_mut_ref(formatter_type);
     let mut generated = Vec::new();
-    for (module_source, name) in calls.called {
-        if defined.contains(&(module_source.clone(), name.clone())) {
+    for ((module_source, name), sig) in called {
+        if defined.contains(&(module_source.clone(), name)) {
             continue;
         }
-        let sig = &signatures[&name];
         let ref_type = tt.make_ref(sig.repr_type_id);
         let mut stub = generate_fn_inspect_fn(
             &sig.receiver,
@@ -4595,10 +4626,11 @@ fn collect_generic_resource_instances(tt: &TypeTable) -> Vec<(TypeId, DefId, Vec
         .collect()
 }
 
-/// One `fn(..)` spelling a dispatch stub is minted for.
-/// `repr_type_id` is the first `ResolvedType::Function` seen with this
-/// spelling, used to build the stub's `&self` type. Any id with the spelling
-/// would do; taking the first makes two compiles byte-identical.
+/// One `fn(..)` spelling a dispatch stub is minted for. Keyed by the stub's
+/// name rather than a `TypeId`, since `&T` and `&mut T` spell alike and share
+/// one stub. `repr_type_id` is the first call's receiver type with the
+/// spelling, used to build the stub's `&self` type; taking the first makes two
+/// compiles byte-identical.
 struct FnSignature {
     repr_type_id: TypeId,
     arity: usize,
@@ -4606,41 +4638,6 @@ struct FnSignature {
     /// The type's own name — the receiver its dispatch stubs hang off, and what
     /// a call on a value of this type asks for.
     receiver: FqTypeName,
-}
-
-fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
-    // Dedup by mangled name, not `TypeId`: `&T` / `&mut T` mangle identically
-    // and must share one stub, else the stubs collide post-mono.
-    let mut seen: IndexSet<String> = IndexSet::default();
-    let mut result = Vec::new();
-
-    for (id, resolved) in tt.all_types() {
-        let ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } = resolved
-        else {
-            continue;
-        };
-        // The whole type must be determined: the receiver is its own spelling,
-        // so an undetermined part would put an inference variable in a function
-        // name. Substitution gives each instantiation its own stub.
-        if !tt.is_concrete(*return_type) || !params.iter().all(|p| tt.is_concrete(*p)) {
-            continue;
-        }
-        let receiver = tt.fn_receiver_name(resolved);
-        if !seen.insert(receiver.to_mangled()) {
-            continue;
-        }
-        result.push(FnSignature {
-            repr_type_id: id,
-            arity: params.len(),
-            return_type: *return_type,
-            receiver,
-        });
-    }
-    result
 }
 
 /// Generate `Name^Eq::eq(&self, &Self) -> bool` for a type that compares as

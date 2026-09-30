@@ -135,7 +135,9 @@ reach — resources, tuple and generic-resource instances, and the `fn(..)`
 dispatch stubs — `synthesis::traits` emits alongside the other auto-derived
 traits, skipping any receiver that has a methodful impl of its own. The stubs
 alone wait for monomorphize, since a `fn(..)` type spelled through a type
-parameter is concrete only in its instance.
+parameter or a projection (`fn(T)`, `fn(I::Item)`) is concrete only in its
+instance. There each call is renamed after its receiver's type, then the stub
+it names is minted.
 
 ### Closure inspect via runtime dispatch
 

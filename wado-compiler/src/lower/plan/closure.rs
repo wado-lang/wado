@@ -141,9 +141,9 @@ fn format_closure_signature(
 ) -> String {
     let param_names: Vec<String> = params
         .iter()
-        .map(|(_, ty)| type_table.type_name(*ty))
+        .map(|(_, ty)| type_table.type_name_unboxed(*ty))
         .collect();
-    let ret_name = type_table.type_name(return_type);
+    let ret_name = type_table.type_name_unboxed(return_type);
     format!("|{}| -> {}", param_names.join(", "), ret_name)
 }
 
