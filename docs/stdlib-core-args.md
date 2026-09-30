@@ -107,7 +107,7 @@ _Fields are private._
 
 #### `impl Deserializer for ArgvDeserializer`
 
-##### `fn on_duplicate_field(&self) -> DuplicateKeyPolicy`
+##### `fn on_duplicate_field(&self) -> DuplicateFieldPolicy`
 
 A command line is last-wins by convention, so a wrapper can append an
 override. A repeatable option never reaches this — `gather_option_values`

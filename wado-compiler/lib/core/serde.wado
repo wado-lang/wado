@@ -228,7 +228,7 @@ impl DeserializeError {
 /// What to do when the wire repeats a field or key. A repeat is how two
 /// readers of the same bytes are made to disagree, so rejecting is the
 /// default; `Warn` and `PassThru` both keep the last occurrence.
-pub enum DuplicateKeyPolicy {
+pub enum DuplicateFieldPolicy {
     Error,
     Warn,
     PassThru,
@@ -237,17 +237,17 @@ pub enum DuplicateKeyPolicy {
 /// Applies `policy` to a key the wire already wrote. Detecting the repeat is
 /// the caller's job: a struct sees a filled slot, a map asks `try_insert`, a
 /// set asks `insert`, whose element is its key.
-pub fn report_duplicate_field<K: Inspect>(policy: DuplicateKeyPolicy, key: &K) -> Result<(), DeserializeError> {
+pub fn report_duplicate_field<K: Inspect>(policy: DuplicateFieldPolicy, key: &K) -> Result<(), DeserializeError> {
     match policy {
-        DuplicateKeyPolicy::Error => {
+        DuplicateFieldPolicy::Error => {
             builtin::cold_path();
             return Result::Err(DeserializeError::duplicate_field(key));
         },
-        DuplicateKeyPolicy::Warn => {
+        DuplicateFieldPolicy::Warn => {
             builtin::cold_path();
             log_stderr(`warning: duplicate field: ${key:?}`);
         },
-        DuplicateKeyPolicy::PassThru => {
+        DuplicateFieldPolicy::PassThru => {
         },
     }
     return Result::Ok(());
@@ -574,8 +574,8 @@ pub trait Deserializer with () {
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
 
     /// What this format does when the wire repeats a field or key.
-    fn on_duplicate_field(&self) -> DuplicateKeyPolicy {
-        return DuplicateKeyPolicy::Error;
+    fn on_duplicate_field(&self) -> DuplicateFieldPolicy {
+        return DuplicateFieldPolicy::Error;
     }
 
 

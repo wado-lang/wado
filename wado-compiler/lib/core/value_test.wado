@@ -12,7 +12,7 @@ use {
     DeserializeVariant,
     DeserializeError,
     DeserializeErrorKind,
-    DuplicateKeyPolicy,
+    DuplicateFieldPolicy,
     IgnoredAny,
     Visitor,
 } from "core:serde";
@@ -1033,8 +1033,8 @@ impl<D: Deserializer> Deserializer for LastWins<D> {
     type StructAccess = D::StructAccess;
     type VariantAccess = D::VariantAccess;
 
-    fn on_duplicate_field(&self) -> DuplicateKeyPolicy {
-        return DuplicateKeyPolicy::PassThru;
+    fn on_duplicate_field(&self) -> DuplicateFieldPolicy {
+        return DuplicateFieldPolicy::PassThru;
     }
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {

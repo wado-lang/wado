@@ -16,7 +16,7 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     apply_case,
-    DuplicateKeyPolicy,
+    DuplicateFieldPolicy,
     report_duplicate_field,
     TextKeySerializer,
     Visitor,
@@ -404,17 +404,17 @@ test "apply_case heck-parity edge corpus" {
 
 test "report_duplicate_field rejects under Error, naming the key as Inspect does" {
     let role: String = "role";
-    let e = report_duplicate_field(DuplicateKeyPolicy::Error, &role).unwrap_err();
+    let e = report_duplicate_field(DuplicateFieldPolicy::Error, &role).unwrap_err();
     assert e.kind == DeserializeErrorKind::DuplicateField && e.message == `duplicate field: "role"`;
-    assert report_duplicate_field(DuplicateKeyPolicy::Error, &7) matches { Err(e) && e.message == "duplicate field: 7" };
+    assert report_duplicate_field(DuplicateFieldPolicy::Error, &7) matches { Err(e) && e.message == "duplicate field: 7" };
 }
 
 test "report_duplicate_field continues under Warn" {
-    assert report_duplicate_field(DuplicateKeyPolicy::Warn, &7) matches { Ok };
+    assert report_duplicate_field(DuplicateFieldPolicy::Warn, &7) matches { Ok };
 }
 
 test "report_duplicate_field continues under PassThru" {
-    assert report_duplicate_field(DuplicateKeyPolicy::PassThru, &7) matches { Ok };
+    assert report_duplicate_field(DuplicateFieldPolicy::PassThru, &7) matches { Ok };
 }
 
 struct KeyPair {

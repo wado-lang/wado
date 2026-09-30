@@ -58,7 +58,7 @@ use {
     FieldSchema,
     DeserializeError,
     DeserializeErrorKind,
-    DuplicateKeyPolicy,
+    DuplicateFieldPolicy,
     NoCompound,
     Visitor,
 } from "core:serde";
@@ -472,8 +472,8 @@ impl Deserializer for ArgvDeserializer {
     /// A command line is last-wins by convention, so a wrapper can append an
     /// override. A repeatable option never reaches this — `gather_option_values`
     /// consumes its later occurrences.
-    fn on_duplicate_field(&self) -> DuplicateKeyPolicy {
-        return DuplicateKeyPolicy::PassThru;
+    fn on_duplicate_field(&self) -> DuplicateFieldPolicy {
+        return DuplicateFieldPolicy::PassThru;
     }
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {

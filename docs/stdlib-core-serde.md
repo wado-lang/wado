@@ -95,7 +95,7 @@ which is unrecoverable unlike an error.
 
 ## Functions
 
-### `pub fn report_duplicate_field<K: Inspect>(policy: DuplicateKeyPolicy, key: &K) -> Result<(), DeserializeError>`
+### `pub fn report_duplicate_field<K: Inspect>(policy: DuplicateFieldPolicy, key: &K) -> Result<(), DeserializeError>`
 
 Applies `policy` to a key the wire already wrote. Detecting the repeat is
 the caller's job: a struct sees a filled slot, a map asks `try_insert`, a
@@ -404,7 +404,7 @@ byte string; JSON reads base64. The default reads a sequence of `u8`.
 
 #### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
-#### `fn on_duplicate_field(&self) -> DuplicateKeyPolicy`
+#### `fn on_duplicate_field(&self) -> DuplicateFieldPolicy`
 
 What this format does when the wire repeats a field or key.
 
@@ -704,7 +704,7 @@ Where the key starts in the input, or -1 where it has no position.
 Nesting ran past the deserializer's depth limit. A resource bound, not
 a spec violation: the input may be perfectly well-formed.
 
-### `pub enum DuplicateKeyPolicy`
+### `pub enum DuplicateFieldPolicy`
 
 What to do when the wire repeats a field or key. A repeat is how two
 readers of the same bytes are made to disagree, so rejecting is the

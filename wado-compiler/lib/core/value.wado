@@ -33,7 +33,7 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
-    DuplicateKeyPolicy,
+    DuplicateFieldPolicy,
     TextKeyDeserializer,
     TextKeySerializer,
 } from "core:serde";
@@ -226,7 +226,7 @@ impl Serialize for Value {
 
 struct ValueVisitor {
     /// `visit_map` is handed the map access, never the deserializer.
-    on_duplicate: DuplicateKeyPolicy,
+    on_duplicate: DuplicateFieldPolicy,
 }
 
 /// An object key's text: a string as itself, any other scalar as a text format

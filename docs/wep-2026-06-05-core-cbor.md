@@ -365,7 +365,7 @@ have one representation and canonical re-encoding is shortest-form:
 format writes it (`1` becomes `"1"`), the rule
 [Serialization](./spec-serialization.md) states for every map key, so a CBOR
 map and its JSON rendering read back as the same `Value`. Two keys that spell
-alike, `1` and `"1"`, are a repeated key, which the default `DuplicateKeyPolicy`
+alike, `1` and `"1"`, are a repeated key, which the default `DuplicateFieldPolicy`
 rejects: that is RFC 8949 §6.1's collision caveat. A compound key is a
 `DeserializeError`. Re-encoding such a `Value` writes text keys (Known gaps).
 
@@ -410,7 +410,7 @@ reused via `pub` functions where practical.
   than exhausting the stack.
 - Never pre-allocate a container from an untrusted declared length (a 2-byte
   header can claim a billion elements); grow incrementally as items are read.
-- Reject duplicate map keys (by default; `DuplicateKeyPolicy`) and trailing
+- Reject duplicate map keys (by default; `DuplicateFieldPolicy`) and trailing
   data so a decode result is unambiguous.
 - Validate UTF-8 in text strings.
 

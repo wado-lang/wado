@@ -12,7 +12,7 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     SerializeErrorKind,
-    DuplicateKeyPolicy,
+    DuplicateFieldPolicy,
     report_duplicate_field,
 } from "core:serde";
 
@@ -767,7 +767,12 @@ impl<K: Ord + Deserialize + Inspect, V: Deserialize> Deserialize for TreeMap<K, 
 impl<K: Ord + Inspect, V> TreeMap<K, V> {
     /// Inserts a decoded entry: a repeated key is reported under `policy`,
     /// and one the policy admits takes the last value.
-    internal fn insert_decoded(&mut self, policy: DuplicateKeyPolicy, key: K, value: V) -> Result<(), DeserializeError> {
+    internal fn insert_decoded(
+        &mut self,
+        policy: DuplicateFieldPolicy,
+        key: K,
+        value: V,
+    ) -> Result<(), DeserializeError> {
         // The losing insert keeps the first value, so a repeat re-assigns.
         if !self.try_insert(key, value) {
             report_duplicate_field(policy, &key)?;
