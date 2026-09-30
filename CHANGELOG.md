@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.0.34](https://github.com/wado-lang/wado/compare/v0.0.33...v0.0.34) - 2026-09-30
+
+- chore(harness): keep every edit in the main session, where it can be watched by @gfx in https://github.com/wado-lang/wado/pull/2222
+- chore(gale): cover package-gale's CLI and generators past 95%, fixing what the tests found by @gfx in https://github.com/wado-lang/wado/pull/2224
+- feat(marl)!: keep HTML comments out of rendered pages, under the consumer's control by @gfx in https://github.com/wado-lang/wado/pull/2225
+
 ## [v0.0.33](https://github.com/wado-lang/wado/compare/v0.0.32...v0.0.33) - 2026-09-29
 
 - fix(loam): hf2loam names a malformed header, and next_token asserts its input by @gfx in https://github.com/wado-lang/wado/pull/2209
