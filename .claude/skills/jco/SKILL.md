@@ -60,7 +60,7 @@ mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transp
 | JSPI                      | ✅ native (Node 26 no flag; Node 24 needs the flag)                                                                                                  |
 | Wide-arithmetic component | ❌ `transpile` rejects it (`wide arithmetic support is not enabled`); even if forced, V8 rejects the opcode at runtime → use `-f no-wide-arithmetic` |
 | Stdout via stream         | ✅ jco's own shim delivers it, flushed after `run()` resolves                                                                                        |
-| Filesystem read stream    | ⚠️ no longer deadlocks; reading through a preopen is unverified                                                                                      |
+| Filesystem read stream    | ⚠️ no longer deadlocks; reading through a preopen is unverified                                                                                       |
 
 ## wide-arithmetic (`-f no-wide-arithmetic`)
 

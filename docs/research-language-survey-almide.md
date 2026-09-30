@@ -275,9 +275,9 @@ Learned:
 Take:
 
 - [ ] A rejection record. Wado has none. The reasons for refusing lifetimes, a
-      borrow checker, `unsafe`, macros, dynamic dispatch and ASI are written
-      down nowhere, so an agent works them out again every time. The operating
-      rule for the file matters as much as the list in it.
+  borrow checker, `unsafe`, macros, dynamic dispatch and ASI are written
+  down nowhere, so an agent works them out again every time. The operating
+  rule for the file matters as much as the list in it.
 
 Refuse:
 

@@ -9,128 +9,128 @@ codegen — is shipping. Detailed development history is in the git log; this
 section records only the current state.
 
 - [x] Front-end: `with E => h do { ... }`, `resume value`, and an explicit
-      `..trap` / `..forward` rest clause in `impl Effect for Type`. Bare `..`
-      is rejected.
+  `..trap` / `..forward` rest clause in `impl Effect for Type`. Bare `..`
+  is rejected.
 - [x] Elaborator / effect-check: `TirExprKind::WithHandler` and
-      `TirExprKind::Resume` carry the structure through TIR. The elaborator
-      validates effect-decl reference, handler-impls-effect relationship,
-      and `resume`-only-in-handler-method. Effect-check skips handled
-      effects from caller requirements while walking the body.
+  `TirExprKind::Resume` carry the structure through TIR. The elaborator
+  validates effect-decl reference, handler-impls-effect relationship,
+  and `resume`-only-in-handler-method. Effect-check skips handled
+  effects from caller requirements while walking the body.
 - [x] Dispatch synthesis (`synthesis/effect_dispatch.rs`) emits, per effect:
-      a `$Dispatch_<E>` Wasm GC struct (recursive `outer: Option<&Self>` +
-      one `fn(args) -> ret` closure field per operation), an
-      `$effect_<E>: Option<&$Dispatch_<E>>` mut global initialised to
-      `null`, and an `$effect_dispatch__<E>__<op>` wrapper per operation.
-      `WithHandler` lowers to a desugared block that saves the global,
-      builds closures capturing the handler, populates the dispatch
-      struct, installs the global, runs the body, and restores on exit.
-      Every `<E>::<op>` call site is rewritten to call the wrapper, so
-      installed handlers are observed at any call-stack depth.
+  a `$Dispatch_<E>` Wasm GC struct (recursive `outer: Option<&Self>` +
+  one `fn(args) -> ret` closure field per operation), an
+  `$effect_<E>: Option<&$Dispatch_<E>>` mut global initialised to
+  `null`, and an `$effect_dispatch__<E>__<op>` wrapper per operation.
+  `WithHandler` lowers to a desugared block that saves the global,
+  builds closures capturing the handler, populates the dispatch
+  struct, installs the global, runs the body, and restores on exit.
+  Every `<E>::<op>` call site is rewritten to call the wrapper, so
+  installed handlers are observed at any call-stack depth.
 - [x] Cross-function-boundary dispatch. Calls to effect operations from
-      helper functions invoked inside `with` reach the installed handler
-      via the global. The wrapper restores `outer` before invoking the
-      handler closure, so a handler method calling its own effect's
-      operation reaches the outer handler chain rather than recursing
-      through itself. Unimplemented operations get a stub closure — a trap
-      (`..trap`) or a forward to the outer handler (`..forward`).
-      Fixtures: `effect_handler_cross_function.wado`,
-      `effect_handler_nested_same.wado`, `effect_handler_self_delegation.wado`.
+  helper functions invoked inside `with` reach the installed handler
+  via the global. The wrapper restores `outer` before invoking the
+  handler closure, so a handler method calling its own effect's
+  operation reaches the outer handler chain rather than recursing
+  through itself. Unimplemented operations get a stub closure — a trap
+  (`..trap`) or a forward to the outer handler (`..forward`).
+  Fixtures: `effect_handler_cross_function.wado`,
+  `effect_handler_nested_same.wado`, `effect_handler_self_delegation.wado`.
 - [x] Early-exit restore. `return v` / `break L: v` / `continue` /
-      label-less `break` that cross out of a `with` body splice the
-      restore sequence in front of the jump (`RestoreInjector` TIR
-      walker). Value-carrying jumps evaluate the value under the
-      still-installed handler before restoring. Jumps to labels declared
-      inside the do-block body are skipped; closures are not descended
-      into. Fixtures: `effect_handler_early_return.wado`,
-      `effect_handler_break_label_cross.wado`,
-      `effect_handler_continue_cross.wado`,
-      `effect_handler_inner_break.wado` (negative).
+  label-less `break` that cross out of a `with` body splice the
+  restore sequence in front of the jump (`RestoreInjector` TIR
+  walker). Value-carrying jumps evaluate the value under the
+  still-installed handler before restoring. Jumps to labels declared
+  inside the do-block body are skipped; closures are not descended
+  into. Fixtures: `effect_handler_early_return.wado`,
+  `effect_handler_break_label_cross.wado`,
+  `effect_handler_continue_cross.wado`,
+  `effect_handler_inner_break.wado` (negative).
 - [x] Bundled handlers (`with &mut h do`, `with h do`). The elaborator
-      expands a bundled binding into one `TirHandlerBinding` per effect
-      that the handler's type implements. Bindings install in source
-      order; a later binding wins when the same effect appears twice on
-      a `with` line, with the earlier binding reachable via the outer
-      chain. All bindings from one bundled clause share a synthesised
-      `$h_<bundle>` local (`TirHandlerBinding.bundle_group`), so the
-      handler expression evaluates exactly once and mutations through
-      any installed effect are observed by the rest — the contract that
-      makes value-form `with h do` work. Diagnostics:
-      `BundledHandlerImplementsNoEffect`,
-      `BundledHandlerUnsupportedHandlerType` (e.g. type parameters,
-      associated-type projections; user is directed to `with E => h do`).
-      Fixtures: `effect_handler_bundled.wado`,
-      `effect_handler_bundled_value.wado`,
-      `effect_handler_bundled_mixed.wado`,
-      `effect_handler_bundled_no_effect.wado` (negative),
-      `effect_handler_bundled_type_param_rejected.wado` (negative).
+  expands a bundled binding into one `TirHandlerBinding` per effect
+  that the handler's type implements. Bindings install in source
+  order; a later binding wins when the same effect appears twice on
+  a `with` line, with the earlier binding reachable via the outer
+  chain. All bindings from one bundled clause share a synthesised
+  `$h_<bundle>` local (`TirHandlerBinding.bundle_group`), so the
+  handler expression evaluates exactly once and mutations through
+  any installed effect are observed by the rest — the contract that
+  makes value-form `with h do` work. Diagnostics:
+  `BundledHandlerImplementsNoEffect`,
+  `BundledHandlerUnsupportedHandlerType` (e.g. type parameters,
+  associated-type projections; user is directed to `with E => h do`).
+  Fixtures: `effect_handler_bundled.wado`,
+  `effect_handler_bundled_value.wado`,
+  `effect_handler_bundled_mixed.wado`,
+  `effect_handler_bundled_no_effect.wado` (negative),
+  `effect_handler_bundled_type_param_rejected.wado` (negative).
 - [x] Resource handler dispatch. Resources participate in the dispatch
-      protocol identically to effects: `with R => h do` installs a
-      handler whose `impl R for T` methods are one-shot handler bodies
-      (`resume` is valid), `R::<op>(args)` and `r.<op>(args)` call sites
-      route through the dispatch wrapper, and the handler body sees the
-      outer scope so `R::<op>` from inside the impl delegates to the
-      wasmtime-provided implementation.
-      `synthesis::effect_dispatch::build_effect_index` walks both
-      `module.effects` and `module.resources` into one
-      `EffectKey -> EffectMeta` index; `EffectMeta.is_resource` keeps
-      the wrapper's `effects: vec![]` empty for resources (matching the
-      cm_binding adapter — resources are not effects).
-      Fixture: `effect_handler_resource_fields.wado` (counting handler
-      for `wasi:http`'s `Fields` with self-delegation to real WASI).
+  protocol identically to effects: `with R => h do` installs a
+  handler whose `impl R for T` methods are one-shot handler bodies
+  (`resume` is valid), `R::<op>(args)` and `r.<op>(args)` call sites
+  route through the dispatch wrapper, and the handler body sees the
+  outer scope so `R::<op>` from inside the impl delegates to the
+  wasmtime-provided implementation.
+  `synthesis::effect_dispatch::build_effect_index` walks both
+  `module.effects` and `module.resources` into one
+  `EffectKey -> EffectMeta` index; `EffectMeta.is_resource` keeps
+  the wrapper's `effects: vec![]` empty for resources (matching the
+  cm_binding adapter — resources are not effects).
+  Fixture: `effect_handler_resource_fields.wado` (counting handler
+  for `wasi:http`'s `Fields` with self-delegation to real WASI).
 
 - [x] Generic-resource handler dispatch (`Stream<T>`,
-      `StreamWritable<T>`, `Future<T>`, `FutureWritable<T>`).
-      The dispatch synthesis runs in two halves around the cm_binding
-      pass: `synthesize_pre_cm_binding` (wrappers, globals, structs,
-      call-site rewriting) before `cm_binding`, and
-      `synthesize_post_check` (`WithHandler` desugaring) after
-      `effect_check`. Per `(module, base, type_args)` instantiation
-      key, the synthesis substitutes the resource's operation template
-      and emits a distinct `$Dispatch_Stream<u8>` struct +
-      `$effect_Stream<u8>` global + `$effect_dispatch__Stream<u8>__op`
-      wrapper triple. `&self` / `&mut self` shorthand on impl methods is
-      synthesised as a `TirEffectOp` receiver at index 0
-      (`Self = GenericResource { name, module, type_args }`), and call
-      sites — both static (`Stream::<u8>::new()`) and instance
-      (`tx.write(payload)`) — are rewritten through the matching
-      wrapper. The wrapper's no-handler else-branch emits the same
-      `Call { cm_name }` shape that user code emits, with
-      `MonomorphInfo { impl_type_args }` for static methods, so
-      cm_binding rewrites both paths uniformly.
-      Fixtures: `effect_handler_resource_stream.wado` (`MockStream`
-      implementing both ends, round-tripping bytes through a buffer),
-      `effect_handler_resource_future.wado` (`MockFuture` round-tripping
-      a value through a stored slot).
+  `StreamWritable<T>`, `Future<T>`, `FutureWritable<T>`).
+  The dispatch synthesis runs in two halves around the cm_binding
+  pass: `synthesize_pre_cm_binding` (wrappers, globals, structs,
+  call-site rewriting) before `cm_binding`, and
+  `synthesize_post_check` (`WithHandler` desugaring) after
+  `effect_check`. Per `(module, base, type_args)` instantiation
+  key, the synthesis substitutes the resource's operation template
+  and emits a distinct `$Dispatch_Stream<u8>` struct +
+  `$effect_Stream<u8>` global + `$effect_dispatch__Stream<u8>__op`
+  wrapper triple. `&self` / `&mut self` shorthand on impl methods is
+  synthesised as a `TirEffectOp` receiver at index 0
+  (`Self = GenericResource { name, module, type_args }`), and call
+  sites — both static (`Stream::<u8>::new()`) and instance
+  (`tx.write(payload)`) — are rewritten through the matching
+  wrapper. The wrapper's no-handler else-branch emits the same
+  `Call { cm_name }` shape that user code emits, with
+  `MonomorphInfo { impl_type_args }` for static methods, so
+  cm_binding rewrites both paths uniformly.
+  Fixtures: `effect_handler_resource_stream.wado` (`MockStream`
+  implementing both ends, round-tripping bytes through a buffer),
+  `effect_handler_resource_future.wado` (`MockFuture` round-tripping
+  a value through a stored slot).
 
 - [x] Value form (`let x = with E => h do { expr }`). `with ... do` is an
-      expression that evaluates to its body block's trailing value, not a
-      statement that always yields `()`. The elaborator types `WithHandler`
-      as the body's value type (annotate `resolve_with_handler` and reify
-      `reify_with_handler` both derive it from the body's tail expression;
-      `block_value_type` is the shared helper), and the dispatch desugaring
-      binds the body's trailing value to a temp local while the handler is
-      still installed, runs the restore sequence, then yields the local as
-      the block's tail (`take_tail_value` in
-      `synthesis/effect_dispatch.rs`). The statement form is unchanged: a
-      `Unit`-tailed body skips the temp entirely. Fixture:
-      `effect_handler_value_form.wado`.
+  expression that evaluates to its body block's trailing value, not a
+  statement that always yields `()`. The elaborator types `WithHandler`
+  as the body's value type (annotate `resolve_with_handler` and reify
+  `reify_with_handler` both derive it from the body's tail expression;
+  `block_value_type` is the shared helper), and the dispatch desugaring
+  binds the body's trailing value to a temp local while the handler is
+  still installed, runs the restore sequence, then yields the local as
+  the block's tail (`take_tail_value` in
+  `synthesis/effect_dispatch.rs`). The statement form is unchanged: a
+  `Unit`-tailed body skips the temp entirely. Fixture:
+  `effect_handler_value_form.wado`.
 
 - [x] `..forward`. The rest clause lives on the impl block, so it reaches the
-      dispatch synthesis through `TirModule::impls` — a block whose only content
-      is a rest clause has no method to be discovered by. An omitted operation
-      gets a stub calling that operation's own dispatch wrapper, which has
-      already installed `outer`, so the call lands on the next handler out and
-      the outermost handler's `..forward` behaves like `..trap`. Every dispatch
-      boundary is therefore typed at the call-site type, and an async
-      operation's handler closure wraps its `T` through `$cm_wrap_async__`.
-      Fixtures: `effect_handler_forward_rest.wado`,
-      `effect_handler_forward_async_op.wado`.
+  dispatch synthesis through `TirModule::impls` — a block whose only content
+  is a rest clause has no method to be discovered by. An omitted operation
+  gets a stub calling that operation's own dispatch wrapper, which has
+  already installed `outer`, so the call lands on the next handler out and
+  the outermost handler's `..forward` behaves like `..trap`. Every dispatch
+  boundary is therefore typed at the call-site type, and an async
+  operation's handler closure wraps its `T` through `$cm_wrap_async__`.
+  Fixtures: `effect_handler_forward_rest.wado`,
+  `effect_handler_forward_async_op.wado`.
 
 - [ ] `core:test::MockCM` and handler-bundling helpers (e.g.
-      `MockStdout::drain()`). With generic-resource dispatch in place,
-      packaging the buffered Stream/Future handlers from the
-      [Buffered CM Handlers (MockCM)](#buffered-cm-handlers-mockcm)
-      section into a reusable `core:test` fixture is the remaining work.
+  `MockStdout::drain()`). With generic-resource dispatch in place,
+  packaging the buffered Stream/Future handlers from the
+  [Buffered CM Handlers (MockCM)](#buffered-cm-handlers-mockcm)
+  section into a reusable `core:test` fixture is the remaining work.
 
 ## Context
 

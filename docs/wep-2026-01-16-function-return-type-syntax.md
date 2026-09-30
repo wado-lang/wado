@@ -8,7 +8,6 @@
 Wado needed to decide on the syntax for specifying function return types. Two primary options were considered:
 
 1. **Arrow syntax (`->`)** - Used by Rust, Swift, Haskell, Python, and C++ (trailing return type)
-
    ```wado
    fn add(a: i32, b: i32) -> i32 { ... }
    ```

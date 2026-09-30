@@ -118,39 +118,39 @@ Ordered by yield per cost. Each run reports the corpus it drew and the sites
 each shape and payload reached.
 
 - [x] Opaque read payload. Its first full run found three bugs: two colliding
-      mangled names (`&&T` spelled as `&T`, a generic newtype spelled without
-      its arguments) and a closure capture handed the box where the field
-      holds the value.
+  mangled names (`&&T` spelled as `&T`, a generic newtype spelled without
+  its arguments) and a closure capture handed the box where the field
+  holds the value.
 - [ ] Retry a payload the compiler refuses without the bindings the error
-      names. A resource binding whose read is a move costs a fixture the whole
-      read payload; the report names each one under `dropped combinations`, so
-      the cost of leaving this undone is on the page.
+  names. A resource binding whose read is a move costs a fixture the whole
+  read payload; the report names each one under `dropped combinations`, so
+  the cost of leaving this undone is on the page.
 - [ ] Recompile determinism as a second oracle: compile each fixture twice and
-      compare the Wasm byte for byte. Catches what no output comparison can see.
+  compare the Wasm byte for byte. Catches what no output comparison can see.
 - [x] `while builtin::black_box(false) { … }` as a second guard shape. A source
-      is calibrated for each shape and loses one at a time, as it does a
-      payload. The loop's own value block puts a reference in a call argument,
-      which is the shape the `O2` bug below needed.
+  is calibrated for each shape and loses one at a time, as it does a
+  payload. The loop's own value block puts a reference in a call argument,
+  which is the shape the `O2` bug below needed.
 - [x] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
-      `O2` is what a release build and `wado test` run, and it was not covered.
-      `WADO_EMI_LEVELS` trades levels for corpus when a run has a time budget.
-      The first run of the two found a wrong-code bug at each of the new
-      levels: at `O1` a stale local type in the value pool, which emitted a
-      `struct.get` of one struct type on another; at `O2` a field constant
-      forwarded over the mutation a callee made through a reference, which
-      turned an assertion into an unconditional trap. Both were invisible at
-      `O0` and `O3`.
+  `O2` is what a release build and `wado test` run, and it was not covered.
+  `WADO_EMI_LEVELS` trades levels for corpus when a run has a time budget.
+  The first run of the two found a wrong-code bug at each of the new
+  levels: at `O1` a stale local type in the value pool, which emitted a
+  `struct.get` of one struct type on another; at `O2` a field constant
+  forwarded over the mutation a callee made through a reference, which
+  turned an assertion into an unconditional trap. Both were invisible at
+  `O0` and `O3`.
 - [x] Draw the corpus from the stdlib and `example/` too. Its first run put the
-      stdlib's own tests under `O3`, which nothing else does — `wado test` runs
-      them at `O2` — and the baselines that failed there were two wrong-code
-      bugs the fixtures never reached.
+  stdlib's own tests under `O3`, which nothing else does — `wado test` runs
+  them at `O2` — and the baselines that failed there were two wrong-code
+  bugs the fixtures never reached.
 - [ ] Draw the corpus from the packages (`package-gale` and its siblings) too. A
-      package is many files behind a manifest, so the runner needs to resolve
-      dependencies and to compile an entry while one module below it carries the
-      injection — neither of which a single-file subject asks for.
+  package is many files behind a manifest, so the runner needs to resolve
+  dependencies and to compile an entry while one module below it carries the
+  injection — neither of which a single-file subject asks for.
 - [ ] Harvested-statement payload.
 - [ ] Name the pass behind a finding by bisecting `WADO_LIST_PASSES` with
-      `WADO_SKIP_PASS`, and write the reduced program out as a fixture.
+  `WADO_SKIP_PASS`, and write the reduced program out as a fixture.
 
 ### When to generate programs
 

@@ -588,79 +588,51 @@ __DATA__
 
 ## Migration Path
 
--
-  1. [x] Add `canonical_name` field to `MethodInfo`
--
-  2. [x] Populate it from resource method `#[canonical]` attributes during resolution
--
-  3. [x] Add `ensure_canonical` to `WirBuildContext` for lazy canonical import registration
--
-  4. [x] Add `try_translate_canonical_method` to WIR translation, dispatch by canonical name
--
-  5. [x] Move each existing `emit_*` function to register its own canonical dependencies
--
-  6. [x] Route existing `try_translate_stream_method` etc. through the new unified dispatch
--
-  7. [x] Remove CM-specific logic from DCE
--
-  8. [x] Update `wasm_plan.rs` to collect canonicals from WIR context
--
-  9. [x] Remove `method_call.rs` special cases for `Stream::new()` / `Future::new()`
--
-  10. [x] Add `#[canonical]` attributes to resource methods in `types.wado`
--
-  11. [x] Add `WaitableSet`, `Subtask`, `ErrorContext` resource declarations
--
-  12. [x] Add `Future::read` declaration
--
-  13. [x] Update `WaitableSet::wait`/`poll` to use Wado-level return types
--
-  14. [x] Remove legacy CM functions from `builtin.wado` — `cli.wado`, `internal.wado`, and
-          test fixtures migrated to use `Stream::<u8>::new()`, `StreamWritable::write/drop()`,
-          `WaitableSet::new/wait/drop()`, `Subtask::join/drop()` resource APIs
--
-  15. [x] Delete `stream.wado`
--
-  16. [x] Update prelude exports (WaitableSet/Subtask/ErrorContext)
--
-  17. [x] Add e2e tests for WaitableSet/Subtask/ErrorContext
-          — `cm_waitable_set_poll.wado`, `cm_error_context.wado` pass;
-          `cm_future_read.wado` remains TODO (blocked by TaskReturn synthesis)
--
-  18. [x] Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
-          `emit_error_context_*` synthesis functions (stubs — panic as "not yet implemented")
--
-  19. [x] Replace dedicated `ResolvedType::Future/Stream/FutureWritable/StreamWritable` variants
-          with `ResolvedType::GenericResource { name, module_source, type_args }` (consistent
-          with how Option/Result migrated from dedicated variants to `GenericInstance`)
--
-  20. [x] Rename resource `fn close` → `fn drop` to match WASI canonical names
-          (`future-drop-readable`, `stream-drop-readable`, `waitable-set-drop`, etc.)
+- 1. [x] Add `canonical_name` field to `MethodInfo`
+- 2. [x] Populate it from resource method `#[canonical]` attributes during resolution
+- 3. [x] Add `ensure_canonical` to `WirBuildContext` for lazy canonical import registration
+- 4. [x] Add `try_translate_canonical_method` to WIR translation, dispatch by canonical name
+- 5. [x] Move each existing `emit_*` function to register its own canonical dependencies
+- 6. [x] Route existing `try_translate_stream_method` etc. through the new unified dispatch
+- 7. [x] Remove CM-specific logic from DCE
+- 8. [x] Update `wasm_plan.rs` to collect canonicals from WIR context
+- 9. [x] Remove `method_call.rs` special cases for `Stream::new()` / `Future::new()`
+- 10. [x] Add `#[canonical]` attributes to resource methods in `types.wado`
+- 11. [x] Add `WaitableSet`, `Subtask`, `ErrorContext` resource declarations
+- 12. [x] Add `Future::read` declaration
+- 13. [x] Update `WaitableSet::wait`/`poll` to use Wado-level return types
+- 14. [x] Remove legacy CM functions from `builtin.wado` — `cli.wado`, `internal.wado`, and
+      test fixtures migrated to use `Stream::<u8>::new()`, `StreamWritable::write/drop()`,
+      `WaitableSet::new/wait/drop()`, `Subtask::join/drop()` resource APIs
+- 15. [x] Delete `stream.wado`
+- 16. [x] Update prelude exports (WaitableSet/Subtask/ErrorContext)
+- 17. [x] Add e2e tests for WaitableSet/Subtask/ErrorContext
+      — `cm_waitable_set_poll.wado`, `cm_error_context.wado` pass;
+      `cm_future_read.wado` remains TODO (blocked by TaskReturn synthesis)
+- 18. [x] Implement `emit_future_read`, `emit_waitable_set_wait`, `emit_waitable_set_poll`,
+      `emit_error_context_*` synthesis functions (stubs — panic as "not yet implemented")
+- 19. [x] Replace dedicated `ResolvedType::Future/Stream/FutureWritable/StreamWritable` variants
+      with `ResolvedType::GenericResource { name, module_source, type_args }` (consistent
+      with how Option/Result migrated from dedicated variants to `GenericInstance`)
+- 20. [x] Rename resource `fn close` → `fn drop` to match WASI canonical names
+      (`future-drop-readable`, `stream-drop-readable`, `waitable-set-drop`, etc.)
 
 ### Phase 2: Synthesis Implementation & Cleanup
 
--
-  21. [x] Implement `emit_waitable_set_wait` synthesis (realloc + WaitEvent struct lowering)
--
-  22. [x] Implement `emit_waitable_set_poll` synthesis (Option\<WaitEvent\> lowering)
--
-  23. [x] Implement `emit_future_read` synthesis (waitable-set wait loop + Option\<T\> lifting)
-          — wait loop + status check + payload lifting for `Result<Option<R>, E>` pattern done;
-          e2e test blocked by `TaskReturn` synthesis issue (TODO test remains)
--
-  24. [x] Implement cancel canonicals as void calls (`future-cancel-read`, `future-cancel-write`,
-          `stream-cancel-read`, `stream-cancel-write`, `subtask-cancel`)
--
-  25. [x] Migrate `cli.wado` and `internal.wado` from `builtin::stream_*` to resource API
-          (performance regression accepted; to be recovered by optimizer improvements later)
--
-  26. [x] Move DCE `cm_lower_array_u8` injection to call graph edge in `dce.rs`
-          (stream-write callee → cm_lower_array_u8 dependency registered during TIR analysis)
--
-  27. [x] Add e2e tests for WaitableSet, future-read, cancel operations
--
-  28. [x] Fix `resolve_static_method_call_from_qualified` to propagate `#[canonical]`
-          attribute — was missing for `WaitableSet::new()` and other qualified static calls
+- 21. [x] Implement `emit_waitable_set_wait` synthesis (realloc + WaitEvent struct lowering)
+- 22. [x] Implement `emit_waitable_set_poll` synthesis (Option\<WaitEvent\> lowering)
+- 23. [x] Implement `emit_future_read` synthesis (waitable-set wait loop + Option\<T\> lifting)
+      — wait loop + status check + payload lifting for `Result<Option<R>, E>` pattern done;
+      e2e test blocked by `TaskReturn` synthesis issue (TODO test remains)
+- 24. [x] Implement cancel canonicals as void calls (`future-cancel-read`, `future-cancel-write`,
+      `stream-cancel-read`, `stream-cancel-write`, `subtask-cancel`)
+- 25. [x] Migrate `cli.wado` and `internal.wado` from `builtin::stream_*` to resource API
+      (performance regression accepted; to be recovered by optimizer improvements later)
+- 26. [x] Move DCE `cm_lower_array_u8` injection to call graph edge in `dce.rs`
+      (stream-write callee → cm_lower_array_u8 dependency registered during TIR analysis)
+- 27. [x] Add e2e tests for WaitableSet, future-read, cancel operations
+- 28. [x] Fix `resolve_static_method_call_from_qualified` to propagate `#[canonical]`
+      attribute — was missing for `WaitableSet::new()` and other qualified static calls
 
 ### Amendment: Canonical Operations Fully Lowered in Synthesis
 

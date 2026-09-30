@@ -339,8 +339,7 @@ hygiene rule in [`AGENTS.md`](./AGENTS.md)).
 Stage B′ runs at descriptor-extraction time, not at test time. Its
 inputs (grammar + input) are stable; its output (the oracle tree) is
 committed to the generated test file so CI does not need Java. The
-jar version used for a given extraction is recorded as an `// Expected
-tree: antlr-4.x.y-complete.jar on the action-body-stripped grammar`
+jar version used for a given extraction is recorded as an `// Expected tree: antlr-4.x.y-complete.jar on the action-body-stripped grammar`
 comment in the emitted test file so any diff in the oracle's answer
 surfaces in commit history.
 
@@ -828,8 +827,7 @@ relevant sites.
 6. A nullable `Repeat` whose body can consume more than one token is
    walked into, not skipped past. Skipping claims the repeat matched a
    single token, so the walk keeps separating alternatives on lookahead
-   that actually sits inside the body: `item : name ( 'as'? alias )? … |
-   name '(' inner ')'` read the token after the `'('` as if `alias` were
+   that actually sits inside the body: `item : name ( 'as'? alias )? … | name '(' inner ')'` read the token after the `'('` as if `alias` were
    one token, and committed to the wrong alt. A single-token body keeps
    the cheap skip — widening this to every repeat would downgrade
    decisions the static path resolves correctly today. The walk holds at
@@ -968,8 +966,7 @@ the compiled fast path:**
    static first-token check can decide the loop entry. Fixtures:
    `lr_wildcard_postfix.g4` and `lr_open_ended_rule_suffix.g4`. The last
    reason is a self-reference nested in a subrule of an LR alternative that a
-   loop operator can follow inside that alternative (`expr (',' expr)* '>>'
-   expr`; fixture `lr_nested_self_ref.g4`). ANTLR4 calls a nested reference as
+   loop operator can follow inside that alternative (`expr (',' expr)* '>>' expr`; fixture `lr_nested_self_ref.g4`). ANTLR4 calls a nested reference as
    a plain `expr[0]`, so it climbs a `'>>'` exactly when another is left over
    for the enclosing alternative. No precedence floor says that. A nested
    reference no loop operator can follow inside its alternative stays static,
@@ -999,8 +996,7 @@ the compiled fast path:**
 3. A **context-dependent multi-alt at-end conflict** — one alternative
    ends (returning to the caller) while another continues past the same
    lookahead. A longest-match tournament resolves this unsoundly when its
-   longer pick consumes a token the caller needed: on `a b c` for `s : x
-   'c' ; x : 'a' 'b' | 'a' 'b' 'c'`, `x` must leave the `'c'` for `s`. The
+   longer pick consumes a token the caller needed: on `a b c` for `s : x 'c' ; x : 'a' 'b' | 'a' 'b' 'c'`, `x` must leave the `'c'` for `s`. The
    conflict needs the simulator only when a token that lets the longer
    alternative continue can also legally follow the rule at some call
    site. When no caller can ever continue on that token — SQLite's `UNION`

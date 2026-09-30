@@ -23,8 +23,7 @@ node .claude/skills/wado-performance/scripts/analyze_guest_profile.ts profile.js
 The script reports self (leaf) and inclusive counts per function; names keep
 monomorphization detail, so each instantiation is separate. Loop a one-shot hot
 phase N times so it clears the fixed setup (aim ≥ ~200 samples). Firefox
-Profiler (`profiler.firefox.com`) gives a flame graph; `perf` + `--profile
-jitdump` gives instruction-level (store- vs compute-bound), see
+Profiler (`profiler.firefox.com`) gives a flame graph; `perf` + `--profile jitdump` gives instruction-level (store- vs compute-bound), see
 `docs/jitdump-profiling.md`.
 
 **Dev-profile inflation:** a `cargo run` `wado` JITs guest code near-release but

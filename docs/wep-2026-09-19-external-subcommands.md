@@ -87,7 +87,7 @@ and not designed here.
 ## Roadmap
 
 - [x] The `PATH` form: resolution, `--list`, `help <name>`, and the
-      `External Commands` section of the `wado-cli` skill.
+  `External Commands` section of the `wado-cli` skill.
 
 ## Known gaps
 

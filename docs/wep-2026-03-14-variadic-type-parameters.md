@@ -393,17 +393,17 @@ occurred.
 ## Implementation Plan
 
 - [x] The `[for let v of tuple { expr }]` / `[for let [i, v] of tuple.enumerate() { expr }]`
-      construction form, over a pack-typed tuple
+  construction form, over a pack-typed tuple
 - [ ] The same form over a _concrete_ tuple: its elements have unrelated types,
-      so the body needs resolving once per element (the per-element overlays the
-      concrete `for-of` already keeps), not once against a pack element
+  so the body needs resolving once per element (the per-element overlays the
+  concrete `for-of` already keeps), not once against a pack element
 - [x] `.enumerate()` over a variadic `for-of`
 - [x] The `.enumerate()` index as a tuple subscript, for reads and writes alike
 - [ ] Variadic impl targets other than the bare `[..T]` — fixed elements
-      (`[i32, ..T]`) or under a reference (`&[..T]`): rejected for now.
-      Selection, pack binding, and template naming all ignore the fixed
-      elements, and a pack under a reference never reaches the impl's
-      type-param scope
+  (`[i32, ..T]`) or under a reference (`&[..T]`): rejected for now.
+  Selection, pack binding, and template naming all ignore the fixed
+  elements, and a pack under a reference never reaches the impl's
+  type-param scope
 - [x] Pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
 - [x] More than one pack per generic parameter list (§6)
 - [ ] Error messages: show call site, element index, and body location

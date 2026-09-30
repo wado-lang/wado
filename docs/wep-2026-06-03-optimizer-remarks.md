@@ -195,25 +195,25 @@ capability the type/trait reason chains want. Building it once serves both.
 Shipped:
 
 - [x] Remark surface: info-level `remark:` diagnostic via `logger.remark`, gated
-      by `--log-level` (no dedicated flag). `Code::Remark`.
+  by `--log-level` (no dedicated flag). `Code::Remark`.
 - [x] Final-NIR walk (`remarks::collect_value_copy_remarks`) over the entry
-      package's functions, detecting `$value_copy$T` and `array_clone` /
-      `array_clone_shallow` / `copy_value` survivors, anchored to the enclosing
-      statement span.
+  package's functions, detecting `$value_copy$T` and `array_clone` /
+  `array_clone_shallow` / `copy_value` survivors, anchored to the enclosing
+  statement span.
 - [x] The whole entry package, not just its entry point:
-      `ModuleSource::is_entry_package` draws the line at the package boundary, so
-      a dependency and the stdlib stay out. A `Remark` carries its module, since
-      a span alone cannot say which file it is in.
+  `ModuleSource::is_entry_package` draws the line at the package boundary, so
+  a dependency and the stdlib stay out. A `Remark` carries its module, since
+  a span alone cannot say which file it is in.
 - [x] Surviving value-copy remarks with why + where, plus the survives / elided
-      test pair at `-O2` (`wado-compiler/tests/integration/remarks.rs`).
+  test pair at `-O2` (`wado-compiler/tests/integration/remarks.rs`).
 
 Next:
 
 - [ ] Failed-SROA remarks: surface the surviving allocation and reuse the SROA
-      passes' hard-escape classification for the cause and escape-site span.
+  passes' hard-escape classification for the cause and escape-site span.
 - [ ] Classify each survivor's actionability (read-only copy → suggest `&`;
-      removable escape → suggest restructuring; otherwise explain why the cost is
-      required) so a suggestion is offered only when a fix would actually help.
+  removable escape → suggest restructuring; otherwise explain why the cost is
+  required) so a suggestion is offered only when a fix would actually help.
 
 Trade-offs and boundaries:
 

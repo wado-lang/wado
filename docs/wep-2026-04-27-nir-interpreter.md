@@ -360,7 +360,7 @@ writer can emit. That one is stage 3's.
 
 - [x] The `TypeId` → fields index on `ProgramFacts`.
 - [x] The writer, reporting whether it changed the tree, and the identity,
-      storage and budget gates.
+  storage and budget gates.
 - [x] The leaf ceiling, swept against wasm size.
 - [x] The recount, above.
 - [ ] A destructuring `let`; a body containing one is abandoned.
@@ -371,14 +371,14 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 ### 2. The stores the engine will not read
 
 - [ ] The 240 global writes, which are the stores that fail the
-      materialization property: a global read somewhere that does not store it.
-      Whether that set has a shape of its own, or is a tail of unrelated cases,
-      decides whether there is a mechanism here at all.
+  materialization property: a global read somewhere that does not store it.
+  Whether that set has a shape of its own, or is a tail of unrelated cases,
+  decides whether there is a mechanism here at all.
 - [ ] Whether an unrunnable callee still refuses a region anywhere: impure,
-      generic, async or bodiless. The corpus now counts none, so this is a check
-      that the refusal has no cases left rather than a set to work through. A
-      genuinely impure callee is a correct refusal; a still-generic one after
-      monomorphization is a bug.
+  generic, async or bodiless. The corpus now counts none, so this is a check
+  that the refusal has no cases left rather than a set to work through. A
+  genuinely impure callee is a correct refusal; a still-generic one after
+  monomorphization is a bug.
 
 ### 3. The frame owns storage
 
@@ -396,19 +396,19 @@ field outlives every pass. What the two once also differed by — a branch on
 fixed, and the branch is gone.
 
 - [x] What distinguishes the `char` path from the `bool` one: reading the buffer
-      back out of the `&mut` field, which is the item below.
+  back out of the `&mut` field, which is the item below.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
-      aggregate is not a constant, since a field holding the referent's value
-      would take a write meant for the referent; what it needs to hold is the
-      place the frame already names elsewhere — `place_aliases` records exactly
-      that pair for a `let`-bound borrow, and the gap is carrying one inside a
-      value. The refusal is whole-value, so a scalar field naming no storage is
-      refused with the rest. A template folds today only where inlining and SROA
-      dissolve its `Formatter` first, which the inliner's pricing decides, not
-      the engine.
+  aggregate is not a constant, since a field holding the referent's value
+  would take a write meant for the referent; what it needs to hold is the
+  place the frame already names elsewhere — `place_aliases` records exactly
+  that pair for a `let`-bound borrow, and the gap is carrying one inside a
+  value. The refusal is whole-value, so a scalar field naming no storage is
+  refused with the rest. A template folds today only where inlining and SROA
+  dissolve its `Formatter` first, which the inliner's pricing decides, not
+  the engine.
 - [ ] `String::grow`, which reshapes the caller's container from a frame of its
-      own and so abandons the evaluation whenever a buffer outgrows its
-      reservation.
+  own and so abandons the evaluation whenever a buffer outgrows its
+  reservation.
 
 A place names the frame's own storage and must not outlive it, so the aggregate
 exit refuses to write any value carrying one — a leaf gate beside the one that
@@ -423,15 +423,15 @@ Done when `${'x'}` folds.
 ### 4. Format coverage to the budget
 
 - [ ] The step budget is per function, and a formatting region spends a large
-      share of it: four in one body all fold, while seven exhaust the budget and
-      five of them stop folding. Whether that is a budget to raise, a cost to
-      cut, or a limit to document is what a recount answers.
+  share of it: four in one body all fold, while seven exhaust the budget and
+  five of them stop folding. Whether that is a budget to raise, a cost to
+  cut, or a limit to document is what a recount answers.
 - [ ] Floats. `fpfmt` is the largest size prize by an order of magnitude and the
-      largest engine cost, so the order is the engine's, not the payoff's; if it
-      overruns the budget it becomes a known gap rather than a reason to raise
-      the budget.
+  largest engine cost, so the order is the engine's, not the payoff's; if it
+  overruns the budget it becomes a known gap rather than a reason to raise
+  the budget.
 - [ ] A `wasm-size` and `benchmark` run, recording what the folds buy on whole
-      programs rather than on one interpolation.
+  programs rather than on one interpolation.
 
 Done when a recount shows no refusal reason left that the step budget does not
 explain.
@@ -439,7 +439,7 @@ explain.
 ### 5. Mixed templates
 
 - [ ] The marked region-append primitive set and the derived-`fmt` admission
-      rule, per "Fold the region, not the call".
+  rule, per "Fold the region, not the call".
 
 Done when a template mixing constant and runtime interpolations emits the
 constant parts as literals. The census counts no such template, since a region
@@ -452,16 +452,16 @@ Each is a small, local refusal the census does not count, so each needs a reason
 of its own to be worth the code.
 
 - [ ] A `switch` with a constant scrutinee. A switch is formed before inlining.
-      When inlining later makes its scrutinee constant, nothing revisits it.
+  When inlining later makes its scrutinee constant, nothing revisits it.
 - [ ] Closure calls: an indirect call whose closure is known is never resolved to
-      a direct call, so neither inlining nor CTFE reaches through it.
+  a direct call, so neither inlining nor CTFE reaches through it.
 - [ ] Guards decided when the engine is only asked what an expression denotes.
 
 ### Validation, alongside every stage
 
 - [ ] A fold / no-fold differential oracle in the
-      [fuzzer](./wep-2026-08-19-compiler-fuzzing.md): compile each corpus fixture
-      with and without constant folding and compare observable behaviour.
+  [fuzzer](./wep-2026-08-19-compiler-fuzzing.md): compile each corpus fixture
+  with and without constant folding and compare observable behaviour.
 
 A wrong constant is a silent miscompile: no trap, no diagnostic, a different
 answer. Fixtures cover the shapes we thought of; the differential covers the ones

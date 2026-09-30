@@ -151,8 +151,7 @@ not alter that. `cancel_copy` traps unless the end is `COPYING`:
 trap_if(e.state != CopyState.COPYING or e.has_sync_waiter)
 ```
 
-The synthesized bindings await BLOCKED inline — `if result == BLOCKED { result =
-cm_await_blocked(handle) }` — so control only returns to user code once the copy
+The synthesized bindings await BLOCKED inline — `if result == BLOCKED { result = cm_await_blocked(handle) }` — so control only returns to user code once the copy
 has settled to `IDLE` or `DONE`. Asynchronous canonicals move where the wait
 happens, not whether user code can observe a copy in flight.
 
@@ -191,9 +190,9 @@ Neutral:
 
 - [x] Emit `CanonicalOption::Async` for `stream.read` / `stream.write`
 - [x] Replace `wait_for_blocked` and `future_await_blocked` with `cm_await_blocked`,
-      which unjoins before dropping the set
+  which unjoins before dropping the set
 - [x] E2E fixture that blocks a stream read and a stream write, covering the
-      await path at both ends (`stream_await_blocked_roundtrip.wado`)
+  await path at both ends (`stream_await_blocked_roundtrip.wado`)
 - [x] Regenerate the golden fixtures
 - [ ] Reuse a per-task waitable set instead of new/drop per await
 

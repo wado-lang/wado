@@ -317,8 +317,8 @@ land with stage 6 of the rearchitecture (see
 #### Phase 1 — diagnostic plumbing
 
 - [x] Add `Code::DeadFunction`, `DeadGlobal` and their `Display` strings.
-      (`UnusedImport` / `UnusedVariable` / `UnusedParameter` land with the
-      reference pass.)
+  (`UnusedImport` / `UnusedVariable` / `UnusedParameter` land with the
+  reference pass.)
 - [x] Add `Logger::warn_at(code, message, span)`.
 - [x] Add `CompilerOptions::unused_diagnostics` (default `true`).
 - [ ] Add `AstIndex::is_param(id)` and tests (reference pass).
@@ -333,31 +333,31 @@ land with stage 6 of the rearchitecture (see
 #### Phase 3 — liveness pass and DeadFunction / DeadGlobal
 
 - [x] Land `elaborator/liveness.rs`: the enclosing-item index (an AST
-      id-collector), edge collection over `references`, the BFS, and the
-      `Liveness` field on `Semantics`. Free functions and globals are
-      precise; every method is seeded live as an intermediary (so the
-      free-function reachability stays sound without the operator / `?` /
-      for-of dispatch edges).
+  id-collector), edge collection over `references`, the BFS, and the
+  `Liveness` field on `Semantics`. Free functions and globals are
+  precise; every method is seeded live as an intermediary (so the
+  free-function reachability stays sound without the operator / `?` /
+  for-of dispatch edges).
 - [x] Implement the emitter (`DeadFunction`, `DeadGlobal`) consuming
-      `Liveness::dead_items`; tests in `tests/integration/unused_diagnostics.rs`.
+  `Liveness::dead_items`; tests in `tests/integration/unused_diagnostics.rs`.
 - [x] Two-closure 3-way classification (`live` / `test-only` / `dead`): test
-      blocks seed `T` only, never `E`; `live_items = E ∪ T` (reify gating
-      unchanged). Adds `TestOnlyFunction` / `TestOnlyGlobal`, emitted in
-      non-test builds. Unit tests in `tests/integration/unused_diagnostics.rs`.
+  blocks seed `T` only, never `E`; `live_items = E ∪ T` (reify gating
+  unchanged). Adds `TestOnlyFunction` / `TestOnlyGlobal`, emitted in
+  non-test builds. Unit tests in `tests/integration/unused_diagnostics.rs`.
 - [x] E2E warning assertions: `warnings_contains` / `warnings_not_contains`
-      fixture-spec fields (`compile_capturing_warnings` in the harness);
-      `dead_fn_*` / `dead_global_*` fixtures cover dead and test-only.
+  fixture-spec fields (`compile_capturing_warnings` in the harness);
+  `dead_fn_*` / `dead_global_*` fixtures cover dead and test-only.
 - [ ] Package-wide analysis so `T` is populated outside the entry module
-      (load the whole package via `wado test` discovery; `wado check`
-      package mode). Until then `test-only` only surfaces for `test` blocks
-      in the compiled entry's own module graph.
+  (load the whole package via `wado test` discovery; `wado check`
+  package mode). Until then `test-only` only surfaces for `test` blocks
+  in the compiled entry's own module graph.
 - [x] LSP wiring: the pure `unused_diagnostics(&Semantics, is_test_world)`
-      builder is shared by the batch path and `Engine::diagnostics`, which
-      applies it at query time (toggle stays live via
-      `Engine::set_unused_diagnostics`) and keeps only entry-document items.
-      The LSP runs the command world, so test-only items are reported.
-      Diagnostics carry the LSP `Unnecessary` tag. Tests in
-      `wado-lsp/tests/diagnostics.rs`.
+  builder is shared by the batch path and `Engine::diagnostics`, which
+  applies it at query time (toggle stays live via
+  `Engine::set_unused_diagnostics`) and keeps only entry-document items.
+  The LSP runs the command world, so test-only items are reported.
+  Diagnostics carry the LSP `Unnecessary` tag. Tests in
+  `wado-lsp/tests/diagnostics.rs`.
 
 #### Phase 3b — reify gating (Design B)
 
@@ -379,28 +379,26 @@ inside reify and broke two contracts, both now understood:
 Gating is therefore disabled until both are addressed:
 
 - [x] 1b. `check_effects_semantic(&Semantics)` (AST + facts) landed and
-      wired into the LSP (`Engine::diagnostics`). Covers free / method /
-      static / indirect calls, declared effects, signature resources
-      (incl. struct-nested), resource injection, the propagation
-      closure, effect-parameter resolution, and `#[benign]`. Batch still
-      runs the TIR `check_effects` (see "Batch switch — blocked" below).
+  wired into the LSP (`Engine::diagnostics`). Covers free / method /
+  static / indirect calls, declared effects, signature resources
+  (incl. struct-nested), resource injection, the propagation
+  closure, effect-parameter resolution, and `#[benign]`. Batch still
+  runs the TIR `check_effects` (see "Batch switch — blocked" below).
 - [ ] 1c. Port `check_stores` likewise.
 - [ ] 1d. Port `check_default_purity` likewise.
 - [ ] 1a. Move the world-export conformance check (`export`-required,
-      param / return mismatch) off the gated TIR — read the entry
-      module's AST / `Semantics` in `compile_with_options` (where the
-      target world is known). Record the world-export root set on
-      `Semantics` for the liveness roots.
--
-  2. [ ] Close the liveness graph's cross-module gaps (foreign-keyed
-         `references` from `with_module_perspective`, inlined-foreign-AST,
-         namespace imports, test-world roots).
--
-  3. [ ] Re-enable reify gating on `Liveness::live_items` and validate
-         the full E2E suite green (fail-loud: a dropped-live item ICEs).
+  param / return mismatch) off the gated TIR — read the entry
+  module's AST / `Semantics` in `compile_with_options` (where the
+  target world is known). Record the world-export root set on
+  `Semantics` for the liveness roots.
+- 2. [ ] Close the liveness graph's cross-module gaps (foreign-keyed
+     `references` from `with_module_perspective`, inlined-foreign-AST,
+     namespace imports, test-world roots).
+- 3. [ ] Re-enable reify gating on `Liveness::live_items` and validate
+     the full E2E suite green (fail-loud: a dropped-live item ICEs).
 - [ ] The optimize-time DCE never carried a user-facing diagnostic role,
-      so there is nothing to retire — it stays as silent cleanup as
-      designed.
+  so there is nothing to retire — it stays as silent cleanup as
+  designed.
 
 Batch switch — landed (Semantics effect check), 3 fixtures still red:
 
@@ -410,25 +408,23 @@ program and the TIR `check_effects` is removed. The full E2E suite is at
 way (each was also an LSP false positive / under-report):
 
 - [x] Stdlib per-module facts (`effect_ops`, `function_effects`,
-      `fn_param_types`, …) were not seeded from the snapshot, so the
-      propagation closure missed stdlib effect→resource propagation
-      (`Stdout → Stream → StreamWritable`). The snapshot now clones each
-      stdlib module's `types`.
+  `fn_param_types`, …) were not seeded from the snapshot, so the
+  propagation closure missed stdlib effect→resource propagation
+  (`Stdout → Stream → StreamWritable`). The snapshot now clones each
+  stdlib module's `types`.
 - [x] Bundled stdlib `.wado` files load as `ModuleSource::Local` with a
-      `wasi:` / `core:` scheme path; `is_user_authored` now excludes them.
+  `wasi:` / `core:` scheme path; `is_user_authored` now excludes them.
 - [x] Effect identity is non-canonical: `EffectRef::Concrete.module_source`
-      reflects the recording module's import perspective (user `with
-      Stdout` → entry module; stdlib → `wasi:cli`). Each effect is now
-      resolved to its declaration where it is written.
+  reflects the recording module's import perspective (user `with     Stdout` → entry module; stdlib → `wasi:cli`). Each effect is now
+  resolved to its declaration where it is written.
 - [x] Effect-handler scopes: `with H => … do { … }` grants `H` to the
-      do-block body (pushed / popped around the body walk).
+  do-block body (pushed / popped around the body walk).
 - [x] Indirect calls through a function-typed parameter resolve the
-      callee via the enclosing function's parameter types.
-- [x] Variant-payload-nested resources: a `(module, variant) → payload
-      types` map feeds the closure and `signature_resources`.
+  callee via the enclosing function's parameter types.
+- [x] Variant-payload-nested resources: a `(module, variant) → payload     types` map feeds the closure and `signature_resources`.
 - [x] Default-expression purity was a side effect of the non-canonical
-      bug, fixed by canonicalisation (`check_default_purity` stays on
-      TIR and fires again).
+  bug, fixed by canonicalisation (`check_default_purity` stays on
+  TIR and fires again).
 
 Async effect checking — resolved with no new rule:
 
@@ -452,9 +448,8 @@ The accurate failure count with `async` checked is **3 fixtures**
 the three handlers actually use.
 
 - [x] Remove the interim `async`-skip; `async` bodies are effect-checked.
-- [x] Declare the used capability on the three handlers (`with
-      WaitableSet` / `with ErrorContext`); HTTP handlers accept a `with`
-      clause. Full E2E green.
+- [x] Declare the used capability on the three handlers (`with     WaitableSet` / `with ErrorContext`); HTTP handlers accept a `with`
+  clause. Full E2E green.
 
 #### Phase 1b design — effect check on `Semantics`
 
@@ -509,8 +504,7 @@ Algorithm (unchanged from the TIR version, restated on facts):
 2. Build `resource_names`, `struct_fields`, `variant_payloads`, and the
    propagation closure (`build_propagation_closure`) from the same decl
    and type data, now read off `Semantics` rather than `TirModule`.
-3. For each user function: `current_effects = expand(declared effects +
-   signature_resources(param/return/task-return types) + benign)`.
+3. For each user function: `current_effects = expand(declared effects + signature_resources(param/return/task-return types) + benign)`.
 4. Walk the AST body; at each call site resolve the callee via the table
    above, compute `get_function_effects` (callee effects + resource
    effect for direct resource methods − benign, with effect-param

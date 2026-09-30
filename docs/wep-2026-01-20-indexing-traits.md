@@ -98,8 +98,7 @@ A `Newtype` follows its base type. Three entries are load-bearing:
 - `&T` is `Ref` (and `RefMut`) — a reference value is itself a GC handle, so a
   `List<&T>` element is a real reference for any `T`.
 - `variant` and `fn` are `Ref` but not `RefMut` — `&variant` is a live handle to
-  read and pattern-match, but assignment replaces the whole value, so a `&mut
-  variant` cannot write through (see
+  read and pattern-match, but assignment replaces the whole value, so a `&mut variant` cannot write through (see
   [Reference Representation](./wep-2026-06-13-reference-representation.md)). A
   container hands variants out by shared reference, never mutable.
 

@@ -41,30 +41,30 @@ Implemented (`lib/core/args.wado`, tested in `lib/core/args_test.wado`):
 
 - [x] `parse` / `from_env` entry points.
 - [x] `--name value`, `--name=value`, and `bool` flags; `-`/`_` folding; `--`
-      end-of-options marker.
+  end-of-options marker.
 - [x] Required, optional (defaulted), and `Option<T> = null` options.
 - [x] Positional arguments (required, optional, variadic) via serde's
-      `FieldSchema::positional_at`.
+  `FieldSchema::positional_at`.
 - [x] Repeatable `List<T>` options (`--include a --include b`, interspersing
-      allowed). A consumed-token mask lets `begin_seq` gather every occurrence of
-      one option up front, so the on-demand value pull still drives flag-vs-value
-      detection.
+  allowed). A consumed-token mask lets `begin_seq` gather every occurrence of
+  one option up front, so the on-demand value pull still drives flag-vs-value
+  detection.
 - [x] Subcommands (`variant` fields) via externally-tagged `begin_variant`,
-      including nesting and `command [global-opts] subcommand [sub-opts]`. A
-      subcommand field is marked `#[wire(positional)]` (see
-      [Subcommands as Variants](#subcommands-as-variants)); the case tag matches
-      the variant case name verbatim.
+  including nesting and `command [global-opts] subcommand [sub-opts]`. A
+  subcommand field is marked `#[wire(positional)]` (see
+  [Subcommands as Variants](#subcommands-as-variants)); the case tag matches
+  the variant case name verbatim.
 - [x] Lenient scalar conversion (`LenientFromStr`) and the `ArgsError` kinds.
 - [x] `enum`-valued options, matched by wire name.
 
 Deferred:
 
 - [ ] Schema validation (positionals contiguous, required-before-optional, ≤1
-      variadic last; no variadic-positional + subcommand) — a CLI-specific
-      well-formedness rule, not a data-model property, so it stays out of the
-      format-agnostic compiler layer; `core:args` relies on correct declaration
-      order. Currently mis-declaration is GIGO; only "too many positionals" is
-      caught at runtime.
+  variadic last; no variadic-positional + subcommand) — a CLI-specific
+  well-formedness rule, not a data-model property, so it stays out of the
+  format-agnostic compiler layer; `core:args` relies on correct declaration
+  order. Currently mis-declaration is GIGO; only "too many positionals" is
+  caught at runtime.
 - [ ] `--help` / `--version`.
 
 Lowercase / kebab subcommand tags are handled by serde's case rename, not by
@@ -221,13 +221,12 @@ comments or default values. `--help` walks the type's reflected metadata
 default's display string) and the `variant` cases (for subcommand help).
 
 - [ ] `--help` walks the reflected schema, drawing text from doc comments and
-      rendering each field's default inline (`--port <n>  (default: 8080)`).
-      Depends on static reflection exposing a per-field `default_display:
-      Option<String>` — the default value rendered via the field type's
-      `Display`. Defaults are pure and compile-time-known, so this is a compile
-      -time constant (no runtime reflection); `has_default` alone
-      ([reflect-derivation](./wep-2026-06-13-reflect-derivation.md)) gives
-      presence but not the value. The whole help text can be a `const`.
+  rendering each field's default inline (`--port <n>  (default: 8080)`).
+  Depends on static reflection exposing a per-field `default_display:     Option<String>` — the default value rendered via the field type's
+  `Display`. Defaults are pure and compile-time-known, so this is a compile
+  -time constant (no runtime reflection); `has_default` alone
+  ([reflect-derivation](./wep-2026-06-13-reflect-derivation.md)) gives
+  presence but not the value. The whole help text can be a `const`.
 - [ ] `--version` prints the package version.
 
 ```wado
@@ -270,12 +269,12 @@ Unix convention).
 - [ ] Shell completion from the schema.
 - [ ] `core:cli` helper wiring `from_env` + error printing + exit codes.
 - [ ] Subcommand-aware error context. `ArgsError` carries only `kind` + `message`,
-      so a caller wanting a `myprog gen: ...` prefix must re-derive the active
-      subcommand from `argv[0]` itself (fine for single-level CLIs). A future
-      `ArgsError` could record the subcommand path the parse failed under (the
-      tags seen by `begin_variant`); the program name stays caller-supplied, and
-      nested paths need an accumulated breadcrumb, so this waits until nested
-      subcommand diagnostics are a real pain.
+  so a caller wanting a `myprog gen: ...` prefix must re-derive the active
+  subcommand from `argv[0]` itself (fine for single-level CLIs). A future
+  `ArgsError` could record the subcommand path the parse failed under (the
+  tags seen by `begin_variant`); the program name stays caller-supplied, and
+  nested paths need an accumulated breadcrumb, so this waits until nested
+  subcommand diagnostics are a real pain.
 
 ## Known gaps
 

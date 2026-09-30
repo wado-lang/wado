@@ -123,7 +123,6 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
   callee does not retain, the
   reference provably cannot outlive the call, so it is desugared to a temp +
   write-back:
-
   ```text
     f(&mut xs[idx])
   ⇒ { let $mr_idx = idx;
@@ -132,7 +131,6 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
       xs[$mr_idx] = $mr_t;           // write-back to the place
     }
   ```
-
   The temp is a real local, so the address-taken boxing promotes it exactly as for
   `&mut <local>`. The forbid stays permanently for the escaping case (a retained
   param, or a `&mut` bound to a variable / returned), which has no sound
@@ -159,21 +157,21 @@ What the two rules above rest on:
 ## Decision
 
 - [x] The representation (in-place shared handle vs `Box<T>`) is normative, keyed
-      on the in-place-vs-replace dividing line, not scalar-vs-heap.
+  on the in-place-vs-replace dividing line, not scalar-vs-heap.
 - [ ] Extract the boxed-as-value classification into one predicate shared by
-      boxing / forbid / carve-out.
+  boxing / forbid / carve-out.
 - [x] Forbid `&mut` to a non-local place of `primitive` / `enum` / `flags` /
-      `fn` at the borrow itself, over both `Index` and `FieldAccess` operands,
-      subsuming the partial primitive-struct-field guard.
+  `fn` at the borrow itself, over both `Index` and `FieldAccess` operands,
+  subsuming the partial primitive-struct-field guard.
 - [x] For `variant`, forbid only where the borrow is put into storage outliving
-      the expression that took it — a variable, an aggregate, a `return`. The
-      borrow itself stays legal, since payload mutation through it lands.
+  the expression that took it — a variable, an aggregate, a `return`. The
+  borrow itself stays legal, since payload mutation through it lands.
 - [ ] Ship the remaining `compile_error` fixtures: `primitive` / `enum` /
-      `flags` list element. Covered today: `fn` list element, `primitive` /
-      `enum` struct field, and the `variant` storing positions.
+  `flags` list element. Covered today: `fn` list element, `primitive` /
+  `enum` struct field, and the `variant` storing positions.
 - [ ] Carve out the retention-gated temp + write-back, one call path at a time:
   - [ ] `List` index element (`&mut xs[i]`) — reuses the existing
-        `index_assign` dispatch.
+    `index_assign` dispatch.
   - [x] struct field (`&mut s.f`) — write-back is a plain field assign.
   - [x] remaining call paths (method-call / indirect-call arguments).
 
@@ -186,9 +184,8 @@ These are gaps between the design above and the current tree. Each is a bug to
 fix to conform; none should be preserved.
 
 - [ ] D1 — a whole-value write through a `&mut` to a non-local place is dropped
-      behind `&mut *p` for every replace type but `variant`, and for two
-      `variant` shapes is refused rather than written back. Probe (HEAD):
-
+  behind `&mut *p` for every replace type but `variant`, and for two
+  `variant` shapes is refused rather than written back. Probe (HEAD):
   | place, by referent and by where the borrow goes                   | result                |
   | ----------------------------------------------------------------- | --------------------- |
   | primitive / enum / flags / `fn` field or element, anywhere        | refused at the borrow |
@@ -223,110 +220,109 @@ fix to conform; none should be preserved.
 
   What still drops:
 
-  - `&mut *p` for every replace type but `variant`. The borrow-site refusal keys
-    on a `FieldAccess` / `Index` operand, so a reborrow slips past it. `variant`
-    is covered from the other side by the write-back; the rest are not.
-  - A `variant` element as a call argument, where the callee neither replaces
-    nor stores. `&mut xs[i]` lowers to `&mut *xs.index_ref(i)`, so its
-    write-back is an `index_assign` to synthesize, and that resolves in the
-    elaborator — trait impl, mangled name, recorded dispatch. A lowering pass
-    reaching it would repeat trait resolution, which is why the carve-out lists
-    index-element and struct-field separately. Refusing the whole shape is not
-    an option either, since `normalize_element(&mut alt.elements[ei])` lands.
-    A `&mut self` receiver takes the same borrow, so it waits on the same
-    write-back: `xs[i].m()` is refused where `m` replaces the element, and the
-    call the carve-out unblocks is spelled either way.
-  - A call argument that _yields_ a borrow (`f(if c { &mut b.l } else
-    { &mut b.r })`), for the mirrored reason: which place it borrowed is not
-    known until it runs. Both want the write-back to follow the borrow to
-    whichever place it named — the points-to answer neither half has.
-  - A whole capture, where a store back would land in the closure's environment:
-    closure lowering filled that with a copy of the enclosing slot, and the
-    capture mode is its decision, not this pass's. A projection _through_ a
-    capture is fine — it lands on the object the capture copied.
+- `&mut *p` for every replace type but `variant`. The borrow-site refusal keys
+  on a `FieldAccess` / `Index` operand, so a reborrow slips past it. `variant`
+  is covered from the other side by the write-back; the rest are not.
+- A `variant` element as a call argument, where the callee neither replaces
+  nor stores. `&mut xs[i]` lowers to `&mut *xs.index_ref(i)`, so its
+  write-back is an `index_assign` to synthesize, and that resolves in the
+  elaborator — trait impl, mangled name, recorded dispatch. A lowering pass
+  reaching it would repeat trait resolution, which is why the carve-out lists
+  index-element and struct-field separately. Refusing the whole shape is not
+  an option either, since `normalize_element(&mut alt.elements[ei])` lands.
+  A `&mut self` receiver takes the same borrow, so it waits on the same
+  write-back: `xs[i].m()` is refused where `m` replaces the element, and the
+  call the carve-out unblocks is spelled either way.
+- A call argument that _yields_ a borrow (`f(if c { &mut b.l } else { &mut b.r })`), for the mirrored reason: which place it borrowed is not
+  known until it runs. Both want the write-back to follow the borrow to
+  whichever place it named — the points-to answer neither half has.
+- A whole capture, where a store back would land in the closure's environment:
+  closure lowering filled that with a copy of the enclosing slot, and the
+  capture mode is its decision, not this pass's. A projection _through_ a
+  capture is fine — it lands on the object the capture copied.
 
-  Where the callee does replace or store, all but the `&mut self` receiver are
-  refused rather than dropped: that code was already losing the write.
+Where the callee does replace or store, all but the `&mut self` receiver are
+refused rather than dropped: that code was already losing the write.
 
-  Two sinks are refused wider than the rule asks, neither gateable on a
-  whole-value write the way a `let` is. Rebinding (`r = &mut b.item`) is refused
-  even where nothing replaces through `r`, since the detached-local set is
-  filled in visit order and an assignment need not dominate its reads; gating it
-  takes that set as a fixpoint before the walk. A `break` carrying one is
-  refused because a labeled block's value is read from its tail alone.
+Two sinks are refused wider than the rule asks, neither gateable on a
+whole-value write the way a `let` is. Rebinding (`r = &mut b.item`) is refused
+even where nothing replaces through `r`, since the detached-local set is
+filled in visit order and an assignment need not dominate its reads; gating it
+takes that set as a fixpoint before the walk. A `break` carrying one is
+refused because a labeled block's value is read from its tail alone.
 
-  The write-back stores the temp back only when the callee replaced it — the
-  temp aliases the place, so an unconditional store would also undo a write the
-  callee made through another route to the same place (`self`, a sibling `&mut`
-  argument), which lands on its own.
+The write-back stores the temp back only when the callee replaced it — the
+temp aliases the place, so an unconditional store would also undo a write the
+callee made through another route to the same place (`self`, a sibling `&mut`
+argument), which lands on its own.
 
-  A store back is still late for a route the callee takes after replacing.
-  Until the store back runs, the new value is in the temp alone, so another
-  route reads the old value and has its own write undone. So a call whose
-  callee replaces the temp is refused where another argument reaches the same
-  storage. That argument may be a borrow on the same root, the root itself
-  where the root is a reference, or any reference once the root is borrowed
-  anywhere in the body. Two reference
-  parameters the caller passed the same storage through are not seen:
-  `f(a, &mut b.opt)` inside `g(a: &mut S, b: &mut S)`, reached as
-  `g(&mut s, &mut s)`, still stores back over `a`'s write.
+A store back is still late for a route the callee takes after replacing.
+Until the store back runs, the new value is in the temp alone, so another
+route reads the old value and has its own write undone. So a call whose
+callee replaces the temp is refused where another argument reaches the same
+storage. That argument may be a borrow on the same root, the root itself
+where the root is a reference, or any reference once the root is borrowed
+anywhere in the body. Two reference
+parameters the caller passed the same storage through are not seen:
+`f(a, &mut b.opt)` inside `g(a: &mut S, b: &mut S)`, reached as
+`g(&mut s, &mut s)`, still stores back over `a`'s write.
 
-  Two costs come with running the refusal after monomorphization, where the
-  types are concrete enough to see a `variant` behind a type parameter:
+Two costs come with running the refusal after monomorphization, where the
+types are concrete enough to see a `variant` behind a type parameter:
 
-  - Liveness drops unreachable functions first, so a detached borrow in dead
-    code is not reported. It cannot execute, so nothing miscompiles.
-  - The refusals reach `wado check`, which lowers, but not
-    `wado query diagnostics`, which does not; and only the first per function is
-    reported. Raising them where the LSP sees them takes what the callee
-    retains at the call site, which only `lower::plan` computes.
+- Liveness drops unreachable functions first, so a detached borrow in dead
+  code is not reported. It cannot execute, so nothing miscompiles.
+- The refusals reach `wado check`, which lowers, but not
+  `wado query diagnostics`, which does not; and only the first per function is
+  reported. Raising them where the LSP sees them takes what the callee
+  retains at the call site, which only `lower::plan` computes.
 
 - [ ] D2 — the boxed set is `TypeTable::is_boxed_reference_target`, which boxing
-      and the implicit `&mut self` receiver borrow both read. The forbid rule
-      still carries its own list, since it excludes `variant`; stating it as
-      that predicate minus `variant` is what keeps the two from drifting.
+  and the implicit `&mut self` receiver borrow both read. The forbid rule
+  still carries its own list, since it excludes `variant`; stating it as
+  that predicate minus `variant` is what keeps the two from drifting.
 - [ ] D3 — `fn` coverage. The implementation boxes `fn` / `fn mut`, but issue
-      #1333's type list omits them; any forbid written from that list would miss
-      `&mut fns[i]`. The predicate (D2) is the source of truth.
+  #1333's type list omits them; any forbid written from that list would miss
+  `&mut fns[i]`. The predicate (D2) is the source of truth.
 - [ ] D4 — `flags`. There is no explicit `flags` arm in the box predicate; it
-      works only because `flags` lowers to its `u32` primitive earlier. Make the
-      predicate name `flags` explicitly.
+  works only because `flags` lowers to its `u32` primitive earlier. Make the
+  predicate name `flags` explicitly.
 - [ ] D5 — overloaded `ResolvedType::Enum`. A standalone `enum` and a variant's
-      payload-less case subset are both `ResolvedType::Enum`, disambiguated only by
-      `name ∉ variant_names`. This overloading is fragile and a latent bug source;
-      a distinct representation for variant-case discriminants should be
-      considered (possibly as separate work).
+  payload-less case subset are both `ResolvedType::Enum`, disambiguated only by
+  `name ∉ variant_names`. This overloading is fragile and a latent bug source;
+  a distinct representation for variant-case discriminants should be
+  considered (possibly as separate work).
 - [ ] D6 — `resource`. A resource handle is replace-on-assign but is not in the box
-      predicate, so `&mut resource` has no stable cell. Decide and document: either
-      box resource handles like other replace types, or explicitly reject `&mut`
-      of a resource. (`&mut resource` is currently unverified / effectively
-      unsupported.) A `&resource` is the handle itself, so `ref_eq` on two
-      compares handles: exact for an affine resource, whose handle only one
-      place holds, and true for two copies of an unrestricted one.
+  predicate, so `&mut resource` has no stable cell. Decide and document: either
+  box resource handles like other replace types, or explicitly reject `&mut`
+  of a resource. (`&mut resource` is currently unverified / effectively
+  unsupported.) A `&resource` is the handle itself, so `ref_eq` on two
+  compares handles: exact for an affine resource, whose handle only one
+  place holds, and true for two copies of an unrestricted one.
 - [x] D7 — whole-value `*ref = v` write-back for `List<T>` and tuples. An in-place
-      `&mut T` makes `*r = v` a field-wise write-back onto the shared handle,
-      lowered by `try_expand_deref_aggregate_assign`. That expansion only
-      recognised `ResolvedType::Struct` (`String`, and monomorphized generics like
-      `TreeMap<K,V>`), so `List<T>` and tuples (`[A, B]`) — in-place
-      `GenericInstance`s that are never monomorphized into their own struct — fell
-      through and the assignment was silently dropped at every opt level
-      (`*xs = []` was a no-op). Fixed by decomposing `List<T>` through its
-      canonical `SeqField` `{repr, used}` layout and a tuple through its positional
-      fields, both with concrete element types.
+  `&mut T` makes `*r = v` a field-wise write-back onto the shared handle,
+  lowered by `try_expand_deref_aggregate_assign`. That expansion only
+  recognised `ResolvedType::Struct` (`String`, and monomorphized generics like
+  `TreeMap<K,V>`), so `List<T>` and tuples (`[A, B]`) — in-place
+  `GenericInstance`s that are never monomorphized into their own struct — fell
+  through and the assignment was silently dropped at every opt level
+  (`*xs = []` was a no-op). Fixed by decomposing `List<T>` through its
+  canonical `SeqField` `{repr, used}` layout and a tuple through its positional
+  fields, both with concrete element types.
 - [x] D8 — `*ref = v` did not deep-copy the RHS. The write-back decomposition in
-      `try_expand_deref_aggregate_assign` moved the RHS's fields into the shared
-      handle without a value copy, because deref-expansion `Let`s are synthesized
-      after `value_copy::insert`'s walk and `wrap_value_copy_operand` found no
-      registered helper for the referent type at that site. So `*r = v` aliased
-      `v`'s interior — e.g. `*list_ref = other; other[0] = 9` also mutated the
-      referent's element. Fixed by seeding a copy helper for the deref-target RHS
-      type in the `analyze` walker and requesting the copy at the expansion site
-      through the fold's `should_wrap_value_copy` predicate, so a live RHS is
-      copied while a fresh / moved one (`*xs = []`/literal cases) stays free with
-      no copy inserted at all.
-      Note: a _separate_ pre-existing gap remains — a tuple literal does not copy
-      its element variables (`a = [inner, 1]; inner[0] = 9` mutates `a.0`), which
-      is tuple-literal construction, not deref-assign, and is out of scope here.
+  `try_expand_deref_aggregate_assign` moved the RHS's fields into the shared
+  handle without a value copy, because deref-expansion `Let`s are synthesized
+  after `value_copy::insert`'s walk and `wrap_value_copy_operand` found no
+  registered helper for the referent type at that site. So `*r = v` aliased
+  `v`'s interior — e.g. `*list_ref = other; other[0] = 9` also mutated the
+  referent's element. Fixed by seeding a copy helper for the deref-target RHS
+  type in the `analyze` walker and requesting the copy at the expansion site
+  through the fold's `should_wrap_value_copy` predicate, so a live RHS is
+  copied while a fresh / moved one (`*xs = []`/literal cases) stays free with
+  no copy inserted at all.
+  Note: a _separate_ pre-existing gap remains — a tuple literal does not copy
+  its element variables (`a = [inner, 1]; inner[0] = 9` mutates `a.0`), which
+  is tuple-literal construction, not deref-assign, and is out of scope here.
 
 ## Consequences
 

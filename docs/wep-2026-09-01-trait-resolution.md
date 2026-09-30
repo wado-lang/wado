@@ -84,8 +84,7 @@ it takes that impl instead. This holds for a method call and a static call alike
 ### A bound's trait arguments
 
 A bound writes its trait's arguments in the body's own parameter space, so what
-they name is settled at the instantiation, not where they are written. `T:
-Make<U>` reaches `impl Make<String>` once the call settles `U` to `String`, and
+they name is settled at the instantiation, not where they are written. `T: Make<U>` reaches `impl Make<String>` once the call settles `U` to `String`, and
 `T: Make<T::Base>` reaches it once `T = UserName` makes `T::Base` the `String`
 that impl binds. A call through the bound therefore lands on the same impl the
 bound check held the type to.
@@ -602,7 +601,7 @@ bound is not: `T: Sub` still reaches `Base`'s methods with `Base` unnamed, since
 the bounds path resolves without the order (above).
 
 - [ ] Gate the bounds path on the supertrait's declaration being in scope
-      (`trait_error_unimported_supertrait_method.wado`).
+  (`trait_error_unimported_supertrait_method.wado`).
 
 ### A ref blanket never dispatches
 
@@ -614,7 +613,7 @@ and the call reports no method (`trait_ref_blanket_dispatch.wado`). The
 prelude's `Inspect for &T` works because the compiler answers that bound itself.
 
 - [ ] Collect a reference blanket as a match, or materialize the match from the
-      winning `ImplId` (above), which makes the collection moot.
+  winning `ImplId` (above), which makes the collection moot.
 
 ### Two coherence rules still read the AST
 
@@ -622,10 +621,10 @@ prelude's `Inspect for &T` works because the compiler answers that bound itself.
 unbounded value blanket. The other two still run over the AST:
 
 - [ ] Variadic overlap, `check_variadic_impl_overlap`. Moving it needs `Program`
-      to carry a pack's bounds, which the key it compares on deliberately
-      ignores (WEP 2026-03-14 §5 Rule 2).
+  to carry a pack's bounds, which the key it compares on deliberately
+  ignores (WEP 2026-03-14 §5 Rule 2).
 - [ ] The orphan rule. Moving it needs each declaration's module and the
-      package boundary, which `Program` does not carry yet.
+  package boundary, which `Program` does not carry yet.
 
 ### The other dispatch paths do not share the order
 
@@ -654,10 +653,10 @@ impl written for it, and no `Reflect*` fact or derived impl
 (`trait_local_struct_receiver_blanket.wado`). What is left is the flip:
 
 - [ ] Route the derived bodies through what `holds` reports instead of
-      `record_bound_driven_synth_request_for`, and retire the member walk.
+  `record_bound_driven_synth_request_for`, and retire the member walk.
 - [ ] State a late declaration's members when they are known — an anonymous
-      struct at its literal, a body-local struct at its statement — or lower
-      them as the declaration `derive` reads.
+  struct at its literal, a body-local struct at its statement — or lower
+  them as the declaration `derive` reads.
 
 ### Specificity is refused, and now has a named cost
 
@@ -679,11 +678,11 @@ leaves no overlapping pair to break. This gap is therefore independent of
 reflection. Reopening it takes both of:
 
 - [ ] Answer what a caller sees when the narrower impl binds an associated type
-      differently — the question rank 3 declines.
+  differently — the question rank 3 declines.
 - [ ] Answer incomparable bound sets. Supertrait closure is a partial order:
-      `{Constrained, Reflect}` beside `{ReflectStruct, Reflect}` is neither
-      narrower nor wider, so a specificity rank leaves that pair at rank 3 and
-      the ambiguity report has to keep naming it.
+  `{Constrained, Reflect}` beside `{ReflectStruct, Reflect}` is neither
+  narrower nor wider, so a specificity rank leaves that pair at rank 3 and
+  the ambiguity report has to keep naming it.
 
 ### Two traits' associated functions of one name
 

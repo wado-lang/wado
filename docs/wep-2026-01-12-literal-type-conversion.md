@@ -62,7 +62,6 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
 ### Rules
 
 1. **Literals allow implicit conversion**:
-
    ```wado
    let x: i64 = 32;        // ✅ Literal → any compatible type
    let y: i32 = 42;        // ✅
@@ -70,7 +69,6 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
    ```
 
 2. **Variables require explicit conversion**:
-
    ```wado
    let x: i64 = 32;
    let y: i32 = x;         // ❌ Error: type mismatch
@@ -84,7 +82,6 @@ We investigated how modern statically-typed languages (Rust, Go, Swift, Zig) han
    boundary is the signed minimum. A literal directly under `as` is exempt:
    it takes the target's width, which is what makes the cast the way to write
    a bit pattern.
-
    ```wado
    let overflow: i8 = 128;   // ❌ Compile error: out of range
    let defaulted = 4294967296;  // ❌ Compile error: out of range for i32

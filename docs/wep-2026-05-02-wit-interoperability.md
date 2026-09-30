@@ -304,18 +304,18 @@ external WIT support; they are listed so the inventory stays honest.
 ## Open questions
 
 - [ ] World structure faithfulness. Today interfaces are globally visible and a
-      world only declares entry points (L1). L2 would have a `contract <World>;`
-      declaration verify that a module's interface usage is a subset of the
-      world's imports; L3 would give each world a scope of usable interfaces,
-      making a `use` outside it an error; L4 would model WIT's `include` / `with`
-      / world inheritance. Consuming external WIT realistically wants L2 and
-      probably L3, since two unrelated worlds can carry same-named interfaces.
+  world only declares entry points (L1). L2 would have a `contract <World>;`
+  declaration verify that a module's interface usage is a subset of the
+  world's imports; L3 would give each world a scope of usable interfaces,
+  making a `use` outside it an error; L4 would model WIT's `include` / `with`
+  / world inheritance. Consuming external WIT realistically wants L2 and
+  probably L3, since two unrelated worlds can carry same-named interfaces.
 - [ ] The `contract` declaration. Its syntax is specified by
-      [World Conformance](./wep-2026-01-16-world-conformance-and-export.md) but
-      the parser does not implement it, and its runtime meaning depends on
-      choosing L2 or L3 above.
+  [World Conformance](./wep-2026-01-16-world-conformance-and-export.md) but
+  the parser does not implement it, and its runtime meaning depends on
+  choosing L2 or L3 above.
 - [ ] An opt-out of the default-interface fallback, so that every non-entry-point
-      export must live in an explicit `export interface`.
+  export must live in an explicit `export interface`.
 
 ## Non-goals
 

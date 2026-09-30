@@ -33,8 +33,7 @@ emitter and fails the predicate is an ICE, never a silent `i32.const 0`.
 
 ### String representation
 
-A string literal lowers to `StructLiteral String { repr: PackedArray(bytes),
-used: <len> }`, a bytes literal to the same shape over `List<u8>`;
+A string literal lowers to `StructLiteral String { repr: PackedArray(bytes), used: <len> }`, a bytes literal to the same shape over `List<u8>`;
 `ExprKind::PackedArray` is a raw constant `Array<u8>`. Strings and bytes are
 therefore ordinary const aggregates, with no string-specific code in the passes
 below.
@@ -154,8 +153,7 @@ because the whole object is shared, even a spine mutation (`push`) corrupts it.
 Any `&mut self` method, any `&mut` of a projection, and any assignment to the
 binding or a projection disqualifies it.
 
-A bare whole-value read in a consuming position (return, block tail, `let y =
-xs`, an aggregate element) is also rejected: the value-copy machinery may have
+A bare whole-value read in a consuming position (return, block tail, `let y = xs`, an aggregate element) is also rejected: the value-copy machinery may have
 elided the copy treating the binding as a movable local, which globalizing would
 break. A by-value call argument is rejected too, unless the parameter it lands
 in passes the callee-parameter gate below. By-`&` borrows, field / index reads

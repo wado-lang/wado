@@ -123,8 +123,7 @@ The receiver has exactly three spellings and never a type annotation:
 receiver (`&self` plus a `*self` deref-copy covers it), and a single borrow
 spelling removes a needless choice. Bare `self` is legal on a resource or an
 aggregate that carries one (its consuming method hands that resource off); on a
-value type that owns no resource it is a diagnostic (`value types are not
-move-only; use &self`) — this is how the value-semantics friction is mitigated,
+value type that owns no resource it is a diagnostic (`value types are not move-only; use &self`) — this is how the value-semantics friction is mitigated,
 not with a keyword. The rule licenses `fn drop(self)` and the consuming
 `AsyncCall<T>` methods.
 
@@ -179,8 +178,7 @@ concrete value type.
 
 ### No move out of a borrow
 
-A hand-written `fn f(&self) -> Resource { return self.f; }` (or `match *self { …
-=> interior }`, or a `let`-bound projection) moves a resource out of a borrowed
+A hand-written `fn f(&self) -> Resource { return self.f; }` (or `match *self { … => interior }`, or a `let`-bound projection) moves a resource out of a borrowed
 place: the borrow keeps the source owned, so the returned handle aliases it — a
 double-free. `resource_move_check` rejects it. For each function it seeds the
 borrowed parameters (`&self` / `&mut self` / `&T`), tracks bindings projected
@@ -543,16 +541,16 @@ Verified against the tree.
 ### Move check
 
 - [x] `resource_move_check.rs` on `Semantics`, wired into batch and LSP; covers
-      free / `impl` / `trait` / `test` / function-local bodies.
+  free / `impl` / `trait` / `test` / function-local bodies.
 - [x] Use-after-move of a bare resource local (branch-join, divergence-aware,
-      loop-carried, rebind clears).
+  loop-carried, rebind clears).
 - [x] By-value `self` consumption via the `consumes_self` dispatch fact.
 - [x] Resource-carrying aggregates (struct / tuple / `Result`) are move-only,
-      kept in step with cleanup's `carries_resource` (variant / `Option` /
-      `List` deferred with their destructors); whole-aggregate move only.
+  kept in step with cleanup's `carries_resource` (variant / `Option` /
+  `List` deferred with their destructors); whole-aggregate move only.
 - [x] No-move-out-of-borrow: a `&self` / `&T`-param return rooted in the borrow
-      whose concrete type carries a resource is rejected (generic-instantiation
-      call sites deferred).
+  whose concrete type carries a resource is rejected (generic-instantiation
+  call sites deferred).
 - [ ] Unify with the value-copy last-use liveness.
 
 ### Cleanup
@@ -560,120 +558,120 @@ Verified against the tree.
 - [x] `&self` aggregate call classified by return type (#1569).
 - [x] Discarded resource value is dropped, not leaked.
 - [x] A temporary in a borrowing position (receiver, `&` argument, field read,
-      operand, condition, scrutinee) is dropped at the end of its statement,
-      and `break` / `continue` drop what their target encloses.
+  operand, condition, scrutinee) is dropped at the end of its statement,
+  and `break` / `continue` drop what their target encloses.
 - [x] `is_resource_aggregate` retired: extraction accessors take `self` by
-      value, so the receiver transfer is read directly (no shape guessing).
+  value, so the receiver transfer is read directly (no shape guessing).
 
 ### Receiver grammar (`self` / `&self` / `&mut self`)
 
 - [x] `SelfKind::Value`; parser accepts bare `self`, `consumes_self` is
-      `self_kind == Value`, and `self` on a free function is a parse error.
+  `self_kind == Value`, and `self` on a free function is a parse error.
 - [x] A `Value` receiver is a diagnostic (`SelfByValueOnNonResource`) only on a
-      value type that provably carries no resource; a resource-carrying aggregate
-      (and any generic self-type) may consume with `self`.
+  value type that provably carries no resource; a resource-carrying aggregate
+  (and any generic self-type) may consume with `self`.
 - [x] stdlib `self: &R` → `&self` (via `wado-from-idl`); every `self:`
-      annotation rejected, fixtures migrated, formatter normalization dropped.
+  annotation rejected, fixtures migrated, formatter normalization dropped.
 - [ ] `syntax.rs` grammar + VS Code grammar for the new receiver forms.
 
 ### Consuming drop
 
 - [x] `types.wado` drops migrated to `fn drop(self)`; `owned_self` keeps exactly
-      one drop, and a use after `.drop()` is a move error.
+  one drop, and a use after `.drop()` is a move error.
 - [x] Compositional destructor for struct / tuple aggregates (field-projected
-      drops; `Result` keeps its `match`); variant / `Option` / `List` deferred.
+  drops; `Result` keeps its `match`); variant / `Option` / `List` deferred.
 
 ### Value-copy client
 
 - [x] `$value_copy$T` at `copy` sites only; read-only-share; recursive-type deep
-      copy; `optimize::escape` / `value_copy_elide` deleted.
+  copy; `optimize::escape` / `value_copy_elide` deleted.
 - [x] Place-level move at struct / tuple literals (whole-value / clean-field
-      materialization out of a dead aggregate); receiver-storing precision so a
-      value-storing `&mut self` method does not pin its receiver.
+  materialization out of a dead aggregate); receiver-storing precision so a
+  value-storing `&mut self` method does not pin its receiver.
 - [x] Freshness through an indirect call and through block / `if` results.
 - [x] Move through a newtype cast (`bytes as ByteArray`), which the freshness
-      side already read through.
+  side already read through.
 - [x] A bytes literal counts as fresh, like a string literal.
 - [x] A reference root answers for the place it borrows — in the immutable-root
-      rule, in the freshness seed, and in path disjointness. Before, each read it
-      as an owner: a `let` out of a `&`- or `&mut`-held struct kept seeing the
-      source's later writes.
+  rule, in the freshness seed, and in path disjointness. Before, each read it
+  as an owner: a `let` out of a `&`- or `&mut`-held struct kept seeing the
+  source's later writes.
 - [x] A self-recursive function can prove it returns owned, so `?` on one stops
-      deep-copying the error it propagates.
+  deep-copying the error it propagates.
 - [x] A repoint of a place costs a binding that read it nothing: the binding
-      keeps its share across it. Handing that binding on to a new owner is a
-      separate claim, and
-      [the release that lets a binding leave the function](#the-release-that-lets-a-binding-leave-the-function)
-      says what proving it would take.
+  keeps its share across it. Handing that binding on to a new owner is a
+  separate claim, and
+  [the release that lets a binding leave the function](#the-release-that-lets-a-binding-leave-the-function)
+  says what proving it would take.
 - [x] Whether a binding aliases storage something still reads is asked of the
-      whole chain its source stands on, so a match temp standing between the
-      binding and the holder does not read as the holder's death.
+  whole chain its source stands on, so a match temp standing between the
+  binding and the holder does not read as the holder's death.
 - [x] A place scrutinee nothing can write is matched where it lies, and a
-      receiver-aliasing call counts as a place, so `match *r` and `match xs[0]`
-      decide as `match r` does. A writable one is hoisted into a temp.
+  receiver-aliasing call counts as a place, so `match *r` and `match xs[0]`
+  decide as `match r` does. A writable one is hoisted into a temp.
 - [x] A closure costs its captures their move, their share and their
-      confinement, not its whole frame's.
+  confinement, not its whole frame's.
 - [x] A projection to a scalar keeps its root live without consuming it, so
-      `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
+  `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
-      (`pattern_temp_no_alias`, over syntactic position × writability × binding
-      kind; `closure_capture`, `scalar_read_before_move`).
+  (`pattern_temp_no_alias`, over syntactic position × writability × binding
+  kind; `closure_capture`, `scalar_read_before_move`).
 - [x] Sharing is keyed on liveness rather than on the whole body, as _Sharing_
-      states: share collection runs inside the move analysis's backward walk, so
-      a write refuses a binding only where that binding's storage is still
-      readable. The live set is closed over what each live local took its value
-      out of, an arm binding being its scrutinee's storage under a second name.
+  states: share collection runs inside the move analysis's backward walk, so
+  a write refuses a binding only where that binding's storage is still
+  readable. The live set is closed over what each live local took its value
+  out of, an arm binding being its scrutinee's storage under a second name.
 - [x] A `&mut` to a variant or a primitive is a `Box<T>` by the time pattern
-      lowering runs, so the writability question a by-value arm binding asks goes
-      to `place::is_reference`, which reads both spellings. A raw `Ref` / `MutRef`
-      test minted no owned scrutinee temp and the binding aliased the caller's
-      payload.
+  lowering runs, so the writability question a by-value arm binding asks goes
+  to `place::is_reference`, which reads both spellings. A raw `Ref` / `MutRef`
+  test minted no owned scrutinee temp and the binding aliased the caller's
+  payload.
 - [x] The helper seed is driven by the types a program names rather than by the
-      expressions it writes, so it predicts none of the temps pattern lowering
-      mints after it. A miss left the fold no helper to call, which
-      `wrap_value_copy` asserts on.
+  expressions it writes, so it predicts none of the temps pattern lowering
+  mints after it. A miss left the fold no helper to call, which
+  `wrap_value_copy` asserts on.
 - [x] A `break LABEL` resumes where its labeled block ends, at both levels that
-      compute last-use liveness. Each kept a stack of exit sets that only loops
-      pushed, so every such break fell back to _every_ local live. A template
-      string lowers to a labeled block, so one interpolation anywhere in a
-      function retired its whole last-use set. That showed most often as a
-      whole-array copy of a `String` handed to a callee that keeps it. The
-      source-level walk had
-      the same fallback, and is fixed here rather than left. No fixture changes
-      with that half fixed: a template is not a labeled block where that walk
-      runs.
+  compute last-use liveness. Each kept a stack of exit sets that only loops
+  pushed, so every such break fell back to _every_ local live. A template
+  string lowers to a labeled block, so one interpolation anywhere in a
+  function retired its whole last-use set. That showed most often as a
+  whole-array copy of a `String` handed to a callee that keeps it. The
+  source-level walk had
+  the same fallback, and is fixed here rather than left. No fixture changes
+  with that half fixed: a template is not a labeled block where that walk
+  runs.
 - [x] A caller takes the whole `&mut` handle as written when the callee names a
-      write it cannot re-root there. Re-rooting kept only the writes whose owner
-      was the handle's own type and dropped the rest, so a callee writing through
-      a variant payload reported nothing to its caller at all. Harmless only
-      while a defensive copy stood in the way; the item above removed that copy
-      and `value_copy_nested_write_through_payload` miscompiled.
+  write it cannot re-root there. Re-rooting kept only the writes whose owner
+  was the handle's own type and dropped the rest, so a callee writing through
+  a variant payload reported nothing to its caller at all. Harmless only
+  while a defensive copy stood in the way; the item above removed that copy
+  and `value_copy_nested_write_through_payload` miscompiled.
 - [x] A wrap site skips its copy for a move, never for a share. The two were one
-      set, so a second owner minted out of a share — `let mut b = a`,
-      `Wrapper { inner: a }` — aliased the place the binding was read out of, and a
-      write through it landed there.
+  set, so a second owner minted out of a share — `let mut b = a`,
+  `Wrapper { inner: a }` — aliased the place the binding was read out of, and a
+  write through it landed there.
 - [x] An arm binding aliases live storage when the scrutinee is live where _that
-      arm_ reads it, decided from the live set the arm's own walk produced. One set
-      merged over every arm made a sibling arm's read refuse this arm's share.
+  arm_ reads it, decided from the live set the arm's own walk produced. One set
+  merged over every arm made a sibling arm's read refuse this arm's share.
 - [x] Storage is handed over only when no other chain reaches it. One predicate
-      answers at every hand-over site, and closes the chain on both sides: the
-      storage being taken, and everything live where it is taken. Closing only
-      the taker's own side left a sibling binding read out of the same place
-      invisible, since it reaches the place from beside the taker rather than
-      above it. Two bindings then both skipped their copy, and a write through
-      one was observed through the other. Both sides are compared as places
-      rather than as root locals: asking only whether two chains share a root
-      made each component of a destructured tuple a reader of its siblings,
-      which cost the corpus five copies in `httpbin_*`. Carrying the selectors
-      gives those back. One copy elsewhere stays, in
-      `parser_synth_id_collision_test`, where two bindings read the whole of one
-      place and one is still live. That is the shape the rule is for, and the
-      only elision in the corpus it takes.
+  answers at every hand-over site, and closes the chain on both sides: the
+  storage being taken, and everything live where it is taken. Closing only
+  the taker's own side left a sibling binding read out of the same place
+  invisible, since it reaches the place from beside the taker rather than
+  above it. Two bindings then both skipped their copy, and a write through
+  one was observed through the other. Both sides are compared as places
+  rather than as root locals: asking only whether two chains share a root
+  made each component of a destructured tuple a reader of its siblings,
+  which cost the corpus five copies in `httpbin_*`. Carrying the selectors
+  gives those back. One copy elsewhere stays, in
+  `parser_synth_id_collision_test`, where two bindings read the whole of one
+  place and one is still live. That is the shape the rule is for, and the
+  only elision in the corpus it takes.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
-      depending on the temp pattern lowering hoists the scrutinee into. Which
-      syntactic position a `match` sits in is part of whether the binding is
-      defended, which it should not be. Finishing means the binding carries its
-      own path and the fold wraps it, with the corpus no worse off.
+  depending on the temp pattern lowering hoists the scrutinee into. Which
+  syntactic position a `match` sits in is part of whether the binding is
+  defended, which it should not be. Finishing means the binding carries its
+  own path and the fold wraps it, with the corpus no worse off.
 
       What blocks it is a write reached through a variant payload: `modref` keys
       it by the payload's type while the call site keys by the handle's, so
@@ -681,29 +679,29 @@ Verified against the tree.
       Two pieces close that — `Selector::Variant` carrying its owner, so a
       variant step is a key as a field is, and `modref` speaking addressable
       steps rather than fields, the vocabulary `disjoint` already uses.
-
+      
       An or-pattern is the trap for any attempt: its alternatives bind one local
       but project different cases, so the local names only what they agree on —
       the value the whole pattern matched. Reading it as one alternative's
       payload lets a write to another's be called disjoint.
 - [x] A borrowed projection returned behind a variant construction. `return` is
-      not a wrap site, so `return place` hands a borrow out for the caller to
-      materialize; `analyze::returned_value` makes `return Some(place)` do the
-      same, and `ownership` judges that payload for the convention that tells
-      callers so.
+  not a wrap site, so `return place` hands a borrow out for the caller to
+  materialize; `analyze::returned_value` makes `return Some(place)` do the
+  same, and `ownership` judges that payload for the convention that tells
+  callers so.
 
       Only where the caller can name what it got, because one copy in a callee
       is shared by every call site and moving it out puts a copy on each of them
       instead. Naming it means a `place::ReturnPath` that stays inside one
       parameter's own storage; a path leaving through a `&` field lands where the
       caller cannot follow.
-
+      
       The path records _which_ parameter, not just the selectors. An accessor
       need not hand out its receiver: `StructField::get(&self, v: &T)` returns a
       field of `v`. Reading every path as the receiver's drops those, and a
       dropped path leaves a place nothing can name. That is what made
       `core:serde` deep-copy every field of every value it serialized.
-
+      
       Whether a place is reached through a borrow is decided by the walk that
       resolves it, never re-derived from an expression's syntax. The walk
       follows local bindings and callee return paths that the syntax does not,
@@ -711,38 +709,38 @@ Verified against the tree.
       write.
 
 - [ ] Follow a borrowed field back to what it borrows. This is what the item
-      above does _not_ reach, and it is the by-value `for` binding: a
-      `SliceValueIter` holds `repr: &Array<T>`, so the element it hands back is
-      a projection of the _list_, not of the iterator, and `ReturnPath`'s
-      `through_borrow` closes the gate rather than claim a place it cannot
-      justify. The walk already records which parameter a callee persists;
-      what is missing is _into which field_, which is what would let a caller
-      re-root `it.repr[i]` at the list `into_iter` was handed.
-      On gale-gen the copy inside `SliceValueIter::next` is 7.9% of the run, ~5%
-      of which writing the loops over `&` recovers. Narrow,
-      though — the same measurement over `syntax_highlight`, `json_catalog` and
-      `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
-      value pays it.
+  above does _not_ reach, and it is the by-value `for` binding: a
+  `SliceValueIter` holds `repr: &Array<T>`, so the element it hands back is
+  a projection of the _list_, not of the iterator, and `ReturnPath`'s
+  `through_borrow` closes the gate rather than claim a place it cannot
+  justify. The walk already records which parameter a callee persists;
+  what is missing is _into which field_, which is what would let a caller
+  re-root `it.repr[i]` at the list `into_iter` was handed.
+  On gale-gen the copy inside `SliceValueIter::next` is 7.9% of the run, ~5%
+  of which writing the loops over `&` recovers. Narrow,
+  though — the same measurement over `syntax_highlight`, `json_catalog` and
+  `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
+  value pays it.
 
 - [ ] Say which _field_ a stored parameter is stored into. The item above needs
-      it to re-root an iterator's element read at the list, and `array_copy`
-      needs it because its elements reach `dst`. Recorded with the rest of
-      what the facts cannot yet say, in
-      [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+  it to re-root an iterator's element read at the list, and `array_copy`
+  needs it because its elements reach `dst`. Recorded with the rest of
+  what the facts cannot yet say, in
+  [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 - [ ] Read a call through `projection_param`, and `&fresh` through
-      `is_owned_value`. Together, not separately.
-      `projection_param` matches a syntactic chain, so a wrapper that returns a
-      call gets no verdict: `VariantCase::extract`, `TemplateHole::get` and
-      `StructField::get` each `return builtin::<part_of builtin>(v, …)`.
-      Resolving the callee through `self_projection_param` is sound and gives
-      `extract` the verdict "projects `v`".
-      It buys nothing alone. `is_owned_value` has no `TirUnaryOp::Ref` arm, so
-      `&fresh_local` is never owned, and the caller that would cash the verdict
-      asks exactly that question about its argument. The resolution on its own
-      leaves every WIR golden byte-identical, and a case written to exercise it —
-      `wrap(h: &Holder) -> List<i32> { return get_items(h); }` called with a fresh
-      `Holder` — is byte-identical at `-O0` too.
+  `is_owned_value`. Together, not separately.
+  `projection_param` matches a syntactic chain, so a wrapper that returns a
+  call gets no verdict: `VariantCase::extract`, `TemplateHole::get` and
+  `StructField::get` each `return builtin::<part_of builtin>(v, …)`.
+  Resolving the callee through `self_projection_param` is sound and gives
+  `extract` the verdict "projects `v`".
+  It buys nothing alone. `is_owned_value` has no `TirUnaryOp::Ref` arm, so
+  `&fresh_local` is never owned, and the caller that would cash the verdict
+  asks exactly that question about its argument. The resolution on its own
+  leaves every WIR golden byte-identical, and a case written to exercise it —
+  `wrap(h: &Holder) -> List<i32> { return get_items(h); }` called with a fresh
+  `Holder` — is byte-identical at `-O0` too.
 
 ## Known gaps
 

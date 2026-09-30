@@ -59,8 +59,8 @@ separate proposal.
 ## TODO
 
 - [ ] `&mut` iteration for replace-on-assign element types: needs write-back to
-      `xs[i]` on every loop-exit edge (WEP-2026-06-13). Rejected for now rather
-      than silently dropped; fixture `iter_mut_forbidden.wado` pins the error.
+  `xs[i]` on every loop-exit edge (WEP-2026-06-13). Rejected for now rather
+  than silently dropped; fixture `iter_mut_forbidden.wado` pins the error.
 - [ ] Generic `iter_value()` on any `Iterator<Item = &T>`: blocked on
-      propagating associated-type-equality bounds (`Item = &T`) into the impl
-      body.
+  propagating associated-type-equality bounds (`Item = &T`) into the impl
+  body.

@@ -89,8 +89,7 @@ example is `func Min[T int | float64](a T, b T) T`, and `ast.TypeParam` has two
 fields, `Token` and `Name`, with no constraint node at all. `parseTypeParams`
 (`parser.go:580`) reads an identifier, then breaks and calls
 `expectPeek(RBRACKET)` on the next token. The repository's own copy of the
-example the README quotes, `examples/shared/libcalc.hike`, writes `func Add[T](a
-T, b T) T` and calls it as `Add[int](a, b)`. Nothing in `tests/`, `examples/` or
+example the README quotes, `examples/shared/libcalc.hike`, writes `func Add[T](a T, b T) T` and calls it as `Add[int](a, b)`. Nothing in `tests/`, `examples/` or
 `std/` uses a union constraint.
 
 One more thing the stdlib author lives with: a type error in Hike source is
