@@ -30,8 +30,7 @@ and never writing output.
 ### What an effect is not
 
 A trap is not an effect. A `panic`, a failed `assert` or any other trap may
-happen in a function that declares no effects. Neither is what an `#[ambient]`
-function writes.
+happen in a function that declares no effects.
 
 The optimizer may remove a call to a function that declares no effects when its
 result is unused. It does not remove a call that may trap, or one that may not
@@ -39,10 +38,9 @@ return. Removing either would change what the program does.
 
 ### Operations demand their interface
 
-Calling an operation of any interface demands that interface, whether the host
-backs it or a Wado handler answers it. `Counter::next()` needs `with Counter`
-in its caller. `with Counter => h do { … }` grants `Counter` to its body, as it
-already did.
+Calling an operation of any interface demands that interface.
+`Counter::next()` needs `with Counter` in its caller, and
+`with Counter => h do { … }` grants `Counter` to its body.
 
 The dependency a handler injects is now visible in every signature it passes
 through. That is the cost, and it is the point: a signature says everything its
@@ -54,8 +52,8 @@ A handler runs on behalf of the code that installs it. So `with E => h do`
 demands every effect `h`'s methods declare, and `E` itself where the block ends
 in `..forward`, which passes operations to the next handler out.
 
-A handler method holds only what it declares. One that delegates to the next
-handler out declares `with E`, as it would any other effect.
+A handler method holds only what it declares, so one that delegates to the next
+handler out declares `with E`.
 
 ### Waiting where the call starts
 
@@ -70,9 +68,8 @@ effect a global access demands, are not decided, so they are a known gap of
 
 ### `#[ambient]` stays
 
-`#[ambient]` exempts a body from effect checking, as before. The optimizer
-treats a call to an ambient function as it treats one that declares no effects,
-so it may remove one whose result is unused. Ambient output such as
+`#[ambient]` exempts a body from effect checking. The optimizer may remove a
+call to an ambient function whose result is unused. Ambient output such as
 `log_stderr` is therefore best-effort: it may not appear.
 
 ## Roadmap

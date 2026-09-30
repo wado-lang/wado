@@ -88,11 +88,11 @@ type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i64>", ref "core:prelude/format.wado//Formatter");  // TypeId(29)
+type "functype//core:prelude/traits.wado/inspect_fn_field_of_generic_instance.wado/Holder<i64>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "inspect_fn_field_of_generic_instance.wado//Holder<i64>", ref "core:prelude/format.wado//Formatter");  // TypeId(29)
 
-type "functype//core:prelude/traits.wado/inspect_fn_field_of_generic_instance.wado/Holder<i64>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "inspect_fn_field_of_generic_instance.wado//Holder<i64>", ref "core:prelude/format.wado//Formatter");  // TypeId(30)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//StrSlice", ref Array<u8>, i32) -> bool;  // TypeId(30)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//StrSlice", ref Array<u8>, i32) -> bool;  // TypeId(31)
+type "functype//core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i64>", ref "core:prelude/format.wado//Formatter");  // TypeId(31)
 
 type "functype//inspect_fn_field_of_generic_instance.wado/inspect_fn_field_of_generic_instance.wado/$Closure_0::$call" = fn() -> i64;  // TypeId(32)
 
@@ -674,12 +674,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
 fn "core:prelude/traits.wado/inspect_fn_field_of_generic_instance.wado/Holder<i64>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
@@ -773,6 +767,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core
         };
         break $inline_bytes_match_at_4: 1;
     };
+}
+
+fn "core:prelude/traits.wado/fn(i32)->i64^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "inspect_fn_field_of_generic_instance.wado/inspect_fn_field_of_generic_instance.wado/$Closure_0::$call"() {

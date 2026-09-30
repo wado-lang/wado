@@ -14,7 +14,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(3)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<fn mut(char)->bool> {  // TypeId(4)
+struct core:prelude/types.wado//Box<fn(char)->bool> {  // TypeId(4)
     mut value: ref struct,
 }
 
@@ -130,27 +130,27 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn(char)->bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32);  // TypeId(44)
 
-type "functype//bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn mut(char)->bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(45)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(45)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(46)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
+type "functype//core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(48)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(49)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(49)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(50)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(50)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(51)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(51)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(52)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(52)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(53)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(53)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(54)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(54)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(55)
+type "functype//bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(char)->bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(55)
 
 type "functype//bug_closure_arg_called_from_iterator_closure.wado/bug_closure_arg_called_from_iterator_closure.wado/$Closure_1::$call" = fn(char) -> bool;  // TypeId(56)
 
@@ -318,7 +318,7 @@ condition: via_alias('b', |c| c >= 'b')
 "), used: 41 }, 41);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_41 + 41, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|c| c >= 'b': "), used: 14 }, 14);
         $local_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_24);
-        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(char)->bool>" { value: $v0_0 }, $local_25);
+        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(char)->bool>" { value: $v0_0 }, $local_25);
         $fuse_at_42 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_24, 31);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_42, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_42 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via_alias('b', |c| c >= 'b'): "), used: 30 }, 30);
@@ -359,7 +359,7 @@ condition: !via_list('a', |c| c >= 'b')
 "), used: 41 }, 41);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $fuse_at_44 + 41, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|c| c >= 'b': "), used: 14 }, 14);
         $local_27 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_26);
-        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(char)->bool>" { value: $v0_3 }, $local_27);
+        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(char)->bool>" { value: $v0_3 }, $local_27);
         $fuse_at_45 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_26, 30);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $fuse_at_45, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $fuse_at_45 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via_list('a', |c| c >= 'b'): "), used: 29 }, 29);
@@ -394,7 +394,7 @@ condition: via_if('b', |c| c >= 'b')
 "), used: 38 }, 38);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_28.repr, $fuse_at_47 + 38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|c| c >= 'b': "), used: 14 }, 14);
         $local_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_28);
-        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(char)->bool>" { value: $v0_6 }, $local_29);
+        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(char)->bool>" { value: $v0_6 }, $local_29);
         $fuse_at_48 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_28, 28);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_28.repr, $fuse_at_48, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_28.repr, $fuse_at_48 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via_if('b', |c| c >= 'b'): "), used: 27 }, 27);
@@ -429,7 +429,7 @@ condition: via_closure_arg('b', |c| c >= 'b')
 "), used: 47 }, 47);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_30.repr, $fuse_at_50 + 47, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|c| c >= 'b': "), used: 14 }, 14);
         $local_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_30);
-        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(char)->bool>" { value: $v0_9 }, $local_31);
+        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(char)->bool>" { value: $v0_9 }, $local_31);
         $fuse_at_51 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_30, 37);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_30.repr, $fuse_at_51, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_30.repr, $fuse_at_51 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via_closure_arg('b', |c| c >= 'b'): "), used: 36 }, 36);
@@ -472,7 +472,7 @@ condition: via_field('b', |c| c >= 'b')
 "), used: 41 }, 41);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_32.repr, $fuse_at_53 + 41, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|c| c >= 'b': "), used: 14 }, 14);
         $local_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_32);
-        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(char)->bool>" { value: $v0_12 }, $local_33);
+        "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(char)->bool>" { value: $v0_12 }, $local_33);
         $fuse_at_54 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_32, 31);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_32.repr, $fuse_at_54, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_32.repr, $fuse_at_54 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("via_field('b', |c| c >= 'b'): "), used: 30 }, 30);
@@ -1293,12 +1293,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn(char)->bool>^core:prel
     unreachable;
 }
 
-fn "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
     return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
 }
@@ -2110,6 +2104,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
         self.used = new_used;
         builtin::array_copy<u8>(self.repr, start_11, $mv$other$repr, 0, $mv$other$used);
     };
+}
+
+fn "bug_closure_arg_called_from_iterator_closure.wado/fn(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "bug_closure_arg_called_from_iterator_closure.wado/bug_closure_arg_called_from_iterator_closure.wado/$Closure_1::$call"(c) {

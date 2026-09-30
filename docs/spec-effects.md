@@ -249,10 +249,10 @@ pub fn log(message: String) with (Stdout, Stderr) {
 
 ## Effect Propagation
 
-Every function declares its effects, whatever its visibility. Nothing is inferred from the body. A call demands of its caller:
+Every function declares its effects. Nothing is inferred from the body. A call demands of its caller:
 
 - for a function, the effects in its `with` clause;
-- for an operation of an interface, that interface, whether a handler or the host answers it (see [Handlers](#handlers));
+- for an operation of an interface, that interface (see [Handlers](#handlers));
 - for an operation of a resource, that resource (see [Resources as Effects](#resources-as-effects)).
 
 An operation's default body holds its own interface, since it runs where the operation was dispatched.
@@ -269,10 +269,10 @@ fn helper() {
 
 ```wado
 fn next_id() -> i32 with Counter {
-    return Counter::next();   // `Counter` answered by a handler still demands it
+    return Counter::next();   // demands `Counter`
 }
 
-pub fn report() with (Stdout, Preopens) {   // `pub` changes nothing
+pub fn report() with (Stdout, Preopens) {
     println("report");
 }
 
@@ -390,7 +390,7 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
-`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. What an ambient body performs is not an effect of its caller, so a call whose result goes unused may be removed, and its output never appear.
+`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. A call whose result goes unused may be removed, so its output may never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 
@@ -673,8 +673,7 @@ The handler expressions are evaluated before the body, outside the handlers they
 A handler runs on behalf of the code that installs it, so installing one demands
 what it performs: every effect its methods declare, and `E` itself where the
 block ends in `..forward` (see
-[Operations a Handler Leaves Out](#operations-a-handler-leaves-out)). A handler
-cannot reach a capability its installer does not hold. Bindings on one `with`
+[Operations a Handler Leaves Out](#operations-a-handler-leaves-out)). Bindings on one `with`
 install in source order, each inside the ones before it, so a binding's handler
 also holds the effects the earlier bindings install.
 
@@ -761,7 +760,7 @@ assert c.value == 2;
 
 ### Where a Handler Method Runs
 
-A handler method for `E` runs with its own installation set aside, so `E`'s operations inside it reach the next handler out. That is how a handler delegates, to an outer handler or to the host, without recursing into itself. A method that delegates declares `with E`, as it would any other effect it performs.
+A handler method for `E` runs with its own installation set aside, so `E`'s operations inside it reach the next handler out. That is how a handler delegates, to an outer handler or to the host, without recursing into itself. A method that delegates declares `with E`.
 
 <!-- {"fixture":"spec_effects_handler_delegates.wado"} -->
 

@@ -133,7 +133,9 @@ newtype types are covered by the blanket impls over `ReflectStruct` /
 `core:prelude/traits`, so nothing is emitted per type. What reflection does not
 reach — resources, tuple and generic-resource instances, and the `fn(..)`
 dispatch stubs — `synthesis::traits` emits alongside the other auto-derived
-traits, skipping any receiver that has a methodful impl of its own.
+traits, skipping any receiver that has a methodful impl of its own. The stubs
+alone wait for monomorphize, since a `fn(..)` type spelled through a type
+parameter is concrete only in its instance.
 
 ### Closure inspect via runtime dispatch
 

@@ -1,8 +1,8 @@
 //! Trait synthesis: auto-derives `Eq` / `Ord` for structs and enums and `Eq` for
 //! variants (discriminant, then payload), `Default` for structs, `Inspect` for
 //! debug formatting, and `Display` for an enum’s bare case name.
-//! Runs before monomorphize, but for the `fn(..)` dispatch stubs only an
-//! instance reaches.
+//! Runs before monomorphize, but for the `fn(..)` dispatch stubs, whose types
+//! are concrete only once instantiated.
 
 use std::cell::RefCell;
 use std::convert::identity;
@@ -4030,10 +4030,10 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // Every reflected kind derives Inspect through its own blanket in
     // `core:prelude/traits` (WEP 2026-06-13) — a newtype's ` as Name` tag
     // included, over `ReflectNewtype`. What remains has no reflection:
-    // parameterized types, resources, and `fn(..)` dispatch stubs.
+    // parameterized types and resources, and `fn(..)` types, whose stubs
+    // [`synthesize_monomorphized_fn_inspect_stubs`] mints after monomorphize.
 
-    // Tuples inspect through their variadic impl in `core:prelude/tuple.wado`,
-    // and `Fn` signatures through `collect_canonical_fn_signatures` below.
+    // Tuples inspect through their variadic impl in `core:prelude/tuple.wado`.
     let span = synth_span();
     for (type_id, def, type_arg_names) in collect_generic_resource_instances(&tt) {
         // The stub belongs to the module declaring the resource, emitted there once.
@@ -4095,36 +4095,13 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         ctx.record_impl(receiver, &inspect_fq.canonical().expect(KEYED));
     }
 
-    // Dispatch stubs — one per `fn(..)` spelling, since a stub is named after
-    // the type it dispatches for.
-    for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = sig.receiver.to_mangled();
-        let instance = TypeHead::instance(&module_source, &mangled);
-        if ctx.pending_has(&instance, &inspect_fq.canonical().expect(KEYED)) {
-            continue;
-        }
-        let ref_type = tt.make_ref(sig.repr_type_id);
-        generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
-            &sig.receiver,
-            sig.arity,
-            sig.return_type,
-            ref_type,
-            fmt_type,
-            span,
-            &inspect_fq,
-            &inspect_method,
-        ))));
-        // Per-module: do not `ctx.record_impl`.
-    }
-
     drop(tt);
     module.functions.extend(generated);
 }
 
-/// Mint the `fn(..)^Inspect` dispatch stubs that monomorphization reaches and
-/// synthesis could not: a `fn(..)` type spelled through a type parameter, as a
-/// generic struct's field is, is concrete only in its instance. Each stub goes
-/// to the module whose call names it.
+/// Mint the `fn(..)^Inspect` dispatch stubs the monomorphized program calls,
+/// each in the module whose call names it. A `fn(..)` type spelled through a
+/// type parameter, as a generic struct's field is, is concrete only here.
 pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
     let names = TraitsStdlibNames::from_type_table(&flat.type_table.borrow());
     let signatures: hashmap::IndexMap<String, FnSignature> =
@@ -4186,7 +4163,6 @@ pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
             sig.return_type,
             ref_type,
             fmt_type,
-            synth_span(),
             &names.inspect_fq,
             &names.inspect_method,
         );
@@ -4329,20 +4305,19 @@ fn generate_enum_display_fn(
 /// being bodyless it bypasses the inliner and the other body walkers. WIR build
 /// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the real body,
 /// a `call_ref` through the matching `CanonicalClosure_K`'s vtable slot.
-#[allow(clippy::too_many_arguments)]
 fn generate_fn_inspect_fn(
     receiver: &FqTypeName,
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
     fmt_type: TypeId,
-    span: Span,
     trait_name: &FqTraitName,
     method_name: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, trait_name, method_name);
     let qualified_name = method_info.to_mangled_name();
 
+    let span = synth_span();
     let mut func = make_synthetic_method(
         qualified_name,
         method_info,
@@ -4620,10 +4595,9 @@ fn collect_generic_resource_instances(tt: &TypeTable) -> Vec<(TypeId, DefId, Vec
         .collect()
 }
 
-/// Canonical `Fn` signature for dispatch-stub synthesis, keyed by
-/// `(arity, return_type)` alone — see [`collect_parameterized_types`].
+/// One `fn(..)` spelling a dispatch stub is minted for.
 /// `repr_type_id` is the first `ResolvedType::Function` seen with this
-/// signature, used to build the stub's `&self` type. Any id with the signature
+/// spelling, used to build the stub's `&self` type. Any id with the spelling
 /// would do; taking the first makes two compiles byte-identical.
 struct FnSignature {
     repr_type_id: TypeId,
