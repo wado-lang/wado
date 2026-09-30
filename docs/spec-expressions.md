@@ -496,6 +496,23 @@ let result = (a as f64) + b;
 assert result == 1.5;
 ```
 
+#### Numeric Casts
+
+A numeric cast converts between two integer or float types. Its result is
+stated in these terms, which follow the Rust Reference:
+
+- Transmute: keep the bit pattern and read it as the target type. Wado names
+  the operation but offers no operator for it.
+- Truncate: keep the low bits that fit the target's width.
+- Zero-extend: widen by filling the new high bits with 0.
+- Sign-extend: widen by filling the new high bits with the sign bit.
+- Round toward zero: drop the fractional part.
+- Saturate: replace a value below the target's range with its `MIN`, and one
+  above it with its `MAX`.
+- Round to nearest: take the target's value closest to the source, and the one
+  with an even last digit on a tie. A value beyond the target's finite range
+  becomes an infinity of its sign.
+
 #### `char` Casts
 
 A `char` casts to any integer type, which yields its Unicode scalar value. A
