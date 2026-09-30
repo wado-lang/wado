@@ -229,7 +229,9 @@ fn from_guest(ty: &WadoType, value: &str) -> String {
             if element == "x" {
                 value.to_string()
             } else {
-                format!("{value}.map((x) => {element})")
+                // jco lifts a numeric list (a handle's `f64` among them) to a
+                // typed array, whose `map` would coerce back to its element type.
+                format!("Array.from({value}, (x) => {element})")
             }
         }
         ty => apply(conversion(ty).map(|(to_dom, _)| to_dom), value),
