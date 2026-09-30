@@ -481,7 +481,7 @@ a whole-value rejection, or a format that counts nothing.
 
 #### `pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError`
 
-#### `pub fn duplicate_key<K: Inspect>(key: &K) -> DeserializeError`
+#### `pub fn duplicate_field<K: Inspect>(key: &K) -> DeserializeError`
 
 A repeated field or key, named as `Inspect` spells it: a string key is
 quoted, so it reads apart from a number.

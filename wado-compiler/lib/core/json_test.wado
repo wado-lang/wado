@@ -940,10 +940,10 @@ test "a repeated unknown member is not a duplicate" {
 
 test "the duplicate error names the wire key alike for a struct, a map and a Value" {
     let input = `{"a":1,"a":2}`;
-    assert from_string::<Dup>(input) matches { Err(e) && e.message == `duplicate key: "a"` };
-    assert from_string::<TreeMap<String, i32>>(input) matches { Err(e) && e.message == `duplicate key: "a"` };
-    assert from_string::<Value>(input) matches { Err(e) && e.message == `duplicate key: "a"` };
-    assert from_string::<TreeMap<i32, i32>>(`{"1":1,"1":2}`) matches { Err(e) && e.message == "duplicate key: 1" };
+    assert from_string::<Dup>(input) matches { Err(e) && e.message == `duplicate field: "a"` };
+    assert from_string::<TreeMap<String, i32>>(input) matches { Err(e) && e.message == `duplicate field: "a"` };
+    assert from_string::<Value>(input) matches { Err(e) && e.message == `duplicate field: "a"` };
+    assert from_string::<TreeMap<i32, i32>>(`{"1":1,"1":2}`) matches { Err(e) && e.message == "duplicate field: 1" };
 }
 
 test "a repeated map key is rejected by default" {

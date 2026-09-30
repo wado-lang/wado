@@ -210,10 +210,10 @@ impl DeserializeError {
 
     /// A repeated field or key, named as `Inspect` spells it: a string key is
     /// quoted, so it reads apart from a number.
-    pub fn duplicate_key<K: Inspect>(key: &K) -> DeserializeError {
+    pub fn duplicate_field<K: Inspect>(key: &K) -> DeserializeError {
         return DeserializeError {
             kind: DeserializeErrorKind::DuplicateField,
-            message: `duplicate key: ${key:?}`,
+            message: `duplicate field: ${key:?}`,
             offset: -1,
         };
     }
@@ -241,11 +241,11 @@ pub fn report_duplicate_key<K: Inspect>(policy: DuplicateKeyPolicy, key: &K) -> 
     match policy {
         DuplicateKeyPolicy::Error => {
             builtin::cold_path();
-            return Result::Err(DeserializeError::duplicate_key(key));
+            return Result::Err(DeserializeError::duplicate_field(key));
         },
         DuplicateKeyPolicy::Warn => {
             builtin::cold_path();
-            log_stderr(`warning: duplicate key: ${key:?}`);
+            log_stderr(`warning: duplicate field: ${key:?}`);
         },
         DuplicateKeyPolicy::PassThru => {
         },
