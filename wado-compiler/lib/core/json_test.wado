@@ -29,7 +29,7 @@ use {
     PrettyJsonSerializer,
     JsonDeserializer,
 } from "core:json";
-use { Value } from "core:value";
+use { Value, to_value } from "core:value";
 
 fn assert_bytes_eq_string<B: AsByteSlice>(bytes: &B, s: &String) {
     let actual = bytes.as_byte_slice();
@@ -1031,10 +1031,15 @@ test "every scalar key width round-trips through its spelling" {
     assert_key_round_trips('x', "x");
 }
 
-test "a NaN map key fails as a NaN value does" {
-    let mut m = TreeMap::<f64, i32>::new();
-    m[f64::NAN] = 1;
-    assert to_string(&m).unwrap_err() == SerializeError::unsupported_value("NaN is not allowed in JSON");
+test "a non-finite map key is a string, spelled as core:value spells it" {
+    // A key is a JSON string, so the rule barring NaN from a number is no bar.
+    assert_key_round_trips(f64::NAN, "NaN");
+    assert_key_round_trips(f64::INFINITY, "inf");
+    let low: f32 = f32::NEG_INFINITY;
+    assert_key_round_trips(low, "-inf");
+    let mut keyed = TreeMap::<f64, i32>::new();
+    keyed[f64::NAN] = 1;
+    assert to_value(&keyed) matches { Ok(Object(o)) && o.contains_key("NaN") };
 }
 
 test "a map key that does not parse as its type names the key" {
