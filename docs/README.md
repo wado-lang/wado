@@ -191,6 +191,7 @@
 - [Eval — Compiling and Running Wado Source from a Test](./wep-2026-09-26-eval.md)
 - [Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md)
 - [Test Coverage](./wep-2026-09-28-test-coverage.md)
+- [A Function Without `with` Is Pure](./wep-2026-09-30-pure-functions.md)
 
 ## Standard Library
 
