@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790774892055,
+  "lastUpdate": 1790777330548,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62317,6 +62317,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5ff003f2f98322827f7fd3e923dbaf513a964fbc"
         },
         "date": 1790774891000,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22806,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fb115698967f767ca0fffba3f91448409c774046",
+          "message": "Merge pull request #2231 from wado-lang/claude/cool-cray-gm68xz\n\nchore(deps): wasmtime 49.0.1, latest Cargo dependencies, and Markdown formatted by Marl",
+          "timestamp": "2026-09-30T22:42:40+09:00",
+          "tree_id": "3ae774ba04542ce588377a0923b2f478084b6e16",
+          "url": "https://github.com/wado-lang/wado/commit/fb115698967f767ca0fffba3f91448409c774046"
+        },
+        "date": 1790777329918,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
