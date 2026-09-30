@@ -2169,19 +2169,13 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         return;
     }
     let guard = if non_greedy_exit_by_atn(re.non_greedy, re.kind, &loop_admits) {
-        let refused = match &re.body {
-            Wildcard => Option::Some([] as List<String>),
-            Excluded(e) => Option::Some(e.kinds),
-            _ => null,
-        };
-        let predicts = atn_enters_cond(ctx, re.atn_decision, "tokens", "pos");
-        atn_loop_enter_cond(
-            re.exit_first_complete,
-            &re.caller_follow_first,
-            refused,
-            `(${kind_at("tokens", "pos")})`,
-            predicts,
+        atn_loop_enters_cond(
             ctx,
+            re.atn_decision,
+            &re.atn_asked_kinds,
+            `(${kind_at("tokens", "pos")})`,
+            "tokens",
+            "pos",
         );
     } else {
         scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx);
@@ -5218,30 +5212,21 @@ fn atn_enters_cond<S: AsStrSlice, S1: AsStrSlice>(ctx: &GenContext, site: i32, t
     return `${atn_predict_call(decision, tokens, pos, ctx)} == 1`;
 }
 
-/// The condition entering a loop the simulator decides, asking it only for a
-/// token that could also start the continuation. Any other token only the `.`
-/// or `~X` body (`refused` is what that body refuses) can take, so the
-/// prediction would enter too. That needs `exit_first` to name every token the
-/// continuation starts with.
-fn atn_loop_enter_cond<S: AsStrSlice>(
-    exit_first_complete: bool,
-    exit_first: &List<String>,
-    refused: Option<List<String>>,
-    lookahead: S,
-    predicts: String,
+/// `atn_enters_cond` for a loop, asking the simulator only about `asked`
+/// (`RepeatOp.atn_asked_kinds`), the kind at `lookahead`.
+fn atn_loop_enters_cond<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &mut GenContext,
+    site: i32,
+    asked: &List<String>,
+    lookahead: S,
+    tokens: S1,
+    pos: S2,
 ) -> String {
-    let Some(refused) = refused else {
-        return predicts;
-    };
-    if !exit_first_complete {
+    let predicts = atn_enters_cond(ctx, site, tokens, pos);
+    if asked.is_empty() {
         return predicts;
     }
-    let mut avoid = union_kind_arrays(exit_first, &refused);
-    if !avoid.contains_str("TK_EOF") {
-        avoid.push("TK_EOF");
-    }
-    return `(${ctx.kind_negate_check_str(&avoid, lookahead)} || ${predicts})`;
+    return `(${ctx.kind_negate_check_str(asked, lookahead)} || ${predicts})`;
 }
 
 /// The precedence a prediction prunes LR enter edges below, or it keeps an
@@ -7209,20 +7194,7 @@ fn compute_non_greedy_condition(
     ctx: &mut GenContext,
 ) -> String {
     if non_greedy_exit_by_atn(rep_op.non_greedy, rep_op.kind, &rep_op.body_admits) {
-        let refused = match &rep_op.body {
-            Wildcard(_) => Option::Some([] as List<String>),
-            Excluded(e) => Option::Some(e.kinds),
-            _ => null,
-        };
-        let predicts = atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos");
-        return atn_loop_enter_cond(
-            rep_op.exit_first_complete,
-            &rep_op.caller_follow_first,
-            refused,
-            &PEEK_KIND,
-            predicts,
-            ctx,
-        );
+        return atn_loop_enters_cond(ctx, rep_op.atn_decision, &rep_op.atn_asked_kinds, &PEEK_KIND, "&p.kinds", "p.pos");
     }
     assert !admits_tests_nothing(&rep_op.body_admits), "a body taking every token exits by the simulator, and `check_epsilon_closure` rejects one taking none";
     let raw_first = &admits_kinds(&rep_op.body_admits);

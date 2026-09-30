@@ -1022,8 +1022,8 @@ the compiled fast path:**
    caller's continuation alike, the loop exits at the first position from
    which the parse can finish. Both the parse and the scan ask the simulator
    (`non_greedy_exit_by_atn`), and only on a token that could also start the
-   continuation, when that continuation cannot match empty; any other token
-   only the body takes. The tests are in `codegen_test.wado`
+   continuation, where its first tokens are all known; any other token only
+   the body takes. The tests are in `codegen_test.wado`
    (`LR_SUFFIX_LOOPS` and "a non-greedy wildcard exits only where the whole
    rest of the input can match").
 

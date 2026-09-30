@@ -2472,7 +2472,7 @@ fn rebind_scan_repeat_caller_follow(
             probe_asks_caller: stamps.probe.asks_caller,
             probe_contested: stamps.probe_contested,
             static_exit_undecided: stamps.static_exit_undecided,
-            exit_first_complete: stamps.exit_first_complete,
+            atn_asked_kinds: stamps.atn_asked_kinds,
             probe_viable: stamps.probe.viable,
             duties: stamps.duties,
         });
@@ -4373,7 +4373,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         probe_asks_caller: stamps.probe.asks_caller,
         probe_contested: stamps.probe_contested,
         static_exit_undecided: stamps.static_exit_undecided,
-        exit_first_complete: stamps.exit_first_complete,
+        atn_asked_kinds: stamps.atn_asked_kinds,
         probe_viable: stamps.probe.viable,
         duties: stamps.duties,
     };
@@ -4385,8 +4385,40 @@ struct RepeatExitStamps {
     probe: ContinuationProbe,
     probe_contested: bool,
     static_exit_undecided: bool,
-    exit_first_complete: bool,
+    atn_asked_kinds: List<String>,
     duties: IterationDuties,
+}
+
+/// The tokens a loop the simulator decides needs asking about: those that
+/// could start the continuation, and those its `.` or `~X` body refuses. Any
+/// other token only the body can take, so the prediction would enter too. Empty
+/// where the continuation can match empty or a token no first set names, since
+/// its first tokens are then not all known.
+fn atn_asked_kinds(
+    repeat: &Element,
+    exit_first: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> List<String> {
+    if ctx.tail_is_nullable_deep(alt_elements, index + 1) || ctx.elements_reach_open_end(alt_elements, index + 1) {
+        return [];
+    }
+    let Repeat(rep) = repeat else {
+        panic("a loop's exit stamps are read at the loop");
+    };
+    let refused = match peel_repeat_body_label(&rep.element) {
+        Wildcard(_) => [] as List<String>,
+        Not(ne) => collect_excluded_kinds(&ne.element),
+        _ => {
+            return [];
+        },
+    };
+    let mut asked = union_kind_arrays(exit_first, &refused);
+    if !asked.contains_str("TK_EOF") {
+        asked.push("TK_EOF");
+    }
+    return asked;
 }
 
 fn lower_repeat_exit_stamps<S: AsStrSlice>(
@@ -4427,9 +4459,11 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             body_second,
             caller_follow_second,
         ),
-        exit_first_complete: by_atn
-            && !ctx.tail_is_nullable_deep(alt_elements, index + 1)
-            && !ctx.elements_reach_open_end(alt_elements, index + 1),
+        atn_asked_kinds: if by_atn {
+            atn_asked_kinds(&alt_elements[index], caller_follow_first, alt_elements, index, ctx);
+        } else {
+            [];
+        },
         duties: lower_iteration_duties(
             non_greedy,
             kind,

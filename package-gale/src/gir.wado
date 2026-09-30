@@ -993,10 +993,9 @@ pub struct RepeatOp {
     /// recomputed so the two emit walkers and the scan side cannot answer
     /// it differently.
     pub static_exit_undecided: bool = false,
-    /// A loop the simulator decides whose continuation cannot match empty and
-    /// names every token it starts with, so `caller_follow_first` is all a
-    /// token must avoid to enter without a prediction.
-    pub exit_first_complete: bool = false,
+    /// For a loop the simulator decides, the only tokens it needs asking
+    /// about; any other enters. Empty where every token asks.
+    pub atn_asked_kinds: List<String> = [],
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
     /// verdict: its continuation scan ends at the rule's tail, and a token
     /// outside this set cannot continue any caller from there. Empty leaves
@@ -1305,8 +1304,8 @@ pub struct ScanRepeatElement {
     pub probe_asks_caller: bool = false,
     pub probe_contested: bool = false,
     pub static_exit_undecided: bool = false,
-    /// Mirrors `RepeatOp.exit_first_complete`.
-    pub exit_first_complete: bool = false,
+    /// Mirrors `RepeatOp.atn_asked_kinds`.
+    pub atn_asked_kinds: List<String> = [],
     pub probe_viable: List<String> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
