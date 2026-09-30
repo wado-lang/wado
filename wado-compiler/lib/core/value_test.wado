@@ -1019,7 +1019,7 @@ test "a Value read from JSON rejects a repeated key" {
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
 
-/// `D` with the duplicate-key policy relaxed to last-wins.
+/// `D` with its `DuplicateFieldPolicy` relaxed to `PassThru`.
 struct LastWins<D: Deserializer> {
     inner: &mut D,
 }
