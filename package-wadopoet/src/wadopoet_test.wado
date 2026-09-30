@@ -258,6 +258,38 @@ test "prune keeps a call whose arguments a forwarded body cannot take" {
     assert w.to_string().contains("fn helper(");
 }
 
+test "a call forwarded through a chain keeps what each forwarder notes" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "outer", false, |b| b.call(call_of("a", ["p"])));
+    unit_fn(&mut w, "a", true, |b| {
+        b.note("TABLE_A");
+        b.call(call_of("b", ["p"]));
+        b.ret();
+    });
+    unit_fn(&mut w, "b", true, |b| {
+        b.note("TABLE_B");
+        b.call(call_of("target", ["p"]));
+        b.ret();
+    });
+    unit_fn(&mut w, "target", false, |b| b.ret());
+    w.prune();
+    assert w.to_string() == "fn outer(p: i32) {\n    target(p);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n", `got: ${w.to_string(
+    )}`;
+    let refs = w.references();
+    assert refs.contains("TABLE_A") && refs.contains("TABLE_B");
+}
+
+test "same_code compares what two writers hold" {
+    let build = |callee: String| {
+        let mut w = CodeWriter::new();
+        w.line("let x = 1;");
+        w.call(call_of(callee, ["x"]));
+        return w;
+    };
+    assert build("f").same_code(&build("f"));
+    assert !build("f").same_code(&build("g"));
+}
+
 
 test "StructSpec basic" {
     let mut s = StructSpec::new("Point");

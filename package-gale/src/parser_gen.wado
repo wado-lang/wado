@@ -1607,7 +1607,7 @@ fn merge_identical_branches(
         if n > 0
             && branch_tests_tokens_only(&branches[i])
             && branch_tests_tokens_only(&out[n - 1])
-            && out_bodies[n - 1].to_string() == bodies[i].to_string() {
+            && out_bodies[n - 1].same_code(&bodies[i]) {
             let mut kinds = admits_kinds(&out[n - 1].test);
             dedup_append_arr(&mut kinds, &admits_kinds(&branches[i].test));
             out[n - 1].test = admits_kinds_of(&kinds);
