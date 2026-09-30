@@ -332,6 +332,10 @@ test {
 }
 ```
 
+> Not yet implemented: the [effect system](./spec-effects.md) will track access
+> to globals, so `example` will have to declare it. Until then, a function reads
+> and writes a global without declaring an effect.
+
 Assigning an immutable global, or calling a `&mut self` method on one, is an
 error:
 

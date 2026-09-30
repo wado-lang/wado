@@ -11,6 +11,9 @@ The effect system does three jobs:
 - It injects dependencies: a handler a caller installs reaches every callee without being passed.
 - It corresponds directly to WASI capabilities.
 
+> Not yet implemented: global variables are not tracked. A function reads and
+> writes a global without declaring an effect.
+
 Rationale: [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
 
 ## Effect Definition

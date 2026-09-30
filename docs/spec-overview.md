@@ -22,6 +22,16 @@ difference. If it is not resolved, it becomes a Known gap in the WEP that
 proposed the rule, saying what the disagreement is and what it admits. The
 specification itself records no bugs.
 
+A rule the language has adopted but the compiler has not built yet stays in the
+specification. A note right after the rule marks it, saying what the compiler
+does until then:
+
+> Not yet implemented: a function writes a mutable global without declaring an
+> effect.
+
+The marker is for a missing feature, not for a bug. A rule the compiler
+implements wrongly is still a disagreement, settled as above.
+
 ## Overview
 
 | Item      | Description               |
