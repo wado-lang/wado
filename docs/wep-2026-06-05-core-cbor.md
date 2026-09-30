@@ -418,7 +418,8 @@ reused via `pub` functions where practical.
 
 The groundwork, the `core:cbor` format itself (encoder, decoder, canonical
 encoding), the typed `core:temporal` date/time mapping and map keys of any key
-type are complete. The remaining item is lossy CBOR→JSON conversion.
+type are complete. The remaining items are lossy CBOR→JSON conversion and CWT,
+which is planned but not started.
 
 - [x] Vendor RFC 8949 at `wado-compiler/ref/rfc8949.txt`
 - [x] prelude: `AsByteSlice` trait — new, since Wado has only `From`/`TryFrom`
@@ -472,6 +473,11 @@ type are complete. The remaining item is lossy CBOR→JSON conversion.
       integer-keyed map such as a CWT claims set round-trips.
 - [ ] lossy CBOR→JSON via `Value` (RFC 8949 §6.1 substitution: bytes→base64,
       `undefined`/non-finite→`null`); the default still errors.
+- [ ] CWT (RFC 8392): a claims set is read and written with its integer labels
+      (`iss` is 1, `sub` is 2) through a type that names each claim, and keeps
+      those labels through CBOR → `Value` → CBOR. Today a struct field's wire
+      key is a text string, so a claims set is only a map, and `Value` turns
+      its keys into text (below).
 
 ## Known gaps
 
@@ -485,10 +491,4 @@ signature over float-bearing data does not verify against one.
 
 `Value::Object` is a `TreeMap<String, Value>`, so a CBOR map with integer keys
 read into a `Value` comes back with text keys: `{1: -7}` re-encodes as
-`{"1": -7}`. A CWT claims set does not survive CBOR → `Value` → CBOR.
-
-### A struct field has a text key only
-
-A struct field is written under its name, and `#[wire(name = …)]` takes a
-string, so no struct spells CWT's integer claim labels (`iss` is 1, `sub` is
-2). A claims set is read and written as a map.
+`{"1": -7}`.
