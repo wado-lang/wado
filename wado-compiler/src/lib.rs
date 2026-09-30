@@ -360,7 +360,7 @@ pub struct CompilerOptions {
     /// "run every test". Ignored outside the test world.
     pub test_name_filters: Vec<String>,
     /// Raw codegen feature flags forwarded from the CLI's generic `-f <flag>`
-    /// option (e.g. `["array-copy"]`). Parsed into [`CodegenFlags`] during
+    /// option (e.g. `["no-branch-hinting"]`). Parsed into [`CodegenFlags`] during
     /// compilation; an unrecognized flag is a hard error. Empty by default.
     pub codegen_flags: Vec<String>,
     /// Emit unused diagnostics (`DeadFunction` / `DeadGlobal`, …). On by
