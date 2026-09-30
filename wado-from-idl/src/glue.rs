@@ -10,7 +10,7 @@ use wado_compiler::ast::HandleClasses;
 use wado_compiler::name::callback_export_name;
 
 use crate::ir::{WadoFunction, WadoType};
-use crate::webidl::{JsFunction, JsMember, Union, WebIdlOutput};
+use crate::webidl::{JsFunction, JsMember, Union, WebIdlOutput, js_typeof};
 
 /// Handles are interned, so `==` on two of them is identity. The `$` prefix keeps
 /// the runtime's names apart from every `WebIDL` argument name.
@@ -195,16 +195,17 @@ fn write_union(out: &mut String, name: &str, union: &Union, output: &WebIdlOutpu
     if union.out_of_host {
         writeln!(out, "\nfunction $to{name}(value) {{").unwrap();
         for (tag, ty) in &union.cases {
-            let test = match ty {
-                WadoType::Bool => "typeof value === \"boolean\"".to_string(),
-                WadoType::String => "typeof value === \"string\"".to_string(),
-                WadoType::Named(resource) => {
+            let test = match (js_typeof(ty), ty) {
+                (Some(kind), _) => format!("typeof value === {kind:?}"),
+                (None, WadoType::Named(resource)) => {
                     format!(
                         "value instanceof globalThis.{}",
                         output.interfaces[resource]
                     )
                 }
-                _ => "typeof value === \"number\"".to_string(),
+                (None, ty) => {
+                    unreachable!("`js_typeof` answers every case but a handle, not {ty:?}")
+                }
             };
             let value = to_guest(ty, "value", unions);
             writeln!(

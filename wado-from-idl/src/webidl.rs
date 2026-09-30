@@ -830,14 +830,15 @@ impl Lowering<'_> {
         if flow == Flow::Out {
             let mut tests: IndexMap<&str, &str> = IndexMap::new();
             for (word, ty) in &cases {
-                let test = self.js_test(ty);
-                if let Some(first) = test.and_then(|test| tests.insert(test, word)) {
+                if self.is_union(ty) {
+                    return Err(format!("a union nested in a result's union: `{word}`"));
+                }
+                // A handle has no `typeof` of its own, so a second one is ambiguous.
+                let test = js_typeof(ty).unwrap_or("object");
+                if let Some(first) = tests.insert(test, word) {
                     return Err(format!(
                         "a union in a result whose `{first}` and `{word}` the glue cannot tell apart"
                     ));
-                }
-                if test.is_none() {
-                    return Err(format!("a union nested in a result's union: `{word}`"));
                 }
             }
         }
@@ -861,16 +862,8 @@ impl Lowering<'_> {
         Ok(name)
     }
 
-    /// What `typeof` or `instanceof` tells a value of `ty` by in JavaScript;
-    /// `None` for a union's variant, which has no one test.
-    fn js_test(&self, ty: &WadoType) -> Option<&'static str> {
-        match ty {
-            WadoType::Bool => Some("boolean"),
-            WadoType::String => Some("string"),
-            WadoType::Named(name) if self.unions.borrow().contains_key(name) => None,
-            WadoType::Named(_) => Some("object"),
-            _ => Some("number"),
-        }
+    fn is_union(&self, ty: &WadoType) -> bool {
+        matches!(ty, WadoType::Named(name) if self.unions.borrow().contains_key(name))
     }
 
     fn lower_name(&self, name: &str, flow: Flow) -> std::result::Result<WadoType, String> {
@@ -924,9 +917,7 @@ impl Lowering<'_> {
                     return Err(format!("callback argument `{}`: optional", arg.name));
                 }
                 let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
-                let is_union =
-                    matches!(&ty, WadoType::Named(name) if self.unions.borrow().contains_key(name));
-                if !is_union && ty.callback_argument_word().is_some() {
+                if !self.is_union(&ty) && ty.callback_argument_word().is_some() {
                     return Ok(ty);
                 }
                 Err(format!(
@@ -1041,6 +1032,27 @@ fn case_word(ty: &WadoType) -> String {
             ty.primitive_name()
                 .unwrap_or_else(|| unreachable!("the WebIDL frontend admits no {ty:?} in a union")),
         ),
+    }
+}
+
+/// What `typeof` answers for a value of a union's case type `ty`; `None` for
+/// a handle, which `instanceof` tells apart instead.
+pub(crate) fn js_typeof(ty: &WadoType) -> Option<&'static str> {
+    match ty {
+        WadoType::Bool => Some("boolean"),
+        WadoType::String => Some("string"),
+        WadoType::Named(_) => None,
+        WadoType::I8
+        | WadoType::I16
+        | WadoType::I32
+        | WadoType::I64
+        | WadoType::U8
+        | WadoType::U16
+        | WadoType::U32
+        | WadoType::U64
+        | WadoType::F32
+        | WadoType::F64 => Some("number"),
+        ty => unreachable!("the WebIDL frontend admits no {ty:?} in a union"),
     }
 }
 
