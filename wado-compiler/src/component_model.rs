@@ -3287,7 +3287,7 @@ impl CmInterfaceRegistry {
             .filter(|hint| self.declares_wado_name(hint, name))
             .map(str::to_string);
         self.source_interface(named)
-            .filter(|source| self.is_cm_source(source))
+            .filter(|source| self.is_cm_source(source) || self.declares_wado_name(source, name))
             .or(declared_at_hint)
             .or_else(|| {
                 self.find_unique_source_across_kinds(name, &|src| {

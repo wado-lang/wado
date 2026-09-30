@@ -683,8 +683,9 @@ fn resource_exports_for<'a>(
         .collect()
 }
 
-/// A named type the shared generator spells as a declared CM type: a record,
-/// or a local newtype kept as its alias so the boundary matches `wado wit`.
+/// A named type the shared generator spells as a declared CM type: a record or
+/// a variant, or a local newtype kept as its alias so the boundary matches
+/// `wado wit`.
 fn has_named_cm_form(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     let Type::Named(named) = ty else {
         return false;
@@ -694,6 +695,9 @@ fn has_named_cm_form(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
         registry
             .get_struct_fields_by_source(s, &named.name)
             .is_some()
+            || registry
+                .get_variant_cases_by_source(s, &named.name)
+                .is_some()
     }) || registry
         .local_newtype_base(source.as_deref(), &named.name)
         .is_some()
@@ -2417,7 +2421,9 @@ fn generate_cm_imports(
                         .map(|c| {
                             let payload = c.payload.as_ref().map(|ty| {
                                 emit_cm_val_type(
-                                    ty,
+                                    &project
+                                        .cm_interface_registry
+                                        .resolve_type_preserving_local_newtypes(ty),
                                     &mut instance_type,
                                     &mut local_type_idx,
                                     has_local_error_code,

@@ -1,0 +1,41 @@
+// An unrestricted handle crosses as its `f64` in a variant payload too, owned
+// or referenced.
+
+#[cm("example:demo/node", linearity = "unrestricted", classes = "0..=0")]
+resource Node {}
+
+#[cm("example:demo/global#node-or-string")]
+variant NodeOrString {
+    #[cm("as-node")]
+    AsNode(Node),
+    #[cm("as-node-ref")]
+    AsNodeRef(&Node),
+    #[cm("as-string")]
+    AsString(String),
+}
+
+#[cm("example:demo/global")]
+interface Dom {
+    #[cm("example:demo/global#touch")]
+    fn touch(v: NodeOrString) -> i32;
+
+    #[cm("example:demo/global#root")]
+    fn root() -> Node;
+}
+
+export fn run() with Dom {
+    let n = Dom::root();
+    let _ = Dom::touch(NodeOrString::AsNode(n));
+    let _ = Dom::touch(NodeOrString::AsNodeRef(&n));
+    let _ = Dom::touch(NodeOrString::AsString("text"));
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(variant (case \"as-node\" f64) (case \"as-node-ref\" f64) (case \"as-string\" string))"], "count": 1 },
+    { "contains": ["borrow"], "count": 0 }
+  ]
+}
