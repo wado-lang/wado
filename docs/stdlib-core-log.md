@@ -280,7 +280,7 @@ One human-readable line per event on stderr:
 ```
 
 Each part its configuration turns off is omitted; `location` appends
-`at file:line`. Writes through the ambient `log_stderr`, so the sink needs
+` at file:line`. Writes through the ambient `log_stderr`, so the sink needs
 no `Stderr` in its signature and installs in any world. `C` selects the
 timestamp: `TextSink<WallClock>` stamps, the default `TextSink` does not.
 
