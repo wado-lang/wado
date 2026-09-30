@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790777330548,
+  "lastUpdate": 1790802787174,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62361,6 +62361,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fb115698967f767ca0fffba3f91448409c774046"
         },
         "date": 1790777329918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22806,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9131776407a6a195dccdf3cca14ebb4e15588375",
+          "message": "Merge pull request #2233 from wado-lang/ccr-5117b114-vbqsqr\n\nfix(effects): a function without `with` performs no effects",
+          "timestamp": "2026-10-01T05:50:20+09:00",
+          "tree_id": "d31ef4fccbc46bffcd5b8006f02bc988a00b3402",
+          "url": "https://github.com/wado-lang/wado/commit/9131776407a6a195dccdf3cca14ebb4e15588375"
+        },
+        "date": 1790802786551,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
