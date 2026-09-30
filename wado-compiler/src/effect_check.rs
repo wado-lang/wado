@@ -15,8 +15,8 @@ use crate::tir::{EffectRef, FunctionRef, ResolvedType, TemplateId, TypeId, TypeS
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
-    ImplBlock, Item, Pattern, RestClause, Stmt, cm_import_of,
+    self, AstId, AstVisitor, Attribute, CmImport, EffectHandlerBinding, Expr, Function, ImplBlock,
+    Item, Pattern, RestClause, Stmt, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
 use crate::compiler_item::CompilerItem;

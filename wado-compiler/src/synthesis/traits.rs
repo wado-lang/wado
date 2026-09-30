@@ -4110,6 +4110,7 @@ pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
     struct CalledStubs<'a> {
         tt: &'a TypeTable,
         names: &'a TraitsStdlibNames,
+        inspect: DefId,
         /// `(module, stub name)` per call, and the signature each name stands for.
         called: hashmap::IndexMap<(ModuleSource, String), FnSignature>,
     }
@@ -4119,19 +4120,20 @@ pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
             let TirExprKind::Call { func, args, .. } = &mut expr.kind else {
                 return;
             };
-            let inspect = self.names.inspect_fq.called_decl();
             let is_inspect = func.method_info.as_ref().is_some_and(|info| {
-                info.trait_decl() == Some(inspect) && info.method_name == self.names.inspect_method
+                info.trait_decl() == Some(self.inspect)
+                    && info.method_name == self.names.inspect_method
             });
             if !is_inspect {
                 return;
             }
             let receiver_type = self.tt.peel_refs(args[0].expr.type_id);
+            let resolved = self.tt.get(receiver_type);
             let ResolvedType::Function {
                 params,
                 return_type,
                 ..
-            } = self.tt.get(receiver_type)
+            } = resolved
             else {
                 return;
             };
@@ -4139,7 +4141,7 @@ pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
                 self.tt.is_concrete(receiver_type),
                 "a monomorphized call inspects a concrete fn type"
             );
-            let receiver = self.tt.fn_receiver_name(self.tt.get(receiver_type));
+            let receiver = self.tt.fn_receiver_name(resolved);
             let respelled = trait_method_info(
                 &receiver,
                 &self.names.inspect_fq,
@@ -4161,6 +4163,7 @@ pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
     let mut calls = CalledStubs {
         tt: &tt,
         names: &names,
+        inspect: names.inspect_fq.called_decl(),
         called: hashmap::IndexMap::default(),
     };
     for func_rc in &flat.functions {
