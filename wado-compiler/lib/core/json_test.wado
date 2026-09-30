@@ -353,6 +353,31 @@ test "deserialize f32 rounds the decimal once" {
     assert r matches { Ok(v) && v.to_bits() == 0x3f800001 };
 }
 
+test "an f32 is written in its own shortest form, not widened" {
+    let tenth: f32 = 0.1;
+    assert to_string(&tenth) == Result::Ok("0.1");
+    assert_bytes_eq_string(&to_bytes_canonical(&tenth).unwrap(), &"0.1");
+    assert_bytes_eq_string(&to_bytes_pretty(&tenth).unwrap(), &"0.1");
+    let mut keyed = TreeMap::<f32, i32>::new();
+    keyed[tenth] = 1;
+    assert to_string(&keyed) == Result::Ok(`{"0.1":1}`);
+}
+
+test "every f32 round-trips through its shortest form" {
+    let mut state: u32 = 0x9e3779b9;
+    for let _ of 0..<20000 {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        let v = f32::from_bits(state);
+        if !v.is_finite() {
+            continue;
+        }
+        let back: f32 = from_string(to_string(&v).unwrap()).unwrap();
+        assert back.to_bits() == v.to_bits();
+    }
+}
+
 test "deserialize f16 and bf16 round the decimal once" {
     // Just above a midpoint that f32 holds exactly: through f32 it ties to even.
     let h: Result<f16, DeserializeError> = from_string("1.00048828125000000000000001");

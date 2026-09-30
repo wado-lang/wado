@@ -178,7 +178,11 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        return self.serialize_f64(v as f64);
+        if !v.is_finite() {
+            return self.serialize_f64(v as f64);
+        }
+        self.buf.push_display(&v);
+        return Result::Ok(());
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
