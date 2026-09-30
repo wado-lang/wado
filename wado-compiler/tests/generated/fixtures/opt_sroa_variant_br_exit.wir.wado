@@ -115,7 +115,7 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(36)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(37)
 
-type "functype//core:json/core/json/number_digit_error<core:prelude/string.wado/String>" = fn(i32, i32, ref "core:prelude/string.wado//String") -> ["core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String", i64];  // TypeId(38)
+type "functype//core:json/core/json/token_stop_error<core:prelude/string.wado/String>" = fn(i32, i32, ref "core:prelude/string.wado//String") -> ["core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String", i64];  // TypeId(38)
 
 type "functype//core:json/core/json/from_bytes<f32,core:prelude/bytes.wado/ByteSlice>" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, f32, ref null "core:serde//DeserializeError"];  // TypeId(39)
 
@@ -1543,7 +1543,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:json/core/json/number_digit_error<core:prelude/string.wado/String>"(pos, len, message) {
+fn "core:json/core/json/token_stop_error<core:prelude/string.wado/String>"(pos, len, message) {
     let $av_8: i32;
     if pos >= len {
         return 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, builtin::i64_extend_i32_s(pos);
@@ -1628,7 +1628,7 @@ fn "core:json/is_json_ws$cold0"(b) {
     offset_30 = start_11 + 43;
     builtin::array_copy<u8>(self_29, offset_30, global:core:json::$const_obj_25, 0, 1);
     $sroa_$f_buf_93 = $local_3;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(955, $sroa_$f_buf_93);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(958, $sroa_$f_buf_93);
     new_used_40 = $local_3.used + 22;
     if @unlikely(new_used_40 > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -2682,7 +2682,7 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
         if @unlikely(pos == point_end) {
             cold_path;
             self.pos = pos;
-            return ref.as_non_null(let $mv_kind_13: "core:serde//enum:DeserializeErrorKind"; let $mv_message_14: ref "core:prelude/string.wado//String"; let $mv_offset_15: i64; multivalue_bind [$mv_kind_13, $mv_message_14, $mv_offset_15] = "core:json/core/json/number_digit_error<core:prelude/string.wado/String>"(pos, len, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected digit after '.'"), used: 24 }); struct.new "core:serde//DeserializeError" { kind: $mv_kind_13, message: $mv_message_14, offset: $mv_offset_15 });
+            return ref.as_non_null(let $mv_kind_13: "core:serde//enum:DeserializeErrorKind"; let $mv_message_14: ref "core:prelude/string.wado//String"; let $mv_offset_15: i64; multivalue_bind [$mv_kind_13, $mv_message_14, $mv_offset_15] = "core:json/core/json/token_stop_error<core:prelude/string.wado/String>"(pos, len, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected digit after '.'"), used: 24 }); struct.new "core:serde//DeserializeError" { kind: $mv_kind_13, message: $mv_message_14, offset: $mv_offset_15 });
         }
     }
     mantissa_end = pos;
@@ -2724,7 +2724,7 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
             if @unlikely(pos == exp_start) {
                 cold_path;
                 self.pos = pos;
-                return ref.as_non_null(let $mv_kind_16: "core:serde//enum:DeserializeErrorKind"; let $mv_message_17: ref "core:prelude/string.wado//String"; let $mv_offset_18: i64; multivalue_bind [$mv_kind_16, $mv_message_17, $mv_offset_18] = "core:json/core/json/number_digit_error<core:prelude/string.wado/String>"(pos, len, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected digit in exponent"), used: 26 }); struct.new "core:serde//DeserializeError" { kind: $mv_kind_16, message: $mv_message_17, offset: $mv_offset_18 });
+                return ref.as_non_null(let $mv_kind_16: "core:serde//enum:DeserializeErrorKind"; let $mv_message_17: ref "core:prelude/string.wado//String"; let $mv_offset_18: i64; multivalue_bind [$mv_kind_16, $mv_message_17, $mv_offset_18] = "core:json/core/json/token_stop_error<core:prelude/string.wado/String>"(pos, len, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected digit in exponent"), used: 26 }); struct.new "core:serde//DeserializeError" { kind: $mv_kind_16, message: $mv_message_17, offset: $mv_offset_18 });
             }
             if exp_neg {
                 exp = 0_i64 - exp;

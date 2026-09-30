@@ -48,20 +48,14 @@ struct core:prelude/string.wado//StrSlice {  // TypeId(11)
     mut end: i32,
 }
 
-struct core:prelude/string.wado//StrCharIter {  // TypeId(12)
-    mut repr: ref Array<u8>,
-    mut used: i32,
-    mut byte_index: i32,
-}
+array Array<u8> (mut u8);  // TypeId(12)
 
-array Array<u8> (mut u8);  // TypeId(13)
-
-struct core:prelude/string.wado//String {  // TypeId(14)
+struct core:prelude/string.wado//String {  // TypeId(13)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(15)
+struct core:prelude/format.wado//Formatter {  // TypeId(14)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -73,43 +67,43 @@ struct core:prelude/format.wado//Formatter {  // TypeId(15)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[!, bool] {  // TypeId(16)
+struct tuple//[!, bool] {  // TypeId(15)
     mut 1: bool,
 }
 
-struct tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck] {  // TypeId(17)
+struct tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck] {  // TypeId(16)
     mut 0: bool,
     mut 1: ref "match_uninhabited_case_needs_no_arm.wado//Stuck",
 }
 
-struct match_uninhabited_case_needs_no_arm.wado//Node {  // TypeId(18)
+struct match_uninhabited_case_needs_no_arm.wado//Node {  // TypeId(17)
     mut next: ref null "match_uninhabited_case_needs_no_arm.wado//Node",
 }
 
-struct match_uninhabited_case_needs_no_arm.wado//Loop {  // TypeId(19)
+struct match_uninhabited_case_needs_no_arm.wado//Loop {  // TypeId(18)
     mut again: ref "match_uninhabited_case_needs_no_arm.wado//Loop",
 }
 
-struct match_uninhabited_case_needs_no_arm.wado//Stuck {  // TypeId(20)
+struct match_uninhabited_case_needs_no_arm.wado//Stuck {  // TypeId(19)
     mut flag: bool,
 }
 
-variant match_uninhabited_case_needs_no_arm.wado//Gone {  // TypeId(21)
+variant match_uninhabited_case_needs_no_arm.wado//Gone {  // TypeId(20)
     A(ref "tuple//[!, bool]"),
     B(ref "match_uninhabited_case_needs_no_arm.wado//Stuck"),
 }
 
-struct match_uninhabited_case_needs_no_arm.wado//Gone::A {  // TypeId(22)
+struct match_uninhabited_case_needs_no_arm.wado//Gone::A {  // TypeId(21)
     discriminant: i32,
     payload_0: ref "tuple//[!, bool]",
 }
 
-struct match_uninhabited_case_needs_no_arm.wado//Gone::B {  // TypeId(23)
+struct match_uninhabited_case_needs_no_arm.wado//Gone::B {  // TypeId(22)
     discriminant: i32,
     payload_0: ref "match_uninhabited_case_needs_no_arm.wado//Stuck",
 }
 
-struct core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Stuck,match_uninhabited_case_needs_no_arm.wado/Void> {  // TypeId(24)
+struct core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Stuck,match_uninhabited_case_needs_no_arm.wado/Void> {  // TypeId(23)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -117,224 +111,224 @@ struct core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm
     mut is_secret: bool,
 }
 
-variant core:prelude/types.wado//Result<i32,!> {  // TypeId(25)
+variant core:prelude/types.wado//Result<i32,!> {  // TypeId(24)
     Ok(i32),
     Err(()),
 }
 
-struct core:prelude/types.wado//Result<i32,!>::Ok {  // TypeId(26)
+struct core:prelude/types.wado//Result<i32,!>::Ok {  // TypeId(25)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,!>::Err {  // TypeId(27)
+struct core:prelude/types.wado//Result<i32,!>::Err {  // TypeId(26)
     discriminant: i32,
     payload_0: (),
 }
 
-variant core:prelude/types.wado//Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]> {  // TypeId(28)
+variant core:prelude/types.wado//Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]> {  // TypeId(27)
     Ok(i32),
     Err(ref "tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck]"),
 }
 
-struct core:prelude/types.wado//Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>::Ok {  // TypeId(29)
+struct core:prelude/types.wado//Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>::Ok {  // TypeId(28)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>::Err {  // TypeId(30)
+struct core:prelude/types.wado//Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>::Err {  // TypeId(29)
     discriminant: i32,
     payload_0: ref "tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck]",
 }
 
-variant core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop> {  // TypeId(31)
+variant core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop> {  // TypeId(30)
     Ok(i32),
     Err(ref "match_uninhabited_case_needs_no_arm.wado//Loop"),
 }
 
-struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop>::Ok {  // TypeId(32)
+struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop>::Ok {  // TypeId(31)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop>::Err {  // TypeId(33)
+struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop>::Err {  // TypeId(32)
     discriminant: i32,
     payload_0: ref "match_uninhabited_case_needs_no_arm.wado//Loop",
 }
 
-variant core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone> {  // TypeId(34)
+variant core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone> {  // TypeId(33)
     Ok(i32),
     Err(ref "match_uninhabited_case_needs_no_arm.wado//Gone"),
 }
 
-struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone>::Ok {  // TypeId(35)
+struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone>::Ok {  // TypeId(34)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone>::Err {  // TypeId(36)
+struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone>::Err {  // TypeId(35)
     discriminant: i32,
     payload_0: ref "match_uninhabited_case_needs_no_arm.wado//Gone",
 }
 
-variant core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Node> {  // TypeId(37)
+variant core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Node> {  // TypeId(36)
     Ok(i32),
     Err(ref "match_uninhabited_case_needs_no_arm.wado//Node"),
 }
 
-struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Node>::Ok {  // TypeId(38)
+struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Node>::Ok {  // TypeId(37)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Node>::Err {  // TypeId(39)
+struct core:prelude/types.wado//Result<i32,match_uninhabited_case_needs_no_arm.wado/Node>::Err {  // TypeId(38)
     discriminant: i32,
     payload_0: ref "match_uninhabited_case_needs_no_arm.wado//Node",
 }
 
-variant core:prelude/types.wado//Option<!> {  // TypeId(40)
+variant core:prelude/types.wado//Option<!> {  // TypeId(39)
     Some(()),
     None,
 }
 
-struct core:prelude/types.wado//Option<!>::Some {  // TypeId(41)
+struct core:prelude/types.wado//Option<!>::Some {  // TypeId(40)
     discriminant: i32,
     payload_0: (),
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(42)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(41)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(43)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(42)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(44)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(43)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(45)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(44)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(46)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(45)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(47)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(46)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(48)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(47)
 
-type "functype//match_uninhabited_case_needs_no_arm.wado/$test_1_ok_covers_a_result_whose_error_has_no_value" = fn();  // TypeId(49)
+type "functype//match_uninhabited_case_needs_no_arm.wado/$test_1_ok_covers_a_result_whose_error_has_no_value" = fn();  // TypeId(48)
 
-type "functype//match_uninhabited_case_needs_no_arm.wado/$field_get$match_uninhabited_case_needs_no_arm.wado/Stuck$!" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Stuck", i32);  // TypeId(50)
+type "functype//match_uninhabited_case_needs_no_arm.wado/$field_get$match_uninhabited_case_needs_no_arm.wado/Stuck$!" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Stuck", i32);  // TypeId(49)
 
-type "functype//match_uninhabited_case_needs_no_arm.wado/$cm_export__$test_0_none_covers_an_option___" = fn();  // TypeId(51)
+type "functype//match_uninhabited_case_needs_no_arm.wado/$cm_export__$test_0_none_covers_an_option___" = fn();  // TypeId(50)
 
-type "functype//match_uninhabited_case_needs_no_arm.wado/$cm_export__$test_1_ok_covers_a_result_whose_error_has_no_value" = fn();  // TypeId(52)
+type "functype//match_uninhabited_case_needs_no_arm.wado/$cm_export__$test_1_ok_covers_a_result_whose_error_has_no_value" = fn();  // TypeId(51)
 
-type "functype//match_uninhabited_case_needs_no_arm.wado/$field_get$match_uninhabited_case_needs_no_arm.wado/Stuck$bool$scalar" = fn(bool, i32) -> bool;  // TypeId(53)
+type "functype//match_uninhabited_case_needs_no_arm.wado/$field_get$match_uninhabited_case_needs_no_arm.wado/Stuck$bool$scalar" = fn(bool, i32) -> bool;  // TypeId(52)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(54)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(53)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(55)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(54)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(56)
+type "functype//core:rt/unreachable" = fn();  // TypeId(55)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(57)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(56)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<!>" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(58)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<!>" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(57)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Void>" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(59)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Void>" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>" = fn(ref "tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck]", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>" = fn(ref "tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck]", ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Loop>" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Loop", ref "core:prelude/format.wado//Formatter");  // TypeId(61)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Loop>" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Loop", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Gone>" = fn(ref "core:prelude/types.wado//Box<match_uninhabited_case_needs_no_arm.wado/Gone>", ref "core:prelude/format.wado//Formatter");  // TypeId(62)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Gone>" = fn(ref "core:prelude/types.wado//Box<match_uninhabited_case_needs_no_arm.wado/Gone>", ref "core:prelude/format.wado//Formatter");  // TypeId(61)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Node>" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Node", ref "core:prelude/format.wado//Formatter");  // TypeId(63)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Node>" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Node", ref "core:prelude/format.wado//Formatter");  // TypeId(62)
 
-type "functype//core:prelude/tuple.wado/core/prelude/tuple.wado/inspect_tuple_alternate<[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>" = fn(ref "tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck]", ref "core:prelude/format.wado//Formatter");  // TypeId(64)
+type "functype//core:prelude/tuple.wado/core/prelude/tuple.wado/inspect_tuple_alternate<[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>" = fn(ref "tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck]", ref "core:prelude/format.wado//Formatter");  // TypeId(63)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Stuck>" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Stuck", ref "core:prelude/format.wado//Formatter");  // TypeId(65)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<match_uninhabited_case_needs_no_arm.wado/Stuck>" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Stuck", ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[!,bool]>" = fn(ref "tuple//[!, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(66)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[!,bool]>" = fn(ref "tuple//[!, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<match_uninhabited_case_needs_no_arm.wado/Stuck,[match_uninhabited_case_needs_no_arm.wado/Void,bool]>" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Stuck", ref "core:prelude/format.wado//Formatter");  // TypeId(67)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<match_uninhabited_case_needs_no_arm.wado/Stuck,[match_uninhabited_case_needs_no_arm.wado/Void,bool]>" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Stuck", ref "core:prelude/format.wado//Formatter");  // TypeId(66)
 
-type "functype//core:prelude/tuple.wado/core/prelude/tuple.wado/inspect_tuple_alternate<[!,bool]>" = fn(ref "tuple//[!, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(68)
+type "functype//core:prelude/tuple.wado/core/prelude/tuple.wado/inspect_tuple_alternate<[!,bool]>" = fn(ref "tuple//[!, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(67)
 
-type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<!>$!$scalar" = fn(ref "core:prelude/types.wado//Option<!>", i32);  // TypeId(69)
+type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<!>$!$scalar" = fn(ref "core:prelude/types.wado//Option<!>", i32);  // TypeId(68)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<match_uninhabited_case_needs_no_arm.wado/Node,[core:prelude/types.wado/Option<match_uninhabited_case_needs_no_arm.wado/Node>]>$scalar" = fn(ref null "match_uninhabited_case_needs_no_arm.wado//Node", ref "core:prelude/format.wado//Formatter");  // TypeId(70)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<match_uninhabited_case_needs_no_arm.wado/Node,[core:prelude/types.wado/Option<match_uninhabited_case_needs_no_arm.wado/Node>]>$scalar" = fn(ref null "match_uninhabited_case_needs_no_arm.wado//Node", ref "core:prelude/format.wado//Formatter");  // TypeId(69)
 
-type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,!>$!$scalar" = fn(ref "core:prelude/types.wado//Result<i32,!>", i32);  // TypeId(71)
+type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,!>$!$scalar" = fn(ref "core:prelude/types.wado//Result<i32,!>", i32);  // TypeId(70)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<match_uninhabited_case_needs_no_arm.wado/Loop,[match_uninhabited_case_needs_no_arm.wado/Loop]>$scalar" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Loop", ref "core:prelude/format.wado//Formatter");  // TypeId(72)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<match_uninhabited_case_needs_no_arm.wado/Loop,[match_uninhabited_case_needs_no_arm.wado/Loop]>$scalar" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Loop", ref "core:prelude/format.wado//Formatter");  // TypeId(71)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(73)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(72)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(74)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(73)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(75)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(74)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(76)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(75)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(77)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(76)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(78)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(77)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(79)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(78)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(80)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(79)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(81)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(80)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Node>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Node>>", ref "core:prelude/format.wado//Formatter");  // TypeId(82)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Node>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Node>>", ref "core:prelude/format.wado//Formatter");  // TypeId(81)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone>>", ref "core:prelude/format.wado//Formatter");  // TypeId(83)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Gone>>", ref "core:prelude/format.wado//Formatter");  // TypeId(82)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop>>", ref "core:prelude/format.wado//Formatter");  // TypeId(84)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Loop>>", ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>>", ref "core:prelude/format.wado//Formatter");  // TypeId(85)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]>>", ref "core:prelude/format.wado//Formatter");  // TypeId(84)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Void>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,!>>", ref "core:prelude/format.wado//Formatter");  // TypeId(86)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Void>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,!>>", ref "core:prelude/format.wado//Formatter");  // TypeId(85)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,!>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,!>>", ref "core:prelude/format.wado//Formatter");  // TypeId(87)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,!>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,!>>", ref "core:prelude/format.wado//Formatter");  // TypeId(86)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<!>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<!>>", ref "core:prelude/format.wado//Formatter");  // TypeId(88)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<!>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<!>>", ref "core:prelude/format.wado//Formatter");  // TypeId(87)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(89)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(88)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(90)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(89)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(91)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(90)
 
-type "functype//core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Node^core:prelude/traits.wado/Inspect::inspect" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Node", ref "core:prelude/format.wado//Formatter");  // TypeId(92)
+type "functype//core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Node^core:prelude/traits.wado/Inspect::inspect" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Node", ref "core:prelude/format.wado//Formatter");  // TypeId(91)
 
-type "functype//core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Gone^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<match_uninhabited_case_needs_no_arm.wado/Gone>", ref "core:prelude/format.wado//Formatter");  // TypeId(93)
+type "functype//core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Gone^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<match_uninhabited_case_needs_no_arm.wado/Gone>", ref "core:prelude/format.wado//Formatter");  // TypeId(92)
 
-type "functype//core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/Inspect::inspect" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Loop", ref "core:prelude/format.wado//Formatter");  // TypeId(94)
+type "functype//core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/Inspect::inspect" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Loop", ref "core:prelude/format.wado//Formatter");  // TypeId(93)
 
-type "functype//core:prelude/tuple.wado/[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]^core:prelude/traits.wado/Inspect::inspect" = fn(ref "tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck]", ref "core:prelude/format.wado//Formatter");  // TypeId(95)
+type "functype//core:prelude/tuple.wado/[bool,match_uninhabited_case_needs_no_arm.wado/Stuck]^core:prelude/traits.wado/Inspect::inspect" = fn(ref "tuple//[bool, match_uninhabited_case_needs_no_arm.wado/Stuck]", ref "core:prelude/format.wado//Formatter");  // TypeId(94)
 
-type "functype//core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Stuck^core:prelude/traits.wado/Inspect::inspect" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Stuck", ref "core:prelude/format.wado//Formatter");  // TypeId(96)
+type "functype//core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Stuck^core:prelude/traits.wado/Inspect::inspect" = fn(ref "match_uninhabited_case_needs_no_arm.wado//Stuck", ref "core:prelude/format.wado//Formatter");  // TypeId(95)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<match_uninhabited_case_needs_no_arm.wado/Node>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<match_uninhabited_case_needs_no_arm.wado/Node>>", ref "core:prelude/format.wado//Formatter");  // TypeId(97)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<match_uninhabited_case_needs_no_arm.wado/Node>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<match_uninhabited_case_needs_no_arm.wado/Node>>", ref "core:prelude/format.wado//Formatter");  // TypeId(96)
 
-type "functype//core:prelude/tuple.wado/[!,bool]^core:prelude/traits.wado/Inspect::inspect" = fn(ref "tuple//[!, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(98)
+type "functype//core:prelude/tuple.wado/[!,bool]^core:prelude/traits.wado/Inspect::inspect" = fn(ref "tuple//[!, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(97)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/StructField<match_uninhabited_case_needs_no_arm.wado/Stuck,match_uninhabited_case_needs_no_arm.wado/Void>::get" = fn(ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Stuck,match_uninhabited_case_needs_no_arm.wado/Void>", ref "match_uninhabited_case_needs_no_arm.wado//Stuck");  // TypeId(99)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/StructField<match_uninhabited_case_needs_no_arm.wado/Stuck,match_uninhabited_case_needs_no_arm.wado/Void>::get" = fn(ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Stuck,match_uninhabited_case_needs_no_arm.wado/Void>", ref "match_uninhabited_case_needs_no_arm.wado//Stuck");  // TypeId(98)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(100)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(99)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(101)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(100)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<!>,!>::extract$scalar" = fn(i32, ref "core:prelude/types.wado//Option<!>");  // TypeId(102)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<!>,!>::extract$scalar" = fn(i32, ref "core:prelude/types.wado//Option<!>");  // TypeId(101)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,!>::extract$scalar" = fn(i32, ref "core:prelude/types.wado//Result<i32,!>");  // TypeId(103)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,!>::extract$scalar" = fn(i32, ref "core:prelude/types.wado//Result<i32,!>");  // TypeId(102)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Void>,match_uninhabited_case_needs_no_arm.wado/Void>::extract$scalar" = fn(i32, ref "core:prelude/types.wado//Result<i32,!>");  // TypeId(104)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,match_uninhabited_case_needs_no_arm.wado/Void>,match_uninhabited_case_needs_no_arm.wado/Void>::extract$scalar" = fn(i32, ref "core:prelude/types.wado//Result<i32,!>");  // TypeId(103)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(105)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(104)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(106)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(105)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(107)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(106)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(108)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(107)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -3800,7 +3794,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<!>^core:prelude/trai
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(self, $mv$content$repr, $mv$content$used) {
     let $load_0: i32;
     let $load_6: ref Array<u8>;
-    let $load_8: i32;
     let view_2: ref "core:prelude/string.wado//StrSlice";
     let content_len: i32;
     let padding: i32;
@@ -3811,7 +3804,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_19: i32;
     let start_20: i32;
-    let self_26: ref "core:prelude/string.wado//StrCharIter";
     let n_27: i32;
     let self_35: ref "core:prelude/string.wado//String";
     let new_used_45: i32;
@@ -3852,13 +3844,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let new_used_153: i32;
     let start_154: i32;
     let $sroa_slot_156: i32;
-    let $licm_repr_158: ref Array<u8>;
-    let pos: i32;
     let b0: u32;
     let new_used_187: i32;
     let start_188: i32;
     let $sroa_slot_196: i32;
-    let $av_197: i32;
+    let $sroa_self_repr_197: ref Array<u8>;
+    let $sroa_self_byte_index_199: i32;
+    let $av_200: i32;
     if local.tee $load_0(self.width) <= 0 {
         self_9 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_string_2: block {
@@ -3875,43 +3867,42 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         return;
     }
     view_2 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$content$repr, start: 0, end: $mv$content$used };
-    self_26 = struct.new "core:prelude/string.wado//StrCharIter" { repr: ref.as_non_null(local.tee $load_6(view_2.repr)), used: $mv$content$used, byte_index: 0 };
+    $sroa_self_repr_197 = local.tee $load_6(view_2.repr);
+    $sroa_self_byte_index_199 = 0;
     n_27 = 0;
-    $licm_repr_158 = self_26.repr;
     b336: block {
         l337: loop {
             $sroa_slot_156 = 0;
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9: block {
-                if local.tee $load_8(self_26.byte_index) >= $mv$content$used {
+                if $sroa_self_byte_index_199 >= $mv$content$used {
                     $sroa_slot_156 = 1;
                     break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9;
                 }
                 $sroa_slot_196 = 0;
                 $inline_decode_char_at_0: block {
-                    pos = $load_8;
-                    b0 = builtin::array_get_value<u8>($licm_repr_158, pos);
+                    b0 = builtin::array_get_value<u8>($sroa_self_repr_197, $sroa_self_byte_index_199);
                     if b0 <u 128 {
                         $sroa_slot_196 = 1;
                         break $inline_decode_char_at_0;
                     }
                     if b0 <u 224 {
-                        drop(builtin::array_get_value<u8>($licm_repr_158, pos + 1));
+                        drop(builtin::array_get_value<u8>($sroa_self_repr_197, $sroa_self_byte_index_199 + 1));
                         $sroa_slot_196 = 2;
                         break $inline_decode_char_at_0;
                     }
                     if b0 <u 240 {
-                        drop(builtin::array_get_value<u8>($licm_repr_158, pos + 1));
-                        drop(builtin::array_get_value<u8>($licm_repr_158, pos + 2));
+                        drop(builtin::array_get_value<u8>($sroa_self_repr_197, $sroa_self_byte_index_199 + 1));
+                        drop(builtin::array_get_value<u8>($sroa_self_repr_197, $sroa_self_byte_index_199 + 2));
                         $sroa_slot_196 = 3;
                         break $inline_decode_char_at_0;
                     }
-                    drop(builtin::array_get_value<u8>($licm_repr_158, pos + 1));
-                    drop(builtin::array_get_value<u8>($licm_repr_158, pos + 2));
-                    drop(builtin::array_get_value<u8>($licm_repr_158, pos + 3));
+                    drop(builtin::array_get_value<u8>($sroa_self_repr_197, $sroa_self_byte_index_199 + 1));
+                    drop(builtin::array_get_value<u8>($sroa_self_repr_197, $sroa_self_byte_index_199 + 2));
+                    drop(builtin::array_get_value<u8>($sroa_self_repr_197, $sroa_self_byte_index_199 + 3));
                     $sroa_slot_196 = 4;
                     break $inline_decode_char_at_0;
                 };
-                self_26.byte_index = $load_8 + $sroa_slot_196;
+                $sroa_self_byte_index_199 = $sroa_self_byte_index_199 + $sroa_slot_196;
                 $sroa_slot_156 = 0;
                 break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_9;
             };
@@ -3926,8 +3917,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
     };
     content_len = n_27;
-    $av_197 = $load_0;
-    if content_len >= $av_197 {
+    $av_200 = $load_0;
+    if content_len >= $av_200 {
         self_35 = self.buf;
         $inline_core_prelude_string_wado_String__internal_push_string_13: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_13 $mv$content$used == 0;
@@ -3942,7 +3933,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         return;
     }
-    padding = $av_197 - content_len;
+    padding = $av_200 - content_len;
     if self.zero_pad {
         sign_len = $inline_core_prelude_format_wado_leading_sign_byte_len_core_prelude_string_wado_StrSlice__16: block -> i32 {
             if ($mv$content$used - 0) == 0 {

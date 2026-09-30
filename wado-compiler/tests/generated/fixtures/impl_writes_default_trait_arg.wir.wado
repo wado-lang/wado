@@ -86,6 +86,7 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:impl_writes_default_trait_arg.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(32);
+global global:impl_writes_default_trait_arg.wado::$const_obj_2: ref null "Array<impl_writes_default_trait_arg.wado/Cm>" = array.new_fixed<ref "impl_writes_default_trait_arg.wado//Cm">(struct.new "impl_writes_default_trait_arg.wado//Cm" { v: 2 }, struct.new "impl_writes_default_trait_arg.wado//Cm" { v: 3 });
 
 fn "impl_writes_default_trait_arg.wado/run"() with Stdout {
     let t: ref "impl_writes_default_trait_arg.wado//Cm";
@@ -98,11 +99,11 @@ fn "impl_writes_default_trait_arg.wado/run"() with Stdout {
     let packed: i64;
     let rx_48: i32;
     let tx_49: i32;
-    let $sroa_xs_repr_64: ref "Array<impl_writes_default_trait_arg.wado/Cm>";
-    let $sroa_$f_buf_76: ref "core:prelude/string.wado//String";
-    $sroa_xs_repr_64 = array.new_fixed<ref "impl_writes_default_trait_arg.wado//Cm">(struct.new "impl_writes_default_trait_arg.wado//Cm" { v: 2 }, struct.new "impl_writes_default_trait_arg.wado//Cm" { v: 3 });
+    let $sroa_self_repr_66: ref "Array<impl_writes_default_trait_arg.wado/Cm>";
+    let $sroa_$f_buf_79: ref "core:prelude/string.wado//String";
     let $match_scrut_0: ref null "impl_writes_default_trait_arg.wado//Cm";
-    self_17 = struct.new "core:prelude/slice.wado//SliceValueIter<impl_writes_default_trait_arg.wado/Cm>" { repr: $sroa_xs_repr_64, index: 0, end: 2 };
+    $sroa_self_repr_66 = global:impl_writes_default_trait_arg.wado::$const_obj_2;
+    self_17 = struct.new "core:prelude/slice.wado//SliceValueIter<impl_writes_default_trait_arg.wado/Cm>" { repr: $sroa_self_repr_66, index: 0, end: 2 };
     $match_scrut_0 = "core:prelude/traits.wado/impl_writes_default_trait_arg.wado/Cm^core:prelude/traits.wado/Sum::sum_iter<core:prelude/slice.wado/SliceValueIter<impl_writes_default_trait_arg.wado/Cm>>"(self_17);
     $cond_6 = (if ref.is_null($match_scrut_0) == 0 -> bool {
         t = ref.as_non_null($match_scrut_0);
@@ -116,8 +117,8 @@ fn "impl_writes_default_trait_arg.wado/run"() with Stdout {
         unreachable;
     }
     $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $sroa_$f_buf_76 = $local_13;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(5, $sroa_$f_buf_76);
+    $sroa_$f_buf_79 = $local_13;
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(5, $sroa_$f_buf_79);
     new_used = $local_13.used + 1;
     if @unlikely(new_used > builtin::array_len($local_13.repr)) {
         cold_path;
@@ -126,8 +127,8 @@ fn "impl_writes_default_trait_arg.wado/run"() with Stdout {
     start_40 = $local_13.used;
     $local_13.used = new_used;
     builtin::array_copy<u8>($local_13.repr, start_40, global:impl_writes_default_trait_arg.wado::$const_obj_1, 0, 1);
-    $sroa_$f_buf_76 = $local_13;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(6, $sroa_$f_buf_76);
+    $sroa_$f_buf_79 = $local_13;
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(6, $sroa_$f_buf_79);
     rx_48 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_49 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "impl_writes_default_trait_arg.wado/$cm_binding__Stdout_write_via_stream"(rx_48);
