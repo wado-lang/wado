@@ -9,7 +9,7 @@ use wado_compiler::ast::HandleClasses;
 use wado_compiler::name::callback_export_name;
 
 use crate::ir::{WadoFunction, WadoType};
-use crate::webidl::{JsMember, WebIdlOutput};
+use crate::webidl::{JsFunction, JsMember, WebIdlOutput};
 
 /// Handles are interned, so `==` on two of them is identity. The `$` prefix keeps
 /// the runtime's names apart from every `WebIDL` argument name.
@@ -167,7 +167,7 @@ pub fn generate(output: &WebIdlOutput, source: &str) -> String {
     out
 }
 
-fn write_function(out: &mut String, function: &WadoFunction, member: &JsMember) {
+fn write_function(out: &mut String, function: &WadoFunction, js: &JsFunction) {
     let (_, name) = function
         .cm_attr
         .split_once('#')
@@ -184,15 +184,19 @@ fn write_function(out: &mut String, function: &WadoFunction, member: &JsMember) 
             }
         })
         .collect();
-    let args: Vec<String> = function
+    let mut args: Vec<String> = function
         .params
         .iter()
         .zip(&params)
         .map(|(p, name)| from_guest(&p.ty, name))
         .collect();
+    if js.variadic {
+        let last = args.last_mut().expect("a variadic argument");
+        *last = format!("...{last}");
+    }
     let receiver = || args.first().expect("a member of the receiver");
     let call_args = |skip: usize| args[skip..].join(", ");
-    let value = match member {
+    let value = match &js.member {
         JsMember::Get(attribute) => format!("{}.{attribute}", receiver()),
         JsMember::Set(attribute) => format!("{}.{attribute} = {}", receiver(), args[1]),
         JsMember::Call(operation) => format!("{}.{operation}({})", receiver(), call_args(1)),
@@ -218,10 +222,18 @@ fn write_function(out: &mut String, function: &WadoFunction, member: &JsMember) 
 
 /// `value`, as jco lifts it from the guest, in the form the DOM takes.
 fn from_guest(ty: &WadoType, value: &str) -> String {
-    if let WadoType::Callback { params, .. } = ty {
-        return callback(params, value);
+    match ty {
+        WadoType::Callback { params, .. } => callback(params, value),
+        WadoType::List(inner) => {
+            let element = from_guest(inner, "x");
+            if element == "x" {
+                value.to_string()
+            } else {
+                format!("{value}.map((x) => {element})")
+            }
+        }
+        ty => apply(conversion(ty).map(|(to_dom, _)| to_dom), value),
     }
-    apply(conversion(ty).map(|(to_dom, _)| to_dom), value)
 }
 
 /// The function calling back the closure `key` names, which takes `params`.

@@ -12,17 +12,19 @@ covers eight interfaces: `EventTarget`, `Event`, `Node`, `Element`,
 `HTMLElement`, `HTMLInputElement`, `Document` and `Window`.
 
 `wado-from-idl` skips every member it cannot lower and names it on stderr. On
-the current snapshot it skips 575 members:
+the current snapshot it skips 570 members:
 
 | Reason                             | Members | Examples                                               |
 | ---------------------------------- | ------- | ------------------------------------------------------ |
 | An event handler attribute         | 353     | `onclick`, `oninput`                                   |
-| A type outside the slice           | 147     | `NodeList`, `HTMLCollection`, `DOMTokenList`, `Text`   |
+| A type outside the slice           | 145     | `NodeList`, `HTMLCollection`, `DOMTokenList`, `any`    |
 | `Promise<T>`                       | 35      | `scroll_to`, `request_fullscreen`                      |
 | `sequence<T>` and `FrozenArray<T>` | 17      | `composed_path`, `get_attribute_names`                 |
-| A variadic argument                | 13      | `append`, `prepend`, `before`, `after`, `replace_with` |
-| A union                            | 4       | the `inner_html` getter                                |
+| A union                            | 13      | `append`, `prepend`, `before`, the `inner_html` getter |
 | More than one overload lowers      | 2       | `Window.alert`                                         |
+
+A variadic argument lowers to a `List<T>`, which the glue spreads into the
+call. `append` and its siblings still wait on the union `(Node or DOMString)`.
 
 ## Order
 
@@ -33,7 +35,7 @@ lower is then available to each interface the slice adds.
 
 - [ ] Lower `sequence<T>` and `FrozenArray<T>` to `List<T>`, in the bindings and
       in the glue
-- [ ] Lower a variadic argument to a `List<T>`
+- [x] Lower a variadic argument to a `List<T>`
 - [ ] `SurfaceDom` answers the members this unlocks that the slice already has
 
 ### 2. Default arguments on a `#[cm]` operation
