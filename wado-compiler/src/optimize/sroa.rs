@@ -468,20 +468,25 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
 /// the borrow is mutable, which is whether its fields may be written. What
 /// passing `&mut S { … }` to an inlined callee binds its parameter to.
 fn borrowed_projected_literal(body: &Body, expr: ExprId) -> Option<(ExprId, bool)> {
-    let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind else {
-        return None;
-    };
-    let is_mut_ref = match op {
-        NirUnaryOp::Ref => false,
-        NirUnaryOp::MutRef => true,
-        NirUnaryOp::Not | NirUnaryOp::Neg | NirUnaryOp::BitNot | NirUnaryOp::Deref => return None,
-    };
-    let literal = inner.as_expr()?;
+    let (literal, is_mut_ref) = borrow_of(body, expr)?;
     matches!(
         body.exprs[literal].kind,
         ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
     )
     .then_some((literal, is_mut_ref))
+}
+
+/// `&E` / `&mut E`: `E` and whether the borrow is mutable.
+fn borrow_of(body: &Body, expr: ExprId) -> Option<(ExprId, bool)> {
+    let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind else {
+        return None;
+    };
+    let is_mut = match op {
+        NirUnaryOp::Ref => false,
+        NirUnaryOp::MutRef => true,
+        NirUnaryOp::Not | NirUnaryOp::Neg | NirUnaryOp::BitNot | NirUnaryOp::Deref => return None,
+    };
+    Some((inner.as_expr()?, is_mut))
 }
 
 // -----------------------------------------------------------------------
@@ -577,15 +582,7 @@ fn ref_to_candidate_local(
     expr: ExprId,
     candidates: &IndexSet<u32>,
 ) -> Option<(u32, bool)> {
-    let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind else {
-        return None;
-    };
-    let is_mut = match op {
-        NirUnaryOp::Ref => false,
-        NirUnaryOp::MutRef => true,
-        NirUnaryOp::Not | NirUnaryOp::Neg | NirUnaryOp::BitNot | NirUnaryOp::Deref => return None,
-    };
-    let ie = inner.as_expr()?;
+    let (ie, is_mut) = borrow_of(body, expr)?;
     let ExprKind::Local { index, .. } = &body.exprs[ie].kind else {
         return None;
     };
