@@ -1,0 +1,62 @@
+// A default body reaching a bound's subject directly takes the impl for what
+// the subject binds to, a reference included.
+//
+// `Items: IntoIterator` names `Self::Items` itself, and `Bag` binds it to
+// `&mut List<P>`, so `into_iter` is `IntoIterator for &mut List<T>` and the
+// loop writes through to `Bag.xs`, as the same code written as an inherent
+// method does. Only a receiver that is a reference to the subject, as in
+// `assoc_default_body_ref_receiver_selects_through_bound`, reads past a `&T`
+// impl.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    v: i32,
+}
+
+trait Holder with () {
+    type Items: IntoIterator;
+
+    fn items(&mut self) -> Self::Items;
+
+    fn bump(&mut self) {
+        let mut it = self.items().into_iter();
+        while let Some(mut p) = it.next() {
+            p.v += 10;
+        }
+    }
+}
+
+struct Bag {
+    xs: List<P>,
+}
+
+impl Holder for Bag {
+    type Items = &mut List<P>;
+
+    fn items(&mut self) -> &mut List<P> {
+        return &mut self.xs;
+    }
+}
+
+impl Bag {
+    fn bump_inherent(&mut self) {
+        let mut it = self.items().into_iter();
+        while let Some(mut p) = it.next() {
+            p.v += 10;
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut b = Bag { xs: [P { v: 1 }, P { v: 2 }] };
+    b.bump();
+    println(`${b.xs:?}`);
+    b.bump_inherent();
+    println(`${b.xs:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[P { v: 11 }, P { v: 12 }]\n[P { v: 21 }, P { v: 22 }]\n"
+}

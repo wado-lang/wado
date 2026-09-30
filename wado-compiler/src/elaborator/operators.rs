@@ -1860,6 +1860,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.find_method_in_trait_bounds(
             None,
+            false,
             bounds,
             method_name,
             receiver,

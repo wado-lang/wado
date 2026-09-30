@@ -17,7 +17,6 @@ use crate::name::{FqTypeName, MethodName, global_name};
 use crate::tir::{TirEffectOp, TirParam, TypeId, TypeTable, method_param_offset};
 use crate::token::Span;
 
-use super::Elaborator;
 use super::infer_hole::InferHoleTable;
 use super::scope::{BinderInScope, Scope, ScopedBound, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
@@ -25,6 +24,7 @@ use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
+use super::{AbstractSelections, Elaborator};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
@@ -1517,7 +1517,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         trait_decl: DefId,
         func: &Function,
-    ) -> Rc<hashmap::IndexMap<AstId, DefId>> {
+    ) -> Rc<AbstractSelections> {
         if let Some(found) = self.abstract_selection_cache.borrow().get(&func.id) {
             return Rc::clone(found);
         }

@@ -191,10 +191,21 @@ pub struct Elaborator<'a, H: CompilerHost> {
     pub(super) abstract_selection_cache: Rc<RefCell<AbstractSelectionCache>>,
 }
 
-/// The trait each call in a default body reaches through a bound, by the
-/// call's node, keyed by the body.
-pub(crate) type AbstractSelectionCache =
-    hashmap::IndexMap<ast::AstId, Rc<hashmap::IndexMap<ast::AstId, DefId>>>;
+/// What a default body's author selected at one call through a bound.
+#[derive(Clone, Copy)]
+pub(crate) struct AbstractSelection {
+    /// The trait the bound names.
+    pub(crate) trait_decl: DefId,
+    /// The receiver was a reference to the bound's subject, so an impl for
+    /// the reference answers no call the author wrote.
+    pub(crate) through_ref: bool,
+}
+
+/// Each call's [`AbstractSelection`] in one default body, by the call's node.
+pub(crate) type AbstractSelections = hashmap::IndexMap<ast::AstId, AbstractSelection>;
+
+/// [`AbstractSelections`] keyed by the body.
+pub(crate) type AbstractSelectionCache = hashmap::IndexMap<ast::AstId, Rc<AbstractSelections>>;
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// Bind an `impl` block's type parameters to the slots its methods resolve

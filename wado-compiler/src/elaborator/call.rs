@@ -1105,7 +1105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if given_args.is_none()
             && let [head, method] = ident.segments.as_slice()
             && head.name == "Self"
-            && let Some(required) = self.abstract_selection(call.id)
+            && let Some(required) = self.abstract_selection(call.id).map(|s| s.trait_decl)
             && self
                 .annotate_ctx
                 .trait_ctx
@@ -4493,6 +4493,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some((found_trait, method_info_result)) = {
                 self.find_method_in_trait_bounds(
                     Some(call.id),
+                    false,
                     &bounds,
                     method_name,
                     type_param_type_id,

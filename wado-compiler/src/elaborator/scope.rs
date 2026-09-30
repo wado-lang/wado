@@ -10,18 +10,18 @@ use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
-use crate::ast::{self, AstId};
+use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
-use super::Elaborator;
 use super::coercion::PendingLiterals;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
 use super::util;
+use super::{AbstractSelections, Elaborator};
 use crate::defs::DefId;
 use crate::name::FqTypeName;
 use crate::token::Span;
@@ -241,7 +241,7 @@ pub(super) struct TraitContext {
     /// against the trait's `Self` rather than this concrete one: the trait
     /// each of its calls reaches through a declared bound, by the call's node.
     /// See [`Elaborator::abstract_selections`].
-    pub(super) abstract_selections: Option<Rc<IndexMap<AstId, DefId>>>,
+    pub(super) abstract_selections: Option<Rc<AbstractSelections>>,
     /// The `impl` block whose type parameters are in scope, paired with the
     /// node declaring its receiver binder — what names that binder in a mangle.
     /// The node, not the spelling: a method parameter may shadow the letter.
@@ -254,7 +254,7 @@ pub(super) struct SelfFrame {
     assoc_type_bindings: IndexMap<String, TypeId>,
     self_type: Option<TypeId>,
     self_trait: Option<DefId>,
-    abstract_selections: Option<Rc<IndexMap<AstId, DefId>>>,
+    abstract_selections: Option<Rc<AbstractSelections>>,
 }
 
 /// One open `type_implements_trait` question.
@@ -290,9 +290,9 @@ pub(super) struct Scope {
     /// among overloads leaves no trace, and the real walk records them.
     pub(super) suppress_reference_recording: bool,
     /// Set while a trait's default body is walked as its author wrote it: each
-    /// method call a declared bound alone answers records that bound's trait,
-    /// the table [`TraitContext::abstract_selections`] later reads.
-    pub(super) abstract_selections: Option<IndexMap<AstId, DefId>>,
+    /// method call a declared bound alone answers records its selection, the
+    /// table [`TraitContext::abstract_selections`] later reads.
+    pub(super) abstract_selections: Option<AbstractSelections>,
     /// The `(base, assoc)` pairs whose binding is being resolved right now.
     /// Two assoc types bounded through each other have no fixpoint.
     pub(super) assoc_binding_stack: IndexSet<(TypeId, String)>,

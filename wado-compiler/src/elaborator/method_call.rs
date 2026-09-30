@@ -13,7 +13,6 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use super::Elaborator;
 use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
 };
@@ -32,6 +31,7 @@ use super::synth::ArgClass;
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
+use super::{AbstractSelection, Elaborator};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
 use crate::elaborator::call::slot_type_bindings;
@@ -244,7 +244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait the call `call` reaches through a declared bound, where the
     /// walk is a trait's default body standing on one impl: the one its
     /// author's reading selected ([`Elaborator::abstract_selections`]).
-    pub(super) fn abstract_selection(&self, call: AstId) -> Option<DefId> {
+    pub(super) fn abstract_selection(&self, call: AstId) -> Option<AbstractSelection> {
         let selections = self.annotate_ctx.trait_ctx.abstract_selections.as_ref()?;
         selections.get(&call).copied()
     }
@@ -351,12 +351,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A default body's author reached this call through a bound, which
         // names its trait as a qualified call names one.
-        let declared_trait = match (&required_trait, call_id) {
-            (None, Some(call)) => self
-                .abstract_selection(call)
-                .map(|decl| self.tysys.required_trait(decl)),
+        let selection = match (&required_trait, call_id) {
+            (None, Some(call)) => self.abstract_selection(call),
             _ => None,
         };
+        let declared_trait = selection.map(|s| self.tysys.required_trait(s.trait_decl));
         // A qualified call names one trait, so the inherent-method step — a
         // different namespace — is skipped; only that trait's impls may
         // answer. The ref-impl priority step still runs (with the filter):
@@ -434,9 +433,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If receiver is a reference type, try ref-type trait impls first.
         // e.g., impl IntoIterator for &List<T> takes priority over impl IntoIterator for List<T>.
         // Only specific ref impls are preferred (not blanket impls like impl Inspect for &T).
-        // A default body's call is the exception: its author's bound names the
-        // pointee, which no `&T` impl answers, so every impl reads it alike.
-        if declared_trait.is_none() {
+        // A default body's call whose author reached the bound's subject
+        // through a reference is the exception: no `&T` impl answers what the
+        // author wrote, so every impl reads it alike.
+        if !selection.is_some_and(|s| s.through_ref) {
             let is_ref = matches!(
                 self.tysys.type_table.borrow().get(receiver),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
@@ -557,6 +557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !bounds.is_empty()
                 && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
                     call_id,
+                    receiver != base_type_id,
                     &bounds,
                     method_name,
                     base_type_id,
