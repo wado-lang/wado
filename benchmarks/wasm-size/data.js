@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790719714412,
+  "lastUpdate": 1790737185152,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62053,6 +62053,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f769ab463bc31ed97c194eae120632262a1f4f40"
         },
         "date": 1790719713621,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22798,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "48a85259c781d6bdf7521707d1296f96bcd0a2e4",
+          "message": "Merge pull request #2225 from wado-lang/claude/loam-blog-structure-chjy16\n\nfeat(marl)!: keep HTML comments out of rendered pages, under the consumer's control",
+          "timestamp": "2026-09-30T11:32:56+09:00",
+          "tree_id": "48e1f623df40e2a6462c53d8b1d7f4a00089bf49",
+          "url": "https://github.com/wado-lang/wado/commit/48a85259c781d6bdf7521707d1296f96bcd0a2e4"
+        },
+        "date": 1790737184539,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
