@@ -270,9 +270,9 @@ impl JsonKeySerializer {
 
     fn quoted<T: Serialize>(&mut self, v: &T) -> Result<(), SerializeError> {
         self.buf.push('"');
-        v.serialize(&mut self.text())?;
+        let spelled = v.serialize(&mut self.text());
         self.buf.push('"');
-        return Result::Ok(());
+        return spelled;
     }
 }
 
