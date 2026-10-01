@@ -193,16 +193,6 @@ fn check_dominance_in_instr(
             }
             defined.insert(name.clone());
         }
-        WirInstr::LocalTee { name, value } => {
-            check_dominance_in_instr(value, candidates, params, defined, disqualified);
-            defined.insert(name.clone());
-        }
-        WirInstr::MultiValueLocalBind { instr, locals } => {
-            check_dominance_in_instr(instr, candidates, params, defined, disqualified);
-            for local in locals.iter().flatten() {
-                defined.insert(local.clone());
-            }
-        }
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
             // Definitions inside the block/loop do not dominate code after it.
             // `defined` is append-only here, so a length-mark + `truncate`
@@ -238,6 +228,7 @@ fn check_dominance_in_instr(
             other.for_each_child(&mut |child| {
                 check_dominance_in_instr(child, candidates, params, defined, disqualified);
             });
+            defined.extend(other.local_writes().map(str::to_string));
         }
     }
 }
