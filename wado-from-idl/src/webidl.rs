@@ -928,11 +928,19 @@ fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType,
         (Some(DefaultValue::Number { value }), WadoType::F32 | WadoType::F64) => {
             Some(format!("{:?}", float_value(value)))
         }
-        (Some(DefaultValue::Number { value }), ty)
-            if ty.primitive_name().is_some() && !matches!(ty, WadoType::Bool | WadoType::Char) =>
-        {
-            Some(integer_value(value).to_string())
-        }
+        (
+            Some(DefaultValue::Number { value }),
+            WadoType::I8
+            | WadoType::I16
+            | WadoType::I32
+            | WadoType::I64
+            | WadoType::I128
+            | WadoType::U8
+            | WadoType::U16
+            | WadoType::U32
+            | WadoType::U64
+            | WadoType::U128,
+        ) => Some(integer_value(value).to_string()),
         (Some(DefaultValue::String { value }), WadoType::String) => Some(string_literal(value)),
         _ => None,
     };
