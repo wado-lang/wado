@@ -1541,7 +1541,7 @@ impl<'a> WirEmitter<'a> {
                 type_id,
                 array,
                 index,
-                ..
+                result_ty,
             } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
@@ -1555,8 +1555,12 @@ impl<'a> WirEmitter<'a> {
                 // Narrow back to non-null only when the Wado element type is
                 // itself non-nullable. A niche-optimized `Option<ref>` element
                 // stores `None` as a genuine null ref, so narrowing it would
-                // trap `ref.as_non_null` on every `None` read.
-                if self.is_array_element_non_nullable_ref(type_id.index()) {
+                // trap `ref.as_non_null` on every `None` read. A read asking
+                // for a nullable result gets the slot as it is: a deep copy
+                // passes an unset slot's null through.
+                if result_ty.is_nonnull_ref()
+                    && self.is_array_element_non_nullable_ref(type_id.index())
+                {
                     f.instruction(&Instruction::RefAsNonNull);
                 }
             }

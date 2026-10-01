@@ -1,0 +1,25 @@
+// Copying an array of strings keeps the slots nothing has written.
+//
+// `Array::<String>::new(n)` leaves every slot null until it is set. The deep
+// copy reads each slot as nullable and passes a null through, so the read must
+// not narrow it to a non-null reference on the way.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    names: Array<String>,
+}
+
+export fn run() with Stdout {
+    let mut names = Array::<String>::new(4);
+    names[0] = "a";
+    let h = Holder { names };
+    let mut copy = h;
+    copy.names[1] = "b";
+    println(`${h.names[0]} ${copy.names[0]} ${copy.names[1]}`);
+}
+
+__DATA__
+{
+    "stdout": "a a b\n"
+}
