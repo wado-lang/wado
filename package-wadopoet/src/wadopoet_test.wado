@@ -272,6 +272,14 @@ test "prune leaves only the names kept code references" {
     assert !refs.contains("TABLE_A") && !refs.contains("TABLE_B"), `got: ${refs:?}`;
 }
 
+test "every blank line after a function body is written" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "f", false, |b| b.ret());
+    w.blank();
+    w.line("global G: i32 = 0;");
+    assert w.to_string() == "fn f(p: i32) {\n    return;\n}\n\n\nglobal G: i32 = 0;\n", `got: ${w.to_string()}`;
+}
+
 test "prune can leave a writer empty" {
     let mut w = CodeWriter::new();
     unit_fn(&mut w, "dead", true, |b| b.ret());

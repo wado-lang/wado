@@ -177,7 +177,7 @@ impl CodeWriter {
     /// Emit a blank line.
     pub fn blank(&mut self) {
         let n = self.segs.len();
-        if n > 0 && self.segs[n - 1].kind matches { Close } && self.cur_is_empty() {
+        if n > 0 && self.segs[n - 1].kind matches { Close } && !self.segs[n - 1].blank_after && self.cur_is_empty() {
             self.segs[n - 1].blank_after = true;
             self.fresh_line = true;
             return;
