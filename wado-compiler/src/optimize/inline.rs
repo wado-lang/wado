@@ -1268,7 +1268,7 @@ struct Caller<'a> {
 }
 
 /// How deep [`Caller::may_turn_constant`] follows an operand before it answers
-/// yes, which keeps a pathological expression from costing more than its walk.
+/// yes, so a long chain of lets cannot take the recursion as deep as itself.
 const MAY_TURN_CONSTANT_DEPTH: u32 = 16;
 
 impl Caller<'_> {
