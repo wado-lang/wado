@@ -192,6 +192,7 @@
 - [Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md)
 - [Test Coverage](./wep-2026-09-28-test-coverage.md)
 - [A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
+- [HashMap](./wep-2026-10-01-hash-map.md)
 
 ## Standard Library
 
