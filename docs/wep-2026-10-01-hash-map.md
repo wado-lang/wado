@@ -10,7 +10,7 @@ balanced tree of any shape makes about that many.
 Those comparisons are where the time goes. In the `gale_gen` benchmark,
 `TreeMap<String, i32>::find_index_str` takes 15% of the samples, more than any
 other function. A B-tree in place of the AA tree speeds up insertion, removal,
-copying and iteration on `example/treemap_bench.wado`, but leaves `gale_gen`
+copying and iteration on `example/map_bench.wado`, but leaves `gale_gen`
 within noise. A hash table needs one hash and, usually, one comparison per
 lookup.
 
@@ -59,15 +59,44 @@ There is no `HashMap::new()` without a seed and no `impl Default`. A default
 seed would have to be fixed, and a fixed seed reached by accident is the hazard
 this design exists to prevent.
 
+### Trusted keys get a newtype
+
+A package whose maps all hold trusted keys declares a newtype over `HashMap`
+under its own fixed seed. The newtype's `new()` takes no seed, and it implements
+`Default`, `Serialize` and `Deserialize` itself. A fixed seed reveals nothing
+when written out, so none of the reasons that refuse these on `HashMap` hold.
+The choice of seed is made once, where the newtype is declared, rather than at
+every construction site.
+
+```wado
+global SEED: HashSeed = HashSeed::fixed(0x243F6A8885A308D3, 0x13198A2E03707344);
+
+pub type GaleMap<K, V> = HashMap<K, V>;
+
+impl<K: Hash, V> GaleMap<K, V> {
+    pub fn new() -> GaleMap<K, V> {
+        return HashMap::<K, V>::new(SEED) as GaleMap<K, V>;
+    }
+}
+```
+
+Gale does this for its generator, its corpus tools, and the baselines they read
+and write.
+
 ### Iteration keeps insertion order
 
 A `HashMap` iterates in insertion order, as `TreeMap` does. With a random seed,
 any order derived from the hash would change from run to run. Insertion order
 keeps a program's output the same under every seed.
 
-The layout is the one `TreeMap` already uses for its entries: keys, values and
-liveness in parallel arrays, indexed by insertion. An open-addressing table of
-entry indices replaces the tree.
+Both maps keep their entries the same way: keys, values and liveness in parallel
+arrays, indexed by insertion. One internal type holds them, and the two maps
+differ only in the index over it, a B-tree or an open-addressing table of entry
+indices. The iterators walk the entries, so the two maps and the two sets share
+them: `MapKeysRefIter`, `MapEntriesRefIter` and the rest. Neither map is the
+other's variant, and `core:collections` holds them as peers:
+`collections/treemap.wado`, `collections/hashmap.wado`, and the shared
+`collections/entries.wado` behind the facade.
 
 ### `Hash` joins the prelude
 
@@ -122,10 +151,10 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 - [ ] `Hash` and `Hasher` in the prelude, with bound-driven derivation. Done when
   every type listed above hashes consistently with its `Eq`.
 - [ ] The hash function, chosen by measurement on Wasm.
-- [ ] `HashSeed`, `HashMap` and `HashSet` in `core:collections`. Done when they
+- [x] `HashSeed`, `HashMap` and `HashSet` in `core:collections`. Done when they
   offer `TreeMap`'s and `TreeSet`'s lookup and iteration API.
-- [ ] `gale_gen` builds its maps with `HashSeed::fixed`. Done when its benchmark
-  row is re-measured.
+- [ ] `gale_gen` builds its maps as `GaleMap` and `GaleSet`. Done when its
+  benchmark row is re-measured.
 - [ ] `#[unavailable]` on trait impls, and the `Serialize` and `Deserialize`
   refusals on `HashMap` and `HashSet`.
 
