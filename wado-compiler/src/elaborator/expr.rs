@@ -15,8 +15,8 @@ use crate::name::{
     split_local_method,
 };
 use crate::tir::{
-    EffectRef, FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId,
-    TypeKey, TypeTable,
+    EffectRef, FunctionRef, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext, TirField,
+    TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -3485,7 +3485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             });
         (!proven).then(|| {
-            "a type parameter casts only where a `ReflectNewtype` bound makes the cast a newtype step"
+            "a generic type casts only where a `ReflectNewtype` bound makes the cast a newtype step"
                 .to_string()
         })
     }
@@ -3494,23 +3494,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `ty` names, or `None` where `ty` carries no such bound.
     fn newtype_base_bound(&mut self, ty: TypeId) -> Option<TypeId> {
         let name = self.tysys.binder_name(ty)?;
-        let trait_def = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_def(CompilerItem::ReflectNewtype)?;
         let base = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(&name)?
-            .iter()
-            .filter(|b| self.tysys.resolutions.bound_decl(b) == Some(trait_def))
-            .flat_map(|b| &b.assoc_types)
-            .find(|assoc| assoc.name == "Base")?
-            .ty
-            .clone();
+            .bound_assoc_bindings(&name, CompilerItem::ReflectNewtype, REFLECT_NEWTYPE_BASE)
+            .into_iter()
+            .next()?;
         Some(self.resolve_type(&base))
     }
 

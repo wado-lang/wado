@@ -32,7 +32,7 @@ use crate::{hashmap, name};
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
 /// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
 /// registry-driven.
-const REFLECT_NEWTYPE_BASE: &str = "Base";
+pub(crate) const REFLECT_NEWTYPE_BASE: &str = "Base";
 
 /// Identifies the scope where a type parameter is defined
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

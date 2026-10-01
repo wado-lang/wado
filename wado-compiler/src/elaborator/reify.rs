@@ -283,14 +283,7 @@ fn read_through_for_cast(tt: &TypeTable, operand: TirExpr, target: tir::TypeId) 
 /// one.
 fn cast_to_newtype(built: TirExpr, newtype_cast_to: Option<tir::TypeId>, span: Span) -> TirExpr {
     match newtype_cast_to {
-        Some(target_type) => TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(built),
-                target_type,
-            },
-            target_type,
-            span,
-        ),
+        Some(target_type) => bare_cast(built, target_type, span),
         None => built,
     }
 }
@@ -7501,14 +7494,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             Some(DesugarKind::NewtypeFromUnwrap | DesugarKind::NewtypeFromWrap) => {
                 let arg = self.reify_expr(&call.args[0], ctx, None);
-                return TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(arg),
-                        target_type: recorded_type,
-                    },
-                    recorded_type,
-                    span,
-                );
+                return bare_cast(arg, recorded_type, span);
             }
             _ => {}
         }
@@ -8706,18 +8692,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
                 let low_call =
                     build_tir_method_call(receiver, func, vec![], vec![], TypeTable::U64, span);
-                let converted = if target_base == TypeTable::U64 {
-                    low_call
-                } else {
-                    TirExpr::new(
-                        TirExprKind::Cast {
-                            expr: Box::new(low_call),
-                            target_type: target_base,
-                        },
-                        target_base,
-                        span,
-                    )
-                };
+                let converted = bare_cast(low_call, target_base, span);
                 ControlFlow::Break(bare_cast(converted, target_type, span))
             }
             Lowering::Reinterpret(item) => {
