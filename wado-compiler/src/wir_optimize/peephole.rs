@@ -1049,8 +1049,7 @@ fn try_drop_mask(instr: &mut WirInstr) -> bool {
     if value_bits > mask_bits {
         return false;
     }
-    let value = std::mem::replace(value_box.as_mut(), WirInstr::Nop);
-    *instr = value;
+    *instr = std::mem::replace(value_box.as_mut(), WirInstr::Nop);
     true
 }
 

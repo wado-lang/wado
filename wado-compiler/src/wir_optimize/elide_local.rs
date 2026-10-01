@@ -92,8 +92,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
         if let WirInstr::LocalTee { name, value } = instr
             && !self.read_counts.contains_key(name.as_str())
         {
-            let value_expr = std::mem::replace(value.as_mut(), WirInstr::Nop);
-            *instr = value_expr;
+            *instr = std::mem::replace(value.as_mut(), WirInstr::Nop);
             self.changed = true;
             self.visit_instr(instr);
             return;

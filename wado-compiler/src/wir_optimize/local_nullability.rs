@@ -139,8 +139,7 @@ impl WirMutVisitor for Relax<'_> {
             if let WirInstr::RefAsNonNull(access) = operand
                 && self.accesses_demoted(access)
             {
-                let access = std::mem::replace(&mut **access, WirInstr::Nop);
-                *operand = access;
+                *operand = std::mem::replace(&mut **access, WirInstr::Nop);
             }
         });
         match instr {
@@ -157,8 +156,7 @@ impl WirMutVisitor for Relax<'_> {
                 narrow(instr);
             }
             WirInstr::RefAsNonNull(inner) if matches!(**inner, WirInstr::RefAsNonNull(_)) => {
-                let narrowed = std::mem::replace(&mut **inner, WirInstr::Nop);
-                *instr = narrowed;
+                *instr = std::mem::replace(&mut **inner, WirInstr::Nop);
             }
             _ => {}
         }
