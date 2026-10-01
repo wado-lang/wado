@@ -116,6 +116,22 @@ pub struct Argument {
     pub idl_type: IdlType,
     pub optional: bool,
     pub variadic: bool,
+    pub default: Option<DefaultValue>,
+}
+
+/// An optional argument's default, as the snapshot records it.
+#[derive(Deserialize)]
+#[serde(tag = "type")]
+pub enum DefaultValue {
+    #[serde(rename = "boolean")]
+    Boolean { value: bool },
+    #[serde(rename = "number")]
+    Number { value: String },
+    #[serde(rename = "string")]
+    String { value: String },
+    /// `null`, `{}`, `[]`, `Infinity`, `NaN`: the browser's own default.
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Deserialize)]
@@ -586,6 +602,7 @@ impl Lowering<'_> {
                         name: "value".to_string(),
                         ty,
                         wit_name: "value".to_string(),
+                        default: None,
                     };
                     out.push(Ok((
                         function(
@@ -677,15 +694,14 @@ impl Lowering<'_> {
         let mut variadic = false;
         for arg in arguments {
             assert!(!variadic, "WebIDL admits a variadic argument only last");
-            let ty = match self.lower_type(&arg.idl_type, Flow::In) {
+            let (ty, default) = match self.lower_type(&arg.idl_type, Flow::In) {
                 // An empty list leaves the argument out.
                 Ok(ty) if arg.variadic => {
                     variadic = true;
-                    WadoType::List(Box::new(ty))
+                    (WadoType::List(Box::new(ty)), None)
                 }
-                // `None` is the argument left out, so the WebIDL default applies
-                // in the browser. A CM operation admits no default argument.
-                Ok(ty) => optional(ty, arg.optional),
+                Ok(ty) if arg.optional => optional_argument(ty, arg.default.as_ref()),
+                Ok(ty) => (ty, None),
                 // A trailing optional the slice cannot express is left to
                 // its WebIDL default; a required one takes the member with it.
                 Err(_) if arg.optional => break,
@@ -695,7 +711,14 @@ impl Lowering<'_> {
                 name: to_wado_identifier(&arg.name),
                 ty,
                 wit_name: to_kebab_case(&arg.name),
+                default,
             });
+        }
+        // Wado takes defaults only on trailing parameters.
+        if let Some(last_required) = params.iter().rposition(|p| p.default.is_none()) {
+            for param in &mut params[..last_required] {
+                param.default = None;
+            }
         }
         Ok((
             function(wado_name, cm_attr, params, return_type),
@@ -882,6 +905,7 @@ fn self_param(iface: &str) -> WadoParam {
         name: "self".to_string(),
         ty: WadoType::Borrow(Box::new(WadoType::Named(to_upper_camel_case(iface)))),
         wit_name: "self".to_string(),
+        default: None,
     }
 }
 
@@ -893,6 +917,74 @@ fn optional(ty: WadoType, wrap: bool) -> WadoType {
         ty if wrap => WadoType::Option(Box::new(ty)),
         ty => ty,
     }
+}
+
+/// An optional argument's type and default. A `WebIDL` default `ty` can spell is
+/// written out; any other is `None`, which crosses as `undefined`, so the
+/// browser applies its own default. A callback has no default to write.
+fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType, Option<String>) {
+    let written = match (default, &ty) {
+        (Some(DefaultValue::Boolean { value }), WadoType::Bool) => Some(value.to_string()),
+        (Some(DefaultValue::Number { value }), WadoType::F32 | WadoType::F64) => {
+            Some(format!("{:?}", float_value(value)))
+        }
+        (
+            Some(DefaultValue::Number { value }),
+            WadoType::I8
+            | WadoType::I16
+            | WadoType::I32
+            | WadoType::I64
+            | WadoType::I128
+            | WadoType::U8
+            | WadoType::U16
+            | WadoType::U32
+            | WadoType::U64
+            | WadoType::U128,
+        ) => Some(integer_value(value).to_string()),
+        (Some(DefaultValue::String { value }), WadoType::String) => Some(string_literal(value)),
+        _ => None,
+    };
+    match (written, ty) {
+        (Some(written), ty) => (ty, Some(written)),
+        (None, ty @ WadoType::Callback { .. }) => (ty, None),
+        (None, ty) => (optional(ty, true), Some("null".to_string())),
+    }
+}
+
+/// A `WebIDL` `integer` token's value: a leading `0` is octal, unlike in Wado.
+fn integer_value(token: &str) -> i128 {
+    let (negative, digits) = match token.strip_prefix('-') {
+        Some(digits) => (true, digits),
+        None => (false, token),
+    };
+    let magnitude = if let Some(hex) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
+        i128::from_str_radix(hex, 16)
+    } else if digits.len() > 1 && digits.starts_with('0') {
+        i128::from_str_radix(&digits[1..], 8)
+    } else {
+        digits.parse()
+    }
+    .unwrap_or_else(|e| panic!("WebIDL integer `{token}`: {e}"));
+    if negative { -magnitude } else { magnitude }
+}
+
+/// A `WebIDL` `float` or `integer` token's value. A float may start or end at
+/// its `.`, which Wado does not admit.
+fn float_value(token: &str) -> f64 {
+    if token.contains(['.', 'e', 'E']) && !token.contains(['x', 'X']) {
+        token
+            .parse()
+            .unwrap_or_else(|e| panic!("WebIDL float `{token}`: {e}"))
+    } else {
+        integer_value(token) as f64
+    }
+}
+
+fn string_literal(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 fn is_undefined(ty: &IdlType) -> bool {

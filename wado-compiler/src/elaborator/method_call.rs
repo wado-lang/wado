@@ -389,10 +389,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             // Unit type () has impl blocks in core:prelude/primitive
             ResolvedType::Unit => (UNIT_TYPE_NAME.to_string(), ModuleSource::primitive()),
-            // Enum types - use enum name and its defining module
-            // Enum, generic resource, newtype and flags are all named by the
-            // declaration they carry.
+            // Every other nominal type is named by the declaration it carries.
             ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Resource { .. }
             | ResolvedType::GenericResource { .. }
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. } => self

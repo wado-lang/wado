@@ -1,0 +1,8 @@
+global DEEP: Option<bool> = null;
+
+#[cm("example:ui/target", linearity = "unrestricted", classes = "0..=0")]
+pub resource Target {
+    #[cm("example:ui/target#clone")]
+    #[cm_params("self", "deep")]
+    fn clone(&self, deep: Option<bool> = DEEP) -> Target;
+}
