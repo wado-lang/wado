@@ -23,8 +23,8 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv,
 };
-use crate::hashmap::IndexMap;
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, MethodName, RefKind, TEMPLATE_BLOCK_LABEL,

@@ -6572,8 +6572,11 @@ impl TypeTable {
         let pack = self.make_tuple(elements[at..pack_end].to_vec());
         let mut rest_written = written.clone();
         rest_written.remove(at);
-        let rest_concrete: Vec<TypeId> =
-            elements[..at].iter().chain(&elements[pack_end..]).copied().collect();
+        let rest_concrete: Vec<TypeId> = elements[..at]
+            .iter()
+            .chain(&elements[pack_end..])
+            .copied()
+            .collect();
         let mut bound = self.bind_type_params(&rest_written, &rest_concrete)?;
         bound.insert(self.param_slot(written[at])?, pack);
         Some(bound)

@@ -2740,7 +2740,7 @@ impl Monomorphizer {
         } else {
             // Blanket impl: an associated-type projection (`S::SeqSerializer^…`)
             // keeps `new_func_name`; every other blanket is keyed by its own
-            // receiver param. The impl args below stay `ReflectStruct`-only.
+            // receiver param.
             let recv_inner = type_table.peel_refs(receiver_type_id);
             // A blanket `impl<T: Bound<Assoc = P>, P> Trait for T` is keyed by
             // `[T, T::Assoc, …]`, so its instance name matches the template's

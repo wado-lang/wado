@@ -868,11 +868,6 @@ impl Parser {
         self.skipped_span(before)
     }
 
-    /// Parse a comma-separated type list inside angle brackets, the opening `<`
-    /// already consumed, splitting `>>` for nested generics via `pending_gt`.
-    /// Recovery is element-local: a malformed argument is reported, skipped to
-    /// the next `,` or `>`, and replaced with a [`Type::Error`]. The closing `>`
-    /// is still required, so the enclosing construct recovers at its own boundary.
     /// Consume the `,` separating two entries of an angle-bracket list. A `>`
     /// left pending by splitting `>>` has already closed the list, so the `,`
     /// after it belongs to the enclosing one.
@@ -884,6 +879,11 @@ impl Parser {
         true
     }
 
+    /// Parse a comma-separated type list inside angle brackets, the opening `<`
+    /// already consumed, splitting `>>` for nested generics via `pending_gt`.
+    /// Recovery is element-local: a malformed argument is reported, skipped to
+    /// the next `,` or `>`, and replaced with a [`Type::Error`]. The closing `>`
+    /// is still required, so the enclosing construct recovers at its own boundary.
     fn parse_type_args(&mut self) -> ParseResult<Vec<Type>> {
         let mut args = Vec::new();
         loop {
@@ -5257,7 +5257,7 @@ impl Parser {
 
         let mut params = Vec::new();
 
-        while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
+        while !self.check(&TokenKind::Gt) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
             let start_span = self.peek().span;
 
@@ -5999,7 +5999,7 @@ impl Parser {
         self.advance(); // consume '<'
 
         let mut args: Vec<Type> = Vec::new();
-        while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
+        while !self.check(&TokenKind::Gt) && !self.is_at_end() {
             // Bounded type param: `ident : bounds`
             if matches!(self.peek_kind(), TokenKind::Ident(_))
                 && self.peek_nth(1).kind == TokenKind::Colon
