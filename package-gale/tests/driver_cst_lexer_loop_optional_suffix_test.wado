@@ -1,0 +1,29 @@
+//! A greedy lexer loop followed by an optional suffix the loop can also start:
+//! the token is the longest match over the whole rule, suffix included.
+
+use g from "./grammars/lexer_loop_optional_suffix.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_loop_optional_suffix" },
+    };
+use { TK_EOF } from "./grammars/lexer_loop_optional_suffix.g4";
+
+fn assert_tokens<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
+    let actual = g::to_lexer_string(&g::tokenize(input), TK_EOF);
+    assert actual == expected.to_string(), `\ninput: ${input}\nactual:\n${actual}\nexpected:\n${expected.to_string()}`;
+}
+
+test "the optional suffix joins the token" {
+    assert_tokens("255_u8", "[@0,0:5='255_u8',<1>,1:0]\n[@1,6:5='<EOF>',<-1>,1:6]\n");
+}
+
+test "a separator inside the digits is not a suffix" {
+    assert_tokens("1_000_i64", "[@0,0:8='1_000_i64',<1>,1:0]\n[@1,9:8='<EOF>',<-1>,1:9]\n");
+}
+
+test "a trailing separator with no suffix stays in the number" {
+    assert_tokens("12_ u8", "[@0,0:2='12_',<1>,1:0]\n[@1,4:5='u8',<2>,1:4]\n[@2,6:5='<EOF>',<-1>,1:6]\n");
+}
+
+test "an incomplete suffix falls back to the loop's end" {
+    assert_tokens("12_u", "[@0,0:2='12_',<1>,1:0]\n[@1,3:3='u',<2>,1:3]\n[@2,4:3='<EOF>',<-1>,1:4]\n");
+}
