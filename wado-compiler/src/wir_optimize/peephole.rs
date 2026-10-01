@@ -100,16 +100,8 @@ struct DefCounter<'a> {
 
 impl WirRefVisitor for DefCounter<'_> {
     fn visit_instr(&mut self, instr: &WirInstr) {
-        match instr {
-            WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
-                *self.counts.entry(name.clone()).or_default() += 1;
-            }
-            WirInstr::MultiValueLocalBind { locals, .. } => {
-                for local in locals.iter().flatten() {
-                    *self.counts.entry(local.clone()).or_default() += 1;
-                }
-            }
-            _ => {}
+        for name in instr.local_writes() {
+            *self.counts.entry(name.to_string()).or_default() += 1;
         }
         self.walk_instr(instr);
     }

@@ -53,6 +53,11 @@ fn plan_slots(body: &[WirInstr], params: &[(&str, &WirType)]) -> IndexMap<String
         .map(|&(name, _)| name)
         .chain(declared.iter().map(|(name, _)| name))
         .collect();
+    assert_eq!(
+        locals.len(),
+        params.len() + declared.iter().count(),
+        "[WIR] a local is declared under a parameter's name"
+    );
     let is_param = |i: usize| i < params.len();
     let mut ranges = Ranges::new(&locals);
     ranges.walk_body(body);

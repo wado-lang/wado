@@ -50,18 +50,8 @@ struct CollectLocalUses<'a> {
 
 impl WirRefVisitor for CollectLocalUses<'_> {
     fn visit_instr(&mut self, instr: &WirInstr) {
-        match instr {
-            WirInstr::LocalGet { name, .. }
-            | WirInstr::LocalSet { name, .. }
-            | WirInstr::LocalTee { name, .. } => {
-                self.used.insert(name.clone());
-            }
-            WirInstr::MultiValueLocalBind { locals, .. } => {
-                for local in locals.iter().flatten() {
-                    self.used.insert(local.clone());
-                }
-            }
-            _ => {}
+        for name in instr.local_read().into_iter().chain(instr.local_writes()) {
+            self.used.insert(name.to_string());
         }
         self.walk_instr(instr);
     }

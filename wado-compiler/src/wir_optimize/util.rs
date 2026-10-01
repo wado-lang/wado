@@ -111,10 +111,10 @@ impl Footprint {
     }
 
     fn add_reads(&mut self, instr: &WirInstr) {
+        if let Some(name) = instr.local_read() {
+            self.locals.insert(name.to_string());
+        }
         match instr {
-            WirInstr::LocalGet { name, .. } => {
-                self.locals.insert(name.clone());
-            }
             WirInstr::StructGet { field_name, .. } => {
                 self.fields.insert(field_name.clone());
             }
@@ -147,13 +147,8 @@ impl Footprint {
     }
 
     fn add_node_writes(&mut self, instr: &WirInstr) {
+        self.locals.extend(instr.local_writes().map(str::to_string));
         match instr {
-            WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
-                self.locals.insert(name.clone());
-            }
-            WirInstr::MultiValueLocalBind { locals, .. } => {
-                self.locals.extend(locals.iter().flatten().cloned());
-            }
             WirInstr::StructSet { field_name, .. } => {
                 self.fields.insert(field_name.clone());
             }
