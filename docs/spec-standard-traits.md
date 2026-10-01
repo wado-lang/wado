@@ -438,8 +438,22 @@ An IEEE predicate is written with `is_nan()`:
 | `a > b`        | `a > b && !a.is_nan()`   |
 | `a >= b`       | `a >= b && !a.is_nan()`  |
 
+`min` and `max` follow the order wherever they are called: `f32::min`,
+`f64::min`, `Iterator::min`, and every `min` over a `T: Ord`. NaN is greatest,
+so `min(1.0, NaN)` is `1.0` and `max(1.0, NaN)` is NaN.
+
+`f32::minimum`, `f32::maximum`, `f64::minimum` and `f64::maximum` are IEEE
+754-2019 `minimum` and `maximum`: a NaN argument gives NaN on both, and `-0.0`
+is less than `0.0`.
+
+`clamp(x, low, high)` on `f32` and `f64` confines `x` to `low..=high` by the
+order, with one exception: a NaN `x` gives NaN rather than `high`. A NaN bound
+traps, as `low > high` does.
+
 > Not yet implemented: the operators on a float are IEEE's, and `Ord` on a float
 > is IEEE 754 `totalOrder`, which reads a NaN's bits and orders `-0.0 < 0.0`.
+> `f32::min` and `f64::min` (and `max`) are IEEE 754-2019 `minimum` (and
+> `maximum`), and `minimum` and `maximum` do not exist.
 
 ### Default Implementations
 

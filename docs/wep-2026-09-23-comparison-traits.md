@@ -146,6 +146,26 @@ one of `a < b`, `a == b` and `a > b` holds, and `x == x` holds for every `x`.
 predicate is still one expression of an operator and `is_nan()`, listed in
 [Float Comparison](./spec-standard-traits.md#float-comparison).
 
+### `min`, `max` and `clamp`
+
+No total order can match Wasm's `f64.min` and `f64.max`, which are IEEE
+754-2019 `minimum` and `maximum`. Both of those return a NaN when either
+argument is one. An order puts NaN at one end, so only one of `min` and `max`
+can return it. Putting NaN least would only move the disagreement from `min` to
+`max`.
+
+So the two meanings take two names. `min` and `max` follow the order everywhere,
+on a float as through `Iterator` or a `T: Ord` bound, so one name means one
+thing. `minimum` and `maximum` keep IEEE's own names and IEEE's meaning, and
+lower to Wasm's instructions; Rust's `f64::minimum` uses the same names.
+`f64::min` therefore costs a comparison and a select instead of one
+instruction.
+
+`clamp` keeps a NaN `x` as NaN. The order alone would give `high`, since NaN is
+greatest, and that hides a NaN in exactly the place a range check is meant to
+catch bad input. A clamp that returns its input's NaN is what IEEE code expects,
+and the rule is written down where `clamp` is specified.
+
 ### Comparing a value with itself warns
 
 Reflexivity gives every comparison of an expression with itself one answer, on
@@ -206,6 +226,9 @@ Where the optimizer proves an operand is not a NaN, the test goes.
   whose `Eq` is written and whose `cmp` is not. Each with a fixture.
 - [ ] In the `test` world, check every call to a written `eq` or `cmp` against
   the other, with a fixture whose disagreeing pair traps.
+- [ ] Make `f32::min`, `f64::min` and their `max` follow the order, add
+  `minimum` and `maximum` on the Wasm instructions, and make `clamp` keep a NaN
+  `x`. Each with a fixture.
 - [ ] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
 
@@ -215,9 +238,8 @@ Whether an `Eq<Rhs>` for another type must agree with the type's own `==` is
 not settled. `StrSlice == String` should answer as `String == String` does, and
 nothing says so or checks it.
 
-`f64::min` and `f64::max` lower to Wasm's `min` and `max`, which are IEEE
-754-2019 `minimum` and `maximum`. `f64::min(1.0, NaN)` is NaN, where
-`Iterator::min` over the same values reads the order and answers `1.0`.
+Which argument `min` and `max` return when the two are `Equal` is not stated.
+It is observable: `-0.0` and `0.0` are `Equal`, and their signs differ.
 
 Float literal patterns are rejected, though one equality would give them a
 meaning.
