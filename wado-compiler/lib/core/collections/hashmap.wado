@@ -354,6 +354,13 @@ impl<K: Ord, V: Ord> Ord for HashMap<K, V> {
     }
 }
 
+/// The entries alone; the seed is never rendered.
+impl<K: Inspect, V: Inspect> Inspect for HashMap<K, V> {
+    fn inspect(&self, f: &mut Formatter) {
+        self.log.inspect_as(f, false);
+    }
+}
+
 impl<K: Hash, V> IndexAssign<K> for HashMap<K, V> {
     type Output = V;
 
@@ -436,6 +443,12 @@ impl<T: Hash> HashSet<T> {
     /// The elements, in insertion order.
     pub fn iter_value(&self) -> MapKeysValueIter<T, ()> {
         return self.inner.keys().iter_value();
+    }
+}
+
+impl<T: Inspect> Inspect for HashSet<T> {
+    fn inspect(&self, f: &mut Formatter) {
+        self.inner.log.inspect_as(f, true);
     }
 }
 

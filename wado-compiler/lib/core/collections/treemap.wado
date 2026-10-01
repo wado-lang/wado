@@ -663,81 +663,15 @@ impl<T: Ord + Deserialize + Inspect> Deserialize for TreeSet<T> {
     }
 }
 
-impl<K: Ord + Inspect, V: Inspect> TreeMap<K, V> {
-    /// The alternate (`#`) rendering `inspect` hands off to: one entry per
-    /// indented line.
-    fn inspect_alternate(&self, f: &mut Formatter) {
-        if self.is_empty() {
-            f.write_str("{}");
-            return;
-        }
-        f.open_brace("{");
-        for let [key, value] of self.entries() {
-            f.write_newline_indent();
-            key.inspect(f);
-            f.write_str(": ");
-            value.inspect(f);
-            f.write_char(',');
-        }
-        f.close_brace("}");
-    }
-}
-
 impl<K: Ord + Inspect, V: Inspect> Inspect for TreeMap<K, V> {
     pub fn inspect(&self, f: &mut Formatter) {
-        if f.alternate {
-            self.inspect_alternate(f);
-            return;
-        }
-        f.write_char('{');
-        let mut first = true;
-        for let [key, value] of self.entries() {
-            if !first {
-                f.write_str(", ");
-            }
-            first = false;
-            key.inspect(f);
-            f.write_str(": ");
-            value.inspect(f);
-        }
-        f.write_char('}');
-    }
-}
-
-impl<T: Inspect + Ord> TreeSet<T> {
-    /// The alternate (`#`) rendering `inspect` hands off to: one element per
-    /// indented line.
-    fn inspect_alternate(&self, f: &mut Formatter) {
-        if self.inner.is_empty() {
-            f.write_str("{}");
-            return;
-        }
-        f.open_brace("{");
-        for let element of self.iter_ref() {
-            f.write_newline_indent();
-            element.inspect(f);
-            f.write_char(',');
-        }
-        f.close_brace("}");
+        self.log.inspect_as(f, false);
     }
 }
 
 impl<T: Inspect + Ord> Inspect for TreeSet<T> {
     pub fn inspect(&self, f: &mut Formatter) {
-        if f.alternate {
-            self.inspect_alternate(f);
-            return;
-        }
-        f.write_char('{');
-        let mut first = true;
-        for let element of self.iter_ref() {
-            if !first {
-                f.write_str(", ");
-            }
-            first = false;
-            element.inspect(f);
-        }
-        f.write_char('}');
+        self.inner.log.inspect_as(f, true);
     }
 }
 

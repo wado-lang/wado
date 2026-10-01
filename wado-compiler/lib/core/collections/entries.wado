@@ -143,6 +143,53 @@ impl<K, V> EntryLog<K, V> {
     }
 }
 
+impl<K: Inspect, V: Inspect> EntryLog<K, V> {
+    /// The live entries as `{k: v, …}`, or as `{k, …}` for a set's keys. The
+    /// alternate (`#`) form puts each on its own indented line.
+    internal fn inspect_as(&self, f: &mut Formatter, keys_only: bool) {
+        let lines = f.alternate;
+        if lines && self.size == 0 {
+            f.write_str("{}");
+            return;
+        }
+        if lines {
+            f.open_brace("{");
+        } else {
+            f.write_char('{');
+        }
+        let mut first = true;
+        for let [key, value] of self.entries() {
+            if lines {
+                f.write_newline_indent();
+            } else if !first {
+                f.write_str(", ");
+            }
+            first = false;
+            key.inspect(f);
+            if !keys_only {
+                f.write_str(": ");
+                value.inspect(f);
+            }
+            if lines {
+                f.write_char(',');
+            }
+        }
+        if lines {
+            f.close_brace("}");
+        } else {
+            f.write_char('}');
+        }
+    }
+}
+
+/// The live entries alone: a derived `Inspect` of a type holding a log must not
+/// read the slots past `count`, which hold nothing.
+impl<K: Inspect, V: Inspect> Inspect for EntryLog<K, V> {
+    fn inspect(&self, f: &mut Formatter) {
+        self.inspect_as(f, false);
+    }
+}
+
 impl<K, V: Ref> EntryLog<K, V> {
     /// `value_at`, borrowing the value.
     internal fn value_ref_at(&self, e: i32) -> Option<&V> {

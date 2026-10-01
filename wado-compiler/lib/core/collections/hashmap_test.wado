@@ -255,6 +255,22 @@ test "maps order by their entries in insertion order, then by length" {
     assert s > t;
 }
 
+test "inspect renders the live entries and no seed" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    assert `${map:?}` == "{}" && `${map:#?}` == "{}";
+    map["a"] = 1;
+    map["gone"] = 0;
+    map["b"] = 2;
+    assert map.remove("gone");
+    assert `${map:?}` == "{\"a\": 1, \"b\": 2}";
+    assert `${map:#?}` == "{\n  \"a\": 1,\n  \"b\": 2,\n}";
+    let mut set = HashSet::<i32>::new(seed());
+    set.insert(3);
+    set.insert(1);
+    assert `${set:?}` == "{3, 1}";
+    assert `${set:#?}` == "{\n  3,\n  1,\n}";
+}
+
 test "a random seed builds a working map" {
     let mut map = HashMap::<String, i32>::new(HashSeed::random());
     map["a"] = 1;
