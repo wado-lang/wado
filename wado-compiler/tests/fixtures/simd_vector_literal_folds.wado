@@ -1,0 +1,18 @@
+// A vector literal lowers to a splat and one `replace_lane` per lane, each
+// written back to the same local. The peephole round fuses those writes into
+// one tree, and the constant fold turns the tree into a single `v128.const`.
+
+use { println, Stdout } from "core:cli";
+use { i32x4 } from "core:simd";
+
+export fn run() with Stdout {
+    let v: i32x4 = [1, 2, 3, 4];
+    println(`${v.extract_lane(2)}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n",
+    "wir_expect:O2": ["v128.const(316912650112397582603894390785)"],
+    "wir_not_expect:O2": ["replace_lane"]
+}

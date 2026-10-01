@@ -66,11 +66,11 @@ __DATA__
     "stdout": "[true]\"key\":<a long constant hoisted to a global and copied back in><a long constant hoisted to a global and copied back in>\nab<ab<>\n",
     "wir_scope": "opt_string_append_fuse.wado/run",
     "wir_expect:O2": [
-        "buf_0.used = 6;",
+        "local.tee buf_0(struct.new \"core:prelude/string.wado//String\" { repr: builtin::array_new<u8>(128), used: 0 }).used = 6;",
         "builtin::array_set_u8($load_{}, 5, 93);",
         "buf_0.used = 7;",
         "buf_0.used = 12;",
-        "new_used_{} = buf_0.used + 56;",
+        "local.tee new_used_{}(buf_0.used + 56) > ",
         "builtin::array_copy<u8>($load_{}, start_{} + 1, global:opt_string_append_fuse.wado::$const_obj_{}, 0, 54);",
         "builtin::array_set_u8($load_{}, start_{} + 55, 62);",
         "builtin::array_copy<u8>(local.tee $load_{}(s_2.repr), start_{}, $load_{}, 0, 3);"

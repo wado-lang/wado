@@ -8,7 +8,9 @@
 // wrapper makes the wrapped bare-local use a soft, reconstructible position, so
 // `s` decomposes into `$sroa_s_x` / `$sroa_s_y` scalars and the literal is
 // reconstructed only inside the copy (which then copies a fresh literal — a
-// redundant, sound no-op that later passes demote).
+// redundant, sound no-op that later passes demote). Later passes fold the
+// scalars too, so `f` passes `consume` a fresh literal and adds the constant
+// `s.y`.
 use { println, Stdout } from "core:cli";
 
 struct P { x: i32, y: i32 }
@@ -38,7 +40,7 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_expect:O2": [
-        "$sroa_s_x"
+        "{ x: n + 1, y: 7 }) + 7;"
     ],
     "wir_not_expect:O0": [
         "$sroa_s_x"

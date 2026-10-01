@@ -84,16 +84,18 @@ stayed within the noise.
 What wasm-opt removes, as open codegen targets. The counts after the first
 come from Wado's `-O2` build:
 
-- [ ] Local declarations: `codegen/emit.rs` writes one entry per local,
-  `(1, ty)`, without merging neighbours of one type. That is 2,942 entries
-  and 7.1KB, against 346 entries and 1.0KB once grouped by type.
+- [x] Local declarations: the emitter wrote one entry per local, 2,942 entries
+  and 7.1KB in all. Grouped by type, they take 346 entries and 1.0KB.
+  `wir_optimize/local_layout.rs` groups them, and puts the most used first.
 - [ ] Duplicate function types: 167 types stand outside the rec group, and only
   104 of them differ.
 - [ ] `ref.as_non_null`: wasm-opt takes the count from 1,869 to 113. A local
   keeps its non-null type when a write dominates every read
   (`wir_optimize/local_nullability.rs`). That leaves 634.
-- [ ] Set-then-get: a `local.set X` followed at once by `local.get X` occurs
-  1,191 times. wasm-opt turns it into a `local.tee` or removes it.
+- [x] Set-then-get: a `local.set X` followed at once by `local.get X` occurred
+  1,191 times. wasm-opt turns it into a `local.tee` or removes it. The last WIR
+  pass fuses each pair into a tee (`fuse_remaining_local_tees`), and copy
+  propagation removes a copy of a tee'd local. That leaves 46.
 - [ ] Identical functions: `deflate_raw` equals `deflate_raw$spec0` and
   `zlib_wrap` equals `zlib_wrap$spec0`. The outlined `$cold0` bounds-check
   paths of `List<T>::index_value` and `index_assign` repeat once per element

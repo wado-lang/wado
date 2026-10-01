@@ -279,8 +279,11 @@ fn optimize_scoped(
     dce::compact_dead_items(module);
     profiler.span_end(&scope.name("phase8_dce_compact"));
 
-    // Phase 9: finalize the declared-local SSoT now that no pass adds or removes
-    // a `DeclareLocal`.
+    // Phase 9: settle the locals. Tee fusion comes last: a tee hides the copy
+    // it replaces from every pass before it.
+    wir_pass(scope, "fuse_remaining_local_tees", module, profiler, |m| {
+        peephole::fuse_remaining_local_tees(m);
+    });
     finalize_locals(module);
 }
 

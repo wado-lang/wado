@@ -341,6 +341,32 @@ pub(super) fn is_same_free_read(a: &WirInstr, b: &WirInstr) -> bool {
     }
 }
 
+/// Visit each operand of `instr` that accepts `(ref null $type)` where its
+/// type allows `(ref $type)`: the object of a GC access, `ref.cast` and
+/// `ref.test`.
+pub(super) fn for_each_nullable_ref_operand(
+    instr: &mut WirInstr,
+    mut f: impl FnMut(&mut WirInstr),
+) {
+    match instr {
+        WirInstr::ArrayGet { array, .. }
+        | WirInstr::ArrayGetS { array, .. }
+        | WirInstr::ArrayGetU { array, .. }
+        | WirInstr::ArraySet { array, .. }
+        | WirInstr::ArrayFill { array, .. } => f(array),
+        WirInstr::ArrayLen(array) => f(array),
+        WirInstr::ArrayCopy { dest, src, .. } => {
+            f(dest);
+            f(src);
+        }
+        WirInstr::StructGet { expr, .. }
+        | WirInstr::StructSet { expr, .. }
+        | WirInstr::RefCast { expr, .. }
+        | WirInstr::RefTest { expr, .. } => f(expr),
+        _ => {}
+    }
+}
+
 /// Count every `LocalGet` in an expression tree, per local name.
 pub(super) fn count_local_gets(instr: &WirInstr, counts: &mut IndexMap<String, u32>) {
     if let WirInstr::LocalGet { name, .. } = instr {

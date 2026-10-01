@@ -7,6 +7,7 @@
 
 use crate::hashmap::IndexSet;
 use crate::wir::{WirInstr, WirPackage};
+use crate::wir_optimize::util::for_each_nullable_ref_operand;
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
 /// Declare nullable each non-null reference local read before Wasm's
@@ -117,14 +118,31 @@ impl WirRefVisitor for InitScan<'_> {
 }
 
 /// Rewrites a body for its demoted locals, children first so a read's wrapper
-/// meets the parent that may already narrow it.
+/// meets the parent that may already narrow it or not need it.
 struct Relax<'a> {
     demoted: &'a IndexSet<String>,
+}
+
+impl Relax<'_> {
+    fn accesses_demoted(&self, instr: &WirInstr) -> bool {
+        matches!(instr, WirInstr::LocalGet { name, .. } | WirInstr::LocalTee { name, .. }
+            if self.demoted.contains(name.as_str()))
+    }
 }
 
 impl WirMutVisitor for Relax<'_> {
     fn visit_instr(&mut self, instr: &mut WirInstr) {
         self.walk_instr(instr);
+        // The narrowing is static only: a demoted local is never read unset at
+        // run time, so an operand that accepts null needs none.
+        for_each_nullable_ref_operand(instr, |operand| {
+            if let WirInstr::RefAsNonNull(access) = operand
+                && self.accesses_demoted(access)
+            {
+                let access = std::mem::replace(&mut **access, WirInstr::Nop);
+                *operand = access;
+            }
+        });
         match instr {
             WirInstr::DeclareLocal { name, ty } if self.demoted.contains(name.as_str()) => {
                 *ty = ty.clone().as_nullable();
