@@ -3918,7 +3918,17 @@ fn gen_op_leaf_taken(w: &mut CodeWriter, op: &Op, ctx: &GenContext, name_counts:
         Literal(l) => leaf_binding(ctx, &l.dedup_base, &l.field),
         _ => panic("gen_op_leaf_taken: only a token leaf is taken"),
     };
-    w.line(`${binding}p.take();`);
+    emit_leaf(w, &binding, "p.take()");
+}
+
+/// A leaf's statement: `binding`, then `expr`. One that binds nothing means
+/// the same at any call site, so `prune` may move it there.
+fn emit_leaf<S: AsStrSlice>(w: &mut CodeWriter, binding: &String, expr: S) {
+    if binding.is_empty() {
+        w.stmt(`${expr};`);
+    } else {
+        w.line(`${binding}${expr};`);
+    }
 }
 
 /// Emit a single leaf-op parse line, reading the deduped field name
@@ -3946,12 +3956,16 @@ fn gen_op_leaf(
     }
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
-        Token(t) => w.line(
-            `${leaf_binding(ctx, &t.dedup_base, &t.field)}${expect_call(&t.kind, t.atn_leaf_site, ctx)};`,
+        Token(t) => emit_leaf(
+            w,
+            &leaf_binding(ctx, &t.dedup_base, &t.field),
+            expect_call(&t.kind, t.atn_leaf_site, ctx),
         ),
-        Literal(l) => w.line(
-            `${leaf_binding(ctx, &l.dedup_base, &l.field)}${expect_call(&l.kind, l.atn_leaf_site, ctx)};`,
-        ),
+        Literal(l) => emit_leaf(w, &leaf_binding(ctx, &l.dedup_base, &l.field), expect_call(
+            &l.kind,
+            l.atn_leaf_site,
+            ctx,
+        )),
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
             // threaded at runtime via `follow_arg` rather than selecting a
@@ -3983,8 +3997,8 @@ fn gen_op_leaf(
             });
             close_call_capture(w, &span_field);
         },
-        Wildcard(wop) => w.line(`${leaf_binding(ctx, &wop.dedup_base, &wop.field)}p.any();`),
-        Excluded(eop) => w.line(`${leaf_binding(ctx, &eop.dedup_base, &eop.field)}${gen_op_excluded_call(&eop, ctx)};`),
+        Wildcard(wop) => emit_leaf(w, &leaf_binding(ctx, &wop.dedup_base, &wop.field), "p.any()"),
+        Excluded(eop) => emit_leaf(w, &leaf_binding(ctx, &eop.dedup_base, &eop.field), gen_op_excluded_call(&eop, ctx)),
         // Non-leaf ops (Repeat / Group / ListLabel) are routed to
         // their own dispatchers by the caller; reaching here means
         // the caller's `op_is_leaf` gate was bypassed.

@@ -44,6 +44,8 @@ generator states each use:
 - `call(CallStmt)` writes a call statement. `pre` holds statements that run just
   before it, and `form` says whether the result is discarded, returned, or bound
   (`CallForm::Bind("let x = ")`).
+- `stmt(text)` writes a statement line `prune` may move into a caller: one that
+  neither leaves the function nor binds a name.
 - `ret()` writes a bare `return;`.
 - `note(name)` records that the text around it references `name`.
 
@@ -52,7 +54,7 @@ be a `call` or a `note`, since `prune` does not read the text. Everything else a
 the top level is kept, and so is everything it reaches.
 
 A prunable function forwards when its body is one call it returns, one call then
-`return;`, or one statement line then `return;`. A call passing it its own
+`return;`, or one `stmt` line then `return;`. A call passing it its own
 parameters by name gets that body instead. A call passing other arguments is
 renamed to the inner callee, when the body passes every parameter on in order
 and runs nothing first.

@@ -205,13 +205,78 @@ test "prune inlines a one-statement body where its parameters are passed" {
     let mut w = CodeWriter::new();
     unit_fn(&mut w, "outer", false, |b| b.call(call_of("one", ["p"])));
     unit_fn(&mut w, "one", true, |b| {
-        b.line("take(p);");
+        b.stmt("take(p);");
         b.note("TABLE");
         b.ret();
     });
     w.prune();
     assert w.to_string() == "fn outer(p: i32) {\n    take(p);\n}\n\n", `got: ${w.to_string()}`;
     assert w.references().contains("TABLE");
+}
+
+test "prune keeps a one-line body the generator did not write as a movable statement" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "outer", false, |b| b.call(call_of("guard", ["p"])));
+    unit_fn(&mut w, "guard", true, |b| {
+        b.line("if p < 0 { return; }");
+        b.ret();
+    });
+    w.prune();
+    assert w.to_string().contains("    guard(p);\n"), `got: ${w.to_string()}`;
+    assert w.to_string().contains("fn guard("), `got: ${w.to_string()}`;
+}
+
+test "prune prints the joined pre-statements of a forwarded call once" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "outer", false, |b| {
+        b.call(CallStmt {
+            pre: ["a(p);"],
+            callee: "helper",
+            args: ["p"],
+        });
+    });
+    unit_fn(&mut w, "helper", true, |b| {
+        b.call(CallStmt {
+            pre: ["b(p);"],
+            callee: "target",
+            args: ["p"],
+        });
+        b.ret();
+    });
+    unit_fn(&mut w, "target", false, |b| b.ret());
+    w.prune();
+    let expected = "fn outer(p: i32) {\n    a(p);\n    b(p);\n    target(p);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n";
+    assert w.to_string() == expected, `got: ${w.to_string()}`;
+}
+
+test "prune leaves only the names kept code references" {
+    let mut w = CodeWriter::new();
+    // `dead` reaches `target` through two forwarders whose notes do not
+    // adjoin, so forwarding joins them into a new run of names.
+    unit_fn(&mut w, "dead", true, |b| b.call(call_of("a", ["p"])));
+    unit_fn(&mut w, "a", true, |b| {
+        b.note("TABLE_A");
+        b.call(call_of("b", ["p"]));
+        b.ret();
+    });
+    unit_fn(&mut w, "kept", false, |b| b.note("TABLE_KEPT"));
+    unit_fn(&mut w, "b", true, |b| {
+        b.note("TABLE_B");
+        b.call(call_of("target", ["p"]));
+        b.ret();
+    });
+    unit_fn(&mut w, "target", false, |b| b.ret());
+    w.prune();
+    let refs = w.references();
+    assert refs.contains("TABLE_KEPT");
+    assert !refs.contains("TABLE_A") && !refs.contains("TABLE_B"), `got: ${refs:?}`;
+}
+
+test "prune can leave a writer empty" {
+    let mut w = CodeWriter::new();
+    unit_fn(&mut w, "dead", true, |b| b.ret());
+    w.prune();
+    assert w.to_string() == "", `got: ${w.to_string()}`;
 }
 
 test "prune forwards a call through a body that only calls, with its pre-statements" {

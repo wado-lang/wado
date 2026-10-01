@@ -72,15 +72,14 @@ struct Seg {
     form: Form = Form::Discard,
     bind_start: i32 = 0,
     bind_end: i32 = 0,
-    /// `Text`: statement lines (`line` calls, block openers and closers),
-    /// whether any is a block's, and whether `write` or `raw` wrote some text
-    /// whose lines are not counted.
+    /// `Text`: statement lines (`line` calls, block openers and closers), and
+    /// whether `write` or `raw` wrote some text whose lines are not counted.
     lines: i32 = 0,
-    blocks: bool = false,
     opaque: bool = false,
-    /// `Text`: the first `line` call's text.
+    /// `Text`: the first `line` call's text, and whether `stmt` wrote it.
     first_start: i32 = 0,
     first_end: i32 = 0,
+    movable: bool = false,
     /// `Close`: a blank line follows.
     blank_after: bool = false,
     /// `FnOpen`: the name, the parameter names joined by `, `, each
@@ -154,6 +153,14 @@ impl CodeWriter {
         }
     }
 
+    /// Write a statement `prune` may move to a call site, where a function body
+    /// is this statement alone: one that neither leaves the function nor binds
+    /// a name, so it means there what it means here.
+    pub fn stmt<S: AsStrSlice>(&mut self, text: S) {
+        self.cur.movable = self.cur.lines == 0;
+        self.line(text);
+    }
+
     /// Write a complete line (auto-indented, with trailing newline).
     pub fn line<S: AsStrSlice>(&mut self, text: S) {
         self.write_indent();
@@ -185,7 +192,6 @@ impl CodeWriter {
         self.buf.push_str(opener);
         self.buf.push_str(" {\n");
         self.cur.lines += 1;
-        self.cur.blocks = true;
         self.fresh_line = true;
         self.indent_level += 1;
         self.fn_blocks.push(false);
@@ -202,7 +208,6 @@ impl CodeWriter {
         self.write_indent();
         self.buf.push_str("}\n");
         self.cur.lines += 1;
-        self.cur.blocks = true;
         self.fresh_line = true;
     }
 
@@ -215,7 +220,6 @@ impl CodeWriter {
         self.buf.push_str(suffix);
         self.buf.push('\n');
         self.cur.lines += 1;
-        self.cur.blocks = true;
         self.fresh_line = true;
     }
 
@@ -229,7 +233,6 @@ impl CodeWriter {
         self.buf.push_str(opener);
         self.buf.push_str(" {\n");
         self.cur.lines += 1;
-        self.cur.blocks = true;
         self.fresh_line = true;
         self.indent_level += 1;
     }
@@ -427,8 +430,7 @@ impl CodeWriter {
     pub fn to_string(&self) -> String {
         assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level=${self.indent_level})`;
         assert self.hoisted.is_empty(), "CodeWriter: a hoisted definition was never written";
-        if self.segs.is_empty() {
-            assert self.cur.text_start == 0, "CodeWriter: only a segment moves the text start";
+        if self.segs.is_empty() && self.cur.text_start == 0 {
             return self.buf;
         }
         let mut out = String::with_capacity(self.buf.len());
@@ -452,7 +454,7 @@ impl CodeWriter {
     /// references.
     ///
     /// A prunable function forwards when its body, apart from `note`d names, is
-    /// one call returned, one call then `return;`, or one statement line then
+    /// one call returned, one call then `return;`, or one `stmt` line then
     /// `return;`. A call to it passing its own parameters by name becomes that
     /// body, the call's statements and the callee's `pre` included. A call
     /// passing anything else is renamed to the inner callee instead, where the
@@ -471,6 +473,9 @@ impl CodeWriter {
             }
         }
         self.drop_unreached(&items, &item_of);
+        // Forwarding appends joined spans past the text it flushed, which are
+        // no text of the writer's own.
+        self.restart_text();
     }
 
     /// Every name the text `note`s or a call statement calls.
@@ -592,7 +597,7 @@ impl CodeWriter {
             let [start, end] = self.join_names(names, [first.names_start, first.names_end]);
             return Option::Some(Forward { call: Option::Some(*first), names_start: start, names_end: end });
         }
-        if body.len() == 2 && first.kind matches { Text } && first.lines == 1 && !first.blocks && !first.opaque {
+        if body.len() == 2 && first.kind matches { Text } && first.lines == 1 && first.movable && !first.opaque {
             return Option::Some(Forward {
                 call: null,
                 stmt_start: first.first_start,
