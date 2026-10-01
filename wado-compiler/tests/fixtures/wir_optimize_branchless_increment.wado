@@ -20,15 +20,20 @@ fn count_trues(arr: List<bool>) -> i32 {
 
 test {
     // `black_box`ed inputs so the calls survive to the WIR: a fully constant
-    // list folds to the count, and the loop this pins goes with it.
+    // list folds to the count, and the loop this pins goes with it. The counts
+    // are bound first, so no assert formats a `List<bool>`, which branches on
+    // each element.
     let a: List<bool> = [true, false, true, true, false];
-    assert count_trues(builtin::black_box(a)) == 3;
+    let a_count = count_trues(builtin::black_box(a));
+    assert a_count == 3;
 
     let empty: List<bool> = [];
-    assert count_trues(builtin::black_box(empty)) == 0;
+    let empty_count = count_trues(builtin::black_box(empty));
+    assert empty_count == 0;
 
     let all_true: List<bool> = [true, true, true];
-    assert count_trues(builtin::black_box(all_true)) == 3;
+    let all_true_count = count_trues(builtin::black_box(all_true));
+    assert all_true_count == 3;
 }
 
 __DATA__

@@ -1,0 +1,33 @@
+// Locals of one type whose live ranges never overlap share one slot. The
+// first loop's iterator state is dead once the loop ends, so `product`, first
+// written after it, takes that slot. `total` is read after the second loop, so
+// it keeps its own.
+
+use { println, Stdout } from "core:cli";
+
+#[inline("never")]
+fn sum_then_product(n: i32) -> i32 {
+    let mut total = 0;
+    for let i of 0..<n {
+        total += i;
+    }
+    let mut product = 1;
+    for let j of 1..=n {
+        product *= j;
+    }
+    return total + product;
+}
+
+export fn run() with Stdout {
+    println(`${sum_then_product(builtin::black_box(5))}`);
+}
+
+__DATA__
+{
+    "stdout": "130\n",
+    "wir_expect:O2": [
+        "$sroa_$iter_0_start_{} = $sroa_$iter_0_start_{} * j;",
+        "return total + $sroa_$iter_0_start_{};"
+    ],
+    "wir_not_expect:O2": ["let product"]
+}

@@ -5,9 +5,8 @@
 // aliased like a reference. (WEP-2026-06-02.)
 //
 // `i32` needs no per-element helper, so the copy lowers to a fresh array plus
-// a bulk `array.copy` (`wir_build::calls::build_bulk_array_clone`) instead of
-// `WirInstr::ArrayClone`'s element-wise loop — never the bare (non-`_deep`)
-// `builtin::array_clone` shape, which the lowering no longer emits.
+// a bulk `array.copy` (`wir_build::calls::build_array_clone`) instead of the
+// element-wise `$array_clone_deep` loop.
 
 fn mutate_copy(mut a: Array<i32>) {
     // `a` is a by-value copy; mutating it must not touch the caller's array.

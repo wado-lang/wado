@@ -1,8 +1,9 @@
 //! Write-only local elimination for the locals `wir_build` synthesises, whose
 //! names do not exist at TIR for `optimize::elide_local` to see. A
 //! `LocalSet(x, v)` whose `x` is never read elsewhere loses its store: the whole
-//! statement when `v` is side-effect-free, else a bare `Drop(v)`. Runs to a
-//! fixed point, since eliding one write can strand another.
+//! statement when `v` is side-effect-free, else a bare `Drop(v)`, and a
+//! `LocalTee(x, v)` becomes `v`. Runs to a fixed point, since eliding one write
+//! can strand another.
 
 use crate::hashmap::IndexMap;
 use crate::wir::{WirInstr, WirPackage};
@@ -85,6 +86,17 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
             self.changed = true;
             return;
         }
+        // A tee of a local nothing reads is the value it stores. Unlike a
+        // set's, a tee's own value counts: what a read there sees flows out
+        // through the tee's result.
+        if let WirInstr::LocalTee { name, value } = instr
+            && !self.read_counts.contains_key(name.as_str())
+        {
+            *instr = std::mem::replace(value.as_mut(), WirInstr::Nop);
+            self.changed = true;
+            self.visit_instr(instr);
+            return;
+        }
         // `drop(side_effect_free_expr)` is dead — the value is discarded by
         // definition. Catches the statement-position `Expr(struct.new …)` /
         // `Expr(self.field)` shapes the TIR pass leaves alone, not knowing what
@@ -157,6 +169,64 @@ mod tests {
         );
         // The sink itself is write-only and goes.
         assert_matches!(body[1], WirInstr::Nop);
+    }
+
+    /// A tee of a local nothing else reads becomes the value it stores.
+    #[test]
+    fn unread_tee_becomes_its_value() {
+        let tee = WirInstr::LocalTee {
+            name: "t".to_string(),
+            value: Box::new(lget("x")),
+        };
+        let mut body = vec![
+            lset("y", tee),
+            WirInstr::Return {
+                value: Some(Box::new(lget("y"))),
+            },
+        ];
+        assert!(elide_write_only_locals_in_body(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
+        let WirInstr::LocalSet { value, .. } = &body[0] else {
+            panic!("y is read by the return and must survive");
+        };
+        assert_matches!(value.as_ref(), WirInstr::LocalGet { name, .. } if name == "x");
+    }
+
+    /// A tee's own value reading the local is a live read: the tee's result
+    /// carries what that read saw out to the consumer, iteration after
+    /// iteration in a loop.
+    #[test]
+    fn self_reading_tee_is_kept() {
+        let tee = WirInstr::LocalTee {
+            name: "i".to_string(),
+            value: Box::new(WirInstr::I32Add(
+                Box::new(lget("i")),
+                Box::new(WirInstr::I32Const(1)),
+            )),
+        };
+        let mut body = vec![WirInstr::Loop {
+            label: None,
+            body: vec![WirInstr::BrIf {
+                depth: 0,
+                condition: Box::new(WirInstr::I32Ne(
+                    Box::new(tee),
+                    Box::new(WirInstr::I32Const(3)),
+                )),
+            }],
+        }];
+        elide_write_only_locals_in_body(&mut body, &Nullability::new(&WirLocals::default()));
+        let WirInstr::Loop { body, .. } = &body[0] else {
+            panic!("expected the loop to survive");
+        };
+        let WirInstr::BrIf { condition, .. } = &body[0] else {
+            panic!("expected the br_if to survive");
+        };
+        let WirInstr::I32Ne(lhs, _) = condition.as_ref() else {
+            panic!("expected the comparison to survive");
+        };
+        assert_matches!(lhs.as_ref(), WirInstr::LocalTee { .. });
     }
 
     /// A write-only local buried in a value-position statement list (an

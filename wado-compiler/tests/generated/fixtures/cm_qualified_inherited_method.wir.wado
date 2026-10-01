@@ -34,8 +34,7 @@ fn "cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(self) with 
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:demo/EventTarget::tag"(builtin::f64_reinterpret_i64(self), $outptr);
     ptr_3 = builtin::load_i32($outptr);
-    len_4 = builtin::load_i32($outptr + 4);
-    arr_8 = builtin::array_new<u8>(len_4);
+    arr_8 = builtin::array_new<u8>(local.tee len_4(builtin::load_i32($outptr + 4)));
     i = 0;
     b0: block {
         l1: loop {
@@ -51,8 +50,7 @@ fn "cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(self) with 
 }
 
 fn "cm_qualified_inherited_method.wado/$cm_export__run"() {
-    let n: u64;
-    drop("cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(local.tee n(builtin::i64_reinterpret_f64(1))));
+    drop("cm_qualified_inherited_method.wado/$cm_binding__EventTarget_tag"(builtin::i64_reinterpret_f64(1)));
     "wasi/task-return"(0);
 }
 

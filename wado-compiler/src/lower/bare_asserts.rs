@@ -29,11 +29,7 @@ pub fn lower(flat: &FlatPackage, bare_asserts: bool) {
         bare_asserts,
         assert_failed: AssertFailed { module, name },
     };
-    for func_rc in &flat.functions {
-        if let Some(body) = func_rc.borrow_mut().body.as_mut() {
-            visitor.visit_block(body);
-        }
-    }
+    flat.visit_bodies_mut(&mut visitor);
 }
 
 /// The registered `core:rt` marker. A user function of the same name in

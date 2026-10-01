@@ -543,12 +543,7 @@ impl ClosureLowerer {
             func_sigs: &func_sigs,
             type_table: &mut type_table,
         };
-        for func_rc in &flat.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(body) = &mut func.body {
-                rewriter.visit_block(body);
-            }
-        }
+        flat.visit_bodies_mut(&mut rewriter);
     }
 
     /// Seed `local_to_closure` for every parameter declared `&$Closure_N` by

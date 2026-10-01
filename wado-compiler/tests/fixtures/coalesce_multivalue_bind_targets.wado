@@ -1,0 +1,17 @@
+// Regression test: a multi-value bind writes all its targets at once. Here
+// `u128::div_rem` binds the quotient and the remainder, and only the remainder
+// is read. Local coalescing once gave the dead quotient's slot to the
+// remainder, so the bind wrote both into one local and `%` returned the
+// quotient's half.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let r = builtin::black_box(i128::MIN) % builtin::black_box(-1 as i128);
+    println(`${r}`);
+}
+
+__DATA__
+{
+    "stdout": "0\n"
+}

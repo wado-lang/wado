@@ -6,22 +6,16 @@
 //! which [`CodegenFlags::parse`] reads into this struct. Each flag is a boolean,
 //! and a leading `no-` inverts it.
 
+use crate::OptLevel;
+
 /// Codegen feature flags toggled from the CLI via `-f <flag>`.
 ///
 /// Unlike a plain `#[derive(Default)]`, the default here is *not* uniformly
 /// `false`: each field's default encodes the compiler's current preferred
 /// codegen strategy. `-f <flag>` forces it on and `-f no-<flag>` forces it
 /// off, so an empty flag set reproduces [`CodegenFlags::default`].
-use crate::OptLevel;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodegenFlags {
-    /// Lower `builtin::array_copy` to the native Wasm `array.copy` instruction
-    /// (the default) instead of an open-coded element-wise loop. The loop was
-    /// once faster for short copies; since a wasmtime patch, the instruction
-    /// wins big on copy-heavy workloads (zlib decompress ~+41%,
-    /// syntax-highlight ~+10%) and is neutral elsewhere.
-    pub array_copy: bool,
-
     /// Emit `metadata.code.branch_hint` entries (the default);
     /// `-f no-branch-hinting` benchmarks without them, lowering
     /// `builtin::cold_path()` to a no-op and skipping trap-based inference. The
@@ -38,15 +32,14 @@ pub struct CodegenFlags {
 
     /// Emit native Wasm wide-arithmetic (`i64.mul_wide_u/s`, `i64.add128`,
     /// `i64.sub128`) — the default, best on wasmtime. `-f no-wide-arithmetic`
-    /// open-codes them as 32-bit-limb i64 sequences
-    /// (`codegen/emit/wide_arith_downlevel.rs`) for V8, which lacks the proposal.
+    /// calls their `core:rt` software forms instead (`lower::wide_arith`), for
+    /// V8, which lacks the proposal.
     pub wide_arithmetic: bool,
 }
 
 impl Default for CodegenFlags {
     fn default() -> Self {
         Self {
-            array_copy: true,
             branch_hinting: true,
             bare_asserts: false,
             wide_arithmetic: true,
@@ -68,24 +61,11 @@ impl CodegenFlags {
         }
     }
 
-    /// Parse raw `-f` flag strings into a [`CodegenFlags`], starting from the
-    /// [`for_opt_level`](Self::for_opt_level) defaults and applying each flag in
-    /// order.
-    ///
-    /// Flags follow the clang-style convention: `name` enables a flag and
-    /// `no-name` disables it (so `-f no-array-copy` overrides the on-by-default
-    /// `array_copy`, and a later flag wins over an earlier one). An
-    /// unrecognized flag yields `Err(flag)`, carrying the offending string so
-    /// the caller can surface a diagnostic.
-    /// Every flag [`Self::parse`] accepts, in help-text order. The single
-    /// source of truth for the CLI's `-f` help and [`Self::unknown_flag_message`],
+    /// Every flag [`Self::parse`] accepts, in help-text order. The CLI's `-f`
+    /// help is tested against it and [`Self::unknown_flag_message`] reads it,
     /// so a new flag cannot be added and left undiscoverable.
-    pub const SUPPORTED: &'static [&'static str] = &[
-        "array-copy",
-        "branch-hinting",
-        "bare-asserts",
-        "wide-arithmetic",
-    ];
+    pub const SUPPORTED: &'static [&'static str] =
+        &["branch-hinting", "bare-asserts", "wide-arithmetic"];
 
     /// The diagnostic for a flag [`Self::parse`] rejected.
     #[must_use]
@@ -101,6 +81,14 @@ impl CodegenFlags {
         )
     }
 
+    /// Parse raw `-f` flag strings into a [`CodegenFlags`], starting from the
+    /// [`for_opt_level`](Self::for_opt_level) defaults and applying each flag in
+    /// order.
+    ///
+    /// Flags follow the clang-style convention: `name` enables a flag and
+    /// `no-name` disables it, and a later flag wins over an earlier one. An
+    /// unrecognized flag yields `Err(flag)`, carrying the offending string so
+    /// the caller can surface a diagnostic.
     pub fn parse<I, S>(flags: I, opt_level: OptLevel) -> Result<Self, String>
     where
         I: IntoIterator<Item = S>,
@@ -114,7 +102,6 @@ impl CodegenFlags {
                 None => (flag, true),
             };
             match name {
-                "array-copy" => result.array_copy = enabled,
                 "branch-hinting" => result.branch_hinting = enabled,
                 "bare-asserts" => result.bare_asserts = enabled,
                 "wide-arithmetic" => result.wide_arithmetic = enabled,
@@ -159,9 +146,9 @@ mod tests {
     #[test]
     fn empty_flags_reproduce_the_defaults() {
         assert_eq!(parse(std::iter::empty()), Ok(CodegenFlags::default()));
-        // array.copy and branch hinting are on by default; bare-asserts off.
-        assert!(CodegenFlags::default().array_copy);
+        // Branch hinting and wide arithmetic are on by default; bare-asserts off.
         assert!(CodegenFlags::default().branch_hinting);
+        assert!(CodegenFlags::default().wide_arithmetic);
         assert!(!CodegenFlags::default().bare_asserts);
     }
 
@@ -172,8 +159,8 @@ mod tests {
         assert!(CodegenFlags::for_opt_level(OptLevel::Os).bare_asserts);
         assert!(!CodegenFlags::for_opt_level(OptLevel::O2).bare_asserts);
         assert!(!CodegenFlags::for_opt_level(OptLevel::O0).bare_asserts);
-        // The opt-level default still folds the array.copy / branch-hinting ons.
-        assert!(CodegenFlags::for_opt_level(OptLevel::Os).array_copy);
+        // The opt-level default still folds the branch-hinting on.
+        assert!(CodegenFlags::for_opt_level(OptLevel::Os).branch_hinting);
     }
 
     #[test]
@@ -193,22 +180,24 @@ mod tests {
         let flags = parse(["no-branch-hinting"]).unwrap();
         assert!(!flags.branch_hinting);
         // Other flags keep their defaults.
-        assert!(flags.array_copy);
-    }
-
-    #[test]
-    fn no_prefix_disables_an_on_by_default_flag() {
-        let flags = parse(["no-array-copy"]).unwrap();
-        assert!(!flags.array_copy);
+        assert!(flags.wide_arithmetic);
     }
 
     #[test]
     fn explicit_enable_still_works_and_last_wins() {
-        // `-f array-copy` is redundant with the default but remains valid.
-        assert!(parse(["array-copy"]).unwrap().array_copy);
+        // `-f branch-hinting` is redundant with the default but remains valid.
+        assert!(parse(["branch-hinting"]).unwrap().branch_hinting);
         // The last flag wins when both spellings appear.
-        assert!(!parse(["array-copy", "no-array-copy"]).unwrap().array_copy);
-        assert!(parse(["no-array-copy", "array-copy"]).unwrap().array_copy);
+        assert!(
+            !parse(["branch-hinting", "no-branch-hinting"])
+                .unwrap()
+                .branch_hinting
+        );
+        assert!(
+            parse(["no-branch-hinting", "branch-hinting"])
+                .unwrap()
+                .branch_hinting
+        );
     }
 
     #[test]

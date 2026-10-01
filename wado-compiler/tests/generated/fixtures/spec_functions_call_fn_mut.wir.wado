@@ -18,8 +18,7 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "spec_functions_call_fn_mut.wado/$cm_export__$test_0"() {
     let count: ref "core:prelude/types.wado//Box<i32>";
-    count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    count.value = 1;
+    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
     count.value = 2;
     count.value = 4;
     "wasi/task-return"(0);

@@ -100,13 +100,11 @@ impl TirRefVisitor for Collector<'_> {
         {
             self.out.insert(t);
         }
-        // `array_clone::<T>(arr)` lowers to a `WirInstr::ArrayClone`.
-        // When `T` is a value-typed struct, codegen emits a per-element
-        // `$value_copy$` call inside the clone loop so each
-        // destination element is a fresh struct rather than an aliased
-        // ref. The helper has to actually exist by then, so collect
-        // such element types into the worklist alongside direct
-        // `copy_value::<T>` callers.
+        // When `T` is value-typed, WIR build lowers `array_clone::<T>(arr)` to
+        // a loop calling `T`'s `$value_copy$` on each element, so each
+        // destination element is fresh rather than an aliased ref. The helper
+        // has to exist by then, so collect such element types into the
+        // worklist alongside direct `copy_value::<T>` callers.
         if let Some(t) = array_clone_element_type_arg(expr)
             && value_copy::needs_value_copy(t, self.type_table)
         {
@@ -675,9 +673,8 @@ fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
 /// `builtin::array_clone_prefix::<elem_type>(&arr, len)` — the intrinsic that
 /// deep-copies a raw GC array. `array_ty` is the `Array<elem_type>` type of
 /// `arr`; the call returns a fresh array of the same type, sized to `len` when
-/// given (the WIR side mirrors this as one `ArrayClone { len: Option }`).
-/// Codegen gives the clone a per-element `$value_copy$T` pass when `elem_type`
-/// is itself value-semantic (see `wir_build::calls::array_element_copy_func`).
+/// given. WIR build gives the clone a per-element `$value_copy$T` pass when
+/// `elem_type` is itself value-semantic (see `wir_build::calls::build_array_clone`).
 fn build_array_clone(
     arr: TirExpr,
     array_ty: TypeId,

@@ -14,6 +14,11 @@ impl<'a> Nullability<'a> {
         Self { locals }
     }
 
+    /// The declared locals this oracle reads.
+    pub(super) fn locals(&self) -> &'a WirLocals {
+        self.locals
+    }
+
     /// Whether `instr`'s result is a statically non-null reference.
     pub(super) fn is_nonnull(&self, instr: &WirInstr) -> bool {
         instr.is_nonnull_result()

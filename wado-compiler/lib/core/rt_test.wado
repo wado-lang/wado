@@ -1,0 +1,33 @@
+//! Tests for `core:rt`.
+
+use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft } from "core:rt";
+
+/// Operands at every carry, borrow and sign edge of a 32-bit limb.
+global EDGES: List<i64> = [
+    0, 1, -1, 2, -2, 0x7fff_ffff, 0x8000_0000, 0xffff_ffff, 0x1_0000_0000, 0x1234_5678_9abc_def0, i64::MAX, i64::MIN,
+    i64::MIN + 1,
+];
+
+test "the software wide multiplies match the native ones" {
+    for let a of EDGES {
+        for let b of EDGES {
+            assert i64_mul_wide_u_soft(a, b) == builtin::i64_mul_wide_u(a, b);
+            assert i64_mul_wide_s_soft(a, b) == builtin::i64_mul_wide_s(a, b);
+        }
+    }
+}
+
+test "the software 128-bit add and sub match the native ones" {
+    for let a_lo of EDGES {
+        for let b_lo of EDGES {
+            for let [a_hi, b_hi] of [
+                [0, 0],
+                [-1, 1],
+                [i64::MAX, i64::MIN],
+            ] as List<[i64, i64]> {
+                assert i64_add128_soft(a_lo, a_hi, b_lo, b_hi) == builtin::i64_add128(a_lo, a_hi, b_lo, b_hi);
+                assert i64_sub128_soft(a_lo, a_hi, b_lo, b_hi) == builtin::i64_sub128(a_lo, a_hi, b_lo, b_hi);
+            }
+        }
+    }
+}

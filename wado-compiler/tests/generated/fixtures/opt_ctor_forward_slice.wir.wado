@@ -64,20 +64,19 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/future-read:transmission-wasi/cli/types.wado#error-code from "wasi/future-read:transmission-wasi/cli/types.wado#error-code";
 
 fn "opt_ctor_forward_slice.wado/run"() with Stderr {
-    let subtask: i32;
     let packed: i64;
     let rx_6: i32;
     let tx_7: i32;
     let elements: ref Array<u8>;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    subtask = "opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream"(rx_6);
+    rx_6 = "opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream"(rx_6);
     elements = array.new_fixed<u8>(72, 101, 108, 108, 111);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         "core:rt/cm_stream_write_raw_all_u8"(tx_7, elements, 0, 5);
     });
     "wasi/stream-drop-writable"(tx_7);
-    drop("opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(subtask));
+    drop("opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(rx_6));
 }
 
 fn "opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream"(data) with Stderr {
@@ -93,16 +92,11 @@ fn "opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(
     let ptr: i32;
     let status_2: i32;
     let result: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
-    let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
-    let $edisc: i32;
-    let $eresult: "wasi:cli/types.wado//enum:ErrorCode";
     let ws: i32;
     let evt_ptr: i32;
     let status_13: i32;
     ptr = "mem/realloc"(0, 0, 1, 2);
-    status_2 = "wasi/future-read:transmission-wasi/cli/types.wado#error-code"(handle, ptr);
-    if status_2 == -1 {
+    if local.tee status_2("wasi/future-read:transmission-wasi/cli/types.wado#error-code"(handle, ptr)) == -1 {
         ws = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, ws);
         evt_ptr = "mem/realloc"(0, 0, 4, 8);
@@ -115,76 +109,61 @@ fn "opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(
     }
     result = ref.null none;
     if (status_2 & 15) == 0 {
-        $disc = builtin::load_u8(ptr);
-        $result_val = ref.null none;
-        if $disc == 0 {
-            $result_val = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
+        result = (if local.tee status_2(builtin::load_u8(ptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
+            struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
-            $edisc = builtin::load_u8(ptr + 1);
-            $eresult = 0;
-            if $edisc == 0 {
-                $eresult = 0;
-            } else if $edisc == 1 {
-                $eresult = 1;
+            status_2 = (if local.tee status_2(builtin::load_u8(ptr + 1)) == 0 -> "wasi:cli/types.wado//enum:ErrorCode" {
+                0;
+            } else if status_2 == 1 -> "wasi:cli/types.wado//enum:ErrorCode" {
+                1;
             } else {
-                $eresult = 2;
-            }
-            $result_val = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $eresult };
-        }
-        result = $result_val;
+                2;
+            });
+            struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: status_2 };
+        });
     }
     drop("mem/realloc"(ptr, 2, 1, 0));
     return result;
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let len_2: i32;
-    let ptr_3: i32;
-    let taken: i32;
     let ptr_13: i32;
     let ptr_15: i32;
     let count_16: i32;
-    let result: i32;
-    let ws: i32;
     let evt_ptr: i32;
     let status_23: i32;
     let i: i32;
-    let $sroa_written_count_39: i32;
-    let $sroa_written_result_40: "core:prelude/types.wado//enum:CopyResult";
-    len_2 = $mv$data$end - $mv$data$start;
-    if len_2 == 0 {
+    if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b7: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b7: block {
         l8: loop {
-            break_if b7 i >= len_2;
+            break_if b7 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l8;
         };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(len_2) << 32_i64));
-    taken = 0;
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    i = 0;
     block {
         l10: loop {
-            ptr_15 = ptr_3 + taken;
-            count_16 = len_2 - taken;
-            result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
-            if result == -1 {
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
+            ptr_15 = ptr_13 + i;
+            count_16 = $mv$data$end - i;
+            if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
+                $mv$data$start = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, $mv$data$start);
                 evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
+                drop("wasi/waitable-set-wait"($mv$data$start, evt_ptr));
                 status_23 = builtin::load_i32(evt_ptr + 4);
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(ws);
-                result = status_23;
+                "wasi/waitable-set-drop"($mv$data$start);
+                count_16 = status_23;
             }
-            $sroa_written_count_39 = result >>u 4;
-            $sroa_written_result_40 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_15 = count_16 >>u 4;
+            count_16 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
-                $match_scrut_0 = result & 15;
-                if $match_scrut_0 == 0 {
+                if local.tee $match_scrut_0(count_16 & 15) == 0 {
                     break $inline_cm_copy_result_8: 0;
                 } else if $match_scrut_0 == 1 {
                     break $inline_cm_copy_result_8: 1;
@@ -192,10 +171,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 }
                 break $inline_cm_copy_result_8: 2;
             };
-            taken = taken + $sroa_written_count_39;
-            if (($sroa_written_result_40 != 0) | ($sroa_written_count_39 <= 0)) | (taken >= len_2) {
-                drop("mem/realloc"(ptr_3, len_2, 1, 0));
-                return $sroa_written_result_40;
+            i = i + ptr_15;
+            if ((count_16 != 0) | (ptr_15 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
+                return count_16;
             }
             continue l10;
         };

@@ -52,16 +52,8 @@ fn single_assigned_locals(body: &[WirInstr]) -> IndexSet<String> {
 }
 
 fn count_assignments_in_instr(instr: &WirInstr, counts: &mut IndexMap<String, u32>) {
-    match instr {
-        WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
-            *counts.entry(name.clone()).or_insert(0) += 1;
-        }
-        WirInstr::MultiValueLocalBind { locals, .. } => {
-            for name in locals.iter().flatten() {
-                *counts.entry(name.clone()).or_insert(0) += 1;
-            }
-        }
-        _ => {}
+    for name in instr.local_writes() {
+        *counts.entry(name.to_string()).or_insert(0) += 1;
     }
     instr.for_each_child(&mut |child| count_assignments_in_instr(child, counts));
 }
@@ -483,16 +475,8 @@ impl<'a> FieldKnowledge<'a> {
 /// True if `instr`'s subtree contains a def (`LocalSet`/`LocalTee`/
 /// `MultiValueLocalBind`) of `local`.
 fn contains_def_of(instr: &WirInstr, local: &str) -> bool {
-    match instr {
-        WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } if name == local => {
-            return true;
-        }
-        WirInstr::MultiValueLocalBind { locals, .. }
-            if locals.iter().flatten().any(|n| n == local) =>
-        {
-            return true;
-        }
-        _ => {}
+    if instr.local_writes().any(|name| name == local) {
+        return true;
     }
     let mut found = false;
     instr.for_each_child(&mut |child| found = found || contains_def_of(child, local));
@@ -753,16 +737,11 @@ fn invalidate_effects_in_instr(
     for name in &escaped {
         known.invalidate_mutated_local(name);
     }
+    for name in instr.local_writes() {
+        known.invalidate_local(name);
+    }
 
     match instr {
-        WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
-            known.invalidate_local(name);
-        }
-        WirInstr::MultiValueLocalBind { locals, .. } => {
-            for name in locals.iter().flatten() {
-                known.invalidate_local(name);
-            }
-        }
         WirInstr::StructSet {
             expr, field_name, ..
         } => {

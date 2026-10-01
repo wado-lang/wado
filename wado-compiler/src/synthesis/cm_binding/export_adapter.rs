@@ -23,10 +23,10 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const, if_stmt,
-    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none,
-    option_some, param_local, return_stmt, split_packed_ptr_len, synth_span,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
+    cm_canonical_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
+    if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
+    param_local, return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::cm_free::{
@@ -1309,12 +1309,6 @@ fn lift_variant_from_flat_params(
     let total_flat = 1 + max_payload_flats;
 
     let result_local = alloc_local(next_local, locals, variant_type_id);
-    stmts.push(let_mut_stmt(
-        "$var_lift",
-        result_local,
-        variant_type_id,
-        null_expr(variant_type_id),
-    ));
 
     // Per-case payload AST surfaces, computed while the borrow is live.
     let case_payload_tys: Vec<Type> = {
@@ -1330,11 +1324,8 @@ fn lift_variant_from_flat_params(
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt("$var_disc", disc_local, TypeTable::I32, disc));
 
-    // Build the if/else chain from the last case backwards: the final case is
-    // the trailing `else`, earlier cases test `disc == i`.
-    let case_count = variant_decl.cases.len();
-    let mut current_else: Option<TirBlock> = None;
-    for (i, case) in variant_decl.cases.iter().enumerate().rev() {
+    let mut arms = Vec::with_capacity(variant_decl.cases.len());
+    for (i, case) in variant_decl.cases.iter().enumerate() {
         let payload_ty = &case_payload_tys[i];
         let mut case_stmts: Vec<TirStmt> = Vec::new();
         let payload = if payload_ty.is_unit() {
@@ -1366,38 +1357,25 @@ fn lift_variant_from_flat_params(
             );
             Some(Box::new(lifted))
         };
-        case_stmts.push(expr_stmt(assign(
-            local_ref(result_local, "$var_lift", variant_type_id),
-            TirExpr::new(
-                TirExprKind::VariantConstruct {
-                    variant_type: variant_type_id,
-                    case_index: case.index,
-                    case_name: case.name.clone(),
-                    payload,
-                },
-                variant_type_id,
-                synth_span(),
-            ),
+        case_stmts.push(expr_stmt(TirExpr::new(
+            TirExprKind::VariantConstruct {
+                variant_type: variant_type_id,
+                case_index: case.index,
+                case_name: case.name.clone(),
+                payload,
+            },
+            variant_type_id,
+            synth_span(),
         )));
-
-        if i == case_count - 1 {
-            current_else = Some(block(case_stmts));
-        } else {
-            let cond = binary(
-                TirBinaryOp::Eq,
-                local_ref(disc_local, "$var_disc", TypeTable::I32),
-                i32_const(case.index as i32),
-                TypeTable::BOOL,
-            );
-            current_else = Some(block(vec![if_stmt(cond, block(case_stmts), current_else)]));
-        }
-    }
-    if let Some(outer) = current_else {
-        for stmt in outer.stmts {
-            stmts.push(stmt);
-        }
+        arms.push((case.index as i32, block(case_stmts)));
     }
 
+    let value = case_chain(
+        || local_ref(disc_local, "$var_disc", TypeTable::I32),
+        arms,
+        variant_type_id,
+    );
+    stmts.push(let_stmt("$var_lift", result_local, variant_type_id, value));
     (
         local_ref(result_local, "$var_lift", variant_type_id),
         total_flat,

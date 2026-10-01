@@ -39,6 +39,15 @@ pub fn install_dev_stdlib() {
 #[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
 pub fn install_dev_stdlib() {}
 
+/// `path`, or `.` where it is empty, as the parent of a bare file name is:
+/// `canonicalize` and the manifest walk-up both reject `""`.
+fn non_empty(path: PathBuf) -> PathBuf {
+    if path.as_os_str().is_empty() {
+        return PathBuf::from(".");
+    }
+    path
+}
+
 #[derive(Debug)]
 pub struct FilesystemCompilerHost {
     base_path: PathBuf,
@@ -50,7 +59,7 @@ impl FilesystemCompilerHost {
     pub fn new(base_path: PathBuf) -> Self {
         install_dev_stdlib();
         Self {
-            base_path,
+            base_path: non_empty(base_path),
             diagnostics: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -63,7 +72,7 @@ impl FilesystemCompilerHost {
     #[must_use]
     pub fn rebased(&self, base_path: PathBuf) -> Self {
         Self {
-            base_path,
+            base_path: non_empty(base_path),
             diagnostics: Arc::clone(&self.diagnostics),
         }
     }
@@ -250,6 +259,15 @@ mod tests {
     use super::*;
     use crate::Engine;
     use crate::uri::Uri;
+
+    #[test]
+    fn an_empty_base_path_is_the_current_directory() {
+        // `Path::new("a.wado").parent()` is `""`, which `canonicalize` and the
+        // manifest walk-up both reject.
+        let host = FilesystemCompilerHost::new(PathBuf::new());
+        assert_eq!(host.base_path(), Path::new("."));
+        assert_eq!(host.rebased(PathBuf::new()).base_path(), Path::new("."));
+    }
 
     #[test]
     fn source_exists_answers_without_reading() {

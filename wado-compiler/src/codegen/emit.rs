@@ -19,22 +19,6 @@ use wasm_encoder::{
     RefType, StorageType, StructType, SubType, TypeSection, ValType,
 };
 
-/// Software lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
-mod wide_arith_downlevel;
-
-/// Scratch slot for the `-f no-array-copy` loop, keyed by the (dest, src) type
-/// pair so sites of the same shape share slots. The declaring walker and the
-/// emitter must spell these identically, so both come through here.
-fn array_copy_slot(role: &str, dest_type_idx: u32, src_type_idx: u32) -> String {
-    format!("$array_copy_{role}_{dest_type_idx}_{src_type_idx}")
-}
-
-/// Scratch slot for the `ArrayClone` loop, keyed by array type. As
-/// [`array_copy_slot`].
-fn array_clone_slot(role: &str, type_idx: u32) -> String {
-    format!("$copy_arr_{role}_{type_idx}")
-}
-
 /// Whether a packed storage type reads back signed (`Some(true)`), unsigned
 /// (`Some(false)`), or is not packed (`None`).
 fn packed_signedness(ty: &WirType) -> Option<bool> {
@@ -79,15 +63,6 @@ struct WirEmitter<'a> {
     current_function: String,
     /// Local name map for current function.
     current_locals: IndexMap<String, u32>,
-    /// Locals declared with ref types (need `ref.as_non_null` on `local.get`).
-    ref_locals: IndexSet<String>,
-    /// Names of scratch locals (used by `ArrayClone` / `ArrayCopy` emission)
-    /// that have already been collected for the current function. Lets the
-    /// pre-emission walker push each unique scratch name once even when the
-    /// same (dst, src) type pair appears in multiple `ArrayCopy` sites or
-    /// the same `type_id` appears in multiple `ArrayClone` sites — without
-    /// the de-dup, every visit grew the Wasm locals table.
-    scratch_local_names: IndexSet<String>,
     /// Next local index for current function.
     next_local: u32,
     /// Wasm type section counter.
@@ -116,8 +91,6 @@ impl<'a> WirEmitter<'a> {
             global_name_map: IndexMap::default(),
             current_function: String::new(),
             current_locals: IndexMap::default(),
-            ref_locals: IndexSet::default(),
-            scratch_local_names: IndexSet::default(),
             next_local: 0,
             next_type_idx: 0,
             variant_pre_assigned: IndexMap::default(),
@@ -779,8 +752,6 @@ impl<'a> WirEmitter<'a> {
         // Reset local tracking
         self.current_function.clone_from(&func.name.fq);
         self.current_locals.clear();
-        self.ref_locals.clear();
-        self.scratch_local_names.clear();
         self.next_local = 0;
 
         // Get function type info — check if it has a non-void return type
@@ -788,35 +759,21 @@ impl<'a> WirEmitter<'a> {
             .get_func_type(func.type_id.index())
             .is_some_and(|ft| !ft.results.is_empty());
 
-        // Pre-allocate parameter locals
-        for (i, name) in func.param_names.iter().enumerate() {
-            let idx: u32 = u32::try_from(i).unwrap();
-            self.current_locals.insert(name.clone(), idx);
-            // Also register $local_N alias for params, since TIR uses unified local indices
-            self.current_locals.insert(format!("$local_{i}"), idx);
-            self.next_local = idx + 1;
-        }
-
-        let mut local_types: Vec<(String, ValType)> = Vec::new();
-        for (name, ty) in func.locals.iter() {
-            self.push_declared_local(name, ty, &mut local_types);
-        }
-        if let Some(ref body) = func.body {
-            for instr in body {
-                self.collect_scratch_locals(instr, &mut local_types);
-            }
-        }
-
-        // Build locals array
-        let mut locals: Vec<(u32, ValType)> = Vec::new();
-        for (name, val_type) in &local_types {
-            let idx = self.next_local;
+        for name in &func.param_names {
+            self.current_locals.insert(name.clone(), self.next_local);
             self.next_local += 1;
-            self.current_locals.insert(name.clone(), idx);
-            locals.push((1, *val_type));
         }
 
-        let mut f = Function::new(locals);
+        let mut local_types: Vec<ValType> = Vec::new();
+        for (name, ty) in func.locals.iter() {
+            self.current_locals
+                .insert(name.to_string(), self.next_local);
+            self.next_local += 1;
+            local_types.push(self.wir_type_to_val_type(ty));
+        }
+
+        // Runs of one type share a declaration entry.
+        let mut f = Function::new_with_locals_types(local_types);
 
         // Emit body
         if let Some(ref body) = func.body {
@@ -836,101 +793,16 @@ impl<'a> WirEmitter<'a> {
         f
     }
 
-    /// Allocate one declared local. A non-null ref local is made nullable (Wasm
-    /// requires defaultable locals) and tracked in `ref_locals` so its
-    /// `local.get` gets a `ref.as_non_null`.
-    fn push_declared_local(
-        &mut self,
-        name: &str,
-        ty: &WirType,
-        locals: &mut Vec<(String, ValType)>,
-    ) {
-        if !self.scratch_local_names.insert(name.to_string()) {
-            return;
+    /// Emit a wide-arithmetic op, which pushes `[low, high]`.
+    fn emit_wide_op(&mut self, f: &mut Function, operands: &[&WirInstr], op: Instruction) {
+        assert!(
+            self.codegen_flags.wide_arithmetic,
+            "[WIR emit] `lower::wide_arith` leaves no wide op under -f no-wide-arithmetic"
+        );
+        for operand in operands {
+            self.emit_instr(f, operand);
         }
-        let mut val_type = self.wir_type_to_val_type(ty);
-        if let ValType::Ref(rt) = &mut val_type
-            && !rt.nullable
-        {
-            rt.nullable = true;
-            self.ref_locals.insert(name.to_string());
-        }
-        locals.push((name.to_string(), val_type));
-    }
-
-    /// Declare the scratch locals the emitter's inlined lowerings need but that
-    /// are not `DeclareLocal`s in the WIR: the `-f no-array-copy` `array.copy`
-    /// loop, every `ArrayClone` clone loop, and the `-f no-wide-arithmetic`
-    /// 128-bit software pool. Slot names are keyed per type / type-pair and
-    /// deduped through `scratch_local_names`, so sites sharing a shape share slots.
-    fn collect_scratch_locals(&mut self, instr: &WirInstr, locals: &mut Vec<(String, ValType)>) {
-        match instr {
-            WirInstr::ArrayCopy {
-                dest_type_id,
-                src_type_id,
-                ..
-            } if !self.codegen_flags.array_copy => {
-                let dst_ref = RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(self.resolve_type_index(dest_type_id.index())),
-                };
-                let src_ref = RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(self.resolve_type_index(src_type_id.index())),
-                };
-                let (dest, src) = (dest_type_id.index(), src_type_id.index());
-                if self
-                    .scratch_local_names
-                    .insert(array_copy_slot("dst", dest, src))
-                {
-                    for (role, ty) in [
-                        ("dst", ValType::Ref(dst_ref)),
-                        ("src", ValType::Ref(src_ref)),
-                        ("dst_off", ValType::I32),
-                        ("src_off", ValType::I32),
-                        ("len", ValType::I32),
-                        ("i", ValType::I32),
-                    ] {
-                        locals.push((array_copy_slot(role, dest, src), ty));
-                    }
-                }
-            }
-            WirInstr::ArrayClone { type_id, .. } => {
-                let arr = ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(self.resolve_type_index(type_id.index())),
-                });
-                let idx = type_id.index();
-                if self
-                    .scratch_local_names
-                    .insert(array_clone_slot("src", idx))
-                {
-                    let elem_val = self.array_element_val_type(idx).unwrap_or_else(|| {
-                        panic!("[WIR emit] ArrayClone on non-array WIR type {idx}")
-                    });
-                    for (role, ty) in [
-                        ("src", arr),
-                        ("dst", arr),
-                        ("len", ValType::I32),
-                        ("i", ValType::I32),
-                        ("elem", elem_val),
-                    ] {
-                        self.scratch_local_names.insert(array_clone_slot(role, idx));
-                        locals.push((array_clone_slot(role, idx), ty));
-                    }
-                }
-            }
-            WirInstr::I64MulWideU(..)
-            | WirInstr::I64MulWideS(..)
-            | WirInstr::I64Add128(..)
-            | WirInstr::I64Sub128(..)
-                if !self.codegen_flags.wide_arithmetic =>
-            {
-                self.declare_wide_arith_scratch(locals);
-            }
-            _ => {}
-        }
-        instr.for_each_child(&mut |child| self.collect_scratch_locals(child, locals));
+        f.instruction(&op);
     }
 
     /// Emit a single WIR instruction to the Wasm function.
@@ -939,16 +811,9 @@ impl<'a> WirEmitter<'a> {
             WirInstr::DeclareLocal { .. } => {
                 // Already handled in pre-allocation
             }
-            WirInstr::LocalGet { name, result_ty } => {
+            WirInstr::LocalGet { name, .. } => {
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalGet(idx));
-                // Ref-type locals are nullable in Wasm (for defaultability).
-                // Narrow to non-null when the WIR result type says non-null.
-                // The WIR optimizer relaxes result_ty to nullable for GC access
-                // operands (array.get, struct.get, etc.) where nullable is accepted.
-                if self.ref_locals.contains(name.as_str()) && result_ty.is_nonnull_ref() {
-                    f.instruction(&Instruction::RefAsNonNull);
-                }
             }
             WirInstr::LocalSet { name, value } => {
                 self.emit_instr(f, value);
@@ -959,9 +824,6 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, value);
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalTee(idx));
-                if self.ref_locals.contains(name.as_str()) {
-                    f.instruction(&Instruction::RefAsNonNull);
-                }
             }
             WirInstr::GlobalGet { name, result_ty } => {
                 let idx = self.resolve_global(&name.fq);
@@ -1714,17 +1576,7 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::RefNull(ht));
             }
             WirInstr::RefIsNull(o) => self.emit_unary(f, o, Instruction::RefIsNull),
-            WirInstr::RefAsNonNull(o) => {
-                // If inner is a LocalGet for a ref_local, that handler already
-                // emits ref.as_non_null — don't emit it again (would double-wrap).
-                if let WirInstr::LocalGet { name, .. } = o.as_ref()
-                    && self.ref_locals.contains(name.as_str())
-                {
-                    self.emit_instr(f, o);
-                    return;
-                }
-                self.emit_unary(f, o, Instruction::RefAsNonNull);
-            }
+            WirInstr::RefAsNonNull(o) => self.emit_unary(f, o, Instruction::RefAsNonNull),
             WirInstr::RefEq(l, r) => self.emit_binary(f, l, r, Instruction::RefEq),
 
             // Control Flow
@@ -2072,12 +1924,7 @@ impl<'a> WirEmitter<'a> {
                 src,
                 src_offset,
                 len,
-            } if self.codegen_flags.array_copy => {
-                // Native lowering (the default): `array.copy $dst $src` consumes
-                // `dst_ref, dst_offset, src_ref, src_offset, len` and accepts
-                // nullable refs, so unlike the loop below it needs no
-                // `ref.as_non_null`. The loop arm stays behind
-                // `-f no-array-copy` for re-measuring as wasmtime evolves.
+            } => {
                 let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
                 let src_wasm_idx = self.resolve_type_index(src_type_id.index());
                 self.emit_instr(f, dest);
@@ -2089,123 +1936,6 @@ impl<'a> WirEmitter<'a> {
                     array_type_index_dst: dst_wasm_idx,
                     array_type_index_src: src_wasm_idx,
                 });
-            }
-            WirInstr::ArrayCopy {
-                dest_type_id,
-                src_type_id,
-                dest,
-                dest_offset,
-                src,
-                src_offset,
-                len,
-            } => {
-                // Lower `array.copy` to an inline Wasm loop. This is the
-                // `-f no-array-copy` path, kept because wasmtime's `array.copy`
-                // runtime path was historically much slower than an open-coded
-                // loop for short copies (≲ a few hundred elements); open-coding
-                // also lets Cranelift inline the bounds checks and the
-                // per-element get/set. The native instruction (the arm above,
-                // now the default) is selected when `array_copy` is set.
-                let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
-                let (dest_ty, src_ty) = (dest_type_id.index(), src_type_id.index());
-                let slot = |role: &str| self.resolve_local(&array_copy_slot(role, dest_ty, src_ty));
-                let dst_local = slot("dst");
-                let src_local = slot("src");
-                let dst_off_local = slot("dst_off");
-                let src_off_local = slot("src_off");
-                let len_local = slot("len");
-                let i_local = slot("i");
-
-                // Stash the five argument expressions into locals. The dst/src
-                // ref slots are declared non-null (init-tracking), so coerce
-                // the producing expression to non-null before storing — the
-                // upstream `array.copy` accepts nullable refs and the WIR
-                // doesn't always narrow them at the call site.
-                self.emit_instr(f, dest);
-                f.instruction(&Instruction::RefAsNonNull);
-                f.instruction(&Instruction::LocalSet(dst_local));
-                self.emit_instr(f, dest_offset);
-                f.instruction(&Instruction::LocalSet(dst_off_local));
-                self.emit_instr(f, src);
-                f.instruction(&Instruction::RefAsNonNull);
-                f.instruction(&Instruction::LocalSet(src_local));
-                self.emit_instr(f, src_offset);
-                f.instruction(&Instruction::LocalSet(src_off_local));
-                self.emit_instr(f, len);
-                f.instruction(&Instruction::LocalSet(len_local));
-
-                // Match `array.copy` semantics for overlapping copies: when the
-                // destination offset is greater than the source offset, copy
-                // from high index to low so we don't overwrite still-unread
-                // source bytes. (Same-array shifts in fpfmt rely on this.)
-                f.instruction(&Instruction::LocalGet(dst_off_local));
-                f.instruction(&Instruction::LocalGet(src_off_local));
-                f.instruction(&Instruction::I32GtS);
-                f.instruction(&Instruction::If(BlockType::Empty));
-
-                // Backward branch: i = len; while (i > 0) { i -= 1; dst[..+i] = src[..+i]; }
-                f.instruction(&Instruction::LocalGet(len_local));
-                f.instruction(&Instruction::LocalSet(i_local));
-                f.instruction(&Instruction::Block(BlockType::Empty));
-                f.instruction(&Instruction::Loop(BlockType::Empty));
-                f.instruction(&Instruction::LocalGet(i_local));
-                f.instruction(&Instruction::I32Const(0));
-                f.instruction(&Instruction::I32LeS);
-                f.instruction(&Instruction::BrIf(1));
-                // i -= 1
-                f.instruction(&Instruction::LocalGet(i_local));
-                f.instruction(&Instruction::I32Const(1));
-                f.instruction(&Instruction::I32Sub);
-                f.instruction(&Instruction::LocalSet(i_local));
-                // dst, dst_off + i
-                f.instruction(&Instruction::LocalGet(dst_local));
-                f.instruction(&Instruction::LocalGet(dst_off_local));
-                f.instruction(&Instruction::LocalGet(i_local));
-                f.instruction(&Instruction::I32Add);
-                // src.get at src_off + i
-                f.instruction(&Instruction::LocalGet(src_local));
-                f.instruction(&Instruction::LocalGet(src_off_local));
-                f.instruction(&Instruction::LocalGet(i_local));
-                f.instruction(&Instruction::I32Add);
-                self.emit_array_get(f, src_type_id.index());
-                f.instruction(&Instruction::ArraySet(dst_wasm_idx));
-                f.instruction(&Instruction::Br(0));
-                f.instruction(&Instruction::End);
-                f.instruction(&Instruction::End);
-
-                f.instruction(&Instruction::Else);
-
-                // Forward branch: i = 0; while (i < len) { dst[..+i] = src[..+i]; i += 1; }
-                f.instruction(&Instruction::I32Const(0));
-                f.instruction(&Instruction::LocalSet(i_local));
-                f.instruction(&Instruction::Block(BlockType::Empty));
-                f.instruction(&Instruction::Loop(BlockType::Empty));
-                f.instruction(&Instruction::LocalGet(i_local));
-                f.instruction(&Instruction::LocalGet(len_local));
-                f.instruction(&Instruction::I32GeS);
-                f.instruction(&Instruction::BrIf(1));
-                // dst, dst_off + i
-                f.instruction(&Instruction::LocalGet(dst_local));
-                f.instruction(&Instruction::LocalGet(dst_off_local));
-                f.instruction(&Instruction::LocalGet(i_local));
-                f.instruction(&Instruction::I32Add);
-                // src.get at src_off + i
-                f.instruction(&Instruction::LocalGet(src_local));
-                f.instruction(&Instruction::LocalGet(src_off_local));
-                f.instruction(&Instruction::LocalGet(i_local));
-                f.instruction(&Instruction::I32Add);
-                self.emit_array_get(f, src_type_id.index());
-                f.instruction(&Instruction::ArraySet(dst_wasm_idx));
-                // i += 1
-                f.instruction(&Instruction::LocalGet(i_local));
-                f.instruction(&Instruction::I32Const(1));
-                f.instruction(&Instruction::I32Add);
-                f.instruction(&Instruction::LocalSet(i_local));
-                f.instruction(&Instruction::Br(0));
-                f.instruction(&Instruction::End);
-                f.instruction(&Instruction::End);
-
-                f.instruction(&Instruction::End);
             }
             WirInstr::ArrayFill {
                 type_id,
@@ -2220,83 +1950,6 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, len);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArrayFill(wasm_idx));
-            }
-            WirInstr::ArrayClone {
-                type_id,
-                src,
-                element_copy,
-                len,
-            } => {
-                let arr_wasm_idx = self.resolve_type_index(type_id.index());
-                let slot =
-                    |role: &str| self.resolve_local(&array_clone_slot(role, type_id.index()));
-                let src_local = slot("src");
-                let dst_local = slot("dst");
-                let len_local = slot("len");
-                let loop_idx_local = slot("i");
-                let elem_local = slot("elem");
-                // Keep `src` on the operand stack while `len` is emitted: the
-                // scratch locals are shared per `type_id`, so a nested clone of
-                // the same array type inside the `len` subtree would clobber
-                // `src_local` if it were set before `len` runs.
-                self.emit_instr(f, src);
-                if let Some(len) = len {
-                    self.emit_instr(f, len);
-                    f.instruction(&Instruction::LocalSet(len_local));
-                    f.instruction(&Instruction::LocalSet(src_local));
-                } else {
-                    f.instruction(&Instruction::LocalTee(src_local));
-                    f.instruction(&Instruction::ArrayLen);
-                    f.instruction(&Instruction::LocalSet(len_local));
-                }
-                f.instruction(&Instruction::LocalGet(len_local));
-                f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
-                f.instruction(&Instruction::LocalSet(dst_local));
-                f.instruction(&Instruction::I32Const(0));
-                f.instruction(&Instruction::LocalSet(loop_idx_local));
-                f.instruction(&Instruction::Block(BlockType::Empty));
-                f.instruction(&Instruction::Loop(BlockType::Empty));
-                f.instruction(&Instruction::LocalGet(loop_idx_local));
-                f.instruction(&Instruction::LocalGet(len_local));
-                f.instruction(&Instruction::I32GeS);
-                f.instruction(&Instruction::BrIf(1));
-                f.instruction(&Instruction::LocalGet(dst_local));
-                f.instruction(&Instruction::LocalGet(loop_idx_local));
-                f.instruction(&Instruction::LocalGet(src_local));
-                f.instruction(&Instruction::LocalGet(loop_idx_local));
-                self.emit_array_get(f, type_id.index());
-                let func_idx = self.resolve_func_index(element_copy.index());
-                // Wasm GC `array.get` produces `(ref null T)`; the
-                // synthesized `$value_copy$` expects a
-                // non-null `(ref T)`. `List<T>::repr` is sized to
-                // capacity (≥ `used`), so the slots beyond `used`
-                // hold `array.new_default`'s null. Branch on
-                // null and short-circuit those slots — preserving
-                // the null in the destination — instead of
-                // unconditionally `ref.as_non_null` which would
-                // trap on every empty trailing slot.
-                let elem_val = self
-                    .array_element_val_type(type_id.index())
-                    .expect("collect_scratch_locals already resolved the element type");
-                f.instruction(&Instruction::LocalSet(elem_local));
-                f.instruction(&Instruction::LocalGet(elem_local));
-                f.instruction(&Instruction::RefIsNull);
-                f.instruction(&Instruction::If(BlockType::Result(elem_val)));
-                f.instruction(&Instruction::LocalGet(elem_local));
-                f.instruction(&Instruction::Else);
-                f.instruction(&Instruction::LocalGet(elem_local));
-                f.instruction(&Instruction::RefAsNonNull);
-                f.instruction(&Instruction::Call(func_idx));
-                f.instruction(&Instruction::End);
-                f.instruction(&Instruction::ArraySet(arr_wasm_idx));
-                f.instruction(&Instruction::LocalGet(loop_idx_local));
-                f.instruction(&Instruction::I32Const(1));
-                f.instruction(&Instruction::I32Add);
-                f.instruction(&Instruction::LocalSet(loop_idx_local));
-                f.instruction(&Instruction::Br(0));
-                f.instruction(&Instruction::End);
-                f.instruction(&Instruction::End);
-                f.instruction(&Instruction::LocalGet(dst_local));
             }
 
             // GC: Reference (casts, i31, extern)
@@ -2350,47 +2003,17 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-            // 128-bit ops push [low, high]; `-f no-wide-arithmetic` open-codes
-            // them as plain i64 for V8 (see wide_arith_downlevel.rs).
             WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi) => {
-                if self.codegen_flags.wide_arithmetic {
-                    self.emit_instr(f, a_lo);
-                    self.emit_instr(f, a_hi);
-                    self.emit_instr(f, b_lo);
-                    self.emit_instr(f, b_hi);
-                    f.instruction(&Instruction::I64Add128);
-                } else {
-                    self.emit_add_sub_128_soft(f, a_lo, a_hi, b_lo, b_hi, false);
-                }
+                self.emit_wide_op(f, &[a_lo, a_hi, b_lo, b_hi], Instruction::I64Add128);
             }
             WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi) => {
-                if self.codegen_flags.wide_arithmetic {
-                    self.emit_instr(f, a_lo);
-                    self.emit_instr(f, a_hi);
-                    self.emit_instr(f, b_lo);
-                    self.emit_instr(f, b_hi);
-                    f.instruction(&Instruction::I64Sub128);
-                } else {
-                    self.emit_add_sub_128_soft(f, a_lo, a_hi, b_lo, b_hi, true);
-                }
+                self.emit_wide_op(f, &[a_lo, a_hi, b_lo, b_hi], Instruction::I64Sub128);
             }
             WirInstr::I64MulWideU(a, b) => {
-                if self.codegen_flags.wide_arithmetic {
-                    self.emit_instr(f, a);
-                    self.emit_instr(f, b);
-                    f.instruction(&Instruction::I64MulWideU);
-                } else {
-                    self.emit_mul_wide_soft(f, a, b, false);
-                }
+                self.emit_wide_op(f, &[a, b], Instruction::I64MulWideU);
             }
             WirInstr::I64MulWideS(a, b) => {
-                if self.codegen_flags.wide_arithmetic {
-                    self.emit_instr(f, a);
-                    self.emit_instr(f, b);
-                    f.instruction(&Instruction::I64MulWideS);
-                } else {
-                    self.emit_mul_wide_soft(f, a, b, true);
-                }
+                self.emit_wide_op(f, &[a, b], Instruction::I64MulWideS);
             }
             // Multi-value local bind (tuple elision): emit the multi-value instr,
             // then local.set for each target in reverse order (top of stack first).
@@ -2653,23 +2276,6 @@ impl<'a> WirEmitter<'a> {
                      the function while leaving a reference to it behind"
                 )
             })
-    }
-
-    /// Look up the (nullable) element `ValType` of a WIR array type by
-    /// its WIR index. Returns `None` for non-array types or unsupported
-    /// element shapes. Used by `WirInstr::ArrayClone`'s
-    /// `element_copy_type` plumbing to size the per-element scratch
-    /// local that holds the `(ref null T)` mid-loop value.
-    fn array_element_val_type(&self, wir_type_idx: u32) -> Option<ValType> {
-        let idx = wir_type_idx as usize;
-        if idx >= self.wir.types.len() {
-            return None;
-        }
-        if let WirTypeDef::Array(a) = &self.wir.types[idx] {
-            let nullable = a.element_type.clone().as_nullable();
-            return Some(self.wir_type_to_val_type(&nullable));
-        }
-        None
     }
 
     fn get_func_type(&self, wir_type_idx: u32) -> Option<&WirFuncType> {
