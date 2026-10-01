@@ -442,6 +442,12 @@ An IEEE predicate is written with `is_nan()`:
 `f64::min`, `Iterator::min`, and every `min` over a `T: Ord`. NaN is greatest,
 so `min(1.0, NaN)` is `1.0` and `max(1.0, NaN)` is NaN.
 
+Of two `Equal` arguments, on every type, `min` returns the first and `max` the
+second. `Iterator::min` returns the first of its least elements and
+`Iterator::max` the last of its greatest, so `min(a, b)` is `[a, b]`'s `min()`.
+`[min(a, b), max(a, b)]` is then `[a, b]` sorted stably: `min(-0.0, 0.0)` is
+`-0.0` and `max(-0.0, 0.0)` is `0.0`.
+
 `f32::minimum`, `f32::maximum`, `f64::minimum` and `f64::maximum` are IEEE
 754-2019 `minimum` and `maximum`: a NaN argument gives NaN on both, and `-0.0`
 is less than `0.0`.

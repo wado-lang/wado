@@ -169,6 +169,13 @@ lower to Wasm's instructions; Rust's `f64::minimum` uses the same names.
 `f64::min` therefore costs a comparison and a select instead of one
 instruction.
 
+Of two `Equal` arguments, `min` returns the first and `max` the second, as
+Stepanov argued and Rust's `Ord::min` and `max` do. `Iterator::min` and `max`
+already break ties that way, so two arguments answer as a two-element list
+does, and the pair never returns one argument twice. The rule costs nothing:
+either tie-break is a `<=` with the operands in some order, and only which
+operand carries the NaN test differs.
+
 `clamp` keeps a NaN `x` as NaN. The order alone would give `high`, since NaN is
 greatest, and that hides a NaN in exactly the place a range check is meant to
 catch bad input. A clamp that returns its input's NaN is what IEEE code expects.
@@ -242,9 +249,6 @@ Where the optimizer proves an operand is not a NaN, the test goes.
   float hint, a chain, an operand that performs an effect, and `allow`.
 
 ## Known gaps
-
-Which argument `min` and `max` return when the two are `Equal` is not stated.
-It is observable: `-0.0` and `0.0` are `Equal`, and their signs differ.
 
 Float literal patterns are rejected, though one equality would give them a
 meaning.
