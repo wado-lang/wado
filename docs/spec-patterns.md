@@ -218,6 +218,14 @@ The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
 type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
 `Option` constant matches at the top of an arm or nested in another pattern.
 
+A constant whose type is a float, or holds one in a field, element or payload at
+any depth, is not a pattern, as a float literal is not. So `f64::INFINITY` and a
+`global` holding `0.1` are errors here, and so is a struct constant with an
+`f64` field.
+
+> Not yet implemented: a float constant pattern is accepted and matches by
+> `==`.
+
 Only a refutable pattern reads a bare name as a constant: a `match` arm,
 `if let`, `while let`, and `let ... else`. So `let limit = v else { … }` runs
 the `else` block unless `v == limit`. A local, a parameter, or a closure capture

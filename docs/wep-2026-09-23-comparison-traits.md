@@ -190,6 +190,12 @@ show: `0.1 + 0.2` is not `0.3`, and an arm `0.3 =>` would miss it. A NaN is the
 smaller problem. Rust admits float literal patterns, matches them by `==`, and
 since 1.77 rejects a NaN constant in one (rust-lang/rust#41620).
 
+A constant reaches the same rounding: a `global` holding `0.1` is the literal
+under another name. So a constant whose type is or holds a float is no pattern
+either, at the top of an arm or nested, and `f64::INFINITY` with it, though it
+does not round. One rule for every float constant reads more simply than an
+exception for the ones that are exact.
+
 A [range pattern](./spec-patterns.md#range-patterns) takes a float, as Rust's
 does. A range is `low <= x` and `x < high` (or `x <= high`), the comparisons an
 `if` chain would write, so rounding moves only a value on a bound, as it does
@@ -271,10 +277,6 @@ Where the optimizer proves an operand is not a NaN, the test goes.
   float hint, a chain, an operand that performs an effect, and `allow`.
 - [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
   NaN bound, equal bounds, and a `match` that lacks `_`.
-
-## Known gaps
-
-A float constant pattern is accepted and matches by `==`: `f64::INFINITY`, a
-`global` holding `0.1`, or a struct, tuple or `Option` constant holding a float.
-The rounding that keeps a float literal out of patterns reaches one through a
-constant.
+- [ ] Reject a constant pattern whose type is or holds a float, with fixtures
+  for `f64::INFINITY`, a `global` float, and a nested struct constant holding
+  one.
