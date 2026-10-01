@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790868559378,
+  "lastUpdate": 1790889124546,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62645,6 +62645,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 281108,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "71cde1057735fbdb6c4e7b83d3921dd02eccaaa3",
+          "message": "Merge pull request #2241 from wado-lang/treemap-redesign\n\nfeat(collections): seeded HashMap and HashSet, sharing entries with a B-tree TreeMap",
+          "timestamp": "2026-10-02T05:41:07+09:00",
+          "tree_id": "bd037dcbd65c564e30630daf4465ef652202d859",
+          "url": "https://github.com/wado-lang/wado/commit/71cde1057735fbdb6c4e7b83d3921dd02eccaaa3"
+        },
+        "date": 1790889123731,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20682,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281106,
             "unit": "bytes"
           }
         ]
