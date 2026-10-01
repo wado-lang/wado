@@ -1,97 +1,188 @@
-# WEP: The Operator Order and the Total Order
+# WEP: One Order per Type
 
 ## Context
 
-### Wado's problem
+### Two relations compete for the operators
 
-`Ord` does two jobs. It is what `sort`, `TreeMap` and every `T: Ord` bound read,
-and it is what `<`, `<=`, `>` and `>=` mean for a type with no Wasm instruction
-to lower to. For every type but a float those are the same order, so one trait
-carrying both went unnoticed.
+A float can be compared two ways. IEEE 754's comparisons call a NaN unordered
+against everything, itself included, and call `-0.0` and `0.0` one value. A
+total order gives every pair an answer, which is what `sort`, an ordered map
+and a `T: Ord` bound need. Every language decides which of the two `==` and `<`
+mean, and how a program reaches the other.
 
-A float separates them, and the return type is what forces it. `cmp` answers
-`Ordering`, which has three cases; an IEEE comparison has four answers, the
-fourth being that there is none. So `cmp` cannot express IEEE, and as long as it
-answers a bare `Ordering` it must be the total order — which then disagrees with
-`<` on a NaN and on the two zeroes.
+### What Rust's users wish it had done
 
-The operators are IEEE on every float today, and `Ord` is the total order. What
-is left is that one name covers both jobs, so which one a call reads is not
-visible where it is written:
+Rust keeps the operators IEEE and makes floats implement only `PartialEq` and
+`PartialOrd`. [Research: Float Comparison](./research-float-comparison.md)
+collects what its users say about the result:
 
-```wado
-fn max<T: Ord>(a: T, b: T) -> T { if a > b { return a; } return b; }
-```
+- `vec.sort()` does not compile on a `Vec<f64>`, and the idiom taught in its
+  place panics on a NaN.
+- One float field takes `Eq`, `Ord` and `Hash` from a whole struct, so it cannot
+  key a map.
+- The names read backwards: `PartialEq` supplies `==`, and the plain `Eq` only
+  states a law.
+- The law that `Eq`, `PartialEq`, `Ord` and `PartialOrd` agree is checked by
+  nothing. Rust 1.81's sorts began to panic on code where they did not.
 
-At `T = f32` that `>` has no instruction to reach, so it reads `cmp` and gives
-the total order. The same expression written at `f32` gives IEEE. A generic body
-and a concrete body disagree about the same operator on the same type, and
-nothing in either source says which order is in play.
+Wado will not copy the `Partial` split. That leaves the question of which
+relation the operators read.
 
-### Rust's answer, and what its users say about it
+### Two relations on one type need a rule for every reader
 
-Rust splits the two, and puts floats on the partial side only: `f64` implements
-`PartialOrd` but not `Ord`. Three complaints follow it, and all three are
-long-standing.
+The languages that keep IEEE operators and add a total order beside them
+(C++20, Java, Julia, Go) all need a rule for which reader reads which relation.
+`sort` reads one and `<` the other. Julia's `Set` finds a NaN and its arrays do
+not. A Go map stores a NaN key that no lookup reaches again. A struct's derived
+`==` and its derived `cmp` disagree whenever a field holds a float.
 
-`vec.sort()` does not compile on a `Vec<f64>`. The workaround taught everywhere
-is `sort_by(|a, b| a.partial_cmp(b).unwrap())`, which panics on a NaN; the
-correct `total_cmp` arrived years later and is still the less familiar of the
-two.
+Moving the split into the type system does not remove it. Swift's 2017
+"Comparison Reform" pitch made `==` total in a generic body and IEEE at a
+concrete float. It was not adopted, because the same expression on the same
+values would answer differently depending on where it was written. Kotlin
+ships that split and documents it as a caveat.
 
-One float field disqualifies a whole struct. It cannot derive `Eq` or `Ord`, so
-it cannot be a `BTreeMap` key or a `HashSet` member, however unrelated the rest
-of its fields are to the comparison.
+### The reason NaN is unequal to itself is gone
 
-The names read backwards. `Eq` carries no methods and means "equality here is an
-equivalence relation", while `PartialEq` is the one that supplies `==`. A reader
-expects the plain name to be the ordinary one.
+IEEE made `NaN != NaN` so that `x != x` could detect a NaN in languages that had
+no `isnan`. Wado has `is_nan()`.
 
-Wado does not have the first two. A float implements `Ord`, so `List<f32>`
-sorts and a struct holding one is a `TreeMap` key. Keeping that is not in
-question here.
+### NaN bits are not a value
 
-[Research: Float Comparison](./research-float-comparison.md) collects the
-rest of what Rust's users wish it had done, and what other languages chose.
+Wasm leaves the sign of an arithmetic NaN to the host, and its payload too when
+an input is not canonical. On x86_64 `0.0 / 0.0` is a negative NaN; on AArch64
+it is positive. An order that reads a NaN's bits, as IEEE 754 `totalOrder` and
+C++20's `std::strong_order` do, sorts the same program's NaNs differently on two
+machines.
 
 ## Decision
 
-The comparison operators are IEEE on every float, and `Ord` is the total order.
-Both are implemented.
+### One equality and one order
 
-Where a type's two orders differ, the operators read `OperatorOrd` — four
-`bool` methods, `internal` to `core:prelude`, written for `f16` and `bf16`,
-which are the only types with no instruction and two orders to choose between.
-`f32` and `f64` reach the same answers through their instructions.
+Every type has one equality and one order, and the operators read them:
 
-How the split should be named in the public API is not decided. `OperatorOrd`
-is a private stopgap and its name forecloses nothing.
+- `==` and `!=` read `Eq::eq`.
+- `<`, `<=`, `>` and `>=` read `Ord::cmp`.
+
+No type gives an operator a meaning of its own, floats included. A comparison
+in a body generic over `T: Ord` means what it means at the concrete type.
+
+Where a type implements both, `a == b` holds exactly when `a.cmp(&b)` is
+`Equal`. Derived impls hold this by construction, so a struct with a float field
+agrees with itself.
+
+The traits keep the names `Eq` and `Ord`. Nothing is `Partial`, and `Ordering`
+keeps its three cases.
+
+### The float order
+
+`f16`, `bf16`, `f32` and `f64` share one order:
+
+- Every NaN is one value. It equals every NaN, whatever its sign and payload,
+  and is greater than every other value, `+Inf` included.
+- `-0.0` equals `0.0`.
+- Any other two values compare as IEEE 754 compares them.
+
+So the line runs `-Inf < … < -1 < 0 < 1 < … < +Inf < NaN`, and `-0.0` stands
+where `0.0` does.
+
+`Equal` therefore never depends on a NaN's bits, which Wasm does not fix. The
+two zeroes are equal because ordinary arithmetic produces `-0.0`
+(`-1.0 * 0.0`, rounding `-0.3`), and `x == 0.0` must hold for it.
+
+NaN goes last rather than first, as in Java, Kotlin, Julia and `ordered-float`.
+With NaN greatest, `x < c` and `x <= c` are false for a NaN `x`, as IEEE says.
+So a guard against an upper bound, or a search for a minimum, skips a NaN
+exactly as it did under IEEE. A search for a maximum finds the NaN, as Wasm's
+`f64.max` does.
+
+### Where the answers leave IEEE
+
+They differ only when an operand is a NaN:
+
+| Expression            | IEEE  | Wado  |
+| --------------------- | ----- | ----- |
+| `NaN == NaN`          | false | true  |
+| `NaN < x`, `NaN <= x` | false | false |
+| `x < NaN`, `x <= NaN` | false | true  |
+| `NaN > x`, `NaN >= x` | false | true  |
+| `x > NaN`, `x >= NaN` | false | false |
+
+Here `x` is not a NaN.
+
+The comparisons now obey the laws of an order. `!(a < b)` is `a >= b`, exactly
+one of `a < b`, `a == b` and `a > b` holds, and `x == x` holds for every `x`.
+`x != x` is always false, so a NaN is tested with `is_nan()`.
+
+Each IEEE predicate is still one expression:
+
+| IEEE predicate | Written in Wado          |
+| -------------- | ------------------------ |
+| `a == b`       | `a == b && !a.is_nan()`  |
+| `a != b`       | `a != b \|\| a.is_nan()` |
+| `a < b`        | `a < b && !b.is_nan()`   |
+| `a <= b`       | `a <= b && !b.is_nan()`  |
+| `a > b`        | `a > b && !a.is_nan()`   |
+| `a >= b`       | `a >= b && !a.is_nan()`  |
+
+### What follows
+
+- `sort` puts every NaN last. The two zeroes are `Equal`, so a stable sort keeps
+  them in input order.
+- A `TreeMap<f64, V>` holds one NaN key and one zero key.
+- `List::contains`, a `TreeMap` lookup and a struct's derived `==` all reach
+  the same answer, since there is one equality to reach.
+- A SIMD vector is untouched. Its `==` compares bits, and its lane comparisons
+  are IEEE intrinsics called by name.
+
+### Cost
+
+A comparison against a constant that is not a NaN costs one IEEE instruction.
+`x < c`, `x <= c`, `x == c` and `x != c` are IEEE's answers already. `x > c` is
+`!(x <= c)`, and `x >= c` is `!(x < c)`.
+
+Between two variables the IEEE instruction is joined with NaN tests, with no
+branch:
+
+- `a < b` is IEEE `a < b`, or `b` is a NaN and `a` is not.
+- `a == b` is IEEE `a == b`, or both are NaNs.
+
+Where the optimizer proves an operand is not a NaN, the test goes.
+
+### Rejected
+
+- IEEE operators beside a separate total order, as C++20, Java, Julia and Go
+  do. It keeps two relations on one type, and needs the rule for every reader
+  described above.
+- A generic `<` that reads the total order while a concrete one is IEEE. This
+  is the split Swift declined and Kotlin documents as a caveat.
+- IEEE 754 `totalOrder` as the order. It reads a NaN's bits, which Wasm leaves
+  to the host. It also orders `-0.0 < 0.0`, and with the operators reading it,
+  `x == 0.0` would be false for a `-0.0` that ordinary arithmetic produced.
+- NaN least, as Go and the Haskell proposal chose. A guard `x <= limit` would
+  then pass a NaN, where IEEE rejects it.
 
 ## Roadmap
 
-Nothing committed. The problem is recorded; the shape of the answer is open.
+- [ ] Implement the float `Eq` and `Ord` impls and the operator lowering for
+  all four float types, and remove `OperatorOrd`.
+- [ ] Rewrite the fixtures that pin today's answers (`float_total_order.wado`,
+  `half_ieee_compare.wado`) to pin these.
+- [ ] Measure the cost on comparison-heavy code, sorting and Loam's kernels
+  among it, and record it here.
 
 ## Known gaps
 
-One name covers both orders, so a `T: Ord` bound does not say which its body
-reads, and `max<T: Ord>` above answers a NaN differently from the same
-expression at a concrete float.
+Nothing checks the law between `Eq` and `Ord` on a hand-written pair, so a user
+type can still make `==` and `cmp` disagree.
 
-`min` and `max` take `T: Ord`, and each caller means one order or the other.
-Which they should take is unsettled. Already `f64::max(1.0, NaN)` is NaN, while
-`Iterator::max` over the same two values reads `Ord` and answers by the NaN's
-sign.
+`f64::min` and `f64::max` lower to Wasm's `min` and `max`, which are IEEE
+754-2019 `minimum` and `maximum`. They disagree with the order:
+`f64::min(1.0, NaN)` is NaN where `Iterator::min` answers `1.0`, and
+`f64::max(-0.0, 0.0)` picks `0.0` where the order calls the two equal.
 
-A float's total equality — `cmp` answering `Equal` — is not `==`: it separates
-`-0.0` from `0.0` and calls a NaN equal to itself. A `TreeMap<f32, V>` orders by
-the first and has no way to say so, so nothing states which equality a keyed
-lookup owes. A struct holding a float inherits the split: its derived `==`
-calls `P { x: NaN }` unequal to itself while its derived `cmp` answers `Equal`.
+A NaN test ported from another language as `x != x` is always false, and
+nothing warns.
 
-`Ord` orders a NaN by its sign bit, and Wasm leaves the sign of an arithmetic
-NaN to the host. On x86_64 `0.0 / 0.0` is a negative NaN and sorts first; on
-AArch64 it is positive and sorts last.
-
-`OperatorOrd` is reachable by method syntax nowhere, since a call site cannot
-name it, but `wado doc` lists its impls all the same. That gap is recorded in
-[WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
+Float literal patterns are rejected, though one equality would give them a
+meaning.

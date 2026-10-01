@@ -66,8 +66,11 @@ and `Ord` is left to mean the total order alone. C++20 splits them the same way,
 `operator<=>` yielding `partial_ordering` against `strong_order`.
 
 `OperatorOrd` is `internal` to `core:prelude`: the half types are the only ones
-that need it, and naming the split in the public API is
-[a separate decision](./wep-2026-09-23-comparison-traits.md).
+that need it.
+
+[WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md) has since
+replaced this split. Every float's operators read its `Ord`, and `OperatorOrd`
+goes.
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,

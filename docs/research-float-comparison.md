@@ -4,7 +4,7 @@ Wado has decided one thing about comparing floats: it will not copy Rust's
 `PartialEq` / `PartialOrd` split. This survey collects what Rust's users say
 Rust should have done instead, sets it beside the answers other languages chose,
 and measures where Wado stands today. It feeds
-[WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
+[WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 
 ## Rust's design
 
@@ -206,42 +206,32 @@ body adds no surprise of its own.
 
 ### C: the operators are total on a float
 
-`NaN == NaN` is true and `<` is the total order; IEEE moves to named methods.
-This is the Haskell proposal. It meets 4 and 5 trivially, and fails 3 and 8:
-every `<` on a float costs a branch, `x != x` stops finding a NaN, and numeric
-code (Loam's tensor kernels, `core:simd`) reads differently from every other
-language.
+`NaN == NaN` is true and `<` is the total order. This is the Haskell proposal.
+Each type then has one relation, so 4 and 5 hold by construction, with no rule
+about which reader reads which. It gives up 3: `x != x` stops finding a NaN.
+
+It fails 8 less than it first appears. If the order differs from IEEE only on a
+NaN, a comparison against a constant that is not a NaN is still one IEEE
+instruction. Between two variables it adds a NaN test or two, with no branch.
 
 ### The float total order
 
-Under B the order still has to be chosen. The voices and the table point the
-same way:
+The order has to be chosen under either B or C. Both point to one NaN: every
+NaN is `Equal` to every other, so Wasm's non-deterministic sign and payload
+never reach an answer. Java, Kotlin, Julia, Go and `ordered-float` all do this.
+NaN greatest is the majority choice (Java, Kotlin, Julia, Swift's pitch,
+`ordered-float`).
 
-- One NaN. Every NaN is `Equal` to every other, so Wasm's non-deterministic sign
-  and payload never reach an answer. This is what Java, Kotlin, Julia, Go and
-  `ordered-float` do.
-- NaN greatest. This is the majority choice (Java, Kotlin, Julia, Swift's
-  pitch, `ordered-float`), and it makes `Iterator::max` return a NaN when one is
-  present, as `f64::max` does.
-- `-0 < +0`. The two zeroes are told apart by `1 / x` and by printing, so a
-  deterministic program can distinguish them. Calling them `Equal` would let a
-  `TreeMap` hand back one for the other.
+The zeroes depend on the candidate. Under B, `-0 < +0` costs nothing, since the
+operators stay IEEE. Under C it would make `x == 0.0` false for a `-0.0` that
+ordinary arithmetic produced, so C calls the two `Equal`, as `ordered-float`
+and Go do.
 
-One principle covers all three: `cmp` answers `Equal` exactly when no
-deterministic program can tell the two values apart.
+## Outcome
 
-## Open questions
-
-- [ ] Adopt B, or keep A, or take C.
-- [ ] Collapse NaN in the float order, or keep bit-level `totalOrder`.
-- [ ] Put NaN greatest or least.
-- [ ] Order `-0 < +0`, or call them `Equal`.
-- [ ] State which library functions read `Ord` and which read `==`: ordering
-  and keying read `Ord`, and membership in a sequence reads `==`, as Julia
-  and Go do.
-- [ ] Keep `f64::min` / `max` as IEEE 754-2019 `minimum` / `maximum` beside
-  `Iterator::min` / `max` reading `Ord`. With NaN greatest the two `max`
-  agree and the two `min` do not.
+Wado took C, with one NaN, NaN greatest, and `-0.0` equal to `0.0`. The
+decision and its reasons are in
+[WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 
 ## Sources
 
