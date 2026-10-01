@@ -342,10 +342,10 @@ impl FunctionTranslator<'_, '_> {
         left: WirInstr,
         right: WirInstr,
     ) -> WirInstr {
-        // Against a constant that is not a NaN, IEEE answers every operator
-        // that is false when the other operand is a NaN, and the negation of
-        // the opposite operator answers the rest.
-        let nan_side_answer = if is_non_nan_const(&right) {
+        // Against a constant that is not a NaN, IEEE's instruction answers
+        // where it agrees with the order on a NaN operand, and the negation of
+        // the opposite instruction answers the rest.
+        let order_on_nan = if is_non_nan_const(&right) {
             Some(matches!(
                 op,
                 NirBinaryOp::NotEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
@@ -358,8 +358,9 @@ impl FunctionTranslator<'_, '_> {
         } else {
             None
         };
-        if let Some(nan_side_answer) = nan_side_answer {
-            return if nan_side_answer == (op == NirBinaryOp::NotEq) {
+        if let Some(order_on_nan) = order_on_nan {
+            let ieee_on_nan = op == NirBinaryOp::NotEq;
+            return if order_on_nan == ieee_on_nan {
                 width.ieee(op, left, right)
             } else {
                 eqz(width.ieee(opposite(op), left, right))

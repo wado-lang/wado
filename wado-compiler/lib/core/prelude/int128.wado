@@ -84,7 +84,7 @@ impl u128 {
     /// 0: what `value as u128` is.
     #[compiler_item("u128_from_f64")]
     pub fn from_f64(value: f64) -> u128 {
-        if !(value > 0.0) {
+        if value <= 0.0 || value.is_nan() {
             return u128::MIN;
         }
         if value >= 340282366920938463463374607431768211456.0 {
@@ -873,6 +873,9 @@ impl i128 {
     /// 0: what `value as i128` is.
     #[compiler_item("i128_from_f64")]
     pub fn from_f64(value: f64) -> i128 {
+        if value.is_nan() {
+            return i128 { low: 0, high: 0 };
+        }
         if value >= 170141183460469231731687303715884105728.0 {
             return i128::MAX;
         }
