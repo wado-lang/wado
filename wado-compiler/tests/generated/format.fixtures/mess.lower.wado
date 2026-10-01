@@ -4934,6 +4934,52 @@ fn assert_failed(message: String) -> ! {
     core::rt::panic(message);
 }
 
+fn i64_add128_soft(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64] {
+    let lo: i64 = (a_lo + b_lo);
+    let carry: i64 = if (lo as u64 < a_lo as u64) {
+        1;
+    } else {
+        0;
+    };
+    return [lo, ((a_hi + b_hi) + carry)];
+}
+
+fn i64_sub128_soft(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64] {
+    let borrow: i64 = if (a_lo as u64 < b_lo as u64) {
+        1;
+    } else {
+        0;
+    };
+    return [(a_lo - b_lo), ((a_hi - b_hi) - borrow)];
+}
+
+fn i64_mul_wide_u_soft(a: i64, b: i64) -> [i64, i64] {
+    let low32: u64 = 4294967295;
+    let $pattern_temp_0: [u64, u64] = [a as u64, b as u64];
+    let ua: u64 = $pattern_temp_0.0;
+    let ub: u64 = $pattern_temp_0.1;
+    let $pattern_temp_1: [u64, u64, u64, u64] = [(ua & low32), (ua >> 32), (ub & low32), (ub >> 32)];
+    let al: u64 = $pattern_temp_1.0;
+    let ah: u64 = $pattern_temp_1.1;
+    let bl: u64 = $pattern_temp_1.2;
+    let bh: u64 = $pattern_temp_1.3;
+    let $pattern_temp_2: [u64, u64, u64] = [(al * bl), (ah * bl), (al * bh)];
+    let ll: u64 = $pattern_temp_2.0;
+    let m1: u64 = $pattern_temp_2.1;
+    let m2: u64 = $pattern_temp_2.2;
+    let carry: u64 = (((ll >> 32) + (m1 & low32)) + (m2 & low32));
+    let low: u64 = ((carry << 32) | (ll & low32));
+    let high: u64 = ((((ah * bh) + (m1 >> 32)) + (m2 >> 32)) + (carry >> 32));
+    return [low as i64, high as i64];
+}
+
+fn i64_mul_wide_s_soft(a: i64, b: i64) -> [i64, i64] {
+    let $pattern_temp_0: [i64, i64] = core::rt::i64_mul_wide_u_soft(a, b);
+    let low: i64 = $pattern_temp_0.0;
+    let high: i64 = $pattern_temp_0.1;
+    return [low, ((high - (b & (a >> 63))) - (a & (b >> 63)))];
+}
+
 fn coverage_probe(id: i32) {
     let len: i32 = "core::builtin::core/builtin/array_len<u8>"(&core::rt::COVERAGE_SEEN);
     if ((id < len) && (core::builtin::array_get_value_u8(&core::rt::COVERAGE_SEEN, id) != 0)) {
@@ -11880,6 +11926,18 @@ fn "$value_copy$core:prelude/types.wado/StreamChunk<u8>"(v: StreamChunk<u8>) -> 
 
 fn "$value_copy$core:prelude/list.wado/List<u8>"(v: List<u8>) -> List<u8> {
     return List<u8> { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
+}
+
+fn "$value_copy$[u64,u64,u64]"(v: [u64, u64, u64]) -> [u64, u64, u64] {
+    return [u64,u64,u64] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$[u64,u64,u64,u64]"(v: [u64, u64, u64, u64]) -> [u64, u64, u64, u64] {
+    return [u64,u64,u64,u64] { 0: v.0, 1: v.1, 2: v.2, 3: v.3 };
+}
+
+fn "$value_copy$[u64,u64]"(v: [u64, u64]) -> [u64, u64] {
+    return [u64,u64] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StreamWritable<u8>]"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {

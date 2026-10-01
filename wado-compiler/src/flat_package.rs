@@ -22,6 +22,7 @@ use crate::tir::{
     BuiltinDeclarations, TirEnum, TirFlags, TirFunction, TirGlobal, TirStruct, TirTest,
     TirVariantDecl, TypeTable,
 };
+use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
@@ -142,6 +143,15 @@ impl FlatPackage {
     /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
     pub fn is_generator_world(&self) -> bool {
         self.world_imports_interface(GENERATOR_HOST_INTERFACE)
+    }
+
+    /// Walk every function body with `visitor`, which may rewrite it in place.
+    pub fn visit_bodies_mut(&self, visitor: &mut impl TirMutVisitor) {
+        for func_rc in &self.functions {
+            if let Some(body) = func_rc.borrow_mut().body.as_mut() {
+                visitor.visit_block(body);
+            }
+        }
     }
 
     /// Look up a variant by `(module_source, name)`.

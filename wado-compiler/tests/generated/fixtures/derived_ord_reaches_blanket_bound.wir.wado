@@ -102,100 +102,65 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:derived_ord_reaches_blanket_bound.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(32);
 
 fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
-    let p_2: ref "derived_ord_reaches_blanket_bound.wado//P";
     let $cond_3: bool;
-    let $cond_4: bool;
-    let p_5: ref "derived_ord_reaches_blanket_bound.wado//P";
     let $local_10: ref "core:prelude/string.wado//String";
-    let self_17: ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>";
     let self_18: ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>";
-    let handle: i32;
-    let self_31: ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>";
-    let self_32: bool;
     let text_34: ref "core:prelude/string.wado//String";
-    let new_used: i32;
-    let start_46: i32;
-    let self_51: ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>";
-    let self_54: bool;
-    let text_56: ref "core:prelude/string.wado//String";
     let packed: i64;
-    let rx_58: i32;
-    let tx_59: i32;
     let $sroa_xs_repr_100: ref "Array<derived_ord_reaches_blanket_bound.wado/P>";
     let $sroa_cs_repr_102: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
     let $sroa_$f_buf_126: ref "core:prelude/string.wado//String";
     $sroa_xs_repr_100 = array.new_fixed<ref "derived_ord_reaches_blanket_bound.wado//P">(struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 1 }, struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 3 });
     $sroa_cs_repr_102 = array.new_fixed<"derived_ord_reaches_blanket_bound.wado//enum:Color">(0, 1);
     let $match_scrut_0: ref null "derived_ord_reaches_blanket_bound.wado//P";
-    self_17 = struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_100, index: 0, end: 2 };
-    $match_scrut_0 = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0"(self_17);
-    $cond_3 = (if ref.is_null($match_scrut_0) == 0 -> bool {
-        p_2 = ref.as_non_null($match_scrut_0);
-        p_2.n == 3;
+    if @unlikely(local.tee $cond_3((if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_100, index: 0, end: 2 }))) == 0 -> bool {
+        ref.as_non_null($match_scrut_0).n == 3;
     } else {
         0;
-    });
-    if @unlikely($cond_3 == 0) {
+    })) == 0) {
         cold_path;
         "derived_ord_reaches_blanket_bound.wado/run$cold1"();
         unreachable;
     }
     self_18 = struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>" { repr: $sroa_cs_repr_102, index: 0, end: 2 };
-    let $mv$$vr_12$0: i32;
     let $mv$$vr_12$1: "derived_ord_reaches_blanket_bound.wado//enum:Color";
-    multivalue_bind [$mv$$vr_12$0, $mv$$vr_12$1] = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::max_by$$Closure_1"(self_18);
-    $cond_4 = $mv$$vr_12$0 == 0;
-    if @unlikely($cond_4 == 0) {
+    multivalue_bind [$cond_3, $mv$$vr_12$1] = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::max_by$$Closure_1"(self_18);
+    if @unlikely(local.tee $cond_3($cond_3 == 0) == 0) {
         cold_path;
         "derived_ord_reaches_blanket_bound.wado/run$cold0"();
         unreachable;
     }
-    $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $sroa_$f_buf_126 = $local_10;
-    let $match_scrut_2: ref null "derived_ord_reaches_blanket_bound.wado//P";
-    self_31 = struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_100, index: 0, end: 2 };
-    $match_scrut_2 = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0"(self_31);
-    self_32 = (if ref.is_null($match_scrut_2) == 0 -> bool {
-        p_5 = ref.as_non_null($match_scrut_2);
-        p_5.n == 3;
+    $sroa_$f_buf_126 = local.tee $local_10(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    text_34 = (if local.tee $cond_3((if ref.is_null(local.tee $match_scrut_0("derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0"(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>" { repr: $sroa_xs_repr_100, index: 0, end: 2 }))) == 0 -> bool {
+        ref.as_non_null($match_scrut_0).n == 3;
     } else {
         0;
-    });
-    text_34 = (if self_32 -> ref "core:prelude/string.wado//String" {
+    })) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    let $arg_spill_1: ref "core:prelude/string.wado//String";
-    $arg_spill_1 = $sroa_$f_buf_126;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_1, text_34.repr, text_34.used);
-    new_used = $local_10.used + 1;
-    if @unlikely(new_used > builtin::array_len($local_10.repr)) {
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_126, text_34.repr, text_34.used);
+    if @unlikely(local.tee $cond_3($local_10.used + 1) > builtin::array_len($local_10.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, $cond_3);
     }
-    start_46 = $local_10.used;
-    $local_10.used = new_used;
-    builtin::array_copy<u8>($local_10.repr, start_46, global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, 0, 1);
+    $mv$$vr_12$1 = $local_10.used;
+    $local_10.used = $cond_3;
+    builtin::array_copy<u8>($local_10.repr, $mv$$vr_12$1, global:derived_ord_reaches_blanket_bound.wado::$const_obj_1, 0, 1);
     $sroa_$f_buf_126 = $local_10;
-    self_51 = struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>" { repr: $sroa_cs_repr_102, index: 0, end: 2 };
-    let $mv$$vr_13$0: i32;
-    let $mv$$vr_13$1: "derived_ord_reaches_blanket_bound.wado//enum:Color";
-    multivalue_bind [$mv$$vr_13$0, $mv$$vr_13$1] = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::min_by$$Closure_2"(self_51);
-    self_54 = $mv$$vr_13$0 == 0;
-    text_56 = (if self_54 -> ref "core:prelude/string.wado//String" {
+    multivalue_bind [$mv$$vr_12$1, $cond_3] = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::min_by$$Closure_2"(local.tee self_18(struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>" { repr: $sroa_cs_repr_102, index: 0, end: 2 }));
+    text_34 = (if local.tee $mv$$vr_12$1($mv$$vr_12$1 == 0) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    let $arg_spill_3: ref "core:prelude/string.wado//String";
-    $arg_spill_3 = $sroa_$f_buf_126;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_3, text_56.repr, text_56.used);
-    rx_58 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_59 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "derived_ord_reaches_blanket_bound.wado/$cm_binding__Stdout_write_via_stream"(rx_58);
-    "core:rt/write_string_to_stream"(tx_59, $local_10.repr, $local_10.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_126, text_34.repr, text_34.used);
+    $mv$$vr_12$1 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    $cond_3 = builtin::i32_wrap_i64(packed >> 32_i64);
+    $mv$$vr_12$1 = "derived_ord_reaches_blanket_bound.wado/$cm_binding__Stdout_write_via_stream"($mv$$vr_12$1);
+    "core:rt/write_string_to_stream"($cond_3, $local_10.repr, $local_10.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$vr_12$1);
 }
 
 fn "derived_ord_reaches_blanket_bound.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -223,79 +188,66 @@ condition: xs.iter_value().max() matches { Some(p) && p.n == 3 }
 
 fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
-    new_repr = builtin::array_new<u8>($mv$message$used + 1);
-    builtin::array_copy<u8>(new_repr, 0, $mv$message$repr, 0, $mv$message$used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_4: i32;
-        $mv_field_4 = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv_field_4);
+        $mv$message$used = $mv$message$used + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/panic"(message) {
-    let future_handle: i32;
     let packed: i64;
     let rx_7: i32;
     let tx_8: i32;
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let len_2: i32;
-    let ptr_3: i32;
-    let taken: i32;
     let ptr_13: i32;
     let ptr_15: i32;
     let count_16: i32;
-    let result: i32;
-    let ws: i32;
     let evt_ptr: i32;
     let status_23: i32;
     let i: i32;
-    let $sroa_written_count_39: i32;
-    let $sroa_written_result_40: "core:prelude/types.wado//enum:CopyResult";
-    len_2 = $mv$data$end - $mv$data$start;
-    if len_2 == 0 {
+    if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b9: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b9: block {
         l10: loop {
-            break_if b9 i >= len_2;
+            break_if b9 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l10;
         };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(len_2) << 32_i64));
-    taken = 0;
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    i = 0;
     block {
         l12: loop {
-            ptr_15 = ptr_3 + taken;
-            count_16 = len_2 - taken;
-            result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
-            if result == -1 {
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
+            ptr_15 = ptr_13 + i;
+            count_16 = $mv$data$end - i;
+            if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
+                $mv$data$start = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, $mv$data$start);
                 evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
+                drop("wasi/waitable-set-wait"($mv$data$start, evt_ptr));
                 status_23 = builtin::load_i32(evt_ptr + 4);
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(ws);
-                result = status_23;
+                "wasi/waitable-set-drop"($mv$data$start);
+                count_16 = status_23;
             }
-            $sroa_written_count_39 = result >>u 4;
-            $sroa_written_result_40 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_15 = count_16 >>u 4;
+            count_16 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
-                $match_scrut_0 = result & 15;
-                if $match_scrut_0 == 0 {
+                if local.tee $match_scrut_0(count_16 & 15) == 0 {
                     break $inline_cm_copy_result_8: 0;
                 } else if $match_scrut_0 == 1 {
                     break $inline_cm_copy_result_8: 1;
@@ -303,10 +255,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 }
                 break $inline_cm_copy_result_8: 2;
             };
-            taken = taken + $sroa_written_count_39;
-            if (($sroa_written_result_40 != 0) | ($sroa_written_count_39 <= 0)) | (taken >= len_2) {
-                drop("mem/realloc"(ptr_3, len_2, 1, 0));
-                return $sroa_written_result_40;
+            i = i + ptr_15;
+            if ((count_16 != 0) | (ptr_15 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
+                return count_16;
             }
             continue l12;
         };
@@ -316,76 +268,56 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
     let $load_0: ref Array<u8>;
     let capacity: i32;
-    let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_7: i32;
-    let a_9: i32;
     capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
-    a_9 = capacity * 2;
-    a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
 fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>^core:prelude/traits.wado/Iterator::max_by$$Closure_0"(self) {
     let $load_1: i32;
     let $load_2: ref "Array<derived_ord_reaches_blanket_bound.wado/P>";
-    let best: ref "derived_ord_reaches_blanket_bound.wado//P";
-    let item_7: ref "derived_ord_reaches_blanket_bound.wado//P";
     let v_8: ref "derived_ord_reaches_blanket_bound.wado//P";
-    let v_11: ref "derived_ord_reaches_blanket_bound.wado//P";
-    let $licm_end_17: i32;
-    let $licm_repr_18: ref "Array<derived_ord_reaches_blanket_bound.wado/P>";
     let c: "core:prelude/traits.wado//enum:Ordering";
     let $sroa_self_value_5: i32;
     let $sroa_item_n_25: i32;
-    let $hfs_index_26: i32;
     let $av_27: i32;
     $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_P__core_prelude_traits_wado_Iterator__next_0: block {
-        $av_27 = self.index;
-        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_P__core_prelude_traits_wado_Iterator__next_0 $av_27 >= local.tee $load_1(self.end);
-        v_8 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">(local.tee $load_2(self.repr), $av_27);
-        item_7 = struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: v_8.n };
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_P__core_prelude_traits_wado_Iterator__next_0 local.tee $av_27(self.index) >= local.tee $load_1(self.end);
+        v_8 = struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: local.tee v_8(builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">(local.tee $load_2(self.repr), $av_27)).n };
         self.index = $av_27 + 1;
-        best = item_7;
-        $licm_end_17 = $load_1;
-        $licm_repr_18 = $load_2;
-        $hfs_index_26 = self.index;
+        $av_27 = self.index;
         b18: block {
             l19: loop {
-                if $hfs_index_26 >= $licm_end_17 {
-                    self.index = $hfs_index_26;
+                if $av_27 >= $load_1 {
+                    self.index = $av_27;
                     break b18;
                 }
-                v_11 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">($licm_repr_18, $hfs_index_26);
-                $sroa_item_n_25 = v_11.n;
-                $hfs_index_26 = $hfs_index_26 + 1;
+                $sroa_item_n_25 = builtin::array_get_value<ref "derived_ord_reaches_blanket_bound.wado//P">($load_2, $av_27).n;
+                $av_27 = $av_27 + 1;
                 if $inline_derived_ord_reaches_blanket_bound_wado_P_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    c = $inline_derived_ord_reaches_blanket_bound_wado_P_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                        $sroa_self_value_5 = best.n;
-                        if $sroa_self_value_5 < $sroa_item_n_25 {
+                    if local.tee c($inline_derived_ord_reaches_blanket_bound_wado_P_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
+                        if local.tee $sroa_self_value_5(v_8.n) < $sroa_item_n_25 {
                             break $inline_derived_ord_reaches_blanket_bound_wado_P_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 0;
                         }
                         if $sroa_self_value_5 > $sroa_item_n_25 {
                             break $inline_derived_ord_reaches_blanket_bound_wado_P_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 2;
                         }
                         break $inline_derived_ord_reaches_blanket_bound_wado_P_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
-                    };
-                    if c != 1 {
+                    }) != 1 {
                         break $inline_derived_ord_reaches_blanket_bound_wado_P_core_prelude_traits_wado_Ord__cmp_scalar_0: c;
                     }
                     break $inline_derived_ord_reaches_blanket_bound_wado_P_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
                 } != 2 {
-                    best = struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: $sroa_item_n_25 };
+                    v_8 = struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: $sroa_item_n_25 };
                 }
                 continue l19;
             };
         };
-        return struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: best.n };
+        return struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: v_8.n };
     };
     return ref.null none;
 }
@@ -395,43 +327,35 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
     let $load_2: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
     let item_7: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let item_9: "derived_ord_reaches_blanket_bound.wado//enum:Color";
-    let $licm_end_15: i32;
-    let $licm_repr_16: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
-    let $sroa_best_value_22: "derived_ord_reaches_blanket_bound.wado//enum:Color";
-    let $hfs_index_23: i32;
     let $av_24: i32;
     $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0: block {
-        $av_24 = self.index;
-        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0 $av_24 >= local.tee $load_1(self.end);
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0 local.tee $av_24(self.index) >= local.tee $load_1(self.end);
         item_7 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(local.tee $load_2(self.repr), $av_24);
         self.index = $av_24 + 1;
-        $sroa_best_value_22 = item_7;
-        $licm_end_15 = $load_1;
-        $licm_repr_16 = $load_2;
-        $hfs_index_23 = self.index;
+        $av_24 = self.index;
         b25: block {
             l26: loop {
-                if $hfs_index_23 >= $licm_end_15 {
-                    self.index = $hfs_index_23;
+                if $av_24 >= $load_1 {
+                    self.index = $av_24;
                     break b25;
                 }
-                item_9 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">($licm_repr_16, $hfs_index_23);
-                $hfs_index_23 = $hfs_index_23 + 1;
+                item_9 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">($load_2, $av_24);
+                $av_24 = $av_24 + 1;
                 if $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if $sroa_best_value_22 < item_9 {
+                    if item_7 < item_9 {
                         break $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_0: 0;
                     }
-                    if $sroa_best_value_22 > item_9 {
+                    if item_7 > item_9 {
                         break $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_0: 2;
                     }
                     break $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
                 } != 2 {
-                    $sroa_best_value_22 = item_9;
+                    item_7 = item_9;
                 }
                 continue l26;
             };
         };
-        return 0, $sroa_best_value_22;
+        return 0, item_7;
     };
     return 1, 0;
 }
@@ -439,48 +363,38 @@ fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIte
 fn "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::min_by$$Closure_2"(self) {
     let $load_1: i32;
     let $load_2: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
-    let $match_7: "core:prelude/traits.wado//enum:Ordering";
     let item_8: "derived_ord_reaches_blanket_bound.wado//enum:Color";
     let item_10: "derived_ord_reaches_blanket_bound.wado//enum:Color";
-    let $licm_end_20: i32;
-    let $licm_repr_21: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
-    let $sroa_best_value_22: "derived_ord_reaches_blanket_bound.wado//enum:Color";
-    let $hfs_index_24: i32;
     let $av_25: i32;
     $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0: block {
-        $av_25 = self.index;
-        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0 $av_25 >= local.tee $load_1(self.end);
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_derived_ord_reaches_blanket_bound_wado_Color__core_prelude_traits_wado_Iterator__next_0 local.tee $av_25(self.index) >= local.tee $load_1(self.end);
         item_8 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">(local.tee $load_2(self.repr), $av_25);
         self.index = $av_25 + 1;
-        $sroa_best_value_22 = item_8;
-        $licm_end_20 = $load_1;
-        $licm_repr_21 = $load_2;
-        $hfs_index_24 = self.index;
+        $av_25 = self.index;
         b31: block {
             l32: loop {
-                if $hfs_index_24 >= $licm_end_20 {
-                    self.index = $hfs_index_24;
+                if $av_25 >= $load_1 {
+                    self.index = $av_25;
                     break b31;
                 }
-                item_10 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">($licm_repr_21, $hfs_index_24);
-                $hfs_index_24 = $hfs_index_24 + 1;
-                $match_7 = $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if item_10 < $sroa_best_value_22 {
+                item_10 = builtin::array_get_value<"derived_ord_reaches_blanket_bound.wado//enum:Color">($load_2, $av_25);
+                $av_25 = $av_25 + 1;
+                if $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                    if item_10 < item_8 {
                         break $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_3: 0;
                     }
-                    if item_10 > $sroa_best_value_22 {
+                    if item_10 > item_8 {
                         break $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_3: 2;
                     }
                     break $inline_derived_ord_reaches_blanket_bound_wado_Color_core_prelude_traits_wado_Ord__cmp_scalar_3: 1;
-                };
-                if $match_7 == 0 {
-                    $sroa_best_value_22 = item_10;
+                } == 0 {
+                    item_8 = item_10;
                 } else {
                 }
                 continue l32;
             };
         };
-        return 0, $sroa_best_value_22;
+        return 0, item_8;
     };
     return 1, 0;
 }
@@ -490,8 +404,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let start_20: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
-        new_used_19 = self.used + $mv$content$used;
-        if @unlikely(new_used_19 > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_19(self.used + $mv$content$used) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
         }

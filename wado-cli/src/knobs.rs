@@ -131,7 +131,7 @@ impl CompileKnobOpt {
                 long: None,
                 short: Some('f'),
                 value: Some("<flag>"),
-                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\narray-copy       native Wasm array.copy instead of a loop (default: on)\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)",
+                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)",
             },
             Self::NoCache => OptSpec {
                 long: Some("no-cache"),
@@ -395,8 +395,23 @@ impl EmbedOptions {
 
 #[cfg(test)]
 mod tests {
-    use super::{EmbedOpt, EmbedOptions, EmbedPolicy, OptLevel, parse_opt_level_arg};
+    use super::{
+        CompileKnobOpt, EmbedOpt, EmbedOptions, EmbedPolicy, OptLevel, parse_opt_level_arg,
+    };
     use lexopt::Parser;
+    use wado_compiler::CodegenFlags;
+
+    #[test]
+    fn the_feature_help_lists_every_supported_flag() {
+        let listed: Vec<&str> = CompileKnobOpt::Feature
+            .spec()
+            .desc
+            .lines()
+            .skip(1)
+            .map(|line| line.split_whitespace().next().unwrap())
+            .collect();
+        assert_eq!(listed, CodegenFlags::SUPPORTED);
+    }
 
     /// Drive `parse_opt_level_arg` the way the parse loop does: the parser sits
     /// just past the matched `-O`.

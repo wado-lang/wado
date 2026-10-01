@@ -18,8 +18,7 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "bug_closure_captures_address_taken_param.wado/$cm_export__$test_0_a_closure_names_an_address_taken_parameter"() {
     let $boxed_param_0: ref "core:prelude/types.wado//Box<i32>";
-    $boxed_param_0 = struct.new "core:prelude/types.wado//Box<i32>" { value: 10 };
-    $boxed_param_0.value = 11;
+    local.tee $boxed_param_0(struct.new "core:prelude/types.wado//Box<i32>" { value: 10 }).value = 11;
     $boxed_param_0.value = 12;
     "wasi/task-return"(0);
 }

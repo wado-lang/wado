@@ -13,6 +13,9 @@ mod dce;
 mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
+mod local_coalesce;
+mod local_layout;
+mod local_nullability;
 mod nullability;
 mod nullable_ref;
 mod peephole;
@@ -38,6 +41,9 @@ use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
 use elide_local::elide_write_only_locals;
 use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments, unwrap_box_locals};
+use local_coalesce::coalesce_locals;
+use local_layout::lay_out_locals;
+use local_nullability::relax_unset_nonnull_locals;
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
@@ -275,8 +281,27 @@ fn optimize_scoped(
     dce::compact_dead_items(module);
     profiler.span_end(&scope.name("phase8_dce_compact"));
 
-    // Phase 9: finalize the declared-local SSoT now that no pass adds or removes
-    // a `DeclareLocal`.
+    // Phase 9: settle the locals. Coalescing turns a copy between two merged
+    // locals into a self-copy it drops, and leaves set-then-get pairs across
+    // them. Tee fusion comes late: a tee hides the copy it replaces from every
+    // pass before it. A set fused into its local's only read leaves a tee
+    // nothing reads, which the write-only sweep takes back to its value.
+    wir_pass(scope, "coalesce_locals", module, profiler, |m| {
+        coalesce_locals(m);
+    });
+    wir_pass(scope, "fuse_remaining_local_tees", module, profiler, |m| {
+        peephole::fuse_remaining_local_tees(m);
+    });
+    wir_pass(
+        scope,
+        "elide_fused_write_only_locals",
+        module,
+        profiler,
+        |m| {
+            elide_write_only_locals(m);
+            cleanup(m);
+        },
+    );
     finalize_locals(module);
 }
 
@@ -314,10 +339,12 @@ fn optimize_wasm_modules(
     module.wasm_modules = wasm_modules;
 }
 
-/// Freeze each function's declared locals into `func.locals` for the emitter.
-/// Called on every `optimize_wir` exit path, so `-O0` finalizes too.
+/// Settle each local's Wasm type and freeze the locals, laid out, into
+/// `func.locals` for the emitter. Called on every `optimize_wir` exit path, so
+/// `-O0` finalizes too.
 fn finalize_locals(module: &mut WirPackage) {
+    relax_unset_nonnull_locals(module);
     for func in &mut module.functions {
-        func.locals = func.declared_locals();
+        func.locals = lay_out_locals(func);
     }
 }

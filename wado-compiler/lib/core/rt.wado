@@ -162,6 +162,45 @@ internal fn assert_failed(message: String) -> ! {
     panic(message);
 }
 
+/// `builtin::i64_add128` for `-f no-wide-arithmetic`, which V8 lacks: the
+/// carry out of the low word is an unsigned compare.
+#[compiler_item("i64_add128_soft")]
+internal fn i64_add128_soft(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64] {
+    let lo = a_lo + b_lo;
+    let carry: i64 = if (lo as u64) < a_lo as u64 { 1 } else { 0 };
+    return [lo, a_hi + b_hi + carry];
+}
+
+/// `builtin::i64_sub128` for `-f no-wide-arithmetic`: the borrow out of the
+/// low word is an unsigned compare.
+#[compiler_item("i64_sub128_soft")]
+internal fn i64_sub128_soft(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64] {
+    let borrow: i64 = if (a_lo as u64) < b_lo as u64 { 1 } else { 0 };
+    return [a_lo - b_lo, a_hi - b_hi - borrow];
+}
+
+/// `builtin::i64_mul_wide_u` for `-f no-wide-arithmetic`: the 128-bit product
+/// summed from 32-bit limbs.
+#[compiler_item("i64_mul_wide_u_soft")]
+internal fn i64_mul_wide_u_soft(a: i64, b: i64) -> [i64, i64] {
+    let low32: u64 = 0xffff_ffff;
+    let [ua, ub] = [a as u64, b as u64];
+    let [al, ah, bl, bh] = [ua & low32, ua >> 32, ub & low32, ub >> 32];
+    let [ll, m1, m2] = [al * bl, ah * bl, al * bh];
+    let carry = (ll >> 32) + (m1 & low32) + (m2 & low32);
+    let low = carry << 32 | ll & low32;
+    let high = ah * bh + (m1 >> 32) + (m2 >> 32) + (carry >> 32);
+    return [low as i64, high as i64];
+}
+
+/// `builtin::i64_mul_wide_s` for `-f no-wide-arithmetic`: the unsigned
+/// product, its high word less `b` where `a < 0` and `a` where `b < 0`.
+#[compiler_item("i64_mul_wide_s_soft")]
+internal fn i64_mul_wide_s_soft(a: i64, b: i64) -> [i64, i64] {
+    let [low, high] = i64_mul_wide_u_soft(a, b);
+    return [low, high - (b & a >> 63) - (a & b >> 63)];
+}
+
 use { CoverageHost } from "core:coverage/coverage_host.wado";
 
 /// Whether this instance has reported each coverage region, one byte per id.

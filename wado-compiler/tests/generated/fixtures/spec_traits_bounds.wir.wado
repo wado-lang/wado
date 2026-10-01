@@ -21,8 +21,7 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "spec_traits_bounds.wado/$test_0"() {
     let p: ref "spec_traits_bounds.wado//Pair<i32>";
-    p = struct.new "spec_traits_bounds.wado//Pair<i32>" { first: 2, second: 1 };
-    p.first = 1;
+    local.tee p(struct.new "spec_traits_bounds.wado//Pair<i32>" { first: 2, second: 1 }).first = 1;
     p.second = 2;
 }
 

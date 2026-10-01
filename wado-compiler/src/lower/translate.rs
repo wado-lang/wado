@@ -26,7 +26,7 @@ use crate::compiler_item::CompilerItem;
 use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
-use crate::lower::{bare_asserts, wide_int_literal};
+use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
 use crate::name::{
     FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
     field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name, variant_tag_helper_name,
@@ -67,6 +67,10 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         closure,
         value_copy,
     } = plan;
+    // Before pattern lowering, which keeps a destructure of a multi-value
+    // builtin whole: a software form returns its tuple like any call, and its
+    // destructure is lowered like any other.
+    wide_arith::lower(&flat, flat.codegen_flags.wide_arithmetic);
     // Pattern lowering runs before string collection: it synthesises
     // string-literal expressions (string-literal pattern guards) the
     // data section must register.

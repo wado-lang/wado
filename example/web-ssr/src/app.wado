@@ -8,18 +8,18 @@ pub fn render(path: String) with Dom {
     doc.set_title("Wado on the server");
     let body = doc.body().unwrap();
 
-    let heading = doc.create_element("h1", null);
+    let heading = doc.create_element("h1");
     heading.set_text_content(Option::Some("Rendered by Wado"));
     body.append_child(heading);
 
-    let note = doc.create_element("p", null);
+    let note = doc.create_element("p");
     note.set_text_content(Option::Some(`You asked for ${path}.`));
     body.append_child(note);
 
     let steps: List<String> = ["Build the page through the DOM", "Serialize it with to_html", "Send it"];
-    let list = doc.create_element("ol", null);
+    let list = doc.create_element("ol");
     for let step of steps {
-        let item = doc.create_element("li", null);
+        let item = doc.create_element("li");
         item.set_text_content(Option::Some(step));
         list.append_child(item);
     }

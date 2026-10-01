@@ -40,8 +40,8 @@ lower is then available to each interface the slice adds.
 
 ### 2. Default arguments on a `#[cm]` operation
 
-- [ ] The compiler accepts a default argument on a `#[cm]` operation
-- [ ] `wado-from-idl` emits `= null` for an `optional` without a default, and
+- [x] The compiler accepts a default argument on a `#[cm]` operation
+- [x] `wado-from-idl` emits `= null` for an `optional` without a default, and
   the WebIDL default where one is given, so `create_element("div")` and
   `clone_node()` compile
 

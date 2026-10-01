@@ -8,7 +8,7 @@ it.
 use { Dom } from "wado-lang:web";
 
 export fn run() with Dom {
-    let el = Dom::document().create_element("div", null);
+    let el = Dom::document().create_element("div");
     el.set_id("app");
 }
 ```

@@ -832,11 +832,11 @@ node scripts/jco/transpile-released.mjs "$WASM" "$OUT"
 # Node 26 ships stable JSPI (WebAssembly.Suspending), so no flag is needed.
 # The shim flushes stdout after run() resolves, so the loop drains rather than
 # exiting on it; the timeout is what bounds a run that never settles.
-timeout 120 node -e "
-  process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
-  import('$OUT/hello.js').then(m => m.run.run())
+OUT="$OUT" timeout 120 node -e '
+  process.on("unhandledRejection", e => { console.error(e); process.exit(1); });
+  import(`${process.env.OUT}/hello.js`).then(m => m.run.run())
     .catch(e => { console.error(e); process.exit(1); });
-"
+'
 """
 
 [tasks.test-web-glue]
@@ -884,21 +884,29 @@ set -e -o pipefail
 WADO="${1:?Usage: mise run jco-bench <program.wado> [runs]}"
 RUNS="${2:-3}"
 NAME=$(basename "$WADO" .wado)
+# The directory granted as the program's `.`, as `wado run --dir <dir>::.` does.
+# The benchmarks read their data relative to benchmark/.
+PREOPEN=$(realpath "${JCO_PREOPEN:-.}")
 WORK=$(mktemp -d)
 # V8 has no wide-arithmetic; -f no-wide-arithmetic keeps float formatting (and
 # any i128 math) off the native ops so the component runs under Node.
 scripts/dev-bin.sh wado compile -O2 -f no-wide-arithmetic -o "$WORK/$NAME.wasm" "$WADO"
 node scripts/jco/transpile-released.mjs "$WORK/$NAME.wasm" "$WORK/jco" >/dev/null
-echo "# $NAME on Node (jco, self-timed, best of $RUNS):"
+echo "# $NAME on Node (jco, self-timed, best of $RUNS, preopen $PREOPEN):"
 for i in $(seq 1 "$RUNS"); do
-  # `timeout` guards against the known jco read-stream deadlock: filesystem-backed
-  # benchmarks (Preopens) hang forever, so cap each run instead of wedging.
-  if ! timeout 120 node -e "
-    process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
-    import('$WORK/jco/$NAME.js').then(m => m.run.run())
-      .catch(e => { console.error(e.message || e); process.exit(1); });
-  "; then
-    echo "error: '$NAME' did not finish on Node (timed out or errored). Filesystem-backed benchmarks are not yet supported via jco." >&2
+  # The shim writes stdout from a worker that is torn down once the event loop
+  # empties, dropping lines still queued, so the run holds the loop open a
+  # second after `run()` resolves.
+  if ! JCO="$WORK/jco" NAME="$NAME" PREOPEN="$PREOPEN" timeout 120 node -e '
+    process.on("unhandledRejection", e => { console.error(e); process.exit(1); });
+    const { JCO, NAME, PREOPEN } = process.env;
+    const { _setPreopens } = await import(`${JCO}/node_modules/@bytecodealliance/preview3-shim/dist/nodejs/filesystem.js`);
+    _setPreopens({ ".": PREOPEN });
+    const m = await import(`${JCO}/${NAME}.js`);
+    await m.run.run().catch(e => { console.error(e.message || e); process.exit(1); });
+    await new Promise(r => setTimeout(r, 1000));
+  '; then
+    echo "error: '$NAME' did not finish on Node (timed out or errored)." >&2
     exit 1
   fi
 done

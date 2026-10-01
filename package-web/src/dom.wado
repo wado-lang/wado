@@ -6,10 +6,10 @@ pub resource EventTarget {
     fn new() -> EventTarget;
     #[cm("wado-lang:web/event-target#add-event-listener")]
     #[cm_params("self", "type", "callback", "options")]
-    fn add_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<bool>);
+    fn add_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<bool> = null);
     #[cm("wado-lang:web/event-target#remove-event-listener")]
     #[cm_params("self", "type", "callback", "options")]
-    fn remove_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<bool>);
+    fn remove_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<bool> = null);
     #[cm("wado-lang:web/event-target#dispatch-event")]
     #[cm_params("self", "event")]
     fn dispatch_event(&self, event: Event) -> bool;
@@ -76,7 +76,7 @@ pub resource Event {
     fn time_stamp(&self) -> f64;
     #[cm("wado-lang:web/event#init-event")]
     #[cm_params("self", "type", "bubbles", "cancelable")]
-    fn init_event(&self, type: String, bubbles: Option<bool>, cancelable: Option<bool>);
+    fn init_event(&self, type: String, bubbles: bool = false, cancelable: bool = false);
 }
 
 #[cm("wado-lang:web/node", linearity = "unrestricted", classes = "1..=5")]
@@ -137,7 +137,7 @@ pub resource Node extends EventTarget {
     fn normalize(&self);
     #[cm("wado-lang:web/node#clone-node")]
     #[cm_params("self", "subtree")]
-    fn clone_node(&self, subtree: Option<bool>) -> Node;
+    fn clone_node(&self, subtree: bool = false) -> Node;
     #[cm("wado-lang:web/node#is-equal-node")]
     #[cm_params("self", "other-node")]
     fn is_equal_node(&self, other_node: Option<Node>) -> bool;
@@ -267,7 +267,7 @@ pub resource Element extends Node {
     fn remove_attribute_ns(&self, namespace: Option<String>, local_name: String);
     #[cm("wado-lang:web/element#toggle-attribute")]
     #[cm_params("self", "qualified-name", "force")]
-    fn toggle_attribute(&self, qualified_name: String, force: Option<bool>) -> bool;
+    fn toggle_attribute(&self, qualified_name: String, force: Option<bool> = null) -> bool;
     #[cm("wado-lang:web/element#has-attribute")]
     #[cm_params("self", "qualified-name")]
     fn has_attribute(&self, qualified_name: String) -> bool;
@@ -745,7 +745,7 @@ pub resource HtmlElement extends Element {
     fn hide_popover(&self);
     #[cm("wado-lang:web/html-element#toggle-popover")]
     #[cm_params("self", "options")]
-    fn toggle_popover(&self, options: Option<bool>) -> bool;
+    fn toggle_popover(&self, options: Option<bool> = null) -> bool;
     #[cm("wado-lang:web/html-element#popover")]
     #[cm_params("self")]
     fn popover(&self) -> Option<String>;
@@ -1031,10 +1031,10 @@ pub resource HtmlInputElement extends HtmlElement {
     fn set_width(&self, value: u32);
     #[cm("wado-lang:web/html-input-element#step-up")]
     #[cm_params("self", "n")]
-    fn step_up(&self, n: Option<i32>);
+    fn step_up(&self, n: i32 = 1);
     #[cm("wado-lang:web/html-input-element#step-down")]
     #[cm_params("self", "n")]
-    fn step_down(&self, n: Option<i32>);
+    fn step_down(&self, n: i32 = 1);
     #[cm("wado-lang:web/html-input-element#will-validate")]
     #[cm_params("self")]
     fn will_validate(&self) -> bool;
@@ -1073,7 +1073,7 @@ pub resource HtmlInputElement extends HtmlElement {
     fn set_selection_direction(&self, value: Option<String>);
     #[cm("wado-lang:web/html-input-element#set-selection-range")]
     #[cm_params("self", "start", "end", "direction")]
-    fn set_selection_range(&self, start: u32, end: u32, direction: Option<String>);
+    fn set_selection_range(&self, start: u32, end: u32, direction: Option<String> = null);
     #[cm("wado-lang:web/html-input-element#show-picker")]
     #[cm_params("self")]
     fn show_picker(&self);
@@ -1145,13 +1145,13 @@ pub resource Document extends Node {
     fn document_element(&self) -> Option<Element>;
     #[cm("wado-lang:web/document#create-element")]
     #[cm_params("self", "local-name", "options")]
-    fn create_element(&self, local_name: String, options: Option<String>) -> Element;
+    fn create_element(&self, local_name: String, options: Option<String> = null) -> Element;
     #[cm("wado-lang:web/document#create-element-ns")]
     #[cm_params("self", "namespace", "qualified-name", "options")]
-    fn create_element_ns(&self, namespace: Option<String>, qualified_name: String, options: Option<String>) -> Element;
+    fn create_element_ns(&self, namespace: Option<String>, qualified_name: String, options: Option<String> = null) -> Element;
     #[cm("wado-lang:web/document#import-node")]
     #[cm_params("self", "node", "options")]
-    fn import_node(&self, node: Node, options: Option<bool>) -> Node;
+    fn import_node(&self, node: Node, options: bool = false) -> Node;
     #[cm("wado-lang:web/document#adopt-node")]
     #[cm_params("self", "node")]
     fn adopt_node(&self, node: Node) -> Node;
@@ -1208,7 +1208,7 @@ pub resource Document extends Node {
     fn set_body(&self, value: Option<HtmlElement>);
     #[cm("wado-lang:web/document#open")]
     #[cm_params("self", "unused1", "unused2")]
-    fn open(&self, unused1: Option<String>, unused2: Option<String>) -> Document;
+    fn open(&self, unused1: Option<String> = null, unused2: Option<String> = null) -> Document;
     #[cm("wado-lang:web/document#close")]
     #[cm_params("self")]
     fn close(&self);
@@ -1229,7 +1229,7 @@ pub resource Document extends Node {
     fn set_design_mode(&self, value: String);
     #[cm("wado-lang:web/document#exec-command")]
     #[cm_params("self", "command-id", "show-ui", "value")]
-    fn exec_command(&self, command_id: String, show_ui: Option<bool>, value: Option<String>) -> bool;
+    fn exec_command(&self, command_id: String, show_ui: bool = false, value: String = "") -> bool;
     #[cm("wado-lang:web/document#query-command-enabled")]
     #[cm_params("self", "command-id")]
     fn query_command_enabled(&self, command_id: String) -> bool;
@@ -1443,10 +1443,10 @@ pub resource Window extends EventTarget {
     fn origin_agent_cluster(&self) -> bool;
     #[cm("wado-lang:web/window#confirm")]
     #[cm_params("self", "message")]
-    fn confirm(&self, message: Option<String>) -> bool;
+    fn confirm(&self, message: String = "") -> bool;
     #[cm("wado-lang:web/window#prompt")]
     #[cm_params("self", "message", "default")]
-    fn prompt(&self, message: Option<String>, default: Option<String>) -> Option<String>;
+    fn prompt(&self, message: String = "", default: String = "") -> Option<String>;
     #[cm("wado-lang:web/window#print")]
     #[cm_params("self")]
     fn print(&self);
@@ -1476,10 +1476,10 @@ pub resource Window extends EventTarget {
     fn atob(&self, data: String) -> String;
     #[cm("wado-lang:web/window#clear-timeout")]
     #[cm_params("self", "id")]
-    fn clear_timeout(&self, id: Option<i32>);
+    fn clear_timeout(&self, id: i32 = 0);
     #[cm("wado-lang:web/window#clear-interval")]
     #[cm_params("self", "id")]
-    fn clear_interval(&self, id: Option<i32>);
+    fn clear_interval(&self, id: i32 = 0);
     #[cm("wado-lang:web/window#queue-microtask")]
     #[cm_params("self", "callback")]
     fn queue_microtask(&self, callback: fn mut() with Dom);

@@ -7,6 +7,7 @@
 pub mod bare_asserts;
 pub mod plan;
 pub mod translate;
+pub mod wide_arith;
 pub(crate) mod wide_int_literal;
 
 use crate::flat_package::FlatPackage;

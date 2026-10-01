@@ -5,23 +5,14 @@
 //! have no NIR analogue, the shapes they match existing only after lowering.
 
 use crate::compiler_trace;
-use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirInstr, WirLocals, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_optimize::nullability::Nullability;
 use crate::wir_optimize::util::{
-    self, Footprint, is_same_free_read, is_side_effect_free, may_trap_in,
+    self, Footprint, for_each_nullable_ref_operand, is_same_free_read, is_side_effect_free,
+    may_trap_in,
 };
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 use indexmap::{IndexMap, IndexSet};
-
-/// Per-local definition statistics gathered over a whole function body.
-#[derive(Default, Clone)]
-struct LocalDefInfo {
-    /// Number of definitions: `LocalSet`, `LocalTee`, `MultiValueLocalBind` target.
-    defs: u32,
-    /// Number of `LocalTee` definitions (a tee is also a use, so tee'd locals
-    /// are excluded from copy propagation).
-    tees: u32,
-}
 
 /// What a propagated local's uses are replaced by.
 #[derive(Clone)]
@@ -66,7 +57,7 @@ pub(super) fn propagate_trivial_copies(module: &mut WirPackage) {
 
 fn propagate_copies_in_function(body: &mut [WirInstr], params: &IndexSet<String>) {
     // 1. Count definitions per local across the whole function.
-    let mut counts: IndexMap<String, LocalDefInfo> = IndexMap::default();
+    let mut counts: IndexMap<String, u32> = IndexMap::default();
     let mut counter = DefCounter {
         counts: &mut counts,
     };
@@ -104,35 +95,22 @@ fn propagate_copies_in_function(body: &mut [WirInstr], params: &IndexSet<String>
 
 /// Counts `LocalSet` / `LocalTee` / `MultiValueLocalBind` definitions per local.
 struct DefCounter<'a> {
-    counts: &'a mut IndexMap<String, LocalDefInfo>,
+    counts: &'a mut IndexMap<String, u32>,
 }
 
 impl WirRefVisitor for DefCounter<'_> {
     fn visit_instr(&mut self, instr: &WirInstr) {
-        match instr {
-            WirInstr::LocalSet { name, .. } => {
-                self.counts.entry(name.clone()).or_default().defs += 1;
-            }
-            WirInstr::LocalTee { name, .. } => {
-                let info = self.counts.entry(name.clone()).or_default();
-                info.defs += 1;
-                info.tees += 1;
-            }
-            WirInstr::MultiValueLocalBind { locals, .. } => {
-                for local in locals.iter().flatten() {
-                    self.counts.entry(local.clone()).or_default().defs += 1;
-                }
-            }
-            _ => {}
+        for name in instr.local_writes() {
+            *self.counts.entry(name.to_string()).or_default() += 1;
         }
         self.walk_instr(instr);
     }
 }
 
-/// Collects `LocalSet { alias, LocalGet { source } }` copies eligible for
-/// propagation, based on the whole-function definition counts.
+/// Collects the copies eligible for propagation, based on the whole-function
+/// definition counts: `alias = source` and `alias = local.tee source(v)`.
 struct CopyCollector<'a> {
-    counts: &'a IndexMap<String, LocalDefInfo>,
+    counts: &'a IndexMap<String, u32>,
     params: &'a IndexSet<String>,
     candidates: &'a mut IndexMap<String, CopySource>,
 }
@@ -141,26 +119,24 @@ impl WirRefVisitor for CopyCollector<'_> {
     fn visit_instr(&mut self, instr: &WirInstr) {
         if let WirInstr::LocalSet { name: alias, value } = instr
             && !self.params.contains(alias)
-            // `alias` must be single-def (this definition) and never tee'd, so
-            // every read of it observes this value.
-            && self
-                .counts
-                .get(alias)
-                .is_some_and(|i| i.defs == 1 && i.tees == 0)
+            // This is the only definition of `alias`, so every read of it
+            // observes this value.
+            && self.counts.get(alias) == Some(&1)
         {
             match value.as_ref() {
-                WirInstr::LocalGet { name: source, .. } if alias != source => {
-                    // `source` must be single-assignment and never tee'd, so
-                    // its value is invariant across the function. A parameter
-                    // with no definition qualifies (`defs == 0`).
-                    if self
-                        .counts
-                        .get(source)
-                        .is_none_or(|i| i.defs <= 1 && i.tees == 0)
-                    {
-                        self.candidates
-                            .insert(alias.clone(), CopySource::Local(source.clone()));
-                    }
+                // `source` must be single-assignment, so its value is invariant
+                // across the function. A parameter with no definition qualifies.
+                WirInstr::LocalGet { name: source, .. }
+                    if alias != source && self.counts.get(source).is_none_or(|&n| n <= 1) =>
+                {
+                    self.candidates
+                        .insert(alias.clone(), CopySource::Local(source.clone()));
+                }
+                WirInstr::LocalTee { name: source, .. }
+                    if alias != source && self.counts.get(source) == Some(&1) =>
+                {
+                    self.candidates
+                        .insert(alias.clone(), CopySource::Local(source.clone()));
                 }
                 konst if is_immediate_const(konst) => {
                     self.candidates
@@ -217,16 +193,6 @@ fn check_dominance_in_instr(
             }
             defined.insert(name.clone());
         }
-        WirInstr::LocalTee { name, value } => {
-            check_dominance_in_instr(value, candidates, params, defined, disqualified);
-            defined.insert(name.clone());
-        }
-        WirInstr::MultiValueLocalBind { instr, locals } => {
-            check_dominance_in_instr(instr, candidates, params, defined, disqualified);
-            for local in locals.iter().flatten() {
-                defined.insert(local.clone());
-            }
-        }
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
             // Definitions inside the block/loop do not dominate code after it.
             // `defined` is append-only here, so a length-mark + `truncate`
@@ -256,24 +222,13 @@ fn check_dominance_in_instr(
                 defined.truncate(mark);
             }
         }
-        WirInstr::Select {
-            condition,
-            if_true,
-            if_false,
-            ..
-        } => {
-            // Wasm evaluates `select`'s operands before its condition (all
-            // unconditionally), the reverse of `for_each_child` order. Walk in
-            // execution order so a copy defined in the condition never appears
-            // to dominate a use in an arm that actually runs before it.
-            check_dominance_in_instr(if_true, candidates, params, defined, disqualified);
-            check_dominance_in_instr(if_false, candidates, params, defined, disqualified);
-            check_dominance_in_instr(condition, candidates, params, defined, disqualified);
-        }
+        // `for_each_child` visits in evaluation order, which is what dominance
+        // within an expression follows.
         other => {
             other.for_each_child(&mut |child| {
                 check_dominance_in_instr(child, candidates, params, defined, disqualified);
             });
+            defined.extend(other.local_writes().map(str::to_string));
         }
     }
 }
@@ -332,9 +287,16 @@ fn apply_in_body(body: &mut [WirInstr], subst: &IndexMap<String, CopySource>) {
 
 fn apply_in_instr(instr: &mut WirInstr, subst: &IndexMap<String, CopySource>) {
     match instr {
-        // The single, trivial copy that defined this alias — now dead.
-        WirInstr::LocalSet { name, .. } if subst.contains_key(name) => {
-            *instr = WirInstr::Nop;
+        // The single, trivial copy that defined this alias — now dead. A tee
+        // copy keeps its source's write.
+        WirInstr::LocalSet { name, value } if subst.contains_key(name) => {
+            *instr = match std::mem::replace(value.as_mut(), WirInstr::Nop) {
+                WirInstr::LocalTee { name, mut value } => {
+                    apply_in_instr(&mut value, subst);
+                    WirInstr::LocalSet { name, value }
+                }
+                _ => WirInstr::Nop,
+            };
         }
         WirInstr::LocalGet { name, .. } => match subst.get(name) {
             Some(CopySource::Local(source)) => *name = source.clone(),
@@ -384,7 +346,9 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_vector_const);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
-        changed |= rewrite_everywhere(instrs, &mut try_relax_gc_operands);
+        changed |= rewrite_everywhere(instrs, &mut |instr| {
+            try_relax_gc_operands(instr, null.locals())
+        });
         // Last in the round: the rules above simplify conditions and arms, and
         // one that decides the whole `if` (a `ref.test` folding to a constant)
         // must get there first — a `select` is past the reach of
@@ -1070,8 +1034,7 @@ fn try_drop_mask(instr: &mut WirInstr) -> bool {
     if value_bits > mask_bits {
         return false;
     }
-    let value = std::mem::replace(value_box.as_mut(), WirInstr::Nop);
-    *instr = value;
+    *instr = std::mem::replace(value_box.as_mut(), WirInstr::Nop);
     true
 }
 
@@ -1312,30 +1275,62 @@ fn try_simplify_ref_op(instr: &mut WirInstr, null: &Nullability) -> bool {
     }
 }
 
-/// Run [`fuse_local_tee`] on every statement list in the trees.
+/// How far a set-then-get fusion reaches.
+#[derive(Clone, Copy)]
+enum TeeReach {
+    /// What the peephole folds read: a scalar local, never inside control
+    /// flow. The passes after the round (copy propagation, variant-slot
+    /// flattening, branch-hint inference) match the unfused shapes of the rest.
+    Fold,
+    /// Every local, into any first-evaluated position outside a nested scope.
+    Final,
+}
+
+/// Run [`fuse_local_tee`] on every statement list in the trees, so a chain of
+/// writes to one local becomes one tree for the folds above.
 fn fuse_local_tees(instrs: &mut [WirInstr]) -> bool {
-    struct Fuser {
-        changed: bool,
-    }
-    impl WirMutVisitor for Fuser {
-        fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
-            self.walk_body(body);
-            self.changed |= fuse_local_tee(body);
-        }
-    }
-    let mut fuser = Fuser { changed: false };
+    let mut fuser = TeeFuser {
+        reach: TeeReach::Fold,
+        changed: false,
+    };
     for instr in instrs.iter_mut() {
         fuser.visit_instr(instr);
     }
-    fuser.changed | fuse_local_tee(instrs)
+    fuser.changed | fuse_local_tee(instrs, TeeReach::Fold)
+}
+
+/// Fuse every set-then-get pair left, as the last rewrite before the locals
+/// are settled: a tee hides the copy it replaces from every pass before.
+pub(super) fn fuse_remaining_local_tees(module: &mut WirPackage) {
+    for body in module.functions.iter_mut().filter_map(|f| f.body.as_mut()) {
+        TeeFuser {
+            reach: TeeReach::Final,
+            changed: false,
+        }
+        .visit_body(body);
+    }
+}
+
+/// Fuses in every statement list, dropping the `Nop` each fusion leaves.
+struct TeeFuser {
+    reach: TeeReach,
+    changed: bool,
+}
+
+impl WirMutVisitor for TeeFuser {
+    fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
+        self.walk_body(body);
+        if fuse_local_tee(body, self.reach) {
+            self.changed = true;
+            body.retain(|instr| !matches!(instr, WirInstr::Nop));
+        }
+    }
 }
 
 /// Fuse a `local.set` with the next statement's first-evaluated `local.get` of
 /// the same local into one `local.tee`, dropping the read. Order is preserved:
 /// the set value moves to the tee site, the first thing the consumer runs.
-/// Restricted to non-reference locals, away from codegen's `ref.as_non_null`
-/// narrowing, and descent stops at control flow.
-fn fuse_local_tee(instrs: &mut [WirInstr]) -> bool {
+fn fuse_local_tee(instrs: &mut [WirInstr], reach: TeeReach) -> bool {
     let mut changed = false;
     for i in 0..instrs.len() {
         let WirInstr::LocalSet { name, .. } = &instrs[i] else {
@@ -1345,7 +1340,7 @@ fn fuse_local_tee(instrs: &mut [WirInstr]) -> bool {
         let Some(consumer) = util::next_non_nop(instrs, i + 1) else {
             continue;
         };
-        if !leftmost_leaf_is_local_get(&instrs[consumer], &name) {
+        if !leftmost_leaf_is_local_get(&instrs[consumer], &name, reach) {
             continue;
         }
         let value = match &mut instrs[i] {
@@ -1353,7 +1348,7 @@ fn fuse_local_tee(instrs: &mut [WirInstr]) -> bool {
             _ => unreachable!(),
         };
         let mut slot = Some(value);
-        let fused = fuse_into_leftmost_leaf(&mut instrs[consumer], &name, &mut slot);
+        let fused = fuse_into_leftmost_leaf(&mut instrs[consumer], &name, &mut slot, reach);
         debug_assert!(fused, "leftmost check and fuse must agree");
         instrs[i] = WirInstr::Nop;
         changed = true;
@@ -1361,17 +1356,17 @@ fn fuse_local_tee(instrs: &mut [WirInstr]) -> bool {
     changed
 }
 
-/// True if the first-evaluated leaf of `instr` is a non-reference
-/// `local.get $name`. Mirrors the descent of [`fuse_into_leftmost_leaf`].
-fn leftmost_leaf_is_local_get(instr: &WirInstr, name: &str) -> bool {
+/// True if the first-evaluated leaf of `instr` is `local.get $name`. Mirrors
+/// the descent of [`fuse_into_leftmost_leaf`].
+fn leftmost_leaf_is_local_get(instr: &WirInstr, name: &str, reach: TeeReach) -> bool {
     if let WirInstr::LocalGet {
         name: got,
         result_ty,
     } = instr
     {
-        return got == name && !is_ref_type(result_ty);
+        return got == name && reaches_local(result_ty, reach);
     }
-    if descent_blocked(instr) {
+    if descent_blocked(instr, reach) {
         return false;
     }
     let mut result = false;
@@ -1379,7 +1374,7 @@ fn leftmost_leaf_is_local_get(instr: &WirInstr, name: &str) -> bool {
     instr.for_each_child(&mut |child| {
         if first {
             first = false;
-            result = leftmost_leaf_is_local_get(child, name);
+            result = leftmost_leaf_is_local_get(child, name, reach);
         }
     });
     result
@@ -1392,6 +1387,7 @@ fn fuse_into_leftmost_leaf(
     instr: &mut WirInstr,
     name: &str,
     slot: &mut Option<Box<WirInstr>>,
+    reach: TeeReach,
 ) -> bool {
     if let WirInstr::LocalGet {
         name: got,
@@ -1399,7 +1395,7 @@ fn fuse_into_leftmost_leaf(
     } = instr
     {
         if got == name
-            && !is_ref_type(result_ty)
+            && reaches_local(result_ty, reach)
             && let Some(value) = slot.take()
         {
             *instr = WirInstr::LocalTee {
@@ -1410,7 +1406,7 @@ fn fuse_into_leftmost_leaf(
         }
         return false;
     }
-    if descent_blocked(instr) {
+    if descent_blocked(instr, reach) {
         return false;
     }
     let mut fused = false;
@@ -1418,62 +1414,53 @@ fn fuse_into_leftmost_leaf(
     instr.for_each_boxed_child_mut(&mut |child| {
         if first {
             first = false;
-            fused = fuse_into_leftmost_leaf(child, name, slot);
+            fused = fuse_into_leftmost_leaf(child, name, slot, reach);
         }
     });
     fused
 }
 
-/// Nodes the leftmost-leaf descent must not enter: control flow whose first
-/// child runs conditionally or repeatedly (`Block`/`Loop`/`If`/`Seq`/`Br*`),
-/// `Select` (whose Wasm operand order — `if_true`, `if_false`, then condition —
-/// differs from the child-visitation order), and `BranchHint` /
-/// `MultiValueLocalBind`, whose operands we keep the tee away from.
-fn descent_blocked(instr: &WirInstr) -> bool {
-    matches!(
-        instr,
-        WirInstr::Block { .. }
-            | WirInstr::Loop { .. }
-            | WirInstr::If { .. }
-            | WirInstr::Seq(_)
-            | WirInstr::Br { .. }
-            | WirInstr::BrIf { .. }
-            | WirInstr::BrTable { .. }
-            | WirInstr::BranchHint { .. }
-            | WirInstr::Select { .. }
-            | WirInstr::MultiValueLocalBind { .. }
-    )
-}
-
-fn is_ref_type(ty: &WirType) -> bool {
-    matches!(ty, WirType::Ref { .. } | WirType::AbstractRef { .. })
-}
-
-/// Relax `LocalGet.result_ty` from non-null to nullable for GC access operands.
-///
-/// GC access instructions (`array.get`, `array.set`, `struct.get`, `struct.set`,
-/// `array.len`, `array.fill`, `array.copy`, `ref.cast`, `ref.test`) accept
-/// `(ref null $type)`, so `ref.as_non_null` is unnecessary for their object operand.
-/// Codegen emits `ref.as_non_null` only when `result_ty` is non-null, so relaxing
-/// it here suppresses the redundant instruction.
-fn try_relax_gc_operands(instr: &mut WirInstr) -> bool {
-    match instr {
-        WirInstr::ArrayGet { array, .. }
-        | WirInstr::ArrayGetS { array, .. }
-        | WirInstr::ArrayGetU { array, .. }
-        | WirInstr::ArraySet { array, .. }
-        | WirInstr::ArrayFill { array, .. } => relax_ref_local_get(array),
-        WirInstr::ArrayLen(a) => relax_ref_local_get(a),
-        WirInstr::ArrayCopy { dest, src, .. } => {
-            let d = relax_ref_local_get(dest);
-            relax_ref_local_get(src) | d
-        }
-        WirInstr::StructGet { expr, .. }
-        | WirInstr::StructSet { expr, .. }
-        | WirInstr::RefCast { expr, .. }
-        | WirInstr::RefTest { expr, .. } => relax_ref_local_get(expr),
-        _ => false,
+fn reaches_local(ty: &WirType, reach: TeeReach) -> bool {
+    match reach {
+        TeeReach::Fold => !ty.is_reference(),
+        TeeReach::Final => true,
     }
+}
+
+/// Nodes the leftmost-leaf descent must not enter. A `block` or `loop` body is
+/// a scope of its own, so a tee there would leave the local unset for Wasm past
+/// its end, and a loop body runs again. Any other node's first child in
+/// evaluation order runs first and in the enclosing scope, an `if` condition
+/// included; [`TeeReach::Fold`] stays out of control flow all the same.
+fn descent_blocked(instr: &WirInstr, reach: TeeReach) -> bool {
+    match reach {
+        TeeReach::Fold => matches!(
+            instr,
+            WirInstr::Block { .. }
+                | WirInstr::Loop { .. }
+                | WirInstr::If { .. }
+                | WirInstr::Seq(_)
+                | WirInstr::Br { .. }
+                | WirInstr::BrIf { .. }
+                | WirInstr::BrTable { .. }
+                | WirInstr::BranchHint { .. }
+                | WirInstr::Select { .. }
+                | WirInstr::MultiValueLocalBind { .. }
+        ),
+        TeeReach::Final => matches!(instr, WirInstr::Block { .. } | WirInstr::Loop { .. }),
+    }
+}
+
+/// Relax `LocalGet.result_ty` from non-null to nullable for the operands that
+/// accept a nullable reference. `finalize_locals` narrows a nullable local's
+/// read only where `result_ty` is non-null, so relaxing it here suppresses the
+/// redundant `ref.as_non_null`.
+fn try_relax_gc_operands(instr: &mut WirInstr, locals: &WirLocals) -> bool {
+    let mut changed = false;
+    for_each_nullable_ref_operand(instr, locals, |operand| {
+        changed |= relax_ref_local_get(operand);
+    });
+    changed
 }
 
 fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
@@ -1489,7 +1476,7 @@ fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wir::{WirAbstractHeapType, WirFuncId, WirLocals};
+    use crate::wir::{WirAbstractHeapType, WirFuncId};
     use std::assert_matches;
     use std::rc::Rc;
 
@@ -1824,7 +1811,7 @@ mod tests {
                 ))),
             },
         ];
-        fuse_local_tee(&mut body);
+        fuse_local_tee(&mut body, TeeReach::Fold);
         assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[1] else {
             panic!("expected return");
@@ -1856,7 +1843,7 @@ mod tests {
                 ))),
             },
         ];
-        fuse_local_tee(&mut body);
+        fuse_local_tee(&mut body, TeeReach::Fold);
         assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[1] else {
             panic!("expected return");
@@ -1886,12 +1873,12 @@ mod tests {
                 ))),
             },
         ];
-        fuse_local_tee(&mut body);
+        fuse_local_tee(&mut body, TeeReach::Fold);
         assert_matches!(body[0], WirInstr::LocalSet { .. });
     }
 
     #[test]
-    fn tee_does_not_fuse_ref_locals() {
+    fn tee_fuses_ref_locals_only_at_the_end() {
         let mut body = vec![
             WirInstr::LocalSet {
                 name: "r".to_string(),
@@ -1903,8 +1890,56 @@ mod tests {
                 value: Some(Box::new(local_get("r", ref_ty(1, true)))),
             },
         ];
-        fuse_local_tee(&mut body);
-        assert_matches!(body[0], WirInstr::LocalSet { .. });
+        assert!(!fuse_local_tee(&mut body, TeeReach::Fold));
+        assert!(fuse_local_tee(&mut body, TeeReach::Final));
+        assert_matches!(body[0], WirInstr::Nop);
+        let WirInstr::Return { value: Some(v) } = &body[1] else {
+            panic!("expected the return to survive");
+        };
+        assert_matches!(v.as_ref(), WirInstr::LocalTee { .. });
+    }
+
+    #[test]
+    fn tee_fuses_into_an_if_condition_at_the_end() {
+        // The condition runs first and outside the arms, so it may take the tee.
+        let mut body = vec![
+            WirInstr::LocalSet {
+                name: "t".to_string(),
+                value: Box::new(WirInstr::I32Const(1)),
+            },
+            WirInstr::If {
+                condition: Box::new(WirInstr::BranchHint {
+                    likely: true,
+                    expr: Box::new(local_get("t", WirType::I32)),
+                }),
+                result: None,
+                then_body: vec![WirInstr::Drop(Box::new(local_get("t", WirType::I32)))],
+                else_body: None,
+            },
+        ];
+        assert!(!fuse_local_tee(&mut body, TeeReach::Fold));
+        assert!(fuse_local_tee(&mut body, TeeReach::Final));
+        let WirInstr::If { condition, .. } = &body[1] else {
+            panic!("expected the if to survive");
+        };
+        assert_matches!(condition.peel_hint(), WirInstr::LocalTee { .. });
+    }
+
+    #[test]
+    fn tee_does_not_enter_a_block() {
+        // A tee inside the block would leave the local unset past its end.
+        let mut body = vec![
+            WirInstr::LocalSet {
+                name: "t".to_string(),
+                value: Box::new(WirInstr::I32Const(0)),
+            },
+            WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![WirInstr::Drop(Box::new(local_get("t", WirType::I32)))],
+            },
+        ];
+        assert!(!fuse_local_tee(&mut body, TeeReach::Final));
     }
 
     #[test]
@@ -1920,7 +1955,7 @@ mod tests {
                 body: vec![WirInstr::Drop(Box::new(local_get("t", WirType::I32)))],
             },
         ];
-        assert!(!fuse_local_tee(&mut body));
+        assert!(!fuse_local_tee(&mut body, TeeReach::Fold));
         assert_matches!(body[0], WirInstr::LocalSet { .. });
     }
 
@@ -1938,7 +1973,7 @@ mod tests {
                 value: Some(Box::new(local_get("t", WirType::I32))),
             },
         ];
-        assert!(fuse_local_tee(&mut body));
+        assert!(fuse_local_tee(&mut body, TeeReach::Fold));
         assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[3] else {
             panic!("expected return");
@@ -2140,5 +2175,39 @@ mod tests {
             WirInstr::LocalGet { name, .. } if name == "alias",
             "use before the copy executes must not be rewritten"
         );
+    }
+
+    #[test]
+    fn copy_prop_folds_a_tee_copy_into_its_source() {
+        // `a = local.tee s(v); b = s; use(a, b)` leaves `s = v; use(s, s)`.
+        let mut body = vec![
+            WirInstr::LocalSet {
+                name: "a".to_string(),
+                value: Box::new(WirInstr::LocalTee {
+                    name: "s".to_string(),
+                    value: Box::new(local_get("p", WirType::I32)),
+                }),
+            },
+            WirInstr::LocalSet {
+                name: "b".to_string(),
+                value: Box::new(local_get("s", WirType::I32)),
+            },
+            WirInstr::Drop(Box::new(local_get("a", WirType::I32))),
+            WirInstr::Drop(Box::new(local_get("b", WirType::I32))),
+        ];
+        let params: IndexSet<String> = ["p".to_string()].into_iter().collect();
+        propagate_copies_in_function(&mut body, &params);
+        assert_matches!(
+            &body[0],
+            WirInstr::LocalSet { name, value }
+                if name == "s" && matches!(value.as_ref(), WirInstr::LocalGet { name, .. } if name == "p")
+        );
+        assert_matches!(&body[1], WirInstr::Nop);
+        for drop in &body[2..] {
+            assert_matches!(
+                drop,
+                WirInstr::Drop(v) if matches!(v.as_ref(), WirInstr::LocalGet { name, .. } if name == "s")
+            );
+        }
     }
 }

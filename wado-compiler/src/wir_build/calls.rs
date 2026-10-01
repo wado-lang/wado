@@ -22,6 +22,13 @@ use crate::tir::ResolvedType;
 use crate::wir::WirFuncId;
 use crate::wir_build::translate::ref_binding_needs_boxing;
 
+fn local_get(name: &str, ty: &WirType) -> WirInstr {
+    WirInstr::LocalGet {
+        name: name.to_string(),
+        result_ty: ty.clone(),
+    }
+}
+
 /// The compile-time constant of a SIMD lane operand, promoted into the
 /// function's value pool. The elaborator has already rejected anything else.
 fn operand_lane_const(body: &Body, op: Operand) -> u8 {
@@ -274,14 +281,19 @@ impl FunctionTranslator<'_, '_> {
         (self.ref_type_id(src_type_id), src, src_type_id)
     }
 
-    fn build_bulk_array_clone(
+    /// A fresh array of `src`'s type holding its first `len` elements (all of
+    /// them by default). A primitive element copies in bulk; a value-typed one
+    /// goes through its `$value_copy$` helper, `element_copy`, one at a time.
+    fn build_array_clone(
         &mut self,
         type_id: WirTypeId,
         src: WirInstr,
         len: Option<WirInstr>,
+        element_copy: Option<WirFuncId>,
     ) -> WirInstr {
-        // One set per clone: the `len` operand can hold a bulk clone of this
-        // same type, and it runs between this one's `src` store and its copy.
+        // One set per clone: the `len` operand can hold a clone of this same
+        // type, and it runs between this one's `src` store and its copy.
+        let is_prefix = len.is_some();
         let src_name = self.fresh_local("$array_clone_src");
         let dst_name = self.fresh_local("$array_clone_dst");
         let len_name = self.fresh_local("$array_clone_len");
@@ -290,55 +302,125 @@ impl FunctionTranslator<'_, '_> {
             nullable: false,
         };
 
+        let src_get = local_get(&src_name, &ref_ty);
+        let dst_get = local_get(&dst_name, &ref_ty);
+        let len_get = local_get(&len_name, &WirType::I32);
+
         let mut seq = Vec::new();
-        seq.extend(declare_and_set_local(src_name.clone(), ref_ty.clone(), src));
-        let len_instr = len.unwrap_or_else(|| {
-            WirInstr::ArrayLen(Box::new(WirInstr::LocalGet {
-                name: src_name.clone(),
-                result_ty: ref_ty.clone(),
-            }))
-        });
+        seq.extend(declare_and_set_local(src_name, ref_ty.clone(), src));
+        let len = len.unwrap_or_else(|| WirInstr::ArrayLen(Box::new(src_get.clone())));
+        seq.extend(declare_and_set_local(len_name, WirType::I32, len));
         seq.extend(declare_and_set_local(
-            len_name.clone(),
-            WirType::I32,
-            len_instr,
-        ));
-        seq.extend(declare_and_set_local(
-            dst_name.clone(),
-            ref_ty.clone(),
+            dst_name,
+            ref_ty,
             WirInstr::ArrayNewDefault {
                 type_id: type_id.clone(),
-                len: Box::new(WirInstr::LocalGet {
-                    name: len_name.clone(),
-                    result_ty: WirType::I32,
-                }),
+                len: Box::new(len_get.clone()),
             },
         ));
-        seq.push(WirInstr::ArrayCopy {
-            dest_type_id: type_id.clone(),
-            src_type_id: type_id,
-            dest: Box::new(WirInstr::LocalGet {
-                name: dst_name.clone(),
-                result_ty: ref_ty.clone(),
+        match element_copy {
+            None => seq.push(WirInstr::ArrayCopy {
+                dest_type_id: type_id.clone(),
+                src_type_id: type_id,
+                dest: Box::new(dst_get.clone()),
+                dest_offset: Box::new(WirInstr::I32Const(0)),
+                src: Box::new(src_get),
+                src_offset: Box::new(WirInstr::I32Const(0)),
+                len: Box::new(len_get),
             }),
-            dest_offset: Box::new(WirInstr::I32Const(0)),
-            src: Box::new(WirInstr::LocalGet {
-                name: src_name,
-                result_ty: ref_ty.clone(),
-            }),
-            src_offset: Box::new(WirInstr::I32Const(0)),
-            len: Box::new(WirInstr::LocalGet {
-                name: len_name,
-                result_ty: WirType::I32,
-            }),
-        });
-        seq.push(WirInstr::LocalGet {
-            name: dst_name,
-            result_ty: ref_ty,
-        });
+            Some(element_copy) => {
+                // Named for the dump, where it is the one sign of a deep copy.
+                let label = if is_prefix {
+                    "$array_clone_deep_prefix"
+                } else {
+                    "$array_clone_deep"
+                };
+                seq.extend(self.deep_clone_loop(
+                    label,
+                    type_id,
+                    [&src_get, &dst_get, &len_get],
+                    element_copy,
+                ));
+            }
+        }
+        seq.push(dst_get);
         WirInstr::Seq(seq)
     }
 
+    /// `dst[i] = element_copy(src[i])` for each `i < len`, a null element
+    /// copied as it is.
+    fn deep_clone_loop(
+        &mut self,
+        label: &str,
+        type_id: WirTypeId,
+        [src, dst, len]: [&WirInstr; 3],
+        element_copy: WirFuncId,
+    ) -> [WirInstr; 4] {
+        let i_name = self.fresh_local("$array_clone_i");
+        let elem_name = self.fresh_local("$array_clone_elem");
+        // `array.get` reads a ref element as nullable, and a `List<T>`'s
+        // backing array is sized to its capacity, so the slots past `used`
+        // hold `array.new_default`'s null. Keep it rather than hand it to the
+        // helper, which takes a non-null ref.
+        let elem_ty = self.array_element_wir_type(&type_id).as_nullable();
+        let i = local_get(&i_name, &WirType::I32);
+        let elem = local_get(&elem_name, &elem_ty);
+        let copied = WirInstr::If {
+            condition: Box::new(WirInstr::RefIsNull(Box::new(elem.clone()))),
+            result: Some(elem_ty.clone()),
+            then_body: vec![elem.clone()],
+            else_body: Some(vec![WirInstr::Call {
+                func_id: element_copy,
+                args: vec![WirInstr::RefAsNonNull(Box::new(elem))],
+            }]),
+        };
+        let body = vec![
+            WirInstr::BrIf {
+                depth: 1,
+                condition: Box::new(WirInstr::I32GeS(Box::new(i.clone()), Box::new(len.clone()))),
+            },
+            WirInstr::LocalSet {
+                name: elem_name.clone(),
+                value: Box::new(WirInstr::ArrayGet {
+                    type_id: type_id.clone(),
+                    array: Box::new(src.clone()),
+                    index: Box::new(i.clone()),
+                    result_ty: elem_ty.clone(),
+                }),
+            },
+            WirInstr::ArraySet {
+                type_id,
+                array: Box::new(dst.clone()),
+                index: Box::new(i.clone()),
+                value: Box::new(copied),
+            },
+            WirInstr::LocalSet {
+                name: i_name.clone(),
+                value: Box::new(WirInstr::I32Add(
+                    Box::new(i),
+                    Box::new(WirInstr::I32Const(1)),
+                )),
+            },
+            WirInstr::Br { depth: 0 },
+        ];
+        let [declare_i, init_i] =
+            declare_and_set_local(i_name, WirType::I32, WirInstr::I32Const(0));
+        [
+            declare_i,
+            init_i,
+            WirInstr::DeclareLocal {
+                name: elem_name,
+                ty: elem_ty,
+            },
+            WirInstr::Block {
+                label: Some(label.to_string()),
+                result: None,
+                body: vec![WirInstr::Loop { label: None, body }],
+            },
+        ]
+    }
+
+    /// Translate a call to a builtin.
     ///
     /// Returns `Some(instr)` for instruction-builtins (Wasm instructions),
     /// `None` for import-builtins (handled as regular function calls).
@@ -602,30 +684,11 @@ impl FunctionTranslator<'_, '_> {
                     len: Box::new(len),
                 })
             }
-            "array_clone" => {
+            "array_clone" | "array_clone_prefix" => {
                 let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
-                match self.array_element_copy(src_type_id) {
-                    Some(element_copy) => Some(WirInstr::ArrayClone {
-                        type_id,
-                        src: Box::new(src),
-                        element_copy,
-                        len: None,
-                    }),
-                    None => Some(self.build_bulk_array_clone(type_id, src, None)),
-                }
-            }
-            "array_clone_prefix" => {
-                let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
-                let len = self.translate_operand(args[1].expr);
-                match self.array_element_copy(src_type_id) {
-                    Some(element_copy) => Some(WirInstr::ArrayClone {
-                        type_id,
-                        src: Box::new(src),
-                        element_copy,
-                        len: Some(Box::new(len)),
-                    }),
-                    None => Some(self.build_bulk_array_clone(type_id, src, Some(len))),
-                }
+                let len = args.get(1).map(|arg| self.translate_operand(arg.expr));
+                let element_copy = self.array_element_copy(src_type_id);
+                Some(self.build_array_clone(type_id, src, len, element_copy))
             }
             "array_clone_shallow" => {
                 // The demote pass retargets `array_clone` / `array_clone_prefix`
@@ -633,7 +696,7 @@ impl FunctionTranslator<'_, '_> {
                 // arg, when present, is the prefix length to preserve.
                 let (type_id, src, _) = self.translate_array_ref_operand(args);
                 let len = args.get(1).map(|arg| self.translate_operand(arg.expr));
-                Some(self.build_bulk_array_clone(type_id, src, len))
+                Some(self.build_array_clone(type_id, src, len, None))
             }
             "array_fill" => {
                 let arr = self.translate_operand(args[0].expr);
