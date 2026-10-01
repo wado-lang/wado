@@ -15,7 +15,7 @@ use {
 } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, LoweredGrammar, Op, Rule, RuleCallOp } from "./gir.wado";
 use { GenContext, RuleCaptures } from "./gen_context.wado";
-use { TreeMap } from "core:collections";
+use { GaleMap } from "./gale_map.wado";
 use { elements_match, follow_forward_args, to_snake_case } from "./gen_util.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec, wado } from "lib:wadopoet";
 use {
@@ -168,8 +168,8 @@ fn translate_caller_arg<S: AsStrSlice>(expr: S, ctx: &GenContext) -> Option<Stri
 ///
 /// A body the translator refuses is simply absent, and the gate analysis refuses
 /// it in turn.
-pub fn translate_gate_bodies(grammar: &Grammar, ctx: &GenContext) -> TreeMap<i32, String> {
-    let mut out = TreeMap::<i32, String>::new();
+pub fn translate_gate_bodies(grammar: &Grammar, ctx: &GenContext) -> GaleMap<i32, String> {
+    let mut out = GaleMap::<i32, String>::new();
     if !ctx.emit_actions() {
         return out;
     }
@@ -495,7 +495,7 @@ pub fn install_rule_captures(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &
     if !ctx.emit_actions() {
         return;
     }
-    let mut captures: TreeMap<String, RuleCaptures> = TreeMap::new();
+    let mut captures: GaleMap<String, RuleCaptures> = GaleMap::new();
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
         let bodies = rule_action_bodies(rule);

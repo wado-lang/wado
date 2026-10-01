@@ -1,6 +1,6 @@
 #![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/LexerExec/NonGreedyClosure.g4"])]
 
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, HashSeed } from "core:collections";
 
 pub struct Span {
     pub start: i32,
@@ -1081,6 +1081,8 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
     };
 }
 
+global LATN_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
+
 struct LThread {
     state: i32,
     stack: i32,
@@ -1090,7 +1092,7 @@ struct LThread {
 struct LatnStacks {
     parent: List<i32>,
     ret: List<i32>,
-    ids: TreeMap<i64, i32>,
+    ids: HashMap<i64, i32>,
 }
 
 impl LatnStacks {
@@ -1116,14 +1118,14 @@ struct LatnVisited {
     step: i32,
     step_of: List<i32>,
     stack_of: List<i32>,
-    more: TreeSet<i64>,
+    more: HashSet<i64>,
 }
 
 global mut LATN_VISITED: LatnVisited = LatnVisited {
     step: 0,
     step_of: [],
     stack_of: [],
-    more: TreeSet::<i64>::new(),
+    more: HashSet::<i64>::new(LATN_SEED),
 };
 
 impl LatnVisited {
@@ -1212,7 +1214,7 @@ fn latn_closure(
 
 pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
     let mut best = -1;
-    let mut stacks = LatnStacks { parent: [], ret: [], ids: TreeMap::<i64, i32>::new() };
+    let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::<i64, i32>::new(LATN_SEED) };
     let mut open: List<i32> = [];
     let visited = &mut LATN_VISITED;
     visited.cover(sim.state_kind.len());

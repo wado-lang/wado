@@ -18,16 +18,16 @@ use {
     Alternative,
 } from "./ir.wado";
 use { token_slot_order, collect_literal_tokens } from "./lexer_gen.wado";
-use { TreeMap } from "core:collections";
+use { GaleMap } from "./gale_map.wado";
 
 /// Bidirectional token-kind table: `id <-> "TK_*" name`. Built once from
 /// `token_slot_order`; the single long-term home for the `TK_*` strings.
 pub struct TokenKinds {
     /// `names[id]` is the `TK_*` name of kind `id`.
     pub names: List<String>,
-    by_name: TreeMap<String, i32>,
+    by_name: GaleMap<String, i32>,
     /// A literal's text to the `TK_LIT_*` name the lexer declares for it.
-    lit_names: TreeMap<String, String>,
+    lit_names: GaleMap<String, String>,
 }
 
 impl TokenKinds {
@@ -38,8 +38,8 @@ impl TokenKinds {
     pub fn empty() -> TokenKinds {
         return TokenKinds {
             names: [],
-            by_name: TreeMap::<String, i32>::new(),
-            lit_names: TreeMap::<String, String>::new(),
+            by_name: GaleMap::<String, i32>::new(),
+            lit_names: GaleMap::<String, String>::new(),
         };
     }
 
@@ -69,8 +69,8 @@ impl TokenKinds {
         let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
         let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
         let mut names: List<String> = [];
-        let mut by_name = TreeMap::<String, i32>::new();
-        let mut lit_names = TreeMap::<String, String>::new();
+        let mut by_name = GaleMap::<String, i32>::new();
+        let mut lit_names = GaleMap::<String, String>::new();
         for let lit of &lit_tokens {
             lit_names[lit.text] = lit.const_name;
         }
