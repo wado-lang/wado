@@ -420,8 +420,9 @@ pub fn gen_alt_scan_fn<S: AsStrSlice>(
 /// The rule call ending a scan body that the scan can return as its own result:
 /// a failed callee returns -1, which is what the body would. A gate after it, a
 /// one-token callee scanned inline, or an ATN push around it leaves work after
-/// the call.
-fn scan_tail_call(body: &ScanBody, ctx: &GenContext) -> Option<ScanRuleCallElement> {
+/// the call. So does an optional probe that already scans through the call, and
+/// would scan it again were the call split off.
+fn scan_tail_call(body: &ScanBody, ctx: &mut GenContext) -> Option<ScanRuleCallElement> {
     if !body.gates.is_empty() {
         return null;
     }
@@ -430,6 +431,12 @@ fn scan_tail_call(body: &ScanBody, ctx: &GenContext) -> Option<ScanRuleCallEleme
     };
     if ctx.one_token_rule(&rc.target_snake) matches { Some(_) } || ctx.scan_reaches_simulator(&rc.target_snake) {
         return null;
+    }
+    let n = body.elements.len();
+    for let i of 0..<n {
+        if probe_scans_rest(&body.elements[i], &body.elements, i + 1, n, ctx) {
+            return null;
+        }
     }
     return Option::Some(rc);
 }

@@ -1205,6 +1205,18 @@ test "a tail optional enters only where its body can match" {
     assert got == "f(); => (s (e (e f) ( )) ;)\nf () => x; => (s (e f (e ( ) => x)) ;)\nf g; => (s (e f (e g)) ;)\nf g(); => (s (e f (e (e g) ( ))) ;)\n", got;
 }
 
+test "an optional probe that scans the rest of an alternative ends its scan" {
+    let output = gen_source("
+grammar T;
+s : a ';' ;
+a : 'b'? c | c 'd' ;
+c : 'b'* 'c' 'c' ;
+WS : ' ' -> skip ;
+");
+    let body = extract_fn_body(&output, "fn scan_a__alt_0(");
+    assert body.contains("cont_done_"), `a probe that holds scans \`c\` once: ${body}`;
+}
+
 global TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4: String = "
 grammar T;
 s : 'x' '=' e ';' ;
