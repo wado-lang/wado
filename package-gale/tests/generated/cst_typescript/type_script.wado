@@ -17031,13 +17031,13 @@ fn scan_export_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Export { return -1; }
     pos += 1;
+    let mut cont_done_0 = false;
     if pos < tokens.len() && tokens[pos] == TK_Default {
         let sp = pos;
         pos += 1;
         if pos < 0 {
             pos = sp;
         } else {
-            let bp = pos;
             let mut opt_ok: bool = false;
             opt_probe: {
                 let gp_19 = pos;
@@ -17085,50 +17085,58 @@ fn scan_export_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if _kind_set_37(probe_kind) && (follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { opt_ok = true; }
             }
-            pos = if opt_ok { bp } else { sp };
+            if opt_ok {
+                cont_done_0 = true;
+            } else {
+                pos = sp;
+            }
         }
     }
-    let gp_20 = pos;
-    let sgk_20 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    let mut sg_20_best = -1;
-    if _kind_set_51(sgk_20) {
-        pos = gp_20;
-        sg_20_0: {
-            pos = scan_export_from_block(tokens, pos, atn, memo, 0);
-            if pos < 0 { break sg_20_0; }
-            if pos > sg_20_best { sg_20_best = pos; }
+    if !cont_done_0 {
+        let gp_20 = pos;
+        let sgk_20 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let mut sg_20_best = -1;
+        if _kind_set_51(sgk_20) {
+            pos = gp_20;
+            sg_20_0: {
+                pos = scan_export_from_block(tokens, pos, atn, memo, 0);
+                if pos < 0 { break sg_20_0; }
+                if pos > sg_20_best { sg_20_best = pos; }
+            }
+        } else if _kind_set_52(sgk_20) {
+            pos = gp_20;
+            sg_20_0: {
+                pos = scan_export_from_block(tokens, pos, atn, memo, 0);
+                if pos < 0 { break sg_20_0; }
+                if pos > sg_20_best { sg_20_best = pos; }
+            }
+            pos = gp_20;
+            sg_20_1: {
+                atn.stack.push(1555);
+                pos = scan_declaration(tokens, pos, atn, memo, 0);
+                atn.stack.pop();
+                if pos < 0 { break sg_20_1; }
+                if pos > sg_20_best { sg_20_best = pos; }
+            }
+        } else if _kind_set_53(sgk_20) {
+            pos = gp_20;
+            sg_20_1: {
+                atn.stack.push(1555);
+                pos = scan_declaration(tokens, pos, atn, memo, 0);
+                atn.stack.pop();
+                if pos < 0 { break sg_20_1; }
+                if pos > sg_20_best { sg_20_best = pos; }
+            }
         }
-    } else if _kind_set_52(sgk_20) {
-        pos = gp_20;
-        sg_20_0: {
-            pos = scan_export_from_block(tokens, pos, atn, memo, 0);
-            if pos < 0 { break sg_20_0; }
-            if pos > sg_20_best { sg_20_best = pos; }
+        if sg_20_best >= 0 {
+            pos = sg_20_best;
+        } else {
+            return -1;
         }
-        pos = gp_20;
-        sg_20_1: {
-            atn.stack.push(1555);
-            pos = scan_declaration(tokens, pos, atn, memo, 0);
-            atn.stack.pop();
-            if pos < 0 { break sg_20_1; }
-            if pos > sg_20_best { sg_20_best = pos; }
-        }
-    } else if _kind_set_53(sgk_20) {
-        pos = gp_20;
-        sg_20_1: {
-            atn.stack.push(1555);
-            pos = scan_declaration(tokens, pos, atn, memo, 0);
-            atn.stack.pop();
-            if pos < 0 { break sg_20_1; }
-            if pos > sg_20_best { sg_20_best = pos; }
-        }
+        pos = scan_eos(tokens, pos, atn, memo);
+        if pos < 0 { return -1; }
     }
-    if sg_20_best >= 0 {
-        pos = sg_20_best;
-    } else {
-        return -1;
-    }
-    return scan_eos(tokens, pos, atn, memo);
+    return pos;
 }
 
 fn _parse_export_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
