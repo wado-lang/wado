@@ -1239,11 +1239,12 @@ fn hopeful_params(
             continue;
         };
         let own = hopeful[c].clone();
+        let memo = RefCell::default();
         for (callee, args) in caller.sites {
             let callee = callee.index();
             let mut grew = false;
             for &(pos, op) in args {
-                if !hopeful[callee].contains(&pos) && caller.may_turn_constant(op, &own, 0) {
+                if !hopeful[callee].contains(&pos) && caller.may_turn_constant(op, &own, &memo, 0) {
                     hopeful[callee].insert(pos);
                     grew = true;
                 }
@@ -1275,11 +1276,21 @@ impl Caller<'_> {
     /// parameters of this body a constant may reach. Optimistic: only a value
     /// that no splice or fold can pin — another parameter, a loop-carried
     /// value, an indirect call, a write — answers no.
-    fn may_turn_constant(&self, op: Operand, hopeful: &IndexSet<u32>, depth: u32) -> bool {
+    ///
+    /// `memo` holds each bound local's answer under this `hopeful`: a local
+    /// read twice shares its binding, so the bindings form a DAG that an
+    /// unmemoized walk covers exponentially.
+    fn may_turn_constant(
+        &self,
+        op: Operand,
+        hopeful: &IndexSet<u32>,
+        memo: &RefCell<IndexMap<u32, bool>>,
+        depth: u32,
+    ) -> bool {
         if depth == MAY_TURN_CONSTANT_DEPTH {
             return true;
         }
-        let next = |op: Operand| self.may_turn_constant(op, hopeful, depth + 1);
+        let next = |op: Operand| self.may_turn_constant(op, hopeful, memo, depth + 1);
         let e = match op {
             Operand::Value(v) => {
                 return !matches!(self.body.values.kind(v), ValueKind::LoopPhi { .. });
@@ -1291,7 +1302,18 @@ impl Caller<'_> {
                 if self.written.contains(index) {
                     return false;
                 }
-                hopeful.contains(index) || self.bindings.get(index).is_some_and(|&v| next(v))
+                if hopeful.contains(index) {
+                    return true;
+                }
+                let Some(&value) = self.bindings.get(index) else {
+                    return false;
+                };
+                if let Some(&known) = memo.borrow().get(index) {
+                    return known;
+                }
+                let answer = next(value);
+                memo.borrow_mut().insert(*index, answer);
+                answer
             }
             ExprKind::PackedArray(_)
             | ExprKind::EnumConstruct { .. }
