@@ -1848,8 +1848,8 @@ impl WirInstr {
         }
     }
 
-    /// Visit all child instructions of this node (non-recursive).
-    /// Used by the emitter for pre-scanning (e.g., collecting `DeclareLocal`).
+    /// Visit all child instructions of this node (non-recursive), in evaluation
+    /// order: the order codegen emits them.
     pub fn for_each_child(&self, f: &mut impl FnMut(&WirInstr)) {
         match self {
             // Leaf nodes
@@ -2334,9 +2334,9 @@ impl WirInstr {
                 if_false,
                 ..
             } => {
-                f(condition);
                 f(if_true);
                 f(if_false);
+                f(condition);
             }
             Self::I64Add128(a, b, c, d) | Self::I64Sub128(a, b, c, d) => {
                 f(a);
@@ -2454,8 +2454,8 @@ impl WirInstr {
         }
     }
 
-    /// Visit all child instructions of this node mutably (non-recursive).
-    /// Used by WIR optimization passes for in-place tree rewriting.
+    /// Visit all child instructions of this node mutably (non-recursive), in
+    /// evaluation order: the order codegen emits them.
     pub fn for_each_boxed_child_mut(&mut self, f: &mut impl FnMut(&mut WirInstr)) {
         match self {
             // Leaf nodes
@@ -2940,9 +2940,9 @@ impl WirInstr {
                 if_false,
                 ..
             } => {
-                f(condition);
                 f(if_true);
                 f(if_false);
+                f(condition);
             }
             Self::I64Add128(a, b, c, d) | Self::I64Sub128(a, b, c, d) => {
                 f(a);

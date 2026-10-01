@@ -63,8 +63,6 @@ struct WirEmitter<'a> {
     current_function: String,
     /// Local name map for current function.
     current_locals: IndexMap<String, u32>,
-    /// Locals declared with ref types (need `ref.as_non_null` on `local.get`).
-    ref_locals: IndexSet<String>,
     /// Next local index for current function.
     next_local: u32,
     /// Wasm type section counter.
@@ -93,7 +91,6 @@ impl<'a> WirEmitter<'a> {
             global_name_map: IndexMap::default(),
             current_function: String::new(),
             current_locals: IndexMap::default(),
-            ref_locals: IndexSet::default(),
             next_local: 0,
             next_type_idx: 0,
             variant_pre_assigned: IndexMap::default(),
@@ -755,7 +752,6 @@ impl<'a> WirEmitter<'a> {
         // Reset local tracking
         self.current_function.clone_from(&func.name.fq);
         self.current_locals.clear();
-        self.ref_locals.clear();
         self.next_local = 0;
 
         // Get function type info — check if it has a non-void return type
@@ -772,18 +768,12 @@ impl<'a> WirEmitter<'a> {
             self.next_local = idx + 1;
         }
 
-        let mut local_types: Vec<(String, ValType)> = Vec::new();
-        for (name, ty) in func.locals.iter() {
-            self.push_declared_local(name, ty, &mut local_types);
-        }
-
-        // Build locals array
         let mut locals: Vec<(u32, ValType)> = Vec::new();
-        for (name, val_type) in &local_types {
+        for (name, ty) in func.locals.iter() {
             let idx = self.next_local;
             self.next_local += 1;
-            self.current_locals.insert(name.clone(), idx);
-            locals.push((1, *val_type));
+            self.current_locals.insert(name.to_string(), idx);
+            locals.push((1, self.wir_type_to_val_type(ty)));
         }
 
         let mut f = Function::new(locals);
@@ -806,25 +796,6 @@ impl<'a> WirEmitter<'a> {
         f
     }
 
-    /// Allocate one declared local. A non-null ref local is made nullable (Wasm
-    /// requires defaultable locals) and tracked in `ref_locals` so its
-    /// `local.get` gets a `ref.as_non_null`.
-    fn push_declared_local(
-        &mut self,
-        name: &str,
-        ty: &WirType,
-        locals: &mut Vec<(String, ValType)>,
-    ) {
-        let mut val_type = self.wir_type_to_val_type(ty);
-        if let ValType::Ref(rt) = &mut val_type
-            && !rt.nullable
-        {
-            rt.nullable = true;
-            self.ref_locals.insert(name.to_string());
-        }
-        locals.push((name.to_string(), val_type));
-    }
-
     /// Emit a wide-arithmetic op, which pushes `[low, high]`.
     fn emit_wide_op(&mut self, f: &mut Function, operands: &[&WirInstr], op: Instruction) {
         assert!(
@@ -843,16 +814,9 @@ impl<'a> WirEmitter<'a> {
             WirInstr::DeclareLocal { .. } => {
                 // Already handled in pre-allocation
             }
-            WirInstr::LocalGet { name, result_ty } => {
+            WirInstr::LocalGet { name, .. } => {
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalGet(idx));
-                // Ref-type locals are nullable in Wasm (for defaultability).
-                // Narrow to non-null when the WIR result type says non-null.
-                // The WIR optimizer relaxes result_ty to nullable for GC access
-                // operands (array.get, struct.get, etc.) where nullable is accepted.
-                if self.ref_locals.contains(name.as_str()) && result_ty.is_nonnull_ref() {
-                    f.instruction(&Instruction::RefAsNonNull);
-                }
             }
             WirInstr::LocalSet { name, value } => {
                 self.emit_instr(f, value);
@@ -863,9 +827,6 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, value);
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalTee(idx));
-                if self.ref_locals.contains(name.as_str()) {
-                    f.instruction(&Instruction::RefAsNonNull);
-                }
             }
             WirInstr::GlobalGet { name, result_ty } => {
                 let idx = self.resolve_global(&name.fq);
@@ -1618,17 +1579,7 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::RefNull(ht));
             }
             WirInstr::RefIsNull(o) => self.emit_unary(f, o, Instruction::RefIsNull),
-            WirInstr::RefAsNonNull(o) => {
-                // If inner is a LocalGet for a ref_local, that handler already
-                // emits ref.as_non_null — don't emit it again (would double-wrap).
-                if let WirInstr::LocalGet { name, .. } = o.as_ref()
-                    && self.ref_locals.contains(name.as_str())
-                {
-                    self.emit_instr(f, o);
-                    return;
-                }
-                self.emit_unary(f, o, Instruction::RefAsNonNull);
-            }
+            WirInstr::RefAsNonNull(o) => self.emit_unary(f, o, Instruction::RefAsNonNull),
             WirInstr::RefEq(l, r) => self.emit_binary(f, l, r, Instruction::RefEq),
 
             // Control Flow

@@ -12,14 +12,13 @@ use crate::cm_abi;
 use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId,
-    TypeTable,
+    TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, expr_stmt, generic_method_call,
-    generic_static_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
-    loop_stmt, null_expr, option_none, option_some, synth_span,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, expr_stmt,
+    generic_method_call, generic_static_call, i32_const, if_stmt, internal_call, let_mut_stmt,
+    let_stmt, local_ref, loop_stmt, option_none, option_some, synth_span,
 };
 
 use super::types::{
@@ -441,14 +440,7 @@ pub(super) fn lift_variant_from_disc(
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt("$vdisc", disc_local, TypeTable::I32, disc));
 
-    // Result local (typed as the variant type)
     let result_local = alloc_local(next_local, locals, variant_type);
-    stmts.push(let_mut_stmt(
-        "$vresult",
-        result_local,
-        variant_type,
-        null_expr(variant_type),
-    ));
 
     let payload_offset = cm_abi::variant_payload_offset_with_registry(
         cases.len(),
@@ -456,11 +448,8 @@ pub(super) fn lift_variant_from_disc(
         ctx.cm_interface_registry,
     );
 
-    // Build if/else chain for each case (last case is the else branch)
-    let case_count = cases.len();
-    let mut current_else: Option<TirBlock> = None;
-
-    for (i, case) in cases.iter().enumerate().rev() {
+    let mut arms = Vec::with_capacity(cases.len());
+    for (i, case) in cases.iter().enumerate() {
         let case_name = case.wado_name.clone();
         let payload_type = case.payload.as_ref();
 
@@ -494,34 +483,16 @@ pub(super) fn lift_variant_from_disc(
             variant_type,
             synth_span(),
         );
-        case_stmts.push(expr_stmt(assign(
-            local_ref(result_local, "$vresult", variant_type),
-            construct,
-        )));
-
-        if i == case_count - 1 {
-            // Last case: becomes the else branch
-            current_else = Some(block(case_stmts));
-        } else {
-            // Build if statement: if disc == i { ... } else { current_else }
-            let cond = binary(
-                TirBinaryOp::Eq,
-                local_ref(disc_local, "$vdisc", TypeTable::I32),
-                i32_const(i as i32),
-                TypeTable::BOOL,
-            );
-            let if_stmt_node = if_stmt(cond, block(case_stmts), current_else);
-            current_else = Some(block(vec![if_stmt_node]));
-        }
+        case_stmts.push(expr_stmt(construct));
+        arms.push((i as i32, block(case_stmts)));
     }
 
-    if let Some(outer) = current_else {
-        // Unwrap the block: push its statements into the parent
-        for stmt in outer.stmts {
-            stmts.push(stmt);
-        }
-    }
-
+    let value = case_chain(
+        || local_ref(disc_local, "$vdisc", TypeTable::I32),
+        arms,
+        variant_type,
+    );
+    stmts.push(let_stmt("$vresult", result_local, variant_type, value));
     local_ref(result_local, "$vresult", variant_type)
 }
 
@@ -545,54 +516,28 @@ fn synthesize_lift_wasi_enum(
     ));
 
     let result_local = alloc_local(next_local, locals, enum_type);
-    // Enums are represented as i32, so use 0 as the initial value (not null_expr
-    // which emits ref.null for non-Option types).
-    stmts.push(let_mut_stmt(
-        "$eresult",
-        result_local,
-        enum_type,
-        i32_const(0),
-    ));
-
-    let case_count = case_names.len();
-    let mut current_else: Option<TirBlock> = None;
-
-    for (i, cm_case_name) in case_names.iter().enumerate().rev() {
-        let case_name = kebab_to_pascal(cm_case_name);
-        let construct = TirExpr::new(
-            TirExprKind::EnumConstruct {
+    let arms = case_names
+        .iter()
+        .enumerate()
+        .map(|(i, cm_case_name)| {
+            let construct = TirExpr::new(
+                TirExprKind::EnumConstruct {
+                    enum_type,
+                    case_index: i as u32,
+                    case_name: kebab_to_pascal(cm_case_name),
+                },
                 enum_type,
-                case_index: i as u32,
-                case_name,
-            },
-            enum_type,
-            synth_span(),
-        );
-        let assign_stmt = expr_stmt(assign(
-            local_ref(result_local, "$eresult", enum_type),
-            construct,
-        ));
-
-        if i == case_count - 1 {
-            current_else = Some(block(vec![assign_stmt]));
-        } else {
-            let cond = binary(
-                TirBinaryOp::Eq,
-                local_ref(disc_local, "$edisc", TypeTable::I32),
-                i32_const(i as i32),
-                TypeTable::BOOL,
+                synth_span(),
             );
-            let if_stmt_node = if_stmt(cond, block(vec![assign_stmt]), current_else);
-            current_else = Some(block(vec![if_stmt_node]));
-        }
-    }
-
-    if let Some(outer) = current_else {
-        for stmt in outer.stmts {
-            stmts.push(stmt);
-        }
-    }
-
+            (i as i32, block(vec![expr_stmt(construct)]))
+        })
+        .collect();
+    let value = case_chain(
+        || local_ref(disc_local, "$edisc", TypeTable::I32),
+        arms,
+        enum_type,
+    );
+    stmts.push(let_stmt("$eresult", result_local, enum_type, value));
     local_ref(result_local, "$eresult", enum_type)
 }
 
@@ -1106,13 +1051,6 @@ fn synthesize_lift_result_inner(
     };
 
     let result_local = alloc_local(next_local, locals, result_type_id);
-    stmts.push(let_mut_stmt(
-        "$result_val",
-        result_local,
-        result_type_id,
-        null_expr(result_type_id),
-    ));
-
     let payload_addr = binary_add(addr, i32_const(payload_offset as i32));
 
     // Ok case
@@ -1131,18 +1069,15 @@ fn synthesize_lift_result_inner(
         );
         Some(Box::new(lifted))
     };
-    ok_stmts.push(expr_stmt(assign(
-        local_ref(result_local, "$result_val", result_type_id),
-        TirExpr::new(
-            TirExprKind::VariantConstruct {
-                variant_type: result_type_id,
-                case_index: ok_index,
-                case_name: ok_name,
-                payload: ok_payload,
-            },
-            result_type_id,
-            synth_span(),
-        ),
+    ok_stmts.push(expr_stmt(TirExpr::new(
+        TirExprKind::VariantConstruct {
+            variant_type: result_type_id,
+            case_index: ok_index,
+            case_name: ok_name,
+            payload: ok_payload,
+        },
+        result_type_id,
+        synth_span(),
     )));
 
     // Err case
@@ -1161,31 +1096,23 @@ fn synthesize_lift_result_inner(
         );
         Some(Box::new(lifted))
     };
-    err_stmts.push(expr_stmt(assign(
-        local_ref(result_local, "$result_val", result_type_id),
-        TirExpr::new(
-            TirExprKind::VariantConstruct {
-                variant_type: result_type_id,
-                case_index: err_index,
-                case_name: err_name,
-                payload: err_payload,
-            },
-            result_type_id,
-            synth_span(),
-        ),
+    err_stmts.push(expr_stmt(TirExpr::new(
+        TirExprKind::VariantConstruct {
+            variant_type: result_type_id,
+            case_index: err_index,
+            case_name: err_name,
+            payload: err_payload,
+        },
+        result_type_id,
+        synth_span(),
     )));
 
-    stmts.push(if_stmt(
-        binary(
-            TirBinaryOp::Eq,
-            local_ref(disc_local, "$disc", TypeTable::I32),
-            i32_const(0),
-            TypeTable::BOOL,
-        ),
-        block(ok_stmts),
-        Some(block(err_stmts)),
-    ));
-
+    let value = case_chain(
+        || local_ref(disc_local, "$disc", TypeTable::I32),
+        vec![(0, block(ok_stmts)), (1, block(err_stmts))],
+        result_type_id,
+    );
+    stmts.push(let_stmt("$result_val", result_local, result_type_id, value));
     local_ref(result_local, "$result_val", result_type_id)
 }
 

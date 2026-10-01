@@ -13,6 +13,7 @@ mod dce;
 mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
+mod local_nullability;
 mod nullability;
 mod nullable_ref;
 mod peephole;
@@ -38,6 +39,7 @@ use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
 use elide_local::elide_write_only_locals;
 use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments, unwrap_box_locals};
+use local_nullability::relax_unset_nonnull_locals;
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
@@ -314,9 +316,11 @@ fn optimize_wasm_modules(
     module.wasm_modules = wasm_modules;
 }
 
-/// Freeze each function's declared locals into `func.locals` for the emitter.
-/// Called on every `optimize_wir` exit path, so `-O0` finalizes too.
+/// Settle each local's Wasm type and freeze the declared locals into
+/// `func.locals` for the emitter. Called on every `optimize_wir` exit path, so
+/// `-O0` finalizes too.
 fn finalize_locals(module: &mut WirPackage) {
+    relax_unset_nonnull_locals(module);
     for func in &mut module.functions {
         func.locals = func.declared_locals();
     }

@@ -354,10 +354,26 @@ pub fn option_none(option_type_id: TypeId, items: &CompilerItems) -> TirExpr {
     )
 }
 
-/// A `ref.null` placeholder for a synthesized mutable local of *reference*
-/// type. Not a zero of an arbitrary type — `lower` asserts on the difference.
-pub fn null_expr(type_id: TypeId) -> TirExpr {
-    TirExpr::new(TirExprKind::Null, type_id, synth_span())
+/// The value of the arm whose tag `disc` equals, as an `if` chain yielding
+/// `ty`: the last arm is the `else`, so its tag is never tested. Each arm ends
+/// in an expression statement giving its value.
+pub fn case_chain(disc: impl Fn() -> TirExpr, arms: Vec<(i32, TirBlock)>, ty: TypeId) -> TirExpr {
+    let mut arms = arms.into_iter().rev();
+    let (_, mut chain) = arms.next().expect("a case chain has at least one arm");
+    for (tag, arm) in arms {
+        let condition = binary(TirBinaryOp::Eq, disc(), i32_const(tag), TypeTable::BOOL);
+        let value = TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(condition),
+                then_branch: arm,
+                else_branch: Some(chain),
+            },
+            ty,
+            synth_span(),
+        );
+        chain = block(vec![expr_stmt(value)]);
+    }
+    TirExpr::new(TirExprKind::Block(chain), ty, synth_span())
 }
 
 /// Create a TIR block from statements.

@@ -15,9 +15,9 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, block, break_stmt, builtin_call, cm_raw_call, expr_stmt,
-    generic_method_call, handle_from_f64, handle_to_f64, i32_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, return_stmt, split_packed_ptr_len,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cm_raw_call,
+    expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const, if_stmt,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, return_stmt, split_packed_ptr_len,
     synth_span,
 };
 
@@ -46,21 +46,19 @@ pub(super) struct AdapterArtifacts {
     pub auxiliary: Vec<Rc<RefCell<TirFunction>>>,
 }
 
-/// Lift the bare discriminant a flat `Result` returns as into `result_local`.
+/// Lift the bare discriminant a flat `Result` returns as.
 /// A payload takes a flat slot of its own, so only `Result<(), ()>` is flat.
 fn synthesize_lift_flat_result(
     ty: &Type,
     disc_expr: TirExpr,
-    result_local: u32,
     result_type_id: TypeId,
-    stmts: &mut Vec<TirStmt>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
     assert!(
         matches!(ty, Type::Generic(g) if g.args.iter().all(Type::is_unit)),
         "a flat `Result` carries no payload, got {ty:?}"
     );
-    let assign_case = |item| {
+    let case = |item| {
         let (case_name, case_index) = {
             let tt = ctx.type_table.borrow();
             let (_, _, name, index) = tt.compiler_items().require_variant_case(item);
@@ -76,17 +74,16 @@ fn synthesize_lift_flat_result(
             result_type_id,
             synth_span(),
         );
-        block(vec![expr_stmt(assign(
-            local_ref(result_local, "$result_val", result_type_id),
-            construct,
-        ))])
+        block(vec![expr_stmt(construct)])
     };
-    stmts.push(if_stmt(
-        binary(TirBinaryOp::Eq, disc_expr, i32_const(0), TypeTable::BOOL),
-        assign_case(CompilerItem::ResultOk),
-        Some(assign_case(CompilerItem::ResultErr)),
-    ));
-    local_ref(result_local, "$result_val", result_type_id)
+    case_chain(
+        || disc_expr.clone(),
+        vec![
+            (0, case(CompilerItem::ResultOk)),
+            (1, case(CompilerItem::ResultErr)),
+        ],
+        result_type_id,
+    )
 }
 
 /// Create a `TirFunction` with default metadata fields.
@@ -1367,20 +1364,11 @@ impl<'a> AdapterBuilder<'a> {
             self.body_stmts
                 .push(let_stmt("$disc", disc_local, TypeTable::I32, raw_call));
             let result_type_id = self.cm_type_id(&resolved);
-            let result_local = alloc_local(&mut self.next_local, &mut self.locals, result_type_id);
-            self.body_stmts.push(let_mut_stmt(
-                "$result_val",
-                result_local,
-                result_type_id,
-                null_expr(result_type_id),
-            ));
             let lift_ctx = self.lift_ctx();
             let lifted = synthesize_lift_flat_result(
                 &resolved,
                 local_ref(disc_local, "$disc", TypeTable::I32),
-                result_local,
                 result_type_id,
-                &mut self.body_stmts,
                 &lift_ctx,
             );
             let lifted_type_id = lifted.type_id;
