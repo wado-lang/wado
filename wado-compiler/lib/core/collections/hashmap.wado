@@ -477,7 +477,10 @@ test "a difference in one word survives the next, whatever the seed" {
     let b: [u64, u64] = [7 ^ top, 9 ^ top];
     let c: List<u64> = [1, 2, 3];
     let d: List<u64> = [1 ^ top, 2 ^ top, 3];
-    for let seed of [HashSeed::fixed(1, 2), HashSeed::fixed(12345, 67890)] as List<HashSeed> {
+    for let seed of [
+        HashSeed::fixed(1, 2),
+        HashSeed::fixed(12345, 67890),
+    ] as List<HashSeed> {
         let pairs = HashMap::<[u64, u64], i32>::new(seed);
         assert pairs.fingerprint(&a) != pairs.fingerprint(&b);
         let lists = HashMap::<List<u64>, i32>::new(seed);
