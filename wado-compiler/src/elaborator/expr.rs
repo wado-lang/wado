@@ -91,7 +91,7 @@ enum FuncRefInference {
 /// is settled by defaulting to `i32` rather than by a coercion.
 pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
     match &lit.value {
-        Literal::Number(repr) if !util::is_float_only_literal(repr) => Some(repr.as_str()),
+        Literal::Number(repr, None) if !util::is_float_only_literal(repr) => Some(repr.as_str()),
         _ => None,
     }
 }
@@ -657,6 +657,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
+        if let Some(suffixed) = self.resolve_suffixed_literal(expr) {
+            return suffixed;
+        }
+
         if let Some(target_type) = expected_type
             && let Some(coerced) = self
                 .defer_literal_at_var(expr, target_type)
@@ -840,7 +844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Unary(unary) => negated_literal(unary)?,
             _ => return None,
         };
-        let Literal::Number(repr) = &lit.value else {
+        let Literal::Number(repr, None) = &lit.value else {
             return None;
         };
         let integer = !util::is_float_only_literal(repr);
@@ -876,7 +880,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // diagnostics. The returned value is a placeholder, so this projects
         // only the type while preserving the validation side effects.
         match &lit.value {
-            Literal::Number(repr) => {
+            Literal::Number(_, Some(_)) => {
+                unreachable!("resolve_expr types a suffixed literal by its suffix")
+            }
+            Literal::Number(repr, None) => {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
@@ -2022,7 +2029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(repr),
+                value: ast::Literal::Number(repr, None),
                 ..
             }) = &index.index
                 && !util::is_float_only_literal(repr)
@@ -3233,8 +3240,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let value = match lit {
-            Literal::Number(repr) if util::is_float_only_literal(repr) => return None,
-            Literal::Number(repr) => {
+            Literal::Number(repr, suffix) if util::denotes_float(repr, *suffix) => return None,
+            Literal::Number(repr, _) => {
                 if self
                     .tysys
                     .type_table
@@ -5481,12 +5488,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn extract_literal_ord_value(&self, expr: &Expr) -> Option<LiteralOrdValue> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
-                Literal::Number(s) if util::is_float_only_literal(s) => {
+                Literal::Number(s, suffix) if util::denotes_float(s, *suffix) => {
                     float_literal_bits(s, FloatFormat::F64)
                         .ok()
                         .map(|bits| LiteralOrdValue::Float(f64::from_bits(bits)))
                 }
-                Literal::Number(s) => util::parse_i128_literal(s).ok().map(LiteralOrdValue::Int),
+                Literal::Number(s, _) => util::parse_i128_literal(s).ok().map(LiteralOrdValue::Int),
                 Literal::Char(s) => unescape_char(s)
                     .ok()
                     .map(|c| LiteralOrdValue::Char(c as u32)),

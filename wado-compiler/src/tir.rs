@@ -15,7 +15,9 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, NamePolicy, RangeKind, RestClause, Visibility};
+use crate::ast::{
+    AstId, HandleClasses, NamePolicy, NumericSuffix, RangeKind, RestClause, Visibility,
+};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -2309,6 +2311,26 @@ impl TypeTable {
     /// `CompilerItems::trait_module`.
     pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
         self.compiler_items.trait_module(CompilerItem::Default)
+    }
+
+    /// The type a numeric literal's suffix names.
+    pub fn numeric_suffix_type(&mut self, suffix: NumericSuffix) -> TypeId {
+        match suffix {
+            NumericSuffix::I8 => Self::I8,
+            NumericSuffix::I16 => Self::I16,
+            NumericSuffix::I32 => Self::I32,
+            NumericSuffix::I64 => Self::I64,
+            NumericSuffix::I128 => self.make_compiler_struct(CompilerItem::I128),
+            NumericSuffix::U8 => Self::U8,
+            NumericSuffix::U16 => Self::U16,
+            NumericSuffix::U32 => Self::U32,
+            NumericSuffix::U64 => Self::U64,
+            NumericSuffix::U128 => self.make_compiler_struct(CompilerItem::U128),
+            NumericSuffix::F16 => Self::F16,
+            NumericSuffix::Bf16 => Self::BF16,
+            NumericSuffix::F32 => Self::F32,
+            NumericSuffix::F64 => Self::F64,
+        }
     }
 
     /// Make the struct type for a registered `CompilerItem` variant

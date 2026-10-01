@@ -7,7 +7,7 @@
 // best-effort token stream via [`LexResult`]. The entry points are the free
 // functions [`lex`] and [`lex_in`].
 
-use crate::ast::AstIdSpace;
+use crate::ast::{AstIdSpace, NumericSuffix};
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::token;
@@ -260,11 +260,18 @@ pub enum LexErrorKind {
     MissingOctalDigits,
     /// Floating-point exponent (`e` / `E`) with no following digit.
     MissingExponentDigits,
+    /// A suffix written without its `_` (`255u8`), holding the literal
+    /// spelled with one.
+    MissingSuffixSeparator(String),
+    /// Letters after a numeric literal that name no suffix type.
+    UnknownNumericSuffix(String),
+    /// A float suffix on an octal or binary literal, holding the literal.
+    FloatSuffixOnRadixLiteral(String),
 }
 
 impl std::fmt::Display for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
+        match &self.kind {
             LexErrorKind::UnexpectedChar(ch) => write!(f, "unexpected character: '{ch}'"),
             LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
             LexErrorKind::UnterminatedTemplateString => write!(f, "unterminated template string"),
@@ -278,6 +285,15 @@ impl std::fmt::Display for LexError {
             LexErrorKind::MissingBinaryDigits => write!(f, "expected binary digit after 0b"),
             LexErrorKind::MissingOctalDigits => write!(f, "expected octal digit after 0o"),
             LexErrorKind::MissingExponentDigits => write!(f, "expected digit after exponent"),
+            LexErrorKind::MissingSuffixSeparator(spelled) => {
+                write!(f, "write `{spelled}`: a suffix follows an `_`")
+            }
+            LexErrorKind::UnknownNumericSuffix(name) => {
+                write!(f, "unknown numeric suffix `{name}`")
+            }
+            LexErrorKind::FloatSuffixOnRadixLiteral(text) => {
+                write!(f, "a float suffix needs a decimal literal: `{text}`")
+            }
         }
     }
 }
@@ -981,10 +997,51 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        let text = &self.input[start..self.pos];
+        self.finish_number(start, start_line, start_column)
+    }
 
-        // Return string representation; type is determined by context in elaborator
-        TokenKind::NumberLit(text.to_string())
+    /// Read the suffix written directly after a numeric literal, and return the
+    /// literal's token. Letters after a literal are its suffix whatever they
+    /// spell, so `255_u9` is an unknown suffix rather than a number followed
+    /// by a name. A malformed suffix is reported and left out of the token, or
+    /// spelled right where the fix is certain.
+    fn finish_number(&mut self, start: usize, start_line: usize, start_column: usize) -> TokenKind {
+        let digits_end = self.pos;
+        while let Some((_, ch)) = self.peek() {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        let digits = &self.input[start..digits_end];
+        let name = &self.input[digits_end..self.pos];
+        if name.is_empty() {
+            return TokenKind::NumberLit(digits.to_string());
+        }
+        let (kind, text) = match NumericSuffix::from_name(name) {
+            None => (
+                LexErrorKind::UnknownNumericSuffix(name.to_string()),
+                digits.to_string(),
+            ),
+            Some(suffix) if !suffix.suits(digits) => (
+                LexErrorKind::FloatSuffixOnRadixLiteral(format!("{digits}{name}")),
+                digits.to_string(),
+            ),
+            Some(_) if !digits.ends_with('_') => {
+                let spelled = format!("{digits}_{name}");
+                (
+                    LexErrorKind::MissingSuffixSeparator(spelled.clone()),
+                    spelled,
+                )
+            }
+            Some(_) => return TokenKind::NumberLit(format!("{digits}{name}")),
+        };
+        self.errors.push(LexError {
+            kind,
+            span: self.span_from(start, start_line, start_column),
+        });
+        TokenKind::NumberLit(text)
     }
 
     fn lex_hex_number(
@@ -1010,8 +1067,7 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        // Include "0x" prefix in repr; actual parsing happens in elaborator
-        TokenKind::NumberLit(self.input[start..self.pos].to_string())
+        self.finish_number(start, start_line, start_column)
     }
 
     fn lex_binary_number(
@@ -1037,7 +1093,7 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        TokenKind::NumberLit(self.input[start..self.pos].to_string())
+        self.finish_number(start, start_line, start_column)
     }
 
     fn lex_octal_number(
@@ -1063,7 +1119,7 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        TokenKind::NumberLit(self.input[start..self.pos].to_string())
+        self.finish_number(start, start_line, start_column)
     }
 
     fn lex_string(&mut self) -> TokenKind {

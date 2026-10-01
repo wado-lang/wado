@@ -1,0 +1,31 @@
+// A suffix is a type annotation: the literal is checked against it, and the
+// context does not retype it.
+
+type Meters = f64;
+
+export fn run() {
+    let a = 300_u8;              // compile error: literal out of range for `u8`: 300
+    let b = -1_u8;               // compile error: literal out of range for `u8`: -1
+    let c = 1e40_f32;            // compile error: literal out of range for `f32`: 1e40
+    let d = 1.5_i32;             // compile error: cannot use float literal '1.5' as integer
+    let e: i64 = 1_i32;          // compile error: expected 'i64', found 'i32'
+    let f: Meters = 1.0_f64;     // compile error: expected 'Meters', found 'f64'
+    let x: u8 = 0;
+    let g = match x {
+        1_i32 => 1,              // compile error: pattern mismatch: expected 'i32', found 'u8'
+        _ => 0,
+    };
+}
+
+__DATA__
+{
+  "compile_error": "literal out of range for `u8`: 300",
+  "compile_errors_contains": [
+    "literal out of range for `u8`: -1",
+    "literal out of range for `f32`: 1e40",
+    "cannot use float literal '1.5' as integer",
+    "expected 'i64', found 'i32'",
+    "expected 'Meters', found 'f64'",
+    "pattern mismatch: expected 'i32', found 'u8'"
+  ]
+}

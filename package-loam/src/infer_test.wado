@@ -587,12 +587,12 @@ test "Softmax before opset 13 normalizes from axis 1 on, and along the last axis
             None => [],
         },
     };
-    let old = Option::Some(11 as i64);
+    let old = Option::Some(11_i64);
     let fallback = softmax_lane(&softmax(null), 3, old).unwrap();
     assert fallback.axis == 1 && fallback.flattened;
     let last = softmax_lane(&softmax(Option::Some("2")), 3, old).unwrap();
     assert last.axis == 2 && !last.flattened;
-    let current = softmax_lane(&softmax(null), 3, Option::Some(13 as i64)).unwrap();
+    let current = softmax_lane(&softmax(null), 3, Option::Some(13_i64)).unwrap();
     assert current.axis == 2 && !current.flattened;
 }
 

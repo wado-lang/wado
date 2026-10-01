@@ -15,7 +15,8 @@ use crate::ast::{
     StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
     TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
     TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
+    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, spell_number,
+    written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -1904,7 +1905,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_literal(&mut self, lit: &Literal) {
         match lit {
-            Literal::Number(repr) => self.output.push_str(repr),
+            Literal::Number(repr, suffix) => self.output.push_str(&spell_number(repr, *suffix)),
             Literal::String(raw) => {
                 self.output.push('"');
                 self.output.push_str(raw);
@@ -4000,7 +4001,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
 
 fn unparse_literal_into(lit: &Literal, output: &mut String) {
     match lit {
-        Literal::Number(repr) => output.push_str(repr),
+        Literal::Number(repr, suffix) => output.push_str(&spell_number(repr, *suffix)),
         Literal::String(raw) => {
             output.push('"');
             output.push_str(raw);

@@ -4433,7 +4433,7 @@ fn lane_literal(arg: &Expr) -> Option<i128> {
     let Expr::Literal(lit) = operand else {
         return None;
     };
-    let ast::Literal::Number(repr) = &lit.value else {
+    let ast::Literal::Number(repr, _) = &lit.value else {
         return None;
     };
     parse_i128_literal(&format!("{sign}{repr}")).ok()

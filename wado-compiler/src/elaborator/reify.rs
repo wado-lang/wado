@@ -32,8 +32,8 @@ use crate::tir::{
 };
 
 use super::coercion::{
-    NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,
-    is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
+    NumericLiteralKind, is_literal_arithmetic, is_primitive_literal_target,
+    numeric_literal_pair_order, numeric_literal_shape, range_endpoint_order,
     unary_passes_expected_type,
 };
 use super::expr::UnionSource;
@@ -5893,7 +5893,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         if let Some(elems) = &tuple_elems
             && let ast::Expr::Literal(lit) = &index.index
-            && let ast::Literal::Number(repr) = &lit.value
+            && let ast::Literal::Number(repr, None) = &lit.value
             && let Ok(idx) = repr.parse::<usize>()
             && let Ok(elem) = self.tysys.tuple_literal_index_type(elems, idx)
         {
@@ -8403,7 +8403,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // coercion is keyed on the enclosing `Unary` node. Reading the one
         // classifier is what keeps a shape from arriving here as a bare
         // `IntLiteral` typed as the `i128` struct.
-        let literal = classify_numeric_literal(expr)?;
+        let (literal, _) = numeric_literal_shape(expr)?;
         let negated = literal.neg.is_some();
         let repr = match literal.kind {
             NumericLiteralKind::Number(repr) => repr.to_string(),
@@ -8698,8 +8698,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &FunctionContext,
     ) -> TirExpr {
         let kind = match &lit.value {
-            ast::Literal::Number(repr) => {
+            ast::Literal::Number(repr, None) => {
                 return self.reify_numeric_literal(repr, recorded_type, lit.span);
+            }
+            // A snapshot can lack the recorded type, which the suffix states.
+            ast::Literal::Number(repr, Some(suffix)) => {
+                let literal_type = if recorded_type == TypeTable::UNKNOWN {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .numeric_suffix_type(*suffix)
+                } else {
+                    recorded_type
+                };
+                return self.reify_numeric_literal(repr, literal_type, lit.span);
             }
             // A byte literal is an integer literal spelled as a character, so
             // it takes the same route by its decimal spelling — `let x: f64 =
@@ -9222,7 +9234,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let tir_lit = match lit {
                     // A malformed literal is already diagnosed, so the value it
                     // stands in with is never reached.
-                    ast::Literal::Number(repr) => int_pattern(
+                    ast::Literal::Number(repr, _) => int_pattern(
                         parse_int_bits(repr, scrutinee_is_unsigned)
                             .unwrap_or(0)
                             .cast_unsigned(),

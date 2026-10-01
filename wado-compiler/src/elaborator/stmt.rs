@@ -1546,7 +1546,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Pattern::Literal(lit) => {
                 match lit {
-                    Literal::Number(repr) if util::is_float_only_literal(repr) => {
+                    Literal::Number(repr, suffix) if util::denotes_float(repr, *suffix) => {
                         let _ = self.emit(TypeError::InvalidPattern {
                             message: "float literals cannot be used in match patterns".to_string(),
                             span,
@@ -2136,17 +2136,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         lit: &Literal,
         scrutinee_type: TypeId,
     ) -> Option<String> {
+        let suffix_type = match lit {
+            Literal::Number(_, Some(suffix)) => Some(
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .numeric_suffix_type(*suffix),
+            ),
+            _ => None,
+        };
         let type_table = self.tysys.type_table.borrow();
         let head = type_table.representation_head(scrutinee_type);
-        let expected = match lit {
-            Literal::Number(_) | Literal::Byte(_)
+        let expected = match (lit, suffix_type) {
+            (Literal::Number(..), Some(suffix_type)) => {
+                if type_table.type_key(suffix_type) == type_table.type_key(scrutinee_type) {
+                    return None;
+                }
+                type_table.type_name(suffix_type)
+            }
+            (Literal::Number(..) | Literal::Byte(_), _)
                 if !type_table.is_integer(head) && !type_table.is_wide_int(head) =>
             {
-                "an integer type"
+                "an integer type".to_string()
             }
-            Literal::String(_) if !type_table.is_string(head) => "String",
-            Literal::Char(_) if !type_table.is_primitive(head, PrimitiveType::Char) => "char",
-            Literal::Bool(_) if !type_table.is_primitive(head, PrimitiveType::Bool) => "bool",
+            (Literal::String(_), _) if !type_table.is_string(head) => "String".to_string(),
+            (Literal::Char(_), _) if !type_table.is_primitive(head, PrimitiveType::Char) => {
+                "char".to_string()
+            }
+            (Literal::Bool(_), _) if !type_table.is_primitive(head, PrimitiveType::Bool) => {
+                "bool".to_string()
+            }
             _ => return None,
         };
         // An unsettled head judges nothing: an unresolved type is reported
@@ -2170,7 +2189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if matches!(lit, Literal::String(_)) && self.compares_with_string_literal(scrutinee_type) {
             return None;
         }
-        Some(expected.to_string())
+        Some(expected)
     }
 
     /// Whether `scrutinee == "…"` resolves, which is what a string-literal
@@ -2213,7 +2232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let message = {
             let tt = self.tysys.type_table.borrow();
             match pattern {
-                Pattern::Literal(Literal::Number(repr)) => {
+                Pattern::Literal(Literal::Number(repr, _)) => {
                     let (negated, digits) = repr
                         .strip_prefix('-')
                         .map_or((false, repr.as_str()), |digits| (true, digits));

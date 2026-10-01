@@ -8,7 +8,7 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::AstId;
-use crate::ast::{self, BinaryOp, Expr, Literal, LiteralMember, UnaryOp};
+use crate::ast::{self, BinaryOp, Expr, Literal, LiteralMember, NumericSuffix, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
@@ -54,38 +54,70 @@ pub(super) struct NumericLiteral<'a> {
     pub(super) neg: Option<&'a ast::UnaryExpr>,
 }
 
-/// Classify `expr` as a numeric literal, or `None` when it is not one.
+/// Classify `expr` as a numeric literal that takes its type from its
+/// context, or `None` when it is not one. A suffixed literal is
+/// [`classify_suffixed_literal`]'s: its type is its own.
 ///
 /// The single enumeration of these shapes: every walk that asks whether an
 /// operand takes its type from the other one reads it, so a shape cannot be
 /// coercible to one walk and already-typed to another. It was three
 /// enumerations, and they drifted — `b'0' <= b` failed to type-check where
 /// `48 <= b` passed.
+pub(super) fn classify_numeric_literal(expr: &Expr) -> Option<NumericLiteral<'_>> {
+    match numeric_literal_shape(expr)? {
+        (literal, None) => Some(literal),
+        (_, Some(_)) => None,
+    }
+}
+
+/// Classify `expr` as a suffixed numeric literal, bare or negated: `255_u8`,
+/// `-128_i8`.
+pub(super) fn classify_suffixed_literal(
+    expr: &Expr,
+) -> Option<(NumericLiteral<'_>, NumericSuffix)> {
+    match numeric_literal_shape(expr)? {
+        (literal, Some(suffix)) => Some((literal, suffix)),
+        (_, None) => None,
+    }
+}
+
+/// A numeric literal, bare or negated, with its suffix.
 ///
 /// The non-numeric arms are enumerated rather than caught by `_`, so a new
 /// [`Expr`] variant forces a decision here.
-pub(super) fn classify_numeric_literal(expr: &Expr) -> Option<NumericLiteral<'_>> {
+pub(super) fn numeric_literal_shape(
+    expr: &Expr,
+) -> Option<(NumericLiteral<'_>, Option<NumericSuffix>)> {
     match expr {
         Expr::Literal(lit) => match &lit.value {
-            Literal::Number(repr) => Some(NumericLiteral {
-                kind: NumericLiteralKind::Number(repr),
-                lit,
-                neg: None,
-            }),
-            Literal::Byte(raw) => Some(NumericLiteral {
-                kind: NumericLiteralKind::Byte(raw),
-                lit,
-                neg: None,
-            }),
+            Literal::Number(repr, suffix) => Some((
+                NumericLiteral {
+                    kind: NumericLiteralKind::Number(repr),
+                    lit,
+                    neg: None,
+                },
+                *suffix,
+            )),
+            Literal::Byte(raw) => Some((
+                NumericLiteral {
+                    kind: NumericLiteralKind::Byte(raw),
+                    lit,
+                    neg: None,
+                },
+                None,
+            )),
             _ => None,
         },
         Expr::Unary(unary) if unary.op == UnaryOp::Neg => match &unary.expr {
             Expr::Literal(lit) => match &lit.value {
-                Literal::Number(repr) => Some(NumericLiteral {
-                    kind: NumericLiteralKind::Number(repr),
-                    lit,
-                    neg: Some(unary),
-                }),
+                Literal::Number(repr, suffix) => Some((
+                    NumericLiteral {
+                        kind: NumericLiteralKind::Number(repr),
+                        lit,
+                        neg: Some(unary),
+                    },
+                    *suffix,
+                )),
                 _ => None,
             },
             _ => None,
@@ -464,7 +496,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         target_type: TypeId,
     ) -> Option<TypeId> {
-        let coerced = self.try_coerce_numeric_literal_inner(expr, target_type)?;
+        let literal = classify_numeric_literal(expr)?;
+        self.coerce_numeric_literal(expr, literal, target_type)
+    }
+
+    /// The type of a suffixed literal: the one its suffix names, the literal
+    /// checked against it as an annotation of that type would check it.
+    pub(super) fn resolve_suffixed_literal(&mut self, expr: &Expr) -> Option<TypeId> {
+        let (literal, suffix) = classify_suffixed_literal(expr)?;
+        let target_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .numeric_suffix_type(suffix);
+        let coerced = self.coerce_numeric_literal(expr, literal, target_type);
+        assert!(coerced.is_some(), "every suffix names a literal target");
+        coerced
+    }
+
+    fn coerce_numeric_literal(
+        &mut self,
+        expr: &Expr,
+        literal: NumericLiteral<'_>,
+        target_type: TypeId,
+    ) -> Option<TypeId> {
+        let coerced = self.try_coerce_numeric_literal_inner(literal, target_type)?;
         self.record_coercion(expr.id(), CoercionKind::NumericLiteral, target_type);
         self.record_expression_type(expr.id(), target_type);
         // `-NUM` consumes both the outer Unary node and the inner Literal
@@ -481,10 +537,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     fn try_coerce_numeric_literal_inner(
         &mut self,
-        expr: &Expr,
+        literal: NumericLiteral<'_>,
         target_type: TypeId,
     ) -> Option<TypeId> {
-        let NumericLiteral { kind, lit, neg } = classify_numeric_literal(expr)?;
+        let NumericLiteral { kind, lit, neg } = literal;
         // The same set of targets the three dispatches below cover, named once
         // so the ordering walks can ask the question without running this.
         if !is_numeric_literal_target(&self.tysys.type_table.borrow(), target_type) {

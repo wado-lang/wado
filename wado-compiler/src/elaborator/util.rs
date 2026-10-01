@@ -1,6 +1,6 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::Pattern;
+use crate::ast::{NumericSuffix, Pattern};
 use crate::elaborator::stmt::primitive_assoc_const_to_i128;
 use crate::escape::{unescape_byte, unescape_char};
 use crate::resolve::Resolutions;
@@ -71,7 +71,7 @@ pub(super) fn range_endpoint_to_i128(
 ) -> Option<i128> {
     use crate::ast::{Literal, Pattern};
     match pattern {
-        Pattern::Literal(Literal::Number(repr)) => parse_int_bits(repr, is_unsigned).ok(),
+        Pattern::Literal(Literal::Number(repr, _)) => parse_int_bits(repr, is_unsigned).ok(),
         Pattern::Literal(Literal::Char(raw)) => {
             unescape_char(raw).ok().map(|c| i128::from(c as u32))
         }
@@ -160,8 +160,14 @@ pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
     i128::try_from(unsigned).map_err(|_| format!("integer literal out of range: {repr}"))
 }
 
+/// Whether a number literal denotes a float: it can only be one, or its
+/// suffix names a float type.
+pub(super) fn denotes_float(repr: &str, suffix: Option<NumericSuffix>) -> bool {
+    is_float_only_literal(repr) || suffix.is_some_and(NumericSuffix::is_float)
+}
+
 /// Check if a number literal can only be a float (has decimal point or negative exponent).
-pub(super) fn is_float_only_literal(repr: &str) -> bool {
+pub(crate) fn is_float_only_literal(repr: &str) -> bool {
     if repr.contains('.') {
         return true;
     }

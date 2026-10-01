@@ -1,0 +1,36 @@
+// `lit as T` warns where a suffix says the same: the cast types the literal
+// as `lit_T` does. A literal no suffix can write, and a waived item, do not.
+
+type Meters = f64;
+
+#[allow(literal_cast)]
+fn waived_item() -> u32 {
+    return 9 as u32;
+}
+
+export fn run() {
+    let a = 255 as u8;           // warns: write `255_u8` for `255 as u8`
+    let b = -128 as i8;          // warns: write `-128_i8` for `-128 as i8`
+    let c = 1.5 as f32;          // warns: write `1.5_f32` for `1.5 as f32`
+    let d = 0xFF as u64;         // warns: write `0xFF_u64` for `0xFF as u64`
+    let e = 0x10 as f64;         // no warning: a hex literal takes no float suffix
+    let f = 1.5 as i32;          // no warning: this cast converts, to 1
+    let g = 4 as Meters;         // no warning: a newtype has no suffix
+    let h = 3 as i128;
+    assert a == 255_u8 && b == -128_i8 && c == 1.5_f32 && d == 0xFF_u64;
+    assert e == 16.0 && f == 1 && g == 4.0 as Meters && h == 3_i128;
+    assert waived_item() == 9_u32;
+}
+
+__DATA__
+{
+  "stdout": "",
+  "warnings_contains": [
+    "write `255_u8` for `255 as u8`",
+    "write `-128_i8` for `-128 as i8`",
+    "write `1.5_f32` for `1.5 as f32`",
+    "write `0xFF_u64` for `0xFF as u64`",
+    "write `3_i128` for `3 as i128`"
+  ],
+  "warnings_not_contains": ["0x10 as f64", "1.5 as i32", "Meters", "9 as u32"]
+}

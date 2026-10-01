@@ -22,7 +22,7 @@ test "text round-trips" {
 test "bytes round-trip" {
     let dir = scratch("bytes");
     let path = `${dir}/raw.bin`;
-    let bytes: ByteList = [0xff as u8, 0x00 as u8, 0xfe as u8];
+    let bytes: ByteList = [0xff_u8, 0x00_u8, 0xfe_u8];
     fs::write(&path, &bytes).unwrap();
     assert fs::read(&path).unwrap() == bytes;
 }
@@ -42,7 +42,7 @@ test "a file longer than one stream copy is written whole" {
 test "bytes that are not UTF-8 do not read as text" {
     let dir = scratch("not-utf8");
     let path = `${dir}/raw.bin`;
-    fs::write(&path, &([0xff as u8] as ByteList)).unwrap();
+    fs::write(&path, &([0xff_u8] as ByteList)).unwrap();
     let e = fs::read_to_string(&path).unwrap_err();
     assert e.kind matches { NotUtf8(u) && u == Utf8Error::invalid(0, 1) };
     assert `${e}`.ends_with("not valid UTF-8: invalid utf-8 sequence of 1 bytes from index 0");
@@ -350,8 +350,8 @@ test "a write replaces the file rather than truncating it" {
     fs::write(&path, &"second pass").unwrap();
     let after = fs::metadata(&path).unwrap();
     assert fs::read_to_string(&path).unwrap() == "second pass";
-    assert before.size == 5 as u64;
-    assert after.size == 11 as u64;
+    assert before.size == 5_u64;
+    assert after.size == 11_u64;
 }
 
 test "a write that cannot place its file leaves the target alone" {
@@ -439,7 +439,7 @@ test "metadata answers the type and the size" {
     fs::write(&path, &"hello").unwrap();
     let meta = fs::metadata(&path).unwrap();
     assert meta.type matches { File };
-    assert meta.size == 5 as u64;
+    assert meta.size == 5_u64;
 }
 
 test "metadata answers a directory as one" {
