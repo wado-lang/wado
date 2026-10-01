@@ -229,6 +229,7 @@
 - [Research: Callbacks across the Component Model Boundary](./research-cm-boundary-callbacks.md)
 - [Research: Component Model Pain Points](./research-cm-pain-points.md)
 - [Research: Code Generation Approaches](./research-code-generation.md)
+- [Research: Float Comparison, and What Rust's Users Wish It Had Done](./research-float-comparison.md)
 - [Research: From/Into Conversion Trait Framework](./research-from-into-framework.md)
 - [HTTP Routing Benchmark Performance Analysis](./research-http-routing-performance.md)
 - [Research: Language Survey — Almide](./research-language-survey-almide.md)
