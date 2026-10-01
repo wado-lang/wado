@@ -1,0 +1,15 @@
+use { Inner, inner } from "./impl_supertrait_later_module_type.wado";
+
+pub struct Outer {
+    pub inner: Inner<i32>,
+}
+
+impl Ord for Outer {
+    fn cmp(&self, other: &Outer) -> Ordering {
+        return self.inner.v.cmp(&other.inner.v);
+    }
+}
+
+pub fn outer(v: i32) -> Outer {
+    return Outer { inner: inner(v) };
+}

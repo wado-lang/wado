@@ -1364,6 +1364,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
             decl_failed.insert(module_source);
         }
+        // Phase 1b — an impl header's bounds. After every decl pass, since any
+        // module's impl may answer one; before the solver, which takes an impl
+        // of a trait to answer its supertraits too, and so would answer the
+        // very question this asks.
+        for module_source in &sorted_sources {
+            if is_stdlib_snapshot_hit(snapshot, module_source) {
+                continue;
+            }
+            let module = modules.get(module_source).expect("module should exist");
+            let sem = Self::take_module_semantics(state, module_source);
+            let saved_sem = {
+                let mut elaborator =
+                    Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
+                let errors_before = logger.offered_error_count();
+                elaborator.check_impl_headers(module, module_source.clone());
+                if logger.offered_error_count() > errors_before {
+                    decl_failed.insert(module_source.clone());
+                }
+                elaborator.sem
+            };
+            state
+                .module_semantics
+                .insert(module_source.clone(), Rc::new(saved_sem));
+        }
         // Every declaration is resolved, so the solver reads them all at once.
         // Selection asks it, so it is built in every profile.
         state.tysys.solver = Some(Rc::new(SolverBridge::build(

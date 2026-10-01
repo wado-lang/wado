@@ -1527,7 +1527,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (struct_name_for_lookup, struct_key_for_lookup) =
             match self.own_newtype_static(target_type_id, &static_call.method) {
                 Some(key) => (
-                    key.type_name(self.tysys.resolutions.defs()).map(str::to_string),
+                    key.type_name(self.tysys.resolutions.defs())
+                        .map(str::to_string),
                     Some(key),
                 ),
                 None => self.tysys.static_receiver_struct_key(target_type_id),
@@ -2558,7 +2559,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The newtype `target`'s own key, where an impl block on the newtype itself
     /// declares `method`: that declaration shadows the one its base supplies.
     fn own_newtype_static(&self, target: TypeId, method: &str) -> Option<ImplTargetKey> {
-        let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get_unerased(target)
+        let ResolvedType::Newtype { def, .. } =
+            *self.tysys.type_table.borrow().get_unerased(target)
         else {
             return None;
         };
