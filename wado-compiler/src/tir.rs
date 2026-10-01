@@ -6420,6 +6420,20 @@ struct ImplTarget {
     /// The arguments of the head it names past any reference, a binder as its
     /// own `TypeParam`.
     args: Vec<TypeId>,
+    projections: Vec<ImplProjection>,
+}
+
+/// Slots of an impl block that a bound determines rather than its target:
+/// `B` in `impl<N: Tr<Assoc = B>, B> W<N>` is whatever `Assoc` is for the type
+/// filling `N`.
+#[derive(Debug, Clone)]
+pub struct ImplProjection {
+    /// The slot whose bound carries the constraint.
+    pub source: u32,
+    pub trait_: DefId,
+    pub assoc: String,
+    /// The constraint as written, its slots as `TypeParam`s.
+    pub pattern: TypeId,
 }
 
 /// What an impl target binds at a receiver's arguments.
@@ -6443,9 +6457,22 @@ impl TargetBinding {
 
 impl TypeTable {
     /// Record what impl block `def`'s target writes: `whole`, and `args` for
-    /// the head it names.
-    pub fn record_impl_target(&mut self, def: DefId, whole: TypeId, args: Vec<TypeId>) {
-        self.impl_targets.insert(def, ImplTarget { whole, args });
+    /// the head it names, with the slots its bounds determine.
+    pub fn record_impl_target(
+        &mut self,
+        def: DefId,
+        whole: TypeId,
+        args: Vec<TypeId>,
+        projections: Vec<ImplProjection>,
+    ) {
+        self.impl_targets.insert(
+            def,
+            ImplTarget {
+                whole,
+                args,
+                projections,
+            },
+        );
     }
 
     /// Impl block `def`'s target head at `head_args`; `None` where the target
@@ -6476,12 +6503,30 @@ impl TypeTable {
 
     /// The slots each of impl block `def`'s target positions holds, at any
     /// depth, filled from the receiver's arguments: `T` in `Pair<List<T>, i32>`
-    /// from `Pair<List<String>, i32>`. The target is recorded as its module's
-    /// decl pass reaches the block, so an earlier module's bound check can ask.
-    pub fn impl_slots(&self, def: DefId, receiver_args: &[TypeId]) -> IndexMap<u32, TypeId> {
+    /// from `Pair<List<String>, i32>`, then the slots its bounds project from
+    /// those. The target is recorded as its module's decl pass reaches the
+    /// block, so an earlier module's bound check can ask.
+    pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> IndexMap<u32, TypeId> {
         let mut slots = IndexMap::default();
         for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
             if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
+                }
+            }
+        }
+        for projection in self.impl_target(def).projections.clone() {
+            let Some(&source) = slots.get(&projection.source) else {
+                continue;
+            };
+            let Some(concrete) = self.resolve_trait_assoc_type_of_instance(
+                source,
+                &projection.trait_,
+                &projection.assoc,
+            ) else {
+                continue;
+            };
+            if let Some(bound) = self.bind_type_params(&[projection.pattern], &[concrete]) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
                 }
@@ -8347,7 +8392,7 @@ mod tests {
     /// asks whether it covers every instance of that head.
     fn covers(table: &mut TypeTable, whole: TypeId, args: Vec<TypeId>) -> bool {
         let block = DefId::for_test(1);
-        table.record_impl_target(block, whole, args);
+        table.record_impl_target(block, whole, args, vec![]);
         table.impl_covers_every_instance(block)
     }
 

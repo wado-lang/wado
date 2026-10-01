@@ -1,0 +1,27 @@
+// A cast every refusal would pass is settled before any is asked: an operand
+// that never returns, and a newtype step a bound proves, even to `bool`, which
+// nothing else casts to.
+
+type Flag = bool;
+
+fn to_bool<N: ReflectNewtype<Base = bool>>(n: N) -> bool {
+    return n as bool;
+}
+
+fn never<T>() -> T {
+    return unreachable() as T;
+}
+
+test "a newtype step to bool through a bound" {
+    assert to_bool(true as Flag);
+}
+
+#[expect_trap]
+test "a diverging operand casts to anything" {
+    let b = panic("x") as bool;
+}
+
+#[expect_trap]
+test "and to a type parameter" {
+    let n: i32 = never();
+}

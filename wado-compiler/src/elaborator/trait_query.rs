@@ -2393,7 +2393,7 @@ impl TypeSystem {
         let impl_ty = header.ty.referent();
         if let ast::Type::Generic(_) = impl_ty {
             let names = ImplParamSlots::of(&header.ty, type_params);
-            let slots = self.type_table.borrow().impl_slots(def, type_args);
+            let slots = self.type_table.borrow_mut().impl_slots(def, type_args);
             return slots.iter().all(|(&slot, &type_arg)| {
                 names
                     .name_of(slot)

@@ -86,12 +86,21 @@ impl Monomorphizer {
         } else {
             self.impl_args_at(&template, site.template, &site, type_table)?
         };
-        let scalar_params = template
-            .impl_type_params
-            .iter()
-            .filter(|param| !param.is_pack)
-            .count();
-        if impl_type_args.len() < scalar_params {
+        // A written target takes one argument per position, and the slots past
+        // them (nested in an argument, projected by a bound) are read out of
+        // those; any other target takes one per scalar parameter.
+        let required = match template.impl_origin {
+            _ if template.impl_type_params.is_empty() => 0,
+            Some(block) if !type_table.impl_target_args(block).is_empty() => {
+                type_table.impl_target_args(block).len()
+            }
+            _ => template
+                .impl_type_params
+                .iter()
+                .filter(|param| !param.is_pack)
+                .count(),
+        };
+        if impl_type_args.len() < required {
             return None;
         }
         let method_type_args = method_args_at(&template, &site, type_table)?;

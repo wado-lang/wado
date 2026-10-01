@@ -1148,25 +1148,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(coerced);
         }
 
-        // String/template literal → String newtype
-        let is_string_or_template = matches!(
-            expr,
-            Expr::Literal(lit) if matches!(&lit.value, Literal::String(_))
-        ) || matches!(expr, Expr::TemplateString(_));
-
-        if is_string_or_template {
-            let is_string_newtype = {
+        // A string, template, `bool` or `char` literal → a newtype over its type.
+        let literal_type = match expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::String(_) => Some(self.get_string_struct_type()),
+                Literal::Bool(_) => Some(TypeTable::BOOL),
+                Literal::Char(_) => Some(TypeTable::CHAR),
+                _ => None,
+            },
+            Expr::TemplateString(_) => Some(self.get_string_struct_type()),
+            _ => None,
+        };
+        if let Some(literal_type) = literal_type {
+            let is_literal_newtype = {
                 let tt = self.tysys.type_table.borrow();
                 let base_id = tt.representation_head(target_type);
-                tt.is_string(base_id) && target_type != base_id
+                tt.share_common_base(base_id, literal_type) && target_type != base_id
             };
-            if is_string_newtype {
+            if is_literal_newtype {
                 // Walk the inner literal / template for fact recording.
                 self.resolve_expr(expr, ctx, None);
-                self.record_coercion(expr.id(), CoercionKind::StringNewtype, target_type);
+                self.record_coercion(expr.id(), CoercionKind::LiteralNewtype, target_type);
                 // The inner resolve_expr wrote expression_types[expr.id]
-                // with the unwrapped String type; overwrite with the
-                // outer target newtype so reify reads the newtype here.
+                // with the literal's own type; overwrite with the outer
+                // target newtype so reify reads the newtype here.
                 self.record_expression_type(expr.id(), target_type);
                 return Some(target_type);
             }
@@ -1228,7 +1233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // captures, body) under the unwrapped fn type.
                 self.resolve_expr(expr, ctx, Some(base_id));
                 self.record_coercion(expr.id(), CoercionKind::ClosureToFnNewtype, target_type);
-                // Same pattern as StringNewtype above: overwrite the
+                // Same pattern as LiteralNewtype above: overwrite the
                 // map's base-fn-type write with the outer newtype.
                 self.record_expression_type(expr.id(), target_type);
                 return Some(target_type);

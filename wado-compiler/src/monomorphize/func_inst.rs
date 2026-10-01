@@ -992,14 +992,15 @@ impl Monomorphizer {
                 substitution.insert(param.index, arg);
             }
         }
-        // A parameter nested in the target (`T` in `Pair<List<T>, i32>`) sits
-        // past the receiver's positions, and is read out of the argument there.
+        // A parameter nested in the target (`T` in `Pair<List<T>, i32>`) or
+        // projected by a bound sits past the receiver's positions, and is read
+        // out of the arguments there.
         if let Some(block) = generic.impl_origin
-            && let written = type_table.impl_target_args(block)
-            && let Some(positions) = key.impl_type_args.get(..written.len())
-            && let Some(bound) = type_table.bind_type_params(written, positions)
+            && let Some(positions) = key
+                .impl_type_args
+                .get(..type_table.impl_target_args(block).len())
         {
-            for (slot, ty) in bound {
+            for (slot, ty) in type_table.impl_slots(block, positions) {
                 substitution.entry(slot).or_insert(ty);
             }
         }

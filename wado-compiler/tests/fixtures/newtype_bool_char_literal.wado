@@ -1,0 +1,11 @@
+// A literal coerces to a newtype over its type where the context expects the
+// newtype: a `bool` or `char` literal as a number or string one does.
+
+type Flag = bool;
+type Letter = char;
+
+test "bool and char literals coerce to their newtypes" {
+    let f: Flag = true;
+    let c: Letter = 'a';
+    assert f as bool && c as char == 'a';
+}

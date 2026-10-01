@@ -266,9 +266,6 @@ fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<St
 /// too: nothing casts to `bool`, a `bool` casts to no float, and an enum casts
 /// to no number and from none.
 fn scalar_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    if tt.share_common_base(source, target) {
-        return None;
-    }
     let is_number = |id| tt.is_numeric(id) || tt.is_half(id) || tt.is_wide_int(id);
     let enum_name = |id| {
         matches!(
@@ -313,6 +310,22 @@ fn imposes_no_representation(tt: &TypeTable, id: TypeId) -> bool {
     )
 }
 
+/// The reason a cast with a type parameter or a projection on either side is
+/// refused: only a newtype step its bounds prove holds for every type that
+/// settles it, and nothing judges the cast again once one does.
+fn unsettled_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let unsettled = |id| {
+        matches!(
+            tt.get(tt.representation_head(id)),
+            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
+        )
+    };
+    (unsettled(source) || unsettled(target)).then(|| {
+        "a generic type casts only where a `ReflectNewtype` bound makes the cast a newtype step"
+            .to_string()
+    })
+}
+
 /// The reason a cast to a reference is refused: only a reference converts to
 /// one, whose referent it already is, and `&mut` narrows to `&`. A cast to
 /// anything else reads through its operand's references first.
@@ -328,7 +341,6 @@ fn ref_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Strin
             Some("`as` narrows `&mut` to `&`, never the reverse".to_string())
         }
         Some((_, from)) => representation_refusal(tt, from, to),
-        None if imposes_no_representation(tt, source) => None,
         None => Some("only a reference converts to a reference".to_string()),
     }
 }
@@ -365,8 +377,6 @@ fn fn_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String
     match (fn_parts(tt, source), fn_parts(tt, target)) {
         (None, None) => None,
         (Some(from), Some(to)) => fn_step_refusal(tt, &from, &to, true),
-        (Some(_), None) if imposes_no_representation(tt, target) => None,
-        (None, Some(_)) if imposes_no_representation(tt, source) => None,
         _ => Some("a function converts only to a function type".to_string()),
     }
 }
@@ -473,9 +483,7 @@ fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
     );
-    if !(is_aggregate(source) || (source_is_scalar && is_aggregate(target)))
-        || tt.share_common_base(source, target)
-    {
+    if !(is_aggregate(source) || (source_is_scalar && is_aggregate(target))) {
         return None;
     }
     Some(match slice_list_conversion(tt, source, target) {
@@ -3454,27 +3462,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         collector.writes
     }
 
-    /// The reason a cast with a type parameter or a projection on either side
-    /// is refused: only a newtype step its bounds prove holds for every type
-    /// that settles it, and nothing judges the cast again once one does.
-    fn unsettled_cast_hint(&mut self, source: TypeId, target: TypeId) -> Option<String> {
-        let unsettled = |id| {
-            let tt = self.tysys.type_table.borrow();
-            matches!(
-                tt.get(tt.representation_head(id)),
-                ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
-            )
-        };
-        if !unsettled(source) && !unsettled(target)
-            || self
-                .tysys
-                .type_table
-                .borrow()
-                .share_common_base(source, target)
+    /// Whether the cast holds whatever the hints would say: an operand that
+    /// yields no value or already failed, a newtype step, or one a
+    /// `ReflectNewtype` bound proves for every type that settles it.
+    fn cast_needs_no_judgment(&mut self, source: TypeId, target: TypeId) -> bool {
         {
-            return None;
+            let tt = self.tysys.type_table.borrow();
+            if imposes_no_representation(&tt, source)
+                || imposes_no_representation(&tt, target)
+                || tt.share_common_base(source, target)
+            {
+                return true;
+            }
         }
-        let proven = [(source, target), (target, source)]
+        [(source, target), (target, source)]
             .into_iter()
             .any(|(newtype, other)| {
                 self.newtype_base_bound(newtype).is_some_and(|base| {
@@ -3483,11 +3484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .share_common_base(base, other)
                 })
-            });
-        (!proven).then(|| {
-            "a generic type casts only where a `ReflectNewtype` bound makes the cast a newtype step"
-                .to_string()
-        })
+            })
     }
 
     /// The `Base` a `ReflectNewtype<Base = …>` bound on the type parameter
@@ -3607,20 +3604,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .cast_operand_type(source_type, target_type);
 
-        let refused_cast = {
+        let refused_cast = if self.cast_needs_no_judgment(source_type, target_type) {
+            None
+        } else {
             let tt = self.tysys.type_table.borrow();
             handle_cast_hint(&tt, source_type, target_type)
                 .or_else(|| scalar_cast_hint(&tt, source_type, target_type))
                 .or_else(|| ref_cast_hint(&tt, source_type, target_type))
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
                 .or_else(|| aggregate_cast_hint(&tt, source_type, target_type))
-        }
-        .or_else(|| self.unsettled_cast_hint(source_type, target_type))
-        .map(|hint| {
-            let tt = self.tysys.type_table.borrow();
-            let (from, to) = tt.type_names_for_mismatch(source_type, target_type);
-            (from, to, hint)
-        });
+                .or_else(|| unsettled_cast_hint(&tt, source_type, target_type))
+                .map(|hint| {
+                    let (from, to) = tt.type_names_for_mismatch(source_type, target_type);
+                    (from, to, hint)
+                })
+        };
         if let Some((from, to, hint)) = refused_cast {
             let _ = self.emit(TypeError::InvalidCast {
                 from,

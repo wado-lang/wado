@@ -14,7 +14,7 @@ use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, global_name};
-use crate::tir::{TirEffectOp, TirParam, TypeId, TypeTable, method_param_offset};
+use crate::tir::{ImplProjection, TirEffectOp, TirParam, TypeId, TypeTable, method_param_offset};
 use crate::token::Span;
 
 use super::infer_hole::InferHoleTable;
@@ -784,11 +784,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
         let impl_def = scope.tysys.def_at(impl_block.id);
-        scope
-            .tysys
-            .type_table
-            .borrow_mut()
-            .record_impl_target(impl_def, target, target_type_args);
+        let projections = scope.impl_projections(impl_block);
+        scope.tysys.type_table.borrow_mut().record_impl_target(
+            impl_def,
+            target,
+            target_type_args,
+            projections,
+        );
         let sig = ImplSig {
             def: impl_def,
             trait_type_args,
@@ -807,6 +809,37 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// and trait arguments alone, so one they never mention has no value to be
     /// given (Rust's E0207). A bound's arguments count as mentions, its subject
     /// does not; an effect parameter is bound by the handler.
+    /// Every `P: Trait<Assoc = …>` bound on the block's parameters that names
+    /// another of them, which a use site then reads off `P`'s argument.
+    fn impl_projections(&mut self, impl_block: &ast::ImplBlock) -> Vec<ImplProjection> {
+        let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+        let mut projections = Vec::new();
+        for param in &impl_block.type_params {
+            let Some(source) = slots.of_name(&param.name) else {
+                continue;
+            };
+            for bound in &param.bounds {
+                let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
+                    continue;
+                };
+                for assoc in &bound.assoc_types {
+                    let mut named = Vec::new();
+                    assoc.ty.mentioned_names(&mut named);
+                    if !named.iter().any(|n| slots.of_name(n).is_some()) {
+                        continue;
+                    }
+                    projections.push(ImplProjection {
+                        source,
+                        trait_,
+                        assoc: assoc.name.clone(),
+                        pattern: self.resolve_type(&assoc.ty),
+                    });
+                }
+            }
+        }
+        projections
+    }
+
     fn check_impl_params_constrained(&mut self, impl_block: &ast::ImplBlock) {
         let mut named: Vec<String> = Vec::new();
         impl_block.ty.mentioned_names(&mut named);
