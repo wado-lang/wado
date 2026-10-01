@@ -13,6 +13,7 @@ mod dce;
 mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
+mod empty_work;
 mod local_coalesce;
 mod local_layout;
 mod local_nullability;
@@ -36,6 +37,7 @@ use array::{
 };
 use branch_hint::{infer_branch_hints, select_br_ifs};
 use cleanup::{cleanup, cleanup_global_inits};
+use empty_work::elide_empty_work;
 use const_forward::forward_struct_field_constants;
 use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
@@ -240,7 +242,8 @@ fn optimize_scoped(
     // `DeclareLocal`s, dead code after `Unreachable`) before codegen.
     profiler.span_start(&scope.name("phase7_global_cleanup"));
     // Promote now-constant global inits to eager Wasm constants first, so
-    // `cleanup` removes the calls to each `$initialize_module` it empties.
+    // `elide_empty_work` removes the calls to each `$initialize_module` they
+    // empty.
     wir_pass(scope, "promote_const_global_inits", module, profiler, |m| {
         promote_const_global_inits(m);
     });
@@ -263,6 +266,10 @@ fn optimize_scoped(
     // Collapse `if cond { br N }` guards into `br_if`, then infer trap-based hints.
     wir_pass(scope, "select_br_if", module, profiler, |m| {
         select_br_ifs(m);
+    });
+    // After `select_br_if`, which gives a once-guard the `br_if` form it reads.
+    wir_pass(scope, "elide_empty_work", module, profiler, |m| {
+        elide_empty_work(m);
     });
     if flags.branch_hinting {
         wir_pass(scope, "infer_branch_hints", module, profiler, |m| {

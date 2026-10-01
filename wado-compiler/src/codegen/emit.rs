@@ -633,21 +633,14 @@ impl<'a> WirEmitter<'a> {
         memories
     }
 
-    /// The `WirFuncId` of the `i`-th defined function, over the package's own
-    /// base: `DEFINED_FUNC_BASE` for the GC module, `0` for the import-less
-    /// memory module.
-    fn defined_func_id(&self, i: usize) -> u32 {
-        debug_assert!(self.wir.defined_func_base >= self.func_index_offset);
-        self.wir.defined_func_base + u32::try_from(i).unwrap()
-    }
-
     fn build_func_index_map(&mut self) {
+        debug_assert!(self.wir.defined_func_base >= self.func_index_offset);
         // Import functions already have indices 0..import_func_count-1
         for i in 0..self.func_index_offset {
             self.func_index_map.insert(i, i);
         }
         for (wasm_idx, i) in (self.func_index_offset..).zip(0..self.wir.functions.len()) {
-            let wir_func_idx = self.defined_func_id(i);
+            let wir_func_idx = self.wir.defined_func_index(i);
             self.func_index_map.insert(wir_func_idx, wasm_idx);
         }
     }
@@ -739,7 +732,7 @@ impl<'a> WirEmitter<'a> {
             let wasm_func = self.emit_function(func);
             code.function(&wasm_func);
             if !self.current_branch_hints.is_empty() {
-                let func_idx = self.resolve_func_index(self.defined_func_id(i));
+                let func_idx = self.resolve_func_index(self.wir.defined_func_index(i));
                 self.all_branch_hints
                     .push((func_idx, std::mem::take(&mut self.current_branch_hints)));
             }
@@ -2078,7 +2071,7 @@ impl<'a> WirEmitter<'a> {
             let mut name_map = NameMap::new();
             for (i, func) in self.wir.functions.iter().enumerate() {
                 name_map.append(
-                    self.resolve_func_index(self.defined_func_id(i)),
+                    self.resolve_func_index(self.wir.defined_func_index(i)),
                     &func.name.fq,
                 );
             }

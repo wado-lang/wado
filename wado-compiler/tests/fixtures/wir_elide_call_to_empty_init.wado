@@ -1,6 +1,7 @@
 // Test: a call to a function whose body WIR emptied is removed. Promoting the
 // list global to an eager constant leaves the module's `$initialize_module`
-// with nothing to do, and the program's initializer must not keep calling it.
+// with nothing to do, and the program's initializer must not keep calling it,
+// nor keep the once-flag that guarded the calls.
 
 use { println, Stdout } from "core:cli";
 
@@ -19,6 +20,7 @@ __DATA__
 {
     "stdout": "4\n",
     "wir_not_expect:O2": [
-        "$initialize_module\"()"
+        "$initialize_module\"()",
+        "$modules_initialized"
     ]
 }

@@ -1,16 +1,12 @@
 //! Cleanup and normalization pass for WIR.
 //!
-//! Removes dead locals, nops, redundant `ref.as_non_null`, dead code after
-//! `Unreachable`, and calls to a function left with an empty body. Called
-//! multiple times throughout the pipeline as an interpass utility rather than a
-//! standalone optimization.
+//! Removes dead locals, nops, redundant `ref.as_non_null`, and dead code after
+//! `Unreachable`. Called multiple times throughout the pipeline as an interpass
+//! utility rather than a standalone optimization.
 
 use crate::hashmap::IndexSet;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
-
-use super::nullability::Nullability;
-use super::util::{is_side_effect_free, may_trap_in};
 
 pub(super) fn cleanup(module: &mut WirPackage) {
     for func in &mut module.functions {
@@ -18,86 +14,12 @@ pub(super) fn cleanup(module: &mut WirPackage) {
             clean_body(body);
         }
     }
-    elide_calls_to_empty_functions(module);
 }
 
-fn clean_body(body: &mut Vec<WirInstr>) {
+pub(super) fn clean_body(body: &mut Vec<WirInstr>) {
     // Remove DeclareLocal for locals that are never used (no LocalGet/LocalSet/LocalTee).
     eliminate_dead_locals(body);
     CleanupVisitor.visit_body(body);
-}
-
-/// Remove every call to a defined function whose body is empty, keeping what
-/// its arguments do. A module whose globals all became constants is left with
-/// an empty `$initialize_module` that the program's initializer still calls.
-/// Removing the calls can empty a caller in turn, so this runs to a fixpoint.
-fn elide_calls_to_empty_functions(module: &mut WirPackage) {
-    let mut empty: IndexSet<u32> = IndexSet::default();
-    loop {
-        let before = empty.len();
-        empty.extend(
-            module
-                .functions
-                .iter()
-                .enumerate()
-                .filter(|(_, func)| func.body.as_ref().is_some_and(Vec::is_empty))
-                .map(|(position, _)| module.defined_func_index(position)),
-        );
-        if empty.len() == before {
-            return;
-        }
-        for func in &mut module.functions {
-            let locals = func.declared_locals();
-            let Some(body) = &mut func.body else {
-                continue;
-            };
-            let mut elider = EmptyCallElider {
-                empty: &empty,
-                null: &Nullability::new(&locals),
-                elided: false,
-            };
-            elider.visit_body(body);
-            if elider.elided {
-                clean_body(body);
-            }
-        }
-    }
-}
-
-struct EmptyCallElider<'a> {
-    empty: &'a IndexSet<u32>,
-    null: &'a Nullability<'a>,
-    elided: bool,
-}
-
-impl WirMutVisitor for EmptyCallElider<'_> {
-    fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
-        self.walk_body(body);
-        if !body.iter().any(|instr| self.is_elided_call(instr)) {
-            return;
-        }
-        self.elided = true;
-        let mut kept = Vec::with_capacity(body.len());
-        for instr in body.drain(..) {
-            match instr {
-                WirInstr::Call { func_id, args } if self.empty.contains(&func_id.index()) => {
-                    kept.extend(
-                        args.into_iter()
-                            .filter(|arg| !is_side_effect_free(arg) || may_trap_in(arg, self.null))
-                            .map(|arg| WirInstr::Drop(Box::new(arg))),
-                    );
-                }
-                other => kept.push(other),
-            }
-        }
-        *body = kept;
-    }
-}
-
-impl EmptyCallElider<'_> {
-    fn is_elided_call(&self, instr: &WirInstr) -> bool {
-        matches!(instr, WirInstr::Call { func_id, .. } if self.empty.contains(&func_id.index()))
-    }
 }
 
 /// Elide the redundant `RefAsNonNull` wrappers `struct_new` adds for

@@ -13,7 +13,7 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKi
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::niri::{CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map};
+use crate::niri::{Callee, CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{cold_exprs, cold_path_id};
@@ -1239,7 +1239,8 @@ fn build_clones(
     if planned.is_empty() {
         return Vec::new();
     }
-    let settler = BranchSettler::new(project);
+    let mut settler = BranchSettler::new(project);
+    settler.run_clones_as_originals(planned);
     planned
         .iter()
         .map(|&(site, id, ordinal)| {
@@ -1279,6 +1280,22 @@ impl BranchSettler {
             callees: build_callee_map(project),
             ctfe_builtins: build_ctfe_builtin_map(project),
             pure_builtin_callees: project.pure_builtin_callee_ids(),
+        }
+    }
+
+    /// A call retargeted this round names a clone not yet in the store. The
+    /// clone computes what its original does on the constants it was minted
+    /// for, which are the only ones it is called with, so a fold runs the
+    /// original in its place.
+    fn run_clones_as_originals(&mut self, planned: &[Planned<'_>]) {
+        for &(site, id, _) in planned {
+            if let Some(original) = self.callees.get(&site.callee) {
+                let callee = Callee::new(original.func.clone());
+                self.callees.insert(id, callee);
+            }
+            if self.pure_builtin_callees.contains(&site.callee) {
+                self.pure_builtin_callees.insert(id);
+            }
         }
     }
 

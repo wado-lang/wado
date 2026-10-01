@@ -342,30 +342,22 @@ fn compact_funcs(module: &mut WirPackage) {
         return;
     }
 
-    // Each survivor's old `WirFuncId` index to its new one.
-    let survivors = (0..module.functions.len()).filter(|&i| {
-        !module
+    // Keep the survivors, mapping each one's old `WirFuncId` index to its new one.
+    let old_functions = std::mem::take(&mut module.functions);
+    let mut remap: IndexMap<u32, u32> = IndexMap::default();
+    for (old, func) in old_functions.into_iter().enumerate() {
+        if module
             .dead_func_indices
-            .contains(&u32::try_from(i).unwrap())
-    });
-    let remap: IndexMap<u32, u32> = survivors
-        .enumerate()
-        .map(|(new, old)| {
-            (
-                module.defined_func_index(old),
-                module.defined_func_index(new),
-            )
-        })
-        .collect();
-
-    // Filter functions
-    let dead = module.dead_func_indices.clone();
-    let old_functions: Vec<_> = module.functions.drain(..).enumerate().collect();
-    module.functions = old_functions
-        .into_iter()
-        .filter(|(i, _)| !dead.contains(&u32::try_from(*i).unwrap()))
-        .map(|(_, f)| f)
-        .collect();
+            .contains(&u32::try_from(old).unwrap())
+        {
+            continue;
+        }
+        remap.insert(
+            module.defined_func_index(old),
+            module.defined_func_index(module.functions.len()),
+        );
+        module.functions.push(func);
+    }
 
     // Remap WirFuncId in all function bodies
     for func in &mut module.functions {
