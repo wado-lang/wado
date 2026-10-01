@@ -119,7 +119,7 @@ pub struct Argument {
     pub default: Option<DefaultValue>,
 }
 
-/// An optional argument's default, where it is a literal Wado can spell.
+/// An optional argument's default, as the snapshot records it.
 #[derive(Deserialize)]
 #[serde(tag = "type")]
 pub enum DefaultValue {
