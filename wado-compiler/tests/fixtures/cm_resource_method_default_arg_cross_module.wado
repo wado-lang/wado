@@ -1,0 +1,13 @@
+// A `#[cm]` resource method's default resolves in the module declaring the
+// resource, not in the caller's.
+
+use { Target } from "./sub/cm_resource_method_default_arg_cross_module_a.wado";
+
+fn copy(t: Target) -> Target {
+    return t.clone();
+}
+
+test {
+    let t = 0.0 as Target;
+    assert t == t;
+}

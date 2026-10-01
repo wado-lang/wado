@@ -290,12 +290,7 @@ impl WasmModuleInfo {
 
 /// Recursively remap `WirFuncId` indices in a `WirInstr` tree.
 fn remap_func_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
-    if let WirInstr::Call { func_id, .. }
-    | WirInstr::RefFunc { func_id }
-    | WirInstr::ArrayClone {
-        element_copy: func_id,
-        ..
-    } = instr
+    if let WirInstr::Call { func_id, .. } | WirInstr::RefFunc { func_id } = instr
         && let Some(&new_idx) = remap.get(&func_id.index())
     {
         *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
@@ -909,7 +904,8 @@ impl WirFunction {
     }
 }
 
-/// A function's declared locals, keyed by name in declaration order.
+/// A function's declared locals, keyed by name: in declaration order when
+/// scanned, in emission order once `finalize_locals` lays them out.
 ///
 /// A local's declared type is the optimizer's authority on whether a `local.get`
 /// yields a non-null reference: the read site's own `result_ty` can read nullable
@@ -937,14 +933,34 @@ impl WirLocals {
         instr.for_each_child(&mut |child| Self::scan_instr(child, types));
     }
 
+    /// The type `name` is declared at, if it is a declared local.
+    pub fn get(&self, name: &str) -> Option<&WirType> {
+        self.types.get(name)
+    }
+
     /// Whether `name` is declared with a non-null reference type.
     pub fn is_nonnull_ref(&self, name: &str) -> bool {
         self.types.get(name).is_some_and(WirType::is_nonnull_ref)
     }
 
-    /// Declared locals, `(name, type)`, in declaration order.
+    /// Whether `name` is declared with a nullable reference type.
+    pub fn is_nullable_ref(&self, name: &str) -> bool {
+        self.types
+            .get(name)
+            .is_some_and(|ty| ty.is_reference() && !ty.is_nonnull_ref())
+    }
+
+    /// Declared locals, `(name, type)`, in table order.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &WirType)> {
         self.types.iter().map(|(name, ty)| (name.as_str(), ty))
+    }
+}
+
+impl FromIterator<(String, WirType)> for WirLocals {
+    fn from_iter<I: IntoIterator<Item = (String, WirType)>>(iter: I) -> Self {
+        Self {
+            types: iter.into_iter().collect(),
+        }
     }
 }
 
@@ -1449,21 +1465,6 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
-    /// Deep-copy an `Array<T>` whose `T` is a value-typed struct: allocate one
-    /// the length of `src` and copy every element through `T`'s `$value_copy$`
-    /// helper, since a bare `array.set(dst, i, array.get(src, i))` would store
-    /// the *same* ref into both arrays.
-    ArrayClone {
-        type_id: WirTypeId,
-        src: Box<WirInstr>,
-        /// The element type's `$value_copy$` helper. A callee reference like
-        /// any other, so DCE roots it and compaction remaps it.
-        element_copy: WirFuncId,
-        /// Number of leading elements to copy — the destination's exact
-        /// length. `None` clones the whole array (`array.len(src)`). Must
-        /// evaluate to <= `array.len(src)`.
-        len: Option<Box<WirInstr>>,
-    },
 
     // === GC: Reference ===
     RefNull {
@@ -1868,8 +1869,41 @@ impl WirInstr {
         }
     }
 
-    /// Visit all child instructions of this node (non-recursive).
-    /// Used by the emitter for pre-scanning (e.g., collecting `DeclareLocal`).
+    /// The local this node itself reads, its children aside.
+    pub fn local_read(&self) -> Option<&str> {
+        match self {
+            Self::LocalGet { name, .. } => Some(name),
+            _ => None,
+        }
+    }
+
+    /// The locals this node itself writes, its children aside. Each write lands
+    /// once the children are evaluated, a multi-value bind's all at once.
+    pub fn local_writes(&self) -> impl Iterator<Item = &str> {
+        let (single, bound): (Option<&String>, &[Option<String>]) = match self {
+            Self::LocalSet { name, .. } | Self::LocalTee { name, .. } => (Some(name), &[]),
+            Self::MultiValueLocalBind { locals, .. } => (None, locals),
+            _ => (None, &[]),
+        };
+        single
+            .into_iter()
+            .chain(bound.iter().flatten())
+            .map(String::as_str)
+    }
+
+    /// Visit each local name this node itself reads or writes.
+    pub fn for_each_local_name_mut(&mut self, mut f: impl FnMut(&mut String)) {
+        match self {
+            Self::LocalGet { name, .. }
+            | Self::LocalSet { name, .. }
+            | Self::LocalTee { name, .. } => f(name),
+            Self::MultiValueLocalBind { locals, .. } => locals.iter_mut().flatten().for_each(f),
+            _ => {}
+        }
+    }
+
+    /// Visit all child instructions of this node (non-recursive), in evaluation
+    /// order: the order codegen emits them.
     pub fn for_each_child(&self, f: &mut impl FnMut(&WirInstr)) {
         match self {
             // Leaf nodes
@@ -2348,21 +2382,15 @@ impl WirInstr {
                 f(src_offset);
                 f(len);
             }
-            Self::ArrayClone { src, len, .. } => {
-                f(src);
-                if let Some(len) = len {
-                    f(len);
-                }
-            }
             Self::Select {
                 condition,
                 if_true,
                 if_false,
                 ..
             } => {
-                f(condition);
                 f(if_true);
                 f(if_false);
+                f(condition);
             }
             Self::I64Add128(a, b, c, d) | Self::I64Sub128(a, b, c, d) => {
                 f(a);
@@ -2480,8 +2508,8 @@ impl WirInstr {
         }
     }
 
-    /// Visit all child instructions of this node mutably (non-recursive).
-    /// Used by WIR optimization passes for in-place tree rewriting.
+    /// Visit all child instructions of this node mutably (non-recursive), in
+    /// evaluation order: the order codegen emits them.
     pub fn for_each_boxed_child_mut(&mut self, f: &mut impl FnMut(&mut WirInstr)) {
         match self {
             // Leaf nodes
@@ -2960,21 +2988,15 @@ impl WirInstr {
                 f(src_offset);
                 f(len);
             }
-            Self::ArrayClone { src, len, .. } => {
-                f(src);
-                if let Some(len) = len {
-                    f(len);
-                }
-            }
             Self::Select {
                 condition,
                 if_true,
                 if_false,
                 ..
             } => {
-                f(condition);
                 f(if_true);
                 f(if_false);
+                f(condition);
             }
             Self::I64Add128(a, b, c, d) | Self::I64Sub128(a, b, c, d) => {
                 f(a);

@@ -189,72 +189,67 @@ global global:core:prelude/types.wado::$const_obj_12: ref null Array<u8> = array
 global global:core:prelude/types.wado::$const_obj_13: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "cm_lift_same_name_across_interfaces.wado/run"() with Stdout, IpNameLookup {
-    let $load_1: i32;
-    let $load_2: i32;
-    let $load_4: i32;
-    let $match_0: ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";
     let v_1: ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";
     let $vc_payload_0_2: ref "core:prelude//List<wasi:sockets/types.wado/IpAddress>";
     let $vc_payload_1: ref "wasi:sockets/ip_name_lookup.wado//ErrorCode";
     let $vc_payload_5: ref null "core:prelude/string.wado//String";
-    let handle_10: i32;
-    let handle_15: i32;
     let $vc_payload_0_18: ref "core:prelude/string.wado//String";
     let packed_20: i64;
-    let rx_21: i32;
-    let tx_22: i32;
-    let packed_27: i64;
-    let rx_28: i32;
-    let tx_29: i32;
-    v_1 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>::wait"("cm_lift_same_name_across_interfaces.wado/$cm_binding__IpNameLookup_resolve_addresses"(global:cm_lift_same_name_across_interfaces.wado::$const_obj_2));
-    $match_0 = (if ref.test "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok"(v_1) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>" {
+    if ref.test "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok"(local.tee v_1((if ref.test "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok"(local.tee v_1("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>::wait"("cm_lift_same_name_across_interfaces.wado/$cm_binding__IpNameLookup_resolve_addresses"(global:cm_lift_same_name_across_interfaces.wado::$const_obj_2)))) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>" {
         $vc_payload_0_2 = ref.cast "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok"(v_1).payload_0;
-        struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<wasi:sockets/types.wado/IpAddress>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "wasi:sockets/types.wado//IpAddress">($vc_payload_0_2.repr, local.tee $load_1($vc_payload_0_2.used))), used: $load_1 } };
+        struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<wasi:sockets/types.wado/IpAddress>" { repr: ref.as_non_null(let $array_clone_src_4: ref "Array<wasi:sockets/types.wado/IpAddress>"; $array_clone_src_4 = $vc_payload_0_2.repr; let $array_clone_len_6: i32; $array_clone_len_6 = $vc_payload_0_2.used; let $array_clone_dst_5: ref "Array<wasi:sockets/types.wado/IpAddress>"; $array_clone_dst_5 = builtin::array_new<ref "wasi:sockets/types.wado//IpAddress">($array_clone_len_6); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "wasi:sockets/types.wado//IpAddress"; $array_clone_deep_prefix: block {
+            l2: loop {
+                break_if $array_clone_deep_prefix $array_clone_i_7 >= $array_clone_len_6;
+                $array_clone_elem_8 = builtin::array_get_value<ref "wasi:sockets/types.wado//IpAddress">($array_clone_src_4, $array_clone_i_7);
+                builtin::array_set<ref "wasi:sockets/types.wado//IpAddress">($array_clone_dst_5, $array_clone_i_7, (if ref.is_null($array_clone_elem_8) -> ref null "wasi:sockets/types.wado//IpAddress" {
+                    $array_clone_elem_8;
+                } else {
+                    "cm_lift_same_name_across_interfaces.wado/$value_copy$wasi:sockets/types.wado/IpAddress"(ref.as_non_null($array_clone_elem_8));
+                }));
+                $array_clone_i_7 = $array_clone_i_7 + 1;
+                continue l2;
+            };
+        }; $array_clone_dst_5), used: $vc_payload_0_2.used } };
     } else {
         $vc_payload_1 = ref.cast "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Err"(v_1).payload_0;
-        struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Err" { discriminant: 1, payload_0: ref.as_non_null((if local.tee $load_2($vc_payload_1.discriminant) == 0 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+        struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Err" { discriminant: 1, payload_0: ref.as_non_null((if local.tee $array_clone_i_7($vc_payload_1.discriminant) == 0 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
             $vc_payload_1;
-        } else if $load_2 == 1 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+        } else if $array_clone_i_7 == 1 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
             $vc_payload_1;
-        } else if $load_2 == 2 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+        } else if $array_clone_i_7 == 2 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
             $vc_payload_1;
-        } else if $load_2 == 3 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+        } else if $array_clone_i_7 == 3 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
             $vc_payload_1;
-        } else if $load_2 == 4 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+        } else if $array_clone_i_7 == 4 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
             $vc_payload_1;
         } else {
             $vc_payload_5 = ref.cast "wasi:sockets/ip_name_lookup.wado//ErrorCode::Other"($vc_payload_1).payload_0;
             struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode::Other" { discriminant: 5, payload_0: (if ref.is_null($vc_payload_5) == 0 -> ref null "core:prelude/string.wado//String" {
                 $vc_payload_0_18 = ref.as_non_null($vc_payload_5);
-                struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_0_18.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_4($vc_payload_0_18.used); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_4 };
+                struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_0_18.repr; $array_clone_i_7 = $vc_payload_0_18.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($array_clone_i_7)), 0, $array_clone_src_1, 0, $array_clone_i_7); $array_clone_dst_2), used: $array_clone_i_7 };
             } else {
                 $vc_payload_5;
             }) };
         })) };
-    });
-    if ref.test "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok"($match_0) {
-        rx_21 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));
-        tx_22 = builtin::i32_wrap_i64(packed_20 >> 32_i64);
-        handle_10 = "cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_stream"(rx_21);
-        let $mv_arg_7: ref "core:prelude/string.wado//String";
-        $mv_arg_7 = global:cm_lift_same_name_across_interfaces.wado::$const_obj_1;
-        "core:rt/write_string_to_stream$spec0"(tx_22, $mv_arg_7.repr, $mv_arg_7.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_10);
+    }))) {
+        $array_clone_i_7 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));
+        $array_clone_len_6 = builtin::i32_wrap_i64(packed_20 >> 32_i64);
+        $array_clone_i_7 = "cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_stream"($array_clone_i_7);
+        $vc_payload_0_18 = global:cm_lift_same_name_across_interfaces.wado::$const_obj_1;
+        "core:rt/write_string_to_stream$spec0"($array_clone_len_6, $vc_payload_0_18.repr, $vc_payload_0_18.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($array_clone_i_7);
     } else {
-        rx_28 = builtin::i32_wrap_i64(local.tee packed_27("wasi/stream-new"()));
-        tx_29 = builtin::i32_wrap_i64(packed_27 >> 32_i64);
-        handle_15 = "cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_stream"(rx_28);
-        let $mv_arg_5: ref "core:prelude/string.wado//String";
-        $mv_arg_5 = global:cm_lift_same_name_across_interfaces.wado::$const_obj_0;
-        "core:rt/write_string_to_stream$spec0"(tx_29, $mv_arg_5.repr, $mv_arg_5.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
+        $array_clone_i_7 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));
+        $array_clone_len_6 = builtin::i32_wrap_i64(packed_20 >> 32_i64);
+        $array_clone_i_7 = "cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_stream"($array_clone_i_7);
+        $vc_payload_0_18 = global:cm_lift_same_name_across_interfaces.wado::$const_obj_0;
+        "core:rt/write_string_to_stream$spec0"($array_clone_len_6, $vc_payload_0_18.repr, $vc_payload_0_18.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($array_clone_i_7);
     }
 }
 
 fn "cm_lift_same_name_across_interfaces.wado/$cm_binding__IpNameLookup_resolve_addresses"(name) with IpNameLookup {
     let $name_packed: i64;
-    let $async_outptr: i32;
-    let $subtask_packed: i32;
     let bytes: ref Array<u8>;
     let ptr_7: i32;
     let self_8: i32;
@@ -263,17 +258,17 @@ fn "cm_lift_same_name_across_interfaces.wado/$cm_binding__IpNameLookup_resolve_a
     bytes = name.repr;
     ptr_7 = "mem/realloc"(0, 0, 1, self_8);
     i = 0;
-    b8: block {
-        l9: loop {
-            break_if b8 i >= self_8;
+    b10: block {
+        l11: loop {
+            break_if b10 i >= self_8;
             builtin::store_u8(ptr_7 + i, builtin::array_get_value_u8(bytes, i));
             i = i + 1;
-            continue l9;
+            continue l11;
         };
     };
     $name_packed = builtin::i64_extend_i32_u(ptr_7) | (builtin::i64_extend_i32_s(self_8) << 32_i64);
-    $async_outptr = "mem/realloc"(0, 0, 4, 20);
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>" { __cm_packed: local.tee $subtask_packed("wasi/wasi:sockets/IpNameLookup::resolve_addresses"(builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), $async_outptr)), __cm_outptr: $async_outptr, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_lift_same_name_across_interfaces.wado//$Closure_0" {  }, func: ref.func "closure/cm_lift_same_name_across_interfaces.wado/$closure_wrapper_0" } };
+    self_8 = "mem/realloc"(0, 0, 4, 20);
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>>" { __cm_packed: "wasi/wasi:sockets/IpNameLookup::resolve_addresses"(builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), self_8), __cm_outptr: self_8, __cm_size: 20, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_lift_same_name_across_interfaces.wado//$Closure_0" {  }, func: ref.func "closure/cm_lift_same_name_across_interfaces.wado/$closure_wrapper_0" } };
 }
 
 fn "cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -281,111 +276,95 @@ fn "cm_lift_same_name_across_interfaces.wado/$cm_binding__Stdout_write_via_strea
 }
 
 fn "cm_lift_same_name_across_interfaces.wado/$cm_lift__IpNameLookup_resolve_addresses"($outptr) {
-    let $disc_1: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>";
-    let $base: i32;
-    let $count: i32;
-    let $result: ref "core:prelude//List<wasi:sockets/types.wado/IpAddress>";
-    let $i: i32;
-    let $elem_addr: i32;
-    let $vdisc_8: i32;
-    let $vresult_9: ref "wasi:sockets/types.wado//IpAddress";
-    let $lifted_result_10: u16;
-    let $lifted_result_11: u16;
-    let $lifted_result_12: u16;
-    let $lifted_result_13: u16;
-    let $lifted_result_14: u16;
-    let $lifted_result_15: u16;
-    let $lifted_result_16: u16;
-    let $lifted_result_17: u16;
-    let $lifted_result_18: u8;
-    let $lifted_result_19: u8;
-    let $lifted_result_20: u8;
-    let $lifted_result_21: u8;
-    let $vdisc_22: i32;
-    let $vresult_23: ref "wasi:sockets/ip_name_lookup.wado//ErrorCode";
-    let $disc_24: i32;
-    let $option_result: ref null "core:prelude/string.wado//String";
-    let used: i32;
-    let ptr_34: i32;
-    let len_35: i32;
+    let $disc: i32;
+    let $local_4: i32;
+    let $local_5: ref "core:prelude//List<wasi:sockets/types.wado/IpAddress>";
+    let $local_6: i32;
+    let $local_7: i32;
+    let $local_8: i32;
+    let $local_9: ref "wasi:sockets/types.wado//IpAddress";
+    let $local_10: u8;
+    let $local_11: u8;
+    let $local_12: u8;
+    let $local_13: u8;
+    let $local_14: u16;
+    let $local_15: u16;
+    let $local_16: u16;
+    let $local_17: u16;
+    let $local_18: u16;
+    let $local_19: u16;
+    let $local_20: u16;
+    let $local_21: u16;
+    let $local_23: ref "wasi:sockets/ip_name_lookup.wado//ErrorCode";
+    let $local_25: ref null "core:prelude/string.wado//String";
     let arr_39: ref Array<u8>;
-    let i: i32;
-    $disc_1 = builtin::load_u8($outptr);
-    $result_val = ref.null none;
-    if $disc_1 == 0 {
-        $base = builtin::load_i32($outptr + 4);
-        $result = struct.new "core:prelude//List<wasi:sockets/types.wado/IpAddress>" { repr: builtin::array_new<ref "wasi:sockets/types.wado//IpAddress">(local.tee $count(builtin::load_i32(($outptr + 4) + 4))), used: 0 };
-        $i = 0;
-        b11: block {
-            l12: loop {
-                break_if b11 $i >= $count;
-                $vdisc_8 = builtin::load_u8(local.tee $elem_addr($base + ($i * 18)));
-                $vresult_9 = ref.null none;
-                if $vdisc_8 == 0 {
-                    $lifted_result_18 = builtin::load_u8($elem_addr + 2);
-                    $lifted_result_19 = builtin::load_u8(($elem_addr + 2) + 1);
-                    $lifted_result_20 = builtin::load_u8(($elem_addr + 2) + 2);
-                    $lifted_result_21 = builtin::load_u8(($elem_addr + 2) + 3);
-                    $vresult_9 = struct.new "wasi:sockets/types.wado//IpAddress::Ipv4" { discriminant: 0, payload_0: struct.new "tuple//[u8, u8, u8, u8]" { 0: $lifted_result_18, 1: $lifted_result_19, 2: $lifted_result_20, 3: $lifted_result_21 } };
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>" {
+        $disc = builtin::load_i32($outptr + 4);
+        $local_5 = struct.new "core:prelude//List<wasi:sockets/types.wado/IpAddress>" { repr: builtin::array_new<ref "wasi:sockets/types.wado//IpAddress">(local.tee $local_4(builtin::load_i32(($outptr + 4) + 4))), used: 0 };
+        $local_6 = 0;
+        b13: block {
+            l14: loop {
+                break_if b13 $local_6 >= $local_4;
+                $local_9 = (if local.tee $local_8(builtin::load_u8(local.tee $local_7($disc + ($local_6 * 18)))) == 0 -> ref "wasi:sockets/types.wado//IpAddress" {
+                    $local_10 = builtin::load_u8($local_7 + 2);
+                    $local_11 = builtin::load_u8(($local_7 + 2) + 1);
+                    $local_12 = builtin::load_u8(($local_7 + 2) + 2);
+                    $local_13 = builtin::load_u8(($local_7 + 2) + 3);
+                    struct.new "wasi:sockets/types.wado//IpAddress::Ipv4" { discriminant: 0, payload_0: struct.new "tuple//[u8, u8, u8, u8]" { 0: $local_10, 1: $local_11, 2: $local_12, 3: $local_13 } };
                 } else {
-                    $lifted_result_10 = builtin::load_u16($elem_addr + 2);
-                    $lifted_result_11 = builtin::load_u16(($elem_addr + 2) + 2);
-                    $lifted_result_12 = builtin::load_u16(($elem_addr + 2) + 4);
-                    $lifted_result_13 = builtin::load_u16(($elem_addr + 2) + 6);
-                    $lifted_result_14 = builtin::load_u16(($elem_addr + 2) + 8);
-                    $lifted_result_15 = builtin::load_u16(($elem_addr + 2) + 10);
-                    $lifted_result_16 = builtin::load_u16(($elem_addr + 2) + 12);
-                    $lifted_result_17 = builtin::load_u16(($elem_addr + 2) + 14);
-                    $vresult_9 = struct.new "wasi:sockets/types.wado//IpAddress::Ipv6" { discriminant: 1, payload_0: struct.new "tuple//[u16, u16, u16, u16, u16, u16, u16, u16]" { 0: $lifted_result_10, 1: $lifted_result_11, 2: $lifted_result_12, 3: $lifted_result_13, 4: $lifted_result_14, 5: $lifted_result_15, 6: $lifted_result_16, 7: $lifted_result_17 } };
-                }
-                used = $result.used;
-                if @unlikely(used >= builtin::array_len($result.repr)) {
+                    $local_14 = builtin::load_u16($local_7 + 2);
+                    $local_15 = builtin::load_u16(($local_7 + 2) + 2);
+                    $local_16 = builtin::load_u16(($local_7 + 2) + 4);
+                    $local_17 = builtin::load_u16(($local_7 + 2) + 6);
+                    $local_18 = builtin::load_u16(($local_7 + 2) + 8);
+                    $local_19 = builtin::load_u16(($local_7 + 2) + 10);
+                    $local_20 = builtin::load_u16(($local_7 + 2) + 12);
+                    $local_21 = builtin::load_u16(($local_7 + 2) + 14);
+                    struct.new "wasi:sockets/types.wado//IpAddress::Ipv6" { discriminant: 1, payload_0: struct.new "tuple//[u16, u16, u16, u16, u16, u16, u16, u16]" { 0: $local_14, 1: $local_15, 2: $local_16, 3: $local_17, 4: $local_18, 5: $local_19, 6: $local_20, 7: $local_21 } };
+                });
+                if @unlikely(local.tee $local_8($local_5.used) >= builtin::array_len($local_5.repr)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>::grow"($result);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>::grow"($local_5);
                 }
-                builtin::array_set<ref "wasi:sockets/types.wado//IpAddress">($result.repr, used, $vresult_9);
-                $result.used = used + 1;
-                $i = $i + 1;
-                continue l12;
+                builtin::array_set<ref "wasi:sockets/types.wado//IpAddress">($local_5.repr, $local_8, $local_9);
+                $local_5.used = $local_8 + 1;
+                $local_6 = $local_6 + 1;
+                continue l14;
             };
         };
-        if $count > 0 {
-            drop("mem/realloc"($base, $count * 18, 2, 0));
+        if $local_4 > 0 {
+            drop("mem/realloc"($disc, $local_4 * 18, 2, 0));
         }
-        $result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: $result };
+        struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: $local_5 };
     } else {
-        $vdisc_22 = builtin::load_u8($outptr + 4);
-        $vresult_23 = ref.null none;
-        if $vdisc_22 == 0 {
-            $vresult_23 = struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 0 };
-        } else if $vdisc_22 == 1 {
-            $vresult_23 = struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 1 };
-        } else if $vdisc_22 == 2 {
-            $vresult_23 = struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 2 };
-        } else if $vdisc_22 == 3 {
-            $vresult_23 = struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 3 };
-        } else if $vdisc_22 == 4 {
-            $vresult_23 = struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 4 };
+        $local_23 = (if local.tee $local_4(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+            struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 0 };
+        } else if $local_4 == 1 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+            struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 1 };
+        } else if $local_4 == 2 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+            struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 2 };
+        } else if $local_4 == 3 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+            struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 3 };
+        } else if $local_4 == 4 -> ref "wasi:sockets/ip_name_lookup.wado//ErrorCode" {
+            struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode" { 4 };
         } else {
-            $disc_24 = builtin::load_u8(($outptr + 4) + 4);
-            $option_result = ref.null none;
-            if $disc_24 != 0 {
-                $option_result = ref.as_non_null(ptr_34 = builtin::load_i32((($outptr + 4) + 4) + 4); len_35 = builtin::load_i32(((($outptr + 4) + 4) + 4) + 4); arr_39 = builtin::array_new<u8>(len_35); i = 0; b22: block {
-                    l23: loop {
-                        break_if b22 i >= len_35;
-                        builtin::array_set_u8(arr_39, i, builtin::load_u8(ptr_34 + i));
-                        i = i + 1;
-                        continue l23;
+            $local_4 = builtin::load_u8(($outptr + 4) + 4);
+            $local_25 = ref.null none;
+            if $local_4 != 0 {
+                $local_25 = ref.as_non_null($local_4 = builtin::load_i32((($outptr + 4) + 4) + 4); arr_39 = builtin::array_new<u8>(local.tee $disc(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); $local_21 = 0; b24: block {
+                    l25: loop {
+                        break_if b24 $local_21 >= $disc;
+                        builtin::array_set_u8(arr_39, $local_21, builtin::load_u8($local_4 + $local_21));
+                        $local_21 = $local_21 + 1;
+                        continue l25;
                     };
-                }; struct.new "core:prelude/string.wado//String" { repr: arr_39, used: len_35 });
+                }; struct.new "core:prelude/string.wado//String" { repr: arr_39, used: $disc });
                 drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
             }
-            $vresult_23 = struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode::Other" { discriminant: 5, payload_0: $option_result };
-        }
-        $result_val = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $vresult_23 };
-    }
-    return $result_val;
+            struct.new "wasi:sockets/ip_name_lookup.wado//ErrorCode::Other" { discriminant: 5, payload_0: $local_25 };
+        });
+        struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_23 };
+    });
 }
 
 fn "cm_lift_same_name_across_interfaces.wado/$cm_export__run"() {
@@ -467,67 +446,56 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 }
 
 fn "core:rt/panic"(message) {
-    let future_handle: i32;
     let packed: i64;
     let rx_7: i32;
     let tx_8: i32;
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream$spec0"(tx_8, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let len_2: i32;
-    let ptr_3: i32;
-    let taken: i32;
     let ptr_13: i32;
     let ptr_15: i32;
     let count_16: i32;
-    let result: i32;
-    let ws: i32;
     let evt_ptr: i32;
     let status_23: i32;
     let i: i32;
-    let $sroa_written_count_39: i32;
-    let $sroa_written_result_40: "core:prelude/types.wado//enum:CopyResult";
-    len_2 = $mv$data$end - $mv$data$start;
-    if len_2 == 0 {
+    if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b45: block {
-        l46: loop {
-            break_if b45 i >= len_2;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b47: block {
+        l48: loop {
+            break_if b47 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l46;
+            continue l48;
         };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(len_2) << 32_i64));
-    taken = 0;
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    i = 0;
     block {
-        l48: loop {
-            ptr_15 = ptr_3 + taken;
-            count_16 = len_2 - taken;
-            result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
-            if result == -1 {
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
+        l50: loop {
+            ptr_15 = ptr_13 + i;
+            count_16 = $mv$data$end - i;
+            if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
+                $mv$data$start = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, $mv$data$start);
                 evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
+                drop("wasi/waitable-set-wait"($mv$data$start, evt_ptr));
                 status_23 = builtin::load_i32(evt_ptr + 4);
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(ws);
-                result = status_23;
+                "wasi/waitable-set-drop"($mv$data$start);
+                count_16 = status_23;
             }
-            $sroa_written_count_39 = result >>u 4;
-            $sroa_written_result_40 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_15 = count_16 >>u 4;
+            count_16 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
-                $match_scrut_0 = result & 15;
-                if $match_scrut_0 == 0 {
+                if local.tee $match_scrut_0(count_16 & 15) == 0 {
                     break $inline_cm_copy_result_8: 0;
                 } else if $match_scrut_0 == 1 {
                     break $inline_cm_copy_result_8: 1;
@@ -535,70 +503,45 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 }
                 break $inline_cm_copy_result_8: 2;
             };
-            taken = taken + $sroa_written_count_39;
-            if (($sroa_written_result_40 != 0) | ($sroa_written_count_39 <= 0)) | (taken >= len_2) {
-                drop("mem/realloc"(ptr_3, len_2, 1, 0));
-                return $sroa_written_result_40;
+            i = i + ptr_15;
+            if ((count_16 != 0) | (ptr_15 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
+                return count_16;
             }
-            continue l48;
+            continue l50;
         };
     };
 }
 
 fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     let $load_2: ref Array<u8>;
-    let $load_6: ref Array<u8>;
-    let $load_10: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let new_used_11: i32;
     let start_12: i32;
-    let self_14: ref Array<u8>;
-    let self_18: ref Array<u8>;
-    let offset_19: i32;
-    let self_22: ref Array<u8>;
-    let offset_23: i32;
-    let self_26: ref Array<u8>;
-    let offset_27: i32;
-    let self_30: ref Array<u8>;
-    let offset_31: i32;
-    let new_used_41: i32;
-    let start_42: i32;
-    let self_44: ref Array<u8>;
-    let self_48: ref Array<u8>;
-    let offset_49: i32;
-    let new_used_59: i32;
-    let start_60: i32;
-    let self_62: ref Array<u8>;
-    let self_66: ref Array<u8>;
-    let offset_67: i32;
-    let new_used_85: i32;
-    let start_86: i32;
     let $sroa_$f_buf_116: ref "core:prelude/string.wado//String";
-    "core:rt/panic"($local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(180), used: 0 }; new_used_11 = 0 + 66; if @unlikely(new_used_11 > builtin::array_len($local_3.repr)) {
+    "core:rt/panic"($local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(180), used: 0 }; if @unlikely(local.tee new_used_11(0 + 66) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_11);
-    }; start_12 = $local_3.used; $local_3.used = new_used_11; self_14 = local.tee $load_2($local_3.repr); builtin::array_copy<u8>(self_14, start_12, global:core:prelude/types.wado::$const_obj_13, 0, 20); self_18 = $load_2; offset_19 = start_12 + 20; builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/types.wado::$const_obj_12, 0, 18); self_22 = $load_2; offset_23 = start_12 + 38; builtin::array_copy<u8>(self_22, offset_23, global:core:prelude/types.wado::$const_obj_11, 0, 4); self_26 = $load_2; offset_27 = start_12 + 42; builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/types.wado::$const_obj_10, 0, 23); self_30 = $load_2; offset_31 = start_12 + 65; builtin::array_copy<u8>(self_30, offset_31, global:core:prelude/types.wado::$const_obj_9, 0, 1); $sroa_$f_buf_116 = $local_3; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(415, $sroa_$f_buf_116); new_used_41 = $local_3.used + 55; if @unlikely(new_used_41 > builtin::array_len($local_3.repr)) {
+    }; start_12 = $local_3.used; $local_3.used = new_used_11; builtin::array_copy<u8>(local.tee $load_2($local_3.repr), start_12, global:core:prelude/types.wado::$const_obj_13, 0, 20); new_used_11 = start_12 + 20; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_12, 0, 18); new_used_11 = start_12 + 38; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_11, 0, 4); new_used_11 = start_12 + 42; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_10, 0, 23); start_12 = start_12 + 65; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/types.wado::$const_obj_9, 0, 1); $sroa_$f_buf_116 = $local_3; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(415, $sroa_$f_buf_116); if @unlikely(local.tee start_12($local_3.used + 55) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_41);
-    }; start_42 = $local_3.used; $local_3.used = new_used_41; self_44 = local.tee $load_6($local_3.repr); builtin::array_copy<u8>(self_44, start_42, global:core:prelude/types.wado::$const_obj_8, 0, 43); self_48 = $load_6; offset_49 = start_42 + 43; builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/types.wado::$const_obj_7, 0, 12); $sroa_$f_buf_116 = $local_3; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v0, $sroa_$f_buf_116); new_used_59 = $local_3.used + 19; if @unlikely(new_used_59 > builtin::array_len($local_3.repr)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_12);
+    }; new_used_11 = $local_3.used; $local_3.used = start_12; builtin::array_copy<u8>(local.tee $load_2($local_3.repr), new_used_11, global:core:prelude/types.wado::$const_obj_8, 0, 43); new_used_11 = new_used_11 + 43; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_7, 0, 12); $sroa_$f_buf_116 = $local_3; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v0, $sroa_$f_buf_116); if @unlikely(local.tee $v0($local_3.used + 19) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_59);
-    }; start_60 = $local_3.used; $local_3.used = new_used_59; self_62 = local.tee $load_10($local_3.repr); builtin::array_copy<u8>(self_62, start_60, global:core:prelude/types.wado::$const_obj_4, 0, 1); self_66 = $load_10; offset_67 = start_60 + 1; builtin::array_copy<u8>(self_66, offset_67, global:core:prelude/types.wado::$const_obj_5, 0, 18); $sroa_$f_buf_116 = $local_3; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_116); new_used_85 = $local_3.used + 1; if @unlikely(new_used_85 > builtin::array_len($local_3.repr)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $v0);
+    }; new_used_11 = $local_3.used; $local_3.used = $v0; builtin::array_copy<u8>(local.tee $load_2($local_3.repr), new_used_11, global:core:prelude/types.wado::$const_obj_4, 0, 1); new_used_11 = new_used_11 + 1; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_5, 0, 18); $sroa_$f_buf_116 = $local_3; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_116); if @unlikely(local.tee new_used_11($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_85);
-    }; start_86 = $local_3.used; $local_3.used = new_used_85; builtin::array_copy<u8>($local_3.repr, start_86, global:core:prelude/types.wado::$const_obj_4, 0, 1); $local_3);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_11);
+    }; $v0 = $local_3.used; $local_3.used = new_used_11; builtin::array_copy<u8>($local_3.repr, $v0, global:core:prelude/types.wado::$const_obj_4, 0, 1); $local_3);
     unreachable;
 }
 
 fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
-    new_repr = builtin::array_new<u8>($mv$message$used + 1);
-    builtin::array_copy<u8>(new_repr, 0, $mv$message$repr, 0, $mv$message$used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_4: i32;
-        $mv_field_4 = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv_field_4);
+        $mv$message$used = $mv$message$used + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx);
 }
@@ -606,18 +549,12 @@ fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
     let $load_0: ref Array<u8>;
     let capacity: i32;
-    let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a_7: i32;
-    let a_9: i32;
     capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
-    a_9 = capacity * 2;
-    a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -628,12 +565,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     let out_ptr: i32;
     let code: i32;
     let payload: i32;
-    handle_1 = self.__cm_packed >>u 4;
-    if handle_1 != 0 {
+    if local.tee handle_1(self.__cm_packed >>u 4) != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b60: block {
-            l61: loop {
+        b62: block {
+            l63: loop {
                 out_ptr = "mem/realloc"(0, 0, 4, 8);
                 code = "wasi/waitable-set-wait"(ws_3, out_ptr);
                 drop(builtin::load_i32(out_ptr));
@@ -644,8 +580,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
                     "core:prelude/types.wado/cm_subtask_settled$cold0"(code);
                     unreachable;
                 }
-                break_if b60 payload >u 1;
-                continue l61;
+                break_if b62 payload >u 1;
+                continue l63;
             };
         };
         "wasi/subtask-drop"(handle_1);
@@ -653,8 +589,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     }
     result = block -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>,wasi:sockets/ip_name_lookup.wado/ErrorCode>" {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(self.__cm_lift);
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, self.__cm_outptr);
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(self.__cm_lift)).env, self.__cm_outptr);
     };
     drop("mem/realloc"(self.__cm_outptr, self.__cm_size, self.__cm_align, 0));
     return result;
@@ -662,13 +597,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<wasi:sockets/types.wado/IpAddress>::grow"(self) {
     let $load_0: ref "Array<wasi:sockets/types.wado/IpAddress>";
-    let capacity: i32;
-    let new_capacity: i32;
     let new_repr: ref "Array<wasi:sockets/types.wado/IpAddress>";
     let a: i32;
-    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
-    new_repr = builtin::array_new<ref "wasi:sockets/types.wado//IpAddress">(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "wasi:sockets/types.wado//IpAddress">(new_repr, 0, $load_0, 0, self.used);
+    builtin::array_copy<ref "wasi:sockets/types.wado//IpAddress">(local.tee new_repr(builtin::array_new<ref "wasi:sockets/types.wado//IpAddress">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -677,56 +608,45 @@ fn "cm_lift_same_name_across_interfaces.wado/cm_lift_same_name_across_interfaces
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
-    let new_used_25: i32;
     let start_26: i32;
-    let new_used_66: i32;
-    let start_67: i32;
     if is_negative {
-        new_used_25 = self.used + 1;
-        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
         start_26 = self.used;
-        self.used = new_used_25;
+        self.used = is_negative;
         builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    new_used_66 = self.used + digit_count;
-    if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_67 = self.used;
-    self.used = new_used_66;
-    return start_67;
+    start_26 = self.used;
+    self.used = digit_count;
+    return start_26;
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let is_negative: bool;
-    let abs_val: u64;
-    let digit_count_4: i32;
-    let offset_5: i32;
     let x: i64;
     let arr: ref Array<u8>;
-    let pos: i32;
-    let t: u64;
     let i: i32;
     is_negative = self < 0;
-    digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, digit_count_4);
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, self);
     arr = f.repr;
-    pos = offset_5 + digit_count_4;
-    t = abs_val;
+    is_negative = is_negative + self;
     i = 0;
-    b67: block {
-        l68: loop {
-            break_if b67 i >= digit_count_4;
-            pos = pos - 1;
-            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
-            t = t /u 10_i64;
+    b69: block {
+        l70: loop {
+            break_if b69 i >= self;
+            is_negative = is_negative - 1;
+            builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+            x = x /u 10_i64;
             i = i + 1;
-            continue l68;
+            continue l70;
         };
     };
 }

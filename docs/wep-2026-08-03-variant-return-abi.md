@@ -190,8 +190,8 @@ resolving to one), it is neither an ABI boundary nor address-taken, and its
 case payloads fit the slot rule and the cap.
 
 The exclusion set mirrors what the WIR pass derives precisely from
-`collect_pinned_func_ids` (exports, element-table entries, `RefFunc` operands,
-`ArrayClone` value-copy helpers):
+`collect_pinned_func_ids` (exports, element-table entries, `RefFunc` operands),
+plus the value-copy helpers, whose calls WIR build adds after NIR:
 
 | excluded                                      | why                                        |
 | --------------------------------------------- | ------------------------------------------ |
@@ -199,7 +199,7 @@ The exclusion set mirrors what the WIR pass derives precisely from
 | `is_async`                                    | result travels via `task return`           |
 | `is_dispatch_wrapper`                         | effect dispatch calls the binding directly |
 | `is_closure_call()`                           | reached by `RefFunc` from a closure        |
-| `FunctionKind::ValueCopy`                     | `ArrayClone` resolves it at emit time      |
+| `FunctionKind::ValueCopy`                     | WIR build calls it, after NIR              |
 | `FunctionKind::FnCanonicalDispatch`           | body supplied by `wir_build`               |
 | `has_real_type_params()` / `impl_type_params` | not monomorphized                          |
 | `body.is_none()`                              | extern / declaration                       |

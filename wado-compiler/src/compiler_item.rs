@@ -643,6 +643,14 @@ pub enum CompilerItem {
     FormatterWriteStr,
     /// `core:rt::assert_failed`.
     AssertFailed,
+    /// `core:rt::i64_add128_soft`.
+    I64Add128Soft,
+    /// `core:rt::i64_sub128_soft`.
+    I64Sub128Soft,
+    /// `core:rt::i64_mul_wide_u_soft`.
+    I64MulWideUSoft,
+    /// `core:rt::i64_mul_wide_s_soft`.
+    I64MulWideSSoft,
     /// `core:rt::coverage_probe`.
     CoverageProbe,
     /// `core:rt::handle_class`.
@@ -925,6 +933,10 @@ impl CompilerItem {
         Self::FormatterWriteLiteral,
         Self::FormatterWriteStr,
         Self::AssertFailed,
+        Self::I64Add128Soft,
+        Self::I64Sub128Soft,
+        Self::I64MulWideUSoft,
+        Self::I64MulWideSSoft,
         Self::CoverageProbe,
         Self::HandleClass,
         Self::InspectHandle,
@@ -1108,6 +1120,10 @@ impl CompilerItem {
             Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::FormatterWriteStr => "formatter_write_str",
             Self::AssertFailed => "assert_failed",
+            Self::I64Add128Soft => "i64_add128_soft",
+            Self::I64Sub128Soft => "i64_sub128_soft",
+            Self::I64MulWideUSoft => "i64_mul_wide_u_soft",
+            Self::I64MulWideSSoft => "i64_mul_wide_s_soft",
             Self::CoverageProbe => "coverage_probe",
             Self::HandleClass => "handle_class",
             Self::InspectHandle => "inspect_handle",
@@ -1219,6 +1235,10 @@ impl CompilerItem {
             // Always loaded — `core:prelude` is auto-imported, and `core:rt`
             // carries the CM ABI helpers the binding synthesis calls.
             | Self::AssertFailed
+            | Self::I64Add128Soft
+            | Self::I64Sub128Soft
+            | Self::I64MulWideUSoft
+            | Self::I64MulWideSSoft
             | Self::CoverageProbe
             | Self::HandleClass
             | Self::InspectHandle
@@ -1499,6 +1519,10 @@ impl CompilerItem {
                 CompilerItemKind::Method
             }
             Self::AssertFailed
+            | Self::I64Add128Soft
+            | Self::I64Sub128Soft
+            | Self::I64MulWideUSoft
+            | Self::I64MulWideSSoft
             | Self::CoverageProbe
             | Self::HandleClass
             | Self::InspectHandle

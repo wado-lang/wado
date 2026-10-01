@@ -1,0 +1,19 @@
+// Test: a set fused into its local's only read leaves no tee behind.
+//
+// The assert binds its condition to a local read once, by the `if` right after
+// it. The last WIR pass fuses that set and read into a tee, which then writes a
+// local nothing reads: the value itself belongs there, and the local goes.
+
+global mut CALLS: i32 = 0;
+
+test {
+    CALLS = builtin::black_box(1);
+    assert CALLS == 1;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O2": ["if @unlikely((global:wir_no_dead_tee_after_fusion.wado::CALLS == 1) == 0)"],
+    "wir_not_expect:O2": ["local.tee $cond"]
+}

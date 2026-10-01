@@ -21,12 +21,7 @@ fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
 
 fn collect_func_refs_recursive(instr: &WirInstr, out: &mut IndexSet<u32>) {
     match instr {
-        WirInstr::Call { func_id, .. }
-        | WirInstr::RefFunc { func_id }
-        | WirInstr::ArrayClone {
-            element_copy: func_id,
-            ..
-        } => {
+        WirInstr::Call { func_id, .. } | WirInstr::RefFunc { func_id } => {
             out.insert(func_id.index());
         }
         _ => {}
@@ -89,12 +84,7 @@ pub fn mark_unreferenced_globals(module: &mut WirPackage) {
 
 fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     match instr {
-        WirInstr::Call { func_id, .. }
-        | WirInstr::RefFunc { func_id }
-        | WirInstr::ArrayClone {
-            element_copy: func_id,
-            ..
-        } => {
+        WirInstr::Call { func_id, .. } | WirInstr::RefFunc { func_id } => {
             if let Some(&new) = remap.get(&func_id.index()) {
                 *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
             }

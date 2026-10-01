@@ -72,11 +72,7 @@ fn "stream_cm_stdin_pipe.wado/$cm_binding__Stdin_read_via_stream"() with Stdin {
 }
 
 fn "stream_cm_stdin_pipe.wado/$cm_export__run"() {
-    let stdin_stream: i32;
-    let subtask: i32;
-    let $pattern_temp_0: ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
-    $pattern_temp_0 = "stream_cm_stdin_pipe.wado/$cm_binding__Stdin_read_via_stream"();
-    drop("stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(local.tee subtask("stream_cm_stdin_pipe.wado/$cm_binding__Stdout_write_via_stream"(local.tee stdin_stream($pattern_temp_0.0)))));
+    drop("stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"("stream_cm_stdin_pipe.wado/$cm_binding__Stdout_write_via_stream"("stream_cm_stdin_pipe.wado/$cm_binding__Stdin_read_via_stream"().0)));
     "wasi/task-return"(0);
 }
 
@@ -84,16 +80,11 @@ fn "stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),
     let ptr: i32;
     let status_2: i32;
     let result: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
-    let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
-    let $edisc: i32;
-    let $eresult: "wasi:cli/types.wado//enum:ErrorCode";
     let ws: i32;
     let evt_ptr: i32;
     let status_13: i32;
     ptr = "mem/realloc"(0, 0, 1, 2);
-    status_2 = "wasi/future-read:transmission-wasi/cli/types.wado#error-code"(handle, ptr);
-    if status_2 == -1 {
+    if local.tee status_2("wasi/future-read:transmission-wasi/cli/types.wado#error-code"(handle, ptr)) == -1 {
         ws = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, ws);
         evt_ptr = "mem/realloc"(0, 0, 4, 8);
@@ -106,23 +97,18 @@ fn "stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),
     }
     result = ref.null none;
     if (status_2 & 15) == 0 {
-        $disc = builtin::load_u8(ptr);
-        $result_val = ref.null none;
-        if $disc == 0 {
-            $result_val = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
+        result = (if local.tee status_2(builtin::load_u8(ptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
+            struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
-            $edisc = builtin::load_u8(ptr + 1);
-            $eresult = 0;
-            if $edisc == 0 {
-                $eresult = 0;
-            } else if $edisc == 1 {
-                $eresult = 1;
+            status_2 = (if local.tee status_2(builtin::load_u8(ptr + 1)) == 0 -> "wasi:cli/types.wado//enum:ErrorCode" {
+                0;
+            } else if status_2 == 1 -> "wasi:cli/types.wado//enum:ErrorCode" {
+                1;
             } else {
-                $eresult = 2;
-            }
-            $result_val = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $eresult };
-        }
-        result = $result_val;
+                2;
+            });
+            struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: status_2 };
+        });
     }
     drop("mem/realloc"(ptr, 2, 1, 0));
     return result;

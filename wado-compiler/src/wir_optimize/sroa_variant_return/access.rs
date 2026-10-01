@@ -27,7 +27,7 @@ pub(super) struct VariantReplacement {
 /// `count_local_get` per temp) that made validation O(n²).
 #[derive(Default)]
 pub(super) struct LocalDefUse {
-    /// `LocalSet` + `LocalTee` writes per local name.
+    /// Writes per local name.
     sets: IndexMap<String, usize>,
     /// `LocalGet` reads per local name.
     gets: IndexMap<String, usize>,
@@ -43,14 +43,11 @@ impl LocalDefUse {
     }
 
     fn scan(&mut self, instr: &WirInstr) {
-        match instr {
-            WirInstr::LocalGet { name, .. } => {
-                *self.gets.entry(name.clone()).or_default() += 1;
-            }
-            WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
-                *self.sets.entry(name.clone()).or_default() += 1;
-            }
-            _ => {}
+        if let Some(name) = instr.local_read() {
+            *self.gets.entry(name.to_string()).or_default() += 1;
+        }
+        for name in instr.local_writes() {
+            *self.sets.entry(name.to_string()).or_default() += 1;
         }
         instr.for_each_child(&mut |child| self.scan(child));
     }

@@ -64,22 +64,18 @@ global mut global:infer_type_arg_from_assoc_bound_method.wado::$const_obj_3: ref
 global mut global:infer_type_arg_from_assoc_bound_method.wado::$const_obj_4: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "infer_type_arg_from_assoc_bound_method.wado/$cm_export__$test_0_bound_only_type_param_inferred_on_a_generic_method"() {
-    let $cond_2: bool;
-    let v: i32;
     let $sroa_slot_13: i32;
     let $sroa_$sroa_it_items_23_repr_25: ref Array<i32>;
     $sroa_$sroa_it_items_23_repr_25 = array.new_fixed<i32>(11, 12);
     $sroa_slot_13 = 0;
-    v = builtin::array_get_value<i32>($sroa_$sroa_it_items_23_repr_25, 0);
-    $sroa_slot_13 = v;
-    $cond_2 = (if block -> i32 {
+    $sroa_slot_13 = builtin::array_get_value<i32>($sroa_$sroa_it_items_23_repr_25, 0);
+    if @unlikely(local.tee $sroa_slot_13((if block -> i32 {
         $sroa_slot_13 == 11;
     } -> bool {
         1;
     } else {
         0;
-    });
-    if @unlikely($cond_2 == 0) {
+    })) == 0) {
         cold_path;
         "infer_type_arg_from_assoc_bound_method.wado/$test_0_bound_only_type_param_inferred_on_a_generic_method$cold0"();
         unreachable;
@@ -88,22 +84,18 @@ fn "infer_type_arg_from_assoc_bound_method.wado/$cm_export__$test_0_bound_only_t
 }
 
 fn "infer_type_arg_from_assoc_bound_method.wado/$cm_export__$test_1_bound_only_type_param_inferred_on_a_method_of_a_generic_impl"() {
-    let $cond_2: bool;
-    let v: i32;
     let $sroa_slot_13: i32;
     let $sroa_$sroa_it_items_24_repr_26: ref Array<i32>;
     $sroa_$sroa_it_items_24_repr_26 = array.new_fixed<i32>(21, 22);
     $sroa_slot_13 = 0;
-    v = builtin::array_get_value<i32>($sroa_$sroa_it_items_24_repr_26, 0);
-    $sroa_slot_13 = v;
-    $cond_2 = (if block -> i32 {
+    $sroa_slot_13 = builtin::array_get_value<i32>($sroa_$sroa_it_items_24_repr_26, 0);
+    if @unlikely(local.tee $sroa_slot_13((if block -> i32 {
         $sroa_slot_13 == 21;
     } -> bool {
         1;
     } else {
         0;
-    });
-    if @unlikely($cond_2 == 0) {
+    })) == 0) {
         cold_path;
         "infer_type_arg_from_assoc_bound_method.wado/$test_1_bound_only_type_param_inferred_on_a_method_of_a_generic_impl$cold0"();
         unreachable;
@@ -118,8 +110,7 @@ fn "infer_type_arg_from_assoc_bound_method.wado/$test_0_bound_only_type_param_in
 condition: m.first(g) matches { Some(11) }
 "), used: 172 };
     }
-    $mv_arg_1 = global:infer_type_arg_from_assoc_bound_method.wado::$const_obj_3;
-    "core:rt/panic"($mv_arg_1.repr, $mv_arg_1.used);
+    "core:rt/panic"(local.tee $mv_arg_1(global:infer_type_arg_from_assoc_bound_method.wado::$const_obj_3).repr, $mv_arg_1.used);
     unreachable;
 }
 
@@ -130,82 +121,68 @@ fn "infer_type_arg_from_assoc_bound_method.wado/$test_1_bound_only_type_param_in
 condition: w.head(g) matches { Some(21) }
 "), used: 181 };
     }
-    $mv_arg_1 = global:infer_type_arg_from_assoc_bound_method.wado::$const_obj_4;
-    "core:rt/panic"($mv_arg_1.repr, $mv_arg_1.used);
+    "core:rt/panic"(local.tee $mv_arg_1(global:infer_type_arg_from_assoc_bound_method.wado::$const_obj_4).repr, $mv_arg_1.used);
     unreachable;
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    let future_handle: i32;
     let packed: i64;
     let rx_7: i32;
     let tx_8: i32;
     let new_repr: ref Array<u8>;
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    new_repr = builtin::array_new<u8>($mv$message$used + 1);
-    builtin::array_copy<u8>(new_repr, 0, $mv$message$repr, 0, $mv$message$used);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $mv_field_4: i32;
-        $mv_field_4 = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx_8, new_repr, 0, $mv_field_4);
+        $mv$message$used = $mv$message$used + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(tx_8, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let len_2: i32;
-    let ptr_3: i32;
-    let taken: i32;
     let ptr_13: i32;
     let ptr_15: i32;
     let count_16: i32;
-    let result: i32;
-    let ws: i32;
     let evt_ptr: i32;
     let status_23: i32;
     let i: i32;
-    let $sroa_written_count_39: i32;
-    let $sroa_written_result_40: "core:prelude/types.wado//enum:CopyResult";
-    len_2 = $mv$data$end - $mv$data$start;
-    if len_2 == 0 {
+    if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b10: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b10: block {
         l11: loop {
-            break_if b10 i >= len_2;
+            break_if b10 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l11;
         };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(len_2) << 32_i64));
-    taken = 0;
+    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    i = 0;
     block {
         l13: loop {
-            ptr_15 = ptr_3 + taken;
-            count_16 = len_2 - taken;
-            result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
-            if result == -1 {
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
+            ptr_15 = ptr_13 + i;
+            count_16 = $mv$data$end - i;
+            if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
+                $mv$data$start = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, $mv$data$start);
                 evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
+                drop("wasi/waitable-set-wait"($mv$data$start, evt_ptr));
                 status_23 = builtin::load_i32(evt_ptr + 4);
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(ws);
-                result = status_23;
+                "wasi/waitable-set-drop"($mv$data$start);
+                count_16 = status_23;
             }
-            $sroa_written_count_39 = result >>u 4;
-            $sroa_written_result_40 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_15 = count_16 >>u 4;
+            count_16 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
-                $match_scrut_0 = result & 15;
-                if $match_scrut_0 == 0 {
+                if local.tee $match_scrut_0(count_16 & 15) == 0 {
                     break $inline_cm_copy_result_8: 0;
                 } else if $match_scrut_0 == 1 {
                     break $inline_cm_copy_result_8: 1;
@@ -213,10 +190,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 }
                 break $inline_cm_copy_result_8: 2;
             };
-            taken = taken + $sroa_written_count_39;
-            if (($sroa_written_result_40 != 0) | ($sroa_written_count_39 <= 0)) | (taken >= len_2) {
-                drop("mem/realloc"(ptr_3, len_2, 1, 0));
-                return $sroa_written_result_40;
+            i = i + ptr_15;
+            if ((count_16 != 0) | (ptr_15 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
+                return count_16;
             }
             continue l13;
         };

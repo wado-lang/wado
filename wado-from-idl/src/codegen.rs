@@ -379,7 +379,12 @@ impl WadoCodeGenerator {
                         _ => "self".to_string(),
                     }
                 } else {
-                    format!("{}: {}", p.name, Self::format_type(&p.ty))
+                    let default = p
+                        .default
+                        .as_ref()
+                        .map(|value| format!(" = {value}"))
+                        .unwrap_or_default();
+                    format!("{}: {}{default}", p.name, Self::format_type(&p.ty))
                 }
             })
             .collect::<Vec<_>>()

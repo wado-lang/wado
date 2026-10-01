@@ -1,83 +1,14 @@
 //! Tests for the `-f <flag>` codegen feature flags plumbed through
 //! [`CompilerOptions::codegen_flags`].
 //!
-//! Covers `array-copy`, `branch-hinting`, `bare-asserts`, and
-//! `wide-arithmetic`. Each test asserts on the disassembled WAT (or the run
-//! output) so it pins the actual codegen difference rather than an internal
-//! detail.
+//! Covers `branch-hinting`, `bare-asserts`, and `wide-arithmetic`. Each test
+//! asserts on the disassembled WAT (or the run output) so it pins the actual
+//! codegen difference rather than an internal detail.
 
 use std::path::Path;
 
 use crate::common::{compile_source_with_compiler_options, run_wasm};
 use wado_compiler::{CompilerOptions, OptLevel};
-
-/// A string-building loop. `String` append (`+`) lowers to
-/// `builtin::array_copy`, giving codegen something to lower as either a loop
-/// or the native instruction. `assert s.len() == 50` keeps the loop live
-/// through DCE.
-const ARRAY_COPY_SOURCE: &str = r#"
-export fn run() {
-    let mut s = "";
-    let mut i = 0;
-    while i < 50 {
-        s = s + "x";
-        i += 1;
-    }
-    assert s.len() == 50;
-}
-"#;
-
-fn compile_to_wat(codegen_flags: Vec<String>) -> String {
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        codegen_flags,
-        ..Default::default()
-    };
-    let result = compile_source_with_compiler_options(
-        Path::new("codegen_flags_test.wado"),
-        ARRAY_COPY_SOURCE,
-        options,
-    )
-    .expect("compilation should succeed");
-    wasmprinter::print_bytes(&result.wasm).expect("disassemble wasm to WAT")
-}
-
-#[test]
-fn default_emits_native_array_copy() {
-    let wat = compile_to_wat(Vec::new());
-    assert!(
-        wat.contains("array.copy"),
-        "default codegen must emit the native Wasm array.copy instruction"
-    );
-}
-
-#[test]
-fn no_array_copy_flag_lowers_to_a_loop() {
-    let wat = compile_to_wat(vec!["no-array-copy".to_string()]);
-    assert!(
-        !wat.contains("array.copy"),
-        "`-f no-array-copy` must lower builtin::array_copy to a loop, not the native instruction"
-    );
-}
-
-#[test]
-fn explicit_array_copy_flag_is_redundant_but_valid() {
-    let wat = compile_to_wat(vec!["array-copy".to_string()]);
-    assert!(
-        wat.contains("array.copy"),
-        "`-f array-copy` must keep the native Wasm array.copy instruction"
-    );
-}
-
-#[test]
-fn last_flag_wins() {
-    // `array-copy` after `no-array-copy` re-enables the native instruction.
-    let wat = compile_to_wat(vec!["no-array-copy".to_string(), "array-copy".to_string()]);
-    assert!(
-        wat.contains("array.copy"),
-        "a trailing `-f array-copy` must override an earlier `-f no-array-copy`"
-    );
-}
 
 /// Sources covering every branch-hint producer: an explicit `cold_path()`
 /// marker, a synthesized one (`assert`), and a trap branch that the WIR-level
@@ -327,6 +258,40 @@ fn no_wide_arithmetic_preserves_results() {
     );
 }
 
+/// The software forms return their two halves as a tuple. Once one is inlined,
+/// the halves go to locals as a written destructure's would, so a 128-bit add
+/// or sub allocates nothing.
+#[test]
+fn no_wide_arithmetic_allocates_no_tuple() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn add_sub(a: u128, b: u128) -> u128 {
+    return a + b - (b - a);
+}
+
+export fn run() with Stdout {
+    println(`${add_sub(builtin::black_box(3 as u128), builtin::black_box(5 as u128))}`);
+}
+"#;
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        codegen_flags: vec!["no-wide-arithmetic".to_string()],
+        ..Default::default()
+    };
+    let wasm = compile_source_with_compiler_options(Path::new("u128.wado"), source, options)
+        .expect("compilation should succeed")
+        .wasm;
+    let wat = wasmprinter::print_bytes(wasm).expect("disassemble");
+    let start = wat
+        .find("(func $u128.wado/add_sub")
+        .expect("add_sub is emitted");
+    let body = &wat[start..];
+    let body = &body[..body[1..].find("(func ").map_or(body.len(), |end| end + 1)];
+    assert!(!body.contains("struct.new"), "add_sub allocates:\n{body}");
+}
+
 #[test]
 fn unknown_codegen_flag_is_rejected() {
     let options = CompilerOptions {
@@ -336,7 +301,7 @@ fn unknown_codegen_flag_is_rejected() {
     };
     let result = compile_source_with_compiler_options(
         Path::new("codegen_flags_test.wado"),
-        ARRAY_COPY_SOURCE,
+        BRANCH_HINT_SOURCE,
         options,
     );
     let err = result.expect_err("an unknown codegen flag must fail compilation");

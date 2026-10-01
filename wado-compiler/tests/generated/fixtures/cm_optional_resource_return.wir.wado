@@ -41,13 +41,12 @@ fn "cm_optional_resource_return.wado/$cm_binding__Gfx_get_device"() with Gfx {
 
 fn "cm_optional_resource_return.wado/$cm_binding__Device_adapter"(self) with Device {
     let $outptr: i32;
-    let $disc: i32;
     let $option_result: ref "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:demo/Device::adapter"(self, $outptr);
-    $disc = builtin::load_u8($outptr);
+    self = builtin::load_u8($outptr);
     $option_result = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" { 1 };
-    if $disc != 0 {
+    if self != 0 {
         $option_result = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
     }
     drop("mem/realloc"($outptr, 8, 4, 0));

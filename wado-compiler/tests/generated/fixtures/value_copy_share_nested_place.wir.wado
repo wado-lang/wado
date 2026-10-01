@@ -22,25 +22,47 @@ type "functype//value_copy_share_nested_place.wado/run" = fn();  // TypeId(5)
 
 type "functype//value_copy_share_nested_place.wado/$cm_export__run" = fn();  // TypeId(6)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(7)
+type "functype//value_copy_share_nested_place.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(7)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(8)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(8)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "value_copy_share_nested_place.wado/run"() {
-    let self_28: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let v: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $sroa_$sroa_t_inner_41_tags_46: ref "core:prelude//List<core:prelude/string.wado/String>";
-    $sroa_$sroa_t_inner_41_tags_46 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), used: 1 };
-    self_28 = $sroa_$sroa_t_inner_41_tags_46;
-    if @unlikely(1 >= builtin::array_len(self_28.repr)) {
+    v = local.tee $sroa_$sroa_t_inner_41_tags_46(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), used: 1 });
+    let $array_clone_src_1: ref "Array<core:prelude/string.wado/String>";
+    $array_clone_src_1 = v.repr;
+    let $array_clone_dst_2: ref "Array<core:prelude/string.wado/String>";
+    $array_clone_dst_2 = builtin::array_new<ref "core:prelude/string.wado//String">(1);
+    let $array_clone_i_4: i32;
+    $array_clone_i_4 = 0;
+    let $array_clone_elem_5: ref null "core:prelude/string.wado//String";
+    $array_clone_deep_prefix: block {
+        l0: loop {
+            break_if $array_clone_deep_prefix $array_clone_i_4 >= 1;
+            $array_clone_elem_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_src_1, $array_clone_i_4);
+            builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4, (if ref.is_null($array_clone_elem_5) -> ref null "core:prelude/string.wado//String" {
+                $array_clone_elem_5;
+            } else {
+                "value_copy_share_nested_place.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null($array_clone_elem_5));
+            }));
+            $array_clone_i_4 = $array_clone_i_4 + 1;
+            continue l0;
+        };
+    };
+    v = $sroa_$sroa_t_inner_41_tags_46;
+    if @unlikely(1 >= builtin::array_len(v.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_28);
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(v);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self_28.repr, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 });
-    self_28.used = 2;
+    builtin::array_set<ref "core:prelude/string.wado//String">(v.repr, 1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 });
+    v.used = 2;
     $sroa_$sroa_t_inner_41_tags_46 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 }), used: 1 };
 }
 
@@ -49,15 +71,17 @@ fn "value_copy_share_nested_place.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
+fn "value_copy_share_nested_place.wado/$value_copy$core:prelude/string.wado/String"(v) {
+    let $av_1: i32;
+    $av_1 = v.used;
+    return struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2), used: $av_1 };
+}
+
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
     let $load_0: ref "Array<core:prelude/string.wado/String>";
-    let capacity: i32;
-    let new_capacity: i32;
     let new_repr: ref "Array<core:prelude/string.wado/String>";
     let a: i32;
-    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
-    new_repr = builtin::array_new<ref "core:prelude/string.wado//String">(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<ref "core:prelude/string.wado//String">(new_repr, 0, $load_0, 0, self.used);
+    builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee new_repr(builtin::array_new<ref "core:prelude/string.wado//String">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
