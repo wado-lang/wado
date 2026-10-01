@@ -548,6 +548,9 @@ the literal can take that type: an integer literal takes any numeric type, and
 a float literal any float type. The literal must then lie in the target's range
 (see
 [Compile-time range checking](./spec-literals.md#compile-time-range-checking)).
+Rust gives an integer literal no type from a float target and types it `i32`,
+so `3_000_000_000 as f64` is an error there. Wado types it by every numeric
+target alike, since Rust's exception for float targets is the inconsistent rule.
 A float literal cast to an integer type stays a float and converts as a float
 value does. To reinterpret a bit pattern, cast a value that already has the
 unsigned type:
