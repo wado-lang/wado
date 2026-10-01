@@ -1012,11 +1012,16 @@ fn specialize_round(
     if per_caller.is_empty() {
         return propagated;
     }
-    let (retarget, minted) = mint_clones(project, state, &per_caller);
+    let (retarget, planned) = plan_clones(project, state, &per_caller);
     if retarget.is_empty() {
         return propagated;
     }
+    // A callee cloned this round may itself be a caller retargeted this round.
+    // Retargeting first gives its clone the retarget too, where a clone copied
+    // before it would keep calling an original its own constants then fold into
+    // a copy of the clone it should have called.
     retarget_calls(project, &retarget);
+    let minted = build_clones(project, state, &planned);
     // A clone is reachable through the call just pointed at it, and reaches
     // nothing its original did not.
     let first_minted = project.functions.len();
@@ -1167,20 +1172,21 @@ fn collect_sites(
 /// One call to point at a clone: `(caller store position, call node, clone)`.
 type Retarget = (usize, ExprId, FuncId);
 
-/// Mint a clone per distinct binding set, reusing one already cached. Returns
-/// the retargets to apply and the clones to append to the store. Hot sites go
-/// first, so a cold one finds the clone a hot one minted this round.
-fn mint_clones(
-    project: &mut NirPackage,
+/// A clone to build: the site it is minted for, its id, and its ordinal among
+/// its callee's clones.
+type Planned<'s> = (&'s Site, FuncId, usize);
+
+/// Assign a clone per distinct binding set, reusing one already cached. Returns
+/// the retargets to apply and the clones to build. Hot sites go first, so a
+/// cold one finds the clone a hot one planned this round.
+fn plan_clones<'s>(
+    project: &NirPackage,
     state: &mut ParamSpecState,
-    per_caller: &[(usize, Vec<Site>)],
-) -> (Vec<Retarget>, Vec<Rc<RefCell<NirFunction>>>) {
+    per_caller: &'s [(usize, Vec<Site>)],
+) -> (Vec<Retarget>, Vec<Planned<'s>>) {
     let mut retarget: Vec<Retarget> = Vec::new();
-    let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
+    let mut planned: Vec<Planned<'s>> = Vec::new();
     let mut next_id = project.next_func_id().index();
-    // Built on the first clone: a round whose sites all reuse a clone or fall
-    // outside the budget mints none.
-    let mut settler: Option<BranchSettler> = None;
     let hot_then_cold = [false, true].into_iter().flat_map(|cold| {
         per_caller.iter().flat_map(move |(caller, sites)| {
             sites
@@ -1214,16 +1220,34 @@ fn mint_clones(
             project.functions[site.callee.index()].borrow().name,
             site.bindings.len()
         );
-        let settler = settler.get_or_insert_with(|| BranchSettler::new(project));
-        let clone = build_clone(project, site, FuncId::new(next_id), ordinal, settler);
+        let id = FuncId::new(next_id);
         next_id += 1;
-        state.clones.insert(key, clone.id);
+        state.clones.insert(key, id);
         state.per_callee.insert(site.callee, ordinal + 1);
-        state.param_consts.insert(clone.id, clone.param_consts);
-        retarget.push((*caller, site.call, clone.id));
-        minted.push(clone.function);
+        retarget.push((*caller, site.call, id));
+        planned.push((site, id, ordinal));
     }
-    (retarget, minted)
+    (retarget, planned)
+}
+
+/// Build the planned clones, in id order, to append to the store.
+fn build_clones(
+    project: &mut NirPackage,
+    state: &mut ParamSpecState,
+    planned: &[Planned<'_>],
+) -> Vec<Rc<RefCell<NirFunction>>> {
+    if planned.is_empty() {
+        return Vec::new();
+    }
+    let settler = BranchSettler::new(project);
+    planned
+        .iter()
+        .map(|&(site, id, ordinal)| {
+            let clone = build_clone(project, site, id, ordinal, &settler);
+            state.param_consts.insert(id, clone.param_consts);
+            clone.function
+        })
+        .collect()
 }
 
 /// Point each selected call at its clone — a `func_id` swap, no analysis.
@@ -1276,7 +1300,6 @@ impl BranchSettler {
 
 /// A freshly minted clone and the facts recorded for it.
 struct Clone {
-    id: FuncId,
     function: Rc<RefCell<NirFunction>>,
     param_consts: IndexMap<String, ParamSeed>,
 }
@@ -1344,7 +1367,6 @@ fn build_clone(
     copy_function_strings(project, &origin, (clone.module_source.clone(), name));
 
     Clone {
-        id,
         function: Rc::new(RefCell::new(clone)),
         param_consts,
     }
