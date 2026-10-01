@@ -336,7 +336,10 @@ fn wide_int_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<
 /// The reason a cast to or from `char` is refused: only a `u8` is always a
 /// Unicode scalar value, and a `char` converts only to its code point.
 fn char_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    let (source, target) = (tt.representation_head(source), tt.representation_head(target));
+    let (source, target) = (
+        tt.representation_head(source),
+        tt.representation_head(target),
+    );
     if target == TypeTable::CHAR && source != TypeTable::CHAR && source != TypeTable::U8 {
         return Some("use char::from_u32() or char::from_i32() for checked conversion".to_string());
     }

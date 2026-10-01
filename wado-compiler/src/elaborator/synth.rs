@@ -295,10 +295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 tt.fq_base_type_name(param) == *head
                     || tt.fq_base_type_name(tt.representation_head(param)) == *head
             }
-            ArgClass::IntLit => {
-                is_primitive_literal_target(&tt, param)
-                    || tt.is_wide_int(param)
-            }
+            ArgClass::IntLit => is_primitive_literal_target(&tt, param) || tt.is_wide_int(param),
             ArgClass::FloatLit => tt.is_float(param) || tt.is_half(param),
             ArgClass::StrLit => tt.is_string(tt.representation_head(param)),
             ArgClass::BytesLit => {
