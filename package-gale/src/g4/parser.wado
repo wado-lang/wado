@@ -107,19 +107,19 @@ global LEXER_COMMAND_NAMES: List<String> = ["skip", "more", "channel", "type", "
 /// its own lexical problem — quoting its raw text would show a truncated
 /// fragment and say nothing about why the lexer stopped.
 fn found_desc(tok: &Token) -> String {
-    if tok.kind == G4Token::UnterminatedString as i32 {
+    if tok.kind == G4Token::UnterminatedString.code() {
         return G4Token::UnterminatedString.name();
     }
-    if tok.kind == G4Token::UnterminatedCharClass as i32 {
+    if tok.kind == G4Token::UnterminatedCharClass.code() {
         return G4Token::UnterminatedCharClass.name();
     }
-    if tok.kind == G4Token::InvalidEscape as i32 {
+    if tok.kind == G4Token::InvalidEscape.code() {
         return `${G4Token::InvalidEscape.name()} ${tok.text}`;
     }
-    if tok.kind == G4Token::UnexpectedChar as i32 {
+    if tok.kind == G4Token::UnexpectedChar.code() {
         return `${G4Token::UnexpectedChar.name()} "${tok.text}"`;
     }
-    assert tok.kind < G4Token::UnterminatedString as i32, `kind ${tok.kind} is one the lexer could not form, and those are the trailing kinds — it must name its problem above rather than reach the raw text`;
+    assert tok.kind < G4Token::UnterminatedString.code(), `kind ${tok.kind} is one the lexer could not form, and those are the trailing kinds — it must name its problem above rather than reach the raw text`;
     return `got "${tok.text}"`;
 }
 
@@ -253,7 +253,7 @@ impl G4Parser {
     }
 
     fn at_eof(&self) -> bool {
-        return self.peek_kind() == G4Token::Eof as i32;
+        return self.peek_kind() == G4Token::Eof.code();
     }
 
     fn advance(&mut self) -> &Token {
@@ -264,7 +264,7 @@ impl G4Parser {
 
     fn expect(&mut self, kind: G4Token) -> Result<&Token, ParseError> {
         let tok = self.peek();
-        if tok.kind == kind as i32 {
+        if tok.kind == kind.code() {
             self.pos += 1;
             return Result::<&Token, ParseError>::Ok(tok);
         }
@@ -275,7 +275,7 @@ impl G4Parser {
     }
 
     fn is_kind(&self, kind: G4Token) -> bool {
-        return self.peek_kind() == kind as i32;
+        return self.peek_kind() == kind.code();
     }
 
     pub fn parse_grammar(&mut self) -> Result<Grammar, ParseError> {
@@ -850,7 +850,7 @@ impl G4Parser {
     /// the token stream ends in `Eof`.
     fn parse_dotted_name(&mut self) -> List<String> {
         let mut parts: List<String> = [self.expect(G4Token::Identifier).unwrap().text];
-        while self.is_kind(G4Token::Dot) && self.tokens[self.pos + 1].kind == G4Token::Identifier as i32 {
+        while self.is_kind(G4Token::Dot) && self.tokens[self.pos + 1].kind == G4Token::Identifier.code() {
             self.advance();
             parts.push(self.advance().text);
         }
@@ -1246,7 +1246,7 @@ impl G4Parser {
                         actions.channel = DEFAULT_CHANNEL;
                     } else if arg.text == "HIDDEN" {
                         actions.channel = HIDDEN_CHANNEL;
-                    } else if arg.kind == G4Token::IntLit as i32 {
+                    } else if arg.kind == G4Token::IntLit.code() {
                         actions.channel = parse_int_literal(&arg.text);
                     } else {
                         let name = arg.text;
