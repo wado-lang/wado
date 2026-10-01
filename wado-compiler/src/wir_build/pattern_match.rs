@@ -368,7 +368,14 @@ impl FunctionTranslator<'_, '_> {
                     value_instr,
                 ));
 
+                let element_types = self
+                    .type_table
+                    .as_tuple(value_ty)
+                    .unwrap_or_else(|| panic!("[WIR] tuple pattern on non-tuple {value_ty:?}"));
                 for (i, sub_pattern) in patterns.iter().enumerate() {
+                    if self.is_unit_element(tuple_element_type(&element_types, i)) {
+                        continue;
+                    }
                     if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind {
                         let local_name = self.local_name(*local_index);
                         let field_name_str = format!("{i}");
@@ -1024,6 +1031,15 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Whether a tuple element of `elem_type` is unit in Wasm: the tuple's
+    /// struct omits its field, and a binding of it has no local to set.
+    fn is_unit_element(&self, elem_type: TypeId) -> bool {
+        matches!(
+            self.ctx.type_id_to_wir_type(self.type_table, elem_type),
+            WirType::Unit
+        )
+    }
+
     /// Emit pattern bindings (local.set for bound variables).
     ///
     /// For or-patterns, conditionally extracts bindings from whichever alternative matched.
@@ -1206,6 +1222,10 @@ impl FunctionTranslator<'_, '_> {
                     .as_tuple(scrut_type)
                     .unwrap_or_else(|| panic!("[WIR] tuple pattern on non-tuple {scrut_type:?}"));
                 for (i, sub_pattern) in sub_patterns.iter().enumerate() {
+                    let elem_type = tuple_element_type(&element_types, i);
+                    if self.is_unit_element(elem_type) {
+                        continue;
+                    }
                     let field_name_str = format!("{i}");
                     let field_result_ty = self.struct_field_wir_type(type_id, &field_name_str);
                     let field_get = WirInstr::StructGet {
@@ -1229,7 +1249,6 @@ impl FunctionTranslator<'_, '_> {
                         PatKind::Wildcard => {}
                         _ => {
                             let temp_name = self.fresh_local("$tuple_elem");
-                            let elem_type = tuple_element_type(&element_types, i);
                             let elem_wir_type =
                                 self.ctx.type_id_to_wir_type(self.type_table, elem_type);
                             instrs.extend(declare_and_set_local(
