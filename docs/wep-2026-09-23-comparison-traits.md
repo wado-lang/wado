@@ -146,6 +146,17 @@ one of `a < b`, `a == b` and `a > b` holds, and `x == x` holds for every `x`.
 predicate is still one expression of an operator and `is_nan()`, listed in
 [Float Comparison](./spec-standard-traits.md#float-comparison).
 
+### Comparing a value with itself warns
+
+Reflexivity gives every comparison of an expression with itself one answer, on
+every type. Such a comparison is either a mistake or a NaN test carried over
+from another language, where it is now always false. The
+[`self_comparison` lint](./spec-expressions.md#the-self_comparison-lint) warns
+about all six operators, and on a float names `is_nan()`. It reports only an
+expression that performs no effect, since one that does may answer differently
+the second time. GCC's `-Wtautological-compare` and Clippy's `eq_op` warn on the
+same shape.
+
 ### What follows
 
 - `sort` puts every NaN last. The two zeroes are `Equal`, so a stable sort keeps
@@ -195,6 +206,8 @@ Where the optimizer proves an operand is not a NaN, the test goes.
   whose `Eq` is written and whose `cmp` is not. Each with a fixture.
 - [ ] In the `test` world, check every call to a written `eq` or `cmp` against
   the other, with a fixture whose disagreeing pair traps.
+- [ ] Report the `self_comparison` lint, with a fixture for each operator, the
+  float hint, a chain, an operand that performs an effect, and `allow`.
 
 ## Known gaps
 
@@ -205,9 +218,6 @@ nothing says so or checks it.
 `f64::min` and `f64::max` lower to Wasm's `min` and `max`, which are IEEE
 754-2019 `minimum` and `maximum`. `f64::min(1.0, NaN)` is NaN, where
 `Iterator::min` over the same values reads the order and answers `1.0`.
-
-A NaN test ported from another language as `x != x` is always false, and
-nothing warns.
 
 Float literal patterns are rejected, though one equality would give them a
 meaning.
