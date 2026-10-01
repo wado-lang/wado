@@ -896,7 +896,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 bounds: p.real_bounds().iter().map(|b| b.name.clone()).collect(),
                 default: None,
                 index: index as u32,
-                projected_from: None,
+                projected: false,
             })
             .collect()
     }

@@ -6156,11 +6156,11 @@ pub struct TirTypeParam {
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
     pub index: u32,
-    /// For a pack param bound by projection — `impl<T: ReflectStruct<FieldTypes = [..F]>,
-    /// ..F: Trait>` — records `(source param index, assoc type name)`. The pack
-    /// is not supplied by the caller; monomorphization derives it by resolving
-    /// the source param's associated type (e.g. `T::Fields`) to its tuple.
-    pub projected_from: Option<(u32, String)>,
+    /// Whether a blanket impl's bound projects it (`..F` in
+    /// `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F>`). The instance key
+    /// carries the projection's answer at the parameter's own slot, a pack
+    /// as one tuple (`blanket_impl_args`).
+    pub projected: bool,
 }
 
 /// What a use site knows about the associated types projected from a slot,
@@ -6515,6 +6515,15 @@ impl TypeTable {
                 }
             }
         }
+        self.project_impl_slots(def, &mut slots);
+        slots
+    }
+
+    /// Fill the slots impl block `def`'s bounds project from those `slots`
+    /// already holds: `X` in `impl<T: Tr<Assoc = List<X>>, X>` once `T` is
+    /// settled, read through `Tr` itself, so another trait's `Assoc` on the
+    /// same type cannot answer.
+    pub fn project_impl_slots(&mut self, def: DefId, slots: &mut IndexMap<u32, TypeId>) {
         for projection in self.impl_target(def).projections.clone() {
             let Some(&source) = slots.get(&projection.source) else {
                 continue;
@@ -6526,13 +6535,48 @@ impl TypeTable {
             ) else {
                 continue;
             };
-            if let Some(bound) = self.bind_type_params(&[projection.pattern], &[concrete]) {
+            self.register_assoc_type_resolution(
+                source,
+                TraitRef::bare(projection.trait_),
+                projection.assoc,
+                concrete,
+            );
+            if let Some(bound) = self.bind_projection_pattern(projection.pattern, concrete) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
                 }
             }
         }
-        slots
+    }
+
+    /// [`Self::bind_type_params`] for one pattern, where a tuple pattern may
+    /// spread a pack (`[A, ..F]`): the pack takes the elements its neighbours
+    /// leave, as one tuple.
+    fn bind_projection_pattern(
+        &mut self,
+        pattern: TypeId,
+        concrete: TypeId,
+    ) -> Option<IndexMap<u32, TypeId>> {
+        let (Some(written), Some(elements)) = (self.as_tuple(pattern), self.as_tuple(concrete))
+        else {
+            return self.bind_type_params(&[pattern], &[concrete]);
+        };
+        let Some(at) = written.iter().position(|&w| self.is_type_pack(w)) else {
+            return self.bind_type_params(&[pattern], &[concrete]);
+        };
+        let after = written.len() - at - 1;
+        let pack_end = elements.len().checked_sub(after)?;
+        if pack_end < at {
+            return None;
+        }
+        let pack = self.make_tuple(elements[at..pack_end].to_vec());
+        let mut rest_written = written.clone();
+        rest_written.remove(at);
+        let rest_concrete: Vec<TypeId> =
+            elements[..at].iter().chain(&elements[pack_end..]).copied().collect();
+        let mut bound = self.bind_type_params(&rest_written, &rest_concrete)?;
+        bound.insert(self.param_slot(written[at])?, pack);
+        Some(bound)
     }
 
     fn impl_target(&self, def: DefId) -> &ImplTarget {

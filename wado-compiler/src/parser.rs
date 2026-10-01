@@ -873,6 +873,17 @@ impl Parser {
     /// Recovery is element-local: a malformed argument is reported, skipped to
     /// the next `,` or `>`, and replaced with a [`Type::Error`]. The closing `>`
     /// is still required, so the enclosing construct recovers at its own boundary.
+    /// Consume the `,` separating two entries of an angle-bracket list. A `>`
+    /// left pending by splitting `>>` has already closed the list, so the `,`
+    /// after it belongs to the enclosing one.
+    fn eat_angle_list_comma(&mut self) -> bool {
+        if self.pending_gt || !self.check(&TokenKind::Comma) {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
     fn parse_type_args(&mut self) -> ParseResult<Vec<Type>> {
         let mut args = Vec::new();
         loop {
@@ -885,8 +896,7 @@ impl Parser {
                     args.push(Type::Error(span));
                 }
             }
-            if !self.pending_gt && self.check(&TokenKind::Comma) {
-                self.advance();
+            if self.eat_angle_list_comma() {
                 continue;
             }
             break;
@@ -4084,8 +4094,7 @@ impl Parser {
             Ok(t) => type_args.push(t),
             Err(_) => spec_ok = false,
         }
-        while spec_ok && self.check(&TokenKind::Comma) {
-            self.advance();
+        while spec_ok && self.eat_angle_list_comma() {
             match self.parse_type() {
                 Ok(t) => type_args.push(t),
                 Err(_) => spec_ok = false,
@@ -5312,9 +5321,7 @@ impl Parser {
                 span: start_span,
             });
 
-            if self.check(&TokenKind::Comma) {
-                self.advance();
-            } else {
+            if !self.eat_angle_list_comma() {
                 break;
             }
         }
@@ -5380,9 +5387,7 @@ impl Parser {
                         "a trait argument cannot follow an associated type binding",
                     ));
                 }
-                if self.check(&TokenKind::Comma) {
-                    self.advance();
-                } else {
+                if !self.eat_angle_list_comma() {
                     break;
                 }
             }
@@ -6026,9 +6031,7 @@ impl Parser {
                 args.push(self.parse_type()?);
             }
 
-            if self.check(&TokenKind::Comma) {
-                self.advance();
-            } else {
+            if !self.eat_angle_list_comma() {
                 break;
             }
         }

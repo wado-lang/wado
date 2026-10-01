@@ -23,6 +23,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv,
 };
+use crate::hashmap::IndexMap;
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
 use crate::name::{
@@ -34,7 +35,7 @@ use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
     CallArg, FunctionRef, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId,
     TemplateShape, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
-    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TraitRef, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
@@ -1338,26 +1339,26 @@ pub(crate) fn blanket_impl_args(
     receiver: TypeId,
     tt: &mut TypeTable,
 ) -> Option<Vec<TypeId>> {
+    // A blanket's slots are its parameters in declaration order, so a
+    // source's position is its slot.
     let sources = trait_env.blanket_param_sources(blanket);
-    let mut args = Vec::with_capacity(sources.len());
-    for source in sources {
-        match source {
-            BlanketParamSource::Receiver => args.push(receiver),
-            BlanketParamSource::Unresolved => return None,
-            BlanketParamSource::Projection(bound_trait, assoc) => {
-                let projected =
-                    tt.resolve_trait_assoc_type_of_instance(receiver, &bound_trait, &assoc)?;
-                tt.register_assoc_type_resolution(
-                    receiver,
-                    TraitRef::bare(bound_trait),
-                    assoc,
-                    projected,
-                );
-                args.push(projected);
+    let mut slots: IndexMap<u32, TypeId> = sources
+        .iter()
+        .zip(0..)
+        .filter(|(source, _)| matches!(source, BlanketParamSource::Receiver))
+        .map(|(_, slot)| (slot, receiver))
+        .collect();
+    tt.project_impl_slots(blanket.def, &mut slots);
+    sources
+        .iter()
+        .zip(0..)
+        .map(|(source, slot)| match source {
+            BlanketParamSource::Unresolved => None,
+            BlanketParamSource::Receiver | BlanketParamSource::Projection => {
+                slots.get(&slot).copied()
             }
-        }
-    }
-    Some(args)
+        })
+        .collect()
 }
 
 /// The call through the value blanket providing `local_name` where no written

@@ -414,7 +414,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         index: u32,
         is_pack: bool,
         bounds: Vec<String>,
-        projected_from: Option<(u32, String)>,
+        projected: bool,
         decl: Option<ast::AstId>,
     ) -> TirTypeParam {
         let type_id = {
@@ -440,7 +440,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             bounds,
             default: None,
             index,
-            projected_from,
+            projected,
         }
     }
 
@@ -470,7 +470,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
-                projected_from: None,
+                projected: false,
             })
             .collect()
     }
@@ -521,7 +521,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 slot,
                 false,
                 vec![],
-                None,
+                false,
                 param_decl(impl_declared_params, name),
             ));
         }
@@ -536,9 +536,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         impl_declared_params: &[ast::GenericParam],
         slots: &ImplParamSlots,
     ) -> Vec<TirTypeParam> {
-        let Some(target_index) = slots.of_name(&named.name) else {
+        if slots.of_name(&named.name).is_none() {
             return Vec::new();
-        };
+        }
         // Declaration order, not "receiver then projections": the impl's type
         // arguments are consumed by position, so a parameter written before
         // the receiver must be bound before it.
@@ -558,7 +558,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                     index,
                     false,
                     bounds,
-                    None,
+                    false,
                     Some(declared.id),
                 ));
                 continue;
@@ -566,13 +566,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             // A parameter the receiver's bound determines. One neither the
             // target nor a bound names is rejected at the impl, so anything
             // left here is projectable.
-            if let Some(assoc_name) = projected.get(&declared.name) {
+            if projected.contains(&declared.name) {
                 params.push(self.bind_target_param(
                     &declared.name,
                     index,
                     declared.is_pack,
                     bounds,
-                    Some((target_index, assoc_name.clone())),
+                    true,
                     Some(declared.id),
                 ));
             }
@@ -580,15 +580,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         params
     }
 
-    /// Which associated type of the receiver's bound determines each of the
-    /// impl's other parameters — `..F` from `Assoc = [..F]`, `A` from
-    /// `Assoc = A`. Monomorphization projects them from the concrete receiver.
+    /// The impl's other parameters the receiver's bound determines — `..F`
+    /// from `Assoc = [..F]`, `A` from `Assoc = A`.
     fn blanket_projections(
         &self,
         target_name: &str,
         impl_declared_params: &[ast::GenericParam],
-    ) -> hashmap::IndexMap<String, String> {
-        let mut out = hashmap::IndexMap::default();
+    ) -> IndexSet<String> {
+        let mut out = IndexSet::default();
         for assoc in impl_declared_params
             .iter()
             .filter(|p| p.name == target_name)
@@ -597,9 +596,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         {
             let mut named = Vec::new();
             assoc.ty.mentioned_names(&mut named);
-            for n in named {
-                out.entry(n).or_insert_with(|| assoc.name.clone());
-            }
+            out.extend(named);
         }
         out
     }
@@ -620,7 +617,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         };
         let bounds = self.saved_param_bounds(&named.name);
         let decl = param_decl(impl_declared_params, &named.name);
-        vec![self.bind_target_param(&named.name, index, false, bounds, None, decl)]
+        vec![self.bind_target_param(&named.name, index, false, bounds, false, decl)]
     }
 
     /// `impl<..T: Trait> Trait for [..T]` — the target's spread elements are
@@ -641,7 +638,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             };
             let bounds = self.saved_param_bounds(name);
             let decl = param_decl(impl_declared_params, name);
-            params.push(self.bind_target_param(name, index, true, bounds, None, decl));
+            params.push(self.bind_target_param(name, index, true, bounds, false, decl));
         }
         params
     }
@@ -712,7 +709,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 slot,
                 param.is_pack,
                 bounds,
-                None,
+                false,
                 Some(param.id),
             ));
         }

@@ -949,17 +949,7 @@ impl Monomorphizer {
             .filter(|p| !p.is_pack)
             .count();
         for param in &generic.impl_type_params {
-            if let Some((src_idx, assoc_name)) = &param.projected_from {
-                // A projected pack `..F` (`impl<T: ReflectStruct<FieldTypes = [..F]>>`) is
-                // not caller-supplied: resolve `T::Fields` for the concrete `T`,
-                // which precedes the pack and is already bound.
-                let projected = substitution
-                    .get(src_idx)
-                    .copied()
-                    .and_then(|src| type_table.resolve_assoc_type_of_instance(src, assoc_name))
-                    .unwrap_or_else(|| type_table.make_tuple(vec![]));
-                substitution.insert(param.index, projected);
-            } else if param.is_pack {
+            if param.is_pack && !param.projected {
                 // Read the shape off the declaration, never off `key`:
                 // `InstantiationKey` leaves `method_info` out of its equality
                 // and hash, so two keys differing only there share one entry.
