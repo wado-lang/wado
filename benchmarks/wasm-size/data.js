@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790855243602,
+  "lastUpdate": 1790856976278,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62493,6 +62493,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ed6fae0b40524b64abba012f8c8047fd27b1c29c"
         },
         "date": 1790855242852,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20682,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281108,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f6456a9545cf9f92f69a9a0d7e1e7c297e891267",
+          "message": "Merge pull request #2238 from wado-lang/claude/cm-default-args-rhkkpc\n\nfeat(web): WebIDL optional arguments become default arguments",
+          "timestamp": "2026-10-01T20:47:59+09:00",
+          "tree_id": "d64a8c9e89d798fc1dc44f52e3c4a5a419dad320",
+          "url": "https://github.com/wado-lang/wado/commit/f6456a9545cf9f92f69a9a0d7e1e7c297e891267"
+        },
+        "date": 1790856975650,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
