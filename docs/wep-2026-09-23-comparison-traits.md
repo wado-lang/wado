@@ -59,9 +59,8 @@ machines.
 
 Measured on x86_64 with `wado run`, at `-O0` and `-O2` alike:
 
-- `Ord` on a float is bit-level `totalOrder`. `0.0 / 0.0` is a negative NaN on
-  x86_64, so `[1.0, 0.0 / 0.0, -1.0].sort()` gives `[NaN, -1, 1]`. On AArch64
-  the same NaN is positive and sorts last.
+- `Ord` on a float is bit-level `totalOrder`, so `[1.0, 0.0 / 0.0, -1.0].sort()`
+  gives `[NaN, -1, 1]` on x86_64 and puts the NaN last on AArch64.
 - For `struct P { x: f64 }`, the derived `==` and `cmp` disagree on a NaN and on
   the two zeroes.
 - `f64::max(1.0, NaN)` is NaN, as Wasm's `f64.max` is, while
