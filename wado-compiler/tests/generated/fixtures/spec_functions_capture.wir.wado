@@ -24,8 +24,7 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "spec_functions_capture.wado/$cm_export__$test_0_a_capture_is_a_reference"() {
     let count: ref "core:prelude/types.wado//Box<i32>";
-    count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    count.value = 1;
+    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
     count.value = 2;
     count.value = 10;
     "wasi/task-return"(0);
@@ -33,8 +32,7 @@ fn "spec_functions_capture.wado/$cm_export__$test_0_a_capture_is_a_reference"() 
 
 fn "spec_functions_capture.wado/$cm_export__$test_1_a_capture_reaches_any_enclosing_frame"() {
     let count: ref "core:prelude/types.wado//Box<i32>";
-    count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    count.value = 1;
+    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
     "wasi/task-return"(0);
 }
 
@@ -44,8 +42,7 @@ fn "spec_functions_capture.wado/$cm_export__$test_2_a_snapshot"() {
 
 fn "spec_functions_capture.wado/$cm_export__$test_3_closures_are_values"() {
     let count: ref "core:prelude/types.wado//Box<i32>";
-    count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    count.value = 1;
+    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
     count.value = 2;
     "wasi/task-return"(0);
 }

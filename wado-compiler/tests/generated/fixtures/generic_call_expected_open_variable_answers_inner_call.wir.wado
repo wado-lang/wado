@@ -22,9 +22,7 @@ import fn wasi/task-return from "wasi/task-return";
 fn "generic_call_expected_open_variable_answers_inner_call.wado/$cm_export__$test_0"() {
     let l_13: ref "core:prelude//List<i64>";
     let o: ref null "core:prelude//List<i64>";
-    l_13 = struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(1_i64, 2_i64), used: 2 };
-    o = l_13;
-    drop(ref.as_non_null(o));
+    drop(ref.as_non_null(local.tee o(local.tee l_13(struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(1_i64, 2_i64), used: 2 }))));
     "wasi/task-return"(0);
 }
 

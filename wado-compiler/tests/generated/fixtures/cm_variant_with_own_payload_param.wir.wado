@@ -34,10 +34,9 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(target) with Gfx {
     let $target_p0: i32;
-    let $local_3: i32;
     $target_p0 = 0;
     if ref.test "cm_variant_with_own_payload_param.wado//Target::Dev"(target) {
-        $target_p0 = local.tee $local_3(ref.cast "cm_variant_with_own_payload_param.wado//Target::Dev"(target).payload_0);
+        $target_p0 = ref.cast "cm_variant_with_own_payload_param.wado//Target::Dev"(target).payload_0;
     } else {
     }
     return "wasi/wasi:demo/Gfx::pick"(target.discriminant, $target_p0);

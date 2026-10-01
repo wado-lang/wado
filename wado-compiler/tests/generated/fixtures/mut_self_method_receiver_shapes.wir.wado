@@ -18,8 +18,7 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "mut_self_method_receiver_shapes.wado/$cm_export__run"() {
     let b: ref "core:prelude/types.wado//Box<i32>";
-    b = struct.new "core:prelude/types.wado//Box<i32>" { value: 5 };
-    b.value = 4;
+    local.tee b(struct.new "core:prelude/types.wado//Box<i32>" { value: 5 }).value = 4;
     "wasi/task-return"(0);
 }
 

@@ -8,39 +8,23 @@
     (export "realloc" (func $realloc))
     (export "memory" (memory 0))
     (func $grow_memory (;0;) (type 0) (param i64)
-      (local i64 i64 i64 i64)
+      (local i64)
       (local.set 1
         (i64.mul
           (i64.extend_i32_s
             (memory.size))
           (i64.const 65536)))
-      (local.set 2
+      (local.set 0
         (i64.sub
           (local.get 0)
           (local.get 1)))
-      (local.set 3
+      (local.set 1
         (select (result i64)
           (local.get 1)
           (i64.const 16777216)
           (i64.lt_u
             (local.get 1)
             (i64.const 16777216))))
-      (local.set 4
-        (if (result i64) ;; label = @1
-          (i64.gt_u
-            (local.get 2)
-            (local.get 3))
-          (then
-            (i64.shl
-              (i64.const 1)
-              (i64.sub
-                (i64.const 64)
-                (i64.clz
-                  (i64.sub
-                    (local.get 2)
-                    (i64.const 1))))))
-          (else
-            (local.get 3))))
       (@metadata.code.branch_hint "\00")
       (if ;; label = @1
         (if (result i32) ;; label = @1
@@ -50,7 +34,22 @@
                 (i64.div_u
                   (i64.sub
                     (i64.add
-                      (local.get 4)
+                      (local.tee 1
+                        (if (result i64) ;; label = @1
+                          (i64.gt_u
+                            (local.get 0)
+                            (local.get 1))
+                          (then
+                            (i64.shl
+                              (i64.const 1)
+                              (i64.sub
+                                (i64.const 64)
+                                (i64.clz
+                                  (i64.sub
+                                    (local.get 0)
+                                    (i64.const 1))))))
+                          (else
+                            (local.get 1))))
                       (i64.const 65536))
                     (i64.const 1))
                   (i64.const 65536))))
@@ -62,7 +61,7 @@
                   (i64.div_u
                     (i64.sub
                       (i64.add
-                        (local.get 2)
+                        (local.get 0)
                         (i64.const 65536))
                       (i64.const 1))
                     (i64.const 65536))))
@@ -73,7 +72,7 @@
           (unreachable)))
     )
     (func $realloc (;1;) (type 1) (param i32 i32 i32 i32) (result i32)
-      (local i64 i64 i64)
+      (local i64 i64)
       (if ;; label = @1
         (i32.eqz
           (local.get 3))
@@ -94,43 +93,42 @@
           (i64.extend_i32_u
             (local.get 2))
           (i64.const 1)))
-      (local.set 6
-        (i64.add
-          (local.tee 5
-            (i64.and
-              (i64.add
-                (i64.extend_i32_u
-                  (global.get 0))
-                (local.get 4))
-              (i64.xor
-                (local.get 4)
-                (i64.const -1))))
-          (i64.extend_i32_u
-            (local.get 3))))
       (@metadata.code.branch_hint "\00")
       (if ;; label = @1
         (i64.gt_u
-          (local.get 6)
+          (local.tee 5
+            (i64.add
+              (local.tee 4
+                (i64.and
+                  (i64.add
+                    (i64.extend_i32_u
+                      (global.get 0))
+                    (local.get 4))
+                  (i64.xor
+                    (local.get 4)
+                    (i64.const -1))))
+              (i64.extend_i32_u
+                (local.get 3))))
           (i64.const 4294967295))
         (then
           (unreachable)))
       (@metadata.code.branch_hint "\00")
       (if ;; label = @1
         (i64.gt_u
-          (local.get 6)
+          (local.get 5)
           (i64.mul
             (i64.extend_i32_s
               (memory.size))
             (i64.const 65536)))
         (then
           (call $grow_memory
-            (local.get 6))))
+            (local.get 5))))
       (global.set 0
         (i32.wrap_i64
-          (local.get 6)))
+          (local.get 5)))
       (return
         (i32.wrap_i64
-          (local.get 5)))
+          (local.get 4)))
       (unreachable)
     )
   )
