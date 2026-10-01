@@ -528,7 +528,7 @@ impl<T> AsyncCall<T> {
     /// returning. After `wait` returns, the `AsyncCall<T>` value must not be
     /// used again — doing so is a use-after-free (the backing buffer has
     /// been released).
-    pub fn wait(&self) -> T {
+    pub fn wait(&self) -> T with (Subtask, WaitableSet) {
         let handle = self.subtask_handle();
         if handle != 0 {
             let raw = handle as Subtask;
@@ -551,7 +551,7 @@ impl<T> AsyncCall<T> {
     /// Cancel the in-flight subtask and free the result buffer. Any
     /// partially-written result is discarded. Same single-use contract as
     /// `wait` — the `AsyncCall<T>` must not be used again after `cancel`.
-    pub fn cancel(&self) {
+    pub fn cancel(&self) with Subtask {
         let handle = self.subtask_handle();
         if handle != 0 {
             // `subtask.cancel` traps on a waitable still in a set. Joining set 0
@@ -569,7 +569,7 @@ impl<T> AsyncCall<T> {
     /// simultaneously). Returns a `Waitable` token identifying this
     /// subtask in wait events. The caller remains responsible for eventual
     /// `wait`/`cancel` on this `AsyncCall<T>`.
-    pub fn join(&self, set: &WaitableSet) -> Waitable {
+    pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask {
         let raw = self.subtask_handle() as Subtask;
         return raw.join(set);
     }

@@ -1,0 +1,27 @@
+// A type pattern inside a closure narrows for the closure alone: the function
+// around it does not hold the narrowed resource.
+
+#[cm("example:demo/dom#node", linearity = "unrestricted", classes = "0..=1")]
+resource Node {}
+
+#[cm("example:demo/dom#input", linearity = "unrestricted", classes = "1..=1")]
+resource HtmlInputElement extends Node {
+    #[cm("example:demo/dom#input-value")]
+    fn value(&self) -> String;
+}
+
+fn read(n: Node) -> String {
+    let _is_input = |m: Node| match m { _i: HtmlInputElement => true, _ => false };
+    let input = builtin::black_box(137438953472.0 + 1.0) as HtmlInputElement;
+    return input.value();
+}
+
+export fn run() with Node {
+    let _ = read(builtin::black_box(1.0) as Node);
+}
+
+__DATA__
+{
+    "compile_error": ":16:12: analysis error: missing resource 'HtmlInputElement' required by 'value'",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

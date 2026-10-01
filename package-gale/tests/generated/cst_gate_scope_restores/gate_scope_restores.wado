@@ -1673,40 +1673,6 @@ fn scan_args__scoped(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
     return pos;
 }
 
-fn scan_expr_atom_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LP { return -1; }
-    pos += 1;
-    pos = scan_args(tokens, pos, gate, memo);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_RP { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
-    let mut pos = pos;
-    if !((gate.no_brace == 0)) { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_expr_atom_alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -1715,13 +1681,13 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut
     if kind == TK_ID {
         let mut best: i32 = -1;
         let mut best_gate = *gate;
-        let try_1_end = scan_expr_atom_alt_1(tokens, start, gate, memo);
+        let try_1_end = scan_expr__alt_1(tokens, start, gate, memo);
         if try_1_end > best { best = try_1_end; best_gate = *gate; }
         *gate = start_gate;
-        let try_2_end = scan_expr_atom_alt_2(tokens, start, gate, memo);
+        let try_2_end = scan_expr__alt_2(tokens, start, gate, memo);
         if try_2_end > best { best = try_2_end; best_gate = *gate; }
         *gate = start_gate;
-        let try_3_end = scan_expr_atom_alt_3(tokens, start, gate, memo);
+        let try_3_end = scan_expr__alt_3(tokens, start, gate, memo);
         if try_3_end > best { best = try_3_end; best_gate = *gate; }
         if best >= 0 {
             pos = best;
@@ -1896,6 +1862,19 @@ fn _parse_expr__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
+fn scan_expr__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LP { return -1; }
+    pos += 1;
+    pos = scan_args(tokens, pos, gate, memo);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RP { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_expr__inner_alt_2(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_7, false);
     p.expect(TK_LB, &SYNC_3, false);
@@ -1904,9 +1883,30 @@ fn _parse_expr__inner_alt_2(p: &mut Parser) -> () {
     return;
 }
 
+fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+    let mut pos = pos;
+    if !((gate.no_brace == 0)) { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_expr__inner_alt_3(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_6, true);
     return;
+}
+
+fn scan_expr__alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
@@ -1916,11 +1916,11 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_brace = p.no_brace;
-        let _sd_p_1 = scan_expr_atom_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
+        let _sd_p_1 = scan_expr__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         p.scan_gate.no_brace = p.no_brace;
-        let _sd_p_2 = scan_expr_atom_alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
+        let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         p.scan_gate.no_brace = p.no_brace;
-        let _sd_p_3 = scan_expr_atom_alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
+        let _sd_p_3 = scan_expr__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_1 > _sd_best_p {

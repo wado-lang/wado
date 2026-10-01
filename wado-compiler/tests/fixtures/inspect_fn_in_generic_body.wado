@@ -1,0 +1,36 @@
+// A closure inspected in a generic body, where its type is spelled through the
+// body's parameters, renders as the instance's concrete type. The closures sit
+// in a list, so the call reaches the `fn(..)` dispatch stub, not a known
+// closure's own.
+
+fn describe_all<T>(fs: List<fn(T) -> i32>) -> String {
+    let mut s = "";
+    for let f of fs {
+        s.push_str(`${f:?};`);
+    }
+    return s;
+}
+
+fn describe_items<I: Iterator>(it: I, fs: List<fn(I::Item) -> i32>) -> String {
+    let mut s = "";
+    for let f of fs {
+        s.push_str(`${f:?};`);
+    }
+    return s;
+}
+
+test {
+    let a = |x: i64| x as i32;
+    let b = |x: i64| (x * 2) as i32;
+    assert describe_all([a, b]) == "|i64| -> i32;|i64| -> i32;";
+
+    let xs: List<i32> = [1, 2, 3];
+    let c = |x: &i32| *x;
+    let d = |x: &i32| *x * 2;
+    assert describe_items(xs.iter_ref(), [c, d]) == "|&i32| -> i32;|&i32| -> i32;";
+}
+
+test "a reference parameter renders as written" {
+    let f = |x: &i32| *x * 2;
+    assert `${f:?}` == "|&i32| -> i32";
+}

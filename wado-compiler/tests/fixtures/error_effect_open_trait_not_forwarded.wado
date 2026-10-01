@@ -1,0 +1,31 @@
+// A method reached through a bound on a `with _` trait leaves its effects to the
+// impl, so a caller that cannot name the impl forwards them with `with _`.
+trait Source with _ {
+    fn next(&mut self) -> i32;
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 {
+    return s.next();
+}
+
+struct Quiet {
+    n: i32,
+}
+
+impl Source for Quiet {
+    fn next(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+export fn run() {
+    let mut quiet = Quiet { n: 0 };
+    assert draw(&mut quiet) == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":8:12: analysis error: missing effects required by 'next': its trait leaves them to the impl, so declare `with _`",
+    "compile_error_codes": ["MISSING_EFFECT"]
+}

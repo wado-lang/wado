@@ -147,25 +147,25 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(55)
 
-type "functype//ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn()->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(56)
+type "functype//wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/traits.wado/Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(56)
 
-type "functype//wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/traits.wado/Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(57)
+type "functype//core:prelude/format.wado/&wasi:http/types.wado/Fields^core:prelude/traits.wado/Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(57)
 
-type "functype//core:prelude/format.wado/&wasi:http/types.wado/Fields^core:prelude/traits.wado/Inspect::inspect" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(58)
+type "functype//core:prelude/format.wado/&i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
-type "functype//core:prelude/format.wado/&i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(59)
+type "functype//core:prelude/format.wado/&mut ref_equality.wado/Point^core:prelude/traits.wado/Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
-type "functype//core:prelude/format.wado/&mut ref_equality.wado/Point^core:prelude/traits.wado/Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
+type "functype//core:prelude/traits.wado/ref_equality.wado/Point^core:prelude/traits.wado/Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
-type "functype//core:prelude/traits.wado/ref_equality.wado/Point^core:prelude/traits.wado/Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(61)
+type "functype//core:prelude/format.wado/&ref_equality.wado/Point^core:prelude/traits.wado/Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(61)
 
-type "functype//core:prelude/format.wado/&ref_equality.wado/Point^core:prelude/traits.wado/Inspect::inspect" = fn(ref "ref_equality.wado//Point", ref "core:prelude/format.wado//Formatter");  // TypeId(62)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(62)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(63)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(63)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(64)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(64)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(65)
+type "functype//ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn()->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
 type "functype//ref_equality.wado/ref_equality.wado/$Closure_0::$call" = fn() -> i32;  // TypeId(66)
 
@@ -1431,11 +1431,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
+<<<<<<< HEAD
 fn "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
     call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
+||||||| fb1156989
+fn "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
+}
+
+=======
+>>>>>>> origin/main
 fn "wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let self_2: ref "core:prelude/string.wado//String";
     let new_used: i32;
@@ -2118,6 +2128,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
         self.used = new_used;
         builtin::array_copy<u8>(self.repr, start_11, $mv$other$repr, 0, $mv$other$used);
     };
+}
+
+fn "ref_equality.wado/fn()->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "ref_equality.wado/ref_equality.wado/$Closure_0::$call"() {

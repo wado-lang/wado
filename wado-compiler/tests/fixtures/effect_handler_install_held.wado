@@ -1,0 +1,29 @@
+// A function holding what the handler's methods declare may install it, and a
+// bundled binding asks the same as an explicit one.
+
+use { println, Stdout } from "core:cli";
+
+interface Log {
+    fn emit(message: String);
+}
+
+struct StdoutLog {}
+
+impl Log for StdoutLog {
+    fn emit(&self, message: String) with Stdout {
+        println(`[log] ${message}`);
+    }
+}
+
+fn quiet() -> i32 with Log {
+    Log::emit("quiet");
+    return 1;
+}
+
+export fn run() with Stdout {
+    with Log => &StdoutLog {} do { quiet(); }
+    with &StdoutLog {} do { quiet(); }
+}
+
+__DATA__
+{"stdout": "[log] quiet\n[log] quiet\n"}

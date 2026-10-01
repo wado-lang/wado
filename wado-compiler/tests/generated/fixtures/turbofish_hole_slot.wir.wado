@@ -116,13 +116,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(41)
 
-type "functype//turbofish_hole_slot.wado/fn(core:prelude/string.wado/String)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(core:prelude/string.wado/String)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(42)
+type "functype//core:prelude/traits.wado/./sub/turbofish_hole_slot_dep.wado/Box2^core:prelude/traits.wado/Inspect::inspect" = fn(ref "./sub/turbofish_hole_slot_dep.wado//Box2", ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
-type "functype//core:prelude/traits.wado/./sub/turbofish_hole_slot_dep.wado/Box2^core:prelude/traits.wado/Inspect::inspect" = fn(ref "./sub/turbofish_hole_slot_dep.wado//Box2", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(43)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(44)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(44)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(45)
+type "functype//turbofish_hole_slot.wado/fn(core:prelude/string.wado/String)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(core:prelude/string.wado/String)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
 type "functype//turbofish_hole_slot.wado/turbofish_hole_slot.wado/$Closure_0::$call" = fn(ref "core:prelude/string.wado//String") -> i32;  // TypeId(46)
 
@@ -654,11 +654,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
+<<<<<<< HEAD
 fn "turbofish_hole_slot.wado/fn(core:prelude/string.wado/String)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
     call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
+||||||| fb1156989
+fn "turbofish_hole_slot.wado/fn(core:prelude/string.wado/String)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
+}
+
+=======
+>>>>>>> origin/main
 fn "core:prelude/traits.wado/./sub/turbofish_hole_slot_dep.wado/Box2^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
@@ -991,6 +1001,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
         self.used = new_used;
         builtin::array_copy<u8>(self.repr, start_11, $mv$other$repr, 0, $mv$other$used);
     };
+}
+
+fn "turbofish_hole_slot.wado/fn(core:prelude/string.wado/String)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "turbofish_hole_slot.wado/turbofish_hole_slot.wado/$Closure_0::$call"(b) {

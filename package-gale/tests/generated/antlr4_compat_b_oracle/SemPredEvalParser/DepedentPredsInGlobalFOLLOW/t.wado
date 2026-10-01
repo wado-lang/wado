@@ -2555,13 +2555,6 @@ struct BVals {
     i: i32 = 0,
 }
 
-fn _parse_s__inner(p: &mut Parser) -> () {
-    p.site = 0;
-    p.atn_ret_pending = 12;
-    _parse_a(p, 99);
-    return;
-}
-
 fn _parse_s(p: &mut Parser) -> () {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
@@ -2570,7 +2563,9 @@ fn _parse_s(p: &mut Parser) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p);
+    p.site = 0;
+    p.atn_ret_pending = 12;
+    _parse_a(p, 99);
     if p.recovering { let _ = p.recover_rule(RK_S, "s", -1); }
     p.b.finish_node(p.last_end());
     p.atn.stack.pop();

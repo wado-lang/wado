@@ -4171,7 +4171,7 @@ let resp = task.wait();             // block for response
 
 _Fields are private._
 
-#### `pub fn wait(&self) -> T`
+#### `pub fn wait(&self) -> T with (Subtask, WaitableSet)`
 
 Wait for the subtask to complete and return the lifted result.
 Drops the CM subtask handle and frees the result buffer before
@@ -4179,13 +4179,13 @@ returning. After `wait` returns, the `AsyncCall<T>` value must not be
 used again — doing so is a use-after-free (the backing buffer has
 been released).
 
-#### `pub fn cancel(&self)`
+#### `pub fn cancel(&self) with Subtask`
 
 Cancel the in-flight subtask and free the result buffer. Any
 partially-written result is discarded. Same single-use contract as
 `wait` — the `AsyncCall<T>` must not be used again after `cancel`.
 
-#### `pub fn join(&self, set: &WaitableSet) -> Waitable`
+#### `pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask`
 
 Join this subtask to a waitable set for manual polling (use when
 the caller wants to wait on multiple subtasks and/or streams

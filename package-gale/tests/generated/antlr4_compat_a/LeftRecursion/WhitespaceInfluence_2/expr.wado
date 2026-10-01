@@ -2431,49 +2431,15 @@ impl Parser {
     }
 }
 
-fn scan_expression_atom_alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    pos = scan_expression(tokens, pos, memo, 0);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-        let sp = pos;
-        sg_0_done: {
-            sg_0: {
-                pos += 1;
-                pos = scan_expression(tokens, pos, memo, 0);
-                if pos < 0 { break sg_0; }
-                break sg_0_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_expression_atom_alt_25(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_expression_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_ID {
         let mut best: i32 = -1;
-        let try_0_end = scan_expression_atom_alt_0(tokens, start, memo);
+        let try_0_end = scan_expression__alt_0(tokens, start, memo);
         if try_0_end > best { best = try_0_end; }
-        let try_25_end = scan_expression_atom_alt_25(tokens, start, memo);
+        let try_25_end = scan_expression__alt_25(tokens, start, memo);
         if try_25_end > best { best = try_25_end; }
         if best >= 0 { pos = best; return pos; }
         return -1;
@@ -2899,10 +2865,44 @@ fn _parse_expression__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
+fn scan_expression__alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_expression(tokens, pos, memo, 0);
+    if pos < 0 { return -1; }
+    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+        let sp = pos;
+        sg_0_done: {
+            sg_0: {
+                pos += 1;
+                pos = scan_expression(tokens, pos, memo, 0);
+                if pos < 0 { break sg_0; }
+                break sg_0_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_expression__inner_alt_25(p: &mut Parser) -> () {
     p.b.set_alt(25);
     p.expect(TK_ID, &SYNC_3, true);
     return;
+}
+
+fn scan_expression__alt_25(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn _parse_expression__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
@@ -2911,8 +2911,8 @@ fn _parse_expression__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if kind == TK_ID {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_0 = scan_expression_atom_alt_0(_sd_tokens, _sd_pos, &mut p.memo);
-        let _sd_p_25 = scan_expression_atom_alt_25(_sd_tokens, _sd_pos, &mut p.memo);
+        let _sd_p_0 = scan_expression__alt_0(_sd_tokens, _sd_pos, &mut p.memo);
+        let _sd_p_25 = scan_expression__alt_25(_sd_tokens, _sd_pos, &mut p.memo);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {

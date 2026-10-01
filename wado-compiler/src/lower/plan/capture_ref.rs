@@ -247,10 +247,8 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
     }
 
     fn visit_pattern(&mut self, pattern: &TirPattern) {
-        if let TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } =
-            pattern
-        {
-            self.bound.insert(*local_index);
+        if let Some((local_index, _)) = pattern.declared_local() {
+            self.bound.insert(local_index);
         }
         self.walk_pattern(pattern);
     }
@@ -440,10 +438,8 @@ impl TirRefVisitor for Scan {
     }
 
     fn visit_pattern(&mut self, pattern: &TirPattern) {
-        if let TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } =
-            pattern
-        {
-            self.bind(*local_index);
+        if let Some((local_index, _)) = pattern.declared_local() {
+            self.bind(local_index);
         }
         self.walk_pattern(pattern);
     }

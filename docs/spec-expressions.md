@@ -286,13 +286,12 @@ test {
 A global may have any type. Its initializer runs at module initialization, with
 no handler installed for it and in an order it does not choose. It declares no
 `with` clause and has nowhere to declare one. So calling a function that
-declares an effect is an error, as is dispatching an operation backed by the
-host.
+declares an effect is an error, as is dispatching an operation.
 
-An initializer may dispatch a user-defined effect's operation, which behaves as
-it does in a function body
-([With No Handler Installed](./spec-effects.md#with-no-handler-installed)). It
-may also install its own handler.
+An initializer may install its own handler, whose body holds the effect it
+handles as a function body's would. Installing it demands what the handler
+performs ([Installing a Handler](./spec-effects.md#installing-a-handler)), so
+only a handler that performs nothing can be installed here.
 
 An initializer runs at module initialization whether or not anything reads the
 global, so one that traps traps the program at start, at every optimization
@@ -330,6 +329,10 @@ test {
     assert variable == 10 && CONSTANT == 42 && TABLE.len() == 3;
 }
 ```
+
+> Not yet implemented: the [effect system](./spec-effects.md) will track access
+> to globals, so `example` will have to declare it. Until then, a function reads
+> and writes a global without declaring an effect.
 
 Assigning an immutable global, or calling a `&mut self` method on one, is an
 error:

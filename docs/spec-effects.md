@@ -11,6 +11,9 @@ The effect system does three jobs:
 - It injects dependencies: a handler a caller installs reaches every callee without being passed.
 - It corresponds directly to WASI capabilities.
 
+> Not yet implemented: global variables are not tracked. A function reads and
+> writes a global without declaring an effect.
+
 Rationale: [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
 
 ## Effect Definition
@@ -92,7 +95,7 @@ Beyond a name, parameters and a return type, an operation declares nothing else.
 - A body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method). With no handler installed, the host answers it, so the body could never run.
 - A body on an `async` operation. A call to it evaluates to an `AsyncCall`, which a plain body does not produce.
 - A `self` receiver. An operation is called as `Effect::op(args)`, with no receiver to bind it to.
-- A `with` clause. An operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code.
+- A `with` clause. A call demands only the operation's interface, so one would let a default perform a capability its caller never declared. A default has to be performable wherever it is dispatched, which means code that performs no effects, or `#[ambient]` code.
 - A `#[retain(...)]` attribute. An operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes.
 - Type parameters. An operation dispatches to one handler method, not to one per instantiation.
 
@@ -127,7 +130,7 @@ A function that calls an async operation is not itself async. `async` marks only
 ## Effect Declaration in Functions
 
 A function or method lists the effects it performs in a `with` clause after its
-return type. A function without one is pure:
+return type. A function without one performs no effects:
 
 <!-- {"fixture":"spec_effects_declaration.wado"} -->
 
@@ -150,7 +153,7 @@ impl Logger {
     }
 }
 
-// No effects = pure function
+// No `with` = no effects
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
@@ -246,12 +249,13 @@ pub fn log(message: String) with (Stdout, Stderr) {
 
 ## Effect Propagation
 
-Every function declares its effects, whatever its visibility. Nothing is inferred from the body. A call demands of its caller:
+Every function declares its effects. Nothing is inferred from the body. A call demands of its caller:
 
 - for a function, the effects in its `with` clause;
-- for an operation of a host-backed interface (one carrying `#[cm(...)]`), that interface;
-- for an operation of a resource, that resource (see [Resources as Effects](#resources-as-effects));
-- for an operation of a user-defined interface, nothing. An installed handler answers it, and it traps where none is installed (see [Handlers](#handlers)).
+- for an operation of an interface, that interface (see [Handlers](#handlers));
+- for an operation of a resource, that resource (see [Resources as Effects](#resources-as-effects)).
+
+An operation's default body holds its own interface, since it runs where the operation was dispatched.
 
 <!-- {"fixture":"spec_effects_propagation_missing.wado"} -->
 
@@ -264,11 +268,11 @@ fn helper() {
 <!-- {"fixture":"spec_effects_propagation.wado"} -->
 
 ```wado
-fn next_id() -> i32 {
-    return Counter::next();   // OK: `Counter` is a user-defined interface
+fn next_id() -> i32 with Counter {
+    return Counter::next();   // demands `Counter`
 }
 
-pub fn report() with (Stdout, Preopens) {   // `pub` changes nothing
+pub fn report() with (Stdout, Preopens) {
     println("report");
 }
 
@@ -386,7 +390,7 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
-`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade.
+`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. A call whose result goes unused may be removed, so its output may never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 
@@ -404,10 +408,6 @@ test {
 ```
 
 [`#[benign(E)]`](./spec-attributes.md#benigne-) is the narrower form: only the named effects go undeclared, and the rest of the body is checked.
-
-### Non-Effects
-
-`panic` and `unreachable` are not effects. Both return `!`, so a pure function may call them.
 
 ## Generic Effects (Effect Polymorphism)
 
@@ -537,7 +537,7 @@ A `with` clause on the trait itself says what every impl of it may do. A method'
 | Head                          | Every impl of it       |
 | ----------------------------- | ---------------------- |
 | `trait Foo { … }`             | as `with _`, diagnosed |
-| `trait Foo with () { … }`     | is pure                |
+| `trait Foo with () { … }`     | performs no effects    |
 | `trait Foo with Stdout { … }` | gets exactly `Stdout`  |
 | `trait Foo with _ { … }`      | brings its own effects |
 
@@ -576,7 +576,7 @@ fn pure_draw() -> i32 {                             // `Quiet`'s impl declares n
 
 A fixed head demands the same effects of every caller. An open one is resolved from the type each call names, so `draw(&mut quiet)` demands nothing when `Quiet`'s impl declares nothing. Inside `draw`, `s.next()` names only the bound `S: Source`, which has no impl to read. Its effects stay unresolved, and `draw` forwards them with `with _`. A generic caller of `draw` that forwards them again writes its own `with _`.
 
-A head that writes nothing reads as `with _`, so a bare trait is open rather than pure. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
+A head that writes nothing reads as `with _`, so a bare trait is open rather than effect-free. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
 
 Every trait in the standard library says `with ()`. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
 
@@ -670,6 +670,13 @@ assert o.lines == ["b"];
 
 The handler expressions are evaluated before the body, outside the handlers they install.
 
+A handler runs on behalf of the code that installs it, so installing one demands
+what it performs: every effect its methods declare, and `E` itself where the
+block ends in `..forward` (see
+[Operations a Handler Leaves Out](#operations-a-handler-leaves-out)). Bindings on one `with`
+install in source order, each inside the ones before it, so a binding's handler
+also holds the effects the earlier bindings install.
+
 `with ... do` is an expression. Its value is the body's, as a block's is:
 
 <!-- {"fixture":"spec_effects_install.wado"} -->
@@ -753,7 +760,7 @@ assert c.value == 2;
 
 ### Where a Handler Method Runs
 
-A handler method for `E` runs with its own installation set aside, so `E`'s operations inside it reach the next handler out. That is how a handler delegates, to an outer handler or to the host, without recursing into itself. The method holds `E` for this without declaring it.
+A handler method for `E` runs with its own installation set aside, so `E`'s operations inside it reach the next handler out. That is how a handler delegates, to an outer handler or to the host, without recursing into itself. A method that delegates declares `with E`.
 
 <!-- {"fixture":"spec_effects_handler_delegates.wado"} -->
 
@@ -765,7 +772,7 @@ struct Counting {
 }
 
 impl Random for Counting {
-    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> with Random {
         self.calls += 1;
         resume Random::get_random_bytes(max_len)   // the next handler out: the host
     }
@@ -799,7 +806,7 @@ The rest clause is the block's last item, and a block may hold nothing else. A b
 struct Filter { min: i32 }
 
 impl Log for Filter {                      // a layer: decorate one operation
-    fn enabled(&self, level: i32) -> bool {
+    fn enabled(&self, level: i32) -> bool with Log {
         resume level >= self.min && Log::enabled(level)
     }
     ..forward                              // everything else → the outer `Log`

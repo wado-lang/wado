@@ -960,7 +960,7 @@ fn foo(
     z: String = `default`,        // template string
     w: Option<Config> = null,     // Option::None
     v: Color = Color::Red,        // enum case
-    u: i32 = i32::max(1, 2),      // pure function call
+    u: i32 = i32::max(1, 2),      // a call performing no effects
 ) -> String { return `${x} ${y:.2} ${z} ${w matches { None }} ${v} ${u}`; }
 
 test "default expressions" {

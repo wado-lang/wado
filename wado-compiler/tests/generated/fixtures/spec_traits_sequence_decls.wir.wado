@@ -18,7 +18,7 @@ struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>> {  // T
     mut value: ref "core:prelude/types.wado//Option<i32>",
 }
 
-struct core:prelude/types.wado//Box<fn mut(char)->bool> {  // TypeId(5)
+struct core:prelude/types.wado//Box<fn(i32)->bool> {  // TypeId(5)
     mut value: ref struct,
 }
 
@@ -70,19 +70,19 @@ struct core:prelude//List<i32> {  // TypeId(15)
     mut used: i32,
 }
 
-type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(16)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(16)
 
-struct canonical//CanonicalInspectableBase {  // TypeId(17)
+type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(17)
+
+struct canonical//CanonicalInspectableBase {  // TypeId(18)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(18)
-
-struct canonical//CanonicalClosure_1 {  // TypeId(19)
+struct canonical//CanonicalClosure_0 {  // TypeId(19)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    func: ref "functype/$canonical_closure_fn_1",
+    func: ref "functype/$canonical_closure_fn_0",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(20)
@@ -131,15 +131,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(42)
 
-type "functype//spec_traits_sequence_decls.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn mut(char)->bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/traits.wado/spec_traits_sequence_decls.wado/Digits^core:prelude/traits.wado/Inspect::inspect" = fn(ref "spec_traits_sequence_decls.wado//Digits", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
-type "functype//core:prelude/traits.wado/spec_traits_sequence_decls.wado/Digits^core:prelude/traits.wado/Inspect::inspect" = fn(ref "spec_traits_sequence_decls.wado//Digits", ref "core:prelude/format.wado//Formatter");  // TypeId(44)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(45)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(45)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(46)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(46)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(47)
+type "functype//spec_traits_sequence_decls.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->bool>", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
 type "functype//spec_traits_sequence_decls.wado/spec_traits_sequence_decls.wado/$Closure_0::$call" = fn(i32) -> bool;  // TypeId(48)
 
@@ -215,8 +215,16 @@ fn "spec_traits_sequence_decls.wado/$test_0"() {
     let $sroa_d_items_160: ref "core:prelude//List<i32>";
     $sroa_d_items_160 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0, 1, 2), used: 3 };
     $v4_seen = 0;
+<<<<<<< HEAD
     if @unlikely(local.tee b_60($v5 = $inline_spec_traits_sequence_decls_wado_Digits_spec_traits_sequence_decls_wado_Sequence__position_5: block -> ref "core:prelude/types.wado//Option<i32>" {
         $v4 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_traits_sequence_decls.wado//$Closure_0" {  }, inspect: ref.func "closure/spec_traits_sequence_decls.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_traits_sequence_decls.wado/$closure_wrapper_0" };
+||||||| fb1156989
+    $cond_12 = local.tee $v7($v5 = $inline_spec_traits_sequence_decls_wado_Digits_spec_traits_sequence_decls_wado_Sequence__position_5: block -> ref "core:prelude/types.wado//Option<i32>" {
+        $v4 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_traits_sequence_decls.wado//$Closure_0" {  }, inspect: ref.func "closure/spec_traits_sequence_decls.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_traits_sequence_decls.wado/$closure_wrapper_0" };
+=======
+    $cond_12 = local.tee $v7($v5 = $inline_spec_traits_sequence_decls_wado_Digits_spec_traits_sequence_decls_wado_Sequence__position_5: block -> ref "core:prelude/types.wado//Option<i32>" {
+        $v4 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_traits_sequence_decls.wado//$Closure_0" {  }, inspect: ref.func "closure/spec_traits_sequence_decls.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_traits_sequence_decls.wado/$closure_wrapper_0" };
+>>>>>>> origin/main
         $v4_seen = 1;
         i = 0;
         $licm_repr_130 = $sroa_d_items_160.repr;
@@ -224,8 +232,18 @@ fn "spec_traits_sequence_decls.wado/$test_0"() {
             l2: loop {
                 break_if b1 i >= 3;
                 if block -> bool {
+<<<<<<< HEAD
                     let $indirect_call_1: ref "canonical//CanonicalClosure_1";
                     call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v4)).env, builtin::array_get_value<i32>($licm_repr_130, i));
+||||||| fb1156989
+                    let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+                    $indirect_call_1 = ref.cast "canonical//CanonicalClosure_1"($v4);
+                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, $indirect_call_1.env, builtin::array_get_value<i32>($licm_repr_130, i));
+=======
+                    let $indirect_call_1: ref "canonical//CanonicalClosure_0";
+                    $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"($v4);
+                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, builtin::array_get_value<i32>($licm_repr_130, i));
+>>>>>>> origin/main
                 } {
                     break $inline_spec_traits_sequence_decls_wado_Digits_spec_traits_sequence_decls_wado_Sequence__position_5: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: i };
                 }
@@ -250,9 +268,21 @@ fn "spec_traits_sequence_decls.wado/$test_0"() {
         }
     })) == 0) {
         cold_path;
+<<<<<<< HEAD
         $local_19 = (if $v4_seen -> ref "core:prelude/string.wado//String" {
             $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_19("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
             "spec_traits_sequence_decls.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(char)->bool>" { value: ref.as_non_null($v4) }, $local_20);
+||||||| fb1156989
+        $v4_text = (if $v4_seen -> ref "core:prelude/string.wado//String" {
+            $local_19 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16);
+            $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_19);
+            "spec_traits_sequence_decls.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(char)->bool>" { value: $v4 }, $local_20);
+=======
+        $v4_text = (if $v4_seen -> ref "core:prelude/string.wado//String" {
+            $local_19 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16);
+            $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_19);
+            "spec_traits_sequence_decls.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->bool>" { value: $v4 }, $local_20);
+>>>>>>> origin/main
             $local_19;
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
@@ -972,11 +1002,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
+<<<<<<< HEAD
 fn "spec_traits_sequence_decls.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
     call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
+||||||| fb1156989
+fn "spec_traits_sequence_decls.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
+}
+
+=======
+>>>>>>> origin/main
 fn "core:prelude/traits.wado/spec_traits_sequence_decls.wado/Digits^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
@@ -1581,6 +1621,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21.used = digit_count;
         return $mv$alt_prefix$used;
     }
+}
+
+fn "spec_traits_sequence_decls.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "spec_traits_sequence_decls.wado/spec_traits_sequence_decls.wado/$Closure_0::$call"(x) {

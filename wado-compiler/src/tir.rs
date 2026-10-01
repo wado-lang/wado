@@ -4421,9 +4421,10 @@ impl TypeTable {
     /// Whether `id` is an inference variable or is built over one — through the
     /// constructors a use site instantiates and substitutes through.
     ///
-    /// A pack's mapped element and the bindings a projection carries to be
-    /// answered are not what a use site is still waiting on. Reading them as
-    /// such left `Ok(v)` in `f32::from_str_lenient` with no resolved type.
+    /// A projection's base is: `?I::Item` is answered once `?I` is. A pack's
+    /// mapped element and the bindings a projection carries to be answered are
+    /// not what a use site is still waiting on. Reading them as such left
+    /// `Ok(v)` in `f32::from_str_lenient` with no resolved type.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
         self.any_infer_var(id, &mut |_| true)
     }
@@ -4451,7 +4452,9 @@ impl TypeTable {
     fn any_infer_var(&self, id: TypeId, pred: &mut impl FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => pred(id),
-            ResolvedType::AssocTypeProjection { .. } => false,
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                self.any_infer_var(*param_id, pred)
+            }
             _ => self.any_constituent(id, &mut |t| self.any_infer_var(t, pred)),
         }
     }
@@ -4459,6 +4462,17 @@ impl TypeTable {
     /// Get a human-readable name for a type
     pub fn type_name(&self, id: TypeId) -> String {
         self.render_type_name(id, false)
+    }
+
+    /// [`Self::type_name`] as the type read before `boxing::prepare_types`
+    /// redefined a borrow into `Box<T>`: what the source wrote, `&i32`.
+    #[must_use]
+    pub fn type_name_unboxed(&self, id: TypeId) -> String {
+        match self.spelled_borrow(id) {
+            Some((payload, RefKind::Shared)) => format!("&{}", self.type_name_unboxed(payload)),
+            Some((payload, RefKind::Mut)) => format!("&mut {}", self.type_name_unboxed(payload)),
+            None => self.type_name(id),
+        }
     }
 
     /// [`Self::type_name`] with every declared head written in the spec's
@@ -5749,6 +5763,52 @@ pub enum TirPattern {
         type_id: TypeId,
         test: Box<TirExpr>,
     },
+}
+
+impl TirPattern {
+    /// The local this pattern itself declares, with its type: a binding's, or
+    /// the one a narrowing holds the scrutinee in. Sub-patterns are not asked.
+    pub fn declared_local(&self) -> Option<(u32, TypeId)> {
+        match self {
+            TirPattern::Binding {
+                local_index,
+                type_id,
+                ..
+            }
+            | TirPattern::Narrow {
+                local_index,
+                type_id,
+                ..
+            } => Some((*local_index, *type_id)),
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::Or(_)
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => None,
+        }
+    }
+
+    /// The index of the local [`Self::declared_local`] names, to renumber it.
+    pub fn declared_local_index_mut(&mut self) -> Option<&mut u32> {
+        match self {
+            TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
+                Some(local_index)
+            }
+            TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::Or(_)
+            | TirPattern::ConstantValue { .. }
+            | TirPattern::Range { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

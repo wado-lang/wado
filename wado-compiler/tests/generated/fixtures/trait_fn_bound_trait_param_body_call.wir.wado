@@ -98,13 +98,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(32)
 
-type "functype//trait_fn_bound_trait_param_body_call.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(33)
+type "functype//core:prelude/traits.wado/trait_fn_bound_trait_param_body_call.wado/P^core:prelude/traits.wado/Inspect::inspect" = fn(ref "trait_fn_bound_trait_param_body_call.wado//P", ref "core:prelude/format.wado//Formatter");  // TypeId(33)
 
-type "functype//core:prelude/traits.wado/trait_fn_bound_trait_param_body_call.wado/P^core:prelude/traits.wado/Inspect::inspect" = fn(ref "trait_fn_bound_trait_param_body_call.wado//P", ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(35)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(36)
+type "functype//trait_fn_bound_trait_param_body_call.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
 type "functype//trait_fn_bound_trait_param_body_call.wado/trait_fn_bound_trait_param_body_call.wado/$Closure_0::$call" = fn(i32) -> i32;  // TypeId(37)
 
@@ -516,11 +516,21 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
+<<<<<<< HEAD
 fn "trait_fn_bound_trait_param_body_call.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
     call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
+||||||| fb1156989
+fn "trait_fn_bound_trait_param_body_call.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
+}
+
+=======
+>>>>>>> origin/main
 fn "core:prelude/traits.wado/trait_fn_bound_trait_param_body_call.wado/P^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
@@ -853,6 +863,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
         self.used = new_used;
         builtin::array_copy<u8>(self.repr, start_11, $mv$other$repr, 0, $mv$other$used);
     };
+}
+
+fn "trait_fn_bound_trait_param_body_call.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let $typed_self: ref "canonical//CanonicalInspectableBase";
+    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
 }
 
 fn "trait_fn_bound_trait_param_body_call.wado/trait_fn_bound_trait_param_body_call.wado/$Closure_0::$call"(v) {

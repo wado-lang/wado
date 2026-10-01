@@ -11,16 +11,16 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, is_test_function};
 use crate::resolve::Resolutions;
-use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
+use crate::tir::{EffectRef, FunctionRef, ResolvedType, TemplateId, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, Attribute, Block, CmImport, EffectHandlerBinding, Expr, Function,
-    ImplBlock, Item, Pattern, Stmt, cm_import_of,
+    self, AstId, AstVisitor, Attribute, CmImport, EffectHandlerBinding, Expr, Function, ImplBlock,
+    Item, Pattern, RestClause, Stmt, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
+use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
 use crate::semantics::Semantics;
@@ -49,6 +49,9 @@ impl EffectKind {
 pub enum EffectFault {
     /// The caller does not hold what its callee requires.
     Missing(EffectKind),
+    /// A `with` installs a handler whose methods perform what the installing
+    /// function does not hold. `callee` names the effect handled.
+    MissingForHandler(EffectKind),
     /// An `impl` method declares an effect its trait method leaves out.
     UndeclaredByTrait,
     /// The callee's effects are left open, and the caller forwards none.
@@ -76,7 +79,7 @@ impl From<EffectError> for Diagnostic {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message) = match e.fault {
             EffectFault::Missing(kind) => (
-                Code::TypeMismatch,
+                Code::MissingEffect,
                 format!(
                     "missing {} '{}' required by '{}'",
                     kind.noun(),
@@ -84,15 +87,24 @@ impl From<EffectError> for Diagnostic {
                     e.callee
                 ),
             ),
+            EffectFault::MissingForHandler(kind) => (
+                Code::MissingEffect,
+                format!(
+                    "missing {} '{}' required by the handler installed for '{}'",
+                    kind.noun(),
+                    e.missing_effect,
+                    e.callee
+                ),
+            ),
             EffectFault::UndeclaredByTrait => (
-                Code::TypeMismatch,
+                Code::EffectNotInTrait,
                 format!(
                     "effect '{}' is not declared by trait method '{}'",
                     e.missing_effect, e.callee
                 ),
             ),
             EffectFault::MissingOpen => (
-                Code::TypeMismatch,
+                Code::MissingEffect,
                 format!(
                     "missing effects required by '{}': its trait leaves them to the impl, so declare `with _`",
                     e.callee
@@ -136,10 +148,12 @@ impl PureContext {
 pub enum Impurity {
     /// The named callee declares an effect.
     Call(String),
-    /// The named operation is backed by the host, so dispatching it demands a
-    /// capability. A user-defined effect's operation demands none: it traps
-    /// where no handler answers, which is a runtime outcome, not an impurity.
+    /// The named operation demands its interface, which the position does not
+    /// hold.
     Dispatch(String),
+    /// The position installs a handler for the named effect whose methods
+    /// declare an effect it does not hold.
+    Install(String),
 }
 
 /// One impurity, at the position that must not hold it.
@@ -157,16 +171,20 @@ impl From<PurityError> for Diagnostic {
         let noun = e.context.noun();
         let message = match &e.impurity {
             Impurity::Call(callee) => {
-                format!("{noun} must be pure (no effects), but calls effectful function '{callee}'")
+                format!("{noun} cannot perform effects, but calls effectful function '{callee}'")
             }
             Impurity::Dispatch(op) => format!(
-                "{noun} must be pure (no effects), but dispatches '{op}', which needs a \
+                "{noun} cannot perform effects, but dispatches '{op}', which needs a \
                  capability the position does not hold"
+            ),
+            Impurity::Install(effect) => format!(
+                "{noun} cannot perform effects, but installs a handler for '{effect}' \
+                 whose methods need a capability the position does not hold"
             ),
         };
         Diagnostic {
             severity: Severity::Error,
-            code: Code::TypeMismatch,
+            code: Code::EffectNotAllowed,
             message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
@@ -374,11 +392,20 @@ impl SemanticDiagnostics {
     }
 }
 
-/// Walk every user-authored function / method / trait method, appending effect
+/// The standard library is held to the rules it states, so every module is
+/// checked but the bindings, whose declarations have no body to read.
+fn is_effect_checked(src: &ModuleSource) -> bool {
+    !matches!(
+        src,
+        ModuleSource::Binding { .. } | ModuleSource::Wasm { .. }
+    )
+}
+
+/// Walk every function / method / trait method with a body, appending effect
 /// violations. Shared by [`check_effects_semantic`] and [`check_semantics`].
 fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectError>) {
     for (src, module) in &sem.modules {
-        if !is_user_authored(src) {
+        if !is_effect_checked(src) {
             continue;
         }
         for item in &module.items {
@@ -387,10 +414,9 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                     check_function_effects_sem(sem, src, func, index, None, out);
                 }
                 Item::Impl(impl_block) => {
-                    let handled = handled_effect(sem, src, impl_block, index);
                     check_impl_effect_conformance(sem, src, impl_block, index, out);
                     for method in &impl_block.methods {
-                        check_function_effects_sem(sem, src, method, index, handled.as_ref(), out);
+                        check_function_effects_sem(sem, src, method, index, None, out);
                     }
                 }
                 Item::Trait(trait_decl) => {
@@ -399,10 +425,13 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                     }
                 }
                 // An operation's default body is ordinary code, so what it
-                // performs is checked like any other function's.
+                // performs is checked like any other function's. It runs where
+                // the operation was dispatched, which held the interface.
                 Item::Interface(interface_decl) => {
+                    let def = index.resolutions.defs().def_at(interface_decl.id);
+                    let own = index.interfaces.get(&def).map(|(effect, _)| effect);
                     for method in &interface_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, None, out);
+                        check_function_effects_sem(sem, src, method, index, own, out);
                     }
                 }
                 _ => {}
@@ -462,9 +491,16 @@ struct OwnedEffectData {
     /// Every effect an impl's methods declare, for resolving a trait head's
     /// effect hole against the type a call instantiates it with.
     impl_effects: IndexMap<ImplKey, Vec<EffectRef>>,
+    /// Every effect one `impl` block's methods declare, by the block. What a
+    /// handler binding performs when it installs the block.
+    block_effects: IndexMap<DefId, IndexSet<EffectRef>>,
+    /// The `impl` blocks ending in `..forward`, whose left-out operations reach
+    /// the next handler out.
+    forwarding_blocks: IndexSet<DefId>,
     resources: IndexSet<EffectRef>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
+    waiting: IndexSet<EffectRef>,
     /// Each interface declaration's effect and `#[cm]` FQ.
     interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
@@ -551,6 +587,10 @@ impl OwnedEffectData {
 
         let mut fn_bound_traits: IndexMap<AstId, Vec<Vec<DefId>>> = IndexMap::default();
         let mut impl_effects: IndexMap<ImplKey, Vec<EffectRef>> = IndexMap::default();
+        let mut block_effects: IndexMap<DefId, IndexSet<EffectRef>> = IndexMap::default();
+        let mut forwarding_blocks: IndexSet<DefId> = IndexSet::default();
+        let mut waiting: IndexSet<EffectRef> = IndexSet::default();
+        let async_call = sem.types.compiler_item_def(CompilerItem::AsyncCall);
         for (src, module) in &sem.modules {
             let annotations = state.module_semantics.get(src).map(|m| &m.types);
             for item in &module.items {
@@ -562,28 +602,41 @@ impl OwnedEffectData {
                         );
                     }
                     Item::Impl(block) => {
-                        let Some(facts) = annotations.and_then(|ann| ann.impl_facts.get(&block.id))
-                        else {
-                            continue;
-                        };
-                        let Some(key) = facts
-                            .trait_name
-                            .as_ref()
-                            .and_then(|trait_name| impl_key(&facts.struct_name, trait_name))
-                        else {
-                            continue;
-                        };
-                        let entry: &mut Vec<EffectRef> = impl_effects.entry(key).or_default();
-                        for effect in block
+                        let declared: IndexSet<EffectRef> = block
                             .methods
                             .iter()
                             .filter_map(|method| fn_effects.get(&method.id))
                             .flatten()
-                        {
-                            if !entry.contains(effect) {
-                                entry.push(effect.clone());
+                            .cloned()
+                            .collect();
+                        let facts = annotations.and_then(|ann| ann.impl_facts.get(&block.id));
+                        // Waiting on an `AsyncCall` demands what its methods declare.
+                        if facts.is_some_and(|facts| {
+                            facts.trait_name.is_none()
+                                && async_call
+                                    .is_some_and(|def| facts.struct_name.head().def() == Some(def))
+                        }) {
+                            waiting.extend(declared.iter().cloned());
+                        }
+                        if let Some(key) = facts.and_then(|facts| {
+                            let trait_name = facts.trait_name.as_ref()?;
+                            impl_key(&facts.struct_name, trait_name)
+                        }) {
+                            let entry: &mut Vec<EffectRef> = impl_effects.entry(key).or_default();
+                            for effect in &declared {
+                                if !entry.contains(effect) {
+                                    entry.push(effect.clone());
+                                }
                             }
                         }
+                        let def = defs.def_at(block.id);
+                        if block
+                            .rest
+                            .is_some_and(|rest| rest.kind == RestClause::Forward)
+                        {
+                            forwarding_blocks.insert(def);
+                        }
+                        block_effects.insert(def, declared);
                     }
                     _ => {}
                 }
@@ -623,9 +676,12 @@ impl OwnedEffectData {
             open_traits,
             fn_bound_traits,
             impl_effects,
+            block_effects,
+            forwarding_blocks,
             resources,
             members,
             closure,
+            waiting,
             interfaces,
             effect_by_cm_fq,
             provided_import_fqs,
@@ -643,9 +699,12 @@ impl OwnedEffectData {
             open_traits: &self.open_traits,
             fn_bound_traits: &self.fn_bound_traits,
             impl_effects: &self.impl_effects,
+            block_effects: &self.block_effects,
+            forwarding_blocks: &self.forwarding_blocks,
             resources: &self.resources,
             members: &self.members,
             closure: &self.closure,
+            waiting: &self.waiting,
             interfaces: &self.interfaces,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
@@ -673,12 +732,18 @@ struct EffectIndex<'a> {
     fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<DefId>>>,
     /// Every effect one impl's methods declare.
     impl_effects: &'a IndexMap<ImplKey, Vec<EffectRef>>,
+    /// Every effect one `impl` block's methods declare, by the block.
+    block_effects: &'a IndexMap<DefId, IndexSet<EffectRef>>,
+    /// The `impl` blocks ending in `..forward`.
+    forwarding_blocks: &'a IndexSet<DefId>,
     /// Declared resources, for classifying a missing effect.
     resources: &'a IndexSet<EffectRef>,
     /// Declared members, for nested-resource detection.
     members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
+    /// What waiting on an `AsyncCall` demands, held where the call starts.
+    waiting: &'a IndexSet<EffectRef>,
     /// Interface declaration → its effect and `#[cm]` FQ.
     interfaces: &'a IndexMap<DefId, (EffectRef, Option<String>)>,
     /// CM interface FQ → the effect it declares, for reconstructing a
@@ -687,6 +752,41 @@ struct EffectIndex<'a> {
     /// CM interface FQs the consumer provides (discharged in reconstruction).
     provided_import_fqs: &'a IndexSet<String>,
     resolutions: &'a Resolutions,
+}
+
+/// Per effect `binding` installs a handler for, what that handler performs:
+/// what its methods declare, and the effect itself where `..forward` passes
+/// operations to the next handler out. The installing function must hold it,
+/// since the handler runs on its behalf.
+fn binding_performed_effects(
+    annotations: Option<&TypeAnnotations>,
+    index: &EffectIndex,
+    binding: &EffectHandlerBinding,
+) -> IndexMap<String, Vec<EffectRef>> {
+    let mut performed: IndexMap<String, Vec<EffectRef>> = IndexMap::default();
+    for entry in annotations
+        .into_iter()
+        .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
+        .flat_map(|facts| &facts.effects)
+    {
+        let Some(def) = entry.impl_def else {
+            continue;
+        };
+        let forwarded = index
+            .forwarding_blocks
+            .contains(&def)
+            .then(|| EffectRef::Concrete {
+                name: entry.name.clone(),
+                module_source: entry.module_source.clone(),
+            });
+        let effects = performed.entry(entry.name.clone()).or_default();
+        for effect in index.block_effects[&def].iter().cloned().chain(forwarded) {
+            if !effects.contains(&effect) {
+                effects.push(effect);
+            }
+        }
+    }
+    performed
 }
 
 /// The effects `with E => h do` grants to its body.
@@ -732,8 +832,8 @@ fn binding_granted_effects(
         .collect()
 }
 
-/// What a direct call of an operation `owner` declares demands of its caller.
-/// A user-defined effect demands nothing: an unhandled dispatch traps at runtime.
+/// What a direct call of an operation `owner` declares demands of its caller:
+/// the interface itself, whether a handler or the host answers it.
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
@@ -743,7 +843,7 @@ fn operation_requirements(
         return Vec::new();
     };
     let Some(fq) = cm_fq else {
-        return Vec::new();
+        return vec![effect.clone()];
     };
     if let Some(registry) = sem.cm_interface_registry()
         && registry.is_component_interface(fq)
@@ -773,25 +873,6 @@ fn impl_facts<'a>(
         .types
         .impl_facts
         .get(&impl_block.id)
-}
-
-/// The effect an `impl E for T` block handles, when `E` is one. Read off the
-/// impl facts, which name the trait by its declaring module: a plain trait
-/// spelled like an effect is a different declaration and grants nothing.
-fn handled_effect(
-    sem: &Semantics,
-    module: &ModuleSource,
-    impl_block: &ImplBlock,
-    index: &EffectIndex,
-) -> Option<EffectRef> {
-    let facts = impl_facts(sem, module, impl_block)?;
-    if !facts.is_handler_method {
-        return None;
-    }
-    let effect = index
-        .resolutions
-        .effect_decl(facts.trait_name.as_ref()?.canonical()?)?;
-    index.closure.contains_key(&effect).then_some(effect)
 }
 
 /// Reports an impl method declaring an effect its trait method leaves out.
@@ -835,13 +916,12 @@ fn check_impl_effect_conformance(
     }
 }
 
-/// `handled` is the effect a method of `impl E for T` handles.
 fn check_function_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
     func: &Function,
     index: &EffectIndex,
-    handled: Option<&EffectRef>,
+    held: Option<&EffectRef>,
     out: &mut Vec<EffectError>,
 ) {
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
@@ -894,17 +974,22 @@ fn check_function_effects_sem(
     if let Some(ann) = annotations {
         add_signature_resources(ann, caller_key, &scan, &mut current);
     }
-    // A handler method holds the effect it handles: `E::op()` from inside
-    // `impl E for T` delegates to the outer handler, what `..forward` desugars to.
-    if let Some(effect) = handled {
-        current.insert(effect.clone());
-    }
     current.extend(benign);
+    current.extend(held.cloned());
+    if starts_async_call(annotations, &sem.types, |v| ast::walk_block(v, body)) {
+        current.extend(index.waiting.iter().cloned());
+    }
     // A function holding `Stdout` may call operations that internally need
     // `Stream`, etc.
     let mut current = expand_through_closure(&current, index.closure);
     if let Some(ann) = annotations {
-        add_narrowed_resources(body, ann, &scan, index.closure, &mut current);
+        add_narrowed_resources(
+            |v| ast::walk_block(v, body),
+            ann,
+            &scan,
+            index.closure,
+            &mut current,
+        );
     }
 
     // Parameter name → type id (aligned with the recorded signature types),
@@ -1061,14 +1146,14 @@ fn add_signature_resources(
 /// Union into `held` the resources the body's type patterns narrow to. A
 /// narrowing hands out a held ancestor's handle, as an operation returning it would.
 fn add_narrowed_resources(
-    body: &Block,
+    walk: impl FnOnce(&mut TypePatternSites),
     annotations: &TypeAnnotations,
     scan: &ResourceScan<'_>,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     held: &mut IndexSet<EffectRef>,
 ) {
     let mut sites = TypePatternSites::default();
-    ast::walk_block(&mut sites, body);
+    walk(&mut sites);
     let mut targets: Vec<DefId> = sites
         .0
         .into_iter()
@@ -1095,12 +1180,65 @@ fn add_narrowed_resources(
     }
 }
 
+/// Finds whether a body starts an async call, so it may wait on the call there.
+/// A closure is a body of its own, so the search stops at one.
+struct StartsAsyncCall<'a> {
+    annotations: &'a TypeAnnotations,
+    types: &'a TypeTable,
+    found: bool,
+}
+
+impl AstVisitor for StartsAsyncCall<'_> {
+    fn visit_expr(&mut self, expr: &Expr) {
+        if matches!(expr, Expr::Closure(_)) {
+            return;
+        }
+        if matches!(expr, Expr::Call(_) | Expr::MethodCall(_))
+            && self
+                .annotations
+                .all(|facts| &facts.expression_types, expr.id())
+                .any(|&ty| {
+                    self.types
+                        .is_compiler_item_type(ty, CompilerItem::AsyncCall)
+                })
+        {
+            self.found = true;
+        }
+        ast::walk_expr(self, expr);
+    }
+}
+
+/// Whether the body `walk` visits starts an async call.
+fn starts_async_call(
+    annotations: Option<&TypeAnnotations>,
+    types: &TypeTable,
+    walk: impl FnOnce(&mut StartsAsyncCall),
+) -> bool {
+    let Some(annotations) = annotations else {
+        return false;
+    };
+    let mut starts = StartsAsyncCall {
+        annotations,
+        types,
+        found: false,
+    };
+    walk(&mut starts);
+    starts.found
+}
+
 /// The ids a body's type patterns are recorded under: each `p: T`, and each
-/// `let … else` whose annotation is one.
+/// `let … else` whose annotation is one. A closure is a body of its own, so the
+/// search stops at one.
 #[derive(Default)]
 struct TypePatternSites(Vec<AstId>);
 
 impl AstVisitor for TypePatternSites {
+    fn visit_expr(&mut self, expr: &Expr) {
+        if !matches!(expr, Expr::Closure(_)) {
+            ast::walk_expr(self, expr);
+        }
+    }
+
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if let Stmt::Let(let_stmt) = stmt
             && let_stmt.else_block.is_some()
@@ -1222,7 +1360,7 @@ fn call_site_effects(
         };
         return vec![bare(INDIRECT_CALLEE.to_string(), effects.clone())];
     }
-    // Only a free function in this program dispatches through the path: a
+    // Only a free function outside the bindings dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
     let owner = match callee {
         Expr::Ident(ident) => index.resolutions.operation_owner(ident),
@@ -1238,7 +1376,7 @@ fn call_site_effects(
             // parameter list — no self skip.
             let is_method = func_ref.method_info.is_some() && !self_in_args;
             let dispatches_through_path = func_ref.method_info.is_none()
-                && matches!(func_ref.module_source, ModuleSource::Local { .. });
+                && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
@@ -1278,11 +1416,7 @@ impl EffectIndex<'_> {
         // dispatch has no impl to read: the declaration is what a call requires.
         let mut effects = match self.declared_by_trait(func_ref) {
             Some(declared) => declared.to_vec(),
-            None => self
-                .mangled_index
-                .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-                .cloned()
-                .unwrap_or_default(),
+            None => self.callee_entry(func_ref, self.fn_effects, self.mangled_index),
         };
         effects = self.resolve_open_head(func_ref, effects);
         if let Some(method_info) = &func_ref.method_info
@@ -1374,10 +1508,27 @@ impl EffectIndex<'_> {
 
     /// Parameter type ids for a method / static dispatch target.
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
-        self.mangled_params
-            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            .cloned()
-            .unwrap_or_default()
+        self.callee_entry(func_ref, self.fn_params, self.mangled_params)
+    }
+
+    /// `func_ref`'s entry, looked up by the declaration the dispatch selected.
+    /// Its name carries the receiver's type arguments, so only a callee no
+    /// declaration names is looked up by name.
+    fn callee_entry<V: Clone + Default>(
+        &self,
+        func_ref: &FunctionRef,
+        by_decl: &IndexMap<AstId, V>,
+        by_name: &IndexMap<(ModuleSource, String), V>,
+    ) -> V {
+        let entry = match &func_ref.template {
+            Some(TemplateId::Declared { def, .. }) => {
+                by_decl.get(&self.resolutions.defs().ast_id(*def))
+            }
+            Some(TemplateId::Synthesized { .. }) | None => {
+                by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+            }
+        };
+        entry.cloned().unwrap_or_default()
     }
 }
 
@@ -1536,6 +1687,16 @@ impl SemEffectWalker<'_> {
     }
 
     fn report_missing(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
+        self.report_missing_as(effects, callee, span, EffectFault::Missing);
+    }
+
+    fn report_missing_as(
+        &mut self,
+        effects: &[EffectRef],
+        callee: &str,
+        span: Span,
+        fault: fn(EffectKind) -> EffectFault,
+    ) {
         for effect in effects {
             if effect.is_param() {
                 // An undetermined parameter stands for whatever the callee
@@ -1562,7 +1723,7 @@ impl SemEffectWalker<'_> {
             self.out.push(EffectError {
                 callee: callee.to_string(),
                 missing_effect: effect.name().to_string(),
-                fault: EffectFault::Missing(kind),
+                fault: fault(kind),
                 span,
                 module: self.module.clone(),
             });
@@ -1646,15 +1807,28 @@ impl AstVisitor for SemEffectWalker<'_> {
                 // `with H => h do { body }` installs handlers, granting each
                 // handled effect to the body (calls inside it — directly or via
                 // helpers — observe the installed handler). The handler
-                // expressions themselves run outside the grant.
+                // expressions themselves run outside the grant. A binding
+                // installs inside the ones before it, so its handler holds
+                // what they grant.
+                let mut granted: Vec<EffectRef> = Vec::new();
                 for binding in &with_handler.handlers {
                     ast::walk_expr(self, &binding.handler);
+                    for (handled, effects) in
+                        binding_performed_effects(self.annotations, self.index, binding)
+                    {
+                        let effects: Vec<EffectRef> = effects
+                            .into_iter()
+                            .filter(|effect| !granted.contains(effect))
+                            .collect();
+                        self.report_missing_as(
+                            &effects,
+                            &handled,
+                            binding.handler.span(),
+                            EffectFault::MissingForHandler,
+                        );
+                    }
+                    granted.extend(self.binding_granted_effects(binding));
                 }
-                let granted: Vec<EffectRef> = with_handler
-                    .handlers
-                    .iter()
-                    .flat_map(|binding| self.binding_granted_effects(binding))
-                    .collect();
                 self.walk_granted(granted, |walker| {
                     ast::walk_block(walker, &with_handler.body);
                 });
@@ -1663,13 +1837,33 @@ impl AstVisitor for SemEffectWalker<'_> {
             Expr::Closure(closure) => {
                 // A closure's body performs what its type carries, not what the
                 // function it is written in holds: it runs wherever it is called.
-                let declared: IndexSet<EffectRef> = self
+                let mut declared: IndexSet<EffectRef> = self
                     .annotations
                     .into_iter()
                     .flat_map(|ann| ann.all(|facts| &facts.closure_captures, closure.id))
                     .flat_map(|info| info.declared_effects.iter().cloned())
                     .collect();
-                let carried = expand_through_closure(&declared, self.index.closure);
+                if starts_async_call(self.annotations, &self.sem.types, |v| {
+                    v.visit_expr(&closure.body);
+                }) {
+                    declared.extend(self.index.waiting.iter().cloned());
+                }
+                let mut carried = expand_through_closure(&declared, self.index.closure);
+                if let Some(ann) = self.annotations {
+                    let scan = ResourceScan {
+                        tt: &self.sem.types,
+                        resolutions: self.index.resolutions,
+                        members: self.index.members,
+                    };
+                    carried.extend(self.current.iter().cloned());
+                    add_narrowed_resources(
+                        |v| v.visit_expr(&closure.body),
+                        ann,
+                        &scan,
+                        self.index.closure,
+                        &mut carried,
+                    );
+                }
                 self.walk_granted(carried, |walker| ast::walk_expr(walker, expr));
                 return;
             }
@@ -1748,14 +1942,14 @@ pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
     out
 }
 
-/// Walk every user-authored expression that must be pure, appending violations.
+/// Walk every expression that must be pure, appending violations.
 /// Shared by [`check_purity_semantic`] and [`check_semantics`].
 fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityError>) {
     let Some(state) = sem.state.as_ref() else {
         return;
     };
     for (src, module) in &sem.modules {
-        if !is_user_authored(src) {
+        if !is_effect_checked(src) {
             continue;
         }
         let mut walker = PurityWalker {
@@ -1970,18 +2164,26 @@ impl AstVisitor for PurityWalker<'_> {
             }
             Expr::WithHandler(with_handler) => {
                 // The install discharges what its body dispatches, so the body
-                // walks under the grant. The handler expressions run outside it.
+                // walks under the grant. The handler expressions run outside it,
+                // and a binding's handler holds what the bindings before it grant.
                 for binding in &with_handler.handlers {
                     ast::walk_expr(self, &binding.handler);
                 }
-                let added: Vec<EffectRef> = with_handler
-                    .handlers
-                    .iter()
-                    .flat_map(|binding| {
+                let mut added: Vec<EffectRef> = Vec::new();
+                for binding in &with_handler.handlers {
+                    for (handled, effects) in
+                        binding_performed_effects(self.annotations, self.index, binding)
+                    {
+                        if self.unanswered(&effects) {
+                            self.flag(Impurity::Install(handled), binding.handler.span());
+                        }
+                    }
+                    added.extend(
                         binding_granted_effects(self.annotations, self.index, binding)
-                    })
-                    .filter(|effect| self.granted.insert(effect.clone()))
-                    .collect();
+                            .into_iter()
+                            .filter(|effect| self.granted.insert(effect.clone())),
+                    );
+                }
                 ast::walk_block(self, &with_handler.body);
                 for effect in added {
                     self.granted.shift_remove(&effect);

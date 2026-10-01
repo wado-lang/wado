@@ -20,7 +20,9 @@ be belongs to the WEP that proposed it.
 
 The specification states exactly how the language should behave. It is not the
 place for implementation details or bugs. Where the compiler falls short of a
-rule, the shortfall is a known gap in the WEP that proposed the rule.
+rule, the shortfall is a known gap in the WEP that proposed the rule. The one
+exception is a rule adopted but not built yet: it carries a
+`> Not yet implemented: …` note, as `spec-overview.md` § Status says.
 
 A `wado` code block quotes an e2e fixture or a source file, named in an HTML
 comment before it (`<!-- {"fixture": "name.wado"} -->`, or

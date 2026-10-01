@@ -8,6 +8,7 @@ use { scratch } from "../../tests/support/scratch.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
+use { Log } from "core:log";
 
 global SUITE: String = "gale-facade-test";
 
@@ -21,7 +22,7 @@ fn bold(source: &String) -> String {
 }
 
 /// What `run_cli` printed and logged, rendering with `bold`.
-fn highlight_cli(args: List<String>) -> Console with (Preopens, MonotonicClock) {
+fn highlight_cli(args: List<String>) -> Console with (Preopens, MonotonicClock, Log) {
     let mut console = Console {};
     with &mut console do {
         run_cli(bold, args);

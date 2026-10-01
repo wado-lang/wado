@@ -239,7 +239,7 @@ fn greet(value: i32 = noisy()) -> i32 {
 
 export fn run() {}
 "#,
-            "must be pure",
+            "cannot perform effects",
         ),
         (
             "resource-moves",

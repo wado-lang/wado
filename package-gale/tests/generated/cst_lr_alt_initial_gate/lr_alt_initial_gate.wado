@@ -1590,45 +1590,6 @@ impl Parser {
     }
 }
 
-fn scan_stmt_alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos, gate, memo, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_stmt_alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
-    let mut pos = pos;
-    pos = scan_e(tokens, pos, gate, memo, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
-    let start = pos;
-    let start_gate = *gate;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(kind) {
-        let mut best: i32 = -1;
-        let mut best_gate = *gate;
-        let try_0_end = scan_stmt_alt_0(tokens, start, gate, memo);
-        if try_0_end > best { best = try_0_end; best_gate = *gate; }
-        *gate = start_gate;
-        let try_1_end = scan_stmt_alt_1(tokens, start, gate, memo);
-        if try_1_end > best { best = try_1_end; best_gate = *gate; }
-        if best >= 0 {
-            pos = best;
-            *gate = best_gate;
-            return pos;
-        }
-        return -1;
-    }
-    return -1;
-}
-
 fn scan_e_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let start = pos;
     let start_gate = *gate;
@@ -1726,6 +1687,19 @@ fn _parse_stmt__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
+fn scan_stmt__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+    let mut pos = pos;
+    pos = scan_e(tokens, pos, gate, memo, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_stmt__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+    return scan_e(tokens, pos, gate, memo, 0);
+}
+
 fn _parse_stmt__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
@@ -1733,9 +1707,9 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_1 = scan_stmt_alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
+        let _sd_p_1 = scan_stmt__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_0 = scan_stmt_alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
+        let _sd_p_0 = scan_stmt__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {

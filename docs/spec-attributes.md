@@ -32,7 +32,7 @@ test {
 
 ### `#[benign(E, ...)]`
 
-Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that are observationally pure, that is, unobservable through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited.
+Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that no caller can observe through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify that they are unobservable, so this is an unchecked assertion that must be audited.
 
 An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
 

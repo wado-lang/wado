@@ -363,7 +363,7 @@ a : 'x' ;
     assert output.contains("fn _parse_r__inner_alt_0(");
     assert output.contains("fn _parse_r__inner_alt_1(");
     // ...but neither scan helper is emitted.
-    assert !output.contains("fn _parse_r__inner_scan_");
+    assert !output.contains("fn scan_r__alt_");
 
     // A shared-prefix tournament rule still emits its scan helpers, so the
     // gate is not over-pruning.
@@ -373,7 +373,7 @@ X : 'X' ;
 Y : 'Y' ;
 ";
     let tout = gen_source(tinput);
-    assert tout.contains("fn scan_s_alt_0(");
+    assert tout.contains("fn scan_s__alt_0(");
 }
 
 test "an alternative's scan helper is emitted once for the scan and the parse" {
@@ -390,9 +390,8 @@ Y : 'Y' ;
 Z : 'Z' ;
 ";
     let output = gen_source(input);
-    assert output.contains("fn scan_r_alt_0(");
-    assert !output.contains("fn _parse_r__inner_scan_0(");
-    assert output.contains("let _sd_p_0 = scan_r_alt_0(_sd_tokens, _sd_pos");
+    assert output.split("fn scan_r__alt_0(").count() == 2, "defined once";
+    assert output.contains("let _sd_p_0 = scan_r__alt_0(_sd_tokens, _sd_pos");
 }
 
 test "a scan never re-tests a token its guard already proved" {
@@ -1206,6 +1205,18 @@ test "a tail optional enters only where its body can match" {
     assert got == "f(); => (s (e (e f) ( )) ;)\nf () => x; => (s (e f (e ( ) => x)) ;)\nf g; => (s (e f (e g)) ;)\nf g(); => (s (e f (e (e g) ( ))) ;)\n", got;
 }
 
+test "an optional probe that scans the rest of an alternative ends its scan" {
+    let output = gen_source("
+grammar T;
+s : a ';' ;
+a : 'b'? c | c 'd' ;
+c : 'b'* 'c' 'c' ;
+WS : ' ' -> skip ;
+");
+    let body = extract_fn_body(&output, "fn scan_a__alt_0(");
+    assert body.contains("cont_done_"), `a probe that holds scans \`c\` once: ${body}`;
+}
+
 global TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4: String = "
 grammar T;
 s : 'x' '=' e ';' ;
@@ -1659,10 +1670,13 @@ test "dispatch branches sharing a sub-dispatch are emitted once" {
     assert !body.contains("if p.peek_kind() == TK_A"), `A got its own branch: ${body}`;
 }
 
-// Alts 0 and 1 share `A` and `B`, which the token after them tells apart.
+// Alts 0 and 1 share `A` and `B`, which the token after them tells apart. `s`
+// scans `e` to choose between its alternatives, so `scan_e` is emitted.
 global REPEATED_SCAN_ALT_G4: String = "
 grammar T;
-s : e EOF ;
+s : e X EOF | e Y EOF ;
+X : 'x' ;
+Y : 'y' ;
 e : f '(' ')' | n | K ;
 f : A | B ;
 n : A | B | C ;
@@ -1677,8 +1691,8 @@ test "a scan decides by the parse's lookahead, not by scanning every candidate" 
     let output = gen_source(REPEATED_SCAN_ALT_G4);
     let scan_e = extract_fn_body(&output, "fn scan_e(");
     assert scan_e.contains("if la_1 == TK_LIT_LPAREN {"), scan_e;
-    assert scan_e.contains("return scan_e_alt_0(tokens, start"), scan_e;
-    assert scan_e.contains("return scan_e_alt_1(tokens, start"), scan_e;
+    assert scan_e.contains("return scan_e__alt_0(tokens, start"), scan_e;
+    assert scan_e.contains("return scan_e__alt_1(tokens, start"), scan_e;
 }
 
 test "a gate the scan cannot evaluate does not put its untested arm first" {
@@ -1695,7 +1709,7 @@ A : 'a' ; B : 'b' ; C : 'c' ;
 
 test "an uncontested alternative is scanned in place" {
     let output = gen_source(REPEATED_SCAN_ALT_G4);
-    assert !output.contains("fn scan_e_alt_2("), output;
+    assert !output.contains("fn scan_e__alt_2("), output;
 }
 
 // `RustParser.g4`'s `crate : innerAttribute* item* EOF`: the reserve walks the

@@ -141,9 +141,9 @@ fn format_closure_signature(
 ) -> String {
     let param_names: Vec<String> = params
         .iter()
-        .map(|(_, ty)| type_table.type_name(*ty))
+        .map(|(_, ty)| type_table.type_name_unboxed(*ty))
         .collect();
-    let ret_name = type_table.type_name(return_type);
+    let ret_name = type_table.type_name_unboxed(return_type);
     format!("|{}| -> {}", param_names.join(", "), ret_name)
 }
 
@@ -1526,13 +1526,8 @@ impl TirRefVisitor for LocalCollector<'_> {
     /// right type for the slot; otherwise `wir_build` falls back to a
     /// placeholder and downstream code emits ref→i32 type-mismatch Wasm.
     fn visit_pattern(&mut self, pattern: &TirPattern) {
-        if let TirPattern::Binding {
-            local_index,
-            type_id,
-            ..
-        } = pattern
-        {
-            self.locals.push((*local_index, *type_id));
+        if let Some(local) = pattern.declared_local() {
+            self.locals.push(local);
         }
         self.walk_pattern(pattern);
     }

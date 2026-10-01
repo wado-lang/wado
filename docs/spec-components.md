@@ -97,8 +97,8 @@ Rationale: [WEP: The Web Interface for Wado](./wep-2026-04-01-web.md#callbacks).
 ## Concurrency Model
 
 Wado follows the Component Model's concurrency model. It has no `await`: a
-wait blocks the current task until the value is ready, so an ordinary function
-may wait without saying so in its signature.
+wait blocks the current task until the value is ready, so a function that waits
+is not itself async.
 
 ### Async Imports
 
@@ -111,6 +111,11 @@ call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 - `.cancel()` abandons the call.
 - `.join(&set)` adds the call to a `WaitableSet`, so one wait covers several
   calls and streams.
+
+A function or closure that starts an async call also holds the effects these
+methods declare, so it may later wait on that call without declaring them. A
+closure is a body of its own: a call it starts grants nothing to the function
+around it.
 
 <!-- {"fixture":"spec_components_async_import.wado"} -->
 

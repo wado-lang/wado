@@ -1,7 +1,8 @@
 //! Trait synthesis: auto-derives `Eq` / `Ord` for structs and enums and `Eq` for
 //! variants (discriminant, then payload), `Default` for structs, `Inspect` for
 //! debug formatting, and `Display` for an enum’s bare case name.
-//! Runs before monomorphize.
+//! Runs before monomorphize, but for the `fn(..)` dispatch stubs, whose types
+//! are concrete only once instantiated.
 
 use std::cell::RefCell;
 use std::convert::identity;
@@ -12,6 +13,7 @@ use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
+use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
@@ -21,6 +23,7 @@ use crate::tir::{
     TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStructField, TirTypeParam, TraitRef, TypeId, TypeTable,
 };
+use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 use super::common::{
@@ -4027,10 +4030,10 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // Every reflected kind derives Inspect through its own blanket in
     // `core:prelude/traits` (WEP 2026-06-13) — a newtype's ` as Name` tag
     // included, over `ReflectNewtype`. What remains has no reflection:
-    // parameterized types, resources, and `fn(..)` dispatch stubs.
+    // parameterized types and resources, and `fn(..)` types, whose stubs
+    // [`synthesize_monomorphized_fn_inspect_stubs`] mints after monomorphize.
 
-    // Tuples inspect through their variadic impl in `core:prelude/tuple.wado`,
-    // and `Fn` signatures through `collect_canonical_fn_signatures` below.
+    // Tuples inspect through their variadic impl in `core:prelude/tuple.wado`.
     let span = synth_span();
     for (type_id, def, type_arg_names) in collect_generic_resource_instances(&tt) {
         // The stub belongs to the module declaring the resource, emitted there once.
@@ -4092,30 +4095,116 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         ctx.record_impl(receiver, &inspect_fq.canonical().expect(KEYED));
     }
 
-    // Dispatch stubs — one per `fn(..)` spelling, since a stub is named after
-    // the type it dispatches for.
-    for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = sig.receiver.to_mangled();
-        let instance = TypeHead::instance(&module_source, &mangled);
-        if ctx.pending_has(&instance, &inspect_fq.canonical().expect(KEYED)) {
+    drop(tt);
+    module.functions.extend(generated);
+}
+
+/// Mint the `fn(..)^Inspect` dispatch stubs the monomorphized program calls,
+/// each in the module whose call names it. A call is renamed first after its
+/// receiver's type: one written in a generic body is spelled through the
+/// body's parameters (`fn(T)->i32`, `fn(I::Item)->i32`), which only an
+/// instance's receiver has answered.
+pub fn synthesize_monomorphized_fn_inspect_stubs(flat: &mut FlatPackage) {
+    let names = TraitsStdlibNames::from_type_table(&flat.type_table.borrow());
+
+    struct CalledStubs<'a> {
+        tt: &'a TypeTable,
+        names: &'a TraitsStdlibNames,
+        inspect: DefId,
+        /// `(module, stub name)` per call, and the signature each name stands for.
+        called: hashmap::IndexMap<(ModuleSource, String), FnSignature>,
+    }
+    impl TirMutVisitor for CalledStubs<'_> {
+        fn visit_expr(&mut self, expr: &mut TirExpr) {
+            self.walk_expr(expr);
+            let TirExprKind::Call { func, args, .. } = &mut expr.kind else {
+                return;
+            };
+            let is_inspect = func.method_info.as_ref().is_some_and(|info| {
+                info.trait_decl() == Some(self.inspect)
+                    && info.method_name == self.names.inspect_method
+            });
+            if !is_inspect {
+                return;
+            }
+            let receiver_type = self.tt.peel_refs(args[0].expr.type_id);
+            let resolved = self.tt.get(receiver_type);
+            let ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } = resolved
+            else {
+                return;
+            };
+            assert!(
+                self.tt.is_concrete(receiver_type),
+                "a monomorphized call inspects a concrete fn type"
+            );
+            let receiver = self.tt.fn_receiver_name(resolved);
+            let respelled = trait_method_info(
+                &receiver,
+                &self.names.inspect_fq,
+                &self.names.inspect_method,
+            );
+            func.name = respelled.to_mangled_name();
+            func.method_info = Some(respelled);
+            self.called
+                .entry((func.module_source.clone(), func.name.clone()))
+                .or_insert(FnSignature {
+                    repr_type_id: receiver_type,
+                    arity: params.len(),
+                    return_type: *return_type,
+                    receiver,
+                });
+        }
+    }
+    let tt = flat.type_table.borrow();
+    let mut calls = CalledStubs {
+        tt: &tt,
+        names: &names,
+        inspect: names.inspect_fq.called_decl(),
+        called: hashmap::IndexMap::default(),
+    };
+    for func_rc in &flat.functions {
+        if let Some(body) = &mut func_rc.borrow_mut().body {
+            calls.visit_block(body);
+        }
+    }
+    let called = calls.called;
+    drop(tt);
+    let defined: IndexSet<(ModuleSource, String)> = flat
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            (f.module_source.clone(), f.name.clone())
+        })
+        .collect();
+
+    let mut tt = flat.type_table.borrow_mut();
+    let formatter_type = tt.make_compiler_struct(CompilerItem::Formatter);
+    let fmt_type = tt.make_mut_ref(formatter_type);
+    let mut generated = Vec::new();
+    for ((module_source, name), sig) in called {
+        if defined.contains(&(module_source.clone(), name)) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
-        generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
+        let mut stub = generate_fn_inspect_fn(
             &sig.receiver,
             sig.arity,
             sig.return_type,
             ref_type,
             fmt_type,
-            span,
-            &inspect_fq,
-            &inspect_method,
-        ))));
-        // Per-module: do not `ctx.record_impl`.
+            &names.inspect_fq,
+            &names.inspect_method,
+        );
+        stub.module_source = module_source;
+        generated.push(Rc::new(RefCell::new(stub)));
     }
-
     drop(tt);
-    module.functions.extend(generated);
+    flat.functions.extend(generated);
 }
 
 /// Auto-derive `EnumName^Display::fmt` writing the bare case name (`Red`),
@@ -4250,20 +4339,19 @@ fn generate_enum_display_fn(
 /// being bodyless it bypasses the inliner and the other body walkers. WIR build
 /// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the real body,
 /// a `call_ref` through the matching `CanonicalClosure_K`'s vtable slot.
-#[allow(clippy::too_many_arguments)]
 fn generate_fn_inspect_fn(
     receiver: &FqTypeName,
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
     fmt_type: TypeId,
-    span: Span,
     trait_name: &FqTraitName,
     method_name: &str,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, trait_name, method_name);
     let qualified_name = method_info.to_mangled_name();
 
+    let span = synth_span();
     let mut func = make_synthetic_method(
         qualified_name,
         method_info,
@@ -4541,11 +4629,11 @@ fn collect_generic_resource_instances(tt: &TypeTable) -> Vec<(TypeId, DefId, Vec
         .collect()
 }
 
-/// Canonical `Fn` signature for dispatch-stub synthesis, keyed by
-/// `(arity, return_type)` alone — see [`collect_parameterized_types`].
-/// `repr_type_id` is the first `ResolvedType::Function` seen with this
-/// signature, used to build the stub's `&self` type. Any id with the signature
-/// would do; taking the first makes two compiles byte-identical.
+/// One `fn(..)` spelling a dispatch stub is minted for. Keyed by the stub's
+/// name rather than a `TypeId`, since `&T` and `&mut T` spell alike and share
+/// one stub. `repr_type_id` is the first call's receiver type with the
+/// spelling, used to build the stub's `&self` type; taking the first makes two
+/// compiles byte-identical.
 struct FnSignature {
     repr_type_id: TypeId,
     arity: usize,
@@ -4553,41 +4641,6 @@ struct FnSignature {
     /// The type's own name — the receiver its dispatch stubs hang off, and what
     /// a call on a value of this type asks for.
     receiver: FqTypeName,
-}
-
-fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
-    // Dedup by mangled name, not `TypeId`: `&T` / `&mut T` mangle identically
-    // and must share one stub, else the stubs collide post-mono.
-    let mut seen: IndexSet<String> = IndexSet::default();
-    let mut result = Vec::new();
-
-    for (id, resolved) in tt.all_types() {
-        let ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } = resolved
-        else {
-            continue;
-        };
-        // The whole type must be determined: the receiver is its own spelling,
-        // so an undetermined part would put an inference variable in a function
-        // name. Substitution gives each instantiation its own stub.
-        if !tt.is_concrete(*return_type) || !params.iter().all(|p| tt.is_concrete(*p)) {
-            continue;
-        }
-        let receiver = tt.fn_receiver_name(resolved);
-        if !seen.insert(receiver.to_mangled()) {
-            continue;
-        }
-        result.push(FnSignature {
-            repr_type_id: id,
-            arity: params.len(),
-            return_type: *return_type,
-            receiver,
-        });
-    }
-    result
 }
 
 /// Generate `Name^Eq::eq(&self, &Self) -> bool` for a type that compares as

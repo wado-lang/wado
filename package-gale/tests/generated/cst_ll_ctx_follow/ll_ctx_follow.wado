@@ -1619,18 +1619,13 @@ fn _parse_r(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_wrapper__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.site = 3;
-    _parse_a(p, follow);
-    return;
-}
-
 fn _parse_wrapper(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_WRAPPER, _start);
-    _parse_wrapper__inner(p, follow);
+    p.site = 3;
+    _parse_a(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_WRAPPER, "wrapper", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();

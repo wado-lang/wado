@@ -84,11 +84,6 @@ pub struct LoweredGrammar {
     /// Lowered parser rules in source order. `parser_rules[0]` is the
     /// start rule (per ANTLR4 convention) and seeds `gen_parse_entry`.
     pub parser_rules: List<Rule>,
-    /// Interned multi-element token-kind sets. `lower` rewrites every
-    /// `<expr> matches { TK_X | TK_Y | ... }` decision into a
-    /// `_kind_set_<id>(<expr>)` call; this list drives the
-    /// helper-function emission.
-    pub kind_sets: List<KindSet>,
     /// Prediction-strategy diagnostics raised while lowering picked a
     /// dispatch strategy. These are advisory warnings, not errors:
     /// lowering always produces a usable grammar, but a warning flags a
@@ -1371,15 +1366,6 @@ pub variant FieldKind {
     Optional,
     List,
     Span,
-}
-
-/// One interned token-kind set. emit drops a `_kind_set_<id>(k)
-/// -> bool` helper for each entry; multi-element `matches { ... }`
-/// checks elsewhere route through the helper to share the body.
-pub struct KindSet {
-    pub id: i32,
-    /// Canonical (name-sorted, unique) token kind ids; emitted as `TK_*` names.
-    pub tokens: List<i32>,
 }
 
 // ==========================================================================

@@ -231,13 +231,19 @@ _Fields are private._
 
 #### `pub fn record<T: Serialize>(&self, fields: T)`
 
+`#[ambient]`
+
 Add fields to an open span.
 
 #### `pub fn follows_from(&self, cause: &Span)`
 
+`#[ambient]`
+
 Record a non-parent causal link: this span follows from `cause`.
 
 #### `pub fn close(&self)`
+
+`#[ambient]`
 
 Close a span entered by hand. [`in_span`] closes on every exit path, so
 this is only for a span the caller opened without it.
@@ -432,7 +438,7 @@ A key the event itself carries wins.
 
 #### `impl Log for Context<T>`
 
-##### `fn event(&self, event: Event)`
+##### `fn event(&self, event: Event) with Log`
 
 ### `pub struct Directive`
 
@@ -469,9 +475,9 @@ narrower answer would drop events `event` would go on to admit.
 
 #### `impl Log for Filter`
 
-##### `fn enabled(&self, level: Level) -> bool`
+##### `fn enabled(&self, level: Level) -> bool with Log`
 
-##### `fn event(&self, event: Event)`
+##### `fn event(&self, event: Event) with Log`
 
 ## Enums
 

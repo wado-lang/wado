@@ -388,17 +388,20 @@ impl Span {
     }
 
     /// Add fields to an open span.
+    #[ambient]
     pub fn record<T: Serialize>(&self, fields: T) {
         Log::record_fields(self.id, box_fields(fields));
     }
 
     /// Record a non-parent causal link: this span follows from `cause`.
+    #[ambient]
     pub fn follows_from(&self, cause: &Span) {
         Log::follows_from(self.id, cause.id);
     }
 
     /// Close a span entered by hand. [`in_span`] closes on every exit path, so
     /// this is only for a span the caller opened without it.
+    #[ambient]
     pub fn close(&self) {
         Log::close(self.id);
     }
@@ -804,7 +807,7 @@ pub struct Context<T: Serialize> {
 }
 
 impl<T: Serialize> Log for Context<T> {
-    fn event(&self, event: Event) {
+    fn event(&self, event: Event) with Log {
         let mut merged = TreeMap::<String, Value>::new();
         if let Object(base) = box_fields(self.fields) {
             for let [key, value] of base.entries() {
@@ -909,11 +912,11 @@ impl Filter {
 }
 
 impl Log for Filter {
-    fn enabled(&self, level: Level) -> bool {
+    fn enabled(&self, level: Level) -> bool with Log {
         resume level >= self.floor() && Log::enabled(level);
     }
 
-    fn event(&self, event: Event) {
+    fn event(&self, event: Event) with Log {
         if event.meta.level >= self.threshold(event.meta.target) {
             Log::event(event);
         }

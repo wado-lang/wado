@@ -1,0 +1,12 @@
+// A closure parameter typed by a projection of a type parameter an earlier
+// argument settles takes the projected type, as a method's `Self::Item` does.
+
+fn apply<I: Iterator>(mut it: I, f: fn(I::Item) -> i32) -> i32 {
+    return f(it.next().unwrap());
+}
+
+test {
+    let xs: List<i32> = [1, 2, 3];
+    assert apply(xs.iter_ref(), |x| *x * 2) == 2;
+    assert apply(xs.into_iter(), |x| x + 10) == 11;
+}

@@ -9,11 +9,19 @@ use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 /// `map` takes `f: fn(Self::Item) -> U`, so elaborating this call instantiates
 /// both slots and interns the `fn` type the collector used to accept.
+/// `describe` inspects a closure whose type is spelled through the same
+/// projection, so the program calls a stub whose name that spelling could leak
+/// into.
 const SOURCE: &str = r#"
+fn describe<I: Iterator>(it: I, f: fn(I::Item) -> i32) -> String {
+    return `${f:?}`;
+}
+
 export fn run() {
     let xs: List<i32> = [1, 2, 3];
     let doubled: List<i32> = xs.iter_ref().map(|x| *x * 2).collect();
     assert doubled.len() == 3;
+    assert describe(xs.iter_ref(), |x| *x * 2).len() > 0;
 }
 "#;
 
