@@ -163,7 +163,7 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 - [ ] The hash function, chosen by measurement on Wasm.
 - [x] `HashSeed`, `HashMap` and `HashSet` in `core:collections`. Done when they
   offer `TreeMap`'s and `TreeSet`'s lookup and iteration API.
-- [ ] `gale_gen` builds its maps as `GaleMap` and `GaleSet`. Done when its
+- [x] `gale_gen` builds its maps as `GaleMap` and `GaleSet`. Done when its
   benchmark row is re-measured.
 - [ ] `#[unavailable]` on trait impls, and the `Serialize` and `Deserialize`
   refusals on `HashMap` and `HashSet`.
