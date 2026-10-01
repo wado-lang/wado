@@ -211,8 +211,7 @@ i128, u128
 // half precision: storage only, no arithmetic; `as` converts as for any float.
 // Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32` /
 // `from_f64`, text via `from_str` (each rounded once, as a literal is).
-// Every comparison hands the widened value to f32's, so `==` and `<` are IEEE
-// and `Ord` is the total order — the same split f32 has.
+// A comparison answers as f32's does on the widened values (see `Ord` below).
 f16, bf16
 let w: List<bf16> = [0.5, -1.25];   // a float literal rounds once, ties to even
 
@@ -1157,11 +1156,10 @@ trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
 // For == and != operators
 trait Eq<Rhs = Self> { fn eq(&self, other: &Rhs) -> bool; }
 
-// A total order: what `sort()`, `TreeMap` and a `T: Ord` bound read. On a
-// float it is IEEE 754-2019 `totalOrder`, as C++20's `std::strong_order` is:
-// -NaN < -Inf < -0 < +0 < +Inf < +NaN. The comparison operators keep IEEE's
-// answers on every float, so `sort()` and `<` disagree about a NaN — see
-// WEP: The Operator Order and the Total Order. Any other type reads `cmp`.
+// A total order: what `<` `<=` `>` `>=`, `sort()`, `TreeMap` and a `T: Ord`
+// bound read, on every type. `a == b` exactly when `cmp` answers `Equal`.
+// A float is IEEE except that every NaN is one value, equal to itself and
+// greatest, and -0.0 == 0.0: -Inf < … < +Inf < NaN. Test a NaN with is_nan().
 trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,

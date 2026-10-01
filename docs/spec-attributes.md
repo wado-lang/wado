@@ -88,6 +88,7 @@ Waives a lint on the item carrying it. As the module inner attribute
 `#[deny(...)]`. The lints are:
 
 - `dead_code`: an unused or test-only free function or global (see [The `dead_code` Lint](#the-dead_code-lint)).
+- `self_comparison`: a comparison of an expression with itself (see [The `self_comparison` Lint](./spec-expressions.md#the-self_comparison-lint)).
 - `shadowed_name`: a binder that takes a name already reaching a known symbol (see [The `shadowed_name` Lint](./spec-expressions.md#the-shadowed_name-lint)).
 - `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](./spec-effects.md#the-trait-head)).
 
