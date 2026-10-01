@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirInstr, WirLocals, WirPackage, WirType, WirTypeDef};
+use crate::wir::{WirInstr, WirLocals, WirPackage, WirType};
 use crate::wir_optimize::local_layout::WasmClass;
 use crate::wir_optimize::local_nullability::relax_unset_nonnull_locals_in;
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
@@ -21,9 +21,7 @@ pub(super) fn coalesce_locals(module: &mut WirPackage) {
         let Some(body) = func.body.as_mut() else {
             continue;
         };
-        let WirTypeDef::Func(func_type) = &module.types[func.type_id.index() as usize] else {
-            unreachable!("a function's type is a func type");
-        };
+        let func_type = module.types[func.type_id.index() as usize].expect_func();
         let params: Vec<(&str, &WirType)> = func
             .param_names
             .iter()

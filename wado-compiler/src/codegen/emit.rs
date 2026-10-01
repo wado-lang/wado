@@ -636,21 +636,14 @@ impl<'a> WirEmitter<'a> {
         memories
     }
 
-    /// The `WirFuncId` of the `i`-th defined function, over the package's own
-    /// base: `DEFINED_FUNC_BASE` for the GC module, `0` for the import-less
-    /// memory module.
-    fn defined_func_id(&self, i: usize) -> u32 {
-        debug_assert!(self.wir.defined_func_base >= self.func_index_offset);
-        self.wir.defined_func_base + u32::try_from(i).unwrap()
-    }
-
     fn build_func_index_map(&mut self) {
+        debug_assert!(self.wir.defined_func_base >= self.func_index_offset);
         // Import functions already have indices 0..import_func_count-1
         for i in 0..self.func_index_offset {
             self.func_index_map.insert(i, i);
         }
         for (wasm_idx, i) in (self.func_index_offset..).zip(0..self.wir.functions.len()) {
-            let wir_func_idx = self.defined_func_id(i);
+            let wir_func_idx = self.wir.defined_func_index(i);
             self.func_index_map.insert(wir_func_idx, wasm_idx);
         }
     }
@@ -742,7 +735,7 @@ impl<'a> WirEmitter<'a> {
             let wasm_func = self.emit_function(func);
             code.function(&wasm_func);
             if !self.current_branch_hints.is_empty() {
-                let func_idx = self.resolve_func_index(self.defined_func_id(i));
+                let func_idx = self.resolve_func_index(self.wir.defined_func_index(i));
                 self.all_branch_hints
                     .push((func_idx, std::mem::take(&mut self.current_branch_hints)));
             }
@@ -757,10 +750,10 @@ impl<'a> WirEmitter<'a> {
         self.current_locals.clear();
         self.next_local = 0;
 
-        // Get function type info — check if it has a non-void return type
-        let has_results = self
-            .get_func_type(func.type_id.index())
-            .is_some_and(|ft| !ft.results.is_empty());
+        let has_results = !self.wir.types[func.type_id.index() as usize]
+            .expect_func()
+            .results
+            .is_empty();
 
         for name in &func.param_names {
             self.current_locals.insert(name.clone(), self.next_local);
@@ -2089,7 +2082,7 @@ impl<'a> WirEmitter<'a> {
             let mut name_map = NameMap::new();
             for (i, func) in self.wir.functions.iter().enumerate() {
                 name_map.append(
-                    self.resolve_func_index(self.defined_func_id(i)),
+                    self.resolve_func_index(self.wir.defined_func_index(i)),
                     &func.name.fq,
                 );
             }
@@ -2305,16 +2298,6 @@ impl<'a> WirEmitter<'a> {
                      the function while leaving a reference to it behind"
                 )
             })
-    }
-
-    fn get_func_type(&self, wir_type_idx: u32) -> Option<&WirFuncType> {
-        let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len()
-            && let WirTypeDef::Func(ref ft) = self.wir.types[idx]
-        {
-            return Some(ft);
-        }
-        None
     }
 
     /// Convert `WirType` to Wasm `ValType` (for locals and function signatures).

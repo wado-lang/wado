@@ -1077,11 +1077,7 @@ impl<'a> WirContext<'a> {
                     }
                 }
 
-                let Some(WirTypeDef::Func(signature)) =
-                    self.types.get(func.type_id.index() as usize)
-                else {
-                    unreachable!("a function's type is a func type");
-                };
+                let signature = self.types[func.type_id.index() as usize].expect_func();
 
                 mod_functions.push(WasmModuleFunc {
                     export_name,

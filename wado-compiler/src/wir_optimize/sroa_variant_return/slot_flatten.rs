@@ -148,13 +148,11 @@ pub(super) fn slot_flatten_candidates(
 ) -> Vec<SlotFlattenCand> {
     let mut out = Vec::new();
     for (i, func) in module.functions.iter().enumerate() {
-        let func_id_index = module.defined_func_base + u32::try_from(i).unwrap();
+        let func_id_index = module.defined_func_index(i);
         if pinned.contains(&func_id_index) || func.body.is_none() {
             continue;
         }
-        let Some(WirTypeDef::Func(ft)) = module.types.get(func.type_id.index() as usize) else {
-            continue;
-        };
+        let ft = module.types[func.type_id.index() as usize].expect_func();
         // Only already-multi-value functions have a `ref W` *slot* to flatten;
         // sole-result `ref W` returns are the province of single-level SROA.
         if ft.results.len() < 2 {
@@ -461,9 +459,7 @@ pub(super) fn apply_slot_flatten(module: &mut WirPackage, confirmed: &[SlotFlatt
     for cand in confirmed {
         let func = &mut module.functions[cand.func_idx];
         let old_type_idx = func.type_id.index() as usize;
-        let WirTypeDef::Func(ft) = &module.types[old_type_idx] else {
-            unreachable!()
-        };
+        let ft = module.types[old_type_idx].expect_func();
         let old_arity = ft.results.len();
         let mut results = ft.results.clone();
         results.splice(

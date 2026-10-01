@@ -11,12 +11,15 @@ use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 pub(super) fn cleanup(module: &mut WirPackage) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            // Remove DeclareLocal for locals that are never used (no LocalGet/LocalSet/LocalTee).
-            eliminate_dead_locals(body);
-            let mut visitor = CleanupVisitor;
-            visitor.visit_body(body);
+            clean_body(body);
         }
     }
+}
+
+pub(super) fn clean_body(body: &mut Vec<WirInstr>) {
+    // Remove DeclareLocal for locals that are never used (no LocalGet/LocalSet/LocalTee).
+    eliminate_dead_locals(body);
+    CleanupVisitor.visit_body(body);
 }
 
 /// Elide the redundant `RefAsNonNull` wrappers `struct_new` adds for

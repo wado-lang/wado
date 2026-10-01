@@ -37,15 +37,12 @@ pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
     // Snapshot variant_case_info so we can identify case structs while mutating functions.
     let vci: IndexMap<u32, (u32, u32)> = module.variant_case_info.clone();
     for func in &mut module.functions {
-        let result_nullable: Vec<bool> =
-            if let WirTypeDef::Func(ft) = &module.types[func.type_id.index() as usize] {
-                ft.results
-                    .iter()
-                    .map(|r| matches!(r, WirType::Ref { nullable: true, .. }))
-                    .collect()
-            } else {
-                Vec::new()
-            };
+        let result_nullable: Vec<bool> = module.types[func.type_id.index() as usize]
+            .expect_func()
+            .results
+            .iter()
+            .map(|r| matches!(r, WirType::Ref { nullable: true, .. }))
+            .collect();
         if let Some(body) = &mut func.body {
             transform_body(body, &module.types, &vci, &nullable_map);
             if result_nullable.iter().any(|&n| n) {
