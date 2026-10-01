@@ -182,6 +182,28 @@ catch bad input. A clamp that returns its input's NaN is what IEEE code expects.
 The exception is stated with `clamp`'s rule, so it does not have to be inferred
 from the order.
 
+### Float patterns
+
+A float literal stays out of patterns, though one equality now gives it a
+meaning. Whether a float equals a literal turns on rounding the source does not
+show: `0.1 + 0.2` is not `0.3`, and an arm `0.3 =>` would miss it. A NaN is the
+smaller problem. Rust admits float literal patterns, matches them by `==`, and
+since 1.77 rejects a NaN constant in one (rust-lang/rust#41620).
+
+A [range pattern](./spec-patterns.md#range-patterns) takes a float, as Rust's
+does. A range is `low <= x` and `x < high` (or `x <= high`), the comparisons an
+`if` chain would write, so rounding moves only a value on a bound, as it does
+for the `if`. Under the float order:
+
+- `-0.0` falls in every range holding `0.0`.
+- A NaN bound is an error, as in Rust. `1.0..=NaN` would match every `+Inf` and
+  NaN, which no reader expects.
+- A NaN scrutinee is greater than every bound and matches no range, as IEEE's
+  comparisons say. A `match` on a float therefore
+  always needs `_`, which makes the NaN case a written one.
+- Equal bounds (`1.0..=1.0`) are an error, since they spell the literal pattern
+  this section refuses.
+
 ### Comparing a value with itself warns
 
 Reflexivity gives every comparison of an expression with itself one answer, on
@@ -247,8 +269,12 @@ Where the optimizer proves an operand is not a NaN, the test goes.
   `x`. Each with a fixture.
 - [ ] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
+- [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
+  NaN bound, equal bounds, and a `match` that lacks `_`.
 
 ## Known gaps
 
-Float literal patterns are rejected, though one equality would give them a
-meaning.
+A float constant pattern is accepted and matches by `==`: `f64::INFINITY`, a
+`global` holding `0.1`, or a struct, tuple or `Option` constant holding a float.
+The rounding that keeps a float literal out of patterns reaches one through a
+constant.

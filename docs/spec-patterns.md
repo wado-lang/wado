@@ -14,7 +14,7 @@ parameters. The statements themselves are in [Control Flow](./spec-control-flow.
 | Mut variable  | `mut x`, `Some(mut x)`       | Binds as mutable                             |
 | Literal       | `0`, `"hello"`, `true`       | Matches exact value                          |
 | Constant      | `MAX_LEN`, `i32::MAX`        | Matches an immutable global / const by value |
-| Range         | `0..<60`, `'a'..='z'`        | Matches an integer or `char` in the range    |
+| Range         | `0..<60`, `'a'..='z'`        | Matches an integer, `char` or float in range |
 | Variant       | `Some(x)`, `None`            | Matches variant case                         |
 | Tuple         | `[a, b, c]`                  | Destructures tuple                           |
 | Nested tuple  | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple        |
@@ -32,6 +32,9 @@ A string-literal pattern tests the scrutinee with `==` against a `String`, so
 any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
 newtype over either. A type parameter bounded by
 [`AsStrSlice`](./spec-standard-traits.md#asstrslice) matches as well.
+
+A float literal is not a pattern. A float matches a
+[range pattern](#range-patterns) instead.
 
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
@@ -241,15 +244,28 @@ let lower = c matches { 'a'..='z' };
 assert grade == "P" && lower;
 ```
 
-- The scrutinee is an integer or `char`.
-- Each bound is an integer, `char` or byte literal, optionally negated, or a
-  primitive type's associated constant such as `i32::MAX`. A user-defined
-  constant is not a bound.
+- The scrutinee is an integer, `char` or float.
+- Each bound is an integer, `char`, byte or float literal, optionally negated,
+  or a primitive type's associated constant such as `i32::MAX` or
+  `f64::INFINITY`. A user-defined constant is not a bound.
 - A reversed range pattern is an error, and so is an empty one (`5..<5`).
 - Two arms' range patterns must not overlap. The alternatives of one arm's
   or-pattern may.
 - Range patterns count toward [exhaustiveness](#exhaustiveness): `0 => …` and
   `1..=255 => …` together cover a `u8`.
+
+A float range compares by the
+[float order](./spec-standard-traits.md#float-comparison), so `0.0..<1.0`
+matches `-0.0`. Two more rules apply to it:
+
+- A NaN bound is an error. A NaN scrutinee therefore matches no range, and a
+  `match` on a float needs a `_` arm. `f64::NEG_INFINITY..=f64::INFINITY`
+  matches every float but a NaN.
+- A range whose bounds are equal (`1.0..=1.0`) is an error, as the float literal
+  it stands for is.
+
+> Not yet implemented: a float range pattern is rejected, as an integer or
+> `char` bound is required.
 
 The range operators themselves are in [Ranges](./spec-expressions.md#ranges).
 
