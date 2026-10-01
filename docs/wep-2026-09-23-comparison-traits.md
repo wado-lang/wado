@@ -199,8 +199,8 @@ for the `if`. Under the float order:
 - A NaN bound is an error, as in Rust. `1.0..=NaN` would match every `+Inf` and
   NaN, which no reader expects.
 - A NaN scrutinee is greater than every bound and matches no range, as IEEE's
-  comparisons say. A `match` on a float therefore
-  always needs `_`, which makes the NaN case a written one.
+  comparisons say. A `match` on a float therefore always needs `_`, which makes
+  the NaN case a written one.
 - Equal bounds (`1.0..=1.0`) are an error, since they spell the literal pattern
   this section refuses.
 
