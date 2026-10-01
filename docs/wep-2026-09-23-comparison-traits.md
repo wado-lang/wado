@@ -78,22 +78,19 @@ reads, and `max<T: Ord>` above answers a NaN differently from the same
 expression at a concrete float.
 
 `min` and `max` take `T: Ord`, and each caller means one order or the other.
-Which they should take is unsettled.
+Which they should take is unsettled. Already `f64::max(1.0, NaN)` is NaN, while
+`Iterator::max` over the same two values reads `Ord` and answers by the NaN's
+sign.
 
 A float's total equality — `cmp` answering `Equal` — is not `==`: it separates
 `-0.0` from `0.0` and calls a NaN equal to itself. A `TreeMap<f32, V>` orders by
 the first and has no way to say so, so nothing states which equality a keyed
-lookup owes.
+lookup owes. A struct holding a float inherits the split: its derived `==`
+calls `P { x: NaN }` unequal to itself while its derived `cmp` answers `Equal`.
 
 `Ord` orders a NaN by its sign bit, and Wasm leaves the sign of an arithmetic
 NaN to the host. On x86_64 `0.0 / 0.0` is a negative NaN and sorts first; on
 AArch64 it is positive and sorts last.
-
-A derived `Ord` and a derived `Eq` disagree on a struct holding a float:
-`P { x: NaN } == P { x: NaN }` is false while `cmp` answers `Equal`.
-
-`f64::max(1.0, NaN)` is NaN, while `Iterator::max` over the same two values
-reads `Ord`, and so answers by the NaN's sign.
 
 `OperatorOrd` is reachable by method syntax nowhere, since a call site cannot
 name it, but `wado doc` lists its impls all the same. That gap is recorded in

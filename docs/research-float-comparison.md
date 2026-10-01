@@ -90,8 +90,8 @@ these paths is satisfactory."
 ### Hiding a NaN in a sort hides a bug
 
 A total order sorts a NaN to one end, and a median taken afterwards is "an
-error that looks like it isn't one". This is the case for the IEEE side: a NaN
-should not pass through code that never asked for it.
+error that looks like it isn't one". This argues for keeping the IEEE operators:
+a NaN should not pass silently through code that never asked for it.
 
 ### Reaching the total order must not slow `<`
 
@@ -108,18 +108,18 @@ would be a third meaning had floats been `Ord`.
 
 ## Other languages
 
-| Language          | `==` / `<`           | What sorts and keys read      | NaN in that order         | `-0` vs `+0`  |
-| ----------------- | -------------------- | ----------------------------- | ------------------------- | ------------- |
-| Rust              | IEEE                 | nothing (`total_cmp` by hand) | split by sign and payload | `-0 < +0`     |
-| C++20             | IEEE (`<=>` partial) | `std::strong_order` by hand   | split by sign and payload | `-0 < +0`     |
-| Java              | IEEE                 | `compareTo`, `equals`         | one value, greatest       | `-0 < +0`     |
-| Kotlin            | IEEE on a float type | `compareTo`, `equals`         | one value, greatest       | `-0 < +0`     |
-| Julia             | IEEE                 | `isless`, `isequal`           | one value, greatest       | `-0 < +0`     |
-| Go                | IEEE                 | `cmp.Compare` for sorts       | one value, least          | equal         |
-| Swift             | IEEE                 | `<` (NaN order unspecified)   | unspecified               | equal         |
-| JavaScript        | IEEE                 | `Map`, `Set`: SameValueZero   | one value                 | equal         |
-| Haskell           | IEEE, `compare` = GT | `compare` (lawless)           | breaks the sort           | equal         |
-| Haskell, proposed | total                | `compare`                     | one value, least          | (not covered) |
+| Language          | `==` / `<`                 | What sorts and keys read      | NaN in that order         | `-0` vs `+0`  |
+| ----------------- | -------------------------- | ----------------------------- | ------------------------- | ------------- |
+| Rust              | IEEE                       | nothing (`total_cmp` by hand) | split by sign and payload | `-0 < +0`     |
+| C++20             | IEEE (`<=>` partial)       | `std::strong_order` by hand   | split by sign and payload | `-0 < +0`     |
+| Java              | IEEE                       | `compareTo`, `equals`         | one value, greatest       | `-0 < +0`     |
+| Kotlin            | IEEE if statically a float | `compareTo`, `equals`         | one value, greatest       | `-0 < +0`     |
+| Julia             | IEEE                       | `isless`, `isequal`           | one value, greatest       | `-0 < +0`     |
+| Go                | IEEE                       | `cmp.Compare` for sorts       | one value, least          | equal         |
+| Swift             | IEEE                       | `<` (NaN order unspecified)   | unspecified               | equal         |
+| JavaScript        | IEEE                       | `Map`, `Set`: SameValueZero   | one value                 | equal         |
+| Haskell           | IEEE, `compare` = GT       | `compare` (lawless)           | breaks the sort           | equal         |
+| Haskell, proposed | total                      | `compare`                     | one value, least          | (not covered) |
 
 Two patterns stand out. Every language keeps the operators IEEE; the one serious
 proposal to change that (Haskell's, by Daniel Fischer) moved IEEE to separate
