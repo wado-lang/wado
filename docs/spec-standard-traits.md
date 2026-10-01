@@ -399,7 +399,17 @@ So a comparison means the same in a body generic over `T: Ord` as at the
 concrete type.
 
 Where a type implements both `Eq` and `Ord`, `a == b` holds exactly when
-`a.cmp(&b)` is `Ordering::Equal`. Derived impls hold this by construction.
+`a.cmp(&b)` is `Ordering::Equal`. An impl the compiler writes holds this by
+construction, since both come from one source
+([Derivation Policy](./spec-traits.md#derivation-policy)).
+
+A type may write both, so that `==` can answer faster than `cmp`, as a length
+check does for a `String`. Nothing proves such a pair agrees. In the
+[`test` world](./spec-worlds.md), each call to either method also computes the
+other and traps if they disagree. A disagreement no test reaches goes
+unreported.
+
+> Not yet implemented: the `test` world does not check a written pair.
 
 Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 

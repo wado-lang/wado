@@ -68,11 +68,41 @@ No type gives an operator a meaning of its own, floats included. A comparison
 in a body generic over `T: Ord` means what it means at the concrete type.
 
 Where a type implements both, `a == b` holds exactly when `a.cmp(&b)` is
-`Equal`. Derived impls hold this by construction, so a struct with a float field
-agrees with itself.
+`Equal`.
 
 The traits keep the names `Eq` and `Ord`. Nothing is `Partial`, and `Ordering`
 keeps its three cases.
+
+### One source for `==` and `cmp`
+
+Rust states the same law and checks it nowhere. Its usual breach is a
+hand-written order beside a derived equality: a `cmp` that skips a cache field,
+and a derived `==` that compares it. Clippy's `derive_ord_xor_partial_ord` lint
+exists because deriving one of the pair and writing the other breaks the law.
+So in Wado the two are independent only where someone writes both:
+
+| Written    | `==` comes from         | `cmp` comes from           |
+| ---------- | ----------------------- | -------------------------- |
+| neither    | the members, derived    | the members, derived       |
+| `cmp` only | `cmp`: equal on `Equal` | the written `cmp`          |
+| `eq` only  | the written `eq`        | nothing: a use is an error |
+| both       | the written `eq`        | the written `cmp`          |
+
+The first three rows cannot disagree. An order cannot be built from an equality,
+so the third row asks for `cmp` rather than deriving one that ignores the
+written `eq`.
+
+The last row exists for speed. `==` on a `String` or a `List` stops at a length
+mismatch, where `cmp` must walk the common prefix. C++20 kept the two apart for
+the same reason: a written `<=>` does not generate `==` (P1185, "`<=>` != `==`").
+
+Nothing proves a written pair agrees, and that risk is accepted. The `test`
+world narrows it: each call to either method also computes the other and traps
+when they disagree. Production code pays nothing. A disagreement surfaces in a
+test rather than as a sort that panics in production, as Rust 1.81's did.
+
+The rule reads `Eq<Self>` only. An `Eq<Rhs>` for another type, such as
+`StrSlice == String`, has no `Ord` beside it to agree with.
 
 ### The float order
 
@@ -161,11 +191,16 @@ Where the optimizer proves an operand is not a NaN, the test goes.
   `half_ieee_compare.wado`) to pin these.
 - [ ] Measure the cost on comparison-heavy code, sorting and Loam's kernels
   among it, and record it here.
+- [ ] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
+  whose `Eq` is written and whose `cmp` is not. Each with a fixture.
+- [ ] In the `test` world, check every call to a written `eq` or `cmp` against
+  the other, with a fixture whose disagreeing pair traps.
 
 ## Known gaps
 
-Nothing checks the law between `Eq` and `Ord` on a hand-written pair, so a user
-type can still make `==` and `cmp` disagree.
+Whether an `Eq<Rhs>` for another type must agree with the type's own `==` is
+not settled. `StrSlice == String` should answer as `String == String` does, and
+nothing says so or checks it.
 
 `f64::min` and `f64::max` lower to Wasm's `min` and `max`, which are IEEE
 754-2019 `minimum` and `maximum`. `f64::min(1.0, NaN)` is NaN, where

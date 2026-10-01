@@ -1022,6 +1022,17 @@ default expression, not that every member satisfy `Default`
 ([Auto-Derivation](./spec-standard-traits.md#auto-derivation)). A `variant`
 derives `Eq` but never `Ord`.
 
+`Eq` and `Ord` on one type come from one source. A type with a written `Ord`
+and no written `Eq` gets its `Eq` from `cmp`, not from its members:
+`a == b` is `a.cmp(&b) == Ordering::Equal`. A type with a written `Eq` derives
+no `Ord`, so a use that needs one is a compile error until `cmp` is written
+too. Only `Eq<Self>` counts here; an `Eq<Rhs>` for another type has no `Ord` to
+agree with. [Ord - Ordering](./spec-standard-traits.md#ord---ordering) says what
+holds when both are written.
+
+> Not yet implemented: a written `Ord` beside no written `Eq` derives `Eq` from
+> the members, and a written `Eq` does not stop `Ord` from deriving.
+
 An on-demand impl is generated only where a use needs it, not for every declared
 type. For `Eq` and `Ord` that use is an operator, a comparison method, or a
 bound; for `Default`, a `T: Default` bound or a `T::default()` call; for serde,
