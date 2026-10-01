@@ -95,7 +95,6 @@ written `eq`.
 The last row exists for speed. `==` on a `String` or a `List` stops at a length
 mismatch, where `cmp` must walk the common prefix. C++20 kept the two apart for
 the same reason: a written `<=>` does not generate `==` (P1185, "`<=>` != `==`").
-
 Nothing proves or checks that a written pair agrees, and that risk is accepted.
 
 The rule reads `Eq<Self>` only. An `Eq<Rhs>` for another type, such as
@@ -103,8 +102,8 @@ The rule reads `Eq<Self>` only. An `Eq<Rhs>` for another type, such as
 to the type's own `==`. Only `==` and a string literal pattern read it: `sort`,
 `TreeMap` and `contains` read `Eq<Self>` and `Ord`.
 
-`AsStrSlice` gets no exception, though it requires `Eq<String>`. A type whose `Eq<String>` is not byte equality, such as
-a case-insensitive string, answers `x == s` one way while `contains_str(x)` and
+`AsStrSlice` gets no exception, though it requires `Eq<String>`. A type whose
+`Eq<String>` is not byte equality, such as a case-insensitive string, answers `x == s` one way while `contains_str(x)` and
 `get_str(x)`, which compare the bytes of `as_str_slice()`, answer the other.
 Such a type keeps its own equality in its `Ord`, and does not claim to be text
 by implementing `AsStrSlice`.
