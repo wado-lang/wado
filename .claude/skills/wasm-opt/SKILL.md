@@ -15,7 +15,7 @@ binaryen is not in the mise registry, and mise's `github:` backend gets a 403
 from the GitHub API in a cloud session. Download the release tarball instead:
 
 ```sh
-S=<scratchpad>
+S=$(mktemp -d)
 curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C $S
 B=$S/binaryen-version_133/bin
 ```
