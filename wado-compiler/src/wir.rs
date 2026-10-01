@@ -532,6 +532,16 @@ pub enum WirTypeDef {
     Func(WirFuncType),
 }
 
+impl WirTypeDef {
+    /// The signature, for the type a function's `type_id` names.
+    pub fn expect_func(&self) -> &WirFuncType {
+        let Self::Func(func_type) = self else {
+            unreachable!("a function's type is a func type");
+        };
+        func_type
+    }
+}
+
 /// A struct type with named fields.
 #[derive(Debug)]
 pub struct WirStructType {

@@ -750,10 +750,10 @@ impl<'a> WirEmitter<'a> {
         self.current_locals.clear();
         self.next_local = 0;
 
-        // Get function type info — check if it has a non-void return type
-        let has_results = self
-            .get_func_type(func.type_id.index())
-            .is_some_and(|ft| !ft.results.is_empty());
+        let has_results = !self.wir.types[func.type_id.index() as usize]
+            .expect_func()
+            .results
+            .is_empty();
 
         for name in &func.param_names {
             self.current_locals.insert(name.clone(), self.next_local);
@@ -2300,15 +2300,6 @@ impl<'a> WirEmitter<'a> {
             })
     }
 
-    fn get_func_type(&self, wir_type_idx: u32) -> Option<&WirFuncType> {
-        let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len()
-            && let WirTypeDef::Func(ref ft) = self.wir.types[idx]
-        {
-            return Some(ft);
-        }
-        None
-    }
 
     /// Convert `WirType` to Wasm `ValType` (for locals and function signatures).
     fn wir_type_to_val_type(&self, ty: &WirType) -> ValType {

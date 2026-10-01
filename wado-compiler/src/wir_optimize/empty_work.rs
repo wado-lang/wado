@@ -6,15 +6,15 @@
 //! which drops the functions and the flag this leaves unreferenced.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirExportDesc, WirInstr, WirPackage};
+use crate::wir::{WirExportDesc, WirFunction, WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
 use super::cleanup::clean_body;
 use super::nullability::Nullability;
 use super::util::{is_side_effect_free, may_trap_in};
 
-/// Remove every call to a defined function whose body is empty, keeping what
-/// its arguments do, and every once-guard whose flag nothing else reads.
+/// Remove every call to a defined function that does nothing, keeping what its
+/// arguments do, and every once-guard whose flag nothing else reads.
 /// Either can empty a function in turn, so this runs to a fixpoint.
 pub(super) fn elide_empty_work(module: &mut WirPackage) {
     while elide_calls_to_empty_functions(module) | remove_dead_once_guards(module) {}
@@ -25,7 +25,7 @@ fn elide_calls_to_empty_functions(module: &mut WirPackage) -> bool {
         .functions
         .iter()
         .enumerate()
-        .filter(|(_, func)| func.body.as_ref().is_some_and(Vec::is_empty))
+        .filter(|(_, func)| does_nothing(module, func))
         .map(|(position, _)| module.defined_func_index(position))
         .collect();
     if empty.is_empty() {
@@ -46,10 +46,24 @@ fn elide_calls_to_empty_functions(module: &mut WirPackage) -> bool {
             null: &Nullability::new(&locals),
         }
         .visit_body(body);
+        assert!(
+            !body.iter().any(|instr| holds_call_into(instr, &empty)),
+            "a call returning nothing stands only as a statement of a body, which the elider reaches",
+        );
         clean_body(body);
         changed = true;
     }
     changed
+}
+
+/// Emit ends a function with results in `unreachable`, so an empty body does
+/// nothing only where the function returns nothing.
+fn does_nothing(module: &WirPackage, func: &WirFunction) -> bool {
+    func.body.as_ref().is_some_and(Vec::is_empty)
+        && module.types[func.type_id.index() as usize]
+            .expect_func()
+            .results
+            .is_empty()
 }
 
 fn is_call_into(instr: &WirInstr, empty: &IndexSet<u32>) -> bool {
@@ -62,8 +76,6 @@ fn holds_call_into(instr: &WirInstr, empty: &IndexSet<u32>) -> bool {
     found
 }
 
-/// A call to an empty function returns nothing, so it only ever stands as a
-/// statement of a body.
 struct EmptyCallElider<'a> {
     empty: &'a IndexSet<u32>,
     null: &'a Nullability<'a>,
@@ -201,7 +213,10 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use crate::wir::{WirFuncId, WirFunction, WirLocals, WirMeta, WirName, WirType, WirTypeId};
+    use crate::wir::{
+        WirFuncId, WirFuncType, WirFunction, WirLocals, WirMeta, WirName, WirType, WirTypeDef,
+        WirTypeId,
+    };
 
     fn func(name: &str, body: Vec<WirInstr>) -> WirFunction {
         WirFunction {
@@ -228,8 +243,20 @@ mod tests {
         }
     }
 
+    const RETURNS_I32: u32 = 1;
+
+    fn func_type(results: Vec<WirType>) -> WirTypeDef {
+        WirTypeDef::Func(WirFuncType {
+            name: WirName { fq: "t".into() },
+            params: Vec::new(),
+            results,
+        })
+    }
+
+    /// Type 0 returns nothing and type [`RETURNS_I32`] an `i32`.
     fn package(functions: Vec<WirFunction>) -> WirPackage {
         let mut module = WirPackage::empty();
+        module.types = vec![func_type(Vec::new()), func_type(vec![WirType::I32])];
         module.functions = functions;
         module
     }
@@ -290,6 +317,21 @@ mod tests {
         assert!(matches!(
             module.functions[2].body.as_ref().unwrap().as_slice(),
             [WirInstr::Unreachable]
+        ));
+    }
+
+    #[test]
+    fn an_empty_function_with_results_traps_so_its_calls_stay() {
+        let mut traps = func("traps", Vec::new());
+        traps.type_id = WirTypeId::new(RETURNS_I32, Rc::from("t"));
+        let mut module = package(vec![
+            traps,
+            func("caller", vec![WirInstr::Drop(Box::new(call(0, Vec::new())))]),
+        ]);
+        elide_empty_work(&mut module);
+        assert!(matches!(
+            module.functions[1].body.as_ref().unwrap().as_slice(),
+            [WirInstr::Drop(c)] if matches!(**c, WirInstr::Call { .. })
         ));
     }
 
