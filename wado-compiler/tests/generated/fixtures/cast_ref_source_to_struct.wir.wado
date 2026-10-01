@@ -66,128 +66,28 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:cast_ref_source_to_struct.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(32);
 
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/cast_ref_source_to_struct.wir.wado
 fn "cast_ref_source_to_struct.wado/run"() with Stdout {
     let $local_5: ref "core:prelude/string.wado//String";
-    let handle: i32;
     let new_used: i32;
     let start_31: i32;
-||||||| c7490af3c7:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
-fn "cast_unsettled_source_to_struct.wado/run"() with Stdout {
-    let $local_7: ref "core:prelude/string.wado//String";
-    let handle: i32;
-    let new_used_34: i32;
-    let start_35: i32;
-    let new_used_52: i32;
-    let start_53: i32;
-    let new_used_70: i32;
-    let start_71: i32;
-=======
-fn "cast_unsettled_source_to_struct.wado/run"() with Stdout {
-    let $local_7: ref "core:prelude/string.wado//String";
-    let new_used_34: i32;
-    let start_35: i32;
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
     let packed: i64;
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/cast_ref_source_to_struct.wir.wado
-    let rx_39: i32;
-    let tx_40: i32;
     let $sroa_$f_buf_59: ref "core:prelude/string.wado//String";
-    $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $sroa_$f_buf_59 = $local_5;
+    $sroa_$f_buf_59 = local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_59);
-    new_used = $local_5.used + 1;
-    if @unlikely(new_used > builtin::array_len($local_5.repr)) {
-||||||| c7490af3c7:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
-    let rx_79: i32;
-    let tx_80: i32;
-    let $sroa_$f_buf_103: ref "core:prelude/string.wado//String";
-    $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(67), used: 0 };
-    $sroa_$f_buf_103 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_103);
-    new_used_34 = $local_7.used + 1;
-    if @unlikely(new_used_34 > builtin::array_len($local_7.repr)) {
-=======
-    let $sroa_$f_buf_103: ref "core:prelude/string.wado//String";
-    $sroa_$f_buf_103 = local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(67), used: 0 });
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_103);
-    if @unlikely(local.tee new_used_34($local_7.used + 1) > builtin::array_len($local_7.repr)) {
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
+    if @unlikely(local.tee new_used($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used);
     }
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/cast_ref_source_to_struct.wir.wado
     start_31 = $local_5.used;
     $local_5.used = new_used;
     builtin::array_copy<u8>($local_5.repr, start_31, global:cast_ref_source_to_struct.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_59 = $local_5;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_59);
-    rx_39 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_40 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "cast_ref_source_to_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_39);
-    "core:rt/write_string_to_stream"(tx_40, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
-||||||| c7490af3c7:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
-    start_35 = $local_7.used;
-    $local_7.used = new_used_34;
-    builtin::array_copy<u8>($local_7.repr, start_35, global:cast_unsettled_source_to_struct.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_103 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_103);
-    new_used_52 = $local_7.used + 1;
-    if @unlikely(new_used_52 > builtin::array_len($local_7.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_52);
-    }
-    start_53 = $local_7.used;
-    $local_7.used = new_used_52;
-    builtin::array_copy<u8>($local_7.repr, start_53, global:cast_unsettled_source_to_struct.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_103 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $sroa_$f_buf_103);
-    new_used_70 = $local_7.used + 1;
-    if @unlikely(new_used_70 > builtin::array_len($local_7.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_70);
-    }
-    start_71 = $local_7.used;
-    $local_7.used = new_used_70;
-    builtin::array_copy<u8>($local_7.repr, start_71, global:cast_unsettled_source_to_struct.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_103 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(3, $sroa_$f_buf_103);
-    rx_79 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_80 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "cast_unsettled_source_to_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_79);
-    "core:rt/write_string_to_stream"(tx_80, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
-=======
-    start_35 = $local_7.used;
-    $local_7.used = new_used_34;
-    builtin::array_copy<u8>($local_7.repr, start_35, global:cast_unsettled_source_to_struct.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_103 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_103);
-    if @unlikely(local.tee start_35($local_7.used + 1) > builtin::array_len($local_7.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, start_35);
-    }
-    new_used_34 = $local_7.used;
-    $local_7.used = start_35;
-    builtin::array_copy<u8>($local_7.repr, new_used_34, global:cast_unsettled_source_to_struct.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_103 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $sroa_$f_buf_103);
-    if @unlikely(local.tee new_used_34($local_7.used + 1) > builtin::array_len($local_7.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_34);
-    }
-    start_35 = $local_7.used;
-    $local_7.used = new_used_34;
-    builtin::array_copy<u8>($local_7.repr, start_35, global:cast_unsettled_source_to_struct.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_103 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(3, $sroa_$f_buf_103);
-    start_35 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    new_used_34 = builtin::i32_wrap_i64(packed >> 32_i64);
-    start_35 = "cast_unsettled_source_to_struct.wado/$cm_binding__Stdout_write_via_stream"(start_35);
-    "core:rt/write_string_to_stream"(new_used_34, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_35);
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
+    start_31 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    new_used = builtin::i32_wrap_i64(packed >> 32_i64);
+    start_31 = "cast_ref_source_to_struct.wado/$cm_binding__Stdout_write_via_stream"(start_31);
+    "core:rt/write_string_to_stream"(new_used, $local_5.repr, $local_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_31);
 }
 
 fn "cast_ref_source_to_struct.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -281,19 +181,9 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/cast_ref_source_to_struct.wir.wado
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b22: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b22: block {
         l23: loop {
-            break_if b22 i >= len_2;
-||||||| c7490af3c7:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b24: block {
-        l25: loop {
-            break_if b24 i >= len_2;
-=======
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b24: block {
-        l25: loop {
-            break_if b24 i >= $mv$data$end;
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
+            break_if b22 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l23;
@@ -301,30 +191,12 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/cast_ref_source_to_struct.wir.wado
         l25: loop {
-            ptr_15 = ptr_3 + taken;
-            count_16 = len_2 - taken;
-            result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
-            if result == -1 {
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
-||||||| c7490af3c7:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
-        l27: loop {
-            ptr_15 = ptr_3 + taken;
-            count_16 = len_2 - taken;
-            result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
-            if result == -1 {
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
-=======
-        l27: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
                 $mv$data$start = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, $mv$data$start);
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
                 evt_ptr = "mem/realloc"(0, 0, 4, 8);
                 drop("wasi/waitable-set-wait"($mv$data$start, evt_ptr));
                 status_23 = builtin::load_i32(evt_ptr + 4);
@@ -398,28 +270,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     arr = f.repr;
     is_negative = is_negative + self;
     i = 0;
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/cast_ref_source_to_struct.wir.wado
     b34: block {
         l35: loop {
-            break_if b34 i >= digit_count_4;
-            pos = pos - 1;
-            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
-            t = t /u 10_i64;
-||||||| c7490af3c7:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
-    b36: block {
-        l37: loop {
-            break_if b36 i >= digit_count_4;
-            pos = pos - 1;
-            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
-            t = t /u 10_i64;
-=======
-    b36: block {
-        l37: loop {
-            break_if b36 i >= self;
+            break_if b34 i >= self;
             is_negative = is_negative - 1;
             builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
             x = x /u 10_i64;
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/cast_unsettled_source_to_struct.wir.wado
             i = i + 1;
             continue l35;
         };
