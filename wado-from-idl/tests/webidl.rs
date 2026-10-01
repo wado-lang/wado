@@ -285,6 +285,33 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
             )],
             "",
         ),
+        // A number is read by WebIDL's grammar, where a leading `0` is octal
+        // and a float may start or end at its `.`, and written in Wado's.
+        operation(
+            "setMode",
+            &plain("undefined"),
+            &[
+                argument(
+                    "mode",
+                    &plain("long"),
+                    true,
+                    r#"{"type": "number", "value": "-0755"}"#,
+                ),
+                argument(
+                    "ratio",
+                    &plain("double"),
+                    true,
+                    r#"{"type": "number", "value": ".5"}"#,
+                ),
+                argument(
+                    "scale",
+                    &plain("double"),
+                    true,
+                    r#"{"type": "number", "value": "5."}"#,
+                ),
+            ],
+            "",
+        ),
         operation(
             "open",
             &plain("undefined"),
@@ -332,7 +359,11 @@ fn an_optional_argument_takes_its_webidl_default_or_null() {
         ),
         "{code}"
     );
-    assert!(code.contains("fn step_up(&self, n: i32 = 0xFF);"), "{code}");
+    assert!(code.contains("fn step_up(&self, n: i32 = 255);"), "{code}");
+    assert!(
+        code.contains("fn set_mode(&self, mode: i32 = -493, ratio: f64 = 0.5, scale: f64 = 5.0);"),
+        "{code}"
+    );
     assert!(
         code.contains(r#"fn open(&self, target: String = "_\"blank\\");"#),
         "{code}"

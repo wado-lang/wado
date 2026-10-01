@@ -919,16 +919,19 @@ fn optional(ty: WadoType, wrap: bool) -> WadoType {
     }
 }
 
-/// An optional argument's type and default. A WebIDL default `ty` can spell is
+/// An optional argument's type and default. A `WebIDL` default `ty` can spell is
 /// written out; any other is `None`, which crosses as `undefined`, so the
 /// browser applies its own default. A callback has no default to write.
 fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType, Option<String>) {
     let written = match (default, &ty) {
         (Some(DefaultValue::Boolean { value }), WadoType::Bool) => Some(value.to_string()),
+        (Some(DefaultValue::Number { value }), WadoType::F32 | WadoType::F64) => {
+            Some(format!("{:?}", float_value(value)))
+        }
         (Some(DefaultValue::Number { value }), ty)
             if ty.primitive_name().is_some() && !matches!(ty, WadoType::Bool | WadoType::Char) =>
         {
-            Some(value.clone())
+            Some(integer_value(value).to_string())
         }
         (Some(DefaultValue::String { value }), WadoType::String) => Some(string_literal(value)),
         _ => None,
@@ -937,6 +940,38 @@ fn optional_argument(ty: WadoType, default: Option<&DefaultValue>) -> (WadoType,
         (Some(written), ty) => (ty, Some(written)),
         (None, ty @ WadoType::Callback { .. }) => (ty, None),
         (None, ty) => (optional(ty, true), Some("null".to_string())),
+    }
+}
+
+/// A `WebIDL` `integer` token's value: a leading `0` is octal, unlike in Wado.
+fn integer_value(token: &str) -> i128 {
+    let (negative, digits) = match token.strip_prefix('-') {
+        Some(digits) => (true, digits),
+        None => (false, token),
+    };
+    let magnitude = if let Some(hex) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
+        i128::from_str_radix(hex, 16)
+    } else if digits.len() > 1 && digits.starts_with('0') {
+        i128::from_str_radix(&digits[1..], 8)
+    } else {
+        digits.parse()
+    }
+    .unwrap_or_else(|e| panic!("WebIDL integer `{token}`: {e}"));
+    if negative { -magnitude } else { magnitude }
+}
+
+/// A `WebIDL` `float` or `integer` token's value. A float may start or end at
+/// its `.`, which Wado does not admit.
+fn float_value(token: &str) -> f64 {
+    if token.contains(['.', 'e', 'E']) && !token.contains(['x', 'X']) {
+        token
+            .parse()
+            .unwrap_or_else(|e| panic!("WebIDL float `{token}`: {e}"))
+    } else {
+        integer_value(token) as f64
     }
 }
 
