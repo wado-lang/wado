@@ -16,7 +16,8 @@
 // of.
 //
 // All four helpers splice into `run`, so every run is checked on `run`'s own
-// locals (`buf_0`, `s_2`). `dynamic`'s group split survives that: the fusion
+// locals. `buf_0` is dead once printed, so `s` takes its slot, and
+// `self_append`'s check reads `buf_0`. `dynamic`'s group split survives that: the fusion
 // runs before `inline`, so `name` was still a parameter when it opened the
 // second group. `constant` reserves once, ending at used 6; `dynamic` reserves
 // twice, ending at 7 and then 12.
@@ -73,7 +74,7 @@ __DATA__
         "local.tee new_used_{}(buf_0.used + 56) > ",
         "builtin::array_copy<u8>($load_{}, start_{} + 1, global:opt_string_append_fuse.wado::$const_obj_{}, 0, 54);",
         "builtin::array_set_u8($load_{}, start_{} + 55, 62);",
-        "builtin::array_copy<u8>(local.tee $load_{}(s_2.repr), start_{}, $load_{}, 0, 3);"
+        "builtin::array_copy<u8>(local.tee $load_{}(buf_0.repr), i, $load_{}, 0, 3);"
     ],
     "wir_not_expect:O2": [
         "String::push_str\"(",

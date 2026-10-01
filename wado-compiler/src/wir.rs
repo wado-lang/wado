@@ -933,6 +933,11 @@ impl WirLocals {
         instr.for_each_child(&mut |child| Self::scan_instr(child, types));
     }
 
+    /// The type `name` is declared at, if it is a declared local.
+    pub fn get(&self, name: &str) -> Option<&WirType> {
+        self.types.get(name)
+    }
+
     /// Whether `name` is declared with a non-null reference type.
     pub fn is_nonnull_ref(&self, name: &str) -> bool {
         self.types.get(name).is_some_and(WirType::is_nonnull_ref)

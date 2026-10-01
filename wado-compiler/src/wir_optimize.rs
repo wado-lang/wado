@@ -13,6 +13,7 @@ mod dce;
 mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
+mod local_coalesce;
 mod local_layout;
 mod local_nullability;
 mod nullability;
@@ -40,6 +41,7 @@ use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
 use elide_local::elide_write_only_locals;
 use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments, unwrap_box_locals};
+use local_coalesce::coalesce_locals;
 use local_layout::lay_out_locals;
 use local_nullability::relax_unset_nonnull_locals;
 use nullable_ref::lower_nullable_refs;
@@ -279,8 +281,13 @@ fn optimize_scoped(
     dce::compact_dead_items(module);
     profiler.span_end(&scope.name("phase8_dce_compact"));
 
-    // Phase 9: settle the locals. Tee fusion comes last: a tee hides the copy
-    // it replaces from every pass before it.
+    // Phase 9: settle the locals. Coalescing turns a copy between two merged
+    // locals into a self-copy it drops, and leaves set-then-get pairs across
+    // them. Tee fusion comes last: a tee hides the copy it replaces from every
+    // pass before it.
+    wir_pass(scope, "coalesce_locals", module, profiler, |m| {
+        coalesce_locals(m);
+    });
     wir_pass(scope, "fuse_remaining_local_tees", module, profiler, |m| {
         peephole::fuse_remaining_local_tees(m);
     });

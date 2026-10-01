@@ -95,7 +95,11 @@ come from Wado's `-O2` build:
 - [x] Set-then-get: a `local.set X` followed at once by `local.get X` occurred
   1,191 times. wasm-opt turns it into a `local.tee` or removes it. The last WIR
   pass fuses each pair into a tee (`fuse_remaining_local_tees`), and copy
-  propagation removes a copy of a tee'd local. That leaves 46.
+  propagation removes a copy of a tee'd local. On the `-Os` build that leaves
+  46.
+- [x] Local coalescing: wasm-opt merges locals whose live ranges never overlap,
+  as a register allocator would. `wir_optimize/local_coalesce.rs` does the
+  same per exact type. On the `-Os` build it takes 2,752 locals to 1,063.
 - [ ] Identical functions: `deflate_raw` equals `deflate_raw$spec0` and
   `zlib_wrap` equals `zlib_wrap$spec0`. The outlined `$cold0` bounds-check
   paths of `List<T>::index_value` and `index_assign` repeat once per element
