@@ -326,7 +326,10 @@ mod tests {
         traps.type_id = WirTypeId::new(RETURNS_I32, Rc::from("t"));
         let mut module = package(vec![
             traps,
-            func("caller", vec![WirInstr::Drop(Box::new(call(0, Vec::new())))]),
+            func(
+                "caller",
+                vec![WirInstr::Drop(Box::new(call(0, Vec::new())))],
+            ),
         ]);
         elide_empty_work(&mut module);
         assert!(matches!(

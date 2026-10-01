@@ -2300,7 +2300,6 @@ impl<'a> WirEmitter<'a> {
             })
     }
 
-
     /// Convert `WirType` to Wasm `ValType` (for locals and function signatures).
     fn wir_type_to_val_type(&self, ty: &WirType) -> ValType {
         if let Some(kind) = ty.scalar_kind() {
