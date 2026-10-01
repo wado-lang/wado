@@ -218,10 +218,9 @@ The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
 type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
 `Option` constant matches at the top of an arm or nested in another pattern.
 
-A constant whose type is a float, or holds one in a field, element or payload at
-any depth, is not a pattern, as a float literal is not. So `f64::INFINITY` and a
-`global` holding `0.1` are errors here, and so is a struct constant with an
-`f64` field.
+A constant is not a pattern when its type is a float or holds one, in a field,
+element or payload at any depth. So `f64::INFINITY`, a `global` holding `0.1`,
+and a struct constant with an `f64` field are errors here.
 
 > Not yet implemented: a float constant pattern is accepted and matches by
 > `==`.
