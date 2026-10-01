@@ -928,15 +928,33 @@ impl<'a> Lexer<'a> {
             match self.peek_char() {
                 Some('x' | 'X') => {
                     self.advance();
-                    return self.lex_hex_number(start, start_line, start_column);
+                    return self.lex_radix_number(
+                        start,
+                        start_line,
+                        start_column,
+                        |ch| ch.is_ascii_hexdigit(),
+                        LexErrorKind::MissingHexDigits,
+                    );
                 }
                 Some('b' | 'B') => {
                     self.advance();
-                    return self.lex_binary_number(start, start_line, start_column);
+                    return self.lex_radix_number(
+                        start,
+                        start_line,
+                        start_column,
+                        |ch| matches!(ch, '0' | '1'),
+                        LexErrorKind::MissingBinaryDigits,
+                    );
                 }
                 Some('o' | 'O') => {
                     self.advance();
-                    return self.lex_octal_number(start, start_line, start_column);
+                    return self.lex_radix_number(
+                        start,
+                        start_line,
+                        start_column,
+                        |ch| ('0'..='7').contains(&ch),
+                        LexErrorKind::MissingOctalDigits,
+                    );
                 }
                 _ => {
                     // Continue with decimal (could be 0, 0.5, etc.)
@@ -1044,16 +1062,20 @@ impl<'a> Lexer<'a> {
         TokenKind::NumberLit(text)
     }
 
-    fn lex_hex_number(
+    /// Lex the digits of a hex, binary or octal literal after its prefix. With
+    /// no digit there is no literal to suffix, so what follows lexes on its own.
+    fn lex_radix_number(
         &mut self,
         start: usize,
         start_line: usize,
         start_column: usize,
+        is_digit: fn(char) -> bool,
+        missing_digits: LexErrorKind,
     ) -> TokenKind {
         let digit_start = self.pos;
 
         while let Some((_, ch)) = self.peek() {
-            if ch.is_ascii_hexdigit() || ch == '_' {
+            if is_digit(ch) || ch == '_' {
                 self.advance();
             } else {
                 break;
@@ -1062,61 +1084,10 @@ impl<'a> Lexer<'a> {
 
         if self.pos == digit_start {
             self.errors.push(LexError {
-                kind: LexErrorKind::MissingHexDigits,
+                kind: missing_digits,
                 span: self.span_from(start, start_line, start_column),
             });
-        }
-
-        self.finish_number(start, start_line, start_column)
-    }
-
-    fn lex_binary_number(
-        &mut self,
-        start: usize,
-        start_line: usize,
-        start_column: usize,
-    ) -> TokenKind {
-        let digit_start = self.pos;
-
-        while let Some((_, ch)) = self.peek() {
-            if ch == '0' || ch == '1' || ch == '_' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-
-        if self.pos == digit_start {
-            self.errors.push(LexError {
-                kind: LexErrorKind::MissingBinaryDigits,
-                span: self.span_from(start, start_line, start_column),
-            });
-        }
-
-        self.finish_number(start, start_line, start_column)
-    }
-
-    fn lex_octal_number(
-        &mut self,
-        start: usize,
-        start_line: usize,
-        start_column: usize,
-    ) -> TokenKind {
-        let digit_start = self.pos;
-
-        while let Some((_, ch)) = self.peek() {
-            if ('0'..='7').contains(&ch) || ch == '_' {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-
-        if self.pos == digit_start {
-            self.errors.push(LexError {
-                kind: LexErrorKind::MissingOctalDigits,
-                span: self.span_from(start, start_line, start_column),
-            });
+            return TokenKind::NumberLit(self.input[start..self.pos].to_string());
         }
 
         self.finish_number(start, start_line, start_column)
