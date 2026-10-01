@@ -264,21 +264,12 @@ fn test_bool_casts() {
     // bool → i64 (zero-extend)
     assert t as i64 == 1 as i64;
     assert f as i64 == 0 as i64;
-
-    // bool → f64 (unsigned convert)
-    assert t as f64 == 1.0;
-    assert f as f64 == 0.0;
-
-    // bool → f32 (unsigned convert)
-    let tf = t as f32;
-    assert tf as f64 == 1.0;
 }
 
 fn test_same_size_reinterpret() {
-    // i32 → u32 (noop)
+    // i32 → u32 transmutes
     let neg: i32 = -1;
     let u = neg as u32;
-    // -1 as u32 reinterprets bit pattern
     assert u as i32 == -1;
 
     // i32 → i8 (truncate + sign-extend)

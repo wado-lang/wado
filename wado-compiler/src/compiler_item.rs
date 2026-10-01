@@ -703,6 +703,24 @@ pub enum CompilerItem {
     CmWaitableJoin,
     /// `core:rt::cm_waitable_set_poll`.
     CmWaitableSetPoll,
+    /// `core:rt::f16_widen` — the exact `f32`; lowers `f16 as T`.
+    F16Widen,
+    /// `core:rt::bf16_widen` — the exact `f32`; lowers `bf16 as T`.
+    Bf16Widen,
+    /// `core:rt::f16_from_f64` — rounds once; lowers `as f16` from every
+    /// other number.
+    F16FromF64,
+    /// `core:rt::bf16_from_f64` — rounds once; lowers `as bf16` from a float
+    /// and from an integer `f64` holds exactly.
+    Bf16FromF64,
+    /// `core:rt::bf16_from_i64` — rounds once; lowers `i64 as bf16`.
+    Bf16FromI64,
+    /// `core:rt::bf16_from_u64` — rounds once; lowers `u64 as bf16`.
+    Bf16FromU64,
+    /// `core:rt::bf16_from_i128` — rounds once; lowers `i128 as bf16`.
+    Bf16FromI128,
+    /// `core:rt::bf16_from_u128` — rounds once; lowers `u128 as bf16`.
+    Bf16FromU128,
 
     // ── Type families ─────────────────────────────────────────────────
     /// The tuple type family (`pub type [..T];`). The owning module is
@@ -942,6 +960,14 @@ impl CompilerItem {
         Self::CmWaitableSetWait,
         Self::CmWaitableJoin,
         Self::CmWaitableSetPoll,
+        Self::F16Widen,
+        Self::Bf16Widen,
+        Self::F16FromF64,
+        Self::Bf16FromF64,
+        Self::Bf16FromI64,
+        Self::Bf16FromU64,
+        Self::Bf16FromI128,
+        Self::Bf16FromU128,
         Self::Tuple,
         Self::Array,
     ];
@@ -1121,6 +1147,14 @@ impl CompilerItem {
             Self::CmWaitableSetWait => "cm_waitable_set_wait",
             Self::CmWaitableJoin => "cm_waitable_join",
             Self::CmWaitableSetPoll => "cm_waitable_set_poll",
+            Self::F16Widen => "f16_widen",
+            Self::Bf16Widen => "bf16_widen",
+            Self::F16FromF64 => "f16_from_f64",
+            Self::Bf16FromF64 => "bf16_from_f64",
+            Self::Bf16FromI64 => "bf16_from_i64",
+            Self::Bf16FromU64 => "bf16_from_u64",
+            Self::Bf16FromI128 => "bf16_from_i128",
+            Self::Bf16FromU128 => "bf16_from_u128",
             Self::ReflectVariantDiscriminant => "reflect_variant_discriminant",
             Self::ReflectVariantMembers => "reflect_variant_members",
             Self::ReflectEnumDiscriminant => "reflect_enum_discriminant",
@@ -1228,6 +1262,14 @@ impl CompilerItem {
             | Self::CmWaitableSetWait
             | Self::CmWaitableJoin
             | Self::CmWaitableSetPoll
+            | Self::F16Widen
+            | Self::Bf16Widen
+            | Self::F16FromF64
+            | Self::Bf16FromF64
+            | Self::Bf16FromI64
+            | Self::Bf16FromU64
+            | Self::Bf16FromI128
+            | Self::Bf16FromU128
             | Self::Add
             | Self::Sub
             | Self::Mul
@@ -1503,7 +1545,15 @@ impl CompilerItem {
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
             | Self::CmWaitableJoin
-            | Self::CmWaitableSetPoll => CompilerItemKind::Function,
+            | Self::CmWaitableSetPoll
+            | Self::F16Widen
+            | Self::Bf16Widen
+            | Self::F16FromF64
+            | Self::Bf16FromF64
+            | Self::Bf16FromI64
+            | Self::Bf16FromU64
+            | Self::Bf16FromI128
+            | Self::Bf16FromU128 => CompilerItemKind::Function,
             Self::List
             | Self::TreeMap
             | Self::MapEntriesIter

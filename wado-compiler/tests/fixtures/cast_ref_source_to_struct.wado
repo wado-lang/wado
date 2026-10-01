@@ -1,0 +1,22 @@
+// A reference source reads through to its base, so it casts into a struct the
+// base shares a representation with.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    x: i32,
+}
+
+type Q = P;
+
+export fn run() with Stdout {
+    let mut p = P { x: 1 };
+    let r = &p;
+    let a = r as P;
+    let m = &mut p;
+    let b = m as Q;
+    println(`${a.x} ${b.x}`);
+}
+
+__DATA__
+{"stdout": "1 1\n"}

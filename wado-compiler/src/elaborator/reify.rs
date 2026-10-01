@@ -51,9 +51,7 @@ use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_nam
 use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
-use crate::elaborator::expr::{
-    compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
-};
+use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
@@ -68,8 +66,7 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    is_float_only_literal, parse_i128_literal, parse_int_bits, parse_u128_literal,
-    range_endpoint_to_i128,
+    parse_i128_literal, parse_int_bits, parse_u128_literal, range_endpoint_to_i128,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -286,14 +283,7 @@ fn read_through_for_cast(tt: &TypeTable, operand: TirExpr, target: tir::TypeId) 
 /// one.
 fn cast_to_newtype(built: TirExpr, newtype_cast_to: Option<tir::TypeId>, span: Span) -> TirExpr {
     match newtype_cast_to {
-        Some(target_type) => TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(built),
-                target_type,
-            },
-            target_type,
-            span,
-        ),
+        Some(target_type) => bare_cast(built, target_type, span),
         None => built,
     }
 }
@@ -906,7 +896,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 bounds: p.real_bounds().iter().map(|b| b.name.clone()).collect(),
                 default: None,
                 index: index as u32,
-                projected_from: None,
+                projected: false,
             })
             .collect()
     }
@@ -2680,57 +2670,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let target_type = self
                     .ann_expression_types(cast.id)
                     .unwrap_or(TypeTable::ERROR);
-                // Mirrors `Elaborator::resolve_cast`'s int128 branch.
-                if let Some(tir) = self.try_reify_int128_literal_cast(cast, target_type) {
-                    return tir;
-                }
-                // annotate types a direct literal operand as the target but not
-                // one under a `Neg`: `-9e15 as i64` would truncate as `i32.const`.
-                let numeric_target = self.tysys.type_table.borrow().is_numeric(target_type);
-                let inner = match int_literal_cast_operand(&cast.expr) {
-                    Some((lit, _, negated)) if numeric_target => {
-                        let lit_tir = self.reify_literal(lit, target_type, ctx);
-                        if negated {
-                            TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Neg,
-                                    expr: Box::new(lit_tir),
-                                },
-                                target_type,
-                                span,
-                            )
-                        } else {
-                            lit_tir
-                        }
-                    }
-                    _ => self.reify_expr(&cast.expr, ctx, None),
-                };
+                let inner = self.reify_expr(&cast.expr, ctx, None);
                 let inner =
                     read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
-                let inner = match self.lower_int128_cast(inner, target_type, span) {
-                    ControlFlow::Break(lowered) => return lowered,
-                    ControlFlow::Continue(inner) => inner,
-                };
-                let (from_handle, to_handle) = {
-                    let tt = self.tysys.type_table.borrow();
-                    (
-                        tt.is_unrestricted_handle(inner.type_id),
-                        tt.is_unrestricted_handle(target_type),
-                    )
-                };
-                let inner = match (from_handle, to_handle) {
-                    (true, false) => handle_to_f64(inner),
-                    (false, true) => return handle_from_f64(inner, target_type),
-                    _ => inner,
-                };
-                TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(inner),
-                        target_type,
-                    },
-                    target_type,
-                    span,
-                )
+                self.lower_cast(inner, target_type, span)
             }
             ast::Expr::Unary(unary) => {
                 // `&mut [1, 2] as List<i32>` parses as `(&mut [1, 2]) as …`,
@@ -2807,7 +2750,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         TirExprKind::Cast {
                             expr: cast_inner,
                             target_type,
-                        } if matches!(&cast_inner.kind, TirExprKind::IntLiteral { .. }) => {
+                        } => {
                             if let TirExprKind::IntLiteral { value, repr } = &cast_inner.kind {
                                 let neg_literal = TirExpr::new(
                                     TirExprKind::IntLiteral {
@@ -2817,14 +2760,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                     cast_inner.type_id,
                                     span,
                                 );
-                                return TirExpr::new(
-                                    TirExprKind::Cast {
-                                        expr: Box::new(neg_literal),
-                                        target_type: *target_type,
-                                    },
-                                    *target_type,
-                                    span,
-                                );
+                                return bare_cast(neg_literal, *target_type, span);
                             }
                         }
                         _ => {}
@@ -3555,25 +3491,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // lets `-f bare-asserts` (see `lower::bare_asserts`) replace assertion
         // failures with a bare trap, dropping this diagnostic without touching
         // explicit `panic(...)` calls. It behaves identically to `panic`.
-        let (module_source, name) = {
-            let type_table = self.tysys.type_table.borrow();
-            let (module, name) = type_table
-                .compiler_items()
-                .require_function(CompilerItem::AssertFailed);
-            (module.clone(), name.to_string())
-        };
-        let panic_call = TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source,
-                    name,
-                    template: None,
-                    monomorph_info: None,
-                    method_info: None,
-                }),
-                type_args: Vec::new(),
-                args: CallArgs::free(vec![CallArg::new(template_tir, false)]),
-            },
+        let panic_call = self.rt_call(
+            CompilerItem::AssertFailed,
+            template_tir,
             TypeTable::NEVER,
             span,
         );
@@ -7567,14 +7487,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             Some(DesugarKind::NewtypeFromUnwrap | DesugarKind::NewtypeFromWrap) => {
                 let arg = self.reify_expr(&call.args[0], ctx, None);
-                return TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(arg),
-                        target_type: recorded_type,
-                    },
-                    recorded_type,
-                    span,
-                );
+                return bare_cast(arg, recorded_type, span);
             }
             _ => {}
         }
@@ -8514,58 +8427,126 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
-    /// `LITERAL as i128/u128`: a `from_pair` constructor carries a literal past
-    /// `u64`, which the numeric path's `from_u64` / `from_i64` cannot.
-    fn try_reify_int128_literal_cast(
-        &mut self,
-        cast: &ast::CastExpr,
-        target_type: TypeId,
-    ) -> Option<TirExpr> {
-        let item = {
-            let tt = self.tysys.type_table.borrow();
-            tt.wide_int_item(tt.representation_head(target_type))?
+    /// `inner as target_type`, `inner` already read through its references:
+    /// the prelude calls a half or a wide integer needs, then the bare `Cast`.
+    fn lower_cast(&self, inner: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
+        if self.is_newtype_step(inner.type_id, target_type) {
+            return bare_cast(inner, target_type, span);
+        }
+        let inner = match self.lower_half_cast(inner, target_type, span) {
+            ControlFlow::Break(lowered) => return lowered,
+            ControlFlow::Continue(inner) => inner,
         };
+        let inner = match self.lower_int128_cast(inner, target_type, span) {
+            ControlFlow::Break(lowered) => return lowered,
+            ControlFlow::Continue(inner) => inner,
+        };
+        let (from_handle, to_handle) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.is_unrestricted_handle(inner.type_id),
+                tt.is_unrestricted_handle(target_type),
+            )
+        };
+        let inner = match (from_handle, to_handle) {
+            (true, false) => handle_to_f64(inner),
+            (false, true) => return handle_from_f64(inner, target_type),
+            _ => inner,
+        };
+        bare_cast(inner, target_type, span)
+    }
 
-        // Literal operand: `1042 as u128`.
-        if let ast::Expr::Literal(lit) = &cast.expr
-            && let Some(repr) = int_literal_repr(lit)
-        {
-            let parsed = if item == CompilerItem::U128 {
-                parse_u128_literal(repr).map(|v| v as i128)
-            } else {
-                parse_i128_literal(repr)
-            };
-            if let Ok(value) = parsed {
-                return Some(create_literal(
-                    item,
-                    value,
-                    target_type,
-                    &self.tysys.type_table.borrow(),
-                    cast.span,
-                ));
+    /// Whether `source as target` changes no representation: both share one,
+    /// or either is still generic, where the checker admits only a newtype
+    /// step (`cast_needs_no_judgment`).
+    fn is_newtype_step(&self, source: TypeId, target: TypeId) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        tt.share_common_base(source, target)
+            || tt.representation_awaits_substitution(source)
+            || tt.representation_awaits_substitution(target)
+    }
+
+    /// A cast with `f16` or `bf16` on either side. No instruction converts
+    /// either, so a half widens to its exact `f32` and casts on from there,
+    /// and a number reaches a half through the prelude conversion that rounds
+    /// it once. `Continue` hands `inner` on where neither side is a half.
+    fn lower_half_cast(
+        &self,
+        inner: TirExpr,
+        target_type: TypeId,
+        span: Span,
+    ) -> ControlFlow<TirExpr, TirExpr> {
+        let (source_half, target_half) = {
+            let tt = self.tysys.type_table.borrow();
+            let half = |id| tt.primitive_head(id).filter(|p| p.is_half());
+            (half(inner.type_id), half(target_type))
+        };
+        if source_half.is_none() && target_half.is_none() {
+            return ControlFlow::Continue(inner);
+        }
+        let source = match source_half {
+            Some(PrimitiveType::F16) => {
+                let base = bare_cast(inner, TypeTable::F16, span);
+                self.rt_call(CompilerItem::F16Widen, base, TypeTable::F32, span)
             }
-        }
+            Some(_) => {
+                let base = bare_cast(inner, TypeTable::BF16, span);
+                self.rt_call(CompilerItem::Bf16Widen, base, TypeTable::F32, span)
+            }
+            None => inner,
+        };
+        let Some(half) = target_half else {
+            return ControlFlow::Break(self.lower_cast(source, target_type, span));
+        };
+        let (base, item, via) = {
+            let tt = self.tysys.type_table.borrow();
+            let source_base = tt.representation_head(source.type_id);
+            match (
+                half,
+                tt.primitive_head(source_base),
+                tt.wide_int_item(source_base),
+            ) {
+                (PrimitiveType::F16, _, _) => {
+                    (TypeTable::F16, CompilerItem::F16FromF64, TypeTable::F64)
+                }
+                (_, _, Some(CompilerItem::I128)) => {
+                    (TypeTable::BF16, CompilerItem::Bf16FromI128, source_base)
+                }
+                (_, _, Some(_)) => (TypeTable::BF16, CompilerItem::Bf16FromU128, source_base),
+                (_, Some(PrimitiveType::I64), _) => {
+                    (TypeTable::BF16, CompilerItem::Bf16FromI64, TypeTable::I64)
+                }
+                (_, Some(PrimitiveType::U64), _) => {
+                    (TypeTable::BF16, CompilerItem::Bf16FromU64, TypeTable::U64)
+                }
+                _ => (TypeTable::BF16, CompilerItem::Bf16FromF64, TypeTable::F64),
+            }
+        };
+        let arg = self.lower_cast(source, via, span);
+        let converted = self.rt_call(item, arg, base, span);
+        ControlFlow::Break(bare_cast(converted, target_type, span))
+    }
 
-        // Negated literal operand (i128 only): `-170... as i128`.
-        if item == CompilerItem::I128
-            && let ast::Expr::Unary(unary) = &cast.expr
-            && unary.op == ast::UnaryOp::Neg
-            && let ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(repr),
-                ..
-            }) = &unary.expr
-            && !is_float_only_literal(repr)
-            && let Ok(value) = parse_i128_literal(&format!("-{repr}"))
-        {
-            return Some(create_literal(
-                item,
-                value,
-                target_type,
-                &self.tysys.type_table.borrow(),
-                unary.span,
-            ));
-        }
-        None
+    /// A call of the `core:rt` function `item` on `arg`.
+    pub(super) fn rt_call(
+        &self,
+        item: CompilerItem,
+        arg: TirExpr,
+        result_type: TypeId,
+        span: Span,
+    ) -> TirExpr {
+        let func = {
+            let type_table = self.tysys.type_table.borrow();
+            let (module_source, name) = type_table.compiler_items().require_function(item);
+            FunctionRef {
+                module_source: module_source.clone(),
+                name: name.to_string(),
+                template: None,
+                monomorph_info: None,
+                method_info: None,
+            }
+        };
+        unary_call(func, arg, result_type, span)
     }
 
     /// A cast with a wide integer on either side, `inner` already read through
@@ -8580,11 +8561,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
     ) -> ControlFlow<TirExpr, TirExpr> {
         let tt = self.tysys.type_table.borrow();
-        if tt.is_wide_int(tt.representation_head(inner.type_id)) {
+        if tt.is_wide_int(inner.type_id) {
             drop(tt);
             return self.lower_int128_source_cast(inner, target_type, span);
         }
-        let Some(item) = tt.wide_int_item(tt.representation_head(target_type)) else {
+        let Some(item) = tt.wide_int_item(target_type) else {
             return ControlFlow::Continue(inner);
         };
         ControlFlow::Break(create_conversion(item, inner, target_type, &tt, span))
@@ -8623,8 +8604,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let signed_source = source_item == CompilerItem::I128;
 
         enum Lowering {
-            /// `i128 as i128` / `u128 as u128` — no-op.
-            Identity,
             /// `&self` accessor returning the target primitive directly.
             Method(CompilerItem),
             /// `low()` then a primitive cast down to the target width.
@@ -8654,44 +8633,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
             _ => match target_item {
-                Some(item) if item == source_item => {
-                    if target_type == source_type {
-                        Lowering::Identity
+                Some(item) => {
+                    assert_ne!(
+                        item, source_item,
+                        "`lower_cast` takes a cast within one base as a newtype step"
+                    );
+                    Lowering::Reinterpret(if signed_source {
+                        CompilerItem::U128FromI128
                     } else {
-                        // Same wide base but a newtype on either side: the
-                        // bare `Cast` emitted by the caller is the correct
-                        // repr-compatible reinterpret.
-                        return ControlFlow::Continue(inner);
-                    }
+                        CompilerItem::I128FromU128
+                    })
                 }
-                Some(CompilerItem::I128) => Lowering::Reinterpret(CompilerItem::I128FromU128),
-                Some(CompilerItem::U128) => Lowering::Reinterpret(CompilerItem::U128FromI128),
-                Some(other) => unreachable!("wide_int_item answered {other:?}"),
                 None => return ControlFlow::Continue(inner),
             },
         };
 
-        // Repr-compatible `Cast` bridging a newtype boundary (no-op in
-        // codegen); identity when the types already match.
-        let bridge = |expr: TirExpr, to: TypeId, span: Span| {
-            if expr.type_id == to {
-                return expr;
-            }
-            TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(expr),
-                    target_type: to,
-                },
-                to,
-                span,
-            )
-        };
-
-        // A newtype source first reinterprets to its wide base so the
-        // prelude calls below see their declared receiver/argument type.
-        let inner = bridge(inner, source_base, span);
+        // A newtype source first steps to its wide base so the prelude calls
+        // below see their declared receiver/argument type.
+        let inner = bare_cast(inner, source_base, span);
         match lowering {
-            Lowering::Identity => ControlFlow::Break(inner),
             Lowering::Method(item) => {
                 let func = method_ref(&self.tysys.type_table.borrow(), item);
                 let receiver = adjust_receiver_for_self_kind(
@@ -8702,7 +8662,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     &self.tysys.type_table,
                 );
                 let call = build_tir_method_call(receiver, func, vec![], vec![], target_base, span);
-                ControlFlow::Break(bridge(call, target_type, span))
+                ControlFlow::Break(bare_cast(call, target_type, span))
             }
             Lowering::LowThenCast => {
                 let item = if signed_source {
@@ -8720,32 +8680,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
                 let low_call =
                     build_tir_method_call(receiver, func, vec![], vec![], TypeTable::U64, span);
-                let converted = if target_base == TypeTable::U64 {
-                    low_call
-                } else {
-                    TirExpr::new(
-                        TirExprKind::Cast {
-                            expr: Box::new(low_call),
-                            target_type: target_base,
-                        },
-                        target_base,
-                        span,
-                    )
-                };
-                ControlFlow::Break(bridge(converted, target_type, span))
+                let converted = bare_cast(low_call, target_base, span);
+                ControlFlow::Break(bare_cast(converted, target_type, span))
             }
             Lowering::Reinterpret(item) => {
                 let func = method_ref(&self.tysys.type_table.borrow(), item);
-                let call = TirExpr::new(
-                    TirExprKind::Call {
-                        func: Box::new(func),
-                        type_args: vec![],
-                        args: CallArgs::free(vec![CallArg::new(inner, false)]),
-                    },
-                    target_base,
-                    span,
-                );
-                ControlFlow::Break(bridge(call, target_type, span))
+                let call = unary_call(func, inner, target_base, span);
+                ControlFlow::Break(bare_cast(call, target_type, span))
             }
         }
     }
@@ -10514,6 +10455,35 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
             ..method.clone()
         })
         .collect()
+}
+
+/// A call of `func` on the one argument `arg`.
+fn unary_call(func: FunctionRef, arg: TirExpr, result_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(func),
+            type_args: vec![],
+            args: CallArgs::free(vec![CallArg::new(arg, false)]),
+        },
+        result_type,
+        span,
+    )
+}
+
+/// `expr as to` as codegen takes it, one instruction or none: `expr` itself
+/// where it already has the type.
+fn bare_cast(expr: TirExpr, to: TypeId, span: Span) -> TirExpr {
+    if expr.type_id == to {
+        return expr;
+    }
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(expr),
+            target_type: to,
+        },
+        to,
+        span,
+    )
 }
 
 /// A half precision literal, given as its bits.

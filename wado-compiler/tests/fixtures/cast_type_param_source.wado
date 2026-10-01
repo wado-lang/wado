@@ -1,0 +1,15 @@
+// A type parameter casts only where its bounds make the cast a newtype step.
+// `to_f32::<f16>` once reached WIR as an unlowered cast and crashed, and
+// `to_f32::<Color>` read an enum's tag that `Color::Green as f32` refuses.
+
+fn to_f32<T>(x: T) -> f32 {
+    return x as f32;
+}
+
+test "type parameter to number" {
+    let h: f16 = 1.5;
+    assert to_f32(h) == 1.5;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'T' to 'f32': a generic type casts only where a `ReflectNewtype` bound makes the cast a newtype step"}

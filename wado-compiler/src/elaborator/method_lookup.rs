@@ -3400,7 +3400,7 @@ impl TypeSystem {
         let receiver_type_args = receiver_type_args.unwrap_or(&[]);
         let slots = self
             .type_table
-            .borrow()
+            .borrow_mut()
             .impl_slots(impl_ref.0, receiver_type_args);
         let instantiated = sig.decl.instantiate_slots(&self.type_table, &slots);
         let table = &self.type_table;

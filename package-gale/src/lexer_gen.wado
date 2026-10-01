@@ -51,7 +51,7 @@ pub type LitName = String;
 /// `'+'`. `LitToken.text` holds the literal with its escapes already resolved,
 /// so this puts them back — a readable rendering, not a round-trip.
 pub fn lit_name<S: AsStrSlice>(text: S) -> LitName {
-    return text as LitName;
+    return text.as_str_slice().to_string() as LitName;
 }
 
 impl Display for LitName {

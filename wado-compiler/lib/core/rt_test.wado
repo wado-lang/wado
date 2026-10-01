@@ -17,6 +17,41 @@ test "the software wide multiplies match the native ones" {
     }
 }
 
+test "a half widens exactly and narrows from f64 rounded once" {
+    assert builtin::black_box(1.5) as f16 as f32 == 1.5;
+    assert builtin::black_box(-2.25) as bf16 as f64 == -2.25;
+    assert builtin::black_box(3 as i32) as bf16 == bf16::from_f64(3.0);
+}
+
+// 2^60 + 2^52 + 1 lies just past the midpoint of bf16's neighbours 2^60 and
+// 2^60 + 2^53. Rounding it to f64 first lands on that midpoint, whose tie goes
+// down; rounding to odd keeps it above, so it rounds up as the integer does.
+test "a 64-bit integer narrows to bf16 rounded once" {
+    assert builtin::black_box(1157425104234217473 as u64) as bf16 == bf16::from_f64(1161928703861587968.0);
+    assert builtin::black_box(-1157425104234217473 as i64) as bf16 == bf16::from_f64(-1161928703861587968.0);
+    assert builtin::black_box(1157425104234217473 as i64) as bf16 == bf16::from_f64(1161928703861587968.0);
+    // Exact in f64, then inexact with an odd and an even nearest neighbour.
+    assert builtin::black_box(1152921504606846976 as u64) as bf16 == bf16::from_f64(1152921504606846976.0);
+    assert builtin::black_box(1152921504606847233 as u64) as bf16 == bf16::from_f64(1152921504606846976.0);
+    assert builtin::black_box(1152921504606846977 as u64) as bf16 == bf16::from_f64(1152921504606846976.0);
+    // Past every f64 below 2^64.
+    assert builtin::black_box(u64::MAX) as bf16 == bf16::from_f64(18446744073709551616.0);
+}
+
+test "a 128-bit integer narrows to bf16 rounded once" {
+    assert builtin::black_box(1272602360385370922596299702273 as u128) as bf16 == bf16::from_f64(
+        1277554120542512443695896199168.0,
+    );
+    assert builtin::black_box(-1272602360385370922596299702273 as i128) as bf16 == bf16::from_f64(
+        -1277554120542512443695896199168.0,
+    );
+    assert builtin::black_box(1267650600228229401496703205376 as u128) as bf16 == bf16::from_f64(
+        1267650600228229401496703205376.0,
+    );
+    assert builtin::black_box(5 as i128) as bf16 == bf16::from_f64(5.0);
+    assert builtin::black_box(u128::MAX) as bf16 == bf16::INFINITY;
+}
+
 test "the software 128-bit add and sub match the native ones" {
     for let a_lo of EDGES {
         for let b_lo of EDGES {

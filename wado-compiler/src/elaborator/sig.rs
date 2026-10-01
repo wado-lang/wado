@@ -480,7 +480,7 @@ impl ImplSig {
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> InstantiatedImplSig {
-        let slots = type_table.borrow().impl_slots(self.def, receiver_args);
+        let slots = type_table.borrow_mut().impl_slots(self.def, receiver_args);
         self.instantiate_slots(type_table, &slots)
     }
 
@@ -518,7 +518,7 @@ impl ImplSig {
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
-        let table = type_table.borrow();
+        let mut table = type_table.borrow_mut();
         let positions = table.impl_target_args(self.def).len();
         if positions == 0 || receiver_args.len() < positions {
             return None;
@@ -695,9 +695,12 @@ mod tests {
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
         let v = table.borrow_mut().make_type_param("V".to_string(), 1);
         let def = DefId::for_test(1);
-        table
-            .borrow_mut()
-            .record_impl_target(def, TypeTable::UNKNOWN, vec![TypeTable::U8, v]);
+        table.borrow_mut().record_impl_target(
+            def,
+            TypeTable::UNKNOWN,
+            vec![TypeTable::U8, v],
+            vec![],
+        );
         ImplSig {
             def,
             trait_type_args: vec![TypeTable::I32],
@@ -713,7 +716,7 @@ mod tests {
         let sig = partially_concrete_impl(&table);
 
         let slots = table
-            .borrow()
+            .borrow_mut()
             .impl_slots(sig.def, &[TypeTable::U8, TypeTable::BOOL]);
 
         assert_eq!(slots.len(), 1);

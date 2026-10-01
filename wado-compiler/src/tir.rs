@@ -32,7 +32,7 @@ use crate::{hashmap, name};
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
 /// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
 /// registry-driven.
-const REFLECT_NEWTYPE_BASE: &str = "Base";
+pub(crate) const REFLECT_NEWTYPE_BASE: &str = "Base";
 
 /// Identifies the scope where a type parameter is defined
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1689,7 +1689,7 @@ impl TypeTable {
     /// Whether `id` is stored as `i128` or `u128`, newtypes of them included.
     #[must_use]
     pub fn is_wide_int(&self, id: TypeId) -> bool {
-        self.wide_int_item(self.representation_head(id)).is_some()
+        self.wide_int_item(id).is_some()
     }
 
     /// A struct head as a mangled name embeds it: the declaration when it names
@@ -2189,17 +2189,18 @@ impl TypeTable {
         matches!(
             self.primitive_head(type_id),
             Some(PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64)
-        ) || self.wide_int_item(self.representation_head(type_id)) == Some(CompilerItem::U128)
+        ) || self.wide_int_item(type_id) == Some(CompilerItem::U128)
     }
 
-    /// Which wide-integer prelude struct `type_id` is, `None` for anything else.
-    /// By declaration identity: a name match also answers for a user type.
+    /// Which wide-integer prelude struct `type_id` is stored as, through any
+    /// newtype chain; `None` for anything else. By declaration identity: a
+    /// name match also answers for a user type.
     #[must_use]
     pub fn wide_int_item(&self, type_id: TypeId) -> Option<CompilerItem> {
         let ResolvedType::Struct {
             def: StructDef::Decl(def),
             ..
-        } = self.get(type_id)
+        } = self.get(self.representation_head(type_id))
         else {
             return None;
         };
@@ -4370,6 +4371,15 @@ impl TypeTable {
         )
     }
 
+    /// Whether `id`'s representation is known only once substitution settles
+    /// it: a type parameter or a projection, read through newtypes.
+    pub fn representation_awaits_substitution(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(self.representation_head(id)),
+            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
+        )
+    }
+
     /// Whether `id` (recursively) mentions an associated-type projection
     /// (`I::Item`), i.e. still needs a bound's impl to become concrete.
     pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {
@@ -6167,11 +6177,11 @@ pub struct TirTypeParam {
     /// Default type if specified (e.g., `Effects = []`)
     pub default: Option<TypeId>,
     pub index: u32,
-    /// For a pack param bound by projection — `impl<T: ReflectStruct<FieldTypes = [..F]>,
-    /// ..F: Trait>` — records `(source param index, assoc type name)`. The pack
-    /// is not supplied by the caller; monomorphization derives it by resolving
-    /// the source param's associated type (e.g. `T::Fields`) to its tuple.
-    pub projected_from: Option<(u32, String)>,
+    /// Whether a blanket impl's bound projects it (`..F` in
+    /// `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F>`). The instance key
+    /// carries the projection's answer at the parameter's own slot, a pack
+    /// as one tuple (`blanket_impl_args`).
+    pub projected: bool,
 }
 
 /// What a use site knows about the associated types projected from a slot,
@@ -6431,6 +6441,20 @@ struct ImplTarget {
     /// The arguments of the head it names past any reference, a binder as its
     /// own `TypeParam`.
     args: Vec<TypeId>,
+    projections: Vec<ImplProjection>,
+}
+
+/// Slots of an impl block that a bound determines rather than its target:
+/// `B` in `impl<N: Tr<Assoc = B>, B> W<N>` is whatever `Assoc` is for the type
+/// filling `N`.
+#[derive(Debug, Clone)]
+pub struct ImplProjection {
+    /// The slot whose bound carries the constraint.
+    pub source: u32,
+    pub trait_: DefId,
+    pub assoc: String,
+    /// The constraint as written, its slots as `TypeParam`s.
+    pub pattern: TypeId,
 }
 
 /// What an impl target binds at a receiver's arguments.
@@ -6454,9 +6478,22 @@ impl TargetBinding {
 
 impl TypeTable {
     /// Record what impl block `def`'s target writes: `whole`, and `args` for
-    /// the head it names.
-    pub fn record_impl_target(&mut self, def: DefId, whole: TypeId, args: Vec<TypeId>) {
-        self.impl_targets.insert(def, ImplTarget { whole, args });
+    /// the head it names, with the slots its bounds determine.
+    pub fn record_impl_target(
+        &mut self,
+        def: DefId,
+        whole: TypeId,
+        args: Vec<TypeId>,
+        projections: Vec<ImplProjection>,
+    ) {
+        self.impl_targets.insert(
+            def,
+            ImplTarget {
+                whole,
+                args,
+                projections,
+            },
+        );
     }
 
     /// Impl block `def`'s target head at `head_args`; `None` where the target
@@ -6487,9 +6524,10 @@ impl TypeTable {
 
     /// The slots each of impl block `def`'s target positions holds, at any
     /// depth, filled from the receiver's arguments: `T` in `Pair<List<T>, i32>`
-    /// from `Pair<List<String>, i32>`. The target is recorded as its module's
-    /// decl pass reaches the block, so an earlier module's bound check can ask.
-    pub fn impl_slots(&self, def: DefId, receiver_args: &[TypeId]) -> IndexMap<u32, TypeId> {
+    /// from `Pair<List<String>, i32>`, then the slots its bounds project from
+    /// those. The target is recorded as its module's decl pass reaches the
+    /// block, so an earlier module's bound check can ask.
+    pub fn impl_slots(&mut self, def: DefId, receiver_args: &[TypeId]) -> IndexMap<u32, TypeId> {
         let mut slots = IndexMap::default();
         for (&declared, &concrete) in self.impl_target_args(def).iter().zip(receiver_args) {
             if let Some(bound) = self.bind_type_params(&[declared], &[concrete]) {
@@ -6498,9 +6536,11 @@ impl TypeTable {
                 }
             }
         }
+        self.project_impl_slots(def, &mut slots);
         slots
     }
 
+<<<<<<< HEAD
     /// The declaration impl block `def` targets, past any reference.
     pub fn impl_target_decl(&self, def: DefId) -> Option<DefId> {
         self.nominal_def(self.peel_refs(self.impl_target(def).whole))
@@ -6522,6 +6562,70 @@ impl TypeTable {
             };
             link = *base_type;
         }
+||||||| f6456a9545c
+=======
+    /// Fill the slots impl block `def`'s bounds project from those `slots`
+    /// already holds: `X` in `impl<T: Tr<Assoc = List<X>>, X>` once `T` is
+    /// settled, read through `Tr` itself, so another trait's `Assoc` on the
+    /// same type cannot answer.
+    pub fn project_impl_slots(&mut self, def: DefId, slots: &mut IndexMap<u32, TypeId>) {
+        for projection in self.impl_target(def).projections.clone() {
+            let Some(&source) = slots.get(&projection.source) else {
+                continue;
+            };
+            let Some(concrete) = self.resolve_trait_assoc_type_of_instance(
+                source,
+                &projection.trait_,
+                &projection.assoc,
+            ) else {
+                continue;
+            };
+            self.register_assoc_type_resolution(
+                source,
+                TraitRef::bare(projection.trait_),
+                projection.assoc,
+                concrete,
+            );
+            if let Some(bound) = self.bind_projection_pattern(projection.pattern, concrete) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
+                }
+            }
+        }
+    }
+
+    /// [`Self::bind_type_params`] for one pattern, where a tuple pattern may
+    /// spread a pack (`[A, ..F]`): the pack takes the elements its neighbours
+    /// leave, as one tuple.
+    fn bind_projection_pattern(
+        &mut self,
+        pattern: TypeId,
+        concrete: TypeId,
+    ) -> Option<IndexMap<u32, TypeId>> {
+        let (Some(written), Some(elements)) = (self.as_tuple(pattern), self.as_tuple(concrete))
+        else {
+            return self.bind_type_params(&[pattern], &[concrete]);
+        };
+        let Some(at) = written.iter().position(|&w| self.is_type_pack(w)) else {
+            return self.bind_type_params(&[pattern], &[concrete]);
+        };
+        let after = written.len() - at - 1;
+        let pack_end = elements.len().checked_sub(after)?;
+        if pack_end < at {
+            return None;
+        }
+        let pack = self.make_tuple(elements[at..pack_end].to_vec());
+        let mut rest_written = written.clone();
+        rest_written.remove(at);
+        let rest_concrete: Vec<TypeId> = elements[..at]
+            .iter()
+            .chain(&elements[pack_end..])
+            .copied()
+            .collect();
+        let mut bound = self.bind_type_params(&rest_written, &rest_concrete)?;
+        bound.insert(self.param_slot(written[at])?, pack);
+        Some(bound)
+>>>>>>> origin/main
     }
 
     fn impl_target(&self, def: DefId) -> &ImplTarget {
@@ -8381,7 +8485,7 @@ mod tests {
     /// asks whether it covers every instance of that head.
     fn covers(table: &mut TypeTable, whole: TypeId, args: Vec<TypeId>) -> bool {
         let block = DefId::for_test(1);
-        table.record_impl_target(block, whole, args);
+        table.record_impl_target(block, whole, args, vec![]);
         table.impl_covers_every_instance(block)
     }
 

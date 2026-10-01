@@ -1,0 +1,11 @@
+// Nothing casts to `bool`, and a `bool` casts to no float.
+
+test {
+    let x: i32 = 1;
+    let a = x as bool;     // compile error
+    let b = 1.0 as bool;   // compile error
+    let c = true as f64;   // compile error
+}
+
+__DATA__
+{"compile_error":"cannot cast 'i32' to 'bool': nothing casts to `bool`; compare instead, as `x != 0`","compile_errors_contains":["cannot cast 'f64' to 'bool'","cannot cast 'bool' to 'f64': a `bool` casts only to an integer type"]}

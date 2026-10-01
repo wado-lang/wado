@@ -78,8 +78,9 @@ pub(crate) enum CoercionKind {
     NumericLiteral,
     /// `null → Option<T>` for some unwrapped `T`.
     NullToOption,
-    /// A `String` / template literal retagged as a newtype over `String`.
-    StringNewtype,
+    /// A string, template, `bool` or `char` literal retagged as a newtype
+    /// over its type.
+    LiteralNewtype,
     /// A `b"..."` / `#include_bytes` byte literal (default type `ByteList`)
     /// retagged as another type whose ultimate base is `List<u8>` — e.g.
     /// `let x: List<u8> = b"..."`. Free: the repr is identical either way.

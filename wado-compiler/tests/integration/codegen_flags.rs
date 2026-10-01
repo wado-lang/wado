@@ -188,11 +188,11 @@ const WIDE_ARITH_SOURCE: &str = r#"
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    let [lo1, hi1] = builtin::i64_mul_wide_u(0xFFFFFFFFFFFFFFFF as i64, 3 as i64);
+    let [lo1, hi1] = builtin::i64_mul_wide_u(-1 as i64, 3 as i64);
     println(`${lo1} ${hi1}`);
     let [lo2, hi2] = builtin::i64_mul_wide_s(0 - 5, 7);
     println(`${lo2} ${hi2}`);
-    let [lo3, hi3] = builtin::i64_add128(0xFFFFFFFFFFFFFFFF as i64, 0, 2, 0);
+    let [lo3, hi3] = builtin::i64_add128(-1 as i64, 0, 2, 0);
     println(`${lo3} ${hi3}`);
     let [lo4, hi4] = builtin::i64_sub128(1, 5, 2, 2);
     println(`${lo4} ${hi4}`);

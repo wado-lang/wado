@@ -3,14 +3,11 @@
 //! numbers. See [WEP: Test Coverage](../../../docs/wep-2026-09-28-test-coverage.md).
 
 use crate::ast::{AstId, Block};
-use crate::call_args::CallArgs;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::coverage::ProbeSite;
 use crate::hashmap::IndexSet;
-use crate::tir::{
-    CallArg, FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable,
-};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable};
 use crate::token::Span;
 
 use super::reify::Reify;
@@ -21,13 +18,6 @@ impl<H: CompilerHost> Reify<'_, H> {
     pub(super) fn probe(&mut self, site: ProbeSite, id: AstId, span: Span) -> Option<TirStmt> {
         let probe = self.coverage?.probe(site, id)?;
         self.probes_emitted.insert(probe);
-        let (module_source, name) = {
-            let type_table = self.tysys.type_table.borrow();
-            let (module, name) = type_table
-                .compiler_items()
-                .require_function(CompilerItem::CoverageProbe);
-            (module.clone(), name.to_string())
-        };
         let id_literal = TirExpr::new(
             TirExprKind::IntLiteral {
                 value: u64::from(probe),
@@ -36,18 +26,9 @@ impl<H: CompilerHost> Reify<'_, H> {
             TypeTable::I32,
             span,
         );
-        let call = TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source,
-                    name,
-                    template: None,
-                    monomorph_info: None,
-                    method_info: None,
-                }),
-                type_args: Vec::new(),
-                args: CallArgs::free(vec![CallArg::new(id_literal, false)]),
-            },
+        let call = self.rt_call(
+            CompilerItem::CoverageProbe,
+            id_literal,
             TypeTable::UNIT,
             span,
         );

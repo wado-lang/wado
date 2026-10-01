@@ -497,7 +497,7 @@ impl Semantics {
         let kind = match choice.kind {
             CoercionKind::NumericLiteral => "numeric_literal",
             CoercionKind::NullToOption => "null_to_option",
-            CoercionKind::StringNewtype => "string_newtype",
+            CoercionKind::LiteralNewtype => "literal_newtype",
             CoercionKind::BytesNewtype => "bytes_newtype",
             CoercionKind::ClosureToFnNewtype => "closure_to_fn_newtype",
             CoercionKind::StructNewtype => "struct_newtype",
