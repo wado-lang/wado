@@ -771,7 +771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         let key_class = self.synth(&index.index, scope);
-        let Some(key) = self.index_key_type(&key_class) else {
+        let Some(key) = self.index_key_type(container, &key_class) else {
             // Which impl answers depends on the key's type, so an unpinned key
             // leaves the element type unknown.
             return ArgClass::Opaque(OpaqueReason::Inference);
@@ -797,20 +797,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The type a subscript key really elaborates to. Unlike an argument, an
-    /// index is resolved with *no* expected type before its impl is selected
-    /// (`resolve_index`), so a literal key takes its default type there — and
-    /// synthesis must read the key the same way or it would answer for an impl
-    /// the real walk never picks.
-    pub(super) fn index_key_type(&mut self, key: &ArgClass) -> Option<TypeId> {
+    /// The type a subscript key on `container` really elaborates to. A numeric
+    /// literal takes the key type of the one read impl admitting it, as a
+    /// literal argument takes its parameter's, and its default type without
+    /// exactly one. `resolve_index` and synthesis both read the key here, so
+    /// they answer for the same impl.
+    pub(super) fn index_key_type(&mut self, container: TypeId, key: &ArgClass) -> Option<TypeId> {
         match key {
             ArgClass::Exact(t) => Some(*t),
-            ArgClass::IntLit => Some(TypeTable::I32),
-            ArgClass::FloatLit => Some(TypeTable::F64),
+            ArgClass::IntLit => Some(
+                self.literal_index_key(container, key)
+                    .unwrap_or(TypeTable::I32),
+            ),
+            ArgClass::FloatLit => Some(
+                self.literal_index_key(container, key)
+                    .unwrap_or(TypeTable::F64),
+            ),
             ArgClass::StrLit => Some(self.get_string_struct_type()),
             ArgClass::BytesLit => Some(self.tysys.type_table.borrow_mut().make_byte_list()),
             ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => None,
         }
+    }
+
+    fn literal_index_key(&mut self, container: TypeId, key: &ArgClass) -> Option<TypeId> {
+        let base = self.tysys.get_base_type(container);
+        let name = self.tysys.struct_name_for_type(base)?;
+        let (lookup_name, lookup_type) = self.tysys.newtype_base_lookup(&name, base);
+        let (mut keys, _) = self.index_lookup_or_newtype_base(
+            &name,
+            base,
+            &lookup_name,
+            lookup_type,
+            |s, n, t| Some(s.index_read_key_types(n, t)).filter(|keys| !keys.is_empty()),
+        )?;
+        keys.retain(|&k| self.class_admits(k, key));
+        let first = *keys.first()?;
+        keys.iter().all(|&k| k == first).then_some(first)
     }
 
     /// `a..<b` is a `RangeExclusive<T>`: `T` when both endpoints pin it, the

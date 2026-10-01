@@ -359,6 +359,97 @@ test "50 items insert and partial remove" {
     assert !map.contains_key("item2");
 }
 
+/// `0..n` scattered: `i * 7919 % n` visits each once while `n` is no multiple
+/// of 7919.
+fn scattered(n: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let i of 0..<n {
+        out.push(i * 7919 % n);
+    }
+    return out;
+}
+
+/// A map from each of `keys` to its position in it.
+fn positions(keys: &List<i32>) -> TreeMap<i32, i32> {
+    let mut map = TreeMap::<i32, i32>::new();
+    for let i of 0..<keys.len() {
+        map[keys[i]] = i;
+    }
+    return map;
+}
+
+test "a map many levels deep finds every key it holds and none it lacks" {
+    let ascending: List<i32> = (0..<5000).collect();
+    let descending: List<i32> = ascending.iter_ref().map(|k| 4999 - *k).collect();
+    for let keys of [scattered(5000), ascending, descending] {
+        let map = positions(&keys);
+        assert map.len() == 5000;
+        for let i of 0..<keys.len() {
+            assert map.get(keys[i]) matches { Some(p) && p == i };
+            assert !map.contains_key(keys[i] + 5000);
+            assert !map.contains_key(-1 - keys[i]);
+        }
+        let mut position = 0;
+        for let [k, p] of map.entries() {
+            assert *k == keys[position] && *p == position;
+            position += 1;
+        }
+        assert position == 5000;
+    }
+}
+
+test "a deep map compacts its removals and appends what returns" {
+    let keys = scattered(3000);
+    let mut map = positions(&keys);
+    for let i of 0..<3000 {
+        if i % 10 != 0 {
+            assert map.remove(keys[i]);
+        }
+    }
+    assert map.len() == 300;
+    for let i of 0..<3000 {
+        assert map.contains_key(keys[i]) == (i % 10 == 0);
+    }
+    for let i of 0..<3000 {
+        if i % 10 == 1 {
+            map[keys[i]] = i;
+        }
+    }
+    assert map.len() == 600;
+    let order: List<i32> = map.values().iter_value().collect();
+    for let j of 0..<300 {
+        assert order[j] == j * 10;
+        assert order[300 + j] == j * 10 + 1;
+    }
+    for let i of 0..<3000 {
+        assert map.contains_key(keys[i]) == (i % 10 <= 1);
+    }
+}
+
+test "a copy of a deep map is its own" {
+    let keys = scattered(2000);
+    let original = positions(&keys);
+    let mut copy = original;
+    for let i of 0..<1000 {
+        copy.remove(keys[i]);
+    }
+    copy[-1] = -1;
+    assert original.len() == 2000 && copy.len() == 1001;
+    assert original.contains_key(keys[0]) && !copy.contains_key(keys[0]);
+    assert !original.contains_key(-1) && copy.contains_key(-1);
+}
+
+test "get_str finds every key of a deep map" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    for let k of scattered(2000) {
+        map[`key${k}`] = k;
+    }
+    for let k of 0..<2000 {
+        assert map.get_str(`key${k}`.as_str_slice()) matches { Some(v) && v == k };
+    }
+    assert !map.contains_key_str("key2000");
+}
+
 test "key-value literal coercion" {
     let m: TreeMap<String, i32> = { a: 1, b: 2, c: 3 };
     assert m.len() == 3;
@@ -396,6 +487,103 @@ test "empty key-value literal" {
 test "index access panics for missing key" {
     let map: TreeMap<String, i32> = TreeMap::new();
     let _ = map["missing"];
+}
+
+#[expect_trap]
+test "borrowing a missing key panics" {
+    let map: TreeMap<String, List<i32>> = TreeMap::new();
+    let _ = &map["missing"];
+}
+
+test "maps are equal when they hold equal entries in the same order" {
+    let mut a: TreeMap<String, i32> = TreeMap::new();
+    let mut b: TreeMap<String, i32> = TreeMap::new();
+    assert a == b;
+    a["x"] = 1;
+    a["gone"] = 0;
+    a["y"] = 2;
+    assert a.remove("gone");
+    b["x"] = 1;
+    b["y"] = 2;
+    assert a == b;
+    b["y"] = 3;
+    assert a != b;
+    let c: TreeMap<String, i32> = { y: 2, x: 1 };
+    assert a != c;
+    let s = [1, 2] as TreeSet<i32>;
+    assert s == [1, 2] as TreeSet<i32> && s != [2, 1] as TreeSet<i32>;
+}
+
+test "maps order by their entries in insertion order, then by length" {
+    let a: TreeMap<String, i32> = { x: 1, y: 2 };
+    let mut b: TreeMap<String, i32> = { x: 1, gone: 0, y: 2 };
+    assert b.remove("gone");
+    assert a.cmp(&b) == Ordering::Equal;
+    assert a < { x: 1, y: 3 } as TreeMap<String, i32>;
+    assert a < { y: 0 } as TreeMap<String, i32>;
+    assert a > { x: 1 } as TreeMap<String, i32>;
+    let mut maps: List<TreeMap<String, i32>> = [
+        { y: 0 },
+        a,
+        { x: 1 },
+    ];
+    maps.sort();
+    assert maps == [
+        { x: 1 },
+        a,
+        { y: 0 },
+    ];
+    assert [2] as TreeSet<i32> > [1, 5] as TreeSet<i32>;
+}
+
+#[expect_trap]
+test "mutating a missing key panics" {
+    let mut map: TreeMap<String, List<i32>> = TreeMap::new();
+    map["missing"].push(1);
+}
+
+test "overwriting the median of a full child keeps one entry" {
+    // 0..<31 fill the root, 31 splits it, and 32..<47 fill its right child to
+    // [16, 46], whose median 31 the next descent promotes.
+    let mut map: TreeMap<i32, i32> = TreeMap::new();
+    for let i of 0..<47 {
+        map[i] = i;
+    }
+    map[31] = -1;
+    assert map.len() == 47 && map[31] == -1 && map[30] == 30 && map[32] == 32;
+}
+
+test "a value mutates in place through its key" {
+    let mut map: TreeMap<String, List<i32>> = TreeMap::new();
+    map["a"] = [];
+    map["a"].push(1);
+    map["a"].push(2);
+    assert map["a"] == [1, 2];
+}
+
+test "a spread literal merges into a map" {
+    let base: TreeMap<String, i32> = { a: 1, b: 2 };
+    let merged: TreeMap<String, i32> = { ..base, b: 20, c: 3 };
+    assert merged.len() == 3 && merged["a"] == 1 && merged["b"] == 20 && merged["c"] == 3;
+}
+
+test "a text lookup on an empty map finds nothing" {
+    let map: TreeMap<String, i32> = TreeMap::new();
+    assert map.get_str("a") == null;
+}
+
+test "re-inserting every key of a deep tree keeps one entry each" {
+    let mut map: TreeMap<i32, i32> = TreeMap::new();
+    for let i of 0..<2000 {
+        map[i * 7919 % 2000] = i;
+    }
+    for let i of 0..<2000 {
+        map[i] = -i;
+    }
+    assert map.len() == 2000;
+    for let i of 0..<2000 {
+        assert map[i] == -i;
+    }
 }
 
 test "for-of over entries" {

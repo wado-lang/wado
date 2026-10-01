@@ -79,6 +79,23 @@ read. A float's is IEEE 754-2019 `totalOrder`, which its `<` is not.
 
 Compares self with other and returns an Ordering.
 
+### `pub trait Hasher with ()`
+
+What a `Hash` impl feeds its value into. The hasher owns the algorithm and
+its seed; an impl only says which words and bytes make up the value.
+
+#### `fn write_u64(&mut self, x: u64)`
+
+#### `fn write_bytes(&mut self, bytes: ByteSlice)`
+
+Takes the length too, so consecutive byte runs never run together.
+
+### `pub trait Hash: Eq with ()`
+
+A value a hash table can key on. Values that are `==` feed a hasher alike.
+
+#### `fn hash<H: Hasher>(&self, h: &mut H)`
+
 ### `pub trait Default with ()`
 
 Trait for providing a default value for a type.
@@ -2153,6 +2170,10 @@ Counts the number of set bits (population count).
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for i64`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for i64`
 
 ##### `pub fn default() -> i64`
@@ -2273,6 +2294,10 @@ Counts the number of set bits (population count).
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for u64`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for u64`
 
 ##### `pub fn default() -> u64`
@@ -2378,6 +2403,10 @@ as negating it does.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for i8`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for i8`
 
 ##### `pub fn default() -> i8`
@@ -2478,6 +2507,10 @@ as negating it does.
 #### `impl Ord for i16`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for i16`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Default for i16`
 
@@ -2595,6 +2628,10 @@ Counts the number of set bits (population count).
 #### `impl Ord for i32`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for i32`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Default for i32`
 
@@ -2746,6 +2783,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for u8`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for u8`
 
 ##### `pub fn default() -> u8`
@@ -2837,6 +2878,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl Ord for u16`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for u16`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Default for u16`
 
@@ -2930,6 +2975,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for u32`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for u32`
 
 ##### `pub fn default() -> u32`
@@ -2991,6 +3040,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl Ord for bool`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for bool`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Default for bool`
 
@@ -3107,6 +3160,10 @@ Encodes this character as UTF-8, returning the bytes.
 #### `impl Ord for char`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Hash for char`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Default for char`
 
@@ -4836,6 +4893,10 @@ Identity: any text parses to the string it spells. Never fails.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for String`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Default for String`
 
 ##### `pub fn default() -> String`
@@ -5138,6 +5199,10 @@ If `count` is negative, replaces all occurrences.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
+#### `impl Hash for StrSlice`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
+
 #### `impl Eq<String> for StrSlice`
 
 ##### `pub fn eq(&self, other: &String) -> bool`
@@ -5312,6 +5377,10 @@ Joins elements into a string with the given separator.
 #### `impl Eq for List<T>`
 
 ##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Hash for List<T>`
+
+##### `pub fn hash<H: Hasher>(&self, h: &mut H)`
 
 #### `impl Ord for List<T>`
 

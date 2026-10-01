@@ -3395,6 +3395,17 @@ impl TypeTable {
         }
     }
 
+    /// The arguments `type_id`'s own declaration is instantiated with, a
+    /// newtype's included: what an `impl` header naming that declaration binds.
+    /// [`Self::nominal_type_args`] leaves a newtype out, since a newtype's
+    /// representation is its base's.
+    pub fn declared_type_args(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        match self.get_unerased(type_id) {
+            ResolvedType::Newtype { type_args, .. } => Some(type_args.clone()),
+            _ => self.nominal_type_args(type_id),
+        }
+    }
+
     /// Resolve an associated type for a `GenericInstance` type using generic definitions.
     /// For `ListIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
     /// then substitutes using the instance's `type_args` to get `i32`.
@@ -6527,6 +6538,29 @@ impl TypeTable {
         }
         self.project_impl_slots(def, &mut slots);
         slots
+    }
+
+    /// The declaration impl block `def` targets, past any reference.
+    pub fn impl_target_decl(&self, def: DefId) -> Option<DefId> {
+        self.nominal_def(self.peel_refs(self.impl_target(def).whole))
+    }
+
+    /// `receiver`'s arguments as declaration `decl` names them, read at the
+    /// link of its newtype chain that `decl` declares: a newtype's own impls
+    /// take the newtype's arguments, its base's impls the base's, and a
+    /// re-shaping newtype (`type Pair<T> = List<[T, i32]>`) differs on the two.
+    /// `None` where no link is `decl`.
+    pub fn args_at_decl(&self, receiver: TypeId, decl: DefId) -> Option<Vec<TypeId>> {
+        let mut link = self.peel_refs(receiver);
+        loop {
+            if self.nominal_def(link) == Some(decl) {
+                return self.declared_type_args(link);
+            }
+            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(link) else {
+                return None;
+            };
+            link = *base_type;
+        }
     }
 
     /// Fill the slots impl block `def`'s bounds project from those `slots`

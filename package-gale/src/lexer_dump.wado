@@ -32,7 +32,7 @@ use {
 } from "./lexer_gen.wado";
 use { grammar_needs_latn, build_latn } from "./latn.wado";
 use { canonicalize_for_analysis } from "./codegen.wado";
-use { TreeMap } from "core:collections";
+use { GaleMap } from "./gale_map.wado";
 
 /// Read-only inputs every walk step needs. Assembled once from the grammar,
 /// exactly as `generate` assembles them for `gen_lexer`.
@@ -42,7 +42,7 @@ struct DumpCtx {
     routes: List<LexerRuleRoute>,
     /// `name -> latn rule index` for the rules routed to the runtime lexer
     /// simulator instead of a static matcher.
-    atn_class: TreeMap<String, i32>,
+    atn_class: GaleMap<String, i32>,
 }
 
 /// The report under construction: the text plus the per-strategy tallies the
@@ -115,8 +115,8 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
 
 /// The lexer-ATN routing map, built exactly as `generate` builds it: nothing
 /// unless some rule is ATN-class, then one entry per such rule.
-fn latn_rule_indices(grammar: &Grammar) -> TreeMap<String, i32> {
-    let mut out = TreeMap::<String, i32>::new();
+fn latn_rule_indices(grammar: &Grammar) -> GaleMap<String, i32> {
+    let mut out = GaleMap::<String, i32>::new();
     if !grammar_needs_latn(grammar) {
         return out;
     }

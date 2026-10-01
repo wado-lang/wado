@@ -1,0 +1,36 @@
+// A static called on a generic newtype with its arguments named: the
+// turbofish binds the impl's `T`, so `Bag::<i32>::fresh()` is a `Bag<i32>`
+// and not a `Bag<T>` no element fits. A static the newtype inherits from its
+// base is reached the same way, and answers with the newtype. `Pair`
+// re-shapes its argument, so its own impl and its base's see different ones.
+use { println, Stdout } from "core:cli";
+
+type Bag<T> = List<T>;
+type Pair<T> = List<[T, i32]>;
+
+impl<T> Bag<T> {
+    fn fresh() -> Bag<T> {
+        return [] as Bag<T>;
+    }
+}
+
+impl<T> Pair<T> {
+    fn fresh() -> Pair<T> {
+        return [] as Pair<T>;
+    }
+}
+
+export fn run() with Stdout {
+    let mut b = Bag::<i32>::fresh();
+    b.push(1);
+    let mut names = Bag::<String>::fresh();
+    names.push("a");
+    let mut p = Pair::<i64>::fresh();
+    p.push([2 as i64, 3]);
+    let inherited = Bag::<i32>::with_capacity(4);
+    let kept: Bag<i32> = inherited;
+    println(`${b[0]} ${names[0]} ${p[0][0]} ${kept.len()}`);
+}
+
+__DATA__
+{"stdout": "1 a 2 0\n"}

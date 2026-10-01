@@ -43,7 +43,7 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
 } from "./runtime/atn.wado";
-use { TreeMap } from "core:collections";
+use { GaleMap } from "./gale_map.wado";
 
 // ATN state kinds and transition kinds are the wire-format protocol shared
 // with the decoder; they live in `runtime/atn.wado` (imported above) so there
@@ -170,7 +170,7 @@ struct AtnBuilder {
     rule_start: List<i32>,
     rule_stop: List<i32>,
     decision_state: List<i32>,
-    kinds: TreeMap<String, i32>,
+    kinds: GaleMap<String, i32>,
     num_tokens: i32,
     call_site_returns: List<i32>,
     decision_sites: List<i32>,
@@ -244,8 +244,8 @@ impl AtnBuilder {
 /// constants, so ATN atom labels match them by construction. Returns the
 /// map and the total token count. Numeric `type(N)` overrides are not
 /// modelled yet (no fixture needs them in the ATN path).
-pub fn build_token_kinds(grammar: &Grammar) -> [TreeMap<String, i32>, i32] {
-    let mut map = TreeMap::<String, i32>::new();
+pub fn build_token_kinds(grammar: &Grammar) -> [GaleMap<String, i32>, i32] {
+    let mut map = GaleMap::<String, i32>::new();
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
     let mut idx = 0;
@@ -302,7 +302,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         b.rule_stop.push(stop);
     }
 
-    let mut rule_index = TreeMap::<String, i32>::new();
+    let mut rule_index = GaleMap::<String, i32>::new();
     for let mut r = 0; r < nrules; r += 1 {
         rule_index[grammar.parser_rules[r].name] = r;
     }
@@ -351,7 +351,7 @@ fn build_lr_body(
     rule: &ParserRule,
     lr: &LeftRecursiveRule,
     r: i32,
-    rule_index: &TreeMap<String, i32>,
+    rule_index: &GaleMap<String, i32>,
 ) -> [i32, i32] {
     let mut atom_alts: List<Alternative> = [];
     let mut operand_precs: List<i32> = [];
@@ -397,7 +397,7 @@ fn build_lr_suffix<S: AsStrSlice>(
     lr_alt: &LrAlt,
     rule_name: S,
     r: i32,
-    rule_index: &TreeMap<String, i32>,
+    rule_index: &GaleMap<String, i32>,
 ) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
@@ -443,7 +443,7 @@ fn build_alternation(
     b: &mut AtnBuilder,
     alts: &List<Alternative>,
     rule: i32,
-    rule_index: &TreeMap<String, i32>,
+    rule_index: &GaleMap<String, i32>,
     site: i32,
     operand_precs: &List<i32> = &[],
 ) -> [i32, i32] {
@@ -473,7 +473,7 @@ fn build_sequence(
     b: &mut AtnBuilder,
     elements: &List<Element>,
     rule: i32,
-    rule_index: &TreeMap<String, i32>,
+    rule_index: &GaleMap<String, i32>,
     operand_prec: i32 = 0,
 ) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, rule);
@@ -492,7 +492,7 @@ fn build_sequence(
 }
 
 /// Build a single element, returning its `[entry, exit]` state pair.
-fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
+fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &GaleMap<String, i32>) -> [i32, i32] {
     return match *elem {
         TokenRef(t) => leaf_segment(b, b.kind_of(`TK_${t.name}`), rule, t.atn_leaf_site),
         Literal(l) => leaf_segment(b, b.kind_of(&l.const_name), rule, l.atn_leaf_site),
@@ -574,7 +574,7 @@ fn build_repeat(
     inner: &Element,
     rule: i32,
     site: i32,
-    rule_index: &TreeMap<String, i32>,
+    rule_index: &GaleMap<String, i32>,
 ) -> [i32, i32] {
     return match kind {
         Optional => {

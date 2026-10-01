@@ -1,0 +1,489 @@
+#![stdlib("core:collections/hashmap.wado")]
+//! `HashMap<K, V>` and `HashSet<T>`, found by hashing their keys under a
+//! `HashSeed`.
+
+use { InsecureSeed } from "wasi:random";
+use {
+    EntryLog,
+    MapKeysRefIter,
+    MapKeysValueIter,
+    MapValuesRefIter,
+    MapEntriesRefIter,
+} from "core:collections/entries.wado";
+
+// A `HashMap` keeps its entries in an `EntryLog`, and an open-addressing table
+// of entry indices over them, probed linearly. Each entry also keeps its key's
+// 32-bit fingerprint, which picks its home slot, filters the key comparisons,
+// and rebuilds the table without rehashing a key.
+
+global NO_ENTRY: i32 = -1;
+global MIN_SLOTS: i32 = 8;
+/// Odd 64-bit multipliers: the golden ratio's, and SplitMix64's first.
+global MUL: u64 = 0x9E3779B97F4A7C15;
+global FINISH: u64 = 0xBF58476D1CE4E5B9;
+
+/// The key to a `HashMap`'s hash function. A seed nobody outside the program
+/// can predict keeps keys an attacker chooses from colliding.
+pub struct HashSeed {
+    k0: u64,
+    k1: u64,
+}
+
+impl HashSeed {
+    /// A seed from the host, for a map holding keys from outside the program.
+    /// The host is asked to make it unpredictable but is not obliged to, and
+    /// it asks to be called once: fetch one seed and pass it down.
+    pub fn random() -> HashSeed with InsecureSeed {
+        let [k0, k1] = InsecureSeed::get_insecure_seed();
+        return HashSeed { k0, k1 };
+    }
+
+    /// A seed of the caller's choosing, for a map whose keys the program trusts.
+    pub fn fixed(k0: u64, k1: u64) -> HashSeed {
+        return HashSeed { k0, k1 };
+    }
+}
+
+/// The 128-bit product of `a` and `b` with its halves folded together, so every
+/// bit of either reaches every bit of the result.
+fn folded_multiply(a: u64, b: u64) -> u64 {
+    let [lo, hi] = builtin::i64_mul_wide_u(a as i64, b as i64);
+    return (lo ^ hi) as u64;
+}
+
+/// Folds each word into the state by a folded multiply with a seeded key. A
+/// plain multiply carries a difference only upward, so the next word could
+/// cancel one in the top bit whatever the seed.
+struct SeededHasher {
+    state: u64,
+    /// Odd, so never zero, which would erase every word.
+    key: u64,
+}
+
+impl Hasher for SeededHasher {
+    fn write_u64(&mut self, x: u64) {
+        self.state = folded_multiply(self.state ^ x, self.key);
+    }
+
+    fn write_bytes(&mut self, bytes: ByteSlice) {
+        let len = bytes.len();
+        let mut s = folded_multiply(self.state ^ len as u64, self.key);
+        let mut i = 0;
+        while i + 8 <= len {
+            let w = bytes.get_unchecked(i) as u64 | bytes.get_unchecked(i + 1) as u64 << 8 | bytes.get_unchecked(i + 2) as u64 << 16 | bytes.get_unchecked(
+                i + 3,
+            ) as u64 << 24 | bytes.get_unchecked(i + 4) as u64 << 32 | bytes.get_unchecked(i + 5) as u64 << 40 | bytes.get_unchecked(
+                i + 6,
+            ) as u64 << 48 | bytes.get_unchecked(i + 7) as u64 << 56;
+            s = folded_multiply(s ^ w, self.key);
+            i += 8;
+        }
+        if i < len {
+            let mut w: u64 = 0;
+            for let mut j = len - 1; j >= i; j -= 1 {
+                w = w << 8 | bytes.get_unchecked(j) as u64;
+            }
+            s = folded_multiply(s ^ w, self.key);
+        }
+        self.state = s;
+    }
+}
+
+/// A map that iterates in insertion order, found by hashing its keys.
+///
+/// Its hash function is keyed by the `HashSeed` it is built with. Build one
+/// with `HashSeed::random()` wherever an attacker may choose its keys.
+pub struct HashMap<K, V> {
+    log: EntryLog<K, V>,
+    /// `fps[e]` is the fingerprint of entry `e`'s key.
+    fps: Array<i32>,
+    /// Entry indices, `NO_ENTRY` where empty; a power of two long, at least
+    /// twice the entry count once there is an entry. A fingerprint's top bits
+    /// above `shift` are its home slot.
+    table: Array<i32>,
+    shift: i32,
+    seed: HashSeed,
+}
+
+impl<K: Hash, V> HashMap<K, V> {
+    /// An empty map hashing with `seed`.
+    pub fn new(seed: HashSeed) -> HashMap<K, V> {
+        return HashMap {
+            log: EntryLog::new(),
+            fps: Array::new(0),
+            table: Array::new(0),
+            shift: 32,
+            seed,
+        };
+    }
+
+    /// Returns the number of key-value pairs in the map.
+    pub fn len(&self) -> i32 {
+        return self.log.size;
+    }
+
+    /// Returns true if the map contains no elements.
+    pub fn is_empty(&self) -> bool {
+        return self.log.size == 0;
+    }
+
+    fn fingerprint<Q: Hash>(&self, key: &Q) -> i32 {
+        let mut h = SeededHasher { state: self.seed.k0, key: self.seed.k1 ^ MUL | 1 };
+        key.hash(&mut h);
+        return (folded_multiply(h.state, FINISH) >> 32) as i32;
+    }
+
+    fn home(&self, fp: i32) -> i32 {
+        return (fp as u32 >> self.shift as u32) as i32;
+    }
+
+    /// The slot holding `key`'s entry, live or dead, or `-1 - slot` for the
+    /// empty slot it would take. The table must have a slot.
+    fn find_slot(&self, key: &K, fp: i32) -> i32 {
+        let mask = self.table.len() - 1;
+        let mut s = self.home(fp);
+        loop {
+            let e = self.table[s];
+            if e == NO_ENTRY {
+                return -1 - s;
+            }
+            if self.fps[e] == fp && self.log.keys[e] == *key {
+                return s;
+            }
+            s = s + 1 & mask;
+        }
+    }
+
+    /// The entry index of `key`, or -1 if the key is missing or its entry is
+    /// dead.
+    fn find_index(&self, key: &K) -> i32 {
+        if self.log.count == 0 {
+            return -1;
+        }
+        let s = self.find_slot(key, self.fingerprint(key));
+        if s < 0 {
+            return -1;
+        }
+        let e = self.table[s];
+        return if self.log.alive[e] { e } else { -1 };
+    }
+
+    /// Points `key`'s slot at the entry the caller appends next, unless a live
+    /// entry holds it already: that entry's index, else -1.
+    fn place(&mut self, key: &K) -> i32 {
+        let e = self.log.count;
+        if (e + 1) * 2 > self.table.len() {
+            self.rebuild_table(i32::max(MIN_SLOTS, self.table.len() * 2));
+        }
+        let fp = self.fingerprint(key);
+        let s = self.find_slot(key, fp);
+        if s >= 0 {
+            let old = self.table[s];
+            if self.log.alive[old] {
+                return old;
+            }
+            self.table[s] = e;
+        } else {
+            self.table[-1 - s] = e;
+        }
+        if e == self.fps.len() {
+            let mut fps = Array::<i32>::new(i32::max(4, e * 2));
+            fps.copy_from(0, &self.fps, 0, e);
+            self.fps = fps;
+        }
+        self.fps[e] = fp;
+        return -1;
+    }
+
+    /// A table of `slots`, a power of two, over the live entries. A dead entry
+    /// left out is only missed by a later insert of its key, which appends
+    /// anyway.
+    fn rebuild_table(&mut self, slots: i32) {
+        assert slots & slots - 1 == 0;
+        self.table = Array::<i32>::filled(slots, NO_ENTRY);
+        self.shift = 32 - i32::ctz(slots);
+        let mask = slots - 1;
+        let alive = &self.log.alive;
+        let fps = &self.fps;
+        let table = &mut self.table;
+        for let e of 0..<self.log.count {
+            if alive[e] {
+                let mut s = (fps[e] as u32 >> self.shift as u32) as i32;
+                while table[s] != NO_ENTRY {
+                    s = s + 1 & mask;
+                }
+                table[s] = e;
+            }
+        }
+    }
+
+    /// The implementation behind `map[key] = value`. Updates in place when the
+    /// key exists (keeping its order), else appends.
+    fn insert(&mut self, key: K, value: V) {
+        let existing = self.place(&key);
+        if existing >= 0 {
+            self.log.values[existing] = value;
+            return;
+        }
+        self.log.push(key, value);
+    }
+
+    /// Inserts only if `key` is absent, and reports whether it was inserted.
+    /// The losing insert keeps the existing value, unlike `map[key] = value`.
+    pub fn try_insert(&mut self, key: K, value: V) -> bool {
+        if self.place(&key) >= 0 {
+            return false;
+        }
+        self.log.push(key, value);
+        return true;
+    }
+
+    /// The value already stored under `key`, or `value` inserted and returned.
+    pub fn get_or_insert(&mut self, key: K, value: V) -> V {
+        let existing = self.place(&key);
+        if existing >= 0 {
+            return self.log.values[existing];
+        }
+        self.log.push(key, value);
+        return value;
+    }
+
+    /// Returns true if the map contains a value for the specified key.
+    pub fn contains_key(&self, key: K) -> bool {
+        return self.find_index(&key) >= 0;
+    }
+
+    /// Returns the value corresponding to the key, or null if not found.
+    pub fn get(&self, key: K) -> Option<V> {
+        return self.log.value_at(self.find_index(&key));
+    }
+
+    /// Removes a key from the map and returns true if the key was present.
+    /// Preserves insertion order of remaining elements.
+    pub fn remove(&mut self, key: K) -> bool {
+        let index = self.find_index(&key);
+        if index < 0 {
+            return false;
+        }
+        if self.log.kill(index) {
+            self.compact();
+        }
+        return true;
+    }
+
+    /// Drop the dead entries and rebuild the table over the rest, hashing no
+    /// key.
+    fn compact(&mut self) {
+        let renumbered = self.log.compact();
+        for let e of 0..<renumbered.len() {
+            let to = renumbered[e];
+            if to >= 0 {
+                self.fps[to] = self.fps[e];
+            }
+        }
+        self.rebuild_table(self.table.len());
+    }
+
+    /// The keys, in insertion order.
+    pub fn keys(&self) -> MapKeysRefIter<K, V> {
+        return self.log.keys();
+    }
+
+    /// The values, in insertion order.
+    pub fn values(&self) -> MapValuesRefIter<K, V> {
+        return self.log.values();
+    }
+
+    /// The key-value pairs, in insertion order.
+    pub fn entries(&self) -> MapEntriesRefIter<K, V> {
+        return self.log.entries();
+    }
+
+    /// Removes all key-value pairs from the map. The seed stays.
+    pub fn clear(&mut self) {
+        self.log.clear();
+        self.fps = Array::new(0);
+        self.table = Array::new(0);
+        self.shift = 32;
+    }
+}
+
+/// Lookups that take any text, so a `StrSlice` probe reaches the map without
+/// the `to_string` copy that a `String` key would require of it.
+impl<V> HashMap<String, V> {
+    /// Returns the value stored under text equal to `key`, or null.
+    pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V> {
+        return self.log.value_at(self.find_index_str(key.as_str_slice()));
+    }
+
+    /// Returns true if some key spells the same text as `key`.
+    pub fn contains_key_str<S: AsStrSlice>(&self, key: S) -> bool {
+        return self.find_index_str(key.as_str_slice()) >= 0;
+    }
+
+    /// `find_index` for text, which hashes as the `String` spelling it does.
+    fn find_index_str(&self, key: StrSlice) -> i32 {
+        if self.log.count == 0 {
+            return -1;
+        }
+        let fp = self.fingerprint(&key);
+        let mask = self.table.len() - 1;
+        let mut s = self.home(fp);
+        loop {
+            let e = self.table[s];
+            if e == NO_ENTRY {
+                return -1;
+            }
+            if self.fps[e] == fp && key.eq_str(&self.log.keys[e]) {
+                return if self.log.alive[e] { e } else { -1 };
+            }
+            s = s + 1 & mask;
+        }
+    }
+}
+
+/// The borrowing sibling of `get_str`, for a value a copy would be wasteful of.
+impl<V: Ref> HashMap<String, V> {
+    /// Returns a reference to the value stored under text equal to `key`.
+    pub fn get_ref_str<S: AsStrSlice>(&self, key: S) -> Option<&V> {
+        return self.log.value_ref_at(self.find_index_str(key.as_str_slice()));
+    }
+}
+
+/// Equal entries in the same insertion order, whatever either map's seed.
+impl<K: Eq, V: Eq> Eq for HashMap<K, V> {
+    fn eq(&self, other: &HashMap<K, V>) -> bool {
+        return self.log == other.log;
+    }
+}
+
+/// Entry by entry in insertion order, then by length.
+impl<K: Ord, V: Ord> Ord for HashMap<K, V> {
+    fn cmp(&self, other: &HashMap<K, V>) -> Ordering {
+        return self.log.cmp(&other.log);
+    }
+}
+
+/// The entries alone; the seed is never rendered.
+impl<K: Inspect, V: Inspect> Inspect for HashMap<K, V> {
+    fn inspect(&self, f: &mut Formatter) {
+        self.log.inspect_as(f, false);
+    }
+}
+
+impl<K: Hash, V> IndexAssign<K> for HashMap<K, V> {
+    type Output = V;
+
+    fn index_assign(&mut self, key: K, value: Self::Output) {
+        self.insert(key, value);
+    }
+}
+
+impl<K: Hash, V> IndexValue<K> for HashMap<K, V> {
+    type Output = V;
+
+    fn index_value(&self, key: K) -> Self::Output {
+        return self.log.values[self.log.found(self.find_index(&key), &key)];
+    }
+}
+
+impl<K: Hash, V: Ref> IndexRef<K> for HashMap<K, V> {
+    type Output = V;
+
+    fn index_ref(&self, key: K) -> &V {
+        return &self.log.values[self.log.found(self.find_index(&key), &key)];
+    }
+}
+
+impl<K: Hash, V: RefMut> IndexRefMut<K> for HashMap<K, V> {
+    type Output = V;
+
+    fn index_ref_mut(&mut self, key: K) -> &mut V {
+        let index = self.log.found(self.find_index(&key), &key);
+        return &mut self.log.values[index];
+    }
+}
+
+/// A set that iterates in insertion order, found by hashing its elements.
+pub struct HashSet<T> {
+    inner: HashMap<T, ()>,
+}
+
+impl<T: Hash> HashSet<T> {
+    /// An empty set hashing with `seed`.
+    pub fn new(seed: HashSeed) -> HashSet<T> {
+        return HashSet { inner: HashMap::new(seed) };
+    }
+
+    /// Returns the number of elements in the set.
+    pub fn len(&self) -> i32 {
+        return self.inner.len();
+    }
+
+    /// Returns true if the set contains no elements.
+    pub fn is_empty(&self) -> bool {
+        return self.inner.is_empty();
+    }
+
+    /// Inserts a value, and reports whether it was absent.
+    pub fn insert(&mut self, value: T) -> bool {
+        return self.inner.try_insert(value, ());
+    }
+
+    /// Returns true if the set contains the given value.
+    pub fn contains(&self, value: T) -> bool {
+        return self.inner.contains_key(value);
+    }
+
+    /// Removes a value, and reports whether it was present.
+    pub fn remove(&mut self, value: T) -> bool {
+        return self.inner.remove(value);
+    }
+
+    /// Removes all elements from the set.
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    /// The elements, in insertion order.
+    pub fn iter_ref(&self) -> MapKeysRefIter<T, ()> {
+        return self.inner.keys();
+    }
+
+    /// The elements, in insertion order.
+    pub fn iter_value(&self) -> MapKeysValueIter<T, ()> {
+        return self.inner.keys().iter_value();
+    }
+}
+
+impl<T: Inspect> Inspect for HashSet<T> {
+    fn inspect(&self, f: &mut Formatter) {
+        self.inner.log.inspect_as(f, true);
+    }
+}
+
+impl<T: Hash> IntoIterator for HashSet<T> {
+    type Item = T;
+    type Iter = MapKeysValueIter<T, ()>;
+
+    fn into_iter(&self) -> MapKeysValueIter<T, ()> {
+        return self.iter_value();
+    }
+}
+
+test "a difference in one word survives the next, whatever the seed" {
+    let top: u64 = 1 << 63;
+    let a: [u64, u64] = [7, 9];
+    let b: [u64, u64] = [7 ^ top, 9 ^ top];
+    let c: List<u64> = [1, 2, 3];
+    let d: List<u64> = [1 ^ top, 2 ^ top, 3];
+    for let seed of [
+        HashSeed::fixed(1, 2),
+        HashSeed::fixed(12345, 67890),
+    ] as List<HashSeed> {
+        let pairs = HashMap::<[u64, u64], i32>::new(seed);
+        assert pairs.fingerprint(&a) != pairs.fingerprint(&b);
+        let lists = HashMap::<List<u64>, i32>::new(seed);
+        assert lists.fingerprint(&c) != lists.fingerprint(&d);
+    }
+}

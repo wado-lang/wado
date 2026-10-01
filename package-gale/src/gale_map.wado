@@ -1,0 +1,103 @@
+//! The hash maps and sets Gale keys by its own input: grammar names, ATN
+//! states, corpus paths. A developer writes that input, not an attacker, so
+//! one fixed seed serves every map and none needs `InsecureSeed`.
+
+use { HashMap, HashSet, HashSeed } from "core:collections";
+use {
+    Serialize,
+    Serializer,
+    SerializeError,
+    Deserialize,
+    Deserializer,
+    DeserializeError,
+    report_duplicate_field,
+} from "core:serde";
+use { from_string, to_string } from "core:json";
+
+global SEED: HashSeed = HashSeed::fixed(0x243F6A8885A308D3, 0x13198A2E03707344);
+
+/// A `HashMap` under Gale's fixed seed.
+pub type GaleMap<K, V> = HashMap<K, V>;
+
+/// A `HashSet` under Gale's fixed seed.
+pub type GaleSet<T> = HashSet<T>;
+
+impl<K: Hash, V> GaleMap<K, V> {
+    /// An empty map.
+    pub fn new() -> GaleMap<K, V> {
+        return HashMap::<K, V>::new(SEED) as GaleMap<K, V>;
+    }
+}
+
+impl<K: Hash, V> Default for GaleMap<K, V> {
+    fn default() -> GaleMap<K, V> {
+        return GaleMap::<K, V>::new();
+    }
+}
+
+impl<V> From<Array<[String, V]>> for GaleMap<String, V> {
+    fn from(entries: Array<[String, V]>) -> GaleMap<String, V> {
+        let mut map = GaleMap::<String, V>::new();
+        for let [key, value] of entries {
+            map[key] = value;
+        }
+        return map;
+    }
+}
+
+impl<T: Hash> GaleSet<T> {
+    /// An empty set.
+    pub fn new() -> GaleSet<T> {
+        return HashSet::<T>::new(SEED) as GaleSet<T>;
+    }
+}
+
+impl<T: Hash> Default for GaleSet<T> {
+    fn default() -> GaleSet<T> {
+        return GaleSet::<T>::new();
+    }
+}
+
+impl<K: Hash + Serialize, V: Serialize> Serialize for GaleMap<K, V> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(self.len())?;
+        for let [key, value] of self.entries() {
+            m.key(key)?;
+            m.value(value)?;
+        }
+        return m.end();
+    }
+}
+
+impl<K: Hash + Deserialize + Inspect, V: Deserialize> Deserialize for GaleMap<K, V> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<GaleMap<K, V>, DeserializeError> {
+        let on_duplicate = d.on_duplicate_field();
+        let mut map = d.begin_map()?;
+        let mut result = GaleMap::<K, V>::new();
+        while let Some(key) = map.next_key::<K>()? {
+            let value = map.next_value::<V>()?;
+            // The losing insert keeps the first value, so a repeat re-assigns.
+            if !result.try_insert(key, value) {
+                report_duplicate_field(on_duplicate, &key)?;
+                result[key] = value;
+            }
+        }
+        map.end()?;
+        return Result::Ok(result);
+    }
+}
+
+test "a map round-trips through JSON in insertion order" {
+    let mut m = GaleMap::<String, i32>::new();
+    m["b"] = 2;
+    m["a"] = 1;
+    let text = to_string(&m).unwrap();
+    assert text == "{\"b\":2,\"a\":1}";
+    let back = from_string::<GaleMap<String, i32>>(text).unwrap();
+    assert back.len() == 2 && back["a"] == 1 && back["b"] == 2;
+}
+
+test "a map literal coerces to a map" {
+    let m: GaleMap<String, i32> = { b: 2, a: 1 };
+    assert m.len() == 2 && m["a"] == 1 && m["b"] == 2;
+}

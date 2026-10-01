@@ -1,0 +1,28 @@
+// A tuple pattern over a unit-typed element: the element has no field in the
+// tuple's struct, so binding it, or skipping it with `_`, reads nothing.
+use { println, Stdout } from "core:cli";
+
+fn unit_name(u: &()) -> String {
+    return `${u:?}`;
+}
+
+export fn run() with Stdout {
+    let u = ();
+    let x = 7;
+    let o: Option<[&(), &i32]> = Option::Some([&u, &x]);
+    if let Some([_, v]) = o {
+        println(`${*v}`);
+    }
+    if let Some([k, v]) = o {
+        println(`${unit_name(k)} ${*v}`);
+    }
+    let [k, w] = [&u, &x];
+    println(`${unit_name(k)} ${*w}`);
+    let [a, b] = [(), 3];
+    println(`${a:?} ${b}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n&() 7\n&() 7\n() 3\n"
+}

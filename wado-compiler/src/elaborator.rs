@@ -607,13 +607,35 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// reaching the type only through a namespace (`lib::Q`) has no bare name
     /// its frame answers for, and the declaration is what it does have.
     pub(super) fn newtype_base_of(
-        &self,
+        &mut self,
         key: &trait_env::ImplTargetKey,
     ) -> Option<(tir::TypeId, String)> {
         let trait_env::ImplTargetKey::Decl(def) = key else {
             return None;
         };
-        Some(self.tysys.peeled_base(self.lookup_newtype_of_decl(*def)?))
+        if let Some(alias) = self.lookup_newtype_of_decl(*def) {
+            return Some(self.tysys.peeled_base(alias));
+        }
+        // A generic newtype declares no one type. Its instance over its own
+        // parameters reaches the base's head, which is all a key reads.
+        let names: Vec<String> = self
+            .lookup_generic_newtype_of_decl(*def)?
+            .type_params
+            .iter()
+            .map(|p| p.name.clone())
+            .collect();
+        let params = names
+            .into_iter()
+            .zip(0..)
+            .map(|(name, index)| {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(name, index)
+            })
+            .collect();
+        let instance = self.generic_newtype_instance(*def, params);
+        Some(self.tysys.peeled_base(instance))
     }
 
     /// The base a newtype receiver wraps: the key its impls answer at, and the

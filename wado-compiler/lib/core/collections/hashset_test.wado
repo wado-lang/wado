@@ -1,0 +1,28 @@
+use { HashSet, HashSeed } from "core:collections";
+
+test "a set iterates in insertion order" {
+    let mut set = HashSet::<String>::new(HashSeed::fixed(1, 2));
+    assert set.insert("c");
+    assert set.insert("a");
+    assert !set.insert("c");
+    assert set.insert("b");
+    assert set.remove("a");
+    assert !set.remove("a");
+    assert set.insert("a");
+    let mut got: List<String> = [];
+    for let v of set {
+        got.push(v);
+    }
+    assert got == ["c", "b", "a"];
+    assert set.iter_ref().iter_value().collect() == got;
+    assert set.contains("b") && !set.contains("z");
+    assert set.len() == 3;
+}
+
+test "clear empties the set" {
+    let mut set = HashSet::<i32>::new(HashSeed::fixed(1, 2));
+    assert set.insert(1);
+    set.clear();
+    assert set.is_empty();
+    assert !set.contains(1);
+}

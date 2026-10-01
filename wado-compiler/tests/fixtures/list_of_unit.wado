@@ -1,0 +1,31 @@
+// A `List<()>` stores units like any other element: `push` writes one into
+// the backing `Array<()>`, whose element the unit's erasure must not drop.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut units: List<()> = [];
+    units.push(());
+    units.push(());
+    units[1] = ();
+    assert units.len() == 2;
+    assert units[0] == ();
+    let mut count = 0;
+    for let u of units {
+        assert u == ();
+        count += 1;
+    }
+    assert count == 2;
+
+    let literal: List<()> = [(), (), ()];
+    let filled = List::<()>::filled(4, ());
+    let mut copy = literal;
+    copy.push(());
+    copy.extend(&filled);
+    assert literal.len() == 3;
+    assert filled.len() == 4;
+    assert copy.len() == 8;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

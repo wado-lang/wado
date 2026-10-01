@@ -1,5 +1,5 @@
 use { ReflectTemplate } from "core:prelude";
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, HashSeed } from "core:collections";
 
 /// What a call does with the callee's result.
 pub variant CallForm {
@@ -462,7 +462,7 @@ impl CodeWriter {
     pub fn prune(&mut self) {
         self.flush_text();
         let items = self.items();
-        let mut item_of = TreeMap::<String, i32>::new();
+        let mut item_of = HashMap::<String, i32>::new(SOURCE_SEED);
         for let mut k = 0; k < items.len(); k += 1 {
             let head = &self.segs[items[k].start];
             item_of[self.slice(head.name_start, head.name_end).to_string()] = k;
@@ -479,8 +479,8 @@ impl CodeWriter {
     }
 
     /// Every name the text `note`s or a call statement calls.
-    pub fn references(&self) -> TreeSet<String> {
-        let mut found = TreeSet::<String>::new();
+    pub fn references(&self) -> HashSet<String> {
+        let mut found = HashSet::<String>::new(SOURCE_SEED);
         for let seg of &self.segs {
             if seg.kind matches { Call } {
                 found.insert(self.slice(seg.text_start, seg.text_end).to_string());
@@ -533,7 +533,7 @@ impl CodeWriter {
 
     /// One round of forwarding over the functions `items`, `item_of` indexing
     /// them by name. Whether any call changed.
-    fn forward_calls(&mut self, items: &List<Item>, item_of: &TreeMap<String, i32>) -> bool {
+    fn forward_calls(&mut self, items: &List<Item>, item_of: &HashMap<String, i32>) -> bool {
         let mut forwards: List<Option<Forward>> = [];
         let mut any = false;
         for let item of items {
@@ -617,7 +617,7 @@ impl CodeWriter {
         head_i: i32,
         fw: &Forward,
         items: &List<Item>,
-        item_of: &TreeMap<String, i32>,
+        item_of: &HashMap<String, i32>,
     ) -> Option<Seg> {
         let site = self.segs[site_i];
         let head = &self.segs[head_i];
@@ -683,7 +683,7 @@ impl CodeWriter {
         head: &Seg,
         inner: &Seg,
         items: &List<Item>,
-        item_of: &TreeMap<String, i32>,
+        item_of: &HashMap<String, i32>,
     ) -> bool {
         if site.arg_count == head.param_count {
             return true;
@@ -701,7 +701,7 @@ impl CodeWriter {
     }
 
     /// The function item the call `call` calls, where the writer holds it.
-    fn item_called(&self, call: &Seg, item_of: &TreeMap<String, i32>) -> Option<i32> {
+    fn item_called(&self, call: &Seg, item_of: &HashMap<String, i32>) -> Option<i32> {
         return item_of.get_str(self.slice(call.text_start, call.text_end));
     }
 
@@ -767,7 +767,7 @@ impl CodeWriter {
         &self,
         from: i32,
         to: i32,
-        item_of: &TreeMap<String, i32>,
+        item_of: &HashMap<String, i32>,
         kept: &mut List<bool>,
         queue: &mut List<i32>,
     ) {
@@ -783,7 +783,7 @@ impl CodeWriter {
     }
 
     /// Drop the prunable functions of `items` nothing kept reaches.
-    fn drop_unreached(&mut self, items: &List<Item>, item_of: &TreeMap<String, i32>) {
+    fn drop_unreached(&mut self, items: &List<Item>, item_of: &HashMap<String, i32>) {
         let mut kept: List<bool> = [];
         let mut queue: List<i32> = [];
         for let item of items {
@@ -862,6 +862,10 @@ impl CodeWriter {
 /// round resolves one link of every chain, and generated code nests few.
 global MAX_FORWARD_ROUNDS: i32 = 8;
 
+/// Seeds every map over the source being written, which the program writes
+/// itself rather than reads from an attacker.
+global SOURCE_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
+
 /// A top-level function: the segments of its head and closing brace.
 struct Item {
     start: i32,
@@ -879,7 +883,7 @@ struct Forward {
 }
 
 /// Mark the item `name` names kept, if there is one.
-fn reach<S: AsStrSlice>(name: S, item_of: &TreeMap<String, i32>, kept: &mut List<bool>, queue: &mut List<i32>) {
+fn reach<S: AsStrSlice>(name: S, item_of: &HashMap<String, i32>, kept: &mut List<bool>, queue: &mut List<i32>) {
     if let Some(k) = item_of.get_str(name) {
         if !kept[k] {
             kept[k] = true;

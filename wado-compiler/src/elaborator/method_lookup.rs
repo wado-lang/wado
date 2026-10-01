@@ -2622,6 +2622,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// The key type of every `IndexValue` and `IndexRef` impl a read of the
+    /// container may dispatch to.
+    pub(super) fn index_read_key_types(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+    ) -> Vec<TypeId> {
+        let by_value = self.indexing_trait_impls(
+            struct_name,
+            base_type_id,
+            CompilerItem::IndexValue,
+            "index_value",
+            "Output",
+            None,
+        );
+        let by_ref = self.indexing_trait_impls(
+            struct_name,
+            base_type_id,
+            CompilerItem::IndexRef,
+            "index_ref",
+            "Output",
+            None,
+        );
+        by_value
+            .into_iter()
+            .chain(by_ref)
+            .filter_map(|info| info.index_type)
+            .collect()
+    }
+
     /// Find operator trait implementation
     pub(super) fn find_arithmetic_trait_impl(
         &mut self,
@@ -2688,21 +2718,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .pointee_of(receiver)
                 .expect("a reference key is asked of a reference receiver")
         });
-        let concrete_type_args: Vec<TypeId> = match pointee {
-            Some(pointee) => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_type_args(pointee)
-                .unwrap_or_default(),
-            None => {
-                if let ResolvedType::GenericInstance { type_args, .. } =
-                    self.tysys.type_table.borrow().get(receiver).clone()
-                {
-                    type_args
-                } else {
-                    Vec::new()
-                }
+        let concrete_type_args: Vec<TypeId> = {
+            let table = self.tysys.type_table.borrow();
+            if let Some(pointee) = pointee {
+                table.nominal_type_args(pointee).unwrap_or_default()
+            } else if let Some(args) = target
+                .decl()
+                .and_then(|decl| table.args_at_decl(receiver, decl))
+            {
+                // A generic newtype's own impls bind its own arguments.
+                args
+            } else if let ResolvedType::GenericInstance { type_args, .. } = table.get(receiver) {
+                type_args.clone()
+            } else {
+                Vec::new()
             }
         };
 
@@ -2854,6 +2883,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
     ) -> Option<IndexingTraitInfo> {
+        self.indexing_trait_impls(
+            struct_name,
+            base_type_id,
+            item,
+            method_name,
+            assoc_type_name,
+            expected_index_type,
+        )
+        .into_iter()
+        .next()
+    }
+
+    /// Every indexing trait impl [`Self::find_indexing_trait_impl`] may pick
+    /// from, in candidate order.
+    fn indexing_trait_impls(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        item: CompilerItem,
+        method_name: &str,
+        assoc_type_name: &str,
+        expected_index_type: Option<TypeId>,
+    ) -> Vec<IndexingTraitInfo> {
         let concrete_type_args = self
             .tysys
             .type_table
@@ -2861,8 +2913,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(base_type_id)
             .unwrap_or_default();
 
-        let trait_ = self.tysys.compiler_trait_def(item)?;
-        self.probe_trait_impls(
+        let Some(trait_) = self.tysys.compiler_trait_def(item) else {
+            return Vec::new();
+        };
+        self.collect_trait_impls(
             &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
             &concrete_type_args,
             trait_,

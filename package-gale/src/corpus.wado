@@ -5,7 +5,7 @@
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { TreeMap } from "core:collections";
+use { GaleMap } from "./gale_map.wado";
 use { from_string, to_string_pretty } from "core:json";
 
 /// The paths to process: every `--paths-from <file>` list, one path per line,
@@ -58,7 +58,7 @@ pub fn line_of<S: AsStrSlice>(source: S, at: i32) -> i32 {
     return line;
 }
 
-fn read_baseline(path: &String) -> Option<TreeMap<String, i32>> with (Stderr, Preopens) {
+fn read_baseline(path: &String) -> Option<GaleMap<String, i32>> with (Stderr, Preopens) {
     let text = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -66,7 +66,7 @@ fn read_baseline(path: &String) -> Option<TreeMap<String, i32>> with (Stderr, Pr
             return null;
         },
     };
-    return match from_string::<TreeMap<String, i32>>(text) {
+    return match from_string::<GaleMap<String, i32>>(text) {
         Ok(map) => Option::Some(map),
         Err(e) => {
             eprintln(`error: ${path}: ${e:?}`);
@@ -75,7 +75,7 @@ fn read_baseline(path: &String) -> Option<TreeMap<String, i32>> with (Stderr, Pr
     };
 }
 
-fn write_baseline(path: &String, counts: &TreeMap<String, i32>) -> bool with (Stderr, Preopens) {
+fn write_baseline(path: &String, counts: &GaleMap<String, i32>) -> bool with (Stderr, Preopens) {
     let text = to_string_pretty(counts, Option::Some('\n')).expect("a map of strings to integers always serializes");
     if let Err(e) = fs::write(path, &text) {
         eprintln(`error: ${e}`);
@@ -84,7 +84,7 @@ fn write_baseline(path: &String, counts: &TreeMap<String, i32>) -> bool with (St
     return true;
 }
 
-fn total(counts: &TreeMap<String, i32>) -> i32 {
+fn total(counts: &GaleMap<String, i32>) -> i32 {
     let mut sum = 0;
     for let [_path, n] of counts.entries() {
         sum += *n;
@@ -93,7 +93,7 @@ fn total(counts: &TreeMap<String, i32>) -> i32 {
 }
 
 /// Every file counting more than `baseline` allows, as `[file, was, now]`.
-fn grown(counts: &TreeMap<String, i32>, baseline: &TreeMap<String, i32>) -> List<[String, i32, i32]> {
+fn grown(counts: &GaleMap<String, i32>, baseline: &GaleMap<String, i32>) -> List<[String, i32, i32]> {
     let mut out: List<[String, i32, i32]> = [];
     for let [path, now] of counts.entries() {
         let was = baseline.get(*path).unwrap_or(0);
@@ -111,7 +111,7 @@ fn grown(counts: &TreeMap<String, i32>, baseline: &TreeMap<String, i32>) -> List
 /// ever ratchets down. `remedy` tells the reader what to do about a growth.
 pub fn ratchet(
     baseline_path: String,
-    counts: &TreeMap<String, i32>,
+    counts: &GaleMap<String, i32>,
     update: bool,
     noun: String,
     remedy: String,

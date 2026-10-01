@@ -136,9 +136,9 @@ pub enum CompilerItem {
     /// `TreeMap<K, V>` — the insertion-ordered map struct, and the Wado
     /// spelling of the Component Model `map<K, V>`.
     TreeMap,
-    /// `TreeMapEntriesRefIter<K, V>` — what `TreeMap::entries` returns, and
+    /// `MapEntriesRefIter<K, V>` — what `TreeMap::entries` returns, and
     /// what the `map<K, V>` lower walks.
-    TreeMapEntriesIter,
+    MapEntriesIter,
     /// `Box<T>` — boxes primitive values into a struct that
     /// participates in GC tracing.
     Box,
@@ -448,9 +448,9 @@ pub enum CompilerItem {
     /// `TreeMap`'s `IndexAssign::index_assign` — the last-wins, order-preserving
     /// insert behind `map[k] = v`, which the `map<K, V>` lift builds pairs with.
     TreeMapIndexAssign,
-    /// `TreeMapEntriesRefIter`'s `Iterator::next`. `Iterator` carries an
+    /// `MapEntriesRefIter`'s `Iterator::next`. `Iterator` carries an
     /// associated type, so the trait item records no method name to reach for.
-    TreeMapEntriesIterNext,
+    MapEntriesIterNext,
     /// `TreeMap::len` — the live pair count, sizing the `map<K, V>` buffer.
     TreeMapLen,
     /// `TreeMap::entries` — the pair traversal the `map<K, V>` lower walks.
@@ -740,7 +740,7 @@ impl CompilerItem {
     pub const ALL: &'static [CompilerItem] = &[
         Self::List,
         Self::TreeMap,
-        Self::TreeMapEntriesIter,
+        Self::MapEntriesIter,
         Self::Box,
         Self::I128,
         Self::U128,
@@ -858,7 +858,7 @@ impl CompilerItem {
         Self::ReflectTypeName,
         Self::ReflectWireNamePolicy,
         Self::TreeMapIndexAssign,
-        Self::TreeMapEntriesIterNext,
+        Self::MapEntriesIterNext,
         Self::TreeMapLen,
         Self::TreeMapEntries,
         Self::TreeMapNew,
@@ -985,7 +985,7 @@ impl CompilerItem {
         match self {
             Self::List => "list",
             Self::TreeMap => "tree_map",
-            Self::TreeMapEntriesIter => "tree_map_entries_iter",
+            Self::MapEntriesIter => "map_entries_iter",
             Self::Box => "box",
             Self::I128 => "i128",
             Self::U128 => "u128",
@@ -1103,7 +1103,7 @@ impl CompilerItem {
             Self::ReflectTypeName => "reflect_type_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
-            Self::TreeMapEntriesIterNext => "tree_map_entries_iter_next",
+            Self::MapEntriesIterNext => "map_entries_iter_next",
             Self::TreeMapLen => "tree_map_len",
             Self::TreeMapEntries => "tree_map_entries",
             Self::TreeMapNew => "tree_map_new",
@@ -1426,9 +1426,9 @@ impl CompilerItem {
             Self::KilnRequest => world == "core:kiln/generator",
             // Loaded only when the user imports `core:collections`.
             Self::TreeMap
-            | Self::TreeMapEntriesIter
+            | Self::MapEntriesIter
             | Self::TreeMapIndexAssign
-            | Self::TreeMapEntriesIterNext
+            | Self::MapEntriesIterNext
             | Self::TreeMapLen
             | Self::TreeMapEntries
             | Self::TreeMapNew => false,
@@ -1556,7 +1556,7 @@ impl CompilerItem {
             | Self::Bf16FromU128 => CompilerItemKind::Function,
             Self::List
             | Self::TreeMap
-            | Self::TreeMapEntriesIter
+            | Self::MapEntriesIter
             | Self::Box
             | Self::I128
             | Self::U128
@@ -1646,7 +1646,7 @@ impl CompilerItem {
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
             | Self::TreeMapIndexAssign
-            | Self::TreeMapEntriesIterNext
+            | Self::MapEntriesIterNext
             | Self::TreeMapLen
             | Self::TreeMapEntries
             | Self::TreeMapNew

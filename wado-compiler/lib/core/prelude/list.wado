@@ -7,6 +7,8 @@ use {
     Ordering,
     Eq,
     Ord,
+    Hash,
+    Hasher,
     Ref,
     RefMut,
     IndexRef,
@@ -402,6 +404,16 @@ impl List<String> {
 impl<T: Eq> Eq for List<T> {
     pub fn eq(&self, other: &Self) -> bool {
         return seq_eq(&self.repr, 0, self.used, &other.repr, 0, other.used);
+    }
+}
+
+/// The length first, so lists nested in one key never run together.
+impl<T: Hash> Hash for List<T> {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(self.used as u64);
+        for let i of 0..<self.used {
+            self.repr[i].hash(h);
+        }
     }
 }
 

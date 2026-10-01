@@ -1,0 +1,26 @@
+// A generic newtype's own static and method shadow the same-named ones its
+// base supplies, with a turbofish as without one.
+use { println, Stdout } from "core:cli";
+
+struct Bag<T> { items: List<T>, tag: i32 }
+impl<T> Bag<T> {
+    fn make(tag: i32) -> Bag<T> { return Bag { items: [], tag }; }
+    fn size(&self, extra: i32) -> i32 { return self.items.len() + extra; }
+}
+
+type Sack<T> = Bag<T>;
+impl<T> Sack<T> {
+    fn make() -> Sack<T> { return Bag::<T>::make(7) as Sack<T>; }
+    fn size(&self) -> i32 { return self.tag; }
+}
+
+export fn run() with Stdout {
+    let s = Sack::<i32>::make();
+    let t: Sack<String> = Sack::make();
+    println(`${s.size()} ${t.size()}`);
+}
+
+__DATA__
+{
+    "stdout": "7 7\n"
+}

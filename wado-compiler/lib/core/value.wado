@@ -38,7 +38,7 @@ use {
     TextKeySerializer,
 } from "core:serde";
 
-use { TreeMap, TreeMapEntriesRefIter } from "core:collections";
+use { TreeMap, MapEntriesRefIter } from "core:collections";
 use { from_bytes, to_bytes } from "core:json";
 use { decode as base64_decode } from "core:base64";
 
@@ -716,7 +716,7 @@ pub struct ValueSeqAccess {
 
 /// Serves both a map and a struct: a `Value` spells them the same way.
 pub struct ValueObjectAccess {
-    entries: TreeMapEntriesRefIter<String, Value>,
+    entries: MapEntriesRefIter<String, Value>,
     /// The value of the key just read.
     pending: Option<&Value>,
 }

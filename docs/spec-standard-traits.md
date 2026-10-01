@@ -91,19 +91,19 @@ The sequence family's iterators:
 | `SliceWindows<T>`    | `Slice<T>` | `windows(size)`                               |
 | `SliceChunks<T>`     | `Slice<T>` | `chunks(size)`                                |
 
-`TreeMap` and `TreeSet` carry the same axis. A map projection needs no suffix,
-since `keys()` already names what it yields, and it yields references:
+The maps and sets of `core:collections` carry the same axis, and share one set
+of iterators: a set's elements are the keys of a map to `()`. A map projection
+needs no suffix, since `keys()` already names what it yields, and it yields
+references:
 
-| Type                            | Item       | Reached by               |
-| ------------------------------- | ---------- | ------------------------ |
-| `TreeSetRefIter<T>`             | `&T`       | `iter_ref()`             |
-| `TreeSetValueIter<T>`           | `T`        | `iter_value()`           |
-| `TreeMapKeysRefIter<K, V>`      | `&K`       | `keys()`                 |
-| `TreeMapKeysValueIter<K, V>`    | `K`        | `keys().iter_value()`    |
-| `TreeMapValuesRefIter<K, V>`    | `&V`       | `values()`               |
-| `TreeMapValuesValueIter<K, V>`  | `V`        | `values().iter_value()`  |
-| `TreeMapEntriesRefIter<K, V>`   | `[&K, &V]` | `entries()`              |
-| `TreeMapEntriesValueIter<K, V>` | `[K, V]`   | `entries().iter_value()` |
+| Type                        | Item       | Reached by                                       |
+| --------------------------- | ---------- | ------------------------------------------------ |
+| `MapKeysRefIter<K, V>`      | `&K`       | `keys()`, or a set's `iter_ref()`                |
+| `MapKeysValueIter<K, V>`    | `K`        | `keys().iter_value()`, or a set's `iter_value()` |
+| `MapValuesRefIter<K, V>`    | `&V`       | `values()`                                       |
+| `MapValuesValueIter<K, V>`  | `V`        | `values().iter_value()`                          |
+| `MapEntriesRefIter<K, V>`   | `[&K, &V]` | `entries()`                                      |
+| `MapEntriesValueIter<K, V>` | `[K, V]`   | `entries().iter_value()`                         |
 
 A map offers no `&mut` traversal: a `&mut` key would break the ordering, and a
 `&mut` value buys nothing over `m[k] = v`. The map and set iterators refer to

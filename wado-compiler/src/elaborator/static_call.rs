@@ -291,7 +291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // is not what it asks for and no case of the name shadows the answer.
         let declaring_args = self
             .tysys
-            .receiver_declaring_args(receiver_type, receiver_args)
+            .receiver_declaring_args(receiver_type, receiver_args, key.decl())
             .unwrap_or_default();
         let mut candidates = if required_trait.is_some() {
             Vec::new()
@@ -835,9 +835,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The declaring slots take the receiver's arguments, never the receiver itself:
         // only a trait's frame leads with `Self` (`Stream::<u8>::new()` once broke on it).
         if sig.declaring_slot_count > 0
-            && let Some(args) = self
-                .tysys
-                .receiver_declaring_args(receiver_type, receiver_args)
+            && let Some(args) =
+                self.tysys
+                    .receiver_args_at_impl(receiver_type, receiver_args, sig.declaring_impl)
         {
             let declaring = sig
                 .declaring_impl
@@ -967,20 +967,35 @@ impl TypeSystem {
         self.signatures.impl_sig(impl_def).trait_type_args.clone()
     }
 
-    /// The receiver's type arguments: the ones a call carries, else the ones its type holds.
+    /// The receiver's type arguments: the ones a call carries, else the ones its
+    /// type holds at `decl`, the declaration whose block is asked about.
     pub(super) fn receiver_declaring_args(
         &self,
         receiver_type: Option<TypeId>,
         receiver_args: &[TypeId],
+        decl: Option<DefId>,
     ) -> Option<Vec<TypeId>> {
         if !receiver_args.is_empty() {
             return Some(receiver_args.to_vec());
         }
-        let args = receiver_type.and_then(|ty| {
-            self.type_table
-                .borrow()
-                .nominal_type_args(self.get_base_type(ty))
-        })?;
+        let ty = receiver_type?;
+        let table = self.type_table.borrow();
+        let args = match decl.and_then(|decl| table.args_at_decl(ty, decl)) {
+            Some(args) => args,
+            None => table.nominal_type_args(self.get_base_type(ty))?,
+        };
         (!args.is_empty()).then_some(args)
+    }
+
+    /// [`Self::receiver_declaring_args`] at the declaration impl block
+    /// `declaring_impl` targets.
+    pub(super) fn receiver_args_at_impl(
+        &self,
+        receiver_type: Option<TypeId>,
+        receiver_args: &[TypeId],
+        declaring_impl: Option<DefId>,
+    ) -> Option<Vec<TypeId>> {
+        let decl = declaring_impl.and_then(|def| self.type_table.borrow().impl_target_decl(def));
+        self.receiver_declaring_args(receiver_type, receiver_args, decl)
     }
 }

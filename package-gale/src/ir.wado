@@ -1,7 +1,7 @@
 use { Span } from "./runtime/lex.wado";
 use { ParseError } from "./g4/parse_error.wado";
 use { escape_ident, to_snake_case, to_lower, to_pascal_case, literal_const_name } from "./ident.wado";
-use { TreeMap } from "core:collections";
+use { GaleMap } from "./gale_map.wado";
 
 /// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
 /// entry. ANTLR4 options can be a bare identifier, a dotted qualified name,
@@ -291,7 +291,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
     // Per-file duplicates are a parse error, so a duplicate here means two
     // merged files define the same rule; downstream name->index maps would
     // silently resolve it to one arbitrary definition.
-    let mut rule_names = TreeMap::<String, ()>::new();
+    let mut rule_names = GaleMap::<String, ()>::new();
     for let pr of &grammar.parser_rules {
         if rule_names.contains_key(pr.name) {
             return Result::Err(
@@ -497,8 +497,8 @@ fn element_holds_epsilon_closure(elem: &Element, ctx: &LeftCornerCtx) -> bool {
 
 /// Least-fixed-point nullability over the lexer rules, so a closure over an
 /// empty-matching fragment is caught as on the parser side. A cycle is false.
-fn lexer_nullable_table(rules: &List<LexerRule>) -> TreeMap<String, bool> {
-    let mut nullable = TreeMap::<String, bool>::new();
+fn lexer_nullable_table(rules: &List<LexerRule>) -> GaleMap<String, bool> {
+    let mut nullable = GaleMap::<String, bool>::new();
     loop {
         let mut changed = false;
         for let rule of rules {
@@ -520,18 +520,18 @@ fn lexer_nullable_table(rules: &List<LexerRule>) -> TreeMap<String, bool> {
     return nullable;
 }
 
-fn lexer_rule_nullable<S: AsStrSlice>(name: S, nullable: &TreeMap<String, bool>) -> bool {
+fn lexer_rule_nullable<S: AsStrSlice>(name: S, nullable: &GaleMap<String, bool>) -> bool {
     return match nullable.get_str(name) {
         Some(n) => n,
         None => false,
     };
 }
 
-fn lexer_elements_all_nullable(elements: &List<LexerElement>, nullable: &TreeMap<String, bool>) -> bool {
+fn lexer_elements_all_nullable(elements: &List<LexerElement>, nullable: &GaleMap<String, bool>) -> bool {
     return elements.iter_ref().all(|e: &LexerElement| lexer_element_nullable(e, nullable));
 }
 
-fn lexer_element_nullable(elem: &LexerElement, nullable: &TreeMap<String, bool>) -> bool {
+fn lexer_element_nullable(elem: &LexerElement, nullable: &GaleMap<String, bool>) -> bool {
     return match elem {
         Literal(text) => text.is_empty(),
         CharRange(_) | CharClass(_) | AnyChar | Not(_) => false,
@@ -544,11 +544,11 @@ fn lexer_element_nullable(elem: &LexerElement, nullable: &TreeMap<String, bool>)
     };
 }
 
-fn lexer_elements_hold_epsilon_closure(elements: &List<LexerElement>, nullable: &TreeMap<String, bool>) -> bool {
+fn lexer_elements_hold_epsilon_closure(elements: &List<LexerElement>, nullable: &GaleMap<String, bool>) -> bool {
     return elements.iter_ref().any(|e: &LexerElement| lexer_element_holds_epsilon_closure(e, nullable));
 }
 
-fn lexer_element_holds_epsilon_closure(elem: &LexerElement, nullable: &TreeMap<String, bool>) -> bool {
+fn lexer_element_holds_epsilon_closure(elem: &LexerElement, nullable: &GaleMap<String, bool>) -> bool {
     return match elem {
         Literal(_) | CharRange(_) | CharClass(_) | AnyChar | RuleRef(_) => false,
         Not(n) => lexer_element_holds_epsilon_closure(&n.element, nullable),
@@ -572,7 +572,7 @@ fn lexer_element_holds_epsilon_closure(elem: &LexerElement, nullable: &TreeMap<S
 /// once per grammar: rule name → dense index, the least-fixed-point
 /// nullable table (a cycle contributes false), and per-rule left-corner ids.
 struct LeftCornerCtx {
-    index: TreeMap<String, i32>,
+    index: GaleMap<String, i32>,
     nullable: List<bool>,
     /// `corners[i]`: ids of rules reachable as a left corner of rule `i`.
     /// A direct-LR alternative's leading self-ref is skipped — precedence
@@ -582,7 +582,7 @@ struct LeftCornerCtx {
 }
 
 fn build_left_corner_ctx(parser_rules: &List<ParserRule>, scan: bool) -> LeftCornerCtx {
-    let mut index = TreeMap::<String, i32>::new();
+    let mut index = GaleMap::<String, i32>::new();
     for let mut i = 0; i < parser_rules.len(); i += 1 {
         index[parser_rules[i].name] = i;
     }
@@ -631,7 +631,7 @@ fn left_corners_reach_self(ctx: &LeftCornerCtx, i: i32) -> bool {
     return false;
 }
 
-fn compute_nullable_table(parser_rules: &List<ParserRule>, index: &TreeMap<String, i32>, scan: bool) -> List<bool> {
+fn compute_nullable_table(parser_rules: &List<ParserRule>, index: &GaleMap<String, i32>, scan: bool) -> List<bool> {
     let mut nullable: List<bool> = [];
     for let mut i = 0; i < parser_rules.len(); i += 1 {
         nullable.push(false);
@@ -659,7 +659,7 @@ fn compute_nullable_table(parser_rules: &List<ParserRule>, index: &TreeMap<Strin
 
 fn collect_alt_corners(
     elements: &List<Element>,
-    index: &TreeMap<String, i32>,
+    index: &GaleMap<String, i32>,
     nullable: &List<bool>,
     scan: bool,
     out: &mut List<i32>,
@@ -675,7 +675,7 @@ fn collect_alt_corners(
 
 fn collect_element_corners(
     elem: &Element,
-    index: &TreeMap<String, i32>,
+    index: &GaleMap<String, i32>,
     nullable: &List<bool>,
     scan: bool,
     out: &mut List<i32>,
@@ -715,7 +715,7 @@ fn element_leads_self_ref<S: AsStrSlice>(elem: &Element, name: S) -> bool {
     };
 }
 
-fn element_nullable(elem: &Element, index: &TreeMap<String, i32>, nullable: &List<bool>, scan: bool) -> bool {
+fn element_nullable(elem: &Element, index: &GaleMap<String, i32>, nullable: &List<bool>, scan: bool) -> bool {
     return match elem {
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
         RuleRef(r) => match index.get(r.name) {
@@ -744,7 +744,7 @@ fn element_nullable(elem: &Element, index: &TreeMap<String, i32>, nullable: &Lis
     };
 }
 
-fn alt_all_nullable(elements: &List<Element>, index: &TreeMap<String, i32>, nullable: &List<bool>, scan: bool) -> bool {
+fn alt_all_nullable(elements: &List<Element>, index: &GaleMap<String, i32>, nullable: &List<bool>, scan: bool) -> bool {
     for let e of elements {
         if !element_nullable(e, index, nullable, scan) {
             return false;
@@ -1399,8 +1399,8 @@ fn check_all_reached(grammars: &List<Grammar>, master_ids: &List<i32>, order: &L
 
 /// Each grammar's index by declared name. An import resolves through this, so
 /// building it is where a name two inputs both claim is caught.
-fn index_by_name(grammars: &List<Grammar>) -> Result<TreeMap<String, i32>, ParseError> {
-    let mut by_name = TreeMap::<String, i32>::new();
+fn index_by_name(grammars: &List<Grammar>) -> Result<GaleMap<String, i32>, ParseError> {
+    let mut by_name = GaleMap::<String, i32>::new();
     for let mut i = 0; i < grammars.len(); i += 1 {
         if !by_name.try_insert(grammars[i].name, i) {
             return Result::Err(
@@ -1420,7 +1420,7 @@ fn index_by_name(grammars: &List<Grammar>) -> Result<TreeMap<String, i32>, Parse
 fn delegate_order(
     imports: &List<String>,
     grammars: &List<Grammar>,
-    by_name: &TreeMap<String, i32>,
+    by_name: &GaleMap<String, i32>,
 ) -> Result<List<i32>, ParseError> {
     let mut order: List<i32> = [];
     let mut visited: List<String> = [];
@@ -1433,7 +1433,7 @@ fn delegate_order(
 fn visit_delegate<S: AsStrSlice>(
     name: S,
     grammars: &List<Grammar>,
-    by_name: &TreeMap<String, i32>,
+    by_name: &GaleMap<String, i32>,
     order: &mut List<i32>,
     visited: &mut List<String>,
 ) -> Result<(), ParseError> {
