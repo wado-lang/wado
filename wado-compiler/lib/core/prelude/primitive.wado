@@ -17,6 +17,8 @@ use {
     Ordering,
     Eq,
     Ord,
+    Hash,
+    Hasher,
     Default,
     Display,
     Inspect,
@@ -2845,6 +2847,66 @@ impl Ord for bool {
             return Ordering::Greater;
         }
         return Ordering::Equal;
+    }
+}
+
+impl Hash for i8 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for u8 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for i16 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for u16 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for i32 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for u32 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for i64 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for u64 {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self);
+    }
+}
+
+impl Hash for char {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
+    }
+}
+
+impl Hash for bool {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(*self as u64);
     }
 }
 

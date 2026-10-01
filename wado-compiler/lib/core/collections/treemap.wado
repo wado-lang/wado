@@ -1,0 +1,781 @@
+#![stdlib("core:collections/treemap.wado")]
+//! `TreeMap<K, V>` and `TreeSet<T>`, found by ordering their keys.
+
+use {
+    Serialize,
+    Deserialize,
+    Serializer,
+    Deserializer,
+    SerializeError,
+    DeserializeError,
+    DeserializeErrorKind,
+    SerializeErrorKind,
+    DuplicateFieldPolicy,
+    report_duplicate_field,
+} from "core:serde";
+use {
+    EntryLog,
+    MapKeysRefIter,
+    MapKeysValueIter,
+    MapValuesRefIter,
+    MapEntriesRefIter,
+} from "core:collections/entries.wado";
+
+// A `TreeMap` keeps its entries in an `EntryLog`, and a B-tree over them in key
+// order whose nodes hold entry indices. Every node is a fixed-stride run in a
+// few shared arrays, so the map holds no GC object per entry: a copy is a
+// handful of array copies. A map of up to `NODE_CAP` keys is one leaf, which is
+// a sorted array searched by bisection.
+
+/// Entries a node holds at most. Odd, so a full node splits around its middle
+/// entry into two halves of `NODE_CAP / 2`.
+global NODE_CAP: i32 = 31;
+global NODE_KIDS: i32 = NODE_CAP + 1;
+global NO_NODE: i32 = -1;
+
+/// A map that iterates in insertion order.
+///
+/// Keys are stored in a tree for O(log n) lookups, while key-value pairs
+/// are stored in a dense array for fast, insertion-order iteration.
+///
+/// This is similar to Rust's `indexmap::IndexMap` but uses a tree instead
+/// of a hash table for key lookups.
+#[compiler_item("tree_map")]
+pub struct TreeMap<K, V> {
+    log: EntryLog<K, V>,
+    /// Node `n` holds `lens[n]` entry indices, in key order, from
+    /// `slots[n * NODE_CAP]`, and above the leaves one more child than that
+    /// from `kids[n * NODE_KIDS]`. `kids` is empty while the root is the only
+    /// node. `nkeys[s]` is the key of entry `slots[s]`, kept beside it so a
+    /// probe reads one array.
+    slots: Array<i32>,
+    nkeys: Array<K>,
+    kids: Array<i32>,
+    lens: Array<i32>,
+    nodes: i32,
+    root: i32,
+    /// Levels below the root; every leaf is this deep.
+    height: i32,
+}
+
+impl<K: Ord, V> TreeMap<K, V> {
+    /// Creates a new empty TreeMap.
+    #[compiler_item("tree_map_new")]
+    pub fn new() -> TreeMap<K, V> {
+        return TreeMap {
+            log: EntryLog::new(),
+            slots: Array::new(0),
+            nkeys: Array::new(0),
+            kids: Array::new(0),
+            lens: Array::new(0),
+            nodes: 0,
+            root: NO_NODE,
+            height: 0,
+        };
+    }
+
+    /// Returns the number of key-value pairs in the map.
+    #[compiler_item("tree_map_len")]
+    pub fn len(&self) -> i32 {
+        return self.log.size;
+    }
+
+    /// Returns true if the map contains no elements.
+    pub fn is_empty(&self) -> bool {
+        return self.log.size == 0;
+    }
+
+    /// The slot of node `n` holding `key`, or `-1 - slot` for the slot it would
+    /// take.
+    fn search_node(&self, n: i32, key: &K) -> i32 {
+        let base = n * NODE_CAP;
+        let mut lo = 0;
+        let mut hi = self.lens[n];
+        while lo < hi {
+            let mid = lo + hi >> 1;
+            match key.cmp(&self.nkeys[base + mid]) {
+                Ordering::Less => hi = mid,
+                Ordering::Greater => lo = mid + 1,
+                Ordering::Equal => {
+                    return mid;
+                },
+            }
+        }
+        return -1 - lo;
+    }
+
+    /// The entry index of `key`, or -1 if the key is missing or its entry is
+    /// dead.
+    fn find_index(&self, key: K) -> i32 {
+        let mut n = self.root;
+        if n == NO_NODE {
+            return -1;
+        }
+        let mut depth = 0;
+        loop {
+            let pos = self.search_node(n, &key);
+            if pos >= 0 {
+                let e = self.slots[n * NODE_CAP + pos];
+                return if self.log.alive[e] { e } else { -1 };
+            }
+            if depth == self.height {
+                return -1;
+            }
+            n = self.kids[n * NODE_KIDS - 1 - pos];
+            depth += 1;
+        }
+    }
+
+    /// Put `key` in the tree for entry `e`, which the caller appends, unless a
+    /// live entry holds it already: that entry's index, else -1. One descent,
+    /// splitting each full node on the way down so a leaf always has room.
+    fn place(&mut self, key: &K, e: i32) -> i32 {
+        self.make_root_room();
+        let mut n = self.root;
+        let mut depth = 0;
+        loop {
+            let found = self.search_node(n, key);
+            if found >= 0 {
+                return self.claim(n * NODE_CAP + found, e);
+            }
+            let mut pos = -1 - found;
+            if depth == self.height {
+                self.insert_slot(n, pos, e, key);
+                return -1;
+            }
+            if self.lens[self.kids[n * NODE_KIDS + pos]] == NODE_CAP {
+                self.split_child(n, pos, depth + 1 == self.height);
+                match key.cmp(&self.nkeys[n * NODE_CAP + pos]) {
+                    Ordering::Less => {
+                    },
+                    Ordering::Greater => pos += 1,
+                    Ordering::Equal => {
+                        return self.claim(n * NODE_CAP + pos, e);
+                    },
+                }
+            }
+            n = self.kids[n * NODE_KIDS + pos];
+            depth += 1;
+        }
+    }
+
+    /// Put entry `e`, whose key orders after every key in the tree, last.
+    fn place_last(&mut self, e: i32) {
+        self.make_root_room();
+        let mut n = self.root;
+        let mut depth = 0;
+        while depth < self.height {
+            let mut pos = self.lens[n];
+            if self.lens[self.kids[n * NODE_KIDS + pos]] == NODE_CAP {
+                self.split_child(n, pos, depth + 1 == self.height);
+                pos += 1;
+            }
+            n = self.kids[n * NODE_KIDS + pos];
+            depth += 1;
+        }
+        self.insert_slot(n, self.lens[n], e, &self.log.keys[e]);
+    }
+
+    /// A root, with room for one more entry.
+    fn make_root_room(&mut self) {
+        if self.root == NO_NODE {
+            self.root = self.new_node();
+            return;
+        }
+        if self.lens[self.root] < NODE_CAP {
+            return;
+        }
+        let top = self.new_node();
+        self.kids[top * NODE_KIDS] = self.root;
+        self.split_child(top, 0, self.height == 0);
+        self.root = top;
+        self.height += 1;
+    }
+
+    /// The slot `at` holds the key being placed: its entry if that one is live,
+    /// else -1 with the slot handed to `e`.
+    fn claim(&mut self, at: i32, e: i32) -> i32 {
+        let old = self.slots[at];
+        if self.log.alive[old] {
+            return old;
+        }
+        self.slots[at] = e;
+        return -1;
+    }
+
+    fn insert_slot(&mut self, n: i32, pos: i32, e: i32, key: &K) {
+        let base = n * NODE_CAP;
+        let len = self.lens[n];
+        self.slots.copy_from(base + pos + 1, &self.slots, base + pos, len - pos);
+        self.nkeys.copy_from(base + pos + 1, &self.nkeys, base + pos, len - pos);
+        self.slots[base + pos] = e;
+        self.nkeys[base + pos] = *key;
+        self.lens[n] = len + 1;
+    }
+
+    /// Split the full child `i` of node `p`, which has room for one more entry:
+    /// the child's middle entry moves up into `p`, and its upper half into a new
+    /// node after it.
+    fn split_child(&mut self, p: i32, i: i32, leaf: bool) {
+        let half = NODE_CAP / 2;
+        let right = self.new_node();
+        let c = self.kids[p * NODE_KIDS + i];
+        let cb = c * NODE_CAP;
+        self.slots.copy_from(right * NODE_CAP, &self.slots, cb + half + 1, half);
+        self.nkeys.copy_from(right * NODE_CAP, &self.nkeys, cb + half + 1, half);
+        if !leaf {
+            self.kids.copy_from(right * NODE_KIDS, &self.kids, c * NODE_KIDS + half + 1, half + 1);
+        }
+        self.lens[c] = half;
+        self.lens[right] = half;
+        let pb = p * NODE_CAP;
+        let plen = self.lens[p];
+        self.slots.copy_from(pb + i + 1, &self.slots, pb + i, plen - i);
+        self.nkeys.copy_from(pb + i + 1, &self.nkeys, pb + i, plen - i);
+        self.slots[pb + i] = self.slots[cb + half];
+        self.nkeys[pb + i] = self.nkeys[cb + half];
+        let kb = p * NODE_KIDS;
+        self.kids.copy_from(kb + i + 2, &self.kids, kb + i + 1, plen - i);
+        self.kids[kb + i + 1] = right;
+        self.lens[p] = plen + 1;
+    }
+
+    fn new_node(&mut self) -> i32 {
+        let n = self.nodes;
+        if n == self.lens.len() {
+            self.grow_nodes();
+        }
+        self.lens[n] = 0;
+        self.nodes = n + 1;
+        return n;
+    }
+
+    /// Double the node capacity. `kids` starts once there is room for a second
+    /// node, the first that can sit below another.
+    fn grow_nodes(&mut self) {
+        let cap = if self.nodes == 0 { 1 } else { self.nodes * 2 };
+        let mut lens = Array::<i32>::new(cap);
+        lens.copy_from(0, &self.lens, 0, self.nodes);
+        self.lens = lens;
+        let mut slots = Array::<i32>::new(cap * NODE_CAP);
+        slots.copy_from(0, &self.slots, 0, self.nodes * NODE_CAP);
+        self.slots = slots;
+        let mut nkeys = Array::<K>::new(cap * NODE_CAP);
+        nkeys.copy_from(0, &self.nkeys, 0, self.nodes * NODE_CAP);
+        self.nkeys = nkeys;
+        if cap > 1 {
+            let mut kids = Array::<i32>::new(cap * NODE_KIDS);
+            kids.copy_from(0, &self.kids, 0, self.kids.len());
+            self.kids = kids;
+        }
+    }
+
+    /// The implementation behind `map[key] = value`; the public API is index
+    /// assignment, `try_insert`, and `get_or_insert`. Updates in place when the
+    /// key exists (keeping its order), else appends.
+    fn insert(&mut self, key: K, value: V) {
+        let existing = self.place(&key, self.log.count);
+        if existing >= 0 {
+            self.log.values[existing] = value;
+            return;
+        }
+        self.log.push(key, value);
+    }
+
+    /// Inserts only if `key` is absent, and reports whether it was inserted.
+    /// The losing insert keeps the existing value, unlike `map[key] = value`.
+    pub fn try_insert(&mut self, key: K, value: V) -> bool {
+        if self.place(&key, self.log.count) >= 0 {
+            return false;
+        }
+        self.log.push(key, value);
+        return true;
+    }
+
+    /// The value already stored under `key`, or `value` inserted and returned.
+    /// The shape of TC39's `Map.prototype.getOrInsert`; for whether it
+    /// inserted, use `try_insert`.
+    pub fn get_or_insert(&mut self, key: K, value: V) -> V {
+        let existing = self.place(&key, self.log.count);
+        if existing >= 0 {
+            return self.log.values[existing];
+        }
+        self.log.push(key, value);
+        return value;
+    }
+
+    /// Returns true if the map contains a value for the specified key.
+    pub fn contains_key(&self, key: K) -> bool {
+        return self.find_index(key) >= 0;
+    }
+
+    /// Returns the value corresponding to the key, or null if not found.
+    pub fn get(&self, key: K) -> Option<V> {
+        let index = self.find_index(key);
+        if index >= 0 {
+            return Option::Some(self.log.values[index]);
+        }
+        return null;
+    }
+
+    /// Removes a key from the map and returns true if the key was present.
+    /// Preserves insertion order of remaining elements.
+    pub fn remove(&mut self, key: K) -> bool {
+        let index = self.find_index(key);
+        if index < 0 {
+            return false;
+        }
+        if self.log.kill(index) {
+            self.compact();
+        }
+        return true;
+    }
+
+    /// Drop the dead entries, and rebuild the tree over the live ones from
+    /// its own key order, comparing no keys.
+    fn compact(&mut self) {
+        let renumbered = self.log.compact();
+        let mut order = List::<i32>::with_capacity(self.log.size);
+        self.collect_in_order(self.root, 0, &renumbered, &mut order);
+        self.clear_tree();
+        for let e of order {
+            self.place_last(e);
+        }
+    }
+
+    /// The live entries below node `n`, renumbered, in key order.
+    fn collect_in_order(&self, n: i32, depth: i32, renumbered: &Array<i32>, out: &mut List<i32>) {
+        let len = self.lens[n];
+        for let i of 0..<len {
+            if depth < self.height {
+                self.collect_in_order(self.kids[n * NODE_KIDS + i], depth + 1, renumbered, out);
+            }
+            let e = renumbered[self.slots[n * NODE_CAP + i]];
+            if e >= 0 {
+                out.push(e);
+            }
+        }
+        if depth < self.height {
+            self.collect_in_order(self.kids[n * NODE_KIDS + len], depth + 1, renumbered, out);
+        }
+    }
+
+    fn clear_tree(&mut self) {
+        self.slots = Array::new(0);
+        self.nkeys = Array::new(0);
+        self.kids = Array::new(0);
+        self.lens = Array::new(0);
+        self.nodes = 0;
+        self.root = NO_NODE;
+        self.height = 0;
+    }
+
+    /// The keys, in insertion order. A map traversal yields references and
+    /// carries no axis suffix: `keys` already says what it yields, and a
+    /// caller wanting owned keys takes `iter_value()` off the result.
+    pub fn keys(&self) -> MapKeysRefIter<K, V> {
+        return self.log.keys();
+    }
+
+    /// The values, in insertion order.
+    pub fn values(&self) -> MapValuesRefIter<K, V> {
+        return self.log.values();
+    }
+
+    /// The key-value pairs, in insertion order.
+    #[compiler_item("tree_map_entries")]
+    pub fn entries(&self) -> MapEntriesRefIter<K, V> {
+        return self.log.entries();
+    }
+
+    /// Removes all key-value pairs from the map.
+    pub fn clear(&mut self) {
+        self.log.clear();
+        self.clear_tree();
+    }
+}
+
+/// Lookups that take any text, so a `StrSlice` probe reaches the map without
+/// the `to_string` copy that a `String` key would require of it.
+impl<V> TreeMap<String, V> {
+    /// Returns the value stored under text equal to `key`, or null.
+    pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V> {
+        let index = self.find_index_str(key.as_str_slice());
+        if index >= 0 {
+            return Option::Some(self.log.values[index]);
+        }
+        return null;
+    }
+
+    /// Returns true if some key spells the same text as `key`.
+    pub fn contains_key_str<S: AsStrSlice>(&self, key: S) -> bool {
+        return self.find_index_str(key.as_str_slice()) >= 0;
+    }
+
+    /// `find_index` for text.
+    fn find_index_str(&self, key: StrSlice) -> i32 {
+        let mut n = self.root;
+        if n == NO_NODE {
+            return -1;
+        }
+        let mut depth = 0;
+        loop {
+            let base = n * NODE_CAP;
+            let mut lo = 0;
+            let mut hi = self.lens[n];
+            while lo < hi {
+                let mid = lo + hi >> 1;
+                match key.cmp_str(&self.nkeys[base + mid]) {
+                    Ordering::Less => hi = mid,
+                    Ordering::Greater => lo = mid + 1,
+                    Ordering::Equal => {
+                        let e = self.slots[base + mid];
+                        return if self.log.alive[e] { e } else { -1 };
+                    },
+                }
+            }
+            if depth == self.height {
+                return -1;
+            }
+            n = self.kids[n * NODE_KIDS + lo];
+            depth += 1;
+        }
+    }
+}
+
+/// The borrowing sibling of `get_str`, for a value a copy would be wasteful of.
+impl<V: Ref> TreeMap<String, V> {
+    /// Returns a reference to the value stored under text equal to `key`.
+    pub fn get_ref_str<S: AsStrSlice>(&self, key: S) -> Option<&V> {
+        let index = self.find_index_str(key.as_str_slice());
+        if index >= 0 {
+            return Option::Some(&self.log.values[index]);
+        }
+        return null;
+    }
+}
+
+/// Equal entries in the same insertion order.
+impl<K: Eq, V: Eq> Eq for TreeMap<K, V> {
+    fn eq(&self, other: &TreeMap<K, V>) -> bool {
+        return self.log == other.log;
+    }
+}
+
+/// Entry by entry in insertion order, then by length.
+impl<K: Ord, V: Ord> Ord for TreeMap<K, V> {
+    fn cmp(&self, other: &TreeMap<K, V>) -> Ordering {
+        return self.log.cmp(&other.log);
+    }
+}
+
+// IndexAssign for map[key] = value
+impl<K: Ord, V> IndexAssign<K> for TreeMap<K, V> {
+    type Output = V;
+
+    #[compiler_item("tree_map_index_assign")]
+    fn index_assign(&mut self, key: K, value: Self::Output) {
+        self.insert(key, value);
+    }
+}
+
+// IndexValue for map[key] -> V (panics if key not found)
+impl<K: Ord, V> IndexValue<K> for TreeMap<K, V> {
+    type Output = V;
+
+    fn index_value(&self, key: K) -> Self::Output {
+        let index = self.find_index(key);
+        if index < 0 {
+            panic(`key not found: ${key:?}`);
+        }
+        return self.log.values[index];
+    }
+}
+
+// IndexRef for &map[key] -> &V (panics if key not found)
+impl<K: Ord, V: Ref> IndexRef<K> for TreeMap<K, V> {
+    type Output = V;
+
+    fn index_ref(&self, key: K) -> &V {
+        let index = self.find_index(key);
+        if index < 0 {
+            panic(`key not found: ${key:?}`);
+        }
+        return &self.log.values[index];
+    }
+}
+
+// IndexRefMut for map[key].mutating_method() -> &mut V (panics if key not found)
+impl<K: Ord, V: RefMut> IndexRefMut<K> for TreeMap<K, V> {
+    type Output = V;
+
+    fn index_ref_mut(&mut self, key: K) -> &mut V {
+        let index = self.find_index(key);
+        if index < 0 {
+            panic(`key not found: ${key:?}`);
+        }
+        return &mut self.log.values[index];
+    }
+}
+
+// `{ key: value, … }` as a `TreeMap<String, V>` — an array of pairs in source
+// order, last write wins (WEP 2026-08-24).
+impl<V> From<Array<[String, V]>> for TreeMap<String, V> {
+    fn from(entries: Array<[String, V]>) -> TreeMap<String, V> {
+        let mut map = TreeMap::<String, V>::new();
+        for let [key, value] of entries {
+            map.insert(key, value);
+        }
+        return map;
+    }
+}
+
+impl<V> LiteralSpread for TreeMap<String, V> {
+    fn spread_literal(&mut self, base: TreeMap<String, V>) {
+        for let [k, v] of base.entries() {
+            self.insert(*k, *v);
+        }
+    }
+}
+
+/// A set that iterates in insertion order.
+///
+/// Backed by a `TreeMap<T, ()>`, which keeps a B-tree for O(log n) membership
+/// tests and a dense array for O(1) insertion-order iteration.
+///
+/// Duplicate inserts are silently ignored (preserving the original position).
+/// Removing an element and re-inserting it appends it at the end.
+///
+/// `T` must implement `Ord` to use any of the methods.
+pub struct TreeSet<T> {
+    inner: TreeMap<T, ()>,
+}
+
+impl<T: Ord> TreeSet<T> {
+    /// Creates a new empty TreeSet.
+    pub fn new() -> TreeSet<T> {
+        return TreeSet { inner: TreeMap::new() };
+    }
+
+    /// Returns the number of elements in the set.
+    pub fn len(&self) -> i32 {
+        return self.inner.len();
+    }
+
+    /// Returns true if the set contains no elements.
+    pub fn is_empty(&self) -> bool {
+        return self.inner.is_empty();
+    }
+
+    /// Inserts a value into the set.
+    ///
+    /// Returns true if the value was newly inserted, false if it was already present.
+    pub fn insert(&mut self, value: T) -> bool {
+        return self.inner.try_insert(value, ());
+    }
+
+    /// Returns true if the set contains the given value.
+    pub fn contains(&self, value: T) -> bool {
+        return self.inner.contains_key(value);
+    }
+
+    /// Removes a value from the set.
+    ///
+    /// Returns true if the value was present, false otherwise.
+    pub fn remove(&mut self, value: T) -> bool {
+        return self.inner.remove(value);
+    }
+
+    /// Removes all elements from the set.
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    /// The elements, in insertion order.
+    pub fn iter_ref(&self) -> MapKeysRefIter<T, ()> {
+        return self.inner.keys();
+    }
+
+    /// The elements, in insertion order.
+    pub fn iter_value(&self) -> MapKeysValueIter<T, ()> {
+        return self.inner.keys().iter_value();
+    }
+}
+
+impl<T: Ord> IntoIterator for TreeSet<T> {
+    type Item = T;
+    type Iter = MapKeysValueIter<T, ()>;
+
+    fn into_iter(&self) -> MapKeysValueIter<T, ()> {
+        return self.iter_value();
+    }
+}
+
+// `[e0, e1, …]` as a `TreeSet<T>`, last duplicate ignored (WEP 2026-08-24).
+impl<T: Ord> From<Array<T>> for TreeSet<T> {
+    fn from(elements: Array<T>) -> TreeSet<T> {
+        let mut set = TreeSet::<T>::new();
+        for let element of elements {
+            set.insert(element);
+        }
+        return set;
+    }
+}
+
+impl<K: Ord + Serialize, V: Serialize> Serialize for TreeMap<K, V> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut m = s.begin_map(self.len())?;
+        for let [key, value] of self.entries() {
+            m.key(key)?;
+            m.value(value)?;
+        }
+        return m.end();
+    }
+}
+
+impl<K: Ord + Deserialize + Inspect, V: Deserialize> Deserialize for TreeMap<K, V> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<K, V>, DeserializeError> {
+        let on_duplicate = d.on_duplicate_field();
+        let mut map = d.begin_map()?;
+        let mut result = TreeMap::<K, V>::new();
+        while let Some(key) = map.next_key::<K>()? {
+            let val = map.next_value::<V>()?;
+            result.insert_decoded(on_duplicate, key, val)?;
+        }
+        map.end()?;
+        return Result::Ok(result);
+    }
+}
+
+impl<K: Ord + Inspect, V> TreeMap<K, V> {
+    /// Inserts a decoded entry: a repeated key is reported under `policy`,
+    /// and one the policy admits takes the last value.
+    internal fn insert_decoded(
+        &mut self,
+        policy: DuplicateFieldPolicy,
+        key: K,
+        value: V,
+    ) -> Result<(), DeserializeError> {
+        // The losing insert keeps the first value, so a repeat re-assigns.
+        if !self.try_insert(key, value) {
+            report_duplicate_field(policy, &key)?;
+            self[key] = value;
+        }
+        return Result::Ok(());
+    }
+}
+
+impl<T: Ord + Serialize> Serialize for TreeSet<T> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut seq = s.begin_seq(self.len())?;
+        for let element of self.iter_ref() {
+            seq.element(element)?;
+        }
+        return seq.end();
+    }
+}
+
+impl<T: Ord + Deserialize + Inspect> Deserialize for TreeSet<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeSet<T>, DeserializeError> {
+        let on_duplicate = d.on_duplicate_field();
+        let mut seq = d.begin_seq()?;
+        let mut result = TreeSet::<T>::new();
+        while let Some(element) = seq.next_element::<T>()? {
+            if !result.insert(element) {
+                report_duplicate_field(on_duplicate, &element)?;
+            }
+        }
+        seq.end()?;
+        return Result::Ok(result);
+    }
+}
+
+impl<K: Ord + Inspect, V: Inspect> TreeMap<K, V> {
+    /// The alternate (`#`) rendering `inspect` hands off to: one entry per
+    /// indented line.
+    fn inspect_alternate(&self, f: &mut Formatter) {
+        if self.is_empty() {
+            f.write_str("{}");
+            return;
+        }
+        f.open_brace("{");
+        for let [key, value] of self.entries() {
+            f.write_newline_indent();
+            key.inspect(f);
+            f.write_str(": ");
+            value.inspect(f);
+            f.write_char(',');
+        }
+        f.close_brace("}");
+    }
+}
+
+impl<K: Ord + Inspect, V: Inspect> Inspect for TreeMap<K, V> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        if f.alternate {
+            self.inspect_alternate(f);
+            return;
+        }
+        f.write_char('{');
+        let mut first = true;
+        for let [key, value] of self.entries() {
+            if !first {
+                f.write_str(", ");
+            }
+            first = false;
+            key.inspect(f);
+            f.write_str(": ");
+            value.inspect(f);
+        }
+        f.write_char('}');
+    }
+}
+
+impl<T: Inspect + Ord> TreeSet<T> {
+    /// The alternate (`#`) rendering `inspect` hands off to: one element per
+    /// indented line.
+    fn inspect_alternate(&self, f: &mut Formatter) {
+        if self.inner.is_empty() {
+            f.write_str("{}");
+            return;
+        }
+        f.open_brace("{");
+        for let element of self.iter_ref() {
+            f.write_newline_indent();
+            element.inspect(f);
+            f.write_char(',');
+        }
+        f.close_brace("}");
+    }
+}
+
+impl<T: Inspect + Ord> Inspect for TreeSet<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        if f.alternate {
+            self.inspect_alternate(f);
+            return;
+        }
+        f.write_char('{');
+        let mut first = true;
+        for let element of self.iter_ref() {
+            if !first {
+                f.write_str(", ");
+            }
+            first = false;
+            element.inspect(f);
+        }
+        f.write_char('}');
+    }
+}
+
+impl<K: Ord, V> Default for TreeMap<K, V> {
+    pub fn default() -> TreeMap<K, V> {
+        return TreeMap::new();
+    }
+}
+
+impl<T: Ord> Default for TreeSet<T> {
+    pub fn default() -> TreeSet<T> {
+        return TreeSet::new();
+    }
+}

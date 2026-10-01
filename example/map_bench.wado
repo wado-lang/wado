@@ -1,0 +1,234 @@
+// Throughput of `core:collections`' maps, `TreeMap` and `HashMap`, in
+// operations per second, over the workloads a generator and a parser put on
+// one: building a map, looking keys up that are and are not there, walking it
+// in insertion order, copying it, and removing entries.
+//
+// Each workload runs at three sizes, since a design that wins on a handful of
+// entries can lose at tens of thousands, and over `i32` and `String` keys,
+// whose comparisons differ in cost by an order of magnitude. Keys arrive in a
+// fixed shuffled order, so neither a sorted nor a reversed insertion flatters
+// a tree.
+
+use { Stdout } from "core:cli";
+use { Benchmark } from "core:benchmark";
+use { TreeMap, HashMap, HashSeed } from "core:collections";
+use { MonotonicClock } from "wasi:clocks";
+
+global SIZES: List<i32> = [16, 1024, 65536];
+
+/// What the workloads ask of a map, so one set of them times every map.
+trait BenchMap<K> with () {
+    fn empty() -> Self;
+    fn put(&mut self, key: K, value: i32);
+    fn find(&self, key: K) -> Option<i32>;
+    fn has(&self, key: K) -> bool;
+    fn take(&mut self, key: K) -> bool;
+    fn size(&self) -> i32;
+    fn total(&self) -> i32;
+}
+
+impl<K: Ord> BenchMap<K> for TreeMap<K, i32> {
+    fn empty() -> TreeMap<K, i32> {
+        return TreeMap::new();
+    }
+
+    fn put(&mut self, key: K, value: i32) {
+        self[key] = value;
+    }
+
+    fn find(&self, key: K) -> Option<i32> {
+        return self.get(key);
+    }
+
+    fn has(&self, key: K) -> bool {
+        return self.contains_key(key);
+    }
+
+    fn take(&mut self, key: K) -> bool {
+        return self.remove(key);
+    }
+
+    fn size(&self) -> i32 {
+        return self.len();
+    }
+
+    fn total(&self) -> i32 {
+        let mut sum = 0;
+        for let [_, v] of self.entries() {
+            sum += *v;
+        }
+        return sum;
+    }
+}
+
+impl<K: Hash> BenchMap<K> for HashMap<K, i32> {
+    fn empty() -> HashMap<K, i32> {
+        return HashMap::new(HashSeed::fixed(1, 2));
+    }
+
+    fn put(&mut self, key: K, value: i32) {
+        self[key] = value;
+    }
+
+    fn find(&self, key: K) -> Option<i32> {
+        return self.get(key);
+    }
+
+    fn has(&self, key: K) -> bool {
+        return self.contains_key(key);
+    }
+
+    fn take(&mut self, key: K) -> bool {
+        return self.remove(key);
+    }
+
+    fn size(&self) -> i32 {
+        return self.len();
+    }
+
+    fn total(&self) -> i32 {
+        let mut sum = 0;
+        for let [_, v] of self.entries() {
+            sum += *v;
+        }
+        return sum;
+    }
+}
+
+/// `0..n` in an order fixed by `seed`: a Fisher-Yates shuffle driven by
+/// SplitMix64.
+fn shuffled(n: i32, seed: u64) -> List<i32> {
+    let mut out = List::<i32>::with_capacity(n);
+    for let i of 0..<n {
+        out.push(i);
+    }
+    let mut state = seed;
+    for let mut i = n - 1; i > 0; i -= 1 {
+        state += 0x9E3779B97F4A7C15;
+        let mut z = state;
+        z = (z ^ z >> 30) * 0xBF58476D1CE4E5B9;
+        z = (z ^ z >> 27) * 0x94D049BB133111EB;
+        z = z ^ z >> 31;
+        let j = (z % (i + 1) as u64) as i32;
+        let t = out[i];
+        out[i] = out[j];
+        out[j] = t;
+    }
+    return out;
+}
+
+fn string_key(i: i32) -> String {
+    return `key_${i}`;
+}
+
+/// Operations one timed iteration performs at every size, so a small map's
+/// workload repeats until it is as long as a large one's and the timer
+/// resolves it.
+global OPS_PER_ITER: i32 = 65536;
+
+/// The workloads over one map and key type: `keys` in insertion order, and
+/// `misses`, none of which `keys` holds.
+fn bench_keys<M: BenchMap<K>, K>(
+    bench: &mut Benchmark,
+    label: String,
+    keys: &List<K>,
+    misses: &List<K>,
+) with (Stdout, MonotonicClock) {
+    let n = keys.len();
+    let rounds = OPS_PER_ITER / n;
+    bench.work_per_iter = Option::Some((n * rounds) as f64);
+    let built = build::<M, K>(keys);
+
+    bench.run(`${label} insert`, || repeat(rounds, || build::<M, K>(keys).size()));
+    bench.run(`${label} get present`, || repeat(rounds, || sum_present(&built, keys)));
+    bench.run(`${label} contains_key absent`, || repeat(rounds, || count_present(&built, misses)));
+    bench.run(`${label} iterate`, || repeat(rounds, || built.total()));
+    bench.run(`${label} copy and write one`, || repeat(rounds, || copy_and_write(&built, keys)));
+    bench.run(`${label} remove half and reinsert`, || {
+        return repeat(rounds, || remove_half_reinsert(&built, keys));
+    });
+}
+
+/// `f` run `rounds` times, its results summed so none of them is dead.
+fn repeat(rounds: i32, f: fn() -> i32) -> i32 {
+    let mut total = 0;
+    for let _ of 0..<rounds {
+        total += f();
+    }
+    return total;
+}
+
+fn build<M: BenchMap<K>, K>(keys: &List<K>) -> M {
+    let mut map = M::empty();
+    for let i of 0..<keys.len() {
+        map.put(keys[i], i);
+    }
+    return map;
+}
+
+fn sum_present<M: BenchMap<K>, K>(map: &M, keys: &List<K>) -> i32 {
+    let mut sum = 0;
+    for let k of keys {
+        sum += map.find(*k).unwrap();
+    }
+    return sum;
+}
+
+fn count_present<M: BenchMap<K>, K>(map: &M, keys: &List<K>) -> i32 {
+    let mut found = 0;
+    for let k of keys {
+        if map.has(*k) {
+            found += 1;
+        }
+    }
+    return found;
+}
+
+fn copy_and_write<M: BenchMap<K>, K>(map: &M, keys: &List<K>) -> i32 {
+    let mut copy = *map;
+    copy.put(keys[0], -1);
+    return copy.size();
+}
+
+fn remove_half_reinsert<M: BenchMap<K>, K>(map: &M, keys: &List<K>) -> i32 {
+    let mut copy = *map;
+    for let i of (0..<keys.len()).step_by(2) {
+        copy.take(keys[i]);
+    }
+    for let i of (0..<keys.len()).step_by(2) {
+        copy.put(keys[i], i);
+    }
+    return copy.size();
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut bench = Benchmark { name: "maps", unit: "ops" };
+    for let n of SIZES {
+        let order = shuffled(n, n as u64);
+        let misses: List<i32> = order.iter_ref().map(|i| *i + n).collect();
+        let names: List<String> = order.iter_ref().map(|i| string_key(*i)).collect();
+        let absent: List<String> = misses.iter_ref().map(|i| string_key(*i)).collect();
+        bench_keys::<TreeMap<i32, i32>, i32>(&mut bench, `TreeMap i32 x${n}`, &order, &misses);
+        bench_keys::<HashMap<i32, i32>, i32>(&mut bench, `HashMap i32 x${n}`, &order, &misses);
+        bench_keys::<TreeMap<String, i32>, String>(&mut bench, `TreeMap String x${n}`, &names, &absent);
+        bench_keys::<HashMap<String, i32>, String>(&mut bench, `HashMap String x${n}`, &names, &absent);
+    }
+}
+
+fn check_workloads<M: BenchMap<i32>>() {
+    let keys = shuffled(100, 7);
+    let misses: List<i32> = keys.iter_ref().map(|i| *i + 100).collect();
+    let map = build::<M, i32>(&keys);
+    assert map.size() == 100;
+    assert sum_present(&map, &keys) == 4950;
+    assert count_present(&map, &misses) == 0;
+    assert map.total() == 4950;
+    assert copy_and_write(&map, &keys) == 100;
+    assert remove_half_reinsert(&map, &keys) == 100;
+    assert map.find(keys[0]) matches { Some(0) };
+}
+
+test "every workload sees the map it built" {
+    check_workloads::<TreeMap<i32, i32>>();
+    check_workloads::<HashMap<i32, i32>>();
+}
