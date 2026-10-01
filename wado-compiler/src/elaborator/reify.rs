@@ -8701,17 +8701,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Literal::Number(repr, None) => {
                 return self.reify_numeric_literal(repr, recorded_type, lit.span);
             }
-            // A snapshot can lack the recorded type, which the suffix states.
             ast::Literal::Number(repr, Some(suffix)) => {
-                let literal_type = if recorded_type == TypeTable::UNKNOWN {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .numeric_suffix_type(*suffix)
-                } else {
-                    recorded_type
-                };
-                return self.reify_numeric_literal(repr, literal_type, lit.span);
+                let suffix_type = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .numeric_suffix_type(*suffix);
+                return self.reify_numeric_literal(repr, suffix_type, lit.span);
             }
             // A byte literal is an integer literal spelled as a character, so
             // it takes the same route by its decimal spelling — `let x: f64 =

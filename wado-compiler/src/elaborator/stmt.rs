@@ -2136,36 +2136,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         lit: &Literal,
         scrutinee_type: TypeId,
     ) -> Option<String> {
-        let suffix_type = match lit {
-            Literal::Number(_, Some(suffix)) => Some(
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .numeric_suffix_type(*suffix),
-            ),
-            _ => None,
-        };
+        if let Literal::Number(_, Some(suffix)) = lit {
+            let mut type_table = self.tysys.type_table.borrow_mut();
+            let suffix_type = type_table.numeric_suffix_type(*suffix);
+            return (type_table.type_key(suffix_type) != type_table.type_key(scrutinee_type))
+                .then(|| type_table.type_name(suffix_type));
+        }
         let type_table = self.tysys.type_table.borrow();
         let head = type_table.representation_head(scrutinee_type);
-        let expected = match (lit, suffix_type) {
-            (Literal::Number(..), Some(suffix_type)) => {
-                if type_table.type_key(suffix_type) == type_table.type_key(scrutinee_type) {
-                    return None;
-                }
-                type_table.type_name(suffix_type)
-            }
-            (Literal::Number(..) | Literal::Byte(_), _)
+        let expected = match lit {
+            Literal::Number(..) | Literal::Byte(_)
                 if !type_table.is_integer(head) && !type_table.is_wide_int(head) =>
             {
-                "an integer type".to_string()
+                "an integer type"
             }
-            (Literal::String(_), _) if !type_table.is_string(head) => "String".to_string(),
-            (Literal::Char(_), _) if !type_table.is_primitive(head, PrimitiveType::Char) => {
-                "char".to_string()
-            }
-            (Literal::Bool(_), _) if !type_table.is_primitive(head, PrimitiveType::Bool) => {
-                "bool".to_string()
-            }
+            Literal::String(_) if !type_table.is_string(head) => "String",
+            Literal::Char(_) if !type_table.is_primitive(head, PrimitiveType::Char) => "char",
+            Literal::Bool(_) if !type_table.is_primitive(head, PrimitiveType::Bool) => "bool",
             _ => return None,
         };
         // An unsettled head judges nothing: an unresolved type is reported
@@ -2189,7 +2176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if matches!(lit, Literal::String(_)) && self.compares_with_string_literal(scrutinee_type) {
             return None;
         }
-        Some(expected)
+        Some(expected.to_string())
     }
 
     /// Whether `scrutinee == "…"` resolves, which is what a string-literal

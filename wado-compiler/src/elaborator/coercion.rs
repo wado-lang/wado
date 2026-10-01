@@ -509,9 +509,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .numeric_suffix_type(suffix);
-        let coerced = self.coerce_numeric_literal(expr, literal, target_type);
-        assert!(coerced.is_some(), "every suffix names a literal target");
-        coerced
+        let coerced = self
+            .coerce_numeric_literal(expr, literal, target_type)
+            .expect("every suffix names a literal target");
+        Some(coerced)
     }
 
     fn coerce_numeric_literal(
