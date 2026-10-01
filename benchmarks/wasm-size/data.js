@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790802787174,
+  "lastUpdate": 1790828324093,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62425,6 +62425,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 313333,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c7490af3c7fbda673b91f5f7481452f89f073a68",
+          "message": "Merge pull request #2234 from wado-lang/gale-gen-id-sync-sets\n\nrefactor(gale): prune generated functions from the writer's structure, not its printed text",
+          "timestamp": "2026-10-01T12:46:56+09:00",
+          "tree_id": "40376ff766f89c363263a50d70c3e90998754e81",
+          "url": "https://github.com/wado-lang/wado/commit/c7490af3c7fbda673b91f5f7481452f89f073a68"
+        },
+        "date": 1790828323408,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1929,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6778,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22806,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 313036,
             "unit": "bytes"
           }
         ]
