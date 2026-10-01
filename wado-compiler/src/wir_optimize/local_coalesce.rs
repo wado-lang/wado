@@ -1,12 +1,16 @@
-//! Local coalescing: locals of one type whose live ranges never overlap share
-//! one slot, as a register allocator shares a register. A range runs from a
+//! Local coalescing: locals of one Wasm type whose live ranges never overlap
+//! share one slot, as a register allocator shares a register. A `bool` and a
+//! `u32` are both an `i32` there, so they may share. A range runs from a
 //! local's first access to its last in evaluation order. It widens to cover a
 //! loop whose back edge the value may cross, and back to the function entry
 //! where a read may see the zero Wasm starts a local at. A parameter is live
 //! from the entry and can absorb a local whose range starts after its own ends.
 
+use std::collections::BTreeSet;
+
 use crate::hashmap::IndexMap;
 use crate::wir::{WirInstr, WirLocals, WirPackage, WirType, WirTypeDef};
+use crate::wir_optimize::local_layout::WasmClass;
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
 /// Rename each local to the slot it shares, dropping the declarations and the
@@ -43,10 +47,10 @@ fn plan_slots(body: &[WirInstr], params: &[(&str, &WirType)]) -> IndexMap<String
     let entry = ranges.first.keys().map(|name| is_param(name)).collect();
     assignment.walk_body(body, &mut Some(entry));
 
-    let mut intervals: Vec<Interval> = Vec::new();
+    let mut intervals: IndexMap<&str, Interval> = IndexMap::default();
     for &(name, ty) in params {
         let end = ranges.last.get(name).copied().unwrap_or(0);
-        intervals.push(Interval::new(name, ty, 0, end, true));
+        intervals.insert(name, Interval::new(ty, 0, end, true));
     }
     for (i, (name, &first)) in ranges.first.iter().enumerate() {
         let Some(ty) = declared.get(name) else {
@@ -57,13 +61,11 @@ fn plan_slots(body: &[WirInstr], params: &[(&str, &WirType)]) -> IndexMap<String
             continue;
         };
         let start = if assignment.maybe_unset[i] { 0 } else { first };
-        intervals.push(Interval::new(name, ty, start, ranges.last[name], false));
+        intervals.insert(name, Interval::new(ty, start, ranges.last[name], false));
     }
     for lp in &ranges.loops {
-        for interval in &mut intervals {
-            let Some(&set_first) = lp.first_access.get(&interval.name) else {
-                continue;
-            };
+        for (name, &set_first) in &lp.first_access {
+            let interval = &mut intervals[name.as_str()];
             let inside = lp.start <= interval.start && interval.end <= lp.end;
             if !(inside && set_first) {
                 interval.start = interval.start.min(lp.start);
@@ -72,52 +74,56 @@ fn plan_slots(body: &[WirInstr], params: &[(&str, &WirType)]) -> IndexMap<String
         }
     }
 
-    intervals.sort_by_key(|interval| (interval.start, !interval.is_param));
-    let mut slots: Vec<Slot> = Vec::new();
+    let mut intervals: Vec<(&str, Interval)> = intervals.into_iter().collect();
+    intervals.sort_by_key(|(_, interval)| (interval.start, !interval.is_param));
+    // Per Wasm type, each slot's end and index. A local takes the slot freed
+    // last before it starts: after a copy `b = a` that ends `a`, that is
+    // `a`'s, and the copy goes.
+    let mut pools: Vec<(WasmClass, BTreeSet<(u32, usize)>)> = Vec::new();
+    let mut slot_names: Vec<&str> = Vec::new();
     let mut renames = IndexMap::default();
-    for interval in intervals {
-        let free = slots
-            .iter_mut()
-            .find(|slot| slot.ty == interval.ty && slot.end < interval.start);
-        match free {
-            Some(slot) if !interval.is_param => {
-                slot.end = interval.end;
-                renames.insert(interval.name, slot.name.clone());
+    for (name, interval) in intervals {
+        let i = pools
+            .iter()
+            .position(|(class, _)| *class == interval.class)
+            .unwrap_or_else(|| {
+                pools.push((interval.class, BTreeSet::new()));
+                pools.len() - 1
+            });
+        let pool = &mut pools[i].1;
+        let free = pool.range(..(interval.start, 0)).next_back().copied();
+        let slot = match free {
+            Some(entry @ (_, slot)) if !interval.is_param => {
+                pool.remove(&entry);
+                renames.insert(name.to_string(), slot_names[slot].to_string());
+                slot
             }
-            _ => slots.push(Slot {
-                name: interval.name,
-                ty: interval.ty,
-                end: interval.end,
-            }),
-        }
+            _ => {
+                slot_names.push(name);
+                slot_names.len() - 1
+            }
+        };
+        pool.insert((interval.end, slot));
     }
     renames
 }
 
 struct Interval {
-    name: String,
-    ty: WirType,
+    class: WasmClass,
     start: u32,
     end: u32,
     is_param: bool,
 }
 
 impl Interval {
-    fn new(name: &str, ty: &WirType, start: u32, end: u32, is_param: bool) -> Self {
+    fn new(ty: &WirType, start: u32, end: u32, is_param: bool) -> Self {
         Self {
-            name: name.to_string(),
-            ty: ty.clone(),
+            class: WasmClass::of(ty),
             start,
             end,
             is_param,
         }
     }
-}
-
-struct Slot {
-    name: String,
-    ty: WirType,
-    end: u32,
 }
 
 /// Each local's first and last access, numbered in evaluation order from 1,
@@ -433,6 +439,19 @@ mod tests {
     fn disjoint_locals_share_a_slot() {
         let body = [
             decl("a", WirType::I32),
+            decl("b", WirType::I32),
+            set("a", WirInstr::I32Const(1)),
+            use_of("a"),
+            set("b", WirInstr::I32Const(2)),
+            use_of("b"),
+        ];
+        assert_eq!(renames(&body, &[]), [merged("b", "a")]);
+    }
+
+    #[test]
+    fn locals_of_one_wasm_type_share_a_slot() {
+        let body = [
+            decl("a", WirType::Bool),
             decl("b", WirType::I32),
             set("a", WirInstr::I32Const(1)),
             use_of("a"),

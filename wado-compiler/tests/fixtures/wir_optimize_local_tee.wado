@@ -5,8 +5,8 @@
 // pair into a single `local.tee t`, dropping one `local.get`.
 //
 // At O0: `t = (a * b) + 1` then `return t * t`
-// At O2: `return local.tee a((a * b) + 1) * a`, where `t` takes the slot of
-// `a`, which is dead once the product is computed.
+// At O2: `return local.tee b((a * b) + 1) * b`, where `t` takes the slot of
+// `b`, which is dead once the product is computed.
 //
 // `black_box` keeps the arguments off the constant path: with constant ones
 // the whole call is evaluated at compile time, and a folded-away function has
@@ -30,5 +30,5 @@ __DATA__
     "test": {},
     "wir_expect:O0": ["t = (a * b) + 1"],
     "wir_not_expect:O2": ["t = (a * b) + 1"],
-    "wir_expect:O2": ["return local.tee a((a * b) + 1) * a;"]
+    "wir_expect:O2": ["return local.tee b((a * b) + 1) * b;"]
 }

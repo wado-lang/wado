@@ -53,13 +53,13 @@ struct Group {
 /// What a local's Wasm declaration says: the scalar a signedness or nominal
 /// type erases to, or the reference type itself.
 #[derive(PartialEq)]
-enum WasmClass {
+pub(super) enum WasmClass {
     Scalar(WirScalarKind),
     Reference(WirType),
 }
 
 impl WasmClass {
-    fn of(ty: &WirType) -> Self {
+    pub(super) fn of(ty: &WirType) -> Self {
         match ty.scalar_kind() {
             Some(kind) => Self::Scalar(kind),
             None => Self::Reference(ty.clone()),

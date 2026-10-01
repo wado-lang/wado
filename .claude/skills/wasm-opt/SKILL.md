@@ -99,7 +99,7 @@ come from Wado's `-O2` build:
   46.
 - [x] Local coalescing: wasm-opt merges locals whose live ranges never overlap,
   as a register allocator would. `wir_optimize/local_coalesce.rs` does the
-  same per exact type. On the `-Os` build it takes 2,752 locals to 1,063.
+  same per Wasm type. On the `-Os` build it takes 2,752 locals to 1,020.
 - [ ] Identical functions: `deflate_raw` equals `deflate_raw$spec0` and
   `zlib_wrap` equals `zlib_wrap$spec0`. The outlined `$cold0` bounds-check
   paths of `List<T>::index_value` and `index_assign` repeat once per element
