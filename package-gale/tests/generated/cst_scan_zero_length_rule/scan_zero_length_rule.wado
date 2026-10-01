@@ -1469,16 +1469,16 @@ fn _parse_list__inner(p: &mut Parser) -> () {
         rep_scan_2: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_2_done: {
-                sg_2: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_2; }
+            sg_0_done: {
+                sg_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_0; }
                     pos += 1;
                     while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
                         pos += 1;
                     }
                     pos = scan_stmt(tokens, pos);
-                    if pos < 0 { break sg_2; }
-                    break sg_2_done;
+                    if pos < 0 { break sg_0; }
+                    break sg_0_done;
                 }
                 break rep_scan_2;
             }

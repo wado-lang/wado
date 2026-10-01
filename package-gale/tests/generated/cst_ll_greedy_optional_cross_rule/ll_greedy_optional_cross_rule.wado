@@ -1812,12 +1812,12 @@ fn scan_if_expr(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: 
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LIT_else && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        sg_1_done: {
-            sg_1: {
+        sg_0_done: {
+            sg_0: {
                 pos += 1;
                 pos = scan_block(tokens, pos, memo);
-                if pos < 0 { break sg_1; }
-                break sg_1_done;
+                if pos < 0 { break sg_0; }
+                break sg_0_done;
             }
             pos = -1;
         }

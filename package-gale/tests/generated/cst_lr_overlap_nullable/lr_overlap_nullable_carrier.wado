@@ -1522,7 +1522,7 @@ fn scan_e_lr_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
 
 fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_e(tokens, pos, memo, 2);
     if pos < 0 { return -1; }
@@ -1545,7 +1545,7 @@ fn scan_e__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, min_prec
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_1(suffix_kind) {
+        if _kind_set_0(suffix_kind) {
             if suffix_kind == TK_LIT_EQ {
                 if 2 >= min_prec {
                     let lr_saved_pos = pos;
@@ -1610,7 +1610,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _kind_set_1(_sk) {
+        if _kind_set_0(_sk) {
             if _sk == TK_LIT_EQ {
                 if 2 >= min_prec {
                     if scan_e_lr_0(&p.kinds, p.pos, &mut p.memo) < 0 {
@@ -1695,7 +1695,7 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
 fn _parse_cmp__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
-    if _kind_set_0(kind) {
+    if _kind_set_1(kind) {
         p.take();
         return;
     }
@@ -1771,11 +1771,11 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_GT | TK_LIT_LT };
+    return k matches { TK_LIT_EQ | TK_LIT_GT | TK_LIT_LT };
 }
 
 fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_LIT_EQ | TK_LIT_GT | TK_LIT_LT };
+    return k matches { TK_LIT_GT | TK_LIT_LT };
 }
 
 global EMPTY_SYNC: List<i32> = [];

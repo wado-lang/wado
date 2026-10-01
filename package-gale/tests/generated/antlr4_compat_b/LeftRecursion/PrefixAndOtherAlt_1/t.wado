@@ -1558,15 +1558,6 @@ impl Parser {
     }
 }
 
-fn scan_expr_atom_alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
-    pos += 1;
-    pos = scan_expr(tokens, pos, memo, 2);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1576,14 +1567,14 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32
             let mut best: i32 = -1;
             let try_0_end = scan_literal(tokens, start, memo);
             if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_expr_atom_alt_1(tokens, start, memo);
+            let try_1_end = scan_expr__alt_1(tokens, start, memo);
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else if kind == TK_Integer {
             return scan_literal(tokens, start, memo);
         } else if kind == TK_LIT_PLUS {
-            return scan_expr_atom_alt_1(tokens, start, memo);
+            return scan_expr__alt_1(tokens, start, memo);
         }
     }
     return -1;
@@ -1668,6 +1659,13 @@ fn _parse_expr__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
+fn scan_expr__alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    pos += 1;
+    return scan_expr(tokens, pos, memo, 2);
+}
+
 fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
@@ -1676,7 +1674,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = scan_literal(_sd_tokens, _sd_pos, &mut p.memo);
-            let _sd_p_1 = scan_expr_atom_alt_1(_sd_tokens, _sd_pos, &mut p.memo);
+            let _sd_p_1 = scan_expr__alt_1(_sd_tokens, _sd_pos, &mut p.memo);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {

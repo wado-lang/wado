@@ -2893,6 +2893,69 @@ impl Parser {
     }
 }
 
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { return -1; }
+    pos += 1;
+    atn.stack.push(23);
+    pos = scan_expr(tokens, pos, atn, 3);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+        let sp = pos;
+        sg_0_done: {
+            sg_0: {
+                pos += 1;
+                atn.stack.push(33);
+                pos = scan_expr(tokens, pos, atn, 0);
+                atn.stack.pop();
+                if pos < 0 { break sg_0; }
+                break sg_0_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_GTGT { return -1; }
+    pos += 1;
+    atn.stack.push(38);
+    pos = scan_expr(tokens, pos, atn, 2);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_expr(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expr_atom(tokens, pos, atn);
+    if pos < 0 { return -1; }
+    loop {
+        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 0, tokens, pos, TK_EOF, min_prec);
+        if _atn_alt == 0 {
+            pos = scan_expr_lr_0(tokens, pos, atn);
+            if pos < 0 { return -1; }
+        } else if _atn_alt == 1 {
+            pos = scan_expr_lr_1(tokens, pos, atn);
+            if pos < 0 { return -1; }
+        } else {
+            break;
+        }
+    }
+    return pos;
+}
+
 fn _parse_s__inner(p: &mut Parser) -> () {
     p.site = 0;
     p.atn_ret_pending = 8;

@@ -1616,45 +1616,45 @@ struct EVals {
 fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    let gp_0 = pos;
-    sg_0_done: {
-        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if sgk_0 == TK_LIT_a {
+    let gp_1 = pos;
+    sg_1_done: {
+        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_1 == TK_LIT_a {
             pos += 1;
-            break sg_0_done;
-        } else if sgk_0 == TK_LIT_b {
+            break sg_1_done;
+        } else if sgk_1 == TK_LIT_b {
             pos += 1;
             while pos < tokens.len() && tokens[pos] == TK_LIT_b && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos += 1;
             }
-            break sg_0_done;
+            break sg_1_done;
         }
-        pos = gp_0;
+        pos = gp_1;
     }
     while pos < tokens.len() && tokens[pos] == TK_LIT_PLUS && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        sg_1_done: {
-            sg_1: {
+        sg_2_done: {
+            sg_2: {
                 pos += 1;
                 pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
-                if pos < 0 { break sg_1; }
-                break sg_1_done;
+                if pos < 0 { break sg_2; }
+                break sg_2_done;
             }
             pos = -1;
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
-        let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_2)) {
-            let dc_2 = pos;
-            let mut dc_2_exit = false;
+        let dk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !(_kind_set_0(dk_3)) {
+            let dc_3 = pos;
+            let mut dc_3_exit = false;
             pos = sp;
-            dcl_2: {
+            dcl_3: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_2_exit = true; }
+                if _kind_set_0(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_3_exit = true; }
             }
-            if dc_2_exit { pos = sp; break; }
-            pos = dc_2;
+            if dc_3_exit { pos = sp; break; }
+            pos = dc_3;
         }
     }
     if pos == scan_start { return -1; }
@@ -1706,13 +1706,13 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, _p: i32 = 0) -> EVals {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_3_done: {
-                sg_3: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_3; }
+            sg_0_done: {
+                sg_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_0; }
                     pos += 1;
                     pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK | follow_open_mark(follow));
-                    if pos < 0 { break sg_3; }
-                    break sg_3_done;
+                    if pos < 0 { break sg_0; }
+                    break sg_0_done;
                 }
                 break rep_scan;
             }

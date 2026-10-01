@@ -1526,39 +1526,39 @@ fn scan_e_lr_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_in { return -1; }
     pos += 1;
-    let gp_0 = pos;
-    sg_0_done: {
-        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if sgk_0 == TK_LIT_LPAREN {
-            sg_0_0: {
+    let gp_1 = pos;
+    sg_1_done: {
+        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_1 == TK_LIT_LPAREN {
+            sg_1_0: {
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_0_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_1_0; }
                 pos += 1;
-                break sg_0_done;
+                break sg_1_done;
             }
-        } else if sgk_0 == TK_ID {
-            sg_0_1: {
+        } else if sgk_1 == TK_ID {
+            sg_1_1: {
                 if pos < tokens.len() && tokens[pos] == TK_ID {
                     let sp = pos;
-                    sg_1_done: {
-                        sg_1: {
+                    sg_2_done: {
+                        sg_2: {
                             pos += 1;
-                            if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_2; }
                             pos += 1;
-                            break sg_1_done;
+                            break sg_2_done;
                         }
                         pos = -1;
                     }
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_1; }
                 pos += 1;
-                break sg_0_done;
+                break sg_1_done;
             }
         }
-        pos = gp_0;
+        pos = gp_1;
     }
     return pos;
 }
@@ -1653,13 +1653,13 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     opt_scan: {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
-                        sg_2_done: {
-                            sg_2: {
-                                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_2; }
+                        sg_0_done: {
+                            sg_0: {
+                                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0; }
                                 pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_2; }
+                                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_0; }
                                 pos += 1;
-                                break sg_2_done;
+                                break sg_0_done;
                             }
                             break opt_scan;
                         }

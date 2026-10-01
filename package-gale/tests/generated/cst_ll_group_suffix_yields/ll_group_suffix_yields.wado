@@ -1602,89 +1602,34 @@ impl Parser {
     }
 }
 
-fn scan_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    sg_0_done: {
-        sg_0: {
-            if pos < tokens.len() && tokens[pos] == TK_ID {
-                let sp = pos;
-                pos = scan_path(tokens, pos, FOLLOW_MASK_1);
-                if pos < 0 { pos = sp; }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_SEP { break sg_0; }
-            pos += 1;
-            break sg_0_done;
-        }
-        return -1;
-    }
-    sg_1_done: {
-        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if sgk_1 == TK_STAR {
-            pos += 1;
-            break sg_1_done;
-        } else if sgk_1 == TK_LBRACE {
-            sg_1_1: {
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_1; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_RBRACE { break sg_1_1; }
-                pos += 1;
-                break sg_1_done;
-            }
-        }
-        return -1;
-    }
-    return pos;
-}
-
-fn scan_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(kind) {
-        if kind == TK_ID {
-            let mut best: i32 = -1;
-            let try_0_end = scan_tree_alt_0(tokens, start, follow);
-            if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_path(tokens, start, follow);
-            if try_1_end > best { best = try_1_end; }
-            if best >= 0 { pos = best; return pos; }
-            return -1;
-        } else if kind == TK_SEP {
-            return scan_tree_alt_0(tokens, start, follow);
-        }
-    }
-    return -1;
-}
-
 fn scan_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_SEP && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        sg_2_done: {
-            sg_2: {
+        sg_3_done: {
+            sg_3: {
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_3; }
                 pos += 1;
-                break sg_2_done;
+                break sg_3_done;
             }
             pos = -1;
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
-        let dk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_1(dk_3)) {
-            let dc_3 = pos;
-            let mut dc_3_exit = false;
+        let dk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !(_kind_set_1(dk_4)) {
+            let dc_4 = pos;
+            let mut dc_4_exit = false;
             pos = sp;
-            dcl_3: {
+            dcl_4: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_1(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_3_exit = true; }
+                if _kind_set_1(probe_kind) && (follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) { dc_4_exit = true; }
             }
-            if dc_3_exit { pos = sp; break; }
-            pos = dc_3;
+            if dc_4_exit { pos = sp; break; }
+            pos = dc_4;
         }
     }
     return pos;
@@ -1729,6 +1674,41 @@ fn _parse_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_tree__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    sg_0_done: {
+        sg_0: {
+            if pos < tokens.len() && tokens[pos] == TK_ID {
+                let sp = pos;
+                pos = scan_path(tokens, pos, FOLLOW_MASK_1);
+                if pos < 0 { pos = sp; }
+            }
+            if pos >= tokens.len() || tokens[pos] != TK_SEP { break sg_0; }
+            pos += 1;
+            break sg_0_done;
+        }
+        return -1;
+    }
+    sg_1_done: {
+        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_1 == TK_STAR {
+            pos += 1;
+            break sg_1_done;
+        } else if sgk_1 == TK_LBRACE {
+            sg_1_1: {
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_1; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_RBRACE { break sg_1_1; }
+                pos += 1;
+                break sg_1_done;
+            }
+        }
+        return -1;
+    }
+    return pos;
+}
+
 fn _parse_tree__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
@@ -1737,7 +1717,7 @@ fn _parse_tree__inner(p: &mut Parser, follow: i64 = 0) -> () {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = scan_path(_sd_tokens, _sd_pos, follow);
-            let _sd_p_0 = scan_tree_alt_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = scan_tree__alt_0(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -1785,13 +1765,13 @@ fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_4_done: {
-                sg_4: {
-                    if pos >= tokens.len() || tokens[pos] != TK_SEP { break sg_4; }
+            sg_2_done: {
+                sg_2: {
+                    if pos >= tokens.len() || tokens[pos] != TK_SEP { break sg_2; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_4; }
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_2; }
                     pos += 1;
-                    break sg_4_done;
+                    break sg_2_done;
                 }
                 break rep_scan;
             }

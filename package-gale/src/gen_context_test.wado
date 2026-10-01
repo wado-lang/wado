@@ -174,6 +174,32 @@ test "intern_follow_mask: same mask returns same id, empty returns null" {
     assert ctx.follow_masks().len() == 2, "only the two real masks are registered";
 }
 
+test "a table reference belongs to the innermost function frame, else to the root" {
+    let mut ctx = mk_ctx();
+    let x: List<List<String>> = [
+        ["TK_X"],
+    ];
+    let y: List<List<String>> = [
+        ["TK_Y"],
+    ];
+    let Some(outer_mask) = ctx.intern_follow_mask(&x) else {
+        panic("a constrained mask interns");
+    };
+    let Some(inner_mask) = ctx.intern_follow_mask(&y) else {
+        panic("a constrained mask interns");
+    };
+    ctx.follow_mask_ref(outer_mask);
+    ctx.begin_ref_frame();
+    ctx.begin_ref_frame();
+    assert ctx.follow_mask_ref(inner_mask) == "FOLLOW_MASK_1";
+    let inner = ctx.end_ref_frame();
+    let outer = ctx.end_ref_frame();
+    assert inner.contains("FOLLOW_MASK_1") && inner.len() == 1;
+    assert outer.len() == 0;
+    let root = ctx.take_root_refs();
+    assert root.contains("FOLLOW_MASK_0") && root.len() == 1;
+}
+
 test "kind_sets: returns entries in insertion order" {
     let mut ctx = mk_ctx();
     let xy: List<String> = ["TK_X", "TK_Y"];

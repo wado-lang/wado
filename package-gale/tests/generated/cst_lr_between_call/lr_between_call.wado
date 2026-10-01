@@ -2901,29 +2901,29 @@ fn scan_expr_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
-        sg_0_done: {
-            sg_0: {
+        sg_2_done: {
+            sg_2: {
                 atn.stack.push(47);
                 pos = scan_expr(tokens, pos, atn, 0);
                 atn.stack.pop();
-                if pos < 0 { break sg_0; }
+                if pos < 0 { break sg_2; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
-                    sg_1_done: {
-                        sg_1: {
+                    sg_3_done: {
+                        sg_3: {
                             pos += 1;
                             atn.stack.push(56);
                             pos = scan_expr(tokens, pos, atn, 0);
                             atn.stack.pop();
-                            if pos < 0 { break sg_1; }
-                            break sg_1_done;
+                            if pos < 0 { break sg_3; }
+                            break sg_3_done;
                         }
                         pos = -1;
                     }
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                break sg_0_done;
+                break sg_2_done;
             }
             pos = -1;
         }
@@ -3035,29 +3035,29 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_2_done: {
-                    sg_2: {
+                sg_0_done: {
+                    sg_0: {
                         p.atn.stack.push(47);
                         pos = scan_expr(tokens, pos, &mut p.atn, 0);
                         p.atn.stack.pop();
-                        if pos < 0 { break sg_2; }
+                        if pos < 0 { break sg_0; }
                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                             let sp = pos;
-                            sg_3_done: {
-                                sg_3: {
+                            sg_1_done: {
+                                sg_1: {
                                     pos += 1;
                                     p.atn.stack.push(56);
                                     pos = scan_expr(tokens, pos, &mut p.atn, 0);
                                     p.atn.stack.pop();
-                                    if pos < 0 { break sg_3; }
-                                    break sg_3_done;
+                                    if pos < 0 { break sg_1; }
+                                    break sg_1_done;
                                 }
                                 pos = -1;
                             }
                             if pos < 0 { pos = sp; break; }
                             if pos == sp { break; }
                         }
-                        break sg_2_done;
+                        break sg_0_done;
                     }
                     break opt_scan;
                 }
