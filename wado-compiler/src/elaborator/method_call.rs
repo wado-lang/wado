@@ -1525,7 +1525,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // two modules' same-named structs whose methods both live in the
         // global `ImplMethodIndex`.
         let (struct_name_for_lookup, struct_key_for_lookup) =
-            self.tysys.static_receiver_struct_key(target_type_id);
+            match self.own_newtype_static(target_type_id, &static_call.method) {
+                Some(key) => (
+                    key.type_name(self.tysys.resolutions.defs()).map(str::to_string),
+                    Some(key),
+                ),
+                None => self.tysys.static_receiver_struct_key(target_type_id),
+            };
 
         // `Type::<T>::method()` parses as a static-method call and never
         // reaches `resolve_call`, which checks the bare spelling. The receiver
@@ -1977,7 +1983,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let resolved = self.tysys.type_table.borrow().get(target_type_id).clone();
+        // The identity, not the representation: an erased generic newtype
+        // reads as its base, whose statics its own would lose to.
+        let resolved = self.tysys.type_table.borrow().get_unerased(target_type_id).clone();
         let (struct_name, struct_module, mangled_struct_name, struct_type_args) = match resolved {
             ResolvedType::Struct { .. }
             | ResolvedType::Resource { .. }
@@ -2528,9 +2536,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base: TypeId,
         method: &str,
     ) -> QualifiedReceiver {
+        let own_static = self.own_newtype_static(newtype, method);
         let type_table = self.tysys.type_table.borrow();
         let own = nominal_receiver(&type_table, newtype);
-        if self.declares_method_directly(&own.0, method) {
+        if own_static.is_some() {
             return own;
         }
         match type_table.get(base) {
@@ -2546,6 +2555,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => own,
         }
+    }
+
+    /// The newtype `target`'s own key, where an impl block on the newtype itself
+    /// declares `method`: that declaration shadows the one its base supplies.
+    fn own_newtype_static(&self, target: TypeId, method: &str) -> Option<ImplTargetKey> {
+        let ResolvedType::Newtype { def, .. } = *self.tysys.type_table.borrow().get_unerased(target)
+        else {
+            return None;
+        };
+        let key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+        let declares = self.impl_method_entries(&key, method).next().is_some();
+        declares.then_some(key)
     }
 
     /// Whether an impl block on `struct_name` itself declares `method_name`, of
