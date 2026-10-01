@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790856976278,
+  "lastUpdate": 1790861332882,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62537,6 +62537,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f6456a9545cf9f92f69a9a0d7e1e7c297e891267"
         },
         "date": 1790856975650,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20682,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281108,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0048807567127ede07b3eaacdde5e24ce01790d4",
+          "message": "Merge pull request #2235 from wado-lang/dependabot/github_actions/github-actions-4124e50699\n\nchore(deps): bump Songmu/tagpr from 1.20.3 to 1.21.0 in the github-actions group across 1 directory",
+          "timestamp": "2026-10-01T22:03:05+09:00",
+          "tree_id": "be26077f9fc76bf30f37af3336daadd467d57c32",
+          "url": "https://github.com/wado-lang/wado/commit/0048807567127ede07b3eaacdde5e24ce01790d4"
+        },
+        "date": 1790861332088,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
