@@ -19,45 +19,9 @@ use wasm_encoder::{
     RefType, StorageType, StructType, SubType, TypeSection, ValType,
 };
 
-<<<<<<< HEAD
-/// Software lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
-mod wide_arith_downlevel;
-
-/// Scratch slot for the `-f no-array-copy` loop, keyed by the (dest, src) type
-/// pair so sites of the same shape share slots. The declaring walker and the
-/// emitter must spell these identically, so both come through here.
-fn array_copy_slot(role: &str, dest_type_idx: u32, src_type_idx: u32) -> String {
-    format!("$array_copy_{role}_{dest_type_idx}_{src_type_idx}")
-}
-
-/// Scratch slot for the `ArrayClone` loop, keyed by array type. As
-/// [`array_copy_slot`].
-fn array_clone_slot(role: &str, type_idx: u32) -> String {
-    format!("$copy_arr_{role}_{type_idx}")
-}
-
 /// What an array of units holds in each slot.
 const UNIT_SLOT: i32 = 0;
 
-||||||| c7490af3c7f
-/// Software lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
-mod wide_arith_downlevel;
-
-/// Scratch slot for the `-f no-array-copy` loop, keyed by the (dest, src) type
-/// pair so sites of the same shape share slots. The declaring walker and the
-/// emitter must spell these identically, so both come through here.
-fn array_copy_slot(role: &str, dest_type_idx: u32, src_type_idx: u32) -> String {
-    format!("$array_copy_{role}_{dest_type_idx}_{src_type_idx}")
-}
-
-/// Scratch slot for the `ArrayClone` loop, keyed by array type. As
-/// [`array_copy_slot`].
-fn array_clone_slot(role: &str, type_idx: u32) -> String {
-    format!("$copy_arr_{role}_{type_idx}")
-}
-
-=======
->>>>>>> origin/main
 /// Whether a packed storage type reads back signed (`Some(true)`), unsigned
 /// (`Some(false)`), or is not packed (`None`).
 fn packed_signedness(ty: &WirType) -> Option<bool> {
