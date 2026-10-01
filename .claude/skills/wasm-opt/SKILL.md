@@ -106,5 +106,5 @@ come from Wado's `-O2` build:
   clones whose bindings differ can fold to one body
   (`fmt_float_special$spec0` and `$spec1` in json_twitter).
 - [x] Empty functions: a module whose globals all become constants keeps an
-  empty `$initialize_module`. `cleanup` removes the calls to it, and DCE the
-  function.
+  empty `$initialize_module`. `wir_optimize/empty_work.rs` removes the calls
+  to it and the once-flag that guarded them, and DCE drops both.

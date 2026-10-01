@@ -37,12 +37,12 @@ use array::{
 };
 use branch_hint::{infer_branch_hints, select_br_ifs};
 use cleanup::{cleanup, cleanup_global_inits};
-use empty_work::elide_empty_work;
 use const_forward::forward_struct_field_constants;
 use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
 use elide_local::elide_write_only_locals;
 use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments, unwrap_box_locals};
+use empty_work::elide_empty_work;
 use local_coalesce::coalesce_locals;
 use local_layout::lay_out_locals;
 use local_nullability::relax_unset_nonnull_locals;

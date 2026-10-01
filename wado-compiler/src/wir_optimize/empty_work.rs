@@ -7,7 +7,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirInstr, WirPackage};
-use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
+use crate::wir_visitor::WirMutVisitor;
 
 use super::cleanup::clean_body;
 use super::nullability::Nullability;
@@ -36,12 +36,7 @@ fn elide_calls_to_empty_functions(module: &mut WirPackage) -> bool {
         let Some(body) = &func.body else {
             continue;
         };
-        let mut finder = EmptyCallFinder {
-            empty: &empty,
-            found: false,
-        };
-        finder.visit_body(body);
-        if !finder.found {
+        if !body.iter().any(|instr| holds_call_into(instr, &empty)) {
             continue;
         }
         let locals = func.declared_locals();
@@ -61,18 +56,10 @@ fn is_call_into(instr: &WirInstr, empty: &IndexSet<u32>) -> bool {
     matches!(instr, WirInstr::Call { func_id, .. } if empty.contains(&func_id.index()))
 }
 
-struct EmptyCallFinder<'a> {
-    empty: &'a IndexSet<u32>,
-    found: bool,
-}
-
-impl WirRefVisitor for EmptyCallFinder<'_> {
-    fn visit_instr(&mut self, instr: &WirInstr) {
-        self.found |= is_call_into(instr, self.empty);
-        if !self.found {
-            self.walk_instr(instr);
-        }
-    }
+fn holds_call_into(instr: &WirInstr, empty: &IndexSet<u32>) -> bool {
+    let mut found = is_call_into(instr, empty);
+    instr.for_each_child(&mut |child| found = found || holds_call_into(child, empty));
+    found
 }
 
 /// A call to an empty function returns nothing, so it only ever stands as a
@@ -109,10 +96,20 @@ impl WirMutVisitor for EmptyCallElider<'_> {
 /// with `cold_path` markers allowed: a guard whose block, once the flag is
 /// clear, does nothing but set it.
 fn once_guard_flag(instr: &WirInstr) -> Option<&str> {
-    let WirInstr::Block { result: None, body, .. } = instr else {
+    let WirInstr::Block {
+        result: None, body, ..
+    } = instr
+    else {
         return None;
     };
-    let [WirInstr::BrIf { depth: 0, condition }, rest @ ..] = body.as_slice() else {
+    let [
+        WirInstr::BrIf {
+            depth: 0,
+            condition,
+        },
+        rest @ ..,
+    ] = body.as_slice()
+    else {
         return None;
     };
     let WirInstr::GlobalGet { name: flag, .. } = condition.peel_hint() else {
@@ -132,27 +129,31 @@ fn once_guard_flag(instr: &WirInstr) -> Option<&str> {
 /// Remove the once-guards whose flag no other instruction reads and no export
 /// names: setting such a flag changes nothing anyone can observe.
 fn remove_dead_once_guards(module: &mut WirPackage) -> bool {
-    let mut reads = FlagReads::default();
-    for func in &module.functions {
-        if let Some(body) = &func.body {
-            reads.visit_body(body);
+    let mut guards: IndexMap<String, usize> = IndexMap::default();
+    for_each_instr_in(module, &mut |instr| {
+        if let Some(flag) = once_guard_flag(instr) {
+            *guards.entry(flag.to_string()).or_default() += 1;
+        }
+    });
+    for export in &module.exports {
+        if let WirExportDesc::Global { name } = &export.desc {
+            guards.shift_remove(&name.fq);
         }
     }
-    for global in &module.globals {
-        reads.visit_instr(&global.init);
+    if guards.is_empty() {
+        return false;
     }
-    let exported: IndexSet<&str> = module
-        .exports
+    let mut reads: IndexMap<&str, usize> = guards.keys().map(|flag| (flag.as_str(), 0)).collect();
+    for_each_instr_in(module, &mut |instr| {
+        if let WirInstr::GlobalGet { name, .. } = instr
+            && let Some(count) = reads.get_mut(name.fq.as_str())
+        {
+            *count += 1;
+        }
+    });
+    let dead: IndexSet<String> = guards
         .iter()
-        .filter_map(|export| match &export.desc {
-            WirExportDesc::Global { name } => Some(name.fq.as_str()),
-            _ => None,
-        })
-        .collect();
-    let dead: IndexSet<String> = reads
-        .guard_reads
-        .iter()
-        .filter(|(flag, guards)| reads.all_reads[*flag] == **guards && !exported.contains(flag.as_str()))
+        .filter(|(flag, count)| reads[flag.as_str()] == **count)
         .map(|(flag, _)| flag.clone())
         .collect();
     if dead.is_empty() {
@@ -166,23 +167,21 @@ fn remove_dead_once_guards(module: &mut WirPackage) -> bool {
     true
 }
 
-/// Per global, how many instructions read it, and how many of those are the
-/// condition of a once-guard.
-#[derive(Default)]
-struct FlagReads {
-    all_reads: IndexMap<String, usize>,
-    guard_reads: IndexMap<String, usize>,
-}
-
-impl WirRefVisitor for FlagReads {
-    fn visit_instr(&mut self, instr: &WirInstr) {
-        if let WirInstr::GlobalGet { name, .. } = instr {
-            *self.all_reads.entry(name.fq.clone()).or_default() += 1;
-        }
-        if let Some(flag) = once_guard_flag(instr) {
-            *self.guard_reads.entry(flag.to_string()).or_default() += 1;
-        }
-        self.walk_instr(instr);
+/// Every instruction of every function body and global initializer.
+fn for_each_instr_in(module: &WirPackage, f: &mut impl FnMut(&WirInstr)) {
+    fn walk(instr: &WirInstr, f: &mut impl FnMut(&WirInstr)) {
+        f(instr);
+        instr.for_each_child(&mut |child| walk(child, f));
+    }
+    let bodies = module
+        .functions
+        .iter()
+        .filter_map(|func| func.body.as_ref());
+    for instr in bodies.flatten() {
+        walk(instr, f);
+    }
+    for global in &module.globals {
+        walk(&global.init, f);
     }
 }
 
@@ -206,7 +205,9 @@ mod tests {
 
     fn func(name: &str, body: Vec<WirInstr>) -> WirFunction {
         WirFunction {
-            name: WirName { fq: name.to_string() },
+            name: WirName {
+                fq: name.to_string(),
+            },
             type_id: WirTypeId::new(0, Rc::from("t")),
             param_names: Vec::new(),
             body: Some(body),
@@ -254,11 +255,14 @@ mod tests {
         let effect = call(2, Vec::new());
         let mut module = package(vec![
             func("empty", Vec::new()),
-            func("caller", vec![
-                declare("a"),
-                declare("b"),
-                call(0, vec![pure, traps, effect]),
-            ]),
+            func(
+                "caller",
+                vec![
+                    declare("a"),
+                    declare("b"),
+                    call(0, vec![pure, traps, effect]),
+                ],
+            ),
             func("effect", vec![WirInstr::Unreachable]),
         ]);
         elide_empty_work(&mut module);
@@ -290,7 +294,9 @@ mod tests {
     }
 
     fn guard(flag: &str) -> WirInstr {
-        let name = WirName { fq: flag.to_string() };
+        let name = WirName {
+            fq: flag.to_string(),
+        };
         WirInstr::Block {
             label: None,
             result: None,
@@ -314,14 +320,15 @@ mod tests {
     #[test]
     fn a_guard_is_removed_only_when_nothing_else_reads_its_flag() {
         let read_elsewhere = WirInstr::Drop(Box::new(WirInstr::GlobalGet {
-            name: WirName { fq: "read".to_string() },
+            name: WirName {
+                fq: "read".to_string(),
+            },
             result_ty: WirType::I32,
         }));
-        let mut module = package(vec![func("f", vec![
-            guard("dead"),
-            guard("read"),
-            read_elsewhere,
-        ])]);
+        let mut module = package(vec![func(
+            "f",
+            vec![guard("dead"), guard("read"), read_elsewhere],
+        )]);
         elide_empty_work(&mut module);
         let body = module.functions[0].body.as_ref().unwrap();
         assert_eq!(body.len(), 2);
