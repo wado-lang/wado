@@ -89,9 +89,9 @@ come from Wado's `-O2` build:
   and 7.1KB, against 346 entries and 1.0KB once grouped by type.
 - [ ] Duplicate function types: 167 types stand outside the rec group, and only
   104 of them differ.
-- [ ] Nullable locals: every reference local is `ref null`, so each read of one
-  carries a `ref.as_non_null`. wasm-opt makes the locals non-nullable,
-  which takes the count from 1,869 to 113.
+- [ ] `ref.as_non_null`: wasm-opt takes the count from 1,869 to 113. A local
+  keeps its non-null type when a write dominates every read
+  (`wir_optimize/local_nullability.rs`). That leaves 634.
 - [ ] Set-then-get: a `local.set X` followed at once by `local.get X` occurs
   1,191 times. wasm-opt turns it into a `local.tee` or removes it.
 - [ ] Identical functions: `deflate_raw` equals `deflate_raw$spec0` and

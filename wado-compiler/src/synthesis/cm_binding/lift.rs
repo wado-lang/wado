@@ -1029,87 +1029,54 @@ fn synthesize_lift_result_inner(
         ),
     ));
 
-    // Determine the proper variant TypeId for Result<ok_ty, err_ty> so that the
-    // mutable local is typed as a GC reference (not i32).
-    let (result_type_id, ok_name, ok_index, err_name, err_index) = {
+    let result_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
         let ok_type_id =
             cm_held_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         let err_type_id =
             cm_held_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
-        let result_type_id = tt.make_result(ok_type_id, err_type_id);
-        let items = tt.compiler_items();
-        let (_, _, ok_n, ok_i) = items.require_variant_case(CompilerItem::ResultOk);
-        let (_, _, err_n, err_i) = items.require_variant_case(CompilerItem::ResultErr);
-        (
-            result_type_id,
-            ok_n.to_string(),
-            ok_i,
-            err_n.to_string(),
-            err_i,
-        )
+        tt.make_result(ok_type_id, err_type_id)
     };
 
     let result_local = alloc_local(next_local, locals, result_type_id);
     let payload_addr = binary_add(addr, i32_const(payload_offset as i32));
 
-    // Ok case
-    let mut ok_stmts: Vec<TirStmt> = Vec::new();
-    let ok_is_unit = ok_ty.is_unit();
-    let ok_payload = if ok_is_unit {
-        None
-    } else {
-        let lifted = synthesize_lift_inner(
-            ok_ty,
-            payload_addr.clone(),
-            next_local,
-            &mut ok_stmts,
-            locals,
-            ctx,
-        );
-        Some(Box::new(lifted))
+    let mut arm = |item, payload_ty: &Type| {
+        let (case_name, case_index) = {
+            let tt = ctx.type_table.borrow();
+            let (_, _, name, index) = tt.compiler_items().require_variant_case(item);
+            (name.to_string(), index)
+        };
+        let mut arm_stmts: Vec<TirStmt> = Vec::new();
+        let payload = (!payload_ty.is_unit()).then(|| {
+            Box::new(synthesize_lift_inner(
+                payload_ty,
+                payload_addr.clone(),
+                next_local,
+                &mut arm_stmts,
+                locals,
+                ctx,
+            ))
+        });
+        arm_stmts.push(expr_stmt(TirExpr::new(
+            TirExprKind::VariantConstruct {
+                variant_type: result_type_id,
+                case_index,
+                case_name,
+                payload,
+            },
+            result_type_id,
+            synth_span(),
+        )));
+        block(arm_stmts)
     };
-    ok_stmts.push(expr_stmt(TirExpr::new(
-        TirExprKind::VariantConstruct {
-            variant_type: result_type_id,
-            case_index: ok_index,
-            case_name: ok_name,
-            payload: ok_payload,
-        },
-        result_type_id,
-        synth_span(),
-    )));
-
-    // Err case
-    let mut err_stmts: Vec<TirStmt> = Vec::new();
-    let err_is_unit = err_ty.is_unit();
-    let err_payload = if err_is_unit {
-        None
-    } else {
-        let lifted = synthesize_lift_inner(
-            err_ty,
-            payload_addr,
-            next_local,
-            &mut err_stmts,
-            locals,
-            ctx,
-        );
-        Some(Box::new(lifted))
-    };
-    err_stmts.push(expr_stmt(TirExpr::new(
-        TirExprKind::VariantConstruct {
-            variant_type: result_type_id,
-            case_index: err_index,
-            case_name: err_name,
-            payload: err_payload,
-        },
-        result_type_id,
-        synth_span(),
-    )));
-
+    let arms = vec![
+        (0, arm(CompilerItem::ResultOk, ok_ty)),
+        (1, arm(CompilerItem::ResultErr, err_ty)),
+    ];
     let value = case_chain(
         || local_ref(disc_local, "$disc", TypeTable::I32),
-        vec![(0, block(ok_stmts)), (1, block(err_stmts))],
+        arms,
         result_type_id,
     );
     stmts.push(let_stmt("$result_val", result_local, result_type_id, value));
