@@ -3505,25 +3505,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // lets `-f bare-asserts` (see `lower::bare_asserts`) replace assertion
         // failures with a bare trap, dropping this diagnostic without touching
         // explicit `panic(...)` calls. It behaves identically to `panic`.
-        let (module_source, name) = {
-            let type_table = self.tysys.type_table.borrow();
-            let (module, name) = type_table
-                .compiler_items()
-                .require_function(CompilerItem::AssertFailed);
-            (module.clone(), name.to_string())
-        };
-        let panic_call = TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source,
-                    name,
-                    template: None,
-                    monomorph_info: None,
-                    method_info: None,
-                }),
-                type_args: Vec::new(),
-                args: CallArgs::free(vec![CallArg::new(template_tir, false)]),
-            },
+        let panic_call = self.rt_call(
+            CompilerItem::AssertFailed,
+            template_tir,
             TypeTable::NEVER,
             span,
         );
@@ -8522,11 +8506,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let source = match source_half {
             Some(PrimitiveType::F16) => {
                 let base = bare_cast(inner, TypeTable::F16, span);
-                self.compiler_item_call(CompilerItem::F16Widen, base, TypeTable::F32, span)
+                self.rt_call(CompilerItem::F16Widen, base, TypeTable::F32, span)
             }
             Some(_) => {
                 let base = bare_cast(inner, TypeTable::BF16, span);
-                self.compiler_item_call(CompilerItem::Bf16Widen, base, TypeTable::F32, span)
+                self.rt_call(CompilerItem::Bf16Widen, base, TypeTable::F32, span)
             }
             None => inner,
         };
@@ -8558,28 +8542,32 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
         let arg = self.lower_cast(source, via, span);
-        let converted = self.compiler_item_call(item, arg, base, span);
+        let converted = self.rt_call(item, arg, base, span);
         ControlFlow::Break(bare_cast(converted, target_type, span))
     }
 
-    /// A call of the static compiler item `item` on `arg`.
-    fn compiler_item_call(
+    /// A call of the `core:rt` function `item` on `arg`.
+    fn rt_call(
         &self,
         item: CompilerItem,
         arg: TirExpr,
         result_type: TypeId,
         span: Span,
     ) -> TirExpr {
-        let func = method_ref(&self.tysys.type_table.borrow(), item);
-        TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(func),
-                type_args: vec![],
-                args: CallArgs::free(vec![CallArg::new(arg, false)]),
-            },
-            result_type,
-            span,
-        )
+        unary_call(self.rt_function(item), arg, result_type, span)
+    }
+
+    /// The `core:rt` function the compiler item `item` names.
+    fn rt_function(&self, item: CompilerItem) -> FunctionRef {
+        let type_table = self.tysys.type_table.borrow();
+        let (module_source, name) = type_table.compiler_items().require_function(item);
+        FunctionRef {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+            template: None,
+            monomorph_info: None,
+            method_info: None,
+        }
     }
 
     /// A cast with a wide integer on either side, `inner` already read through
@@ -8733,7 +8721,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ControlFlow::Break(bare_cast(converted, target_type, span))
             }
             Lowering::Reinterpret(item) => {
-                let call = self.compiler_item_call(item, inner, target_base, span);
+                let func = method_ref(&self.tysys.type_table.borrow(), item);
+                let call = unary_call(func, inner, target_base, span);
                 ControlFlow::Break(bare_cast(call, target_type, span))
             }
         }
@@ -10503,6 +10492,19 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
             ..method.clone()
         })
         .collect()
+}
+
+/// A call of `func` on the one argument `arg`.
+fn unary_call(func: FunctionRef, arg: TirExpr, result_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(func),
+            type_args: vec![],
+            args: CallArgs::free(vec![CallArg::new(arg, false)]),
+        },
+        result_type,
+        span,
+    )
 }
 
 /// `expr as to` as codegen takes it, one instruction or none: `expr` itself
