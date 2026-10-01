@@ -32,18 +32,16 @@ fn clean_body(body: &mut Vec<WirInstr>) {
 /// an empty `$initialize_module` that the program's initializer still calls.
 /// Removing the calls can empty a caller in turn, so this runs to a fixpoint.
 fn elide_calls_to_empty_functions(module: &mut WirPackage) {
-    // Keyed by the `WirFuncId` index a call carries, which counts the imports.
     let mut empty: IndexSet<u32> = IndexSet::default();
     loop {
         let before = empty.len();
-        let base = module.defined_func_base;
         empty.extend(
             module
                 .functions
                 .iter()
                 .enumerate()
                 .filter(|(_, func)| func.body.as_ref().is_some_and(Vec::is_empty))
-                .map(|(index, _)| base + u32::try_from(index).expect("function index fits u32")),
+                .map(|(position, _)| module.defined_func_index(position)),
         );
         if empty.len() == before {
             return;
@@ -81,19 +79,16 @@ impl WirMutVisitor for EmptyCallElider<'_> {
         self.elided = true;
         let mut kept = Vec::with_capacity(body.len());
         for instr in body.drain(..) {
-            let WirInstr::Call { func_id, args } = instr else {
-                kept.push(instr);
-                continue;
-            };
-            if !self.empty.contains(&func_id.index()) {
-                kept.push(WirInstr::Call { func_id, args });
-                continue;
+            match instr {
+                WirInstr::Call { func_id, args } if self.empty.contains(&func_id.index()) => {
+                    kept.extend(
+                        args.into_iter()
+                            .filter(|arg| !is_side_effect_free(arg) || may_trap_in(arg, self.null))
+                            .map(|arg| WirInstr::Drop(Box::new(arg))),
+                    );
+                }
+                other => kept.push(other),
             }
-            kept.extend(
-                args.into_iter()
-                    .filter(|arg| !is_side_effect_free(arg) || may_trap_in(arg, self.null))
-                    .map(|arg| WirInstr::Drop(Box::new(arg))),
-            );
         }
         *body = kept;
     }

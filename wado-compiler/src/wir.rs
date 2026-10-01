@@ -327,6 +327,19 @@ impl WirPackage {
             cm_import_violations: Vec::new(),
         }
     }
+
+    /// The `WirFuncId` index of the defined function at `position` in
+    /// [`functions`](Self::functions).
+    pub fn defined_func_index(&self, position: usize) -> u32 {
+        self.defined_func_base + u32::try_from(position).expect("function count fits u32")
+    }
+
+    /// The position in [`functions`](Self::functions) of the function a
+    /// `WirFuncId` index names, or `None` for an import.
+    pub fn defined_func_position(&self, index: u32) -> Option<usize> {
+        let position = index.checked_sub(self.defined_func_base)? as usize;
+        (position < self.functions.len()).then_some(position)
+    }
 }
 
 /// A globally-scoped name in WIR.

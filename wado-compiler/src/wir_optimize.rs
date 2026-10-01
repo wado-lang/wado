@@ -239,8 +239,8 @@ fn optimize_scoped(
     // Phase 7: global cleanup, then final body cleanup (Nops, dead
     // `DeclareLocal`s, dead code after `Unreachable`) before codegen.
     profiler.span_start(&scope.name("phase7_global_cleanup"));
-    // Promote now-constant global inits to eager Wasm constants first, so the
-    // emptied `$initialize_module` and its guard become reclaimable here.
+    // Promote now-constant global inits to eager Wasm constants first, so
+    // `cleanup` removes the calls to each `$initialize_module` it empties.
     wir_pass(scope, "promote_const_global_inits", module, profiler, |m| {
         promote_const_global_inits(m);
     });

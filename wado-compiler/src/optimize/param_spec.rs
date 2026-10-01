@@ -1016,10 +1016,10 @@ fn specialize_round(
     if retarget.is_empty() {
         return propagated;
     }
-    // A callee cloned this round may itself be a caller retargeted this round.
-    // Retargeting first gives its clone the retarget too, where a clone copied
-    // before it would keep calling an original its own constants then fold into
-    // a copy of the clone it should have called.
+    // A callee cloned this round may be a caller retargeted this round, and its
+    // clone must inherit the retarget. A clone that kept calling the original
+    // would become its only caller, whose constants then fold the original
+    // into a copy of the clone.
     retarget_calls(project, &retarget);
     let minted = build_clones(project, state, &planned);
     // A clone is reachable through the call just pointed at it, and reaches

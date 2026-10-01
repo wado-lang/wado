@@ -99,7 +99,12 @@ come from Wado's `-O2` build:
 - [x] Local coalescing: wasm-opt merges locals whose live ranges never overlap,
   as a register allocator would. `wir_optimize/local_coalesce.rs` does the
   same per Wasm type. On the `-Os` build it takes 2,752 locals to 1,020.
-- [ ] Identical functions: `deflate_raw` equals `deflate_raw$spec0` and
-  `zlib_wrap` equals `zlib_wrap$spec0`. The outlined `$cold0` bounds-check
-  paths of `List<T>::index_value` and `index_assign` repeat once per element
-  type with the same body.
+- [ ] Identical functions: 10 of zlib's 144 functions duplicate another. The
+  outlined `$cold0` bounds-check paths of `List<T>::index_value` and
+  `index_assign` repeat once per element type with the same body, and
+  `i32`'s `Display::fmt` equals its `Inspect::inspect`. Two `param_spec`
+  clones whose bindings differ can fold to one body
+  (`fmt_float_special$spec0` and `$spec1` in json_twitter).
+- [x] Empty functions: a module whose globals all become constants keeps an
+  empty `$initialize_module`. `cleanup` removes the calls to it, and DCE the
+  function.

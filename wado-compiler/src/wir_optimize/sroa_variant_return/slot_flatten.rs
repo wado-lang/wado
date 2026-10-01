@@ -148,7 +148,7 @@ pub(super) fn slot_flatten_candidates(
 ) -> Vec<SlotFlattenCand> {
     let mut out = Vec::new();
     for (i, func) in module.functions.iter().enumerate() {
-        let func_id_index = module.defined_func_base + u32::try_from(i).unwrap();
+        let func_id_index = module.defined_func_index(i);
         if pinned.contains(&func_id_index) || func.body.is_none() {
             continue;
         }

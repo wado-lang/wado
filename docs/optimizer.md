@@ -189,8 +189,8 @@ settles the locals (step 11).
 5. Peephole: repeated field loads reused, instruction selection (`select`,
    rotates), and variant result slots flattened.
 6. Write-only local elimination.
-7. Global cleanup (constant initializers, duplicate globals, dead data), then
-   `br_if` selection and branch hints.
+7. Global cleanup (constant initializers, duplicate globals, dead data, and
+   calls to a function left empty), then `br_if` selection and branch hints.
 8. DCE and compaction.
 9. Local coalescing: locals of one Wasm type whose live ranges never overlap
    share a slot. A local's nullability is settled before it shares one.
