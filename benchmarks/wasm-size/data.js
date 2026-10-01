@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790828324093,
+  "lastUpdate": 1790855243602,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62469,6 +62469,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 313036,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed6fae0b40524b64abba012f8c8047fd27b1c29c",
+          "message": "Merge pull request #2236 from wado-lang/ccr-72a2608f-1u08xs\n\nperf(wir): own every local in WIR — coalesced, tee-fused, laid out by type",
+          "timestamp": "2026-10-01T20:22:46+09:00",
+          "tree_id": "f10e3b8058990665dad2e8f9767d65d110f1f2b5",
+          "url": "https://github.com/wado-lang/wado/commit/ed6fae0b40524b64abba012f8c8047fd27b1c29c"
+        },
+        "date": 1790855242852,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20682,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281108,
             "unit": "bytes"
           }
         ]
