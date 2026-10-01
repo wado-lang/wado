@@ -95,8 +95,7 @@ come from Wado's `-O2` build:
 - [x] Set-then-get: a `local.set X` followed at once by `local.get X` occurred
   1,191 times. wasm-opt turns it into a `local.tee` or removes it. The last WIR
   pass fuses each pair into a tee (`fuse_remaining_local_tees`), and copy
-  propagation removes a copy of a tee'd local. On the `-Os` build that leaves
-  46.
+  propagation removes a copy of a tee'd local. The `-Os` build keeps 39 pairs.
 - [x] Local coalescing: wasm-opt merges locals whose live ranges never overlap,
   as a register allocator would. `wir_optimize/local_coalesce.rs` does the
   same per Wasm type. On the `-Os` build it takes 2,752 locals to 1,020.
