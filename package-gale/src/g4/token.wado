@@ -39,6 +39,11 @@ pub enum G4Token {
 }
 
 impl G4Token {
+    /// The kind a `Token` carries for this case.
+    pub fn code(&self) -> i32 {
+        return ReflectEnum::<G4Token>::discriminant(self);
+    }
+
     pub fn name(&self) -> String {
         return match *self {
             Grammar => "grammar",

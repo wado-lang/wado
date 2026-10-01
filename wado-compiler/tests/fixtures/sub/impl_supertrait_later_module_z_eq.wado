@@ -1,0 +1,11 @@
+use { Inner, inner } from "./impl_supertrait_later_module_type.wado";
+
+impl<T: Eq> Eq for Inner<T> {
+    fn eq(&self, other: &Inner<T>) -> bool {
+        return self.v == other.v;
+    }
+}
+
+pub fn same(a: i32, b: i32) -> bool {
+    return inner(a) == inner(b);
+}

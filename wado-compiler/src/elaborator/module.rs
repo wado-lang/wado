@@ -2,6 +2,7 @@
 
 use crate::ast::{Item, Module, Type};
 use crate::compiler_host::CompilerHost;
+use crate::module_source::ModuleSource;
 use crate::tir::TypeTable;
 
 use super::Elaborator;
@@ -174,6 +175,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Check each trait impl's header against what its trait requires: the
+    /// bounds on its associated types, and its supertraits.
+    pub(super) fn check_impl_headers(&mut self, module: &Module, module_source: ModuleSource) {
+        self.current_module_source = module_source;
+        for item in &module.items {
+            if let Item::Impl(impl_block) = item
+                && impl_block.trait_type.is_some()
+            {
+                let mut scope = self.enter_impl_scope(impl_block);
+                scope.enforce_impl_assoc_type_bounds(impl_block);
+                scope.enforce_impl_supertraits(impl_block);
+            }
+        }
+    }
+
     /// Collect function signatures for call resolution
     pub(super) fn collect_function_signatures(&mut self, module: &Module) {
         self.register_module_assoc_types(module);
@@ -185,11 +201,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
                 let mut scope = self.enter_impl_scope(impl_block);
-
-                if impl_block.trait_type.is_some() {
-                    scope.enforce_impl_assoc_type_bounds(impl_block);
-                    scope.enforce_impl_supertraits(impl_block);
-                }
 
                 // Resolve the trait type for its side effect of recording a
                 // use->def reference from the trait-name identifier in the

@@ -1,0 +1,27 @@
+// A blanket impl's parameter nested inside an associated-type constraint takes
+// the part of the answer it stands for, not the whole answer. The `>>` closing
+// the constraint is followed by `,`, which belongs to the impl's parameter list.
+
+trait Source {
+    type Out;
+}
+
+struct S {}
+
+impl Source for S {
+    type Out = List<i32>;
+}
+
+trait Element {
+    fn element(&self) -> String;
+}
+
+impl<T: Source<Out = List<X>>, X: Default> Element for T {
+    fn element(&self) -> String {
+        return `${X::default():?}`;
+    }
+}
+
+test "the pattern binds the element type" {
+    assert S {}.element() == "0";
+}

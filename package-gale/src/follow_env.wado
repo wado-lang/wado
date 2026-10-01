@@ -5,17 +5,17 @@
 //! The `rule_follow` fixed point represents each rule's FOLLOW set as a u64
 //! bitset over token-kind ids (`Element::kind_id`): union is a word-wise OR
 //! and equality a word compare, so the worklist loop never touches a
-//! `TreeSet<String>`. Every FIRST-derived contribution is fixed-point
+//! `GaleSet<String>`. Every FIRST-derived contribution is fixed-point
 //! invariant, so each `RuleRef` site is flattened once into a
 //! [`Contribution`] — static bits plus an inherits-caller-FOLLOW flag — and
 //! the loop itself is pure bitset propagation. The public `FollowSet` still
-//! exposes `kinds` as a `TreeSet<String>`; the bitsets are materialised to
+//! exposes `kinds` as a `GaleSet<String>`; the bitsets are materialised to
 //! that form once per rule after the fixed point converges.
 
 use { ParserRule, Element } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
 use { bits_ids, bits_set, bits_union_into } from "./token_kinds.wado";
-use { TreeMap, TreeSet } from "core:collections";
+use { GaleMap, GaleSet } from "./gale_map.wado";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
 /// the set of token kinds that may legally appear immediately after a
@@ -26,13 +26,13 @@ use { TreeMap, TreeSet } from "core:collections";
 /// the start rule (or any rule reachable from it through a strictly
 /// nullable suffix chain) is known to be terminated by EOF.
 pub struct FollowSet {
-    pub kinds: TreeSet<String>,
+    pub kinds: GaleSet<String>,
     pub closed: bool,
 }
 
 impl FollowSet {
     pub fn empty() -> FollowSet {
-        return FollowSet { kinds: TreeSet::<String>::new(), closed: false };
+        return FollowSet { kinds: GaleSet::<String>::new(), closed: false };
     }
 }
 
@@ -68,13 +68,13 @@ pub struct FollowEnv {
     /// argument. Lifted into `FollowEnv` so subsequent Phase 1 steps
     /// can compute against a snapshot independent of the codegen-side
     /// cache.
-    tail_greedy: TreeMap<String, List<String>>,
+    tail_greedy: GaleMap<String, List<String>>,
     /// Per-rule FOLLOW set, populated by [`build`]. The `closed` flag
     /// indicates the rule is reachable from the start rule by a chain
     /// whose ultimate suffix is EOF — i.e. EOF is in `kinds` because
     /// of EOF reachability rather than an explicit `EOF` token in
     /// some caller.
-    rule_follow: TreeMap<String, FollowSet>,
+    rule_follow: GaleMap<String, FollowSet>,
 }
 
 impl FollowEnv {
@@ -82,8 +82,8 @@ impl FollowEnv {
     /// the starting point for incremental wiring.
     pub fn empty() -> FollowEnv {
         return FollowEnv {
-            tail_greedy: TreeMap::<String, List<String>>::new(),
-            rule_follow: TreeMap::<String, FollowSet>::new(),
+            tail_greedy: GaleMap::<String, List<String>>::new(),
+            rule_follow: GaleMap::<String, FollowSet>::new(),
         };
     }
 
@@ -115,7 +115,7 @@ impl FollowEnv {
 /// useful for sub-grammar analysis or tests that exercise propagation
 /// without an EOF anchor.
 pub fn build<S: AsStrSlice>(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: S) -> FollowEnv {
-    let mut tail_greedy = TreeMap::<String, List<String>>::new();
+    let mut tail_greedy = GaleMap::<String, List<String>>::new();
     for let rule of parser_rules {
         let mut visiting: List<String> = [];
         let tg = ctx.tail_greedy_first_of_rule(&rule.name, &mut visiting);
@@ -146,7 +146,7 @@ fn compute_rule_follow<S: AsStrSlice>(
     parser_rules: &List<ParserRule>,
     ctx: &mut GenContext,
     start_rule: S,
-) -> TreeMap<String, FollowSet> {
+) -> GaleMap<String, FollowSet> {
     let mut plans: List<List<Contribution>> = [];
     for let rule of parser_rules {
         let mut plan: List<Contribution> = [];
@@ -201,9 +201,9 @@ fn compute_rule_follow<S: AsStrSlice>(
         }
     }
 
-    // Materialise the bitsets to the public `TreeSet<String>` form once per
+    // Materialise the bitsets to the public `GaleSet<String>` form once per
     // rule — outside the fixed point, so the string cost is paid once.
-    let mut result = TreeMap::<String, FollowSet>::new();
+    let mut result = GaleMap::<String, FollowSet>::new();
     for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
         result[parser_rules[ri].name] = bits_to_follow_set(&env[ri], ctx);
     }
@@ -313,11 +313,11 @@ fn accumulate_first_bits(ctx: &mut GenContext, elem: &Element, bits: &mut List<u
     }
 }
 
-/// Materialise a bitset into the public `FollowSet` (a `TreeSet<String>`).
+/// Materialise a bitset into the public `FollowSet` (a `GaleSet<String>`).
 /// Called once per rule after convergence, so its string cost is off the
 /// hot path.
 fn bits_to_follow_set(fb: &FollowBits, ctx: &GenContext) -> FollowSet {
-    let mut kinds = TreeSet::<String>::new();
+    let mut kinds = GaleSet::<String>::new();
     for let id of &bits_ids(&fb.bits) {
         kinds.insert(ctx.token_name(*id));
     }

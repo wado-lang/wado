@@ -1,6 +1,5 @@
-// A literal directly under `as` takes the target's width, so the defaulted
-// range check skips it — but it still has to parse. Nothing downstream reports
-// a wider-than-`u128` literal, and reify reads one as `0`.
+// A literal directly under `as` is typed by the target, so a value wider than
+// any integer type is out of the target's range.
 export fn run() {
     let i = 99999999999999999999999999999999999999999 as i64;
 }

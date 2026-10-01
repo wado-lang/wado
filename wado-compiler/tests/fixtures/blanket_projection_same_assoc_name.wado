@@ -1,0 +1,35 @@
+// A blanket impl's parameter that a bound's associated-type constraint names is
+// projected through that bound's trait, not by the associated type's name: here
+// `Left` and `Right` both declare `Out`, and `S` answers them differently.
+
+trait Left {
+    type Out;
+}
+
+trait Right {
+    type Out;
+}
+
+struct S {}
+
+impl Left for S {
+    type Out = i32;
+}
+
+impl Right for S {
+    type Out = String;
+}
+
+trait Picked {
+    fn picked(&self) -> String;
+}
+
+impl<T: Left<Out = X>, X: Default> Picked for T {
+    fn picked(&self) -> String {
+        return `${X::default():?}`;
+    }
+}
+
+test "the bound's own trait answers the projection" {
+    assert S {}.picked() == "0";
+}

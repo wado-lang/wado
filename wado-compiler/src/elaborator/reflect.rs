@@ -572,32 +572,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: CompilerItem,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let trait_def = self
+        let pack_ast = self
+            .bound_assoc_bindings(type_param_name, trait_, assoc_name)
+            .into_iter()
+            .find(|ty| {
+                matches!(ty, ast::Type::Tuple(elems)
+                    if elems.iter().any(|e| matches!(e, ast::Type::TypePackSpread(..))))
+            })?;
+        Some(self.resolve_type(&pack_ast))
+    }
+
+    /// What `T`'s bounds of the compiler trait `trait_` bind its associated
+    /// type `assoc_name` to, as written, `T` being `type_param_name`.
+    pub(super) fn bound_assoc_bindings(
+        &self,
+        type_param_name: &str,
+        trait_: CompilerItem,
+        assoc_name: &str,
+    ) -> Vec<ast::Type> {
+        let Some(trait_def) = self
             .tysys
             .type_table
             .borrow()
             .compiler_items()
-            .trait_def(trait_)?;
-        let pack_ast = self
+            .trait_def(trait_)
+        else {
+            return Vec::new();
+        };
+        let Some(bounds) = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
-            .get(type_param_name)?
+            .get(type_param_name)
+        else {
+            return Vec::new();
+        };
+        bounds
             .iter()
             .filter(|b| self.tysys.resolutions.bound_decl(b) == Some(trait_def))
             .flat_map(|b| &b.assoc_types)
             .filter(|assoc| assoc.name == assoc_name)
-            .find_map(|assoc| match &assoc.ty {
-                ast::Type::Tuple(elems)
-                    if elems
-                        .iter()
-                        .any(|e| matches!(e, ast::Type::TypePackSpread(..))) =>
-                {
-                    Some(assoc.ty.clone())
-                }
-                _ => None,
-            })?;
-        Some(self.resolve_type(&pack_ast))
+            .map(|assoc| assoc.ty.clone())
+            .collect()
     }
 
     /// The struct `ReflectStruct::<T>` targets: its declared name, the

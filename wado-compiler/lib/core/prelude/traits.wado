@@ -7,6 +7,7 @@ use { Option, Result } from "core:prelude/types.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { String, StrSlice, AsStrSlice } from "core:prelude/string.wado";
 use { List } from "core:prelude/list.wado";
+use { ByteSlice } from "core:prelude/bytes.wado";
 use { panic } from "core:rt";
 
 /// Result of a comparison between two values.
@@ -55,6 +56,19 @@ pub fn ref_eq<T>(a: &T, b: &T) -> bool {
 pub trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
+}
+
+/// What a `Hash` impl feeds its value into. The hasher owns the algorithm and
+/// its seed; an impl only says which words and bytes make up the value.
+pub trait Hasher with () {
+    fn write_u64(&mut self, x: u64);
+    /// Takes the length too, so consecutive byte runs never run together.
+    fn write_bytes(&mut self, bytes: ByteSlice);
+}
+
+/// A value a hash table can key on. Values that are `==` feed a hasher alike.
+pub trait Hash: Eq with () {
+    fn hash<H: Hasher>(&self, h: &mut H);
 }
 
 /// What `<`, `<=`, `>` and `>=` mean where the operator order is not the total

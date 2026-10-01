@@ -187,11 +187,12 @@
 - [Loam — Lowered Operators, Ahead-of-time Modules](./wep-2026-09-20-loam.md)
 - [Grog — Protocol Buffers for Wado](./wep-2026-09-22-grog.md)
 - [Half-Precision Primitives (`f16` / `bf16`)](./wep-2026-09-22-half-precision-primitives.md)
-- [The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)
+- [One Order per Type](./wep-2026-09-23-comparison-traits.md)
 - [Eval — Compiling and Running Wado Source from a Test](./wep-2026-09-26-eval.md)
 - [Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md)
 - [Test Coverage](./wep-2026-09-28-test-coverage.md)
 - [A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
+- [HashMap](./wep-2026-10-01-hash-map.md)
 
 ## Standard Library
 
@@ -229,6 +230,7 @@
 - [Research: Callbacks across the Component Model Boundary](./research-cm-boundary-callbacks.md)
 - [Research: Component Model Pain Points](./research-cm-pain-points.md)
 - [Research: Code Generation Approaches](./research-code-generation.md)
+- [Research: Float Comparison, and What Rust's Users Wish It Had Done](./research-float-comparison.md)
 - [Research: From/Into Conversion Trait Framework](./research-from-into-framework.md)
 - [HTTP Routing Benchmark Performance Analysis](./research-http-routing-performance.md)
 - [Research: Language Survey — Almide](./research-language-survey-almide.md)

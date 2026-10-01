@@ -208,11 +208,10 @@ bool
 // wide integers (GC types, work like primitives)
 i128, u128
 
-// half precision: storage only, no arithmetic and no `as` cast.
+// half precision: storage only, no arithmetic; `as` converts as for any float.
 // Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32` /
 // `from_f64`, text via `from_str` (each rounded once, as a literal is).
-// Every comparison hands the widened value to f32's, so `==` and `<` are IEEE
-// and `Ord` is the total order — the same split f32 has.
+// A comparison answers as f32's does on the widened values (see `Ord` below).
 f16, bf16
 let w: List<bf16> = [0.5, -1.25];   // a float literal rounds once, ties to even
 
@@ -619,11 +618,14 @@ See the spec on [precedence](./spec-expressions.md#precedence) and [overloading]
 // Assignment
 = += -= *= /= %= &= |= ^= <<= >>=
 
-// Type cast
+// Type cast: numeric casts follow Rust's `as`
 42 as f64
 300.7 as u8             // 255: float -> int truncates and saturates, NaN -> 0
+(0xFF as u8) as i8      // -1; `0xFF as i8` is a compile error, as in Rust
+true as i32             // bool -> int: 1; nothing casts to bool
 'A' as i32              // char -> i32: 65
-// 65 as char           // compile error: use char::from_u32()
+97 as char              // 'a': only a u8 casts to char; else char::from_u32()
+// Color::Red as i32    // compile error: ReflectEnum::<Color>::discriminant(&c)
 
 // Range: exclusive and inclusive
 ..<  ..=
@@ -1154,11 +1156,10 @@ trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
 // For == and != operators
 trait Eq<Rhs = Self> { fn eq(&self, other: &Rhs) -> bool; }
 
-// A total order: what `sort()`, `TreeMap` and a `T: Ord` bound read. On a
-// float it is IEEE 754-2019 `totalOrder`, as C++20's `std::strong_order` is:
-// -NaN < -Inf < -0 < +0 < +Inf < +NaN. The comparison operators keep IEEE's
-// answers on every float, so `sort()` and `<` disagree about a NaN — see
-// WEP: The Operator Order and the Total Order. Any other type reads `cmp`.
+// A total order: what `<` `<=` `>` `>=`, `sort()`, `TreeMap` and a `T: Ord`
+// bound read, on every type. `a == b` exactly when `cmp` answers `Equal`.
+// A float is IEEE except that every NaN is one value, equal to itself and
+// greatest, and -0.0 == 0.0: -Inf < … < +Inf < NaN. Test a NaN with is_nan().
 trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,

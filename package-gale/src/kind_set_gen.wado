@@ -11,7 +11,7 @@ use {
     sync_bits_name,
     sync_list_name,
 } from "./gen_context.wado";
-use { TreeSet } from "core:collections";
+use { HashSet } from "core:collections";
 use { join_kinds, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use { DISPATCH_KIND_LOCAL } from "./ident.wado";
@@ -90,7 +90,7 @@ pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -
 
 /// Emit the `_kind_set_<id>(k) -> bool` helper of each interned kind set the
 /// emitted code names in `used`.
-pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext, used: &TreeSet<String>) {
+pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext, used: &HashSet<String>) {
     for let entry of ctx.kind_sets() {
         if used.contains(kind_set_fn_name(entry.id)) {
             gen_kind_set_helper_raw(w, entry.id, &ctx.token_names_of(&entry.tokens));
@@ -103,7 +103,7 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext, used: &TreeSet
 /// packs its positions into one `i64`. A continuation is therefore a scalar a
 /// call site composes with a shift, and a rule takes one parameter rather than
 /// a row of slots.
-pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext, used: &TreeSet<String>) {
+pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext, used: &HashSet<String>) {
     // No caller-FOLLOW gate anywhere ⇒ no call site names either table.
     // A grammar that gates on a forwarded `follow` alone interns no mask
     // and still reads `FOLLOW_SETS`, so only the masks are conditional.
@@ -173,7 +173,7 @@ fn intern_position_set(sets: &mut List<List<i32>>, set: &List<i32>) -> i32 {
 /// Emit the token-set globals: `EMPTY_SYNC`, then per interned set its
 /// `SYNC_<id>` bits and its `EXPECTED_<id>` kind list, each only where `used`
 /// names it.
-pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext, used: &TreeSet<String>) {
+pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext, used: &HashSet<String>) {
     // Also the empty wanted-set `fail` takes, so a lexer-only grammar — whose
     // `Parser` runtime is still emitted — needs it too.
     w.line("global EMPTY_SYNC: List<i32> = [];");

@@ -1077,7 +1077,7 @@ fn cast_through_env_local_applies_target_prim() {
     let table = TypeTable::new();
     let mut interp = Interpreter::new(&table);
     // env: u = Const(Int{0xFFFFFFFF, U32}) — equivalent to `let u: u32
-    // = -1 as u32;`.
+    // = u32::MAX;`.
     interp.bind_local(
         0,
         Lattice::Const(Value::Int {

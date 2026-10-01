@@ -4,8 +4,9 @@
 
 # core:collections
 
-Collection types: `TreeMap<K, V>` and `TreeSet<T>`, both iterating in
-insertion order. `map[key] = value` overwrites; `try_insert` /
+Maps and sets that iterate in insertion order. `TreeMap<K, V>` and
+`TreeSet<T>` find a key by ordering it; `HashMap<K, V>` and `HashSet<T>` by
+hashing it under a `HashSeed`. `map[key] = value` overwrites; `try_insert` /
 `get_or_insert` insert only when the key is absent.
 
 ## Synopsis
@@ -22,9 +23,84 @@ let primes = [7, 2, 5, 2, 3] as TreeSet<i32>;
 assert primes.len() == 4;
 assert primes.contains(5);
 assert !primes.contains(4);
+
+let mut seen = HashSet::<String>::new(HashSeed::fixed(1, 2));
+assert seen.insert("b");
+assert seen.insert("a");
+assert !seen.insert("b");
+assert seen.iter_value().collect() == ["b", "a"];
 ```
 
 ## Structs
+
+### `pub struct MapKeysRefIter<K, V>`
+
+A map's keys, or a set's elements, by reference.
+
+_Fields are private._
+
+#### `pub fn iter_value(&self) -> MapKeysValueIter<K, V>`
+
+#### `impl Iterator for MapKeysRefIter<K, V>`
+
+##### `fn next(&mut self) -> Option<&K>`
+
+### `pub struct MapKeysValueIter<K, V>`
+
+A map's keys, or a set's elements, by value.
+
+_Fields are private._
+
+#### `impl Iterator for MapKeysValueIter<K, V>`
+
+##### `fn next(&mut self) -> Option<K>`
+
+### `pub struct MapValuesRefIter<K, V>`
+
+A map's values, by reference.
+
+_Fields are private._
+
+#### `pub fn iter_value(&self) -> MapValuesValueIter<K, V>`
+
+#### `impl Iterator for MapValuesRefIter<K, V>`
+
+##### `fn next(&mut self) -> Option<&V>`
+
+### `pub struct MapValuesValueIter<K, V>`
+
+A map's values, by value. The doubled word is the axis meeting a
+projection already named `values`.
+
+_Fields are private._
+
+#### `impl Iterator for MapValuesValueIter<K, V>`
+
+##### `fn next(&mut self) -> Option<V>`
+
+### `pub struct MapEntriesRefIter<K, V>`
+
+A map's key-value pairs, by reference.
+
+_Fields are private._
+
+#### `pub fn iter_value(&self) -> MapEntriesValueIter<K, V>`
+
+#### `impl Iterator for MapEntriesRefIter<K, V>`
+
+##### `fn next(&mut self) -> Option<[&K, &V]>`
+
+`#[compiler_item("map_entries_iter_next")]`
+
+### `pub struct MapEntriesValueIter<K, V>`
+
+A map's key-value pairs, by value.
+
+_Fields are private._
+
+#### `impl Iterator for MapEntriesValueIter<K, V>`
+
+##### `fn next(&mut self) -> Option<[K, V]>`
 
 ### `pub struct TreeMap<K, V>`
 
@@ -78,17 +154,17 @@ Returns the value corresponding to the key, or null if not found.
 Removes a key from the map and returns true if the key was present.
 Preserves insertion order of remaining elements.
 
-#### `pub fn keys(&self) -> TreeMapKeysRefIter<K, V>`
+#### `pub fn keys(&self) -> MapKeysRefIter<K, V>`
 
 The keys, in insertion order. A map traversal yields references and
 carries no axis suffix: `keys` already says what it yields, and a
 caller wanting owned keys takes `iter_value()` off the result.
 
-#### `pub fn values(&self) -> TreeMapValuesRefIter<K, V>`
+#### `pub fn values(&self) -> MapValuesRefIter<K, V>`
 
 The values, in insertion order.
 
-#### `pub fn entries(&self) -> TreeMapEntriesRefIter<K, V>`
+#### `pub fn entries(&self) -> MapEntriesRefIter<K, V>`
 
 `#[compiler_item("tree_map_entries")]`
 
@@ -109,6 +185,14 @@ Returns true if some key spells the same text as `key`.
 #### `pub fn get_ref_str<S: AsStrSlice>(&self, key: S) -> Option<&V>`
 
 Returns a reference to the value stored under text equal to `key`.
+
+#### `impl Eq for TreeMap<K, V>`
+
+##### `fn eq(&self, other: &TreeMap<K, V>) -> bool`
+
+#### `impl Ord for TreeMap<K, V>`
+
+##### `fn cmp(&self, other: &TreeMap<K, V>) -> Ordering`
 
 #### `impl IndexAssign<K> for TreeMap<K, V>`
 
@@ -152,89 +236,12 @@ Returns a reference to the value stored under text equal to `key`.
 
 ##### `pub fn default() -> TreeMap<K, V>`
 
-### `pub struct TreeSetRefIter<T>`
-
-_Fields are private._
-
-#### `pub fn iter_value(&self) -> TreeSetValueIter<T>`
-
-#### `impl Iterator for TreeSetRefIter<T>`
-
-##### `fn next(&mut self) -> Option<&T>`
-
-### `pub struct TreeSetValueIter<T>`
-
-_Fields are private._
-
-#### `impl Iterator for TreeSetValueIter<T>`
-
-##### `fn next(&mut self) -> Option<T>`
-
-### `pub struct TreeMapKeysRefIter<K, V>`
-
-_Fields are private._
-
-#### `pub fn iter_value(&self) -> TreeMapKeysValueIter<K, V>`
-
-#### `impl Iterator for TreeMapKeysRefIter<K, V>`
-
-##### `fn next(&mut self) -> Option<&K>`
-
-### `pub struct TreeMapKeysValueIter<K, V>`
-
-_Fields are private._
-
-#### `impl Iterator for TreeMapKeysValueIter<K, V>`
-
-##### `fn next(&mut self) -> Option<K>`
-
-### `pub struct TreeMapValuesRefIter<K, V>`
-
-_Fields are private._
-
-#### `pub fn iter_value(&self) -> TreeMapValuesValueIter<K, V>`
-
-#### `impl Iterator for TreeMapValuesRefIter<K, V>`
-
-##### `fn next(&mut self) -> Option<&V>`
-
-### `pub struct TreeMapValuesValueIter<K, V>`
-
-The doubled word is the axis meeting a projection already named `values`:
-the map's _values_, yielded by _value_.
-
-_Fields are private._
-
-#### `impl Iterator for TreeMapValuesValueIter<K, V>`
-
-##### `fn next(&mut self) -> Option<V>`
-
-### `pub struct TreeMapEntriesRefIter<K, V>`
-
-_Fields are private._
-
-#### `pub fn iter_value(&self) -> TreeMapEntriesValueIter<K, V>`
-
-#### `impl Iterator for TreeMapEntriesRefIter<K, V>`
-
-##### `fn next(&mut self) -> Option<[&K, &V]>`
-
-`#[compiler_item("tree_map_entries_iter_next")]`
-
-### `pub struct TreeMapEntriesValueIter<K, V>`
-
-_Fields are private._
-
-#### `impl Iterator for TreeMapEntriesValueIter<K, V>`
-
-##### `fn next(&mut self) -> Option<[K, V]>`
-
 ### `pub struct TreeSet<T>`
 
 A set that iterates in insertion order.
 
-Backed by a `TreeMap<T, ()>` which uses a balanced binary search tree for
-O(log n) membership tests and a dense array for O(1) insertion-order iteration.
+Backed by a `TreeMap<T, ()>`, which keeps a B-tree for O(log n) membership
+tests and a dense array for O(1) insertion-order iteration.
 
 Duplicate inserts are silently ignored (preserving the original position).
 Removing an element and re-inserting it appends it at the end.
@@ -275,17 +282,17 @@ Returns true if the value was present, false otherwise.
 
 Removes all elements from the set.
 
-#### `pub fn iter_ref(&self) -> TreeSetRefIter<T>`
+#### `pub fn iter_ref(&self) -> MapKeysRefIter<T, ()>`
 
 The elements, in insertion order.
 
-#### `pub fn iter_value(&self) -> TreeSetValueIter<T>`
+#### `pub fn iter_value(&self) -> MapKeysValueIter<T, ()>`
 
 The elements, in insertion order.
 
 #### `impl IntoIterator for TreeSet<T>`
 
-##### `fn into_iter(&self) -> TreeSetValueIter<T>`
+##### `fn into_iter(&self) -> MapKeysValueIter<T, ()>`
 
 #### `impl From<Array<T>> for TreeSet<T>`
 
@@ -306,3 +313,169 @@ The elements, in insertion order.
 #### `impl Default for TreeSet<T>`
 
 ##### `pub fn default() -> TreeSet<T>`
+
+### `pub struct HashSeed`
+
+The key to a `HashMap`'s hash function. A seed nobody outside the program
+can predict keeps keys an attacker chooses from colliding.
+
+_Fields are private._
+
+#### `pub fn random() -> HashSeed with InsecureSeed`
+
+A seed from the host, for a map holding keys from outside the program.
+The host is asked to make it unpredictable but is not obliged to, and
+it asks to be called once: fetch one seed and pass it down.
+
+#### `pub fn fixed(k0: u64, k1: u64) -> HashSeed`
+
+A seed of the caller's choosing, for a map whose keys the program trusts.
+
+### `pub struct HashMap<K, V>`
+
+A map that iterates in insertion order, found by hashing its keys.
+
+Its hash function is keyed by the `HashSeed` it is built with. Build one
+with `HashSeed::random()` wherever an attacker may choose its keys.
+
+_Fields are private._
+
+#### `pub fn new(seed: HashSeed) -> HashMap<K, V>`
+
+An empty map hashing with `seed`.
+
+#### `pub fn len(&self) -> i32`
+
+Returns the number of key-value pairs in the map.
+
+#### `pub fn is_empty(&self) -> bool`
+
+Returns true if the map contains no elements.
+
+#### `pub fn try_insert(&mut self, key: K, value: V) -> bool`
+
+Inserts only if `key` is absent, and reports whether it was inserted.
+The losing insert keeps the existing value, unlike `map[key] = value`.
+
+#### `pub fn get_or_insert(&mut self, key: K, value: V) -> V`
+
+The value already stored under `key`, or `value` inserted and returned.
+
+#### `pub fn contains_key(&self, key: K) -> bool`
+
+Returns true if the map contains a value for the specified key.
+
+#### `pub fn get(&self, key: K) -> Option<V>`
+
+Returns the value corresponding to the key, or null if not found.
+
+#### `pub fn remove(&mut self, key: K) -> bool`
+
+Removes a key from the map and returns true if the key was present.
+Preserves insertion order of remaining elements.
+
+#### `pub fn keys(&self) -> MapKeysRefIter<K, V>`
+
+The keys, in insertion order.
+
+#### `pub fn values(&self) -> MapValuesRefIter<K, V>`
+
+The values, in insertion order.
+
+#### `pub fn entries(&self) -> MapEntriesRefIter<K, V>`
+
+The key-value pairs, in insertion order.
+
+#### `pub fn clear(&mut self)`
+
+Removes all key-value pairs from the map. The seed stays.
+
+#### `pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V>`
+
+Returns the value stored under text equal to `key`, or null.
+
+#### `pub fn contains_key_str<S: AsStrSlice>(&self, key: S) -> bool`
+
+Returns true if some key spells the same text as `key`.
+
+#### `pub fn get_ref_str<S: AsStrSlice>(&self, key: S) -> Option<&V>`
+
+Returns a reference to the value stored under text equal to `key`.
+
+#### `impl Eq for HashMap<K, V>`
+
+##### `fn eq(&self, other: &HashMap<K, V>) -> bool`
+
+#### `impl Ord for HashMap<K, V>`
+
+##### `fn cmp(&self, other: &HashMap<K, V>) -> Ordering`
+
+#### `impl Inspect for HashMap<K, V>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
+#### `impl IndexAssign<K> for HashMap<K, V>`
+
+##### `fn index_assign(&mut self, key: K, value: Self::Output)`
+
+#### `impl IndexValue<K> for HashMap<K, V>`
+
+##### `fn index_value(&self, key: K) -> Self::Output`
+
+#### `impl IndexRef<K> for HashMap<K, V>`
+
+##### `fn index_ref(&self, key: K) -> &V`
+
+#### `impl IndexRefMut<K> for HashMap<K, V>`
+
+##### `fn index_ref_mut(&mut self, key: K) -> &mut V`
+
+### `pub struct HashSet<T>`
+
+A set that iterates in insertion order, found by hashing its elements.
+
+_Fields are private._
+
+#### `pub fn new(seed: HashSeed) -> HashSet<T>`
+
+An empty set hashing with `seed`.
+
+#### `pub fn len(&self) -> i32`
+
+Returns the number of elements in the set.
+
+#### `pub fn is_empty(&self) -> bool`
+
+Returns true if the set contains no elements.
+
+#### `pub fn insert(&mut self, value: T) -> bool`
+
+Inserts a value, and reports whether it was absent.
+
+#### `pub fn contains(&self, value: T) -> bool`
+
+Returns true if the set contains the given value.
+
+#### `pub fn remove(&mut self, value: T) -> bool`
+
+Removes a value, and reports whether it was present.
+
+#### `pub fn clear(&mut self)`
+
+Removes all elements from the set.
+
+#### `pub fn iter_ref(&self) -> MapKeysRefIter<T, ()>`
+
+The elements, in insertion order.
+
+#### `pub fn iter_value(&self) -> MapKeysValueIter<T, ()>`
+
+The elements, in insertion order.
+
+#### `impl Inspect for HashSet<T>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
+
+#### `impl IntoIterator for HashSet<T>`
+
+##### `fn into_iter(&self) -> MapKeysValueIter<T, ()>`

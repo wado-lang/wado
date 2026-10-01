@@ -1,0 +1,384 @@
+#![stdlib("core:collections/entries.wado")]
+//! The entries `TreeMap` and `HashMap` keep in insertion order, and the
+//! traversals over them.
+
+// A removal only marks an entry dead, so the map's index keeps pointing at it
+// and a later insert of the same key can take its slot over. `compact` drops
+// the dead once they outnumber the live.
+
+/// Entries in insertion order, one array per field. Entry `i < count` is
+/// `keys[i]`, `values[i]`, and dead unless `alive[i]`. Arrays rather than
+/// lists: an entry read is one `array.get`.
+internal struct EntryLog<K, V> {
+    internal keys: Array<K>,
+    internal values: Array<V>,
+    internal alive: Array<bool>,
+    internal count: i32,
+    internal size: i32,
+    internal deleted_count: i32,
+}
+
+impl<K, V> EntryLog<K, V> {
+    internal fn new() -> EntryLog<K, V> {
+        return EntryLog {
+            keys: Array::new(0),
+            values: Array::new(0),
+            alive: Array::new(0),
+            count: 0,
+            size: 0,
+            deleted_count: 0,
+        };
+    }
+
+    /// Appends a live entry as index `count`, which the caller's index already
+    /// points at.
+    internal fn push(&mut self, key: K, value: V) {
+        let e = self.count;
+        if e == self.keys.len() {
+            builtin::cold_path();
+            self.grow(i32::max(4, e * 2));
+        }
+        self.keys[e] = key;
+        self.values[e] = value;
+        self.alive[e] = true;
+        self.count = e + 1;
+        self.size += 1;
+    }
+
+    /// Room for `cap` entries, the `count` there are kept.
+    fn grow(&mut self, cap: i32) {
+        let mut keys = Array::<K>::new(cap);
+        keys.copy_from(0, &self.keys, 0, self.count);
+        self.keys = keys;
+        let mut values = Array::<V>::new(cap);
+        values.copy_from(0, &self.values, 0, self.count);
+        self.values = values;
+        let mut alive = Array::<bool>::new(cap);
+        alive.copy_from(0, &self.alive, 0, self.count);
+        self.alive = alive;
+    }
+
+    /// Marks the live entry `e` dead, and reports whether the dead now
+    /// outnumber the live enough to `compact`.
+    internal fn kill(&mut self, e: i32) -> bool {
+        assert self.alive[e];
+        self.alive[e] = false;
+        self.deleted_count += 1;
+        self.size -= 1;
+        return self.deleted_count > self.size && self.deleted_count > 4;
+    }
+
+    /// Drops the dead entries, keeping the rest in order. Answers each old
+    /// index's new one, -1 for a dropped entry, for the caller's index to
+    /// follow.
+    internal fn compact(&mut self) -> Array<i32> {
+        let mut renumbered = Array::<i32>::filled(self.count, -1);
+        let mut keys = Array::<K>::new(self.size);
+        let mut values = Array::<V>::new(self.size);
+        let mut live = 0;
+        for let i of 0..<self.count {
+            if self.alive[i] {
+                renumbered[i] = live;
+                keys[live] = self.keys[i];
+                values[live] = self.values[i];
+                live += 1;
+            }
+        }
+        self.keys = keys;
+        self.values = values;
+        self.alive = Array::<bool>::filled(self.size, true);
+        self.count = self.size;
+        self.deleted_count = 0;
+        return renumbered;
+    }
+
+    internal fn clear(&mut self) {
+        self.keys = Array::new(0);
+        self.values = Array::new(0);
+        self.alive = Array::new(0);
+        self.count = 0;
+        self.size = 0;
+        self.deleted_count = 0;
+    }
+
+    /// The value of entry `e`, which a lookup answered, or null for its miss
+    /// (`e < 0`).
+    internal fn value_at(&self, e: i32) -> Option<V> {
+        if e < 0 {
+            return null;
+        }
+        return Option::Some(self.values[e]);
+    }
+
+    /// `e`, which a lookup of `key` answered; its miss (`e < 0`) panics.
+    internal fn found(&self, e: i32, key: &K) -> i32 {
+        if e < 0 {
+            panic(`key not found: ${*key:?}`);
+        }
+        return e;
+    }
+
+    /// The first live entry from `from` on, or `count` for none. A log nothing
+    /// was removed from has no dead entry to skip.
+    fn next_live(&self, from: i32) -> i32 {
+        let mut i = from;
+        if self.deleted_count > 0 {
+            while i < self.count && !self.alive[i] {
+                i += 1;
+            }
+        }
+        return i;
+    }
+
+    internal fn keys(&self) -> MapKeysRefIter<K, V> {
+        return MapKeysRefIter { log: self, index: 0 };
+    }
+
+    internal fn values(&self) -> MapValuesRefIter<K, V> {
+        return MapValuesRefIter { log: self, index: 0 };
+    }
+
+    internal fn entries(&self) -> MapEntriesRefIter<K, V> {
+        return MapEntriesRefIter { log: self, index: 0 };
+    }
+}
+
+impl<K: Inspect, V: Inspect> EntryLog<K, V> {
+    /// The live entries as `{k: v, …}`, or as `{k, …}` for a set's keys. The
+    /// alternate (`#`) form puts each on its own indented line.
+    internal fn inspect_as(&self, f: &mut Formatter, keys_only: bool) {
+        let lines = f.alternate;
+        if lines && self.size == 0 {
+            f.write_str("{}");
+            return;
+        }
+        if lines {
+            f.open_brace("{");
+        } else {
+            f.write_char('{');
+        }
+        let mut first = true;
+        for let [key, value] of self.entries() {
+            if lines {
+                f.write_newline_indent();
+            } else if !first {
+                f.write_str(", ");
+            }
+            first = false;
+            key.inspect(f);
+            if !keys_only {
+                f.write_str(": ");
+                value.inspect(f);
+            }
+            if lines {
+                f.write_char(',');
+            }
+        }
+        if lines {
+            f.close_brace("}");
+        } else {
+            f.write_char('}');
+        }
+    }
+}
+
+impl<K, V: Ref> EntryLog<K, V> {
+    /// `value_at`, borrowing the value.
+    internal fn value_ref_at(&self, e: i32) -> Option<&V> {
+        if e < 0 {
+            return null;
+        }
+        return Option::Some(&self.values[e]);
+    }
+}
+
+/// Equal live entries in the same order; what was removed on the way there
+/// does not count.
+impl<K: Eq, V: Eq> Eq for EntryLog<K, V> {
+    fn eq(&self, other: &EntryLog<K, V>) -> bool {
+        if self.size != other.size {
+            return false;
+        }
+        let mut i = self.next_live(0);
+        let mut j = other.next_live(0);
+        while i < self.count {
+            if self.keys[i] != other.keys[j] || self.values[i] != other.values[j] {
+                return false;
+            }
+            i = self.next_live(i + 1);
+            j = other.next_live(j + 1);
+        }
+        return true;
+    }
+}
+
+/// Lexicographic over the live entries in order, each by key and then value,
+/// and then by length, as a `List<[K, V]>` orders.
+impl<K: Ord, V: Ord> Ord for EntryLog<K, V> {
+    fn cmp(&self, other: &EntryLog<K, V>) -> Ordering {
+        let mut i = self.next_live(0);
+        let mut j = other.next_live(0);
+        while i < self.count && j < other.count {
+            let by_key = self.keys[i].cmp(&other.keys[j]);
+            if by_key != Ordering::Equal {
+                return by_key;
+            }
+            let by_value = self.values[i].cmp(&other.values[j]);
+            if by_value != Ordering::Equal {
+                return by_value;
+            }
+            i = self.next_live(i + 1);
+            j = other.next_live(j + 1);
+        }
+        return self.size.cmp(&other.size);
+    }
+}
+
+// Every traversal below yields in insertion order, views the map rather than
+// copying it, and skips the entries a removal left dead. Holding the map by
+// value would deep-copy every entry at construction.
+//
+// Viewing means a traversal sees later writes: inserting or removing while one
+// is live can skip or repeat an entry, since `compact` renumbers. Collect first
+// (`iter_value().collect()`) to traverse a snapshot.
+
+/// A map's keys, or a set's elements, by reference.
+pub struct MapKeysRefIter<K, V> {
+    log: &EntryLog<K, V>,
+    index: i32,
+}
+
+impl<K, V> Iterator for MapKeysRefIter<K, V> {
+    type Item = &K;
+
+    fn next(&mut self) -> Option<&K> {
+        let i = self.log.next_live(self.index);
+        if i >= self.log.count {
+            self.index = i;
+            return null;
+        }
+        self.index = i + 1;
+        return Option::Some(&self.log.keys[i]);
+    }
+}
+
+impl<K, V> MapKeysRefIter<K, V> {
+    pub fn iter_value(&self) -> MapKeysValueIter<K, V> {
+        return MapKeysValueIter { log: self.log, index: self.index };
+    }
+}
+
+/// A map's keys, or a set's elements, by value.
+pub struct MapKeysValueIter<K, V> {
+    log: &EntryLog<K, V>,
+    index: i32,
+}
+
+impl<K, V> Iterator for MapKeysValueIter<K, V> {
+    type Item = K;
+
+    fn next(&mut self) -> Option<K> {
+        let i = self.log.next_live(self.index);
+        if i >= self.log.count {
+            self.index = i;
+            return null;
+        }
+        self.index = i + 1;
+        return Option::Some(self.log.keys[i]);
+    }
+}
+
+/// A map's values, by reference.
+pub struct MapValuesRefIter<K, V> {
+    log: &EntryLog<K, V>,
+    index: i32,
+}
+
+impl<K, V> Iterator for MapValuesRefIter<K, V> {
+    type Item = &V;
+
+    fn next(&mut self) -> Option<&V> {
+        let i = self.log.next_live(self.index);
+        if i >= self.log.count {
+            self.index = i;
+            return null;
+        }
+        self.index = i + 1;
+        return Option::Some(&self.log.values[i]);
+    }
+}
+
+impl<K, V> MapValuesRefIter<K, V> {
+    pub fn iter_value(&self) -> MapValuesValueIter<K, V> {
+        return MapValuesValueIter { log: self.log, index: self.index };
+    }
+}
+
+/// A map's values, by value. The doubled word is the axis meeting a
+/// projection already named `values`.
+pub struct MapValuesValueIter<K, V> {
+    log: &EntryLog<K, V>,
+    index: i32,
+}
+
+impl<K, V> Iterator for MapValuesValueIter<K, V> {
+    type Item = V;
+
+    fn next(&mut self) -> Option<V> {
+        let i = self.log.next_live(self.index);
+        if i >= self.log.count {
+            self.index = i;
+            return null;
+        }
+        self.index = i + 1;
+        return Option::Some(self.log.values[i]);
+    }
+}
+
+/// A map's key-value pairs, by reference.
+#[compiler_item("map_entries_iter")]
+pub struct MapEntriesRefIter<K, V> {
+    log: &EntryLog<K, V>,
+    index: i32,
+}
+
+impl<K, V> Iterator for MapEntriesRefIter<K, V> {
+    type Item = [&K, &V];
+
+    #[compiler_item("map_entries_iter_next")]
+    fn next(&mut self) -> Option<[&K, &V]> {
+        let i = self.log.next_live(self.index);
+        if i >= self.log.count {
+            self.index = i;
+            return null;
+        }
+        self.index = i + 1;
+        return Option::Some([&self.log.keys[i], &self.log.values[i]]);
+    }
+}
+
+impl<K, V> MapEntriesRefIter<K, V> {
+    pub fn iter_value(&self) -> MapEntriesValueIter<K, V> {
+        return MapEntriesValueIter { log: self.log, index: self.index };
+    }
+}
+
+/// A map's key-value pairs, by value.
+pub struct MapEntriesValueIter<K, V> {
+    log: &EntryLog<K, V>,
+    index: i32,
+}
+
+impl<K, V> Iterator for MapEntriesValueIter<K, V> {
+    type Item = [K, V];
+
+    fn next(&mut self) -> Option<[K, V]> {
+        let i = self.log.next_live(self.index);
+        if i >= self.log.count {
+            self.index = i;
+            return null;
+        }
+        self.index = i + 1;
+        return Option::Some([self.log.keys[i], self.log.values[i]]);
+    }
+}

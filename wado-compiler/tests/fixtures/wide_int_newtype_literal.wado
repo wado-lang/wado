@@ -1,0 +1,12 @@
+// A newtype over `i128` or `u128` takes an integer literal where one is
+// expected, as a newtype over any other integer does.
+
+type Signed = i128;
+type Unsigned = u128;
+
+test {
+    let s: Signed = -7;
+    let u: Unsigned = 340282366920938463463374607431768211455;
+    assert s as i128 == -7;
+    assert u as u128 == u128::MAX;
+}

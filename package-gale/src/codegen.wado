@@ -64,7 +64,7 @@ use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { recovery_sets } from "./recovery_sets.wado";
-use { TreeMap } from "core:collections";
+use { GaleMap } from "./gale_map.wado";
 use {
     LoweredGrammar,
     Diagnostic,
@@ -276,10 +276,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let needs_latn = grammar_needs_latn(grammar);
     let mut latn = LatnResult {
         atn: empty_atn(),
-        rule_index: TreeMap::<String, i32>::new(),
+        rule_index: GaleMap::<String, i32>::new(),
         atn_class_rules: [],
     };
-    let mut atn_class_map = TreeMap::<String, i32>::new();
+    let mut atn_class_map = GaleMap::<String, i32>::new();
     if needs_latn {
         latn = build_latn(grammar);
         for let name of &latn.atn_class_rules {
@@ -547,7 +547,7 @@ fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
         return;
     }
     let fenv = build_follow_env(&grammar.parser_rules, ctx, &grammar.parser_rules[0].name);
-    let mut follow_kinds = TreeMap::<String, List<String>>::new();
+    let mut follow_kinds = GaleMap::<String, List<String>>::new();
     for let rule of &grammar.parser_rules {
         let fs = fenv.rule_follow(&rule.name);
         let mut kinds: List<String> = [];

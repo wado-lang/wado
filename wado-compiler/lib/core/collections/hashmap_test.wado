@@ -1,0 +1,286 @@
+use { HashMap, HashSeed, HashSet } from "core:collections";
+
+fn seed() -> HashSeed {
+    return HashSeed::fixed(1, 2);
+}
+
+fn keys_of(map: &HashMap<String, i32>) -> List<String> {
+    let mut out: List<String> = [];
+    for let k of map.keys() {
+        out.push(*k);
+    }
+    return out;
+}
+
+test "keys iterate in insertion order" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    for let k of ["zeta", "alpha", "mid", "beta"] as List<String> {
+        map[k] = k.len();
+    }
+    assert keys_of(&map) == ["zeta", "alpha", "mid", "beta"];
+}
+
+test "overwriting a key keeps its position" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    map["a"] = 1;
+    map["b"] = 2;
+    map["a"] = 10;
+    assert keys_of(&map) == ["a", "b"];
+    assert map["a"] == 10;
+}
+
+test "a removed key re-inserted goes to the end" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+    assert map.remove("a");
+    assert !map.remove("a");
+    map["a"] = 4;
+    assert keys_of(&map) == ["b", "c", "a"];
+    assert map.len() == 3;
+}
+
+test "compaction keeps the survivors in order" {
+    let mut map = HashMap::<i32, i32>::new(seed());
+    for let i of 0..<100 {
+        map[i] = i * 2;
+    }
+    for let i of 0..<100 {
+        if i % 3 != 0 {
+            assert map.remove(i);
+        }
+    }
+    let mut expected: List<i32> = [];
+    for let i of 0..<100 {
+        if i % 3 == 0 {
+            expected.push(i);
+        }
+    }
+    let mut got: List<i32> = [];
+    for let [k, v] of map.entries() {
+        assert *v == *k * 2;
+        got.push(*k);
+    }
+    assert got == expected;
+    assert map.len() == expected.len();
+}
+
+test "lookups across growth" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    for let i of 0..<1000 {
+        map[`k${i}`] = i;
+    }
+    assert map.len() == 1000;
+    for let i of 0..<1000 {
+        assert map.get(`k${i}`) == Some(i);
+        assert map.get_str(`k${i}`) == Some(i);
+    }
+    assert map.get("missing") == null;
+    assert !map.contains_key("missing");
+    assert map.get_str("k42".as_str_slice()) == Some(42);
+    assert map.contains_key_str("k7".as_str_slice());
+}
+
+test "try_insert and get_or_insert keep the first value" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    assert map.try_insert("a", 1);
+    assert !map.try_insert("a", 2);
+    assert map.get_or_insert("a", 3) == 1;
+    assert map.get_or_insert("b", 4) == 4;
+    assert keys_of(&map) == ["a", "b"];
+}
+
+test "clear empties the map" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    map["a"] = 1;
+    map.clear();
+    assert map.is_empty();
+    map["b"] = 2;
+    assert keys_of(&map) == ["b"];
+}
+
+test "a copy is independent" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    map["a"] = 1;
+    let mut copy = map;
+    copy["b"] = 2;
+    assert map.len() == 1;
+    assert copy.len() == 2;
+}
+
+test "text lookups find, miss, and skip a removed key" {
+    let mut map = HashMap::<String, List<i32>>::new(seed());
+    assert map.get_str("a") == null;
+    for let i of 0..<20 {
+        map[`key${i}`] = [i];
+    }
+    let text = "xxkey7yy".as_str_slice();
+    assert map.get_str(text.slice(2, 6)) == Some([7]);
+    assert map.get_ref_str(text.slice(2, 6)) matches { Some(v) && v.len() == 1 };
+    assert map.get_ref_str("nope") matches { None };
+    assert map.remove("key3");
+    assert !map.contains_key_str("key3");
+    assert map.get_str("key99") == null;
+}
+
+test "a value is borrowed and mutated in place through its key" {
+    let mut map = HashMap::<String, List<i32>>::new(seed());
+    map["a"] = [];
+    map["a"].push(1);
+    let r = &map["a"];
+    assert r.len() == 1;
+    let mut vs: List<i32> = [];
+    for let v of map.values() {
+        vs.push(v[0]);
+    }
+    assert vs == [1];
+}
+
+#[expect_trap]
+test "reading a missing key panics" {
+    let map = HashMap::<String, i32>::new(seed());
+    let _ = map["missing"];
+}
+
+#[expect_trap]
+test "borrowing a missing key panics" {
+    let map = HashMap::<String, List<i32>>::new(seed());
+    let _ = &map["missing"];
+}
+
+#[expect_trap]
+test "mutating a missing key panics" {
+    let mut map = HashMap::<String, List<i32>>::new(seed());
+    map["missing"].push(1);
+}
+
+test "growth after a removal leaves the dead entry out" {
+    let mut map = HashMap::<i32, i32>::new(seed());
+    for let i of 0..<6 {
+        map[i] = i;
+    }
+    assert map.remove(2);
+    for let i of 6..<200 {
+        map[i] = i;
+    }
+    assert map.len() == 199 && !map.contains_key(2) && map[150] == 150;
+}
+
+test "keys of every length hash by their bytes" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    let mut key = "";
+    for let n of 0..<40 {
+        map[key] = n;
+        key.push_str("x");
+    }
+    key = "";
+    for let n of 0..<40 {
+        assert map[key] == n;
+        key.push_str("x");
+    }
+}
+
+test "every integer width, char, bool and List hash as keys" {
+    let mut a = HashMap::<i8, i32>::new(seed());
+    a[-1] = 1;
+    assert a[-1] == 1;
+    let mut b = HashMap::<u8, i32>::new(seed());
+    b[255] = 1;
+    assert b[255] == 1;
+    let mut c = HashMap::<i16, i32>::new(seed());
+    c[-300] = 1;
+    assert c[-300] == 1;
+    let mut d = HashMap::<u16, i32>::new(seed());
+    d[60000] = 1;
+    assert d[60000] == 1;
+    let mut e = HashMap::<u32, i32>::new(seed());
+    e[4000000000] = 1;
+    assert e[4000000000] == 1;
+    let mut f = HashMap::<i64, i32>::new(seed());
+    f[-5000000000] = 1;
+    assert f[-5000000000] == 1;
+    let mut g = HashMap::<u64, i32>::new(seed());
+    g[u64::MAX] = 1;
+    assert g[u64::MAX] == 1;
+    let mut h = HashMap::<char, i32>::new(seed());
+    h['あ'] = 1;
+    assert h['あ'] == 1;
+    let mut k = HashMap::<bool, i32>::new(seed());
+    k[true] = 1;
+    assert k[true] == 1 && !k.contains_key(false);
+    let mut l = HashMap::<List<i32>, i32>::new(seed());
+    l[[1, 2]] = 1;
+    assert l[[1, 2]] == 1 && !l.contains_key([2, 1]);
+}
+
+test "maps are equal when they hold equal entries in the same order" {
+    let mut a = HashMap::<String, i32>::new(seed());
+    let mut b = HashMap::<String, i32>::new(HashSeed::fixed(3, 4));
+    assert a == b;
+    a["x"] = 1;
+    a["gone"] = 0;
+    a["y"] = 2;
+    assert a.remove("gone");
+    b["x"] = 1;
+    b["y"] = 2;
+    assert a == b;
+    b["y"] = 3;
+    assert a != b;
+    let mut c = HashMap::<String, i32>::new(seed());
+    c["y"] = 2;
+    c["x"] = 1;
+    assert a != c;
+    let mut s = HashSet::<i32>::new(seed());
+    s.insert(1);
+    let mut t = HashSet::<i32>::new(seed());
+    assert s != t;
+    t.insert(1);
+    assert s == t;
+}
+
+test "maps order by their entries in insertion order, then by length" {
+    let mut a = HashMap::<i32, i32>::new(seed());
+    a[1] = 1;
+    let mut b = HashMap::<i32, i32>::new(HashSeed::fixed(3, 4));
+    b[1] = 1;
+    assert a.cmp(&b) == Ordering::Equal;
+    b[0] = 0;
+    assert a < b;
+    let mut s = HashSet::<i32>::new(seed());
+    s.insert(2);
+    let mut t = HashSet::<i32>::new(seed());
+    t.insert(1);
+    t.insert(5);
+    assert s > t;
+}
+
+test "inspect renders the live entries and no seed" {
+    let mut map = HashMap::<String, i32>::new(seed());
+    assert `${map:?}` == "{}" && `${map:#?}` == "{}";
+    map["a"] = 1;
+    map["gone"] = 0;
+    map["b"] = 2;
+    assert map.remove("gone");
+    assert `${map:?}` == "{\"a\": 1, \"b\": 2}";
+    assert `${map:#?}` == "{\n  \"a\": 1,\n  \"b\": 2,\n}";
+    let mut set = HashSet::<i32>::new(seed());
+    set.insert(3);
+    set.insert(1);
+    assert `${set:?}` == "{3, 1}";
+    assert `${set:#?}` == "{\n  3,\n  1,\n}";
+}
+
+test "a random seed builds a working map" {
+    let mut map = HashMap::<String, i32>::new(HashSeed::random());
+    map["a"] = 1;
+    assert map["a"] == 1;
+}
+
+test "tuple keys" {
+    let mut map = HashMap::<[i32, String], i32>::new(seed());
+    map[[1, "x"]] = 1;
+    map[[2, "x"]] = 2;
+    assert map[[1, "x"]] == 1;
+    assert map.get([1, "y"]) == null;
+}

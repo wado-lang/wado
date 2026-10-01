@@ -20,7 +20,7 @@ impl G4Lexer {
 
     /// A token whose text is a copy of the source span `[start, end)`.
     fn owned_token(&self, kind: G4Token, start: i32, end: i32) -> Token {
-        return Token::new(kind as i32, chars_text(self.chars, start, end), Span::new(start, end));
+        return Token::new(kind.code(), chars_text(self.chars, start, end), Span::new(start, end));
     }
 
     fn at_end(&self) -> bool {
@@ -85,7 +85,7 @@ impl G4Lexer {
                 if let Some(esc) = bad {
                     return self.owned_token(G4Token::InvalidEscape, esc.start, esc.end);
                 }
-                return Token::new(G4Token::StringLit as i32, text, Span::new(start, self.pos));
+                return Token::new(G4Token::StringLit.code(), text, Span::new(start, self.pos));
             } else if c == '\\' && !self.at_end() {
                 self.read_string_escape(&mut text, &mut bad);
             } else {
@@ -150,7 +150,7 @@ impl G4Lexer {
             "fragment" => G4Token::Fragment,
             _ => G4Token::Identifier,
         };
-        return Token::new(kind as i32, text, Span::new(start, self.pos));
+        return Token::new(kind.code(), text, Span::new(start, self.pos));
     }
 
     pub fn next_token(&mut self) -> Token {
@@ -224,7 +224,7 @@ pub fn tokenize_chars(chars: &List<char>) -> List<Token> {
     let mut tokens: List<Token> = [];
     loop {
         let tok = lexer.next_token();
-        let is_eof = tok.kind == G4Token::Eof as i32;
+        let is_eof = tok.kind == G4Token::Eof.code();
         tokens.push(tok);
         if is_eof {
             break;

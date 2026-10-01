@@ -1,0 +1,41 @@
+// An impl's type parameter that only a bound's associated-type constraint
+// mentions is projected from the parameter the receiver settles, as a
+// function's is. It once reached codegen unsubstituted and crashed.
+
+type Meters = f64;
+
+trait Named {
+    type Out;
+}
+
+struct S {}
+
+impl Named for S {
+    type Out = i32;
+}
+
+struct W<N> {
+    n: N,
+}
+
+impl<N: ReflectNewtype<Base = B>, B> W<N> {
+    fn base(&self) -> B {
+        return self.n as B;
+    }
+}
+
+impl<N: Named<Out = B>, B: Default> W<N> {
+    fn out(&self) -> B {
+        return B::default();
+    }
+}
+
+test "a newtype's base" {
+    let w = W { n: 2.5 as Meters };
+    assert `${w.base():?}` == "2.5";
+}
+
+test "a user trait's associated type" {
+    let w = W { n: S {} };
+    assert `${w.out():?}` == "0";
+}

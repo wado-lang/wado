@@ -16,7 +16,7 @@ use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { sort_group_by_specificity } from "./alt_grouping.wado";
 use { all_alts_are_single_token, dedup_append_arr } from "./gen_util.wado";
-use { TreeSet } from "core:collections";
+use { GaleSet } from "./gale_map.wado";
 
 pub variant PredictionNode {
     Leaf(i32),
@@ -883,7 +883,7 @@ fn try_expand_opaque(
         return null;
     }
     // Rule diversity check: only expand when opaque configs reference different rules.
-    let mut rule_refs = TreeSet::<String>::new();
+    let mut rule_refs = GaleSet::<String>::new();
     for let c of original_configs {
         if !opaque_alts.contains(&c.alt_index) {
             continue;

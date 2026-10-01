@@ -888,22 +888,19 @@ pub(super) fn synthesize_lower_map_to_buffer(
         };
         let opt = tt.make_option(ref_pair);
         let iter_def = tt
-            .compiler_item_def(CompilerItem::TreeMapEntriesIter)
-            .expect("the TreeMap entries iterator is a registered compiler item");
+            .compiler_item_def(CompilerItem::MapEntriesIter)
+            .expect("the map entries iterator is a registered compiler item");
         let iter = tt.make_generic_instance(iter_def, vec![key_tid, value_tid]);
         let map_head = tt.compiler_struct_fq_name(CompilerItem::TreeMap);
-        let iter_head = tt.compiler_struct_fq_name(CompilerItem::TreeMapEntriesIter);
+        let iter_head = tt.compiler_struct_fq_name(CompilerItem::MapEntriesIter);
         let items = tt.compiler_items();
         let map_source = items.require_struct(CompilerItem::TreeMap).0.clone();
-        let iter_source = items
-            .require_struct(CompilerItem::TreeMapEntriesIter)
-            .0
-            .clone();
+        let iter_source = items.require_struct(CompilerItem::MapEntriesIter).0.clone();
         let next = LocalMethodName::new(
             iter_head,
             Some(items.trait_fq(CompilerItem::Iterator)),
             items
-                .method_name(CompilerItem::TreeMapEntriesIterNext)
+                .method_name(CompilerItem::MapEntriesIterNext)
                 .to_string(),
         );
         let method = |item| {
@@ -919,7 +916,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             iter_source,
             (
                 next,
-                items.require_template(CompilerItem::TreeMapEntriesIterNext),
+                items.require_template(CompilerItem::MapEntriesIterNext),
             ),
             method(CompilerItem::TreeMapLen),
             method(CompilerItem::TreeMapEntries),

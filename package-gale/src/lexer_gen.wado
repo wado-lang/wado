@@ -40,7 +40,7 @@ use {
     LEXER_MODE_READER,
     LEXER_SET_MODE_FIELD,
 } from "./action_translate.wado";
-use { TreeMap, TreeSet } from "core:collections";
+use { GaleMap, GaleSet } from "./gale_map.wado";
 use icu from "core:icu";
 
 /// A grammar literal rendered the way ANTLR4's vocabulary shows it: the source
@@ -51,7 +51,7 @@ pub type LitName = String;
 /// `'+'`. `LitToken.text` holds the literal with its escapes already resolved,
 /// so this puts them back — a readable rendering, not a round-trip.
 pub fn lit_name<S: AsStrSlice>(text: S) -> LitName {
-    return text as LitName;
+    return text.as_str_slice().to_string() as LitName;
 }
 
 impl Display for LitName {
@@ -309,7 +309,7 @@ pub fn gen_lexer<S: AsStrSlice>(
     w: &mut CodeWriter,
     grammar: &Grammar,
     lit_tokens: &List<LitToken>,
-    atn_class: &TreeMap<String, i32>,
+    atn_class: &GaleMap<String, i32>,
     members: &MemberDecls,
     has_members: bool,
     sc_name: S,
@@ -662,7 +662,7 @@ fn gen_lexer_match_fns<S: AsStrSlice>(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
-    atn_class: &TreeMap<String, i32>,
+    atn_class: &GaleMap<String, i32>,
     replayed: &List<String>,
     ea: bool,
     hm: bool,
@@ -820,7 +820,7 @@ pub fn lexer_rule_routes(
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
-    atn_class: &TreeMap<String, i32>,
+    atn_class: &GaleMap<String, i32>,
     replayed: &List<String>,
 ) -> List<LexerRuleRoute> {
     let mut routes: List<LexerRuleRoute> = [];
@@ -840,7 +840,7 @@ pub fn lexer_rule_routes(
 fn statically_called_rules(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
-    atn_class: &TreeMap<String, i32>,
+    atn_class: &GaleMap<String, i32>,
     replayed: &List<String>,
 ) -> List<String> {
     let mut emitted: List<String> = [];
@@ -1008,7 +1008,7 @@ fn lexer_rule_outranks(name: &String, mode: i32, earlier: &List<LexerRuleRoute>,
 fn check_lexer_calls_resolve(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
-    atn_class: &TreeMap<String, i32>,
+    atn_class: &GaleMap<String, i32>,
     replayed: &List<String>,
 ) {
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
@@ -1029,7 +1029,7 @@ fn check_lexer_calls_resolve(
 
 /// Whether `rule` gets a `try_` matcher whose body is emitted here rather than
 /// delegated to `latn_match`.
-fn emits_static_matcher(route: &LexerRuleRoute, rule: &LexerRule, atn_class: &TreeMap<String, i32>) -> bool {
+fn emits_static_matcher(route: &LexerRuleRoute, rule: &LexerRule, atn_class: &GaleMap<String, i32>) -> bool {
     return route.has_match_fn() && !atn_class.contains_key_str(&rule.name);
 }
 
@@ -1038,7 +1038,7 @@ fn emits_static_matcher(route: &LexerRuleRoute, rule: &LexerRule, atn_class: &Tr
 fn emits_static_body(
     route: &LexerRuleRoute,
     rule: &LexerRule,
-    atn_class: &TreeMap<String, i32>,
+    atn_class: &GaleMap<String, i32>,
     replayed: &List<String>,
 ) -> bool {
     return emits_static_matcher(route, rule, atn_class) || replayed.contains(&rule.name);
@@ -1411,7 +1411,7 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     plan: &Option<LexerBodyPlan>,
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
-    atn_class: &TreeMap<String, i32>,
+    atn_class: &GaleMap<String, i32>,
     ea: bool,
     hm: bool,
     sc_name: S,
@@ -2495,7 +2495,7 @@ pub fn lexer_matcher_plans(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
-    atn_class: &TreeMap<String, i32>,
+    atn_class: &GaleMap<String, i32>,
     replayed: &List<String>,
 ) -> LexerMatcherPlans {
     let mut rules: List<Option<LexerBodyPlan>> = [];
@@ -4990,7 +4990,7 @@ pub fn compute_elem_first_chars(
     ci: bool,
     grammar_opts: &List<GrammarOption>,
 ) -> [bool, bool] {
-    let mut seen = TreeSet::<i64>::new();
+    let mut seen = GaleSet::<i64>::new();
     let mut visiting: List<String> = [];
     return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci, grammar_opts, &mut visiting);
 }
@@ -4999,7 +4999,7 @@ fn elem_first_chars_dedup(
     body: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
-    seen: &mut TreeSet<i64>,
+    seen: &mut GaleSet<i64>,
     ci: bool,
     grammar_opts: &List<GrammarOption>,
     visiting: &mut List<String>,
@@ -5027,7 +5027,7 @@ fn elem_first_chars_dedup(
     return [false, any_nullable];
 }
 
-fn add_folded_range(out: &mut List<[char, char]>, seen: &mut TreeSet<i64>, start: char, end: char, ci: bool) {
+fn add_folded_range(out: &mut List<[char, char]>, seen: &mut GaleSet<i64>, start: char, end: char, ci: bool) {
     if !ci {
         add_range(out, seen, start, end);
         return;
@@ -5045,7 +5045,7 @@ fn compute_single_elem_first(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
-    seen: &mut TreeSet<i64>,
+    seen: &mut GaleSet<i64>,
     ci: bool,
     grammar_opts: &List<GrammarOption>,
     visiting: &mut List<String>,
@@ -5128,7 +5128,7 @@ fn char_matches_ranges(c: char, ranges: &List<[char, char]>) -> bool {
     return ranges.iter_ref().any(|r| c >= r[0] && c <= r[1]);
 }
 
-fn add_range(out: &mut List<[char, char]>, seen: &mut TreeSet<i64>, start: char, end: char) {
+fn add_range(out: &mut List<[char, char]>, seen: &mut GaleSet<i64>, start: char, end: char) {
     if seen.insert(range_key(start, end)) {
         out.push([start, end]);
     }
@@ -5195,7 +5195,7 @@ struct DispatchGroup {
 /// The arms of the emitted first-char dispatch: a partition of the character
 /// space at every first-set boundary, one arm per distinct call list.
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
-    let mut cuts = TreeSet::<i32>::new();
+    let mut cuts = GaleSet::<i32>::new();
     for let call of calls {
         if call.is_wildcard {
             continue;
@@ -5205,7 +5205,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
             cuts.insert(r[1] as i32 + 1);
         }
     }
-    // A TreeSet iterates in insertion order.
+    // A GaleSet iterates in insertion order.
     let mut points: List<i32> = cuts.into_iter().collect();
     points.sort();
 
@@ -5215,7 +5215,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     }
 
     let mut groups: List<DispatchGroup> = [];
-    let mut group_by_calls = TreeMap::<List<i32>, i32>::new();
+    let mut group_by_calls = GaleMap::<List<i32>, i32>::new();
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];
         clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
@@ -5290,7 +5290,7 @@ fn build_mode_try_calls(
             let text: List<char> = lit.text.chars().collect();
             let c = text[0];
             let mut fc: List<[char, char]> = [];
-            let mut fc_seen = TreeSet::<i64>::new();
+            let mut fc_seen = GaleSet::<i64>::new();
             // Parser literals inherit grammar-level caseInsensitive.
             add_folded_range(&mut fc, &mut fc_seen, c, c, grammar_ci);
             let lit_extras = literal_command_extras(
@@ -5419,7 +5419,7 @@ fn gen_second_char_dispatch(
 /// A partition of the second char among `members`, each arm in grammar order.
 /// The `_` arm holds the calls `second_char_admits` places in every arm.
 fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<DispatchGroup> {
-    let mut cuts = TreeSet::<i32>::new();
+    let mut cuts = GaleSet::<i32>::new();
     for let m of members {
         if let Some(s) = &calls[*m].second_chars && !s.may_end {
             for let r of &s.ranges {
@@ -5431,7 +5431,7 @@ fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<Dispatch
     let mut points: List<i32> = cuts.into_iter().collect();
     points.sort();
     let mut arms: List<DispatchGroup> = [];
-    let mut arm_by_calls = TreeMap::<List<i32>, i32>::new();
+    let mut arm_by_calls = GaleMap::<List<i32>, i32>::new();
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];
         clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);

@@ -33,7 +33,7 @@ use { RecoverySets, empty_recovery_sets } from "./recovery_sets.wado";
 use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
-use { TreeMap, TreeSet } from "core:collections";
+use { GaleMap, GaleSet } from "./gale_map.wado";
 
 /// A token-kind set interned during parser codegen. Multi-element
 /// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
@@ -107,7 +107,7 @@ pub struct GenContext {
     /// mandatory groups are emitted strict to break that zero-consumption cycle.
     scan_cyclic: List<bool>,
     pub lit_tokens: List<LitToken>,
-    rule_index: TreeMap<String, i32>,
+    rule_index: GaleMap<String, i32>,
     /// Canonical token-kind table (id <-> `TK_*` name). FIRST sets are carried
     /// as `List<i32>` of these ids; names are recovered here at the emit
     /// boundary. Set by `set_token_kinds` on the production path (so ids match
@@ -120,10 +120,9 @@ pub struct GenContext {
     kind_rank: List<i32>,
     /// Per-rule memo caches indexed by dense rule id (position in
     /// `parser_rules`, i.e. what `rule_index_of` returns). `null` means
-    /// "not yet computed"; `Some(v)` is the memoized value. Dense arrays
-    /// replace the former `TreeMap<String, _>` so a cache probe on the hot
-    /// first/nullable/scannable recursion is an O(1) index instead of an
-    /// O(log n) rule-name string-tree walk.
+    /// "not yet computed"; `Some(v)` is the memoized value. A cache probe on
+    /// the hot first/nullable/scannable recursion is then an index, with no
+    /// rule name to hash.
     first_cache: List<Option<List<i32>>>,
     single_token_cache: List<Option<bool>>,
     nullable_cache: List<Option<bool>>,
@@ -131,11 +130,11 @@ pub struct GenContext {
     open_end_cache: List<Option<bool>>,
     /// Maps single-alt group type name → the rule name that first defines it.
     /// Used to resolve general group type names inside shared single-alt groups.
-    single_alt_owner: TreeMap<String, String>,
+    single_alt_owner: GaleMap<String, String>,
     /// Registry of token-kind sets keyed by canonical (sorted, joined
     /// with `|`) representation. IDs are assigned in insertion order so
     /// the same input grammar always produces the same helper names.
-    kind_set_registry: TreeMap<String, KindSetEntry>,
+    kind_set_registry: GaleMap<String, KindSetEntry>,
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
     lr_rule_snakes: List<String>,
     /// Rules whose functions carry the FOLLOW slots, by snake name. Set once
@@ -163,19 +162,19 @@ pub struct GenContext {
     /// per-depth representation. IDs are assigned in insertion order so
     /// `FOLLOW_MASK_<id>` global names are stable across runs. See
     /// `FollowMaskEntry`.
-    follow_mask_registry: TreeMap<String, FollowMaskEntry>,
+    follow_mask_registry: GaleMap<String, FollowMaskEntry>,
     /// Positions each interned mask constrains, indexed by its id.
     follow_mask_depths: List<i32>,
     /// Registry of recovery sync sets (a leaf's FIRST-of-rest) keyed by
     /// canonical representation. Each distinct non-empty set becomes one
     /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
     /// terminal on the valid hot path never rebuilds or copies the set.
-    sync_set_registry: TreeMap<String, KindSetEntry>,
+    sync_set_registry: GaleMap<String, KindSetEntry>,
     /// Per function being emitted, innermost last, the top-level names its text
     /// references, which it `note`s at its end for `CodeWriter::prune`.
-    ref_frames: List<TreeSet<String>>,
+    ref_frames: List<GaleSet<String>>,
     /// Names referenced outside any function frame.
-    root_refs: TreeSet<String>,
+    root_refs: GaleSet<String>,
     /// Cache of `tail_greedy_first(rule)` indexed by dense rule id (see
     /// the memo caches above).
     tail_greedy_cache: List<Option<List<String>>>,
@@ -260,7 +259,7 @@ pub struct GenContext {
     /// differently in the grammar and identically after translation, so this is
     /// the one form the gate analysis reads. Reading the grammar text instead
     /// meant predicting what the translator would name the member.
-    gate_bodies: TreeMap<i32, String>,
+    gate_bodies: GaleMap<i32, String>,
     /// The lexer's `superClass` base effect-interface name, or `""` when none.
     /// See `action.md`, "SuperClass — an effect interface".
     superclass_name: String,
@@ -296,11 +295,11 @@ pub struct GenContext {
     /// inlining the condition, so the same fn is callable from every decision
     /// path (token-led / interchangeable dispatch and the ATN's disabled alternatives).
     predicate_fns: List<[i32, String]>,
-    rule_follow_kinds: TreeMap<String, List<String>>,
+    rule_follow_kinds: GaleMap<String, List<String>>,
     rule_follow_exact: bool,
     /// Per rule, the labeled rule calls whose capture an action reads. Their
     /// value-struct fields are what `$x.text` / `$x.ctx` resolve to.
-    rule_captures: TreeMap<String, RuleCaptures>,
+    rule_captures: GaleMap<String, RuleCaptures>,
     /// Actual post-dedup bindings for the alternative currently being emitted.
     /// The action translator maps a `$ref` to its real local (`e_2`) instead of
     /// re-deriving `binding_name`, which diverges when a token / rule field-name
@@ -308,7 +307,7 @@ pub struct GenContext {
     alt_bindings: List<AltBinding>,
     /// The emitted scan function covering one alternative, by
     /// `[rule index, surface alt index]`: one function serves the scan and the parse.
-    alt_scan_fns: TreeMap<[i32, i32], String>,
+    alt_scan_fns: GaleMap<[i32, i32], String>,
     /// Per rule, the binding bases its actions read (`rule_binding_reads`).
     binding_reads: List<Option<List<String>>>,
     /// Whether the code being emitted is a scan function's, which reaches the
@@ -318,14 +317,14 @@ pub struct GenContext {
     /// with: what continues an alternative's tail besides the rule's `follow`.
     lr_continuation: List<String>,
     /// By snake name, the kinds of each rule whose scan is one token test.
-    one_token_rules: TreeMap<String, List<String>>,
-    snake_index: TreeMap<String, i32>,
+    one_token_rules: GaleMap<String, List<String>>,
+    snake_index: GaleMap<String, i32>,
     /// The block a finished alternative leaves by, where the rule's `@after`
     /// follows it; a finished alternative returns where this is `null`.
     alt_exit_label: Option<String>,
     /// By rule name, the ways a rule begins that `first2_of_element` found
     /// without meeting a cycle.
-    first2_cache: TreeMap<String, Heads>,
+    first2_cache: GaleMap<String, Heads>,
     /// Per rule index, whether emitted code calls one of the rule's scan
     /// functions; `scan_queue` holds the called rules not yet emitted.
     scan_called: List<bool>,
@@ -348,9 +347,9 @@ fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
 
 impl GenContext {
     pub fn new(parser_rules: &List<ParserRule>, lit_tokens: &List<LitToken>) -> GenContext {
-        let mut rule_index = TreeMap::<String, i32>::new();
-        let mut one_token_rules = TreeMap::<String, List<String>>::new();
-        let mut snake_index = TreeMap::<String, i32>::new();
+        let mut rule_index = GaleMap::<String, i32>::new();
+        let mut one_token_rules = GaleMap::<String, List<String>>::new();
+        let mut snake_index = GaleMap::<String, i32>::new();
         for let mut i = 0; i < parser_rules.len(); i += 1 {
             rule_index[parser_rules[i].name] = i;
             snake_index[parser_rules[i].snake_name] = i;
@@ -366,7 +365,7 @@ impl GenContext {
             scan_cyclic,
             lit_tokens: *lit_tokens,
             rule_index,
-            gate_bodies: TreeMap::<i32, String>::new(),
+            gate_bodies: GaleMap::<i32, String>::new(),
             token_kinds: TokenKinds::empty(),
             kind_rank: [],
             first_cache: none_int_list_cache(rule_count),
@@ -375,7 +374,7 @@ impl GenContext {
             scannable_cache: none_bool_cache(rule_count),
             open_end_cache: none_bool_cache(rule_count),
             single_alt_owner,
-            kind_set_registry: TreeMap::new(),
+            kind_set_registry: GaleMap::new(),
             lr_rule_snakes: [],
             follow_rule_snakes: [],
             rule_reads_follow: false_flags(rule_count),
@@ -383,11 +382,11 @@ impl GenContext {
             rule_asks_simulator: false_flags(rule_count),
             rule_reaches_simulator: false_flags(rule_count),
             follow_forward_edges: empty_name_lists(rule_count),
-            follow_mask_registry: TreeMap::new(),
+            follow_mask_registry: GaleMap::new(),
             follow_mask_depths: [],
-            sync_set_registry: TreeMap::new(),
+            sync_set_registry: GaleMap::new(),
             ref_frames: [],
-            root_refs: TreeSet::new(),
+            root_refs: GaleSet::new(),
             tail_greedy_cache: none_list_cache(rule_count),
             diagnostics: [],
             caller_follow_gate_seen: false,
@@ -421,18 +420,18 @@ impl GenContext {
             vocab_names: [],
             expected_names: "",
             predicate_fns: [],
-            rule_follow_kinds: TreeMap::new(),
+            rule_follow_kinds: GaleMap::new(),
             rule_follow_exact: false,
-            rule_captures: TreeMap::new(),
+            rule_captures: GaleMap::new(),
             alt_bindings: [],
-            alt_scan_fns: TreeMap::new(),
+            alt_scan_fns: GaleMap::new(),
             binding_reads: [],
             in_scan_fn: false,
             lr_continuation: [],
             one_token_rules,
             snake_index,
             alt_exit_label: null,
-            first2_cache: TreeMap::new(),
+            first2_cache: GaleMap::new(),
             scan_called: false_flags(rule_count),
             scan_queue: [],
         };
@@ -781,7 +780,7 @@ impl GenContext {
 
     /// Install what each rule's actions read off its labeled rule calls
     /// (`install_rule_captures`), before any value-struct decision is taken.
-    pub fn set_rule_captures(&mut self, captures: TreeMap<String, RuleCaptures>) {
+    pub fn set_rule_captures(&mut self, captures: GaleMap<String, RuleCaptures>) {
         self.rule_captures = captures;
     }
 
@@ -806,7 +805,7 @@ impl GenContext {
         return self.rule_captures(&self.current_rule().name);
     }
 
-    pub fn set_rule_follow(&mut self, kinds: TreeMap<String, List<String>>, exact: bool) {
+    pub fn set_rule_follow(&mut self, kinds: GaleMap<String, List<String>>, exact: bool) {
         self.rule_follow_kinds = kinds;
         self.rule_follow_exact = exact;
     }
@@ -1138,11 +1137,11 @@ impl GenContext {
 
     /// Call before `set_scan_gate_fields`: which fields are simulable is read
     /// off these bodies.
-    pub fn set_gate_bodies(&mut self, bodies: TreeMap<i32, String>) {
+    pub fn set_gate_bodies(&mut self, bodies: GaleMap<i32, String>) {
         self.gate_bodies = bodies;
     }
 
-    pub fn gate_bodies(&self) -> &TreeMap<i32, String> {
+    pub fn gate_bodies(&self) -> &GaleMap<i32, String> {
         return &self.gate_bodies;
     }
 
@@ -2598,18 +2597,18 @@ impl GenContext {
     /// Open the reference frame of a function about to be emitted: what
     /// `note_ref` records until `end_ref_frame` is that function's.
     pub fn begin_ref_frame(&mut self) {
-        self.ref_frames.push(TreeSet::new());
+        self.ref_frames.push(GaleSet::new());
     }
 
     /// Close the innermost reference frame, handing back what it recorded.
-    pub fn end_ref_frame(&mut self) -> TreeSet<String> {
+    pub fn end_ref_frame(&mut self) -> GaleSet<String> {
         return self.ref_frames.pop().unwrap();
     }
 
     /// What was referenced outside every function frame.
-    pub fn take_root_refs(&mut self) -> TreeSet<String> {
+    pub fn take_root_refs(&mut self) -> GaleSet<String> {
         let refs = self.root_refs;
-        self.root_refs = TreeSet::new();
+        self.root_refs = GaleSet::new();
         return refs;
     }
 
@@ -2998,8 +2997,8 @@ fn ids_prefix_key(prefix: &List<List<i32>>) -> String {
 
 /// Build a map from single-alt group type name to the first rule that contains it.
 /// This ensures parser gen uses the same type names as the type gen for shared groups.
-fn build_single_alt_owner_map(parser_rules: &List<ParserRule>) -> TreeMap<String, String> {
-    let mut map = TreeMap::<String, String>::new();
+fn build_single_alt_owner_map(parser_rules: &List<ParserRule>) -> GaleMap<String, String> {
+    let mut map = GaleMap::<String, String>::new();
     for let rule of parser_rules {
         for let alt of &rule.alternatives {
             scan_elements_for_single_alt_groups(&alt.elements, &rule.name, &mut map);
@@ -3011,14 +3010,14 @@ fn build_single_alt_owner_map(parser_rules: &List<ParserRule>) -> TreeMap<String
 fn scan_elements_for_single_alt_groups<S: AsStrSlice>(
     elements: &List<Element>,
     rule_name: S,
-    map: &mut TreeMap<String, String>,
+    map: &mut GaleMap<String, String>,
 ) {
     for let elem of elements {
         scan_element_for_single_alt_groups(elem, rule_name, map);
     }
 }
 
-fn scan_element_for_single_alt_groups<S: AsStrSlice>(elem: &Element, rule_name: S, map: &mut TreeMap<String, String>) {
+fn scan_element_for_single_alt_groups<S: AsStrSlice>(elem: &Element, rule_name: S, map: &mut GaleMap<String, String>) {
     let alts = extract_group_alts_for_scan(elem);
     if let Some(group_alts) = alts {
         if is_single_alt_group(group_alts) {

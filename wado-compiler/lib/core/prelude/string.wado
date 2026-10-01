@@ -3,7 +3,20 @@
 // Split from the prelude so other stdlib modules can depend on String without a cycle.
 
 
-use { Eq, Ord, Iterator, IntoIterator, Add, Default, Display, Error, From, Ordering } from "core:prelude/traits.wado";
+use {
+    Eq,
+    Ord,
+    Hash,
+    Hasher,
+    Iterator,
+    IntoIterator,
+    Add,
+    Default,
+    Display,
+    Error,
+    From,
+    Ordering,
+} from "core:prelude/traits.wado";
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { ReflectTemplate } from "core:prelude/traits.wado";
@@ -1272,6 +1285,12 @@ impl Ord for String {
     }
 }
 
+impl Hash for String {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_bytes(self.as_bytes());
+    }
+}
+
 impl Default for String {
     pub fn default() -> String {
         return "";
@@ -2036,6 +2055,14 @@ impl Eq for StrSlice {
 impl Ord for StrSlice {
     pub fn cmp(&self, other: &Self) -> Ordering {
         return seq_cmp(self.repr, self.start, self.end, other.repr, other.start, other.end);
+    }
+}
+
+/// Hashes as the `String` with the same text, so a view can look up a
+/// `String` key.
+impl Hash for StrSlice {
+    pub fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_bytes(self.as_bytes());
     }
 }
 

@@ -545,8 +545,8 @@ with `k` type-pattern arms costs no host call at all. The handle flows through
 unchanged in the matching arm, because the two Wado types are one wasm value.
 
 The guest holds the bits rather than the `f64` so that every comparison on a
-handle is exact: `f64` equality would make a NaN unequal to itself and `-0.0`
-equal to `0.0`, and `as` makes a handle of any `f64`.
+handle is exact: `f64` equality makes every NaN one value and `-0.0` equal to
+`0.0`, and `as` makes a handle of any `f64`.
 
 The host hands out one handle per object, so the same object always crosses as
 the same number. That interning is what makes `==` a plain compare (below).

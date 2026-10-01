@@ -6,7 +6,7 @@
 // which is expanded at monomorphization time.
 
 use { Formatter } from "core:prelude/format.wado";
-use { Ordering } from "core:prelude/traits.wado";
+use { Ordering, Hash, Hasher } from "core:prelude/traits.wado";
 
 /// The alternate (`#`) rendering the tuple `Inspect` hands off to: one element
 /// per indented line.
@@ -57,6 +57,16 @@ impl<..T: Eq> Eq for [..T] {
             }
         }
         return true;
+    }
+}
+
+/// Hash for tuples: each element in turn. The arity is in the type, so no
+/// length is written.
+impl<..T: Hash> Hash for [..T] {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        for let v of *self {
+            v.hash(h);
+        }
     }
 }
 

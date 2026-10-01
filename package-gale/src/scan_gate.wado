@@ -15,7 +15,7 @@
 
 use { Element, Grammar, ParserRule } from "./ir.wado";
 use { PARSER_HANDLE, VALS_LOCAL, to_snake_case } from "./ident.wado";
-use { TreeMap } from "core:collections";
+use { GaleMap } from "./gale_map.wado";
 use { rule_is_left_recursive } from "./action_translate.wado";
 use { ident_words, is_ident_char } from "./text.wado";
 
@@ -156,7 +156,7 @@ pub struct GateScope {
 /// scan cannot run. Answered here rather than at the emit that would have
 /// wrapped it: the field is unsimulable everywhere, not only in this rule, and
 /// only the set knows that in time.
-pub fn runnable_gate_scope(rule: &ParserRule, bodies: &TreeMap<i32, String>) -> Option<GateScope> {
+pub fn runnable_gate_scope(rule: &ParserRule, bodies: &GaleMap<i32, String>) -> Option<GateScope> {
     if rule_is_left_recursive(rule) {
         return null;
     }
@@ -166,7 +166,7 @@ pub fn runnable_gate_scope(rule: &ParserRule, bodies: &TreeMap<i32, String>) -> 
 /// The body for `action_id`, or `""` where the translator refused it. A body it
 /// cannot render is one the scan has no standing to run, so the empty string
 /// reaches the same refusal.
-pub fn gate_body_of(bodies: &TreeMap<i32, String>, action_id: i32) -> String {
+pub fn gate_body_of(bodies: &GaleMap<i32, String>, action_id: i32) -> String {
     return match bodies.get(action_id) {
         Some(text) => text,
         None => String::new(),
@@ -175,7 +175,7 @@ pub fn gate_body_of(bodies: &TreeMap<i32, String>, action_id: i32) -> String {
 
 /// The gate scope `rule` opens, or `null`. Reads the translated `@init` /
 /// `@after`, as `gate_assignment` does.
-pub fn gate_scope(rule: &ParserRule, bodies: &TreeMap<i32, String>) -> Option<GateScope> {
+pub fn gate_scope(rule: &ParserRule, bodies: &GaleMap<i32, String>) -> Option<GateScope> {
     let init = match &rule.init_action {
         Some(a) => gate_body_of(bodies, a.action_id),
         None => {
@@ -260,7 +260,7 @@ fn statements<S: AsStrSlice>(text: S) -> List<String> {
 /// "Every body" is the whole grammar: a rule's `@init` / `@after` reach a gate
 /// field as much as an alternative's action does, and a group's alternatives
 /// carry actions the parse runs where lowering puts no gate on the scan.
-pub fn scan_gate_fields(grammar: &Grammar, bodies: &TreeMap<i32, String>) -> List<String> {
+pub fn scan_gate_fields(grammar: &Grammar, bodies: &GaleMap<i32, String>) -> List<String> {
     let mut simulable: List<String> = [];
     let mut refused = Refusals {};
     for let rule of &grammar.parser_rules {

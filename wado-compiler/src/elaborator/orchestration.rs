@@ -1160,6 +1160,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Rc::into_inner(sem).expect("a module this compile walks owns its facts")
     }
 
+    /// Run `pass` on a per-module `Elaborator` owning `module_source`'s facts,
+    /// and put them back, even after an error, so the LSP answers from what the
+    /// pass reached. Answers whether the pass logged no error.
+    fn run_module_pass(
+        state: &mut AnnotateState,
+        module_source: &ModuleSource,
+        symbols: &'a SymbolTable,
+        logger: &'a Logger<'a, H>,
+        entry_module_source: &ModuleSource,
+        pass: impl FnOnce(&mut Elaborator<'a, H>),
+    ) -> bool {
+        let sem = Self::take_module_semantics(state, module_source);
+        let mut elaborator =
+            Self::module_elaborator(state, sem, symbols, logger, entry_module_source);
+        let errors_before = logger.offered_error_count();
+        pass(&mut elaborator);
+        let clean = logger.offered_error_count() == errors_before;
+        state
+            .module_semantics
+            .insert(module_source.clone(), Rc::new(elaborator.sem));
+        clean
+    }
+
     /// Construct a per-module `Elaborator` over the shared driver state; the
     /// `annotate_module_*` entry points set its module identity.
     fn module_elaborator(
@@ -1291,25 +1314,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
 
-            // The elaborator owns the module's facts for the decl pass, and
-            // they go back once `annotate_module_decls` returns.
-            let mut sem = Self::take_module_semantics(state, module_source);
-            sem.imports.namespace_imports = namespace_imports;
-            sem.decls.imported_functions = imported_functions;
-
-            let saved_sem = {
-                let mut elaborator =
-                    Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
-                let errors_before = logger.offered_error_count();
-                elaborator.annotate_module_decls(module, module_source.clone());
-                if logger.offered_error_count() > errors_before {
-                    decl_failed.insert(module_source.clone());
-                }
-                elaborator.sem
-            };
-            state
-                .module_semantics
-                .insert(module_source.clone(), Rc::new(saved_sem));
+            let clean = Self::run_module_pass(
+                state,
+                module_source,
+                symbols,
+                logger,
+                &entry_module_source,
+                |elaborator| {
+                    elaborator.sem.imports.namespace_imports = namespace_imports;
+                    elaborator.sem.decls.imported_functions = imported_functions;
+                    elaborator.annotate_module_decls(module, module_source.clone());
+                },
+            );
+            if !clean {
+                decl_failed.insert(module_source.clone());
+            }
             Self::publish_impl_sigs(state, module_source);
         }
 
@@ -1364,6 +1383,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
             decl_failed.insert(module_source);
         }
+        // Impl headers' bounds: after every decl pass, since any module's impl
+        // may answer one; before the solver, which takes an impl of a trait to
+        // answer its supertraits too, and so would answer the very question
+        // this asks.
+        for module_source in &sorted_sources {
+            if is_stdlib_snapshot_hit(snapshot, module_source) {
+                continue;
+            }
+            let module = modules.get(module_source).expect("module should exist");
+            let clean = Self::run_module_pass(
+                state,
+                module_source,
+                symbols,
+                logger,
+                &entry_module_source,
+                |elaborator| elaborator.check_impl_headers(module, module_source.clone()),
+            );
+            if !clean {
+                decl_failed.insert(module_source.clone());
+            }
+        }
         // Every declaration is resolved, so the solver reads them all at once.
         // Selection asks it, so it is built in every profile.
         state.tysys.solver = Some(Rc::new(SolverBridge::build(
@@ -1407,20 +1447,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             let module = modules.get(module_source).expect("module should exist");
 
-            let sem = Self::take_module_semantics(state, module_source);
-            let mut elaborator =
-                Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
-
-            let errors_before = logger.offered_error_count();
-            elaborator.annotate_module_bodies(module, module_source.clone());
-            let module_walk_clean = logger.offered_error_count() == errors_before;
-            let saved_sem = elaborator.sem;
-            // Re-install the (now-populated) `ModuleSemantics` even on bail
-            // so the LSP can answer cursor queries against whatever bindings
-            // the elaborator did reach before bailing.
-            state
-                .module_semantics
-                .insert(module_source.clone(), Rc::new(saved_sem));
+            let module_walk_clean = Self::run_module_pass(
+                state,
+                module_source,
+                symbols,
+                logger,
+                &entry_module_source,
+                |elaborator| elaborator.annotate_module_bodies(module, module_source.clone()),
+            );
 
             // Eligible for reify (Phase 2) when THIS module's decl pass and
             // body walk logged no errors (a per-module error-count delta —

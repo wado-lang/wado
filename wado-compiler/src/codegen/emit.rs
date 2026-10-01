@@ -19,6 +19,9 @@ use wasm_encoder::{
     RefType, StorageType, StructType, SubType, TypeSection, ValType,
 };
 
+/// What an array of units holds in each slot.
+const UNIT_SLOT: i32 = 0;
+
 /// Whether a packed storage type reads back signed (`Some(true)`), unsigned
 /// (`Some(false)`), or is not packed (`None`).
 fn packed_signedness(ty: &WirType) -> Option<bool> {
@@ -1493,7 +1496,7 @@ impl<'a> WirEmitter<'a> {
 
             // GC: Array
             WirInstr::ArrayNew { type_id, init, len } => {
-                self.emit_instr(f, init);
+                self.emit_array_element(f, type_id.index(), init);
                 self.emit_instr(f, len);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArrayNew(wasm_idx));
@@ -1519,7 +1522,7 @@ impl<'a> WirEmitter<'a> {
             }
             WirInstr::ArrayNewFixed { type_id, elements } => {
                 for elem in elements {
-                    self.emit_instr(f, elem);
+                    self.emit_array_element(f, type_id.index(), elem);
                 }
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArrayNewFixed {
@@ -1531,18 +1534,26 @@ impl<'a> WirEmitter<'a> {
                 type_id,
                 array,
                 index,
-                ..
+                result_ty,
             } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
                 self.emit_array_get(f, type_id.index());
+                if self.is_unit_array(type_id.index()) {
+                    f.instruction(&Instruction::Drop);
+                    return;
+                }
                 // Array elements are declared nullable in Wasm (for
                 // `array.new_default`), so `array.get` yields a nullable ref.
                 // Narrow back to non-null only when the Wado element type is
                 // itself non-nullable. A niche-optimized `Option<ref>` element
                 // stores `None` as a genuine null ref, so narrowing it would
-                // trap `ref.as_non_null` on every `None` read.
-                if self.is_array_element_non_nullable_ref(type_id.index()) {
+                // trap `ref.as_non_null` on every `None` read. A read asking
+                // for a nullable result gets the slot as it is: a deep copy
+                // passes an unset slot's null through.
+                if result_ty.is_nonnull_ref()
+                    && self.is_array_element_non_nullable_ref(type_id.index())
+                {
                     f.instruction(&Instruction::RefAsNonNull);
                 }
             }
@@ -1554,7 +1565,7 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
-                self.emit_instr(f, value);
+                self.emit_array_element(f, type_id.index(), value);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArraySet(wasm_idx));
             }
@@ -1939,7 +1950,7 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, offset);
-                self.emit_instr(f, value);
+                self.emit_array_element(f, type_id.index(), value);
                 self.emit_instr(f, len);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArrayFill(wasm_idx));
@@ -2230,6 +2241,24 @@ impl<'a> WirEmitter<'a> {
                 &self.wir.types[idx],
                 WirTypeDef::Array(arr) if arr.element_type.is_nonnull_ref()
             )
+    }
+
+    /// True when the array holds units. A unit has no Wasm value, yet each
+    /// element of a Wasm array is a slot, so a write fills it with
+    /// [`UNIT_SLOT`] and a read drops what it holds.
+    fn is_unit_array(&self, wir_type_idx: u32) -> bool {
+        matches!(
+            self.wir.types.get(wir_type_idx as usize),
+            Some(WirTypeDef::Array(arr)) if matches!(arr.element_type, WirType::Unit)
+        )
+    }
+
+    /// Emit `value` as an element of array type `wir_type_idx`.
+    fn emit_array_element(&mut self, f: &mut Function, wir_type_idx: u32, value: &WirInstr) {
+        self.emit_instr(f, value);
+        if self.is_unit_array(wir_type_idx) {
+            f.instruction(&Instruction::I32Const(UNIT_SLOT));
+        }
     }
 
     fn is_array_packed(&self, wir_type_idx: u32) -> Option<bool> {

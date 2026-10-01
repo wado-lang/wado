@@ -15,8 +15,8 @@ use crate::name::{
     split_local_method,
 };
 use crate::tir::{
-    EffectRef, FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId,
-    TypeKey, TypeTable,
+    EffectRef, FunctionRef, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext, TirField,
+    TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -101,17 +101,6 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
 /// it.
 fn names_its_type(expr: &Expr) -> bool {
     matches!(expr, Expr::Range(_)) || matches!(expr, Expr::StructLiteral(lit) if lit.name.is_some())
-}
-
-/// An integer literal standing as a cast operand, bare or negated, and which of
-/// the two it was — the shape reify re-types to the cast's target width.
-pub(super) fn int_literal_cast_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str, bool)> {
-    let (lit, negated) = match expr {
-        Expr::Literal(lit) => (lit, false),
-        Expr::Unary(unary) => (negated_literal(unary)?, true),
-        _ => return None,
-    };
-    int_literal_repr(lit).map(|repr| (lit, repr, negated))
 }
 
 /// The literal `-NUM` negates, which both range checks read as one literal so
@@ -273,41 +262,43 @@ fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<St
         .then(|| "an unrestricted resource handle is an `f64`".to_string())
 }
 
-/// The reason a cast naming `f16` or `bf16` is refused, or `None` where it
-/// names neither or is the newtype step every type admits (WEP 2026-09-22).
-fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    let from_half = tt.primitive_head(source).filter(|p| p.is_half());
-    let to_half = tt.primitive_head(target).filter(|p| p.is_half());
-    let half = from_half.or(to_half)?.as_str();
-    if tt.share_common_base(source, target) {
-        return None;
-    }
-    let source_half = from_half.is_some();
-    Some(if source_half && to_half.is_some() {
-        "neither direction is exact: `f16` has the shorter exponent range and \
-         `bf16` the shorter mantissa"
-            .to_string()
-    } else if source_half {
-        if tt.is_float(target) {
-            format!(
-                "`as` does not convert `{half}`; use `{}::from(x)`",
-                tt.type_name(target)
-            )
-        } else if tt.is_integer(target) {
-            format!("`as` converts a value; use `to_bits()` to read the bits of `{half}`")
-        } else {
-            format!("`{half}` converts only through `to_bits()` and `From`")
-        }
-    } else if tt.is_float(source) {
-        format!(
-            "`as` does not convert to `{half}`; use `{half}::from_f32(x)` to round or \
-             `{half}::try_from(x)` to require an exact value"
+/// The reason Rust's `as` refuses a cast between scalars, which Wado refuses
+/// too: nothing casts to `bool`, a `bool` casts to no float, and an enum casts
+/// to no number and from none.
+fn scalar_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let is_number = |id| tt.is_numeric(id) || tt.is_half(id) || tt.is_wide_int(id);
+    let enum_name = |id| {
+        matches!(
+            tt.get(tt.representation_head(id)),
+            ResolvedType::Enum { .. }
         )
-    } else if tt.is_integer(source) {
-        format!("`as` converts a value; use `{half}::from_bits(x)` to reinterpret the bits")
-    } else {
-        format!("`{half}` is built only by `from_bits`, `from_f32` and `try_from`")
-    })
+        .then(|| tt.type_name(id))
+    };
+    if tt.representation_head(target) == TypeTable::BOOL {
+        return Some("nothing casts to `bool`; compare instead, as `x != 0`".to_string());
+    }
+    if tt.representation_head(source) == TypeTable::BOOL
+        && is_number(target)
+        && !tt.is_integer(target)
+        && !tt.is_wide_int(target)
+    {
+        return Some("a `bool` casts only to an integer type".to_string());
+    }
+    if let Some(name) = enum_name(source)
+        && is_number(target)
+    {
+        return Some(format!(
+            "an enum casts to no number; `ReflectEnum::<{name}>::discriminant` reads its tag"
+        ));
+    }
+    if let Some(name) = enum_name(target)
+        && is_number(source)
+    {
+        return Some(format!(
+            "a number casts to no enum; `ReflectEnum::<{name}>::from_discriminant` finds its case"
+        ));
+    }
+    None
 }
 
 /// Whether a cast from or to `id` has nothing to judge: a diverging operand
@@ -317,6 +308,44 @@ fn imposes_no_representation(tt: &TypeTable, id: TypeId) -> bool {
         tt.get(tt.representation_head(id)),
         ResolvedType::Never | ResolvedType::Error | ResolvedType::Unknown
     )
+}
+
+/// The reason a cast with a type parameter or a projection on either side is
+/// refused: only a newtype step its bounds prove holds for every type that
+/// settles it, and nothing judges the cast again once one does.
+fn unsettled_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let unsettled = |id| tt.representation_awaits_substitution(id);
+    (unsettled(source) || unsettled(target)).then(|| {
+        "a generic type casts only where a `ReflectNewtype` bound makes the cast a newtype step"
+            .to_string()
+    })
+}
+
+/// The reason a cast from `i128` / `u128` is refused: one converts only to a
+/// number, which reify lowers (`lower_int128_source_cast`). A `char` target is
+/// [`char_cast_hint`]'s to answer.
+fn wide_int_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let reaches = tt.is_wide_int(target)
+        || tt.is_numeric(target)
+        || tt.is_half(target)
+        || tt.representation_head(target) == TypeTable::CHAR;
+    (tt.is_wide_int(source) && !reaches)
+        .then(|| "i128/u128 can only be cast to numeric types".to_string())
+}
+
+/// The reason a cast to or from `char` is refused: only a `u8` is always a
+/// Unicode scalar value, and a `char` converts only to its code point.
+fn char_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let (source, target) = (
+        tt.representation_head(source),
+        tt.representation_head(target),
+    );
+    if target == TypeTable::CHAR && source != TypeTable::CHAR && source != TypeTable::U8 {
+        return Some("use char::from_u32() or char::from_i32() for checked conversion".to_string());
+    }
+    let integer_target = tt.is_integer(target) || tt.is_wide_int(target);
+    (source == TypeTable::CHAR && target != TypeTable::CHAR && !integer_target)
+        .then(|| "char can only be cast to integer types".to_string())
 }
 
 /// The reason a cast to a reference is refused: only a reference converts to
@@ -334,7 +363,6 @@ fn ref_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Strin
             Some("`as` narrows `&mut` to `&`, never the reverse".to_string())
         }
         Some((_, from)) => representation_refusal(tt, from, to),
-        None if imposes_no_representation(tt, source) => None,
         None => Some("only a reference converts to a reference".to_string()),
     }
 }
@@ -371,8 +399,6 @@ fn fn_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String
     match (fn_parts(tt, source), fn_parts(tt, target)) {
         (None, None) => None,
         (Some(from), Some(to)) => fn_step_refusal(tt, &from, &to, true),
-        (Some(_), None) if imposes_no_representation(tt, target) => None,
-        (None, Some(_)) if imposes_no_representation(tt, source) => None,
         _ => Some("a function converts only to a function type".to_string()),
     }
 }
@@ -471,7 +497,7 @@ fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option
             )
     };
     // Only a settled scalar is known to share nothing with an aggregate: a
-    // parameter settles later.
+    // parameter is judged by its bounds (`unsettled_cast_hint`).
     let source_is_scalar = matches!(
         tt.get(tt.representation_head(source)),
         ResolvedType::Primitive(_)
@@ -479,9 +505,7 @@ fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
     );
-    if !(is_aggregate(source) || (source_is_scalar && is_aggregate(target)))
-        || tt.share_common_base(source, target)
-    {
+    if !(is_aggregate(source) || (source_is_scalar && is_aggregate(target))) {
         return None;
     }
     Some(match slice_list_conversion(tt, source, target) {
@@ -803,6 +827,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(message) = message {
             let _ = self.emit(TypeError::InvalidLiteral { message, span });
         }
+    }
+
+    /// The type a cast to `target` gives its operand where the operand is a
+    /// numeric literal, bare or negated, that can take one: an integer literal
+    /// any numeric type, a float literal any float type. A newtype target
+    /// gives its representation, and `char` gives `u8`. A byte literal is a
+    /// `u8` of its own, so `None`.
+    fn cast_literal_type(&self, operand: &Expr, target: TypeId) -> Option<TypeId> {
+        let lit = match operand {
+            Expr::Literal(lit) => lit,
+            Expr::Unary(unary) => negated_literal(unary)?,
+            _ => return None,
+        };
+        let Literal::Number(repr) = &lit.value else {
+            return None;
+        };
+        let integer = !util::is_float_only_literal(repr);
+        let tt = self.tysys.type_table.borrow();
+        let head = tt.representation_head(target);
+        if head == TypeTable::CHAR {
+            return integer.then_some(TypeTable::U8);
+        }
+        let float_target = tt.is_float(head) || tt.is_half(head);
+        (is_numeric_literal_target(&tt, head) && (integer || float_target)).then_some(head)
     }
 
     /// Parse an integer literal, reporting a malformed or wider-than-`u128`
@@ -1942,7 +1990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return false;
                 }
                 let class = key_class.get_or_init(|| this.synthesize_arg_class(&index.index, ctx));
-                this.index_key_type(class).is_some_and(|key| {
+                this.index_key_type(receiver, class).is_some_and(|key| {
                     this.receiver_waits(receiver, "index_value", index.span, |this, def| {
                         this.impl_takes_key(def, key)
                     })
@@ -2021,7 +2069,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the impl supplies) falls back to pre-selecting an impl for its
             // expected type.
             let key_class = key_class.get_or_init(|| self.synthesize_arg_class(&index.index, ctx));
-            let expected_key = self.index_key_type(key_class).or_else(|| {
+            let expected_key = self.index_key_type(expr_type, key_class).or_else(|| {
                 self.index_lookup_or_newtype_base(
                     &struct_name,
                     base_type_id,
@@ -3436,6 +3484,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         collector.writes
     }
 
+    /// Whether the cast holds whatever the hints would say: an operand that
+    /// yields no value or already failed, a newtype step, or one a
+    /// `ReflectNewtype` bound proves for every type that settles it.
+    fn cast_needs_no_judgment(&mut self, source: TypeId, target: TypeId) -> bool {
+        {
+            let tt = self.tysys.type_table.borrow();
+            if imposes_no_representation(&tt, source)
+                || imposes_no_representation(&tt, target)
+                || tt.share_common_base(source, target)
+            {
+                return true;
+            }
+        }
+        [(source, target), (target, source)]
+            .into_iter()
+            .any(|(newtype, other)| {
+                self.newtype_base_bound(newtype).is_some_and(|base| {
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .share_common_base(base, other)
+                })
+            })
+    }
+
+    /// The `Base` a `ReflectNewtype<Base = …>` bound on the type parameter
+    /// `ty` names, or `None` where `ty` carries no such bound.
+    fn newtype_base_bound(&mut self, ty: TypeId) -> Option<TypeId> {
+        let name = self.tysys.binder_name(ty)?;
+        let base = self
+            .bound_assoc_bindings(&name, CompilerItem::ReflectNewtype, REFLECT_NEWTYPE_BASE)
+            .into_iter()
+            .next()?;
+        Some(self.resolve_type(&base))
+    }
+
     pub(super) fn resolve_cast(
         &mut self,
         cast: &ast::CastExpr,
@@ -3503,103 +3587,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return target_type;
         }
 
-        // A cast to i128/u128 becomes a constructor call in reify
-        // (`lower_int128_cast`); here only a literal operand is checked.
-        //
-        // Which pair of words the literal has to fit is how the value is
-        // stored, so the representation answers: `type Signed = i128` is that
-        // pair too, and reading the name instead let an oversized literal
-        // through it with no diagnostic. The cast still yields `target_type`.
-        let repr_target = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(target_type);
-        let wide_target = self.tysys.type_table.borrow().wide_int_item(repr_target);
-        if let Some(item) = wide_target {
-            let name = item.attr_name();
-            // Handle number literal cast specially to support values > u64
-            if let ast::Expr::Literal(lit) = &cast.expr
-                && let Literal::Number(repr) = &lit.value
-                && !util::is_float_only_literal(repr)
-            {
-                let parse_result = if item == CompilerItem::U128 {
-                    util::parse_u128_literal(repr).map(|v| v as i128)
-                } else {
-                    util::parse_i128_literal(repr)
-                };
-
-                if parse_result.is_err() {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!("invalid {name} literal: {repr}"),
-                        span: lit.span,
-                    });
-                }
-                return target_type;
-            }
-
-            // Handle negated number literal cast: -170... as i128
-            if let ast::Expr::Unary(unary) = &cast.expr
-                && unary.op == ast::UnaryOp::Neg
-                && let ast::Expr::Literal(lit) = &unary.expr
-                && let Literal::Number(repr) = &lit.value
-                && !util::is_float_only_literal(repr)
-                && item == CompilerItem::I128
-            {
-                // Parse the negated value directly using Rust's i128
-                let negated_repr = format!("-{repr}");
-                if util::parse_i128_literal(&negated_repr).is_err() {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message: format!("invalid i128 literal: -{repr}"),
-                        span: unary.span,
-                    });
-                }
-                return target_type;
-            }
-
-            let source_type = self.resolve_expr(&cast.expr, ctx, None);
-            let tt = self.tysys.type_table.borrow();
-            if tt.is_numeric(tt.cast_operand_type(source_type, target_type)) {
+        // A cast types a literal operand as an annotation of its target would,
+        // range check included, wherever the literal can take that type. As
+        // in Rust, an integer literal cast to `char` is a `u8`.
+        let literal_type = self.cast_literal_type(&cast.expr, target_type);
+        if let Some(literal_type) = literal_type {
+            self.try_coerce_numeric_literal(&cast.expr, literal_type)
+                .expect("a cast literal type is a numeric literal target");
+            if literal_type == target_type {
                 return target_type;
             }
         }
 
-        // Reify re-types a literal operand to the target's width — what makes
-        // `as` the way to write a bit pattern (`0xFF as i8`) and how a literal
-        // reaches a target wider than `i32` (`65 as i128`). It never lands on
-        // `i32`, so the defaulted range check must not judge it.
-        let source_type = match int_literal_cast_operand(&cast.expr) {
-            // A float has no bit pattern to write, so the literal converts by
-            // value, as `let x: f32 = N;` does.
-            Some(_) if self.tysys.type_table.borrow().is_float(target_type) => {
-                self.try_coerce_numeric_literal(&cast.expr, target_type)
-                    .expect("a float is a numeric literal target");
-                target_type
-            }
-            Some((lit, repr, _)) => {
-                self.check_int_literal_parses(repr, lit.span);
-                self.record_expression_type(cast.expr.id(), TypeTable::I32);
-                self.record_expression_type(lit.id, TypeTable::I32);
-                TypeTable::I32
-            }
-            None => {
-                let expected = match &cast.expr {
-                    // A closure takes its parameter types from the function
-                    // type it is cast to, as it would from an annotation.
-                    ast::Expr::Closure(_) => Some(target_type),
-                    // Its base where the target is a newtype: `Pair { a: 1 } as
-                    // Wide` crosses the boundary a cast may.
-                    named if names_its_type(named) => Some(
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .representation_head(target_type),
-                    ),
-                    _ => None,
-                };
-                self.resolve_expr(&cast.expr, ctx, expected)
-            }
-        };
+        let source_type = literal_type.unwrap_or_else(|| {
+            let expected = match &cast.expr {
+                // A closure takes its parameter types from the function type
+                // it is cast to, as it would from an annotation.
+                ast::Expr::Closure(_) => Some(target_type),
+                // Its base where the target is a newtype: `Pair { a: 1 } as
+                // Wide` crosses the boundary a cast may.
+                named if names_its_type(named) => Some(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .representation_head(target_type),
+                ),
+                _ => None,
+            };
+            self.resolve_expr(&cast.expr, ctx, expected)
+        });
 
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;
@@ -3610,13 +3626,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .cast_operand_type(source_type, target_type);
 
-        let refused_cast = {
+        let refused_cast = if self.cast_needs_no_judgment(source_type, target_type) {
+            None
+        } else {
             let tt = self.tysys.type_table.borrow();
             handle_cast_hint(&tt, source_type, target_type)
-                .or_else(|| half_cast_hint(&tt, source_type, target_type))
+                .or_else(|| scalar_cast_hint(&tt, source_type, target_type))
                 .or_else(|| ref_cast_hint(&tt, source_type, target_type))
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
                 .or_else(|| aggregate_cast_hint(&tt, source_type, target_type))
+                .or_else(|| unsettled_cast_hint(&tt, source_type, target_type))
+                .or_else(|| wide_int_cast_hint(&tt, source_type, target_type))
+                .or_else(|| char_cast_hint(&tt, source_type, target_type))
                 .map(|hint| {
                     let (from, to) = tt.type_names_for_mismatch(source_type, target_type);
                     (from, to, hint)
@@ -3630,85 +3651,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: cast.span,
             });
             return target_type;
-        }
-
-        // Casts *from* i128/u128 (including newtypes of them) support:
-        // f64/f32 (correctly rounded), the integer widths (truncating),
-        // and i128 ↔ u128 (bit reinterpret) — each modulo newtypes, which
-        // share their base's representation. Reify lowers them
-        // (`lower_int128_source_cast`); here reject anything else, so
-        // an unsupported target fails with a diagnostic instead of leaking
-        // the wide-int struct ref into codegen. `char` targets are
-        // excluded: the char-cast diagnostic below already covers them.
-        {
-            let tt = self.tysys.type_table.borrow();
-            let target_supported = !tt.is_wide_int(source_type)
-                || tt.is_wide_int(target_type)
-                || matches!(
-                    tt.get(tt.representation_head(target_type)),
-                    ResolvedType::Primitive(
-                        PrimitiveType::F64
-                            | PrimitiveType::F32
-                            | PrimitiveType::I64
-                            | PrimitiveType::U64
-                            | PrimitiveType::I32
-                            | PrimitiveType::U32
-                            | PrimitiveType::I16
-                            | PrimitiveType::U16
-                            | PrimitiveType::I8
-                            | PrimitiveType::U8
-                            | PrimitiveType::Char,
-                    )
-                );
-            if !target_supported {
-                let (from_name, to_name) = tt.type_names_for_mismatch(source_type, target_type);
-                drop(tt);
-                let _ = self.emit(TypeError::InvalidCast {
-                    from: from_name,
-                    to: to_name,
-                    hint: "i128/u128 can only be cast to numeric types".to_string(),
-                    span: cast.span,
-                });
-            }
-        }
-
-        // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
-        // Exception: u8 -> char is always valid (0..255 are valid Unicode scalar values)
-        let source_base = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(source_type);
-        let target_base = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(target_type);
-        if target_base == TypeTable::CHAR
-            && source_base != TypeTable::CHAR
-            && source_base != TypeTable::U8
-        {
-            let from_name = self.tysys.type_table.borrow().type_name(source_type);
-            let _ = self.emit(TypeError::InvalidCast {
-                from: from_name,
-                to: "char".to_string(),
-                hint: "use char::from_u32() or char::from_i32() for checked conversion".to_string(),
-                span: cast.span,
-            });
-        }
-        // char -> non-integer is invalid (char -> integer extracts code point)
-        let integer_target = {
-            let tt = self.tysys.type_table.borrow();
-            tt.is_integer(target_base) || tt.is_wide_int(target_base)
-        };
-        if source_base == TypeTable::CHAR && target_base != TypeTable::CHAR && !integer_target {
-            let to_name = self.tysys.type_table.borrow().type_name(target_type);
-            let _ = self.emit(TypeError::InvalidCast {
-                from: "char".to_string(),
-                to: to_name,
-                hint: "char can only be cast to integer types".to_string(),
-                span: cast.span,
-            });
         }
 
         // Reify rebuilds the `Cast` from `cast.expr` + the target

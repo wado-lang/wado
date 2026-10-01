@@ -1,0 +1,50 @@
+// A literal coerces through the first link of a newtype chain carrying a
+// `From<Array<…>>` impl, the newtype itself included: here the base is a
+// struct no literal can build.
+use { println, Stdout } from "core:cli";
+
+struct Tally { total: i32, count: i32 }
+
+type Scores = Tally;
+impl From<Array<[String, i32]>> for Scores {
+    fn from(entries: Array<[String, i32]>) -> Scores {
+        let mut t = Tally { total: 0, count: 0 };
+        for let [_, v] of entries {
+            t.total += v;
+            t.count += 1;
+        }
+        return t as Scores;
+    }
+}
+
+type Seq = Tally;
+impl From<Array<i32>> for Seq {
+    fn from(items: Array<i32>) -> Seq {
+        return Tally { total: items.len(), count: 0 } as Seq;
+    }
+}
+
+struct Bin<T> { items: List<T> }
+
+type Named<V> = Bin<V>;
+impl<V> From<Array<[String, V]>> for Named<V> {
+    fn from(entries: Array<[String, V]>) -> Named<V> {
+        let mut items: List<V> = [];
+        for let [_, v] of entries {
+            items.push(v);
+        }
+        return Bin { items } as Named<V>;
+    }
+}
+
+export fn run() with Stdout {
+    let s: Scores = { a: 1, b: 2 };
+    let q: Seq = [5, 6, 7];
+    let n: Named<String> = { x: "p", y: "q" };
+    println(`${s.total} ${s.count} ${q.total} ${n.items[1]}`);
+}
+
+__DATA__
+{
+    "stdout": "3 2 3 q\n"
+}

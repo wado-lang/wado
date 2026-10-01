@@ -1,0 +1,62 @@
+// A `ReflectNewtype<Base = B>` bound proves `N as B` and `B as N` newtype
+// steps, which hold for every `N` the bound admits.
+
+type Meters = f64;
+type Half = f16;
+
+fn to_base<N: ReflectNewtype<Base = B>, B>(n: N) -> B {
+    return n as B;
+}
+
+test {
+    let m: Meters = 2.5;
+    assert to_base(m) == 2.5;
+}
+
+fn from_base<N: ReflectNewtype<Base = B>, B>(b: B) -> N {
+    return b as N;
+}
+
+fn to_f64<N: ReflectNewtype<Base = f64>>(n: N) -> f64 {
+    return n as f64;
+}
+
+test "newtype steps through a bound" {
+    let m: Meters = 2.5;
+    assert to_f64(m) == 2.5;
+    let back: Meters = from_base(4.0);
+    assert back as f64 == 4.0;
+    let h: Half = 1.5;
+    assert to_base(h) == 1.5;
+}
+
+type Wide = i128;
+
+fn to_half<N: ReflectNewtype<Base = f16>>(n: N) -> f16 {
+    return n as f16;
+}
+
+fn from_half<N: ReflectNewtype<Base = f16>>(b: f16) -> N {
+    return b as N;
+}
+
+fn to_i128<N: ReflectNewtype<Base = i128>>(n: N) -> i128 {
+    return n as i128;
+}
+
+fn from_i128<N: ReflectNewtype<Base = i128>>(b: i128) -> N {
+    return b as N;
+}
+
+// Only the instance settles a half or a wide integer's representation, so the
+// generic body casts as the newtype step the bound proves, never a conversion.
+test "newtype steps over a half and a wide integer" {
+    let h: Half = 1.5;
+    assert to_half(h) == 1.5;
+    let back: Half = from_half(2.5);
+    assert back as f16 == 2.5;
+    let w: Wide = 7;
+    assert to_i128(w) == 7;
+    let wide_back: Wide = from_i128(-9);
+    assert wide_back as i128 == -9;
+}

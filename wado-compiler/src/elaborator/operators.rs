@@ -1310,13 +1310,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys.newtype_base_lookup(&struct_name, base_type_id);
 
                 if !struct_name.is_empty() {
-                    let index_type = self.resolve_expr(&index_expr.index, ctx, None);
-
-                    // Reject &T/&mut T used as index expression (would ICE in codegen)
-                    if let Some(expected) = self.tysys.pointee_of(index_type) {
-                        self.typecheck(index_type, expected, index_expr.index.span());
-                    }
-
                     let assign_info = self.index_lookup_or_newtype_base(
                         &struct_name,
                         base_type_id,
@@ -1324,13 +1317,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         Elaborator::find_index_assign_trait_impl,
                     );
-                    if let Some((trait_info, _)) = assign_info {
-                        if let Some(key_type) = trait_info.index_type
-                            && key_type != index_type
-                        {
-                            let _ = self.resolve_expr(&index_expr.index, ctx, Some(key_type));
-                        }
+                    let key_type = assign_info.as_ref().and_then(|(info, _)| info.index_type);
+                    let index_type = self.resolve_expr(&index_expr.index, ctx, key_type);
 
+                    // Reject &T/&mut T used as index expression (would ICE in codegen)
+                    if let Some(expected) = self.tysys.pointee_of(index_type) {
+                        self.typecheck(index_type, expected, index_expr.index.span());
+                    }
+
+                    if let Some((trait_info, _)) = assign_info {
                         // Generate: expr.index_assign(index, value)
                         let value_span = value.span();
                         let value_type = match value {
