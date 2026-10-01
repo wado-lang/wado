@@ -67,6 +67,10 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         closure,
         value_copy,
     } = plan;
+    // Before pattern lowering, which keeps a destructure of a multi-value
+    // builtin whole: a software form returns its tuple like any call, and its
+    // destructure is lowered like any other.
+    wide_arith::lower(&flat, flat.codegen_flags.wide_arithmetic);
     // Pattern lowering runs before string collection: it synthesises
     // string-literal expressions (string-literal pattern guards) the
     // data section must register.
@@ -81,7 +85,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     // build never collects the dropped diagnostic literals into the data section
     // (and a default build routes the marker back to a plain `panic`).
     bare_asserts::lower(&flat, flat.codegen_flags.bare_asserts);
-    wide_arith::lower(&flat, flat.codegen_flags.wide_arithmetic);
     let strings = string::plan(&flat);
     let FlatPackage {
         entry_module_source,

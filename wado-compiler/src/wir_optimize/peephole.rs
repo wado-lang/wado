@@ -5,7 +5,7 @@
 //! have no NIR analogue, the shapes they match existing only after lowering.
 
 use crate::compiler_trace;
-use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirInstr, WirLocals, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_optimize::nullability::Nullability;
 use crate::wir_optimize::util::{
     self, Footprint, for_each_nullable_ref_operand, is_same_free_read, is_side_effect_free,
@@ -363,7 +363,9 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_vector_const);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
-        changed |= rewrite_everywhere(instrs, &mut try_relax_gc_operands);
+        changed |= rewrite_everywhere(instrs, &mut |instr| {
+            try_relax_gc_operands(instr, null.locals())
+        });
         // Last in the round: the rules above simplify conditions and arms, and
         // one that decides the whole `if` (a `ref.test` folding to a constant)
         // must get there first — a `select` is past the reach of
@@ -1470,9 +1472,11 @@ fn descent_blocked(instr: &WirInstr, reach: TeeReach) -> bool {
 /// accept a nullable reference. `finalize_locals` narrows a nullable local's
 /// read only where `result_ty` is non-null, so relaxing it here suppresses the
 /// redundant `ref.as_non_null`.
-fn try_relax_gc_operands(instr: &mut WirInstr) -> bool {
+fn try_relax_gc_operands(instr: &mut WirInstr, locals: &WirLocals) -> bool {
     let mut changed = false;
-    for_each_nullable_ref_operand(instr, |operand| changed |= relax_ref_local_get(operand));
+    for_each_nullable_ref_operand(instr, locals, |operand| {
+        changed |= relax_ref_local_get(operand);
+    });
     changed
 }
 
@@ -1489,7 +1493,7 @@ fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wir::{WirAbstractHeapType, WirFuncId, WirLocals};
+    use crate::wir::{WirAbstractHeapType, WirFuncId};
     use std::assert_matches;
     use std::rc::Rc;
 

@@ -258,6 +258,40 @@ fn no_wide_arithmetic_preserves_results() {
     );
 }
 
+/// The software forms return their two halves as a tuple. Once one is inlined,
+/// the halves go to locals as a written destructure's would, so a 128-bit add
+/// or sub allocates nothing.
+#[test]
+fn no_wide_arithmetic_allocates_no_tuple() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn add_sub(a: u128, b: u128) -> u128 {
+    return a + b - (b - a);
+}
+
+export fn run() with Stdout {
+    println(`${add_sub(builtin::black_box(3 as u128), builtin::black_box(5 as u128))}`);
+}
+"#;
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        codegen_flags: vec!["no-wide-arithmetic".to_string()],
+        ..Default::default()
+    };
+    let wasm = compile_source_with_compiler_options(Path::new("u128.wado"), source, options)
+        .expect("compilation should succeed")
+        .wasm;
+    let wat = wasmprinter::print_bytes(wasm).expect("disassemble");
+    let start = wat
+        .find("(func $u128.wado/add_sub")
+        .expect("add_sub is emitted");
+    let body = &wat[start..];
+    let body = &body[..body[1..].find("(func ").map_or(body.len(), |end| end + 1)];
+    assert!(!body.contains("struct.new"), "add_sub allocates:\n{body}");
+}
+
 #[test]
 fn unknown_codegen_flag_is_rejected() {
     let options = CompilerOptions {

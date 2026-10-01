@@ -73,22 +73,19 @@ struct UseCount(IndexMap<String, u32>);
 
 impl UseCount {
     fn count(&mut self, name: &str) {
-        *self.0.entry(name.to_string()).or_default() += 1;
+        match self.0.get_mut(name) {
+            Some(count) => *count += 1,
+            None => {
+                self.0.insert(name.to_string(), 1);
+            }
+        }
     }
 }
 
 impl WirRefVisitor for UseCount {
     fn visit_instr(&mut self, instr: &WirInstr) {
-        match instr {
-            WirInstr::LocalGet { name, .. }
-            | WirInstr::LocalSet { name, .. }
-            | WirInstr::LocalTee { name, .. } => self.count(name),
-            WirInstr::MultiValueLocalBind { locals, .. } => {
-                for name in locals.iter().flatten() {
-                    self.count(name);
-                }
-            }
-            _ => {}
+        for name in instr.local_read().into_iter().chain(instr.local_writes()) {
+            self.count(name);
         }
         self.walk_instr(instr);
     }

@@ -174,7 +174,8 @@ Whole program and backend:
 
 A WIR pass stays only if it changes the emitted Wasm. One that NIR or another
 WIR pass already covers is removed. At every level, nullable references are
-lowered first. `-O0` then only infers branch hints and removes dead items.
+lowered first. `-O0` then only infers branch hints, removes dead items, and
+settles the locals (step 11).
 
 1. Trivial copy propagation.
 2. Box-local elimination.
@@ -187,6 +188,13 @@ lowered first. `-O0` then only infers branch hints and removes dead items.
 7. Global cleanup (constant initializers, duplicate globals, dead data), then
    `br_if` selection and branch hints.
 8. DCE and compaction.
+9. Local coalescing: locals of one Wasm type whose live ranges never overlap
+   share a slot. A local's nullability is settled before it shares one.
+10. Tee fusion: a `local.set` and the read right after it become a
+    `local.tee`. A local this leaves unread is removed.
+11. Local settling: a non-null local that Wasm's block-scoped rule sees read
+    before any write is declared nullable. The locals are then grouped by Wasm
+    type, the most used first.
 
 A `#![wasm_module(...)]` core module, such as the allocator, runs the same list
 on its own, with its passes named `wir/<module>:<pass>`.

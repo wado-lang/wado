@@ -943,6 +943,13 @@ impl WirLocals {
         self.types.get(name).is_some_and(WirType::is_nonnull_ref)
     }
 
+    /// Whether `name` is declared with a nullable reference type.
+    pub fn is_nullable_ref(&self, name: &str) -> bool {
+        self.types
+            .get(name)
+            .is_some_and(|ty| ty.is_reference() && !ty.is_nonnull_ref())
+    }
+
     /// Declared locals, `(name, type)`, in table order.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &WirType)> {
         self.types.iter().map(|(name, ty)| (name.as_str(), ty))
@@ -1859,6 +1866,39 @@ impl WirInstr {
             // `array.new_data<u8>` repr — cannot be an eager const global
             // and stays lazy.
             _ => false,
+        }
+    }
+
+    /// The local this node itself reads, its children aside.
+    pub fn local_read(&self) -> Option<&str> {
+        match self {
+            Self::LocalGet { name, .. } => Some(name),
+            _ => None,
+        }
+    }
+
+    /// The locals this node itself writes, its children aside. Each write lands
+    /// once the children are evaluated, a multi-value bind's all at once.
+    pub fn local_writes(&self) -> impl Iterator<Item = &str> {
+        let (single, bound): (Option<&String>, &[Option<String>]) = match self {
+            Self::LocalSet { name, .. } | Self::LocalTee { name, .. } => (Some(name), &[]),
+            Self::MultiValueLocalBind { locals, .. } => (None, locals),
+            _ => (None, &[]),
+        };
+        single
+            .into_iter()
+            .chain(bound.iter().flatten())
+            .map(String::as_str)
+    }
+
+    /// Visit each local name this node itself reads or writes.
+    pub fn for_each_local_name_mut(&mut self, mut f: impl FnMut(&mut String)) {
+        match self {
+            Self::LocalGet { name, .. }
+            | Self::LocalSet { name, .. }
+            | Self::LocalTee { name, .. } => f(name),
+            Self::MultiValueLocalBind { locals, .. } => locals.iter_mut().flatten().for_each(f),
+            _ => {}
         }
     }
 

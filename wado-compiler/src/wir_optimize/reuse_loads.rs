@@ -120,17 +120,6 @@ impl Reuser {
                         .all(|end| end.get(key) == Some(id))
                 });
             }
-            // Wasm pops a `select`'s condition last.
-            WirInstr::Select {
-                condition,
-                if_true,
-                if_false,
-                ..
-            } => {
-                self.visit(if_true);
-                self.visit(if_false);
-                self.visit(condition);
-            }
             _ => {
                 instr.for_each_boxed_child_mut(&mut |child| self.visit(child));
                 forget_written(&mut self.avail, &Footprint::writes_of_node(instr));

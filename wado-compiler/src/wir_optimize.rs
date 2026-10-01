@@ -283,14 +283,25 @@ fn optimize_scoped(
 
     // Phase 9: settle the locals. Coalescing turns a copy between two merged
     // locals into a self-copy it drops, and leaves set-then-get pairs across
-    // them. Tee fusion comes last: a tee hides the copy it replaces from every
-    // pass before it.
+    // them. Tee fusion comes late: a tee hides the copy it replaces from every
+    // pass before it. A set fused into its local's only read leaves a tee
+    // nothing reads, which the write-only sweep takes back to its value.
     wir_pass(scope, "coalesce_locals", module, profiler, |m| {
         coalesce_locals(m);
     });
     wir_pass(scope, "fuse_remaining_local_tees", module, profiler, |m| {
         peephole::fuse_remaining_local_tees(m);
     });
+    wir_pass(
+        scope,
+        "elide_fused_write_only_locals",
+        module,
+        profiler,
+        |m| {
+            elide_write_only_locals(m);
+            cleanup(m);
+        },
+    );
     finalize_locals(module);
 }
 

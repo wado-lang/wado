@@ -6,7 +6,7 @@
 //! explicit `RefAsNonNull`.
 
 use crate::hashmap::IndexSet;
-use crate::wir::{WirInstr, WirPackage};
+use crate::wir::{WirInstr, WirLocals, WirPackage};
 use crate::wir_optimize::util::for_each_nullable_ref_operand;
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
@@ -14,35 +14,55 @@ use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 /// structural rule sees it written, narrowing its non-null reads explicitly.
 pub(super) fn relax_unset_nonnull_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
-        let candidates: IndexSet<String> = func
-            .declared_locals()
-            .iter()
-            .filter(|(_, ty)| ty.is_nonnull_ref())
-            .map(|(name, _)| name.to_string())
-            .collect();
-        let Some(body) = func.body.as_mut() else {
-            continue;
-        };
-        if candidates.is_empty() {
-            continue;
-        }
-        let mut scan = InitScan {
-            initialized: vec![false; candidates.len()],
-            demoted: vec![false; candidates.len()],
-            undo: Vec::new(),
-            candidates: &candidates,
-        };
-        scan.walk_body(body);
-        let demoted: IndexSet<String> = candidates
-            .iter()
-            .zip(&scan.demoted)
-            .filter(|(_, demoted)| **demoted)
-            .map(|(name, _)| name.clone())
-            .collect();
-        if !demoted.is_empty() {
-            Relax { demoted: &demoted }.walk_body(body);
+        if let Some(body) = func.body.as_mut() {
+            relax_unset_nonnull_locals_in(body);
         }
     }
+}
+
+/// [`relax_unset_nonnull_locals`] over one function body.
+pub(super) fn relax_unset_nonnull_locals_in(body: &mut Vec<WirInstr>) {
+    let declared = WirLocals::scan(body);
+    let candidates: IndexSet<String> = declared
+        .iter()
+        .filter(|(_, ty)| ty.is_nonnull_ref())
+        .map(|(name, _)| name.to_string())
+        .collect();
+    if candidates.is_empty() {
+        return;
+    }
+    let mut scan = InitScan {
+        initialized: vec![false; candidates.len()],
+        demoted: vec![false; candidates.len()],
+        undo: Vec::new(),
+        candidates: &candidates,
+    };
+    scan.walk_body(body);
+    let demoted: IndexSet<String> = candidates
+        .iter()
+        .zip(&scan.demoted)
+        .filter(|(_, demoted)| **demoted)
+        .map(|(name, _)| name.clone())
+        .collect();
+    if demoted.is_empty() {
+        return;
+    }
+    let locals: WirLocals = declared
+        .iter()
+        .map(|(name, ty)| {
+            let ty = if demoted.contains(name) {
+                ty.clone().as_nullable()
+            } else {
+                ty.clone()
+            };
+            (name.to_string(), ty)
+        })
+        .collect();
+    Relax {
+        demoted: &demoted,
+        locals: &locals,
+    }
+    .walk_body(body);
 }
 
 /// Walks a body in evaluation order, tracking which candidates Wasm considers
@@ -77,28 +97,6 @@ impl InitScan<'_> {
 impl WirRefVisitor for InitScan<'_> {
     fn visit_instr(&mut self, instr: &WirInstr) {
         match instr {
-            WirInstr::LocalGet { name, .. } => {
-                if let Some(i) = self.candidates.get_index_of(name.as_str())
-                    && !self.initialized[i]
-                {
-                    self.demoted[i] = true;
-                }
-            }
-            WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } => {
-                assert!(
-                    !(matches!(**value, WirInstr::RefNull { .. })
-                        && self.candidates.contains(name.as_str())),
-                    "[WIR] `ref.null` written to the non-null local `{name}`"
-                );
-                self.visit_instr(value);
-                self.write(name);
-            }
-            WirInstr::MultiValueLocalBind { instr, locals } => {
-                self.visit_instr(instr);
-                for name in locals.iter().flatten() {
-                    self.write(name);
-                }
-            }
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => self.scoped(body),
             WirInstr::If {
                 condition,
@@ -112,7 +110,28 @@ impl WirRefVisitor for InitScan<'_> {
                     self.scoped(else_body);
                 }
             }
-            _ => self.walk_instr(instr),
+            _ => {
+                if let WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } =
+                    instr
+                {
+                    assert!(
+                        !(matches!(**value, WirInstr::RefNull { .. })
+                            && self.candidates.contains(name.as_str())),
+                        "[WIR] `ref.null` written to the non-null local `{name}`"
+                    );
+                }
+                self.walk_instr(instr);
+                if let Some(i) = instr
+                    .local_read()
+                    .and_then(|name| self.candidates.get_index_of(name))
+                    && !self.initialized[i]
+                {
+                    self.demoted[i] = true;
+                }
+                for name in instr.local_writes() {
+                    self.write(name);
+                }
+            }
         }
     }
 }
@@ -121,6 +140,8 @@ impl WirRefVisitor for InitScan<'_> {
 /// meets the parent that may already narrow it or not need it.
 struct Relax<'a> {
     demoted: &'a IndexSet<String>,
+    /// The declared locals, the demoted ones already nullable.
+    locals: &'a WirLocals,
 }
 
 impl Relax<'_> {
@@ -135,7 +156,7 @@ impl WirMutVisitor for Relax<'_> {
         self.walk_instr(instr);
         // The narrowing is static only: a demoted local is never read unset at
         // run time, so an operand that accepts null needs none.
-        for_each_nullable_ref_operand(instr, |operand| {
+        for_each_nullable_ref_operand(instr, self.locals, |operand| {
             if let WirInstr::RefAsNonNull(access) = operand
                 && self.accesses_demoted(access)
             {

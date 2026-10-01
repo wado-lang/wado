@@ -1,7 +1,7 @@
 //! Shared utility functions for WIR optimization passes.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirExportDesc, WirInstr, WirPackage, WirType, WirTypeId};
+use crate::wir::{WirExportDesc, WirInstr, WirLocals, WirPackage, WirType, WirTypeId};
 
 use super::nullability::Nullability;
 
@@ -343,12 +343,26 @@ pub(super) fn is_same_free_read(a: &WirInstr, b: &WirInstr) -> bool {
 
 /// Visit each operand of `instr` that accepts `(ref null $type)` where its
 /// type allows `(ref $type)`: the object of a GC access, `ref.cast` and
-/// `ref.test`.
+/// `ref.test`, a value dropped, tested for null, compared or externalized,
+/// and one stored into a local `locals` declares nullable.
 pub(super) fn for_each_nullable_ref_operand(
     instr: &mut WirInstr,
+    locals: &WirLocals,
     mut f: impl FnMut(&mut WirInstr),
 ) {
     match instr {
+        WirInstr::Drop(value) | WirInstr::RefIsNull(value) | WirInstr::ExternExternalize(value) => {
+            f(value);
+        }
+        WirInstr::RefEq(a, b) => {
+            f(a);
+            f(b);
+        }
+        WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value }
+            if locals.is_nullable_ref(name) =>
+        {
+            f(value);
+        }
         WirInstr::ArrayGet { array, .. }
         | WirInstr::ArrayGetS { array, .. }
         | WirInstr::ArrayGetU { array, .. }
