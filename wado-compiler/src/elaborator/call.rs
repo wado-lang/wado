@@ -3419,19 +3419,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if !self.tysys.is_unbound_type_param(args[target_idx]) {
                             continue;
                         }
+                        let trait_ = self.tysys.resolutions.bound_decl(bound);
                         let resolved = {
                             let mut tt = self.tysys.type_table.borrow_mut();
-                            match tt.resolve_assoc_type(owner_ty, &assoc.name) {
-                                Some(r) => Some(r),
-                                None => tt.resolve_generic_assoc_type_mono(owner_ty, &assoc.name),
-                            }
+                            trait_
+                                .and_then(|trait_| {
+                                    tt.resolve_assoc_type_of_trait(owner_ty, &trait_, &assoc.name)
+                                })
+                                .or_else(|| tt.resolve_assoc_type(owner_ty, &assoc.name))
+                                .or_else(|| {
+                                    tt.resolve_generic_assoc_type_mono(owner_ty, &assoc.name)
+                                })
                         };
                         // Reflection's associated types are registered by a
                         // synthesis phase that runs after elaboration, so the
                         // registry is empty here; compute the subject's.
                         let resolved = resolved.or_else(|| {
-                            let trait_ = self.tysys.resolutions.bound_decl(bound)?;
-                            self.concrete_reflect_assoc_type(owner_ty, trait_, &assoc.name)
+                            self.concrete_reflect_assoc_type(owner_ty, trait_?, &assoc.name)
                         });
                         if let Some(resolved) = resolved {
                             args[target_idx] = resolved;

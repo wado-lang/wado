@@ -465,7 +465,7 @@ fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option
             )
     };
     // Only a settled scalar is known to share nothing with an aggregate: a
-    // parameter settles later.
+    // parameter is judged by its bounds (`unsettled_cast_hint`).
     let source_is_scalar = matches!(
         tt.get(tt.representation_head(source)),
         ResolvedType::Primitive(_)
@@ -3454,6 +3454,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         collector.writes
     }
 
+    /// The reason a cast with a type parameter or a projection on either side
+    /// is refused: only a newtype step its bounds prove holds for every type
+    /// that settles it, and nothing judges the cast again once one does.
+    fn unsettled_cast_hint(&mut self, source: TypeId, target: TypeId) -> Option<String> {
+        let unsettled = |id| {
+            let tt = self.tysys.type_table.borrow();
+            matches!(
+                tt.get(tt.representation_head(id)),
+                ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
+            )
+        };
+        if !unsettled(source) && !unsettled(target)
+            || self
+                .tysys
+                .type_table
+                .borrow()
+                .share_common_base(source, target)
+        {
+            return None;
+        }
+        let proven = [(source, target), (target, source)]
+            .into_iter()
+            .any(|(newtype, other)| {
+                self.newtype_base_bound(newtype).is_some_and(|base| {
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .share_common_base(base, other)
+                })
+            });
+        (!proven).then(|| {
+            "a type parameter casts only where a `ReflectNewtype` bound makes the cast a newtype step"
+                .to_string()
+        })
+    }
+
+    /// The `Base` a `ReflectNewtype<Base = …>` bound on the type parameter
+    /// `ty` names, or `None` where `ty` carries no such bound.
+    fn newtype_base_bound(&mut self, ty: TypeId) -> Option<TypeId> {
+        let name = self.tysys.binder_name(ty)?;
+        let trait_def = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_def(CompilerItem::ReflectNewtype)?;
+        let base = self
+            .annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(&name)?
+            .iter()
+            .filter(|b| self.tysys.resolutions.bound_decl(b) == Some(trait_def))
+            .flat_map(|b| &b.assoc_types)
+            .find(|assoc| assoc.name == "Base")?
+            .ty
+            .clone();
+        Some(self.resolve_type(&base))
+    }
+
     pub(super) fn resolve_cast(
         &mut self,
         cast: &ast::CastExpr,
@@ -3533,26 +3593,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let source_type = match literal_type {
-            Some(literal_type) => literal_type,
-            None => {
-                let expected = match &cast.expr {
-                    // A closure takes its parameter types from the function
-                    // type it is cast to, as it would from an annotation.
-                    ast::Expr::Closure(_) => Some(target_type),
-                    // Its base where the target is a newtype: `Pair { a: 1 } as
-                    // Wide` crosses the boundary a cast may.
-                    named if names_its_type(named) => Some(
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .representation_head(target_type),
-                    ),
-                    _ => None,
-                };
-                self.resolve_expr(&cast.expr, ctx, expected)
-            }
-        };
+        let source_type = literal_type.unwrap_or_else(|| {
+            let expected = match &cast.expr {
+                // A closure takes its parameter types from the function type
+                // it is cast to, as it would from an annotation.
+                ast::Expr::Closure(_) => Some(target_type),
+                // Its base where the target is a newtype: `Pair { a: 1 } as
+                // Wide` crosses the boundary a cast may.
+                named if names_its_type(named) => Some(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .representation_head(target_type),
+                ),
+                _ => None,
+            };
+            self.resolve_expr(&cast.expr, ctx, expected)
+        });
 
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;
@@ -3570,11 +3627,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .or_else(|| ref_cast_hint(&tt, source_type, target_type))
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
                 .or_else(|| aggregate_cast_hint(&tt, source_type, target_type))
-                .map(|hint| {
-                    let (from, to) = tt.type_names_for_mismatch(source_type, target_type);
-                    (from, to, hint)
-                })
-        };
+        }
+        .or_else(|| self.unsettled_cast_hint(source_type, target_type))
+        .map(|hint| {
+            let tt = self.tysys.type_table.borrow();
+            let (from, to) = tt.type_names_for_mismatch(source_type, target_type);
+            (from, to, hint)
+        });
         if let Some((from, to, hint)) = refused_cast {
             let _ = self.emit(TypeError::InvalidCast {
                 from,

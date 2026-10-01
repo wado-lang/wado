@@ -2473,6 +2473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         let at_call = self.tysys.call_site_types(params, type_args);
+        let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
         for (i, param) in params.iter().enumerate() {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
@@ -2510,7 +2511,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &param.name,
                         span,
                     );
-                    self.enforce_assoc_type_bounds(subject, bound, self_binding, span);
+                    // A constraint may name another of the declaration's
+                    // parameters, `N: ReflectNewtype<Base = B>`, which means
+                    // what the call binds `B` to.
+                    self.with_type_params_bound(&site, type_args, |e| {
+                        e.enforce_assoc_type_bounds(subject, bound, self_binding, span);
+                    });
                 }
             }
             // A supertrait failure has the same one cause as the bound that
@@ -2531,7 +2537,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // arguments are the declaration's, so they are read with the
                 // call's own answers in scope — `U: Uses<P::Inner>` asks what
                 // the argument for `P` binds `Inner` to.
-                let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
                 let bounds = ScopedBound::pin_declared(param, self_binding);
                 let root_args = self.with_type_params_bound(&site, type_args, |e| {
                     e.trait_args_of_bound(&bounds, root)

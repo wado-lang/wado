@@ -1,0 +1,31 @@
+// A `ReflectNewtype<Base = B>` bound proves `N as B` and `B as N` newtype
+// steps, which hold for every `N` the bound admits.
+
+type Meters = f64;
+type Half = f16;
+
+fn to_base<N: ReflectNewtype<Base = B>, B>(n: N) -> B {
+    return n as B;
+}
+
+test {
+    let m: Meters = 2.5;
+    assert to_base(m) == 2.5;
+}
+
+fn from_base<N: ReflectNewtype<Base = B>, B>(b: B) -> N {
+    return b as N;
+}
+
+fn to_f64<N: ReflectNewtype<Base = f64>>(n: N) -> f64 {
+    return n as f64;
+}
+
+test "newtype steps through a bound" {
+    let m: Meters = 2.5;
+    assert to_f64(m) == 2.5;
+    let back: Meters = from_base(4.0);
+    assert back as f64 == 4.0;
+    let h: Half = 1.5;
+    assert to_base(h) == 1.5;
+}

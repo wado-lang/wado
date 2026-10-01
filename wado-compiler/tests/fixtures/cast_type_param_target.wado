@@ -1,0 +1,14 @@
+// A cast to a type parameter is held to the same rule as one from it: only a
+// newtype step its bounds prove.
+
+fn make<T>() -> T {
+    return 0 as T;
+}
+
+test "number to type parameter" {
+    let h: f16 = make();
+    assert h == 0.0;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'i32' to 'T': a type parameter casts only where a `ReflectNewtype` bound makes the cast a newtype step"}

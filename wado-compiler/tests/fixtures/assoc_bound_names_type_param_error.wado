@@ -1,0 +1,34 @@
+// A bound's associated-type constraint may name another of the callee's type
+// parameters, and is checked against what the call binds that one to. It was
+// once read in the caller's scope, where the parameter is unbound, and skipped;
+// and `ReflectNewtype`'s `Base` settled no parameter, so a literal settled it.
+
+type Small = i8;
+
+trait Named {
+    type Out;
+}
+
+impl Named for Small {
+    type Out = i8;
+}
+
+fn out<N: Named<Out = B>, B>(n: N, b: B) -> i32 {
+    return 1;
+}
+
+fn to_base<N: ReflectNewtype<Base = B>, B>(n: N) -> B {
+    return n as B;
+}
+
+export fn run() {
+    let s: Small = 3;
+    let _ = out::<Small, i64>(s, 1);
+    let _ = to_base::<Small, i64>(s);
+    let _: i64 = to_base(s);
+}
+
+__DATA__
+{
+    "compile_error": ":26:13: analysis error: type 'Small' does not satisfy the associated type 'Named::Out = i64': it is 'i8'; 27:13: type 'Small' does not satisfy the associated type 'ReflectNewtype::Base = i64': it is 'i8'; 28:18: type 'Small' does not satisfy the associated type 'ReflectNewtype::Base = i64': it is 'i8'"
+}

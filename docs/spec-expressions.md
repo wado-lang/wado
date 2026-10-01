@@ -651,6 +651,34 @@ let f = c as f64;     // compile error: char can only be cast to integer types
 let s = c as String;  // compile error: the two types share no representation
 ```
 
+#### Casts in Generic Code
+
+A cast with a type parameter or a projection on either side is judged by the
+bounds alone, as Rust's is, since every type that settles it later must take
+the same cast. A `ReflectNewtype<Base = B>` bound makes the cast a newtype step
+to or from `B`, and a cast it does not make one is an error:
+
+<!-- {"fixture":"cast_type_param_newtype_bound.wado"} -->
+
+```wado
+fn to_base<N: ReflectNewtype<Base = B>, B>(n: N) -> B {
+    return n as B;
+}
+
+test {
+    let m: Meters = 2.5;
+    assert to_base(m) == 2.5;
+}
+```
+
+<!-- {"fixture":"cast_type_param_source.wado"} -->
+
+```wado
+fn to_f32<T>(x: T) -> f32 {
+    return x as f32;
+}
+```
+
 ### Parentheses for Grouping
 
 Parentheses `()` can be used to override operator precedence:

@@ -71,9 +71,9 @@ trait Make with () {
     fn make() -> Self;
 }
 
-impl<T> Make for Bag<T> {
+impl<T: Default> Make for Bag<T> {
     fn make() -> Bag<T> {
-        return Bag { v: 0 as T };
+        return Bag { v: T::default() };
     }
 }
 

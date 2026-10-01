@@ -1,0 +1,28 @@
+// A projection settles only once its trait's impl is chosen, so a cast from
+// one is held to the rule a type parameter is.
+
+struct P {
+    x: i32,
+}
+
+trait Tr {
+    type Item;
+}
+
+struct Holder {}
+
+impl Tr for Holder {
+    type Item = P;
+}
+
+fn from_projection<T: Tr>(v: T::Item) -> P {
+    return v as P;
+}
+
+test "projection to struct" {
+    let p = from_projection::<Holder>(P { x: 3 });
+    assert p.x == 3;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'T::Item' to 'P': a type parameter casts only where a `ReflectNewtype` bound makes the cast a newtype step"}
