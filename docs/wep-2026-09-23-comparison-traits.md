@@ -112,18 +112,9 @@ Here `x` is not a NaN.
 
 The comparisons now obey the laws of an order. `!(a < b)` is `a >= b`, exactly
 one of `a < b`, `a == b` and `a > b` holds, and `x == x` holds for every `x`.
-`x != x` is always false, so a NaN is tested with `is_nan()`.
-
-Each IEEE predicate is still one expression:
-
-| IEEE predicate | Written in Wado          |
-| -------------- | ------------------------ |
-| `a == b`       | `a == b && !a.is_nan()`  |
-| `a != b`       | `a != b \|\| a.is_nan()` |
-| `a < b`        | `a < b && !b.is_nan()`   |
-| `a <= b`       | `a <= b && !b.is_nan()`  |
-| `a > b`        | `a > b && !a.is_nan()`   |
-| `a >= b`       | `a >= b && !a.is_nan()`  |
+`x != x` is always false, so a NaN is tested with `is_nan()`. Each IEEE
+predicate is still one expression of an operator and `is_nan()`, listed in
+[Float Comparison](./spec-standard-traits.md#float-comparison).
 
 ### What follows
 
@@ -177,9 +168,8 @@ Nothing checks the law between `Eq` and `Ord` on a hand-written pair, so a user
 type can still make `==` and `cmp` disagree.
 
 `f64::min` and `f64::max` lower to Wasm's `min` and `max`, which are IEEE
-754-2019 `minimum` and `maximum`. They disagree with the order:
-`f64::min(1.0, NaN)` is NaN where `Iterator::min` answers `1.0`, and
-`f64::max(-0.0, 0.0)` picks `0.0` where the order calls the two equal.
+754-2019 `minimum` and `maximum`. `f64::min(1.0, NaN)` is NaN, where
+`Iterator::min` over the same values reads the order and answers `1.0`.
 
 A NaN test ported from another language as `x != x` is always false, and
 nothing warns.
