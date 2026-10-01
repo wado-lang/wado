@@ -163,8 +163,9 @@ instruction.
 
 `clamp` keeps a NaN `x` as NaN. The order alone would give `high`, since NaN is
 greatest, and that hides a NaN in exactly the place a range check is meant to
-catch bad input. A clamp that returns its input's NaN is what IEEE code expects,
-and the rule is written down where `clamp` is specified.
+catch bad input. A clamp that returns its input's NaN is what IEEE code expects.
+The exception is stated with `clamp`'s rule, so it does not have to be inferred
+from the order.
 
 ### Comparing a value with itself warns
 
