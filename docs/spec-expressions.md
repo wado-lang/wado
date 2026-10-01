@@ -537,6 +537,7 @@ assert n as i64 == -1;                 // sign-extend
 assert -3.9 as i32 == -3;              // round toward zero
 assert 1.0e10 as i32 == i32::MAX;      // saturate
 assert f64::NAN as u8 == 0;
+assert 16_777_217 as f32 == 16_777_216.0;   // round to nearest
 let big: f64 = 1.0e300;
 assert big as f32 == f32::INFINITY;    // round to nearest
 assert 0.1 as f16 as f32 == 0.0999755859375;
