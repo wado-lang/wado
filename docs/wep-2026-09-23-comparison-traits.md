@@ -104,8 +104,9 @@ test rather than as a sort that panics in production, as Rust 1.81's did.
 The rule reads `Eq<Self>` only. An `Eq<Rhs>` for another type, such as
 `StrSlice == String`, has no `Ord` beside it to agree with, and nothing ties it
 to the type's own `==`. Only an explicit `==` reads it: `sort`, `TreeMap` and
-`contains` read `Eq<Self>` and `Ord`. `AsStrSlice` gets no exception, though it
-requires `Eq<String>`. A type whose `Eq<String>` is not byte equality, such as
+`contains` read `Eq<Self>` and `Ord`.
+
+`AsStrSlice` gets no exception, though it requires `Eq<String>`. A type whose `Eq<String>` is not byte equality, such as
 a case-insensitive string, answers `x == s` one way while `contains_str(x)` and
 `get_str(x)`, which compare the bytes of `as_str_slice()`, answer the other.
 Such a type keeps its own equality in its `Ord`, and does not claim to be text
