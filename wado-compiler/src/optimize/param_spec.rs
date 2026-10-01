@@ -22,7 +22,7 @@ use super::const_folding::ConstFoldRule;
 use super::dae::is_dae_sroa_eligible;
 use super::dce::{DescriptorCache, reachable_function_positions};
 use super::extract::is_place_read;
-use super::gate::FunctionGate;
+use super::gate::{FunctionGate, GatedPass};
 use super::inline::find_recursive_functions;
 use crate::ast::Visibility;
 use crate::compiler_trace;
@@ -988,6 +988,7 @@ pub(super) fn specialize_const_params(
     while specialize_round(project, state, gate, descriptors, &mut reachable) {
         changed = true;
     }
+    gate.catch_up(GatedPass::ParamSpec, project.functions.len());
     changed
 }
 

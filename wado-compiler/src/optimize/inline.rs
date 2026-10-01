@@ -2066,6 +2066,13 @@ pub fn inline_functions(
 
             if !inlined_funcs.is_empty() {
                 changed = true;
+                compiler_trace!("inline_sites", "{func_name} <- [{}]", {
+                    inlined_funcs
+                        .iter()
+                        .map(|id| inline_candidates[id].name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                });
                 // The splice restructures the body, staling the persisted graph's
                 // `loop_entry_values` (licm's pre-header snapshots — the only
                 // value-graph state any consumer still reads, `value_of` having
