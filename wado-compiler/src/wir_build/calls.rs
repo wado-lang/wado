@@ -13,6 +13,7 @@ use crate::tir::{TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::context::WirContext;
+use super::primitive_ops::FloatWidth;
 use super::translate::{FunctionTranslator, declare_and_set_local};
 use crate::lower::plan::value_copy;
 use crate::nir;
@@ -836,6 +837,14 @@ impl FunctionTranslator<'_, '_> {
             "f32_min" => binary!(self, args, WirInstr::F32Min),
             "f32_max" => binary!(self, args, WirInstr::F32Max),
             "f32_copysign" => binary!(self, args, WirInstr::F32Copysign),
+            "f32_is_nan" => {
+                let x = self.translate_operand(args[0].expr);
+                self.float_is_nan(FloatWidth::F32, x)
+            }
+            "f64_is_nan" => {
+                let x = self.translate_operand(args[0].expr);
+                self.float_is_nan(FloatWidth::F64, x)
+            }
             "black_box" => unary!(self, args, WirInstr::BlackBox),
             "is_uninitialized" => {
                 let mut a = self.translate_operand(args[0].expr);

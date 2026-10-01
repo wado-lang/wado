@@ -275,10 +275,10 @@ Where the optimizer proves an operand is not a NaN, the test goes.
 
 ## Roadmap
 
-- [ ] Implement the float `Eq` and `Ord` impls and the operator lowering for
+- [x] Implement the float `Eq` and `Ord` impls and the operator lowering for
   all four float types, and remove `OperatorOrd`.
-- [ ] Rewrite the fixtures that pin today's answers (`float_total_order.wado`,
-  `half_ieee_compare.wado`) to pin these.
+- [x] Rewrite the fixtures that pin today's answers (`float_total_order.wado`,
+  `half_ieee_compare.wado`, now `half_float_order.wado`) to pin these.
 - [ ] Measure the cost on comparison-heavy code, sorting and Loam's kernels
   among it, and record it here.
 - [ ] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type

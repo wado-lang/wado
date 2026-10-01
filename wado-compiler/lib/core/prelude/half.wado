@@ -13,7 +13,6 @@ use {
     Inspect,
     LenientFromStr,
     LenientParseError,
-    OperatorOrd,
     Ord,
     Ordering,
     TryFrom,
@@ -272,7 +271,7 @@ impl TryFrom<f32> for f16 {
 
     pub fn try_from(value: f32) -> Result<f16, ConvertError> {
         let half = f16::from_f32(value);
-        if f32::from(half) == value || half.is_nan() && value.is_nan() {
+        if f32::from(half) == value {
             return Result::Ok(half);
         }
         return Result::Err(ConvertError::new("value is not exact in f16"));
@@ -284,7 +283,7 @@ impl TryFrom<f64> for f16 {
 
     pub fn try_from(value: f64) -> Result<f16, ConvertError> {
         let half = f16::from_f64(value);
-        if f64::from(half) == value || half.is_nan() && value.is_nan() {
+        if f64::from(half) == value {
             return Result::Ok(half);
         }
         return Result::Err(ConvertError::new("value is not exact in f16"));
@@ -296,7 +295,7 @@ impl TryFrom<f32> for bf16 {
 
     pub fn try_from(value: f32) -> Result<bf16, ConvertError> {
         let half = bf16::from_f32(value);
-        if f32::from(half) == value || half.is_nan() && value.is_nan() {
+        if f32::from(half) == value {
             return Result::Ok(half);
         }
         return Result::Err(ConvertError::new("value is not exact in bf16"));
@@ -308,15 +307,15 @@ impl TryFrom<f64> for bf16 {
 
     pub fn try_from(value: f64) -> Result<bf16, ConvertError> {
         let half = bf16::from_f64(value);
-        if f64::from(half) == value || half.is_nan() && value.is_nan() {
+        if f64::from(half) == value {
             return Result::Ok(half);
         }
         return Result::Err(ConvertError::new("value is not exact in bf16"));
     }
 }
 
-// Every comparison is f32's on the widened value, which is exact: a NaN
-// equals nothing and the two zeroes are one value, neither of which bits give.
+// Every comparison is f32's on the widened value, which is exact: every NaN is
+// one value and the two zeroes are one value, neither of which bits give.
 impl Eq for f16 {
     pub fn eq(&self, other: &Self) -> bool {
         return f32::from(*self) == f32::from(*other);
@@ -338,44 +337,6 @@ impl Ord for f16 {
 impl Ord for bf16 {
     pub fn cmp(&self, other: &Self) -> Ordering {
         return f32::from(*self).cmp(&f32::from(*other));
-    }
-}
-
-// `Ord` above is the total order, which `sort` wants and `<` does not. These
-// are the widened f32's own operators, so `<` means one thing on every float.
-impl OperatorOrd for f16 {
-    pub fn lt(&self, other: &Self) -> bool {
-        return f32::from(*self) < f32::from(*other);
-    }
-
-    pub fn le(&self, other: &Self) -> bool {
-        return f32::from(*self) <= f32::from(*other);
-    }
-
-    pub fn gt(&self, other: &Self) -> bool {
-        return f32::from(*self) > f32::from(*other);
-    }
-
-    pub fn ge(&self, other: &Self) -> bool {
-        return f32::from(*self) >= f32::from(*other);
-    }
-}
-
-impl OperatorOrd for bf16 {
-    pub fn lt(&self, other: &Self) -> bool {
-        return f32::from(*self) < f32::from(*other);
-    }
-
-    pub fn le(&self, other: &Self) -> bool {
-        return f32::from(*self) <= f32::from(*other);
-    }
-
-    pub fn gt(&self, other: &Self) -> bool {
-        return f32::from(*self) > f32::from(*other);
-    }
-
-    pub fn ge(&self, other: &Self) -> bool {
-        return f32::from(*self) >= f32::from(*other);
     }
 }
 

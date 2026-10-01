@@ -1612,7 +1612,7 @@ impl f32 {
     }
 
     pub fn is_nan(&self) -> bool {
-        return *self != *self;
+        return builtin::f32_is_nan(*self);
     }
 
     pub fn is_finite(&self) -> bool {
@@ -2035,7 +2035,7 @@ impl f64 {
     }
 
     pub fn is_nan(&self) -> bool {
-        return *self != *self;
+        return builtin::f64_is_nan(*self);
     }
 
     pub fn is_finite(&self) -> bool {
@@ -2793,34 +2793,28 @@ impl Ord for u64 {
     }
 }
 
-/// A float's bits reordered into IEEE 754-2019 `totalOrder`, which is C++20's
-/// `std::strong_order`: a negative flips whole, a positive flips its sign bit.
-fn total_order_key_32(bits: u32) -> u32 {
-    if bits & 0x8000_0000 != 0 {
-        return ~bits;
-    }
-    return bits | 0x8000_0000;
-}
-
-fn total_order_key_64(bits: u64) -> u64 {
-    if bits & 0x8000_0000_0000_0000 != 0 {
-        return ~bits;
-    }
-    return bits | 0x8000_0000_0000_0000;
-}
-
-// `Ord` is a total order, so it separates the two zeroes and puts every NaN at
-// one end rather than calling it equal to whatever it met. `==` and `<` keep
-// IEEE's answers, as C++20 splits `operator<=>` from `strong_order`.
+// The operators carry the float order themselves, as they do an integer's.
 impl Ord for f32 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        return total_order_key_32(self.to_bits()).cmp(&total_order_key_32(other.to_bits()));
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
     }
 }
 
 impl Ord for f64 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        return total_order_key_64(self.to_bits()).cmp(&total_order_key_64(other.to_bits()));
+        if *self < *other {
+            return Ordering::Less;
+        }
+        if *self > *other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
     }
 }
 

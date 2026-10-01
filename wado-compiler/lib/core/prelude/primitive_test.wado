@@ -260,14 +260,16 @@ test "f32.is_nan and f32.is_finite" {
 }
 
 test "f64::NAN and f32::NAN" {
-    // NAN != NAN (IEEE 754)
+    // Every NaN is one value, greater than every other.
     let nan = f64::NAN;
-    assert !(nan == nan);
+    assert nan == nan;
     assert !(nan < 0.0);
-    assert !(nan > 0.0);
+    assert nan > 0.0;
+    assert nan > f64::INFINITY;
 
     let nan32 = f32::NAN;
-    assert !(nan32 == nan32);
+    assert nan32 == nan32;
+    assert nan32 > f32::INFINITY;
 }
 
 test "i32::clz" {

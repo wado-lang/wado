@@ -71,16 +71,6 @@ pub trait Hash: Eq with () {
     fn hash<H: Hasher>(&self, h: &mut H);
 }
 
-/// What `<`, `<=`, `>` and `>=` mean where the operator order is not the total
-/// order. A float's instructions already carry that split; a half has none.
-#[compiler_item("operator_ord")]
-internal trait OperatorOrd with () {
-    fn lt(&self, other: &Self) -> bool;
-    fn le(&self, other: &Self) -> bool;
-    fn gt(&self, other: &Self) -> bool;
-    fn ge(&self, other: &Self) -> bool;
-}
-
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]

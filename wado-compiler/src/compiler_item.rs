@@ -278,9 +278,6 @@ pub enum CompilerItem {
     /// `Ord` — anchor for synthesised `<` / `>` / `<=` / `>=`
     /// lowering and for auto-derived `T^Ord::cmp` bodies.
     Ord,
-    /// `OperatorOrd` — where `<` / `>` / `<=` / `>=` mean something other
-    /// than the type's total order. Only the half types implement it.
-    OperatorOrd,
     /// `From<T>` — synthesised by the `From` synthesiser.
     From,
     /// `core:serde::Serialize` — anchor for `Serialize` impl synthesis.
@@ -798,7 +795,6 @@ impl CompilerItem {
         Self::Shr,
         Self::Eq,
         Self::Ord,
-        Self::OperatorOrd,
         Self::From,
         Self::Serialize,
         Self::Deserialize,
@@ -1043,7 +1039,6 @@ impl CompilerItem {
             Self::Shr => "shr",
             Self::Eq => "eq",
             Self::Ord => "ord",
-            Self::OperatorOrd => "operator_ord",
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
@@ -1335,7 +1330,6 @@ impl CompilerItem {
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
-            | Self::OperatorOrd
             | Self::From
             | Self::ListPush
             | Self::ListWithCapacity
@@ -1602,7 +1596,6 @@ impl CompilerItem {
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
-            | Self::OperatorOrd
             | Self::From
             | Self::Serialize
             | Self::Deserialize

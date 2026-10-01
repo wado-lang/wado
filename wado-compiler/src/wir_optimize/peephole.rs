@@ -563,7 +563,8 @@ fn try_fold_eqz(instr: &mut WirInstr) -> bool {
 ///
 /// This saves one Wasm instruction per negated comparison, which is significant
 /// in tight loops (e.g., `while x <= limit` lowers to `if !(x <= limit) break`).
-/// Only applies to integer comparisons — float comparisons are excluded due to NaN.
+/// A float's `eq` and `ne` negate each other, NaN included. Its other
+/// comparisons are each false on a NaN, so their negations are no instruction.
 fn try_negate_eqz_comparison(instr: &mut WirInstr) -> bool {
     let WirInstr::I32Eqz(inner) = instr else {
         return false;
@@ -597,6 +598,10 @@ fn try_negate_eqz_comparison(instr: &mut WirInstr) -> bool {
         // i64 eq/ne
         WirInstr::I64Eq(..) => WirInstr::I64Ne,
         WirInstr::I64Ne(..) => WirInstr::I64Eq,
+        WirInstr::F32Eq(..) => WirInstr::F32Ne,
+        WirInstr::F32Ne(..) => WirInstr::F32Eq,
+        WirInstr::F64Eq(..) => WirInstr::F64Ne,
+        WirInstr::F64Ne(..) => WirInstr::F64Eq,
         _ => return false,
     };
     // Extract the two operands from the inner comparison.
@@ -620,7 +625,11 @@ fn try_negate_eqz_comparison(instr: &mut WirInstr) -> bool {
         | WirInstr::I64GeU(l, r)
         | WirInstr::I64GtU(l, r)
         | WirInstr::I64Eq(l, r)
-        | WirInstr::I64Ne(l, r) => (
+        | WirInstr::I64Ne(l, r)
+        | WirInstr::F32Eq(l, r)
+        | WirInstr::F32Ne(l, r)
+        | WirInstr::F64Eq(l, r)
+        | WirInstr::F64Ne(l, r) => (
             std::mem::replace(l, Box::new(WirInstr::Nop)),
             std::mem::replace(r, Box::new(WirInstr::Nop)),
         ),

@@ -4727,7 +4727,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(dispatch) = self.ann_operator_dispatch(id) {
             let call = self.binary_operator_call(dispatch, left, right, span);
             // `!=` negates `eq`, and an ordering operator reads `cmp`'s
-            // `Ordering`; an `OperatorOrd` method already answers a `bool`.
+            // `Ordering`.
             return match op {
                 ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => not_expr(call, span),
                 ast::BinaryOp::Lt

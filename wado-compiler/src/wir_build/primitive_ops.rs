@@ -11,7 +11,7 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
-use super::translate::FunctionTranslator;
+use super::translate::{FunctionTranslator, declare_and_set_local};
 use crate::nir_arena::{Operand, PackedData};
 use crate::wir_build::{packed_array_is_eager, packed_element_consts};
 
@@ -134,7 +134,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Translate a binary operation to WIR.
     pub(super) fn translate_binary_op(
-        &self,
+        &mut self,
         op: &NirBinaryOp,
         left: Box<WirInstr>,
         right: Box<WirInstr>,
@@ -195,57 +195,61 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Unsigned => WirInstr::I32RemU(left, right),
                 PrimitiveKind::I32Signed => WirInstr::I32RemS(left, right),
             },
+            NirBinaryOp::Eq
+            | NirBinaryOp::NotEq
+            | NirBinaryOp::Lt
+            | NirBinaryOp::LtEq
+            | NirBinaryOp::Gt
+            | NirBinaryOp::GtEq
+                if let Some(width) = FloatWidth::of(kind) =>
+            {
+                self.float_order_comparison(*op, width, *left, *right)
+            }
             NirBinaryOp::Eq => match kind {
-                PrimitiveKind::F64 => WirInstr::F64Eq(left, right),
-                PrimitiveKind::F32 => WirInstr::F32Eq(left, right),
                 PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Eq(left, right)
                 }
                 PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Eq(left, right)
                 }
+                PrimitiveKind::F32 | PrimitiveKind::F64 => unreachable!(),
             },
             NirBinaryOp::NotEq => match kind {
-                PrimitiveKind::F64 => WirInstr::F64Ne(left, right),
-                PrimitiveKind::F32 => WirInstr::F32Ne(left, right),
                 PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned => {
                     WirInstr::I64Ne(left, right)
                 }
                 PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned => {
                     WirInstr::I32Ne(left, right)
                 }
+                PrimitiveKind::F32 | PrimitiveKind::F64 => unreachable!(),
             },
             NirBinaryOp::Lt => match kind {
-                PrimitiveKind::F64 => WirInstr::F64Lt(left, right),
-                PrimitiveKind::F32 => WirInstr::F32Lt(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64LtU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64LtS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32LtU(left, right),
                 PrimitiveKind::I32Signed => WirInstr::I32LtS(left, right),
+                PrimitiveKind::F32 | PrimitiveKind::F64 => unreachable!(),
             },
             NirBinaryOp::LtEq => match kind {
-                PrimitiveKind::F64 => WirInstr::F64Le(left, right),
-                PrimitiveKind::F32 => WirInstr::F32Le(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64LeU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64LeS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32LeU(left, right),
                 PrimitiveKind::I32Signed => WirInstr::I32LeS(left, right),
+                PrimitiveKind::F32 | PrimitiveKind::F64 => unreachable!(),
             },
             NirBinaryOp::Gt => match kind {
-                PrimitiveKind::F64 => WirInstr::F64Gt(left, right),
-                PrimitiveKind::F32 => WirInstr::F32Gt(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64GtU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64GtS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32GtU(left, right),
                 PrimitiveKind::I32Signed => WirInstr::I32GtS(left, right),
+                PrimitiveKind::F32 | PrimitiveKind::F64 => unreachable!(),
             },
             NirBinaryOp::GtEq => match kind {
-                PrimitiveKind::F64 => WirInstr::F64Ge(left, right),
-                PrimitiveKind::F32 => WirInstr::F32Ge(left, right),
                 PrimitiveKind::I64Unsigned => WirInstr::I64GeU(left, right),
                 PrimitiveKind::I64Signed => WirInstr::I64GeS(left, right),
                 PrimitiveKind::I32Unsigned => WirInstr::I32GeU(left, right),
                 PrimitiveKind::I32Signed => WirInstr::I32GeS(left, right),
+                PrimitiveKind::F32 | PrimitiveKind::F64 => unreachable!(),
             },
             NirBinaryOp::And | NirBinaryOp::BitAnd => match kind {
                 PrimitiveKind::F32 | PrimitiveKind::F64 => {
@@ -326,6 +330,118 @@ impl FunctionTranslator<'_, '_> {
             Box::new(WirInstr::I32DivS(Box::new(widened), right)),
             Box::new(WirInstr::I32Const(1 << shift)),
         )
+    }
+
+    /// `left op right` under the float order, where every NaN is one value
+    /// greater than `+Inf`: IEEE's instruction, joined with NaN tests where an
+    /// operand may be a NaN.
+    fn float_order_comparison(
+        &mut self,
+        op: NirBinaryOp,
+        width: FloatWidth,
+        left: WirInstr,
+        right: WirInstr,
+    ) -> WirInstr {
+        // Against a constant that is not a NaN, IEEE answers every operator
+        // that is false when the other operand is a NaN, and the negation of
+        // the opposite operator answers the rest.
+        let nan_side_answer = if is_non_nan_const(&right) {
+            Some(matches!(
+                op,
+                NirBinaryOp::NotEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
+            ))
+        } else if is_non_nan_const(&left) {
+            Some(matches!(
+                op,
+                NirBinaryOp::NotEq | NirBinaryOp::Lt | NirBinaryOp::LtEq
+            ))
+        } else {
+            None
+        };
+        if let Some(nan_side_answer) = nan_side_answer {
+            return if nan_side_answer == (op == NirBinaryOp::NotEq) {
+                width.ieee(op, left, right)
+            } else {
+                eqz(width.ieee(opposite(op), left, right))
+            };
+        }
+
+        let (prelude, operands) = self.bind_for_reuse(vec![left, right], width.wir_type());
+        let [a, b] = <[WirInstr; 2]>::try_from(operands).expect("two operands bound");
+        let is_nan = |x: &WirInstr| width.ieee(NirBinaryOp::NotEq, x.clone(), x.clone());
+        let or = |x, y| WirInstr::I32Or(Box::new(x), Box::new(y));
+        // `a <= b` is IEEE's `<=` or a NaN `b`, and `a >= b` is IEEE's `>=` or
+        // a NaN `a`. The order is total, so `<` and `>` negate them.
+        let le = |a: &WirInstr, b: &WirInstr| {
+            or(
+                width.ieee(NirBinaryOp::LtEq, a.clone(), b.clone()),
+                is_nan(b),
+            )
+        };
+        let ge = |a: &WirInstr, b: &WirInstr| {
+            or(
+                width.ieee(NirBinaryOp::GtEq, a.clone(), b.clone()),
+                is_nan(a),
+            )
+        };
+        let eq = |a: &WirInstr, b: &WirInstr| {
+            or(
+                width.ieee(NirBinaryOp::Eq, a.clone(), b.clone()),
+                WirInstr::I32And(Box::new(is_nan(a)), Box::new(is_nan(b))),
+            )
+        };
+        let comparison = match op {
+            NirBinaryOp::Eq => eq(&a, &b),
+            NirBinaryOp::NotEq => eqz(eq(&a, &b)),
+            NirBinaryOp::LtEq => le(&a, &b),
+            NirBinaryOp::GtEq => ge(&a, &b),
+            NirBinaryOp::Lt => eqz(ge(&a, &b)),
+            NirBinaryOp::Gt => eqz(le(&a, &b)),
+            not_comparison => unreachable!("[WIR] `{not_comparison:?}` is not a comparison"),
+        };
+        with_prelude(prelude, comparison)
+    }
+
+    /// IEEE's NaN test, `x != x`, which the float order answers false.
+    pub(super) fn float_is_nan(&mut self, width: FloatWidth, operand: WirInstr) -> WirInstr {
+        let (prelude, mut operands) = self.bind_for_reuse(vec![operand], width.wir_type());
+        let x = operands.pop().expect("one operand bound");
+        with_prelude(prelude, width.ieee(NirBinaryOp::NotEq, x.clone(), x))
+    }
+
+    /// `operands` as instructions each safe to evaluate more than once, and
+    /// the `local.set`s that evaluate them once, in order, ahead of the reads.
+    /// Operands that are all reads already need none.
+    fn bind_for_reuse(
+        &mut self,
+        operands: Vec<WirInstr>,
+        ty: WirType,
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        let is_read = |x: &WirInstr| {
+            matches!(
+                x,
+                WirInstr::LocalGet { .. } | WirInstr::F32Const(_) | WirInstr::F64Const(_)
+            )
+        };
+        if operands.iter().all(is_read) {
+            return (Vec::new(), operands);
+        }
+        let mut prelude = Vec::new();
+        let reads = operands
+            .into_iter()
+            .map(|operand| {
+                if matches!(operand, WirInstr::F32Const(_) | WirInstr::F64Const(_)) {
+                    return operand;
+                }
+                let name = self.fresh_local("$float_cmp");
+                prelude.extend(declare_and_set_local(name.clone(), ty.clone(), operand));
+                WirInstr::LocalGet {
+                    name,
+                    result_ty: ty.clone(),
+                }
+            })
+            .collect();
+        (prelude, reads)
     }
 
     /// Translate a unary operation to WIR.
@@ -851,4 +967,84 @@ impl FunctionTranslator<'_, '_> {
             WirInstr::Drop(Box::new(val))
         }
     }
+}
+
+/// The Wasm float type a float comparison runs on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FloatWidth {
+    F32,
+    F64,
+}
+
+impl FloatWidth {
+    fn of(kind: PrimitiveKind) -> Option<Self> {
+        match kind {
+            PrimitiveKind::F32 => Some(Self::F32),
+            PrimitiveKind::F64 => Some(Self::F64),
+            PrimitiveKind::I32Signed
+            | PrimitiveKind::I32Unsigned
+            | PrimitiveKind::I64Signed
+            | PrimitiveKind::I64Unsigned => None,
+        }
+    }
+
+    fn wir_type(self) -> WirType {
+        match self {
+            Self::F32 => WirType::F32,
+            Self::F64 => WirType::F64,
+        }
+    }
+
+    /// The IEEE 754 comparison Wasm's instruction answers.
+    fn ieee(self, op: NirBinaryOp, left: WirInstr, right: WirInstr) -> WirInstr {
+        let (l, r) = (Box::new(left), Box::new(right));
+        match (self, op) {
+            (Self::F32, NirBinaryOp::Eq) => WirInstr::F32Eq(l, r),
+            (Self::F32, NirBinaryOp::NotEq) => WirInstr::F32Ne(l, r),
+            (Self::F32, NirBinaryOp::Lt) => WirInstr::F32Lt(l, r),
+            (Self::F32, NirBinaryOp::LtEq) => WirInstr::F32Le(l, r),
+            (Self::F32, NirBinaryOp::Gt) => WirInstr::F32Gt(l, r),
+            (Self::F32, NirBinaryOp::GtEq) => WirInstr::F32Ge(l, r),
+            (Self::F64, NirBinaryOp::Eq) => WirInstr::F64Eq(l, r),
+            (Self::F64, NirBinaryOp::NotEq) => WirInstr::F64Ne(l, r),
+            (Self::F64, NirBinaryOp::Lt) => WirInstr::F64Lt(l, r),
+            (Self::F64, NirBinaryOp::LtEq) => WirInstr::F64Le(l, r),
+            (Self::F64, NirBinaryOp::Gt) => WirInstr::F64Gt(l, r),
+            (Self::F64, NirBinaryOp::GtEq) => WirInstr::F64Ge(l, r),
+            (Self::F32 | Self::F64, not_comparison) => {
+                unreachable!("[WIR] `{not_comparison:?}` is not a comparison")
+            }
+        }
+    }
+}
+
+/// The comparison true exactly where `op` is false, for operands that are
+/// not NaNs.
+fn opposite(op: NirBinaryOp) -> NirBinaryOp {
+    match op {
+        NirBinaryOp::Eq => NirBinaryOp::NotEq,
+        NirBinaryOp::NotEq => NirBinaryOp::Eq,
+        NirBinaryOp::Lt => NirBinaryOp::GtEq,
+        NirBinaryOp::LtEq => NirBinaryOp::Gt,
+        NirBinaryOp::Gt => NirBinaryOp::LtEq,
+        NirBinaryOp::GtEq => NirBinaryOp::Lt,
+        not_comparison => unreachable!("[WIR] `{not_comparison:?}` is not a comparison"),
+    }
+}
+
+fn is_non_nan_const(instr: &WirInstr) -> bool {
+    matches!(instr, WirInstr::F32Const(v) if !v.is_nan())
+        || matches!(instr, WirInstr::F64Const(v) if !v.is_nan())
+}
+
+fn eqz(instr: WirInstr) -> WirInstr {
+    WirInstr::I32Eqz(Box::new(instr))
+}
+
+fn with_prelude(mut prelude: Vec<WirInstr>, value: WirInstr) -> WirInstr {
+    if prelude.is_empty() {
+        return value;
+    }
+    prelude.push(value);
+    WirInstr::Seq(prelude)
 }

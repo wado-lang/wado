@@ -4,6 +4,7 @@
 //! functions over [`Value`] and `PrimitiveType`, kept in a lower module so the
 //! value-graph builder can fold arithmetic without depending on `niri`.
 
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
@@ -816,24 +817,27 @@ pub(crate) fn eval_f32_binary(lval: f64, op: NirBinaryOp, rval: f64) -> Option<V
         NirBinaryOp::Sub => non_nan_float(f64::from(l - r), PrimitiveType::F32),
         NirBinaryOp::Mul => non_nan_float(f64::from(l * r), PrimitiveType::F32),
         NirBinaryOp::Div => non_nan_float(f64::from(l / r), PrimitiveType::F32),
-        NirBinaryOp::Eq => Some(Value::Bool(l == r)),
-        NirBinaryOp::NotEq => Some(Value::Bool(l != r)),
-        NirBinaryOp::Lt => Some(Value::Bool(l < r)),
-        NirBinaryOp::LtEq => Some(Value::Bool(l <= r)),
-        NirBinaryOp::Gt => Some(Value::Bool(l > r)),
-        NirBinaryOp::GtEq => Some(Value::Bool(l >= r)),
-        _ => None,
+        // Widening is exact, so f64's order is f32's.
+        _ => eval_float_comparison(f64::from(l), op, f64::from(r)),
     }
 }
 
+/// A comparison under the float order, where every NaN is one value greater
+/// than `+Inf` and `-0.0` equals `0.0`.
 pub(crate) fn eval_float_comparison(lval: f64, op: NirBinaryOp, rval: f64) -> Option<Value> {
+    let ordering = match (lval.is_nan(), rval.is_nan()) {
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+        (false, false) => lval.partial_cmp(&rval).expect("neither operand is a NaN"),
+    };
     match op {
-        NirBinaryOp::Eq => Some(Value::Bool(lval == rval)),
-        NirBinaryOp::NotEq => Some(Value::Bool(lval != rval)),
-        NirBinaryOp::Lt => Some(Value::Bool(lval < rval)),
-        NirBinaryOp::LtEq => Some(Value::Bool(lval <= rval)),
-        NirBinaryOp::Gt => Some(Value::Bool(lval > rval)),
-        NirBinaryOp::GtEq => Some(Value::Bool(lval >= rval)),
+        NirBinaryOp::Eq => Some(Value::Bool(ordering.is_eq())),
+        NirBinaryOp::NotEq => Some(Value::Bool(ordering.is_ne())),
+        NirBinaryOp::Lt => Some(Value::Bool(ordering.is_lt())),
+        NirBinaryOp::LtEq => Some(Value::Bool(ordering.is_le())),
+        NirBinaryOp::Gt => Some(Value::Bool(ordering.is_gt())),
+        NirBinaryOp::GtEq => Some(Value::Bool(ordering.is_ge())),
         _ => None,
     }
 }
