@@ -115,6 +115,14 @@ pub(crate) enum ImplTargetKey {
 }
 
 impl ImplTargetKey {
+    /// The declaration the key names, if it names one.
+    pub(crate) fn decl(&self) -> Option<DefId> {
+        match self {
+            ImplTargetKey::Decl(def) => Some(*def),
+            _ => None,
+        }
+    }
+
     /// The key for a declaration already identified. A builtin shape drops its
     /// declaration, as in [`name::FqTypeName::of_head`].
     pub(crate) fn of_decl(defs: &DefTable, def: DefId) -> Self {

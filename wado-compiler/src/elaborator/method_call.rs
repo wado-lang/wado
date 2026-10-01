@@ -69,7 +69,7 @@ fn nominal_receiver(type_table: &TypeTable, ty: TypeId) -> QualifiedReceiver {
     let (name, module_source) = type_table
         .nominal_head(ty)
         .expect("a nominal receiver names a declaration");
-    let type_args = type_table.nominal_type_args(ty).unwrap_or_default();
+    let type_args = type_table.declared_type_args(ty).unwrap_or_default();
     let args = type_args
         .iter()
         .map(|t| type_table.fq_type_name(*t))
@@ -1815,7 +1815,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
             let declaring_args = self
                 .tysys
-                .receiver_declaring_args(Some(target_type_id), &[])
+                .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
                 .unwrap_or_default();
             let declaring = sig
                 .declaring_impl
@@ -1841,7 +1841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|id| {
                 let args = self
                     .tysys
-                    .receiver_declaring_args(Some(target_type_id), &[])
+                    .receiver_args_at_impl(Some(target_type_id), &[], Some(id))
                     .unwrap_or_default();
                 let table = &self.tysys.type_table;
                 slot_type_bindings(table, table.borrow().impl_target_args(id), &args)
@@ -2092,6 +2092,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let subst_ctx = SubstitutionContext::new().bind(&method_params, &method_type_args);
             if !subst_ctx.is_empty() {
                 return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
+            }
+        }
+
+        // A static inherited through a newtype answers with the newtype, as an
+        // inherited instance method does: `Bag::<i32>::with_capacity` is a
+        // `Bag<i32>`, not the `List<i32>` its block was written against.
+        if self.tysys.type_table.borrow().is_newtype(target_type_id) {
+            let own = nominal_receiver(&self.tysys.type_table.borrow(), target_type_id).0;
+            if !self.declares_method_directly(&own, &static_call.method) {
+                let (base, _) = self.tysys.peeled_base(target_type_id);
+                return_type =
+                    self.tysys
+                        .substitute_newtype_in_type(return_type, base, target_type_id);
             }
         }
 
@@ -2894,7 +2907,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut survey = StaticArgSurvey::default();
         let receiver_args = self
             .tysys
-            .receiver_declaring_args(recv.ty, recv.args)
+            .receiver_declaring_args(recv.ty, recv.args, recv.key.and_then(ImplTargetKey::decl))
             .unwrap_or_default();
         for impl_def in self.trait_impls_for_receiver(recv.name, recv.key, &receiver_args) {
             let Some(trait_decl) = self.tysys.signatures.impl_trait(impl_def) else {
