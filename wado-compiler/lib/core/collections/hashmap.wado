@@ -44,20 +44,30 @@ impl HashSeed {
     }
 }
 
-/// Folds each word into the state with one multiply. A word's bits reach only
-/// the bits above them, so `finish` reads the top of a final multiply.
+/// The 128-bit product of `a` and `b` with its halves folded together, so every
+/// bit of either reaches every bit of the result.
+fn folded_multiply(a: u64, b: u64) -> u64 {
+    let [lo, hi] = builtin::i64_mul_wide_u(a as i64, b as i64);
+    return (lo ^ hi) as u64;
+}
+
+/// Folds each word into the state by a folded multiply with a seeded key. A
+/// plain multiply carries a difference only upward, so the next word could
+/// cancel one in the top bit whatever the seed.
 struct SeededHasher {
     state: u64,
+    /// Odd, so never zero, which would erase every word.
+    key: u64,
 }
 
 impl Hasher for SeededHasher {
     fn write_u64(&mut self, x: u64) {
-        self.state = (self.state ^ x) * MUL;
+        self.state = folded_multiply(self.state ^ x, self.key);
     }
 
     fn write_bytes(&mut self, bytes: ByteSlice) {
         let len = bytes.len();
-        let mut s = (self.state ^ len as u64) * MUL;
+        let mut s = folded_multiply(self.state ^ len as u64, self.key);
         let mut i = 0;
         while i + 8 <= len {
             let w = bytes.get_unchecked(i) as u64 | bytes.get_unchecked(i + 1) as u64 << 8 | bytes.get_unchecked(i + 2) as u64 << 16 | bytes.get_unchecked(
@@ -65,7 +75,7 @@ impl Hasher for SeededHasher {
             ) as u64 << 24 | bytes.get_unchecked(i + 4) as u64 << 32 | bytes.get_unchecked(i + 5) as u64 << 40 | bytes.get_unchecked(
                 i + 6,
             ) as u64 << 48 | bytes.get_unchecked(i + 7) as u64 << 56;
-            s = (s ^ w) * MUL;
+            s = folded_multiply(s ^ w, self.key);
             i += 8;
         }
         if i < len {
@@ -73,7 +83,7 @@ impl Hasher for SeededHasher {
             for let mut j = len - 1; j >= i; j -= 1 {
                 w = w << 8 | bytes.get_unchecked(j) as u64;
             }
-            s = (s ^ w) * MUL;
+            s = folded_multiply(s ^ w, self.key);
         }
         self.state = s;
     }
@@ -118,9 +128,9 @@ impl<K: Hash, V> HashMap<K, V> {
     }
 
     fn fingerprint<Q: Hash>(&self, key: &Q) -> i32 {
-        let mut h = SeededHasher { state: self.seed.k0 };
+        let mut h = SeededHasher { state: self.seed.k0, key: self.seed.k1 ^ MUL | 1 };
         key.hash(&mut h);
-        return ((h.state ^ self.seed.k1) * FINISH >> 32) as i32;
+        return (folded_multiply(h.state, FINISH) >> 32) as i32;
     }
 
     fn home(&self, fp: i32) -> i32 {
@@ -458,5 +468,19 @@ impl<T: Hash> IntoIterator for HashSet<T> {
 
     fn into_iter(&self) -> MapKeysValueIter<T, ()> {
         return self.iter_value();
+    }
+}
+
+test "a difference in one word survives the next, whatever the seed" {
+    let top: u64 = 1 << 63;
+    let a: [u64, u64] = [7, 9];
+    let b: [u64, u64] = [7 ^ top, 9 ^ top];
+    let c: List<u64> = [1, 2, 3];
+    let d: List<u64> = [1 ^ top, 2 ^ top, 3];
+    for let seed of [HashSeed::fixed(1, 2), HashSeed::fixed(12345, 67890)] as List<HashSeed> {
+        let pairs = HashMap::<[u64, u64], i32>::new(seed);
+        assert pairs.fingerprint(&a) != pairs.fingerprint(&b);
+        let lists = HashMap::<List<u64>, i32>::new(seed);
+        assert lists.fingerprint(&c) != lists.fingerprint(&d);
     }
 }
