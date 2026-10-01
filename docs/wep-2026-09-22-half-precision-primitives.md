@@ -255,11 +255,7 @@ page from different modules, and nothing carries a trait's visibility across
 that boundary.
 
 A comparison widens both operands and calls, where `f32`'s is one instruction.
-Both could be answered from the bits instead. Equal bits are equal values
-except for a NaN, and different bits are different values except for the two
-zeroes, which is all `Eq` needs. `Ord` would take the sign-magnitude key
-`f32`'s own uses, computed on sixteen bits. Nothing measured has asked for
-either.
+Nothing measured has asked for a faster one.
 
 A half precision tensor cannot be part of a component's public API, so a Loam
 module that exports one has to widen it or hand out its bytes.

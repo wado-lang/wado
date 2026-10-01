@@ -103,8 +103,8 @@ test rather than as a sort that panics in production, as Rust 1.81's did.
 
 The rule reads `Eq<Self>` only. An `Eq<Rhs>` for another type, such as
 `StrSlice == String`, has no `Ord` beside it to agree with, and nothing ties it
-to the type's own `==`. Only an explicit `==` reads it: `sort`, `TreeMap` and
-`contains` read `Eq<Self>` and `Ord`.
+to the type's own `==`. Only `==` and a string literal pattern read it: `sort`,
+`TreeMap` and `contains` read `Eq<Self>` and `Ord`.
 
 `AsStrSlice` gets no exception, though it requires `Eq<String>`. A type whose `Eq<String>` is not byte equality, such as
 a case-insensitive string, answers `x == s` one way while `contains_str(x)` and
@@ -166,8 +166,8 @@ So the two meanings take two names. `min` and `max` follow the order everywhere,
 on a float as through `Iterator` or a `T: Ord` bound, so one name means one
 thing. `minimum` and `maximum` keep IEEE's own names and IEEE's meaning, and
 lower to Wasm's instructions; Rust's `f64::minimum` uses the same names.
-`f64::min` therefore costs a comparison and a select instead of one
-instruction.
+`f64::min` therefore costs what a `<` between two variables costs (see
+[Cost](#cost)) and a select, instead of one instruction.
 
 Of two `Equal` arguments, `min` returns the first and `max` the second, as
 Stepanov argued and Rust's `Ord::min` and `max` do. `Iterator::min` and `max`
@@ -267,12 +267,14 @@ Where the optimizer proves an operand is not a NaN, the test goes.
 - [ ] Measure the cost on comparison-heavy code, sorting and Loam's kernels
   among it, and record it here.
 - [ ] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
-  whose `Eq` is written and whose `cmp` is not. Each with a fixture.
+  whose `Eq` is written and whose `cmp` is not, a marker included. Each with a
+  fixture.
 - [ ] In the `test` world, check every call to a written `eq` or `cmp` against
   the other, with a fixture whose disagreeing pair traps.
 - [ ] Make `f32::min`, `f64::min` and their `max` follow the order, add
   `minimum` and `maximum` on the Wasm instructions, and make `clamp` keep a NaN
-  `x`. Each with a fixture.
+  `x` and trap on a NaN bound. `low <= high` holds for a NaN `high` under the
+  order, so its check no longer catches one. Each with a fixture.
 - [ ] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
 - [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a

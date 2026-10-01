@@ -56,9 +56,8 @@ arithmetic:
   write instead.
 - A numeric literal coerces to either type and is rounded once (see
   [Floating-Point Literals](./spec-literals.md#floating-point-literals)).
-- A comparison widens both operands to `f32` and compares those, so `<` is
-  IEEE and `Ord` is the total order (see
-  [Ord](./spec-standard-traits.md#ord---ordering)).
+- A comparison answers as it would on both operands widened to `f32` (see
+  [Float Comparison](./spec-standard-traits.md#float-comparison)).
 - Neither type crosses a component boundary (see
   [Type Mapping](./spec-components.md#type-mapping-at-component-boundaries)).
 

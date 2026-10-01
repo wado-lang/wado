@@ -1030,6 +1030,10 @@ too. Only `Eq<Self>` counts here; an `Eq<Rhs>` for another type has no `Ord` to
 agree with. [Ord - Ordering](./spec-standard-traits.md#ord---ordering) says what
 holds when both are written.
 
+A [marker](#compiler-synthesized-impl) asks for the impl this rule gives. So
+`impl Eq for T;` beside a written `cmp` takes `Eq` from `cmp`, and
+`impl Ord for T;` beside a written `eq` is an error.
+
 > Not yet implemented: a written `Ord` beside no written `Eq` derives `Eq` from
 > the members, and a written `Eq` does not stop `Ord` from deriving.
 

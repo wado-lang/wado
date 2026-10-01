@@ -242,7 +242,7 @@ decision and its reasons are in
 - [Rust forum: Traits in `std::cmp` and mathematical terminology](https://users.rust-lang.org/t/traits-in-std-cmp-and-mathematical-terminology/69887)
 - [Rust internals: fast finite floating-point types](https://internals.rust-lang.org/t/avoiding-partialord-problems-by-introducing-fast-finite-floating-point-types/5376)
 - [RFC 3514: float semantics](https://rust-lang.github.io/rfcs/3514-float-semantics.html)
-- [Rust 1.81 release notes: the new sorts](https://git.dreamy.place/mirrors/rust/plain/RELEASES.md?h=1.81.0)
+- [Rust 1.81 release notes: the new sorts](https://github.com/rust-lang/rust/blob/master/RELEASES.md#version-1810-2024-09-05)
 - [`ordered-float`: `OrderedFloat`](https://docs.rs/ordered-float/latest/ordered_float/struct.OrderedFloat.html)
 - [swift-evolution: Comparison Reform pitch](https://lists.swift.org/pipermail/swift-evolution/Week-of-Mon-20170410/035676.html)
 - [swift-evolution: Abrahams and Wu on the context split](https://lists.swift.org/pipermail/swift-evolution/Week-of-Mon-20170417/036054.html)

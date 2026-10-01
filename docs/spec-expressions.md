@@ -620,8 +620,9 @@ Rationale: [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md).
 
 The `self_comparison` lint warns about a comparison whose two operands are the
 same expression, where evaluating that expression performs no effect. Such a
-comparison has one answer on every type, because equality and the order are
-reflexive ([Ord - Ordering](./spec-standard-traits.md#ord---ordering)):
+comparison has one answer on every type, because the laws of
+[`Eq`](./spec-standard-traits.md#eq---equality) and
+[`Ord`](./spec-standard-traits.md#ord---ordering) make both reflexive:
 `x == x`, `x <= x` and `x >= x` are true, and `x != x`, `x < x` and `x > x` are
 false. In a chain, each adjacent pair is one comparison.
 
