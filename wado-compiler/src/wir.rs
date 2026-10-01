@@ -904,7 +904,8 @@ impl WirFunction {
     }
 }
 
-/// A function's declared locals, keyed by name in declaration order.
+/// A function's declared locals, keyed by name: in declaration order when
+/// scanned, in emission order once `finalize_locals` lays them out.
 ///
 /// A local's declared type is the optimizer's authority on whether a `local.get`
 /// yields a non-null reference: the read site's own `result_ty` can read nullable
@@ -937,9 +938,17 @@ impl WirLocals {
         self.types.get(name).is_some_and(WirType::is_nonnull_ref)
     }
 
-    /// Declared locals, `(name, type)`, in declaration order.
+    /// Declared locals, `(name, type)`, in table order.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &WirType)> {
         self.types.iter().map(|(name, ty)| (name.as_str(), ty))
+    }
+}
+
+impl FromIterator<(String, WirType)> for WirLocals {
+    fn from_iter<I: IntoIterator<Item = (String, WirType)>>(iter: I) -> Self {
+        Self {
+            types: iter.into_iter().collect(),
+        }
     }
 }
 

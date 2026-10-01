@@ -759,24 +759,21 @@ impl<'a> WirEmitter<'a> {
             .get_func_type(func.type_id.index())
             .is_some_and(|ft| !ft.results.is_empty());
 
-        // Pre-allocate parameter locals
-        for (i, name) in func.param_names.iter().enumerate() {
-            let idx: u32 = u32::try_from(i).unwrap();
-            self.current_locals.insert(name.clone(), idx);
-            // Also register $local_N alias for params, since TIR uses unified local indices
-            self.current_locals.insert(format!("$local_{i}"), idx);
-            self.next_local = idx + 1;
-        }
-
-        let mut locals: Vec<(u32, ValType)> = Vec::new();
-        for (name, ty) in func.locals.iter() {
-            let idx = self.next_local;
+        for name in &func.param_names {
+            self.current_locals.insert(name.clone(), self.next_local);
             self.next_local += 1;
-            self.current_locals.insert(name.to_string(), idx);
-            locals.push((1, self.wir_type_to_val_type(ty)));
         }
 
-        let mut f = Function::new(locals);
+        let mut local_types: Vec<ValType> = Vec::new();
+        for (name, ty) in func.locals.iter() {
+            self.current_locals
+                .insert(name.to_string(), self.next_local);
+            self.next_local += 1;
+            local_types.push(self.wir_type_to_val_type(ty));
+        }
+
+        // Runs of one type share a declaration entry.
+        let mut f = Function::new_with_locals_types(local_types);
 
         // Emit body
         if let Some(ref body) = func.body {
