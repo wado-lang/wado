@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790861332882,
+  "lastUpdate": 1790868559378,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62581,6 +62581,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0048807567127ede07b3eaacdde5e24ce01790d4"
         },
         "date": 1790861332088,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6319,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20682,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281108,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "051329fb9a4fff97bcda57401a42d718f02bbee6",
+          "message": "Merge pull request #2239 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat!: numeric casts follow Rust's `as`",
+          "timestamp": "2026-10-02T00:00:44+09:00",
+          "tree_id": "50f3f3a093d62540de5af713459a9cfb34a8a8de",
+          "url": "https://github.com/wado-lang/wado/commit/051329fb9a4fff97bcda57401a42d718f02bbee6"
+        },
+        "date": 1790868558738,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
