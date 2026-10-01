@@ -273,8 +273,8 @@ Where the optimizer proves an operand is not a NaN, the test goes.
   the other, with a fixture whose disagreeing pair traps.
 - [ ] Make `f32::min`, `f64::min` and their `max` follow the order, add
   `minimum` and `maximum` on the Wasm instructions, and make `clamp` keep a NaN
-  `x` and trap on a NaN bound. `low <= high` holds for a NaN `high` under the
-  order, so its check no longer catches one. Each with a fixture.
+  `x` and trap on a NaN bound, `high` included, which `low <= high` passes.
+  Each with a fixture.
 - [ ] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
 - [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a

@@ -339,8 +339,8 @@ The `==` and `!=` operators use `Eq::eq`:
 - `a != b` desugars to `!Eq::eq(&a, &b)`
 
 `Eq<Self>` is an equivalence: `a == a` holds, `a == b` is `b == a`, and `a == b`
-with `b == c` gives `a == c`. A derived impl holds this by construction. Nothing
-checks a written one.
+with `b == c` gives `a == c`. A derived impl holds this when its members' impls
+do. Nothing checks a written one.
 
 `==` can span two types. The right operand picks among a type's `Eq<Rhs>` impls
 exactly as it picks among its `Add<Rhs>` impls, so `StrSlice` and `String`
