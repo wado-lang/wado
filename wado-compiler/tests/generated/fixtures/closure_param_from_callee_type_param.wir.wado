@@ -306,35 +306,15 @@ fn "closure_param_from_callee_type_param.wado/$test_1_fold_infers_an_accumulator
     elements = array.new_fixed<i32>(1, 2, 3);
     $sroa_self_index_38 = 0;
     init = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-<<<<<<< HEAD
-    $v0 = struct.new "canonical//CanonicalClosure_2" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_1" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_1" };
-||||||| fb1156989
-    $v0 = struct.new "canonical//CanonicalClosure_2" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_1" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_1" };
-    acc = init;
-=======
     $v0 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_1" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_1" };
-    acc = init;
->>>>>>> origin/main
     b0: block {
         l1: loop {
             break_if b0 $sroa_self_index_38 >= 3;
             item_18 = builtin::array_get_value<i32>(elements, $sroa_self_index_38);
             $sroa_self_index_38 = $sroa_self_index_38 + 1;
-<<<<<<< HEAD
             init = block -> ref "core:prelude/string.wado//String" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($v0)).env, init, item_18);
-||||||| fb1156989
-            acc = block -> ref "core:prelude/string.wado//String" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_2"($v0);
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
-=======
-            acc = block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_1"($v0);
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
->>>>>>> origin/main
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v0)).env, init, item_18);
             };
             continue l1;
         };
@@ -374,22 +354,10 @@ condition: arr.into_iter().fold(\"\", |acc, x| `${acc}${x}`) == \"123\"
 "), used: 69 }, 69);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, item_18 + 69, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|acc, x| `${acc}${x}`: "), used: 23 }, 23);
         $local_5_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
-<<<<<<< HEAD
-        "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>" { value: $v0 }, $local_5_5);
+        "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String>" { value: $v0 }, $local_5_5);
         item_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 50);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, item_18, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, item_18 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr.into_iter().fold(\"\", |acc, x| `${acc}${x}`): "), used: 49 }, 49);
-||||||| fb1156989
-        "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>" { value: $v0 }, $local_5_5);
-        $fuse_at_8 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 50);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_8, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_8 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr.into_iter().fold(\"\", |acc, x| `${acc}${x}`): "), used: 49 }, 49);
-=======
-        "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String>" { value: $v0 }, $local_5_5);
-        $fuse_at_8 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 50);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_8, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_8 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr.into_iter().fold(\"\", |acc, x| `${acc}${x}`): "), used: 49 }, 49);
->>>>>>> origin/main
         $local_5_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
         "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(init, $local_5_5);
         init = global:closure_param_from_callee_type_param.wado::$const_obj_1;
@@ -417,18 +385,8 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_0_fold_infers_it
             item_18 = builtin::array_get_value<i32>(elements, $sroa_self_index_28);
             $sroa_self_index_28 = $sroa_self_index_28 + 1;
             acc = block -> i32 {
-<<<<<<< HEAD
-                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v0)).env, acc, item_18);
-||||||| fb1156989
-                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_1"($v0);
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
-=======
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"($v0);
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
->>>>>>> origin/main
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0)).env, acc, item_18);
             };
             continue l9;
         };
@@ -487,18 +445,8 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_2_a_literal_seed
             item_18 = builtin::array_get_value<i64>(elements, $sroa_self_index_28);
             $sroa_self_index_28 = $sroa_self_index_28 + 1;
             acc = block -> i64 {
-<<<<<<< HEAD
-                let $indirect_call_1: ref "canonical//CanonicalClosure_3";
-                call_ref "functype/$canonical_closure_fn_3"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_3"($v0)).env, acc, item_18);
-||||||| fb1156989
-                let $indirect_call_1: ref "canonical//CanonicalClosure_3";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_3"($v0);
-                call_ref "functype/$canonical_closure_fn_3"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
-=======
                 let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_2"($v0);
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
->>>>>>> origin/main
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($v0)).env, acc, item_18);
             };
             continue l13;
         };
@@ -540,35 +488,11 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_3_an_own_type_pa
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
-<<<<<<< HEAD
-    $v1 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_3" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_3", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_3" };
-    if @unlikely(local.tee $v2(block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v1)).env, 10, 2);
-    }) != 12) {
-||||||| fb1156989
-    let $fuse_at_7: i32;
-    let $fuse_at_8: i32;
-    let $fuse_at_9: i32;
-    $v1 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_3" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_3", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_3" };
-    $v2 = block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_1"($v1);
-        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, $indirect_call_1.env, 10, 2);
-    };
-    if @unlikely($v2 != 12) {
-=======
-    let $fuse_at_7: i32;
-    let $fuse_at_8: i32;
-    let $fuse_at_9: i32;
     $v1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_3" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_3", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_3" };
-    $v2 = block -> i32 {
+    if @unlikely(local.tee $v2(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"($v1);
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, 10, 2);
-    };
-    if @unlikely($v2 != 12) {
->>>>>>> origin/main
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v1)).env, 10, 2);
+    }) != 12) {
         cold_path;
         $fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_4("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(214)), 120);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -610,35 +534,11 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_4_an_own_type_pa
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
-<<<<<<< HEAD
-    $v1 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_4" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_4", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_4" };
-    if @unlikely(local.tee $v2(block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v1)).env, 10, 2);
-    }) != 12) {
-||||||| fb1156989
-    let $fuse_at_7: i32;
-    let $fuse_at_8: i32;
-    let $fuse_at_9: i32;
-    $v1 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_4" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_4", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_4" };
-    $v2 = block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_1"($v1);
-        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, $indirect_call_1.env, 10, 2);
-    };
-    if @unlikely($v2 != 12) {
-=======
-    let $fuse_at_7: i32;
-    let $fuse_at_8: i32;
-    let $fuse_at_9: i32;
     $v1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_4" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_4", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_4" };
-    $v2 = block -> i32 {
+    if @unlikely(local.tee $v2(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"($v1);
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, 10, 2);
-    };
-    if @unlikely($v2 != 12) {
->>>>>>> origin/main
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v1)).env, 10, 2);
+    }) != 12) {
         cold_path;
         $fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_4("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(210)), 117);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -700,18 +600,8 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_7_the_body_may_i
             item_18 = builtin::array_get_value<i32>(elements, $sroa_self_index_28);
             $sroa_self_index_28 = $sroa_self_index_28 + 1;
             acc = block -> i32 {
-<<<<<<< HEAD
-                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v0)).env, acc, item_18);
-||||||| fb1156989
-                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_1"($v0);
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
-=======
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"($v0);
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
->>>>>>> origin/main
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0)).env, acc, item_18);
             };
             continue l21;
         };
@@ -753,35 +643,11 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_8_an_own_type_pa
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
-<<<<<<< HEAD
-    $v1 = struct.new "canonical//CanonicalClosure_4" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_8" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_6", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_6" };
-    if @unlikely(local.tee $v2(block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_4";
-        call_ref "functype/$canonical_closure_fn_4"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_4"($v1)).env, 2);
-    }) != 6) {
-||||||| fb1156989
-    let $fuse_at_7: i32;
-    let $fuse_at_8: i32;
-    let $fuse_at_9: i32;
-    $v1 = struct.new "canonical//CanonicalClosure_4" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_8" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_6", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_6" };
-    $v2 = block -> i32 {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_4";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_4"($v1);
-        call_ref "functype/$canonical_closure_fn_4"($indirect_call_1.func, $indirect_call_1.env, 2);
-    };
-    if @unlikely($v2 != 6) {
-=======
-    let $fuse_at_7: i32;
-    let $fuse_at_8: i32;
-    let $fuse_at_9: i32;
     $v1 = struct.new "canonical//CanonicalClosure_3" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_8" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_6", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_6" };
-    $v2 = block -> i32 {
+    if @unlikely(local.tee $v2(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_3";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_3"($v1);
-        call_ref "functype/$canonical_closure_fn_3"($indirect_call_1.func, $indirect_call_1.env, 2);
-    };
-    if @unlikely($v2 != 6) {
->>>>>>> origin/main
+        call_ref "functype/$canonical_closure_fn_3"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_3"($v1)).env, 2);
+    }) != 6) {
         cold_path;
         $fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_4("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(188)), 116);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -824,24 +690,10 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_9_the_same_rule_
     let seed: ref "core:prelude/string.wado//String";
     let i: i32;
     seed = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-<<<<<<< HEAD
-    $v0 = struct.new "canonical//CanonicalClosure_2" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_9" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_7", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_7" };
-    seed = block -> ref "core:prelude/string.wado//String" {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-        call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($v0)).env, seed, 1);
-||||||| fb1156989
-    $v0 = struct.new "canonical//CanonicalClosure_2" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_9" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_7", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_7" };
-    v = block -> ref "core:prelude/string.wado//String" {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_2"($v0);
-        call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, $indirect_call_1.env, seed, 1);
-=======
     $v0 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "closure_param_from_callee_type_param.wado//$Closure_9" {  }, inspect: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_inspect_wrapper_7", func: ref.func "closure/closure_param_from_callee_type_param.wado/$closure_wrapper_7" };
-    v = block -> ref "core:prelude/string.wado//String" {
+    seed = block -> ref "core:prelude/string.wado//String" {
         let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-        $indirect_call_1 = ref.cast "canonical//CanonicalClosure_1"($v0);
-        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, $indirect_call_1.env, seed, 1);
->>>>>>> origin/main
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v0)).env, seed, 1);
     };
     let $array_clone_src_2: ref Array<u8>;
     $array_clone_src_2 = seed.repr;
@@ -879,10 +731,9 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_9_the_same_rule_
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(seed.repr, i, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: apply_seeded(\"\", |acc, x| `${acc}${x}`) == \"1\"
 "), used: 59 }, 59);
-<<<<<<< HEAD
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(seed.repr, i + 59, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|acc, x| `${acc}${x}`: "), used: 23 }, 23);
         $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(seed);
-        "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>" { value: $v0 }, $local_4);
+        "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String>" { value: $v0 }, $local_4);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(seed, 42);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(seed.repr, i, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(seed.repr, i + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apply_seeded(\"\", |acc, x| `${acc}${x}`): "), used: 41 }, 41);
@@ -891,33 +742,6 @@ condition: apply_seeded(\"\", |acc, x| `${acc}${x}`) == \"1\"
         $array_clone_dst_3 = array.new_fixed<u8>(10);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(seed, $array_clone_dst_3, 1);
         "core:rt/panic"(seed.repr, seed.used);
-||||||| fb1156989
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_6 + 59, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|acc, x| `${acc}${x}`: "), used: 23 }, 23);
-        $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
-        "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>" { value: $v0 }, $local_4);
-        $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 42);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_7 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apply_seeded(\"\", |acc, x| `${acc}${x}`): "), used: 41 }, 41);
-        $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
-        "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_3, used: $sroa_$v1_used_22 }, $local_4);
-        let $mv_field_7: ref Array<u8>;
-        $mv_field_7 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_7, 1);
-        "core:rt/panic"($local_3.repr, $local_3.used);
-=======
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_6 + 59, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|acc, x| `${acc}${x}`: "), used: 23 }, 23);
-        $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
-        "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String>" { value: $v0 }, $local_4);
-        $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 42);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_7 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apply_seeded(\"\", |acc, x| `${acc}${x}`): "), used: 41 }, 41);
-        $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
-        "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_3, used: $sroa_$v1_used_22 }, $local_4);
-        let $mv_field_7: ref Array<u8>;
-        $mv_field_7 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_7, 1);
-        "core:rt/panic"($local_3.repr, $local_3.used);
->>>>>>> origin/main
         unreachable;
     }
     "wasi/task-return"(0);
@@ -941,18 +765,8 @@ fn "closure_param_from_callee_type_param.wado/$cm_export__$test_10_an_explicit_a
             item_18 = builtin::array_get_value<i64>(elements, $sroa_self_index_28);
             $sroa_self_index_28 = $sroa_self_index_28 + 1;
             acc = block -> i64 {
-<<<<<<< HEAD
-                let $indirect_call_1: ref "canonical//CanonicalClosure_3";
-                call_ref "functype/$canonical_closure_fn_3"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_3"($v0)).env, acc, item_18);
-||||||| fb1156989
-                let $indirect_call_1: ref "canonical//CanonicalClosure_3";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_3"($v0);
-                call_ref "functype/$canonical_closure_fn_3"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
-=======
                 let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_2"($v0);
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, $indirect_call_1.env, acc, item_18);
->>>>>>> origin/main
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($v0)).env, acc, item_18);
             };
             continue l33;
         };
@@ -1518,54 +1332,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<c
     return;
 }
 
-<<<<<<< HEAD
-fn "closure_param_from_callee_type_param.wado/fn(i32,i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
-}
-
-fn "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
-}
-
-fn "closure_param_from_callee_type_param.wado/fn(i64,i64)->i64^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
-}
-
-fn "closure_param_from_callee_type_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
-}
-
-||||||| fb1156989
-fn "closure_param_from_callee_type_param.wado/fn(i32,i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
-fn "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
-fn "closure_param_from_callee_type_param.wado/fn(i64,i64)->i64^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
-fn "closure_param_from_callee_type_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
-}
-
-=======
->>>>>>> origin/main
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
     return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
 }
@@ -1994,26 +1760,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 
 fn "closure_param_from_callee_type_param.wado/fn(i32,i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
 fn "closure_param_from_callee_type_param.wado/fn(core:prelude/string.wado/String,i32)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
 fn "closure_param_from_callee_type_param.wado/fn(i64,i64)->i64^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
 fn "closure_param_from_callee_type_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $typed_self: ref "canonical//CanonicalInspectableBase";
-    $typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
-    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, $typed_self.env, f);
+    call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
 fn "closure_param_from_callee_type_param.wado/closure_param_from_callee_type_param.wado/$Closure_0::$call"(acc, x) {
