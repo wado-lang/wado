@@ -55,11 +55,28 @@ it is positive. An order that reads a NaN's bits, as IEEE 754 `totalOrder` and
 C++20's `std::strong_order` do, sorts the same program's NaNs differently on two
 machines.
 
+### What the compiler answers before this WEP
+
+Measured on x86_64 with `wado run`, at `-O0` and `-O2` alike:
+
+- `Ord` on a float is bit-level `totalOrder`. `0.0 / 0.0` is a negative NaN on
+  x86_64, so `[1.0, 0.0 / 0.0, -1.0].sort()` gives `[NaN, -1, 1]`. On AArch64
+  the same NaN is positive and sorts last.
+- For `struct P { x: f64 }`, the derived `==` and `cmp` disagree on a NaN and on
+  the two zeroes.
+- `f64::max(1.0, NaN)` is NaN, as Wasm's `f64.max` is, while
+  `[1.0, 0.0 / 0.0].max()` on an iterator is `1.0`, because the negative NaN
+  sorts least.
+- `a < b` in a body generic over `T: Ord` reads `cmp`, and the same expression
+  at `f32` is IEEE.
+- `[NaN].contains(&NaN)` is false, since `List::contains` reads `==`, while a
+  `TreeMap<f64, V>` reads `cmp` and finds a NaN key.
+
 ## Decision
 
 ### One equality and one order
 
-Every type has one equality and one order, and the operators read them:
+A type has at most one equality and one order, and the operators read them:
 
 - `==` and `!=` read `Eq::eq`.
 - `<`, `<=`, `>` and `>=` read `Ord::cmp`.

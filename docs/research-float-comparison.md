@@ -2,8 +2,8 @@
 
 Wado has decided one thing about comparing floats: it will not copy Rust's
 `PartialEq` / `PartialOrd` split. This survey collects what Rust's users say
-Rust should have done instead, sets it beside the answers other languages chose,
-and measures where Wado stands today. It feeds
+Rust should have done instead, and sets it beside the answers other languages
+chose. It feeds
 [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 
 ## Rust's design
@@ -103,8 +103,9 @@ ordering". The two orders have to live side by side, not one inside the other.
 
 IEEE 754-2019 removed `minNum` and `maxNum`, because they are not associative,
 and added `minimum` / `maximum`, which propagate a NaN and order `-0 < +0`.
-Rust's `f64::max` is still `maxNum`, its `maximum` is not stable, and `Ord::max`
-would be a third meaning had floats been `Ord`.
+Rust's `f64::max` ignores a NaN argument, as `maxNum` and 2019's
+`maximumNumber` do, and may return either zero. Its `maximum` is not stable, and
+`Ord::max` would be a third meaning had floats been `Ord`.
 
 ## Other languages
 
@@ -134,37 +135,8 @@ is part of why Go added `clear`.
 
 ## Wado today
 
-Measured on x86_64 with `wado run`, at `-O0` and `-O2` alike.
-
-### A NaN's place in a sort depends on the host CPU
-
-`Ord` on a float is bit-level `totalOrder`. On x86_64, `0.0 / 0.0` yields
-`0xfff8000000000000`, a negative NaN, so `[1.0, 0.0 / 0.0, -1.0].sort()` gives
-`[NaN, -1, 1]`. On AArch64 the same division yields a positive NaN, which sorts
-last. The program prints `NaN` either way, so the reader cannot see why.
-
-### Derived `==` and derived `cmp` disagree
-
-For `struct P { x: f64 }`, `P { x: NaN } == P { x: NaN }` is false while `cmp`
-answers `Equal`. `P { x: 0.0 } == P { x: -0.0 }` is true while `cmp` answers
-`Greater`. `Ord: Eq` reads as a promise that the two agree.
-
-### `max` means two things
-
-`f64::max(1.0, NaN)` is NaN, as Wasm's `f64.max` is. `[1.0, 0.0 / 0.0].max()` on
-an iterator is `1.0` on x86_64, because the negative NaN sorts least.
-
-### A generic `<` and a concrete `<` disagree
-
-The WEP records this: `a < b` in a body generic over `T: Ord` reads `cmp`, and
-the same expression at `f32` is IEEE. This is the context split Swift declined
-and Kotlin documents as a caveat.
-
-### `contains` and a `TreeMap` disagree
-
-`[NaN].contains(&NaN)` is false, because `List::contains` reads `==`. A
-`TreeMap<f64, V>` reads `cmp`, so a NaN key is found. This matches Julia's split
-between `Array` and `Set`, but no rule in the specification says so.
+What the compiler answered when this research was done is recorded in
+[WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md#what-the-compiler-answers-before-this-wep).
 
 ## What the voices ask for
 

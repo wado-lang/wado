@@ -475,7 +475,7 @@ Every sort is stable and O(n log n) in the worst case:
 | `sorted()`    | No       | `Ord::cmp` (requires `T: Ord`)      |
 | `sorted_by()` | No       | Custom `fn mut(&T, &T) -> Ordering` |
 
-A sorted list of floats puts every NaN last. See
+`sort()` and `sorted()` put every NaN in a list of floats last. See
 [Float Comparison](./spec-standard-traits.md#float-comparison).
 
 <!-- {"fixture":"spec_literals_lists.wado"} -->
