@@ -36,8 +36,8 @@ test {
 // 2. A dense array (entries) for O(1) insertion-order iteration
 //
 // Both the tree nodes and the entries array are owned by the `TreeMap`
-// directly — tree pointers (`root`, `left`, `right`) are `Option<i32>`
-// indices into `nodes`, not `&mut` references. This keeps the entire
+// directly — tree pointers (`root`, `left`, `right`) are `i32` indices
+// into `nodes`, not `&mut` references. This keeps the entire
 // data structure value-semantic: a single Wado `let b = a;` produces a
 // fully independent copy via the synthesized `$value_copy$TreeMap` —
 // every shared `&mut` would be aliased on copy, which would break the
@@ -53,15 +53,19 @@ struct TreeMapEntry<K, V> {
     deleted: bool,
 }
 
-// A node in the tree. `left` / `right` are `Option<i32>` indices into
-// the parent `TreeMap`'s `nodes` array; `index` is into `entries`.
+// A node in the tree. `left` / `right` are indices into the parent
+// `TreeMap`'s `nodes` array, `NO_NODE` for none; `index` is into `entries`.
+// Not `Option<i32>`: that is a GC object, so every link written would
+// allocate one and every step of a lookup would read through one.
 struct TreeMapNode<K> {
     key: K,
     index: i32,
     level: i32,
-    left: Option<i32>,
-    right: Option<i32>,
+    left: i32,
+    right: i32,
 }
+
+global NO_NODE: i32 = -1;
 
 /// A map that iterates in insertion order.
 ///
@@ -72,7 +76,7 @@ struct TreeMapNode<K> {
 /// of a hash table for key lookups.
 #[compiler_item("tree_map")]
 pub struct TreeMap<K, V> {
-    root: Option<i32>,
+    root: i32,
     nodes: List<TreeMapNode<K>>,
     entries: List<TreeMapEntry<K, V>>,
     size: i32,
@@ -84,7 +88,7 @@ impl<K: Ord, V> TreeMap<K, V> {
     #[compiler_item("tree_map_new")]
     pub fn new() -> TreeMap<K, V> {
         return TreeMap {
-            root: null,
+            root: NO_NODE,
             nodes: [],
             entries: [],
             size: 0,
@@ -106,43 +110,38 @@ impl<K: Ord, V> TreeMap<K, V> {
     // Skew: right rotation to fix left horizontal link.
     // Reads through `self.nodes[...]` so rotations stay inside the
     // single owning array — see the module-level comment for why.
-    fn skew(&mut self, node: Option<i32>) -> Option<i32> {
-        if let Some(n_idx) = node {
-            if let Some(left_idx) = self.nodes[n_idx].left {
-                if self.nodes[left_idx].level == self.nodes[n_idx].level {
-                    self.nodes[n_idx].left = self.nodes[left_idx].right;
-                    self.nodes[left_idx].right = Option::Some(n_idx);
-                    return Option::Some(left_idx);
-                }
-            }
-            return Option::Some(n_idx);
+    fn skew(&mut self, n_idx: i32) -> i32 {
+        let left_idx = self.nodes[n_idx].left;
+        if left_idx != NO_NODE && self.nodes[left_idx].level == self.nodes[n_idx].level {
+            self.nodes[n_idx].left = self.nodes[left_idx].right;
+            self.nodes[left_idx].right = n_idx;
+            return left_idx;
         }
-        return null;
+        return n_idx;
     }
 
     // Split: left rotation to fix consecutive right horizontal links.
-    fn split(&mut self, node: Option<i32>) -> Option<i32> {
-        if let Some(n_idx) = node {
-            if let Some(right_idx) = self.nodes[n_idx].right {
-                if let Some(rr_idx) = self.nodes[right_idx].right {
-                    if self.nodes[rr_idx].level == self.nodes[n_idx].level {
-                        self.nodes[n_idx].right = self.nodes[right_idx].left;
-                        self.nodes[right_idx].left = Option::Some(n_idx);
-                        self.nodes[right_idx].level += 1;
-                        return Option::Some(right_idx);
-                    }
-                }
-            }
-            return Option::Some(n_idx);
+    fn split(&mut self, n_idx: i32) -> i32 {
+        // `insert_node` splits a node it descended into, after `skew`: a level-1
+        // node it went left of comes back rotated with the node as its right
+        // child, and a node above level 1 always has one.
+        let right_idx = self.nodes[n_idx].right;
+        assert right_idx != NO_NODE, "TreeMap::split: a node insert_node splits has a right child";
+        let rr_idx = self.nodes[right_idx].right;
+        if rr_idx != NO_NODE && self.nodes[rr_idx].level == self.nodes[n_idx].level {
+            self.nodes[n_idx].right = self.nodes[right_idx].left;
+            self.nodes[right_idx].left = n_idx;
+            self.nodes[right_idx].level += 1;
+            return right_idx;
         }
-        return null;
+        return n_idx;
     }
 
     // Find node in tree and return its `entries` index, or -1 if the
     // key is missing or its entry is tomb-stoned.
     fn find_index(&self, key: K) -> i32 {
-        let mut current = self.root;
-        while let Some(n_idx) = current {
+        let mut n_idx = self.root;
+        while n_idx != NO_NODE {
             let n = &self.nodes[n_idx];
             // `==` then `<` compares the keys twice at every node walked past.
             match key.cmp(&n.key) {
@@ -153,8 +152,8 @@ impl<K: Ord, V> TreeMap<K, V> {
                     }
                     return n.index;
                 },
-                Ordering::Less => current = n.left,
-                Ordering::Greater => current = n.right,
+                Ordering::Less => n_idx = n.left,
+                Ordering::Greater => n_idx = n.right,
             }
         }
         return -1;
@@ -163,38 +162,33 @@ impl<K: Ord, V> TreeMap<K, V> {
     // Recursive AA-tree insert. Returns the (possibly rotated) subtree
     // root index. Allocates a fresh entry in `self.nodes` when the key
     // is not yet present in the subtree.
-    fn insert_node(&mut self, node: Option<i32>, key: K, index: i32) -> Option<i32> {
-        if let Some(n_idx) = node {
-            match key.cmp(&self.nodes[n_idx].key) {
-                Ordering::Equal => {
-                    self.nodes[n_idx].index = index;
-                    return Option::Some(n_idx);
-                },
-                Ordering::Less => {
-                    let left = self.nodes[n_idx].left;
-                    let new_left = self.insert_node(left, key, index);
-                    self.nodes[n_idx].left = new_left;
-                },
-                Ordering::Greater => {
-                    let right = self.nodes[n_idx].right;
-                    let new_right = self.insert_node(right, key, index);
-                    self.nodes[n_idx].right = new_right;
-                },
-            }
-
-            let after_skew = self.skew(Option::Some(n_idx));
-            return self.split(after_skew);
+    fn insert_node(&mut self, n_idx: i32, key: K, index: i32) -> i32 {
+        if n_idx == NO_NODE {
+            let new_idx = self.nodes.len();
+            self.nodes.push(TreeMapNode {
+                key,
+                index,
+                level: 1,
+                left: NO_NODE,
+                right: NO_NODE,
+            });
+            return new_idx;
         }
-
-        let new_idx = self.nodes.len();
-        self.nodes.push(TreeMapNode {
-            key,
-            index,
-            level: 1,
-            left: null,
-            right: null,
-        });
-        return Option::Some(new_idx);
+        match key.cmp(&self.nodes[n_idx].key) {
+            Ordering::Equal => {
+                self.nodes[n_idx].index = index;
+                return n_idx;
+            },
+            Ordering::Less => {
+                let new_left = self.insert_node(self.nodes[n_idx].left, key, index);
+                self.nodes[n_idx].left = new_left;
+            },
+            Ordering::Greater => {
+                let new_right = self.insert_node(self.nodes[n_idx].right, key, index);
+                self.nodes[n_idx].right = new_right;
+            },
+        }
+        return self.split(self.skew(n_idx));
     }
 
     /// Appends `key` as a new entry; the caller has established it is absent.
@@ -300,7 +294,7 @@ impl<K: Ord, V> TreeMap<K, V> {
         // Rebuild tree with new indices. Both `nodes` and `entries`
         // get fresh empty arrays; `insert_node` repopulates `nodes`
         // as it inserts each key.
-        self.root = null;
+        self.root = NO_NODE;
         self.nodes = [];
         self.entries = new_entries;
         self.deleted_count = 0;
@@ -331,7 +325,7 @@ impl<K: Ord, V> TreeMap<K, V> {
 
     /// Removes all key-value pairs from the map.
     pub fn clear(&mut self) {
-        self.root = null;
+        self.root = NO_NODE;
         self.nodes = [];
         self.entries = [];
         self.size = 0;
@@ -357,8 +351,8 @@ impl<V> TreeMap<String, V> {
     }
 
     fn find_index_str(&self, key: StrSlice) -> i32 {
-        let mut current = self.root;
-        while let Some(n_idx) = current {
+        let mut n_idx = self.root;
+        while n_idx != NO_NODE {
             let n = &self.nodes[n_idx];
             match key.cmp_str(&n.key) {
                 Ordering::Equal => {
@@ -368,8 +362,8 @@ impl<V> TreeMap<String, V> {
                     }
                     return n.index;
                 },
-                Ordering::Less => current = n.left,
-                Ordering::Greater => current = n.right,
+                Ordering::Less => n_idx = n.left,
+                Ordering::Greater => n_idx = n.right,
             }
         }
         return -1;
