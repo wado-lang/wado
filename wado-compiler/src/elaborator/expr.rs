@@ -1942,7 +1942,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return false;
                 }
                 let class = key_class.get_or_init(|| this.synthesize_arg_class(&index.index, ctx));
-                this.index_key_type(class).is_some_and(|key| {
+                this.index_key_type(receiver, class).is_some_and(|key| {
                     this.receiver_waits(receiver, "index_value", index.span, |this, def| {
                         this.impl_takes_key(def, key)
                     })
@@ -2021,7 +2021,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the impl supplies) falls back to pre-selecting an impl for its
             // expected type.
             let key_class = key_class.get_or_init(|| self.synthesize_arg_class(&index.index, ctx));
-            let expected_key = self.index_key_type(key_class).or_else(|| {
+            let expected_key = self.index_key_type(expr_type, key_class).or_else(|| {
                 self.index_lookup_or_newtype_base(
                     &struct_name,
                     base_type_id,

@@ -1,0 +1,33 @@
+// A literal subscript takes the key type of the one index impl admitting it,
+// as a literal argument takes its parameter's type, not its own default.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+struct Halves {}
+
+impl IndexValue<f32> for Halves {
+    type Output = f32;
+
+    fn index_value(&self, index: f32) -> f32 {
+        return index / 2.0;
+    }
+}
+
+export fn run() with Stdout {
+    let mut a = TreeMap::<i8, i32>::new();
+    a[-1] = 5;
+    let mut b = TreeMap::<u32, i32>::new();
+    b[4000000000] = 6;
+    b[4000000000] += 1;
+    let mut c = TreeMap::<u64, i32>::new();
+    c[18446744073709551615] = 8;
+    let h = Halves {};
+    println(`${a[-1]} ${b[4000000000]} ${c[18446744073709551615]} ${h[3.0]}`);
+    let xs: List<i32> = [10, 20, 30];
+    println(`${xs[1]} ${xs[1..<3]:?}`);
+}
+
+__DATA__
+{
+    "stdout": "5 7 8 1.5\n20 [20, 30]\n"
+}
