@@ -168,8 +168,7 @@ fn "spec_functions_closure_handler.wado/$test_0"() {
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let elements_9: ref "Array<core:prelude/string.wado/String>";
     let v: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $functor_18: ref "spec_functions_closure_handler.wado//$Closure_0";
-    "spec_functions_closure_handler.wado/spec_functions_closure_handler.wado/$Closure_0::$call"(local.tee $functor_18(struct.new "spec_functions_closure_handler.wado//$Closure_0" { $capture_0: local.tee sink(struct.new "spec_functions_closure_handler.wado//Sink" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_9(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }) }) }));
+    "spec_functions_closure_handler.wado/spec_functions_closure_handler.wado/$Closure_0::$call"(struct.new "spec_functions_closure_handler.wado//$Closure_0" { $capture_0: local.tee sink(struct.new "spec_functions_closure_handler.wado//Sink" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_9(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }) }) });
     elements_9 = local.tee v(sink.lines).repr;
     let $array_clone_len_3: i32;
     $array_clone_len_3 = v.used;
@@ -1330,10 +1329,9 @@ fn "spec_functions_closure_handler.wado/spec_functions_closure_handler.wado/$Clo
 }
 
 fn "spec_functions_closure_handler.wado/spec_functions_closure_handler.wado/$Closure_1::$call"(self, message) {
-    let self_2: ref "spec_functions_closure_handler.wado//Sink";
     let self_4: ref "core:prelude//List<core:prelude/string.wado/String>";
     let used: i32;
-    if @unlikely(local.tee used(local.tee self_4(local.tee self_2(self.$capture_0).lines).used) >= builtin::array_len(self_4.repr)) {
+    if @unlikely(local.tee used(local.tee self_4(self.$capture_0.lines).used) >= builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_4);
     }
@@ -1373,8 +1371,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
 }
 
 fn "closure/spec_functions_closure_handler.wado/$closure_wrapper_1"($env, $p0) {
-    let $typed_env: ref "spec_functions_closure_handler.wado//$Closure_1";
-    "spec_functions_closure_handler.wado/spec_functions_closure_handler.wado/$Closure_1::$call"(local.tee $typed_env(ref.cast "spec_functions_closure_handler.wado//$Closure_1"($env)), $p0);
+    "spec_functions_closure_handler.wado/spec_functions_closure_handler.wado/$Closure_1::$call"(ref.cast "spec_functions_closure_handler.wado//$Closure_1"($env), $p0);
 }
 
 export fn "spec_functions_closure_handler.wado/$cm_export__$test_0" as "$test_0"

@@ -73,8 +73,7 @@ fn "cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(ds) with Gfx {
     let $licm_repr_18: ref "Array<cm_list_of_own_param.wado/Device>";
     if @unlikely((local.tee $ds_len(ds.used) < 0) | ($ds_len > 536870911)) {
         cold_path;
-        let $mv_field_1: ref Array<u8>;
-        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("a buffer's length is negative or past what linear memory can address")), 68);
+        "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;
     }
     $ds_base = "mem/realloc"(0, 0, 4, $ds_len * 4);

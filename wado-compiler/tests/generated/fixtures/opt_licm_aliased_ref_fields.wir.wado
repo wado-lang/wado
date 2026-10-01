@@ -98,12 +98,11 @@ fn "opt_licm_aliased_ref_fields.wado/run_loop"(g) {
 
 fn "opt_licm_aliased_ref_fields.wado/run"() with Stdout {
     let n: ref "opt_licm_aliased_ref_fields.wado//Node";
-    let g: ref "opt_licm_aliased_ref_fields.wado//Graph";
     let result: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let packed: i64;
     let tx_18: i32;
-    result = "opt_licm_aliased_ref_fields.wado/run_loop"(local.tee g(struct.new "opt_licm_aliased_ref_fields.wado//Graph" { a: local.tee n(struct.new "opt_licm_aliased_ref_fields.wado//Node" { value: 0 }), b: n }));
+    result = "opt_licm_aliased_ref_fields.wado/run_loop"(struct.new "opt_licm_aliased_ref_fields.wado//Graph" { a: local.tee n(struct.new "opt_licm_aliased_ref_fields.wado//Node" { value: 0 }), b: n });
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(result, $local_3);
     result = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

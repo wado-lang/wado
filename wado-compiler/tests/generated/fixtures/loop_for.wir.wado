@@ -562,8 +562,7 @@ fn "loop_for.wado/$test_7_for_of_over_an_empty_list_runs_no_iteration"() {
                 $sroa_slot_15 = 0;
                 break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_3;
             };
-            let $match_scrut_0: i32;
-            if local.tee $match_scrut_0($sroa_slot_15) == 0 {
+            if $sroa_slot_15 == 0 {
                 n = n + 1;
             } else {
                 break b23;
@@ -946,13 +945,12 @@ fn "loop_for.wado/$test_13_for_of_over_strings"() {
     let greeted: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $local_7: ref "core:prelude/format.wado//Formatter";
     let elements_13: ref "Array<core:prelude/string.wado/String>";
-    let elements_14: ref "Array<core:prelude/string.wado/String>";
     let v: ref "core:prelude/string.wado//String";
     let new_used_39: i32;
     let start_40: i32;
     let $sroa_$iter_0_index_69: i32;
     elements_13 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Charlie"), used: 7 });
-    greeted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_14(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 };
+    greeted = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     $sroa_$iter_0_index_69 = 0;
     b70: block {
         l71: loop {
@@ -1082,7 +1080,6 @@ fn "loop_for.wado/$test_15_for_of_over_tuples"() {
     let $local_11: ref "core:prelude/format.wado//Formatter";
     let elements_22: ref "Array<[core:prelude/string.wado/String,i32]>";
     let elements_23: ref "Array<core:prelude/string.wado/String>";
-    let v_30: ref "tuple//[core:prelude/string.wado/String, i32]";
     let v_31: ref "core:prelude/string.wado//String";
     let elements_39: ref Array<[i32,i32]>;
     let v_47: ref "tuple//[i32, i32]";
@@ -1095,7 +1092,7 @@ fn "loop_for.wado/$test_15_for_of_over_tuples"() {
     b80: block {
         l81: loop {
             break_if b80 $sroa_$iter_0_index_99 >= 2;
-            v_31 = local.tee v_30(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(elements_22, $sroa_$iter_0_index_99)).0;
+            v_31 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(elements_22, $sroa_$iter_0_index_99).0;
             let $array_clone_src_1: ref Array<u8>;
             $array_clone_src_1 = v_31.repr;
             $load_2 = v_31.used;

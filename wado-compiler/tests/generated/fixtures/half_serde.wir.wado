@@ -2624,10 +2624,9 @@ fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(
     let new_used_29: i32;
     let start_30: i32;
     let val_i64_65: i64;
-    let repr: ref Array<u8>;
     $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0: block {
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0 i <= run_start;
-        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr(s.repr), start: run_start, end: i };
+        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: run_start, end: i };
         $inline_core_prelude_string_wado_String__internal_push_view_6: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_view_6 local.tee i(i - run_start) == 0;
             if @unlikely(local.tee new_used_29(buf.used + i) > builtin::array_len(buf.repr)) {
@@ -3915,10 +3914,8 @@ fn "core:cbor/core:cbor/CborDeserializer::read_text_body"(self, arg, indef) {
     let $load_3: i32;
     let s: ref "core:prelude/string.wado//String";
     let $qm_e_5: ref "core:serde//DeserializeError";
-    let $qm_v_6: ref "tuple//[u8, u8, u64, bool]";
     let $qm_e_7: ref "core:serde//DeserializeError";
     let m: u8;
-    let $qm_v_12: ref "core:prelude/string.wado//String";
     let $qm_e_13: ref "core:serde//DeserializeError";
     let chunk: ref "core:prelude/string.wado//String";
     let $pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
@@ -3967,7 +3964,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_text_body"(self, arg, indef) {
             let $mv$$vr_17$2: ref null "core:serde//DeserializeError";
             multivalue_bind [$mv$$vr_17$0, $mv$$vr_17$1, $mv$$vr_17$2] = "core:cbor/core:cbor/CborDeserializer::read_head"(self);
             m = local.tee $pattern_temp_0((if $mv$$vr_17$0 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-                local.tee $qm_v_6(ref.as_non_null($mv$$vr_17$1));
+                ref.as_non_null($mv$$vr_17$1);
             } else if @unlikely($mv$$vr_17$0 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 $qm_e_7 = ref.as_non_null($mv$$vr_17$2);
                 cold_path;
@@ -3986,7 +3983,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_text_body"(self, arg, indef) {
             let $mv$$vr_18$2: ref null "core:serde//DeserializeError";
             multivalue_bind [$mv$$vr_18$0, $mv$$vr_18$1, $mv$$vr_18$2] = "core:cbor/core:cbor/CborDeserializer::read_definite_text"(self, arg);
             chunk = (if $mv$$vr_18$0 == 0 -> ref "core:prelude/string.wado//String" {
-                local.tee $qm_v_12(ref.as_non_null($mv$$vr_18$1));
+                ref.as_non_null($mv$$vr_18$1);
             } else if @unlikely($mv$$vr_18$0 == 1) -> ref "core:prelude/string.wado//String" {
                 $qm_e_13 = ref.as_non_null($mv$$vr_18$2);
                 cold_path;
@@ -4021,20 +4018,19 @@ fn "core:cbor/core:cbor/CborDeserializer::read_text_key_range"(self, head) {
     let $v5_seen: bool;
     let $v6: bool;
     let $v6_seen: bool;
-    let $cond: bool;
     let $qm_e: ref "core:serde//DeserializeError";
     ai = head & 31;
     $v3 = local.tee $v1((head >>u 5) & 255) == 3;
     $v4_seen = 0;
     $v5_seen = 0;
     $v6_seen = 0;
-    if @unlikely(local.tee $cond((if $v3 -> i32 {
+    if @unlikely((if $v3 -> i32 {
         $v6 = $v4 = ai; $v4_seen = 1; $v4 <=u $v5 = 27; $v5_seen = 1; 27;
         $v6_seen = 1;
         $v6;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:cbor/core:cbor/CborDeserializer::read_text_key_range$cold0"(head, $v1, $v3, $v4, $v4_seen, $v5, $v5_seen, $v6, $v6_seen);
         unreachable;
@@ -4067,7 +4063,6 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
     let $load_11: i32;
     let $qm_v_2: ref "tuple//[u8, u8, u64, bool]";
     let $qm_e_3: ref "core:serde//DeserializeError";
-    let $qm_v_5: ref "tuple//[u8, u8, u64, bool]";
     let arg: u64;
     let indef: bool;
     let $qm_e_17: ref "core:serde//DeserializeError";
@@ -4096,7 +4091,7 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_item"(self, depth) {
             break_if b475 $qm_v_2.0 != 6;
             multivalue_bind [$mv$$vr_44$0, $mv$$vr_44$1, $mv$$vr_44$2] = "core:cbor/core:cbor/CborDeserializer::read_head"(self);
             $qm_v_2 = (if $mv$$vr_44$0 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-                local.tee $qm_v_5(ref.as_non_null($mv$$vr_44$1));
+                ref.as_non_null($mv$$vr_44$1);
             } else if @unlikely($mv$$vr_44$0 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 $qm_e_3 = ref.as_non_null($mv$$vr_44$2);
                 cold_path;
@@ -4312,7 +4307,6 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, maj
     let $load_7: i32;
     let $load_14: ref "core:prelude/slice.wado//Slice<u8>";
     let $qm_e_5: ref "core:serde//DeserializeError";
-    let $qm_v_6: ref "tuple//[u8, u8, u64, bool]";
     let $qm_e_7: ref "core:serde//DeserializeError";
     let m: u8;
     let $qm_e_13: ref "core:serde//DeserializeError";
@@ -4367,7 +4361,7 @@ fn "core:cbor/core:cbor/CborDeserializer::skip_string_raw"(self, arg, indef, maj
             let $mv$$vr_17$2: ref null "core:serde//DeserializeError";
             multivalue_bind [$mv$$vr_17$0, $mv$$vr_17$1, $mv$$vr_17$2] = "core:cbor/core:cbor/CborDeserializer::read_head"(self);
             m = local.tee $pattern_temp_0((if $mv$$vr_17$0 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-                local.tee $qm_v_6(ref.as_non_null($mv$$vr_17$1));
+                ref.as_non_null($mv$$vr_17$1);
             } else if @unlikely($mv$$vr_17$0 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 $qm_e_7 = ref.as_non_null($mv$$vr_17$2);
                 cold_path;
@@ -4407,7 +4401,6 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
     let $load_1: ref "core:prelude/slice.wado//Slice<u8>";
     let $load_3: i32;
     let $qm_e_2: ref "core:serde//DeserializeError";
-    let $qm_v_7: ref "tuple//[u8, u8, u64, bool]";
     let $pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
     let $sroa_slot_23: i32;
     let $sroa_slot_24: u8;
@@ -4457,7 +4450,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_st
             let $mv$$vr_17$1: ref null "tuple//[u8, u8, u64, bool]";
             multivalue_bind [$sroa_slot_23, $mv$$vr_17$1, $sroa_slot_25] = "core:cbor/core:cbor/CborDeserializer::read_head"(self);
             $sroa_slot_24 = local.tee $pattern_temp_0((if $sroa_slot_23 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-                local.tee $qm_v_7(ref.as_non_null($mv$$vr_17$1));
+                ref.as_non_null($mv$$vr_17$1);
             } else if @unlikely($sroa_slot_23 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 $qm_e_2 = ref.as_non_null($sroa_slot_25);
                 cold_path;
@@ -4674,7 +4667,6 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     let $local_3: ref "core:prelude/string.wado//String";
     let offset_10: i64;
     let start_23: i32;
-    let $sroa_$f_buf_83: ref "core:prelude/string.wado//String";
     let $av_86: i32;
     if local.tee $av_86(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start)) {
         return 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, builtin::i64_extend_i32_s($av_86);
@@ -4688,7 +4680,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = $load_3;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_10, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), c & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, c & 255);
     if @unlikely(local.tee c($local_3.used + 10) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, c);
@@ -4696,7 +4688,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = c;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_9, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), $av_86 & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, $av_86 & 255);
     if @unlikely(local.tee $av_86($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $av_86);
@@ -5744,8 +5736,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(cap
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(self) {
-    let repr: ref Array<u8>;
-    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee repr(self.repr), start: 0, end: self.used };
+    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self.repr, start: 0, end: self.used };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -5863,7 +5854,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     let $v2_12: i32;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond_16: bool;
     let b1: u8;
     $load_0 = bytes.start;
     $v2_2 = bytes.end - $load_0;
@@ -5906,13 +5896,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     }) >= 1;
     $v2_2 = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond_16((if b1 -> i32 {
+    if @unlikely((if b1 -> i32 {
         $v3 = $v2_12 = $load_0; $v2_2 = 1; $v2_12 <= 3;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$cold0"($load_0, b1, $v2_12, $v2_2, $v3, $v3_seen);
         unreachable;
@@ -6607,7 +6597,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes_uncheck
 }
 
 fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_container<&core:prelude/string.wado/String>"(self, expected) {
-    let $qm_v_2: ref "tuple//[u8, u8, u64, bool]";
     let $qm_e_3: ref "core:serde//DeserializeError";
     let major: u8;
     let arg: u64;
@@ -6630,7 +6619,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_containe
             let $mv$$vr_14$2: ref null "core:serde//DeserializeError";
             multivalue_bind [$mv$$vr_14$0, $mv$$vr_14$1, $mv$$vr_14$2] = "core:cbor/core:cbor/CborDeserializer::read_head"(self);
             major = local.tee $pattern_temp_0((if $mv$$vr_14$0 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-                local.tee $qm_v_2(ref.as_non_null($mv$$vr_14$1));
+                ref.as_non_null($mv$$vr_14$1);
             } else if @unlikely($mv$$vr_14$0 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 $qm_e_3 = ref.as_non_null($mv$$vr_14$2);
                 cold_path;
@@ -6684,7 +6673,6 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
     let $load_1: ref "core:prelude/slice.wado//Slice<u8>";
     let $load_3: i32;
     let $qm_e_2: ref "core:serde//DeserializeError";
-    let $qm_v_15: ref "tuple//[u8, u8, u64, bool]";
     let major: u8;
     let ai_18: u8;
     let $pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
@@ -6694,9 +6682,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
     let $cse_61: u32;
     let bits_83: u32;
     let kept_84: u16;
-    let bits_118: u16;
     let remainder_133: u32;
-    let bits_134: u16;
     let $av_136: i32;
     $sroa_slot_58 = 0;
     $sroa_slot_59 = 0;
@@ -6801,7 +6787,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
             let $mv$$vr_28$1: ref null "tuple//[u8, u8, u64, bool]";
             multivalue_bind [$sroa_slot_58, $mv$$vr_28$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_head"(self);
             major = local.tee $pattern_temp_0((if $sroa_slot_58 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-                local.tee $qm_v_15(ref.as_non_null($mv$$vr_28$1));
+                ref.as_non_null($mv$$vr_28$1);
             } else if @unlikely($sroa_slot_58 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 $qm_e_2 = ref.as_non_null($sroa_slot_60);
                 cold_path;
@@ -6845,7 +6831,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                     }
                     if $mv$$vr_24$1 == -1_i64 {
                         $av_136 = (local.tee $sroa_slot_59(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
-                        break $inline_core_cbor_int_item_bf16__16: local.tee bits_118($inline_round_to_even_10: block -> u16 {
+                        $inline_round_to_even_10: block -> u16 {
                             if local.tee $load_3($sroa_slot_59 & 65535) >u 32768 {
                                 break $inline_round_to_even_10: ($av_136 + 1) & 65535;
                             }
@@ -6853,7 +6839,8 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                                 break $inline_round_to_even_10: ($av_136 + 1) & 65535;
                             }
                             break $inline_round_to_even_10: $av_136;
-                        });
+                        };
+                        break $inline_core_cbor_int_item_bf16__16;
                     }
                     break $inline_core_cbor_int_item_bf16__16: "core:cbor/bf16^core:cbor/CborFloat::from_int$spec1"($mv$$vr_24$1 + 1_i64);
                 }, ref.null none;
@@ -6864,7 +6851,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                     }
                     if $mv$$vr_24$1 == -1_i64 {
                         kept_84 = (local.tee bits_83(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
-                        break $inline_core_cbor_int_item_bf16__17: local.tee bits_134($inline_round_to_even_16: block -> u16 {
+                        $inline_round_to_even_16: block -> u16 {
                             if local.tee remainder_133(bits_83 & 65535) >u 32768 {
                                 break $inline_round_to_even_16: (kept_84 + 1) & 65535;
                             }
@@ -6872,7 +6859,8 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                                 break $inline_round_to_even_16: (kept_84 + 1) & 65535;
                             }
                             break $inline_round_to_even_16: kept_84;
-                        });
+                        };
+                        break $inline_core_cbor_int_item_bf16__17;
                     }
                     break $inline_core_cbor_int_item_bf16__17: "core:cbor/bf16^core:cbor/CborFloat::from_int$spec1"($mv$$vr_24$1 + 1_i64);
                 }, ref.null none;
@@ -6895,17 +6883,14 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
     let $load_1: ref "core:prelude/slice.wado//Slice<u8>";
     let $load_3: i32;
     let $qm_e_2: ref "core:serde//DeserializeError";
-    let $qm_v_15: ref "tuple//[u8, u8, u64, bool]";
     let $pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
     let $sroa_slot_58: i32;
     let $sroa_slot_59: u8;
     let $sroa_slot_60: ref null "core:serde//DeserializeError";
     let dropped_86: i64;
     let mask_103: u64;
-    let magnitude_104: u64;
     let dropped_118: i64;
     let mask_119: u64;
-    let magnitude_120: u64;
     let $av_134: i32;
     $sroa_slot_58 = 0;
     $sroa_slot_59 = 0;
@@ -7007,7 +6992,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
             let $mv$$vr_28$1: ref null "tuple//[u8, u8, u64, bool]";
             multivalue_bind [$sroa_slot_59, $mv$$vr_28$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_head"(self);
             $sroa_slot_58 = local.tee $pattern_temp_0((if $sroa_slot_59 == 0 -> ref "tuple//[u8, u8, u64, bool]" {
-                local.tee $qm_v_15(ref.as_non_null($mv$$vr_28$1));
+                ref.as_non_null($mv$$vr_28$1);
             } else if @unlikely($sroa_slot_59 == 1) -> ref "tuple//[u8, u8, u64, bool]" {
                 $qm_e_2 = ref.as_non_null($sroa_slot_60);
                 cold_path;
@@ -7047,13 +7032,13 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
             } else if $sroa_slot_58 == 0 {
                 return 0, $inline_core_cbor_int_item_f16__16: block -> u16 {
                     if $sroa_slot_58 != 1 {
-                        break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u(local.tee magnitude_104($inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: block -> u64 {
+                        break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u($inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: block -> u64 {
                             if local.tee dropped_86(40_i64 - builtin::i64_clz($mv$$vr_24$1)) <= 0_i64 {
                                 break $inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: $mv$$vr_24$1;
                             }
                             mask_103 = (1_i64 << dropped_86) - 1_i64;
                             break $inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: select u64(($mv$$vr_24$1 & mask_103) == 0_i64, $mv$$vr_24$1, ($mv$$vr_24$1 & (mask_103 ^ -1_i64)) | (mask_103 + 1_i64));
-                        })));
+                        }));
                     }
                     if $mv$$vr_24$1 == -1_i64 {
                         break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32$spec0"();
@@ -7063,13 +7048,13 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
             } else if $sroa_slot_58 == 1 {
                 return 0, $inline_core_cbor_int_item_f16__17: block -> u16 {
                     if $sroa_slot_58 != 1 {
-                        break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u(local.tee magnitude_120($inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: block -> u64 {
+                        break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u($inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: block -> u64 {
                             if local.tee dropped_118(40_i64 - builtin::i64_clz($mv$$vr_24$1)) <= 0_i64 {
                                 break $inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: $mv$$vr_24$1;
                             }
                             mask_119 = (1_i64 << dropped_118) - 1_i64;
                             break $inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: select u64(($mv$$vr_24$1 & mask_119) == 0_i64, $mv$$vr_24$1, ($mv$$vr_24$1 & (mask_119 ^ -1_i64)) | (mask_119 + 1_i64));
-                        })));
+                        }));
                     }
                     if $mv$$vr_24$1 == -1_i64 {
                         break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32$spec0"();
@@ -7274,7 +7259,7 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Deserialize::deserialize<core:
                     $sroa_$sroa_slots_1_622_1_696 = $local_36;
                     taken = 1;
                 } else if index_10 == 2 {
-                    if @unlikely(let $match_scrut_4: ref null "core:prelude/string.wado//String"; ref.is_null(local.tee $match_scrut_4($sroa_slots_2_623)) == 0) {
+                    if @unlikely(ref.is_null($sroa_slots_2_623) == 0) {
                         cold_path;
                         $local_40 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"name\""), used: 23 }, offset: -1_i64 };
                         cold_path;
@@ -7347,7 +7332,6 @@ fn "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_fiel
     let $load_4: ref "core:prelude/slice.wado//Slice<u8>";
     let $load_6: i32;
     let $qm_v_6: ref "tuple//[i32, i32]";
-    let $qm_v_11: ref "core:prelude/string.wado//String";
     let $vr_16: ref "tuple//[i32, bool, core:prelude/types.wado/Option<core:serde/DeserializeError>]";
     let self_35: ref "core:cbor//CborDeserializer";
     let remaining: i64;
@@ -7461,15 +7445,15 @@ fn "core:cbor/core:cbor/CborStructAccess^core:serde/DeserializeStruct::next_fiel
     cold_path;
     let $mv$$vr_20$1: ref null "core:prelude/string.wado//String";
     multivalue_bind [$load_6, $mv$$vr_20$1, $sroa_slot_12] = "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_string"(self.de);
-    multivalue_bind [$load_6, $sroa_slot_10] = "half_serde.wado/half_serde.wado/Weights^core:serde/FieldSchema::lookup"(local.tee $load_4("core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(local.tee $qm_v_11((if $load_6 == 0 -> ref "core:prelude/string.wado//String" {
-        local.tee $qm_v_11(ref.as_non_null($mv$$vr_20$1));
+    multivalue_bind [$load_6, $sroa_slot_10] = "half_serde.wado/half_serde.wado/Weights^core:serde/FieldSchema::lookup"(local.tee $load_4("core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"((if $load_6 == 0 -> ref "core:prelude/string.wado//String" {
+        ref.as_non_null($mv$$vr_20$1);
     } else if @unlikely($load_6 == 1) -> ref "core:prelude/string.wado//String" {
         $qm_e_39 = ref.as_non_null($sroa_slot_12);
         cold_path;
         return 1, 1, 0, $qm_e_39;
     } else {
         unreachable;
-    })))).repr, $load_4.start, $load_4.end);
+    }))).repr, $load_4.start, $load_4.end);
     $load_6 = (if $load_6 == 0 -> i32 {
         $sroa_slot_10;
     } else if @likely($load_6 == 1) -> i32 {
@@ -7588,7 +7572,7 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Deserialize::deserialize<core:
                     $sroa_$sroa_slots_1_623_1_697 = $local_36;
                     taken = 1;
                 } else if index_10 == 2 {
-                    if @unlikely(let $match_scrut_4: ref null "core:prelude/string.wado//String"; ref.is_null(local.tee $match_scrut_4($sroa_slots_2_624)) == 0) {
+                    if @unlikely(ref.is_null($sroa_slots_2_624) == 0) {
                         cold_path;
                         $local_40 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"name\""), used: 23 }, offset: -1_i64 };
                         cold_path;
@@ -8705,17 +8689,15 @@ fn "core:json/core:json/JsonDeserializer::take_scanned_run$scalar"($mv$self$repr
 fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor/CborSerializer>$scalar"(self, s) {
     let $qm_e_10: ref "core:serde//SerializeError";
     let $match_21: ref null "core:serde//SerializeError";
-    let ser_37: ref "core:cbor//CborSerializer";
     let v_39: u16;
     let v_79: ref "core:prelude/string.wado//String";
-    let repr_132: ref Array<u8>;
     "core:cbor/write_head"(s, 5, 3_i64);
     v_39 = self.scale;
     "core:cbor/write_head"(s, 3, 5_i64);
     let $mv_arg_2: ref "core:prelude/slice.wado//Slice<u8>";
     $mv_arg_2 = global:core:serde::$const_obj_399;
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
-    if @likely(ref.is_null(local.tee $match_21("core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serialize_f32"(local.tee ser_37(struct.new "core:cbor//CborSerializer" { buf: s }), "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(v_39))))) {
+    if @likely(ref.is_null(local.tee $match_21("core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serialize_f32"(struct.new "core:cbor//CborSerializer" { buf: s }, "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(v_39))))) {
     } else {
         $qm_e_10 = ref.as_non_null($match_21);
         cold_path;
@@ -8725,7 +8707,7 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor
     "core:cbor/write_head"(s, 3, 4_i64);
     $mv_arg_2 = global:core:serde::$const_obj_398;
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
-    if @likely(ref.is_null(local.tee $match_21("core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serialize_f32"(local.tee ser_37(struct.new "core:cbor//CborSerializer" { buf: s }), builtin::f32_reinterpret_i32(v_39 << 16))))) {
+    if @likely(ref.is_null(local.tee $match_21("core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serialize_f32"(struct.new "core:cbor//CborSerializer" { buf: s }, builtin::f32_reinterpret_i32(v_39 << 16))))) {
     } else {
         $qm_e_10 = ref.as_non_null($match_21);
         cold_path;
@@ -8736,7 +8718,7 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor
     $mv_arg_2 = global:core:serde::$const_obj_397;
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
     "core:cbor/write_head"(s, 3, builtin::i64_extend_i32_s(v_79.used));
-    $mv_arg_2 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee repr_132(v_79.repr), start: 0, end: v_79.used };
+    $mv_arg_2 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: v_79.repr, start: 0, end: v_79.used };
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, 0, $mv_arg_2.end);
     return ref.null none;
 }

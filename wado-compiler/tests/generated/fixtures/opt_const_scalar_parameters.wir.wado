@@ -85,12 +85,11 @@ fn "opt_const_scalar_parameters.wado/record"(n) {
 }
 
 fn "opt_const_scalar_parameters.wado/run"() {
-    let $cond: bool;
     "opt_const_scalar_parameters.wado/record"(black_box(3));
     "opt_const_scalar_parameters.wado/record"(black_box(5));
     "opt_const_scalar_parameters.wado/varying$spec0"(black_box(2));
     "opt_const_scalar_parameters.wado/varying$spec1"(black_box(1));
-    if @unlikely(local.tee $cond(global:opt_const_scalar_parameters.wado::result == 9) == 0) {
+    if @unlikely((global:opt_const_scalar_parameters.wado::result == 9) == 0) {
         cold_path;
         "opt_const_scalar_parameters.wado/run$cold0"();
         unreachable;

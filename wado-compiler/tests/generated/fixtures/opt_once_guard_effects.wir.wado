@@ -80,7 +80,6 @@ fn "opt_once_guard_effects.wado/initialize"() {
 }
 
 fn "opt_once_guard_effects.wado/$cm_export__run"() {
-    let $cond: bool;
     $inline_ensure_initialized_3: block {
         break_if $inline_ensure_initialized_3 global:opt_once_guard_effects.wado::initialized;
         "opt_once_guard_effects.wado/initialize"();
@@ -91,7 +90,7 @@ fn "opt_once_guard_effects.wado/$cm_export__run"() {
         "opt_once_guard_effects.wado/initialize"();
         global:opt_once_guard_effects.wado::initialized = 1;
     };
-    if @unlikely(local.tee $cond(global:opt_once_guard_effects.wado::calls == 1) == 0) {
+    if @unlikely((global:opt_once_guard_effects.wado::calls == 1) == 0) {
         cold_path;
         "opt_once_guard_effects.wado/run$cold0"();
         unreachable;

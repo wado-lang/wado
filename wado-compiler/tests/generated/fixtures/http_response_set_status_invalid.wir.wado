@@ -428,14 +428,13 @@ fn "http_response_set_status_invalid.wado/$cm_task_entry__handle"(request) {
     let $cond_7: bool;
     let $local_18: ref "core:prelude/string.wado//String";
     let $local_19: ref "core:prelude/format.wado//Formatter";
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $fuse_at_203: i32;
     let packed: i64;
     let rx: i32;
     let tx: i32;
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    if @unlikely(local.tee $cond_7(local.tee ok_result("http_response_set_status_invalid.wado/$cm_binding__Response_set_status_code$spec0"(local.tee rx(local.tee $pattern_temp_1("http_response_set_status_invalid.wado/$cm_binding__Response_new"("http_response_set_status_invalid.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx)).0), 201)).discriminant == 0) == 0) {
+    if @unlikely(local.tee $cond_7(local.tee ok_result("http_response_set_status_invalid.wado/$cm_binding__Response_set_status_code$spec0"(local.tee rx("http_response_set_status_invalid.wado/$cm_binding__Response_new"("http_response_set_status_invalid.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx).0), 201)).discriminant == 0) == 0) {
         cold_path;
         $cond_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_18("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(141)), 68);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_18.repr, $cond_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -1366,11 +1365,10 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let v_7: ref "core:prelude/types.wado//Result<(),()>";
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    if local.tee v_7(self.value).discriminant == 0 {
+    if self.value.discriminant == 0 {
         if @unlikely(local.tee new_used_22(local.tee self_10(f.buf).used + 6) > builtin::array_len(self_10.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, new_used_22);
@@ -1392,12 +1390,12 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/
         start_23 = self_10.used;
         self_10.used = new_used_22;
         builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_19, 0, 2);
-        if @unlikely(local.tee v_7(self.value).discriminant != 0) {
+        if @unlikely(self.value.discriminant != 0) {
             unreachable;
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<()>"(f);
     }
-    if local.tee v_7(self.value).discriminant == 1 {
+    if self.value.discriminant == 1 {
         if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 6) > builtin::array_len(self_10.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, start_23);
@@ -1419,7 +1417,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/
         new_used_22 = self_10.used;
         self_10.used = start_23;
         builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_18, 0, 3);
-        if @unlikely(local.tee v_7(self.value).discriminant != 1) {
+        if @unlikely(self.value.discriminant != 1) {
             unreachable;
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<()>"(f);

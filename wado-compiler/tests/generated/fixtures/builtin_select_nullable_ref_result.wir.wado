@@ -138,14 +138,13 @@ global global:core:prelude/traits.wado::$const_obj_52: ref null Array<u8> = arra
 fn "builtin_select_nullable_ref_result.wado/$test_0_select_between_a_reference_and_null"() {
     let x: ref "builtin_select_nullable_ref_result.wado//S";
     let some: ref null "builtin_select_nullable_ref_result.wado//S";
-    let r_2: ref "builtin_select_nullable_ref_result.wado//S";
     let $local_6: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/format.wado//Formatter";
     let c_14: bool;
     x = struct.new "builtin_select_nullable_ref_result.wado//S" { v: 1 };
     c_14 = black_box(1);
     if @unlikely(local.tee c_14((if ref.is_null(local.tee some(select ref null "builtin_select_nullable_ref_result.wado//S"(c_14, x, ref.null none))) == 0 -> bool {
-        local.tee r_2(ref.as_non_null(some)).v == 1;
+        ref.as_non_null(some).v == 1;
     } else {
         0;
     })) == 0) {

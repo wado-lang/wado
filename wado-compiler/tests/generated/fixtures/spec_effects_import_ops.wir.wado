@@ -212,14 +212,13 @@ fn "spec_effects_import_ops.wado/println"($mv$message$repr, $mv$message$used) wi
     let tx_10: i32;
     let new_used: i32;
     let start: i32;
-    let self_27: ref "core:prelude/string.wado//StrUtf8ByteIter";
     rx_9 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_9 = "spec_effects_import_ops.wado/$cm_binding__Stdout_write_via_stream"(rx_9);
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_10, $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; if @unlikely(local.tee new_used(1 + $mv$message$used) > 17) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used);
-    }; start = $local_4.used; $local_4.used = new_used; builtin::array_copy<u8>(local.tee $load_1($local_4.repr), start, $mv$message$repr, 0, $mv$message$used); $mv$message$used = start + $mv$message$used; builtin::array_copy<u8>($load_1, $mv$message$used, global:spec_effects_import_ops.wado::$const_obj_5, 0, 1); "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(local.tee self_27(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_4.repr, used: $local_4.used, index: 0 })));
+    }; start = $local_4.used; $local_4.used = new_used; builtin::array_copy<u8>(local.tee $load_1($local_4.repr), start, $mv$message$repr, 0, $mv$message$used); $mv$message$used = start + $mv$message$used; builtin::array_copy<u8>($load_1, $mv$message$used, global:spec_effects_import_ops.wado::$const_obj_5, 0, 1); "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_4.repr, used: $local_4.used, index: 0 }));
     "wasi/stream-drop-writable"(tx_10);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_9);
 }
@@ -290,14 +289,13 @@ fn "spec_effects_import_ops.wado/$test_0"() {
     let $v0: ref null "core:prelude/string.wado//String";
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_5_5: ref "core:prelude/format.wado//Formatter";
-    let self_12: ref "core:prelude//List<core:prelude/string.wado/String>";
     let new_used: i32;
     let start_26: i32;
     let b_31: ref "core:prelude/string.wado//String";
     let a_36: ref Array<u8>;
     let b_39: ref Array<u8>;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_12("spec_effects_import_ops.wado/$cm_binding__Environment_get_arguments"()).used, $local_2);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"("spec_effects_import_ops.wado/$cm_binding__Environment_get_arguments"().used, $local_2);
     if @unlikely(local.tee new_used($local_2.used + 10) > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used);

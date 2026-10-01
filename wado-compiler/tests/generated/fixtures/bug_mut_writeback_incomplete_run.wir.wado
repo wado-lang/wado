@@ -100,8 +100,7 @@ fn "bug_mut_writeback_incomplete_run.wado/outer"(dst) {
 
 fn "bug_mut_writeback_incomplete_run.wado/stepped_over"() {
     let v: ref "core:prelude//List<u8>";
-    let elements: ref Array<u8>;
-    drop("bug_mut_writeback_incomplete_run.wado/outer"(local.tee v(struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 })));
+    drop("bug_mut_writeback_incomplete_run.wado/outer"(local.tee v(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 })));
     return v.used;
 }
 
@@ -123,8 +122,7 @@ fn "bug_mut_writeback_incomplete_run.wado/two"(a, b) {
 
 fn "bug_mut_writeback_incomplete_run.wado/aliased"() {
     let v: ref "core:prelude//List<u8>";
-    let elements: ref Array<u8>;
-    "bug_mut_writeback_incomplete_run.wado/two"(local.tee v(struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 }), v);
+    "bug_mut_writeback_incomplete_run.wado/two"(local.tee v(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }), v);
     return v.used;
 }
 

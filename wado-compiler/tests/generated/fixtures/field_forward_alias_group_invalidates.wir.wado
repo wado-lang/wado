@@ -17,8 +17,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "field_forward_alias_group_invalidates.wado/$cm_export__run"() {
-    let x: ref "core:prelude/types.wado//Box<i32>";
-    local.tee x(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 7;
+    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 7;
     "wasi/task-return"(0);
 }
 

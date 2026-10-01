@@ -109,12 +109,11 @@ fn "reflect_inspect_cm_record.wado/$cm_binding__Stdout_write_via_stream"(data) w
 
 fn "reflect_inspect_cm_record.wado/$cm_export__run"() {
     let $local_1: ref "core:prelude/string.wado//String";
-    let $local_2: ref "core:prelude/format.wado//Formatter";
     let packed: i64;
     let rx_11: i32;
     let tx_12: i32;
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/traits.wado/wasi:clocks/system_clock.wado/Instant^core:prelude/traits.wado/Inspect::inspect$spec0"(local.tee $local_2(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 }));
+    "core:prelude/traits.wado/wasi:clocks/system_clock.wado/Instant^core:prelude/traits.wado/Inspect::inspect$spec0"(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 });
     rx_11 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_12 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_11 = "reflect_inspect_cm_record.wado/$cm_binding__Stdout_write_via_stream"(rx_11);

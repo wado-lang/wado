@@ -101,7 +101,6 @@ fn "global_init_order.wado/$cm_export__$test_0_a_dependency_reached_through_a_ca
 }
 
 fn "global_init_order.wado/$cm_export__$test_1_a_dependency_reached_through_a_function_value_is_ordered_first"() {
-    let $cond: bool;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_order.wado::$modules_initialized);
         cold_path;
@@ -109,7 +108,7 @@ fn "global_init_order.wado/$cm_export__$test_1_a_dependency_reached_through_a_fu
         "global_init_order.wado/$initialize_module"();
         global:global_init_order.wado::$modules_initialized = 1;
     };
-    if @unlikely(local.tee $cond(global:global_init_order.wado::THROUGH_FN_VALUE == 4) == 0) {
+    if @unlikely((global:global_init_order.wado::THROUGH_FN_VALUE == 4) == 0) {
         cold_path;
         "global_init_order.wado/$test_1_a_dependency_reached_through_a_function_value_is_ordered_first$cold0"();
         unreachable;

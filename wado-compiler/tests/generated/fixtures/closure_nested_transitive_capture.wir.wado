@@ -201,8 +201,7 @@ fn "closure_nested_transitive_capture.wado/$cm_export__$test_4_an_inner_closure_
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_5_a_nested_write_alone_boxes_the_binding"() {
-    let count: ref "core:prelude/types.wado//Box<i32>";
-    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
+    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 
@@ -230,8 +229,7 @@ fn "closure_nested_transitive_capture.wado/$cm_export__$test_10_a_slot_mix_up_wo
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_11_a_nested_write_crosses_three_frames"() {
-    let count: ref "core:prelude/types.wado//Box<i32>";
-    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
+    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 
@@ -243,8 +241,7 @@ fn "closure_nested_transitive_capture.wado/$cm_export__$test_12_two_nested_closu
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_13_a_nested_closure_only_reading_a_mut_binding_stays_fn"() {
-    let count: ref "core:prelude/types.wado//Box<i32>";
-    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 5 }).value = 6;
+    struct.new "core:prelude/types.wado//Box<i32>" { value: 5 }.value = 6;
     "wasi/task-return"(0);
 }
 
@@ -352,14 +349,12 @@ condition: n == 7
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_16_an_if_let_binding_does_not_outlive_the_expression"() {
-    let n: ref "core:prelude/types.wado//Box<i32>";
-    local.tee n(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
+    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_17_a_shadowing_binder_s_scope_ends_with_its_block"() {
-    let count: ref "core:prelude/types.wado//Box<i32>";
-    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
+    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 
@@ -935,13 +930,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
 }
 
 fn "closure/closure_nested_transitive_capture.wado/$closure_wrapper_0"($env) {
-    let $typed_env: ref "closure_nested_transitive_capture.wado//$Closure_31";
-    return "closure_nested_transitive_capture.wado/closure_nested_transitive_capture.wado/$Closure_31::$call"(local.tee $typed_env(ref.cast "closure_nested_transitive_capture.wado//$Closure_31"($env)));
+    return "closure_nested_transitive_capture.wado/closure_nested_transitive_capture.wado/$Closure_31::$call"(ref.cast "closure_nested_transitive_capture.wado//$Closure_31"($env));
 }
 
 fn "closure/closure_nested_transitive_capture.wado/$closure_inspect_wrapper_0"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "closure_nested_transitive_capture.wado/closure_nested_transitive_capture.wado/$Closure_31^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "closure_nested_transitive_capture.wado/closure_nested_transitive_capture.wado/$Closure_31^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 export fn "closure_nested_transitive_capture.wado/$cm_export__$test_0_an_inner_closure_reaches_the_enclosing_function_s_local" as "$test_0_an_inner_closure_reaches_the_enclosing_function_s_local"

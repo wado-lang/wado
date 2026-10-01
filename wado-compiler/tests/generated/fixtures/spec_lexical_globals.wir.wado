@@ -135,7 +135,6 @@ fn "spec_lexical_globals.wado/$cm_export__$test_0"() {
     let $v5_seen: bool;
     let $v6: bool;
     let $v6_seen: bool;
-    let $cond: bool;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:spec_lexical_globals.wado::$modules_initialized);
         cold_path;
@@ -147,13 +146,13 @@ fn "spec_lexical_globals.wado/$cm_export__$test_0"() {
     $v3 = local.tee $v2(global:spec_lexical_globals.wado::counter) == 1;
     $v5_seen = 0;
     $v6_seen = 0;
-    if @unlikely(local.tee $cond((if $v3 -> i32 {
+    if @unlikely((if $v3 -> i32 {
         $v6 = $v5 = 1; $v5_seen = 1; 1 == 1;
         $v6_seen = 1;
         $v6;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "spec_lexical_globals.wado/$test_0$cold0"($v2, $v3, $v3, $v5, $v5_seen, $v6, $v6_seen);
         unreachable;

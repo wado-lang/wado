@@ -76,12 +76,11 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "copy_prop_projval_ref_field.wado/foo"(g, depth) {
-    let p: ref "copy_prop_projval_ref_field.wado//Node";
     if depth > 0 {
         return "copy_prop_projval_ref_field.wado/foo"(g, depth - 1);
     }
     depth = g.a.value;
-    local.tee p(g.b).value = 999;
+    g.b.value = 999;
     return depth;
 }
 

@@ -66,8 +66,7 @@ global mut global:test_expect_trap.wado::$const_obj_3: ref null "core:prelude/st
 
 fn "test_expect_trap.wado/$cm_export__$test_trap_0_panics_with_message"() {
     cold_path;
-    let $mv_field_1: ref Array<u8>;
-    "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("intentional panic")), 17);
+    "core:rt/panic"(array.new_data<u8>("intentional panic"), 17);
     unreachable;
     "wasi/task-return"(0);
 }
@@ -88,8 +87,7 @@ fn "test_expect_trap.wado/$cm_export__$test_trap_2_assert_failure"() {
 
 fn "test_expect_trap.wado/$cm_export__$test_trap_3"() {
     cold_path;
-    let $mv_field_1: ref Array<u8>;
-    "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("unnamed trap test")), 17);
+    "core:rt/panic"(array.new_data<u8>("unnamed trap test"), 17);
     unreachable;
     "wasi/task-return"(0);
 }

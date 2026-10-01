@@ -78,10 +78,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:wir_optimize_vcopy_into_struct.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(44);
 
 fn "wir_optimize_vcopy_into_struct.wado/wrap"(c) {
-    let inner: ref "wir_optimize_vcopy_into_struct.wado//Inner";
-    let w: ref "wir_optimize_vcopy_into_struct.wado//Wrapper";
     if ref.is_null(c) == 0 {
-        return local.tee w(struct.new "wir_optimize_vcopy_into_struct.wado//Wrapper" { inner: local.tee inner(ref.as_non_null(c)), label: 1 });
+        return struct.new "wir_optimize_vcopy_into_struct.wado//Wrapper" { inner: ref.as_non_null(c), label: 1 };
     } else {
     }
     return struct.new "wir_optimize_vcopy_into_struct.wado//Wrapper" { inner: struct.new "wir_optimize_vcopy_into_struct.wado//Inner" { value: 0 }, label: 0 };

@@ -122,7 +122,6 @@ fn "closure_mut_borrow_capture.wado/run"() with Stdout {
     let new_used_34: i32;
     let start_35: i32;
     let packed_42: i64;
-    let elements_82: ref Array<i32>;
     let self_153: ref "core:prelude//List<i32>";
     let self_167: ref "core:prelude//List<i32>";
     local.tee n_0(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
@@ -161,7 +160,7 @@ fn "closure_mut_borrow_capture.wado/run"() with Stdout {
     start_35 = "closure_mut_borrow_capture.wado/$cm_binding__Stdout_write_via_stream"(start_35);
     "core:rt/write_string_to_stream"(new_used_34, $local_11.repr, $local_11.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_35);
-    if @unlikely(local.tee start_35(local.tee self_167(local.tee self_153(struct.new "core:prelude//List<i32>" { repr: local.tee elements_82(array.new_fixed<i32>()), used: 0 })).used) >= builtin::array_len(self_167.repr)) {
+    if @unlikely(local.tee start_35(local.tee self_167(local.tee self_153(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 })).used) >= builtin::array_len(self_167.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_167);
     }

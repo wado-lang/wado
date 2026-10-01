@@ -323,9 +323,7 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
 
 fn "variant_deref_cross_module.wado/process$scalar"(elem, out) {
     let name_2: ref "core:prelude/string.wado//String";
-    let rep: ref "./sub/variant_deref_helper.wado//RepeatElem";
     let alts: ref "core:prelude//List<./sub/variant_deref_helper.wado/Alt>";
-    let lab: ref "./sub/variant_deref_helper.wado//LabelElem";
     let n_25: i32;
     let new_used_29: i32;
     let start_30: i32;
@@ -379,7 +377,7 @@ fn "variant_deref_cross_module.wado/process$scalar"(elem, out) {
     } else {
     }
     if ref.test "./sub/variant_deref_helper.wado//Elem::Repeat"(elem) {
-        "variant_deref_cross_module.wado/process$scalar"(local.tee rep(ref.cast "./sub/variant_deref_helper.wado//Elem::Repeat"(elem).payload_0).element, out);
+        "variant_deref_cross_module.wado/process$scalar"(ref.cast "./sub/variant_deref_helper.wado//Elem::Repeat"(elem).payload_0.element, out);
         return;
     } else {
     }
@@ -419,7 +417,7 @@ fn "variant_deref_cross_module.wado/process$scalar"(elem, out) {
     } else {
     }
     if ref.test "./sub/variant_deref_helper.wado//Elem::Label"(elem) {
-        "variant_deref_cross_module.wado/process$scalar"(local.tee lab(ref.cast "./sub/variant_deref_helper.wado//Elem::Label"(elem).payload_0).element, out);
+        "variant_deref_cross_module.wado/process$scalar"(ref.cast "./sub/variant_deref_helper.wado//Elem::Label"(elem).payload_0.element, out);
         return;
     } else {
     }

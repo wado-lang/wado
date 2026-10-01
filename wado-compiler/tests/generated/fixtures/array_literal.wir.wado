@@ -784,7 +784,6 @@ fn "array_literal.wado/$test_5_a_list_of_tuples_holding_unit"() {
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let elements_10: ref Array<[i32,()]>;
     let elements_11: ref Array<i32>;
-    let v: ref "tuple//[i32, ()]";
     let used: i32;
     let $licm_repr_39: ref Array<i32>;
     let $sroa_$iter_0_index_45: i32;
@@ -795,7 +794,7 @@ fn "array_literal.wado/$test_5_a_list_of_tuples_holding_unit"() {
     b56: block {
         l57: loop {
             break_if b56 $sroa_$iter_0_index_45 >= 3;
-            $sroa_item_0_47 = local.tee v(builtin::array_get_value<ref "tuple//[i32, ()]">(elements_10, $sroa_$iter_0_index_45)).0;
+            $sroa_item_0_47 = builtin::array_get_value<ref "tuple//[i32, ()]">(elements_10, $sroa_$iter_0_index_45).0;
             $sroa_$iter_0_index_45 = $sroa_$iter_0_index_45 + 1;
             if @unlikely(local.tee used(seen.used) >= builtin::array_len(seen.repr)) {
                 cold_path;

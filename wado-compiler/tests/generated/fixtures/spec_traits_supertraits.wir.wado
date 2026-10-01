@@ -262,8 +262,7 @@ condition: c.radius() == 2 && c.area() == 12 && `${c}` == \"coin\"
 
 fn "spec_traits_supertraits.wado/$cm_export__$test_0"() {
     let $v0: i32;
-    let self: ref "core:prelude//List<spec_traits_supertraits.wado/Id>";
-    if @unlikely(local.tee $v0(local.tee self("spec_traits_supertraits.wado/spec_traits_supertraits.wado/dedup_sorted<spec_traits_supertraits.wado/Id>"(struct.new "core:prelude//List<spec_traits_supertraits.wado/Id>" { repr: array.new_fixed<ref "spec_traits_supertraits.wado//Id">(struct.new "spec_traits_supertraits.wado//Id" { n: 1 }, struct.new "spec_traits_supertraits.wado//Id" { n: 1 }, struct.new "spec_traits_supertraits.wado//Id" { n: 2 }), used: 3 })).used) != 2) {
+    if @unlikely(local.tee $v0("spec_traits_supertraits.wado/spec_traits_supertraits.wado/dedup_sorted<spec_traits_supertraits.wado/Id>"(struct.new "core:prelude//List<spec_traits_supertraits.wado/Id>" { repr: array.new_fixed<ref "spec_traits_supertraits.wado//Id">(struct.new "spec_traits_supertraits.wado//Id" { n: 1 }, struct.new "spec_traits_supertraits.wado//Id" { n: 1 }, struct.new "spec_traits_supertraits.wado//Id" { n: 2 }), used: 3 }).used) != 2) {
         cold_path;
         "spec_traits_supertraits.wado/$test_0$cold0"($v0);
         unreachable;
@@ -282,7 +281,6 @@ fn "spec_traits_supertraits.wado/spec_traits_supertraits.wado/dedup_sorted<spec_
     let elements: ref "Array<spec_traits_supertraits.wado/Id>";
     let end: i32;
     let v: ref "spec_traits_supertraits.wado//Id";
-    let self_21: ref "spec_traits_supertraits.wado//Id";
     let $sroa_$iter_0_index_38: i32;
     let $av_40: i32;
     out = struct.new "core:prelude//List<spec_traits_supertraits.wado/Id>" { repr: local.tee elements(array.new_fixed<ref "spec_traits_supertraits.wado//Id">()), used: 0 };
@@ -297,7 +295,7 @@ fn "spec_traits_supertraits.wado/spec_traits_supertraits.wado/dedup_sorted<spec_
             if (if local.tee $load_3(out.used) == 0 -> i32 {
                 1;
             } else {
-                local.tee self_21(builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">(out.repr, $load_3 - 1)).n == $av_40 == 0;
+                builtin::array_get_value<ref "spec_traits_supertraits.wado//Id">(out.repr, $load_3 - 1).n == $av_40 == 0;
             }) {
                 if @unlikely($load_3 >= builtin::array_len(out.repr)) {
                     cold_path;

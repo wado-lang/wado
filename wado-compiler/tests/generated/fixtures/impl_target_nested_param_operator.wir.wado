@@ -165,8 +165,8 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
     let $v5: i32;
     let $v6: bool;
     let $v6_seen: bool;
-    let $cond_14: bool;
     let $local_20: ref "core:prelude/format.wado//Formatter";
+    let $local_21: ref "core:prelude/string.wado//String";
     let $local_23: ref "core:prelude/string.wado//String";
     let $local_25: ref "core:prelude/string.wado//String";
     let $local_27: ref "core:prelude/string.wado//String";
@@ -216,13 +216,13 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
     });
     $v1_47 = 0;
     $v6_seen = 0;
-    if @unlikely(local.tee $cond_14((if i -> i32 {
+    if @unlikely((if i -> i32 {
         $v6 = $v5 = global:impl_target_nested_param_operator.wado::$const_obj_3.b; $v1_47 = 1; $v5 == 3;
         $v6_seen = 1;
         $v6;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         v = (if $v2_seen -> ref "core:prelude/string.wado//String" {
             $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee v("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
@@ -231,10 +231,10 @@ fn "impl_target_nested_param_operator.wado/$test_0_the_operands__element_type"()
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
-        $v2 = (if $v3_seen -> ref "core:prelude/string.wado//String" {
-            $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(ref.as_non_null(local.tee $v2("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16))));
+        $local_21 = (if $v3_seen -> ref "core:prelude/string.wado//String" {
+            $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_21("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
             "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: $v3 }, $local_20);
-            ref.as_non_null($v2);
+            $local_21;
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
@@ -280,9 +280,9 @@ condition: r.a.len() == 2 && r.a[1] == \"y\" && r.b == 3
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_27.repr, $mv_b_2, v, $v1_4);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_27.repr, $mv_b_2 + $v1_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_27.repr, $mv_b_2 + (1 + $v1_4), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("r.a[1] == \"y\": "), used: 15 }, 15);
-        $v1_4 = "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"($v2.used);
+        $v1_4 = "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"($local_21.used);
         $mv_b_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 34 + $v1_4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_27.repr, $mv_b_2, ref.as_non_null($v2), $v1_4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_27.repr, $mv_b_2, $local_21, $v1_4);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_27.repr, $mv_b_2 + $v1_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_27.repr, $mv_b_2 + (1 + $v1_4), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("r.a.len() == 2 && r.a[1] == \"y\": "), used: 33 }, 33);
         $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_27);

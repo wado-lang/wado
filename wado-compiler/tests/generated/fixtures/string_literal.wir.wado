@@ -484,7 +484,6 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start) {
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond: bool;
     if @unlikely(local.tee n("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len$spec0"(bytes, start)) <= 0) {
         cold_path;
         advance = (if n == 0 -> i32 {
@@ -501,13 +500,13 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start) {
     $v1 = n >= 2;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2 = n; $v2_seen = 1; $v2 <= 4;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/decode_utf8_scalar$cold0"($load_0, advance, bytes.end, n, $v1, $v2, $v2_seen, $v3, $v3_seen);
         unreachable;
@@ -1618,7 +1617,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond_16: bool;
     $v2_2 = bytes.end - bytes.start;
     if @unlikely(prefix == $v2_2) {
         cold_path;
@@ -1632,13 +1630,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     $v1 = local.tee $v2_2("core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len"(bytes, prefix)) >= 1;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond_16((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2_12 = $v2_2; $v2_seen = 1; $v2_12 <= 3;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$cold0"($v2_2, $v1, $v2_12, $v2_seen, $v3, $v3_seen);
         unreachable;

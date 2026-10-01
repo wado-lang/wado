@@ -129,8 +129,7 @@ fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscri
 fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through_every_one_of_them"() {
     let $load_0: ref "index_ref_mut_field_assign.wado//Cell";
     let $v0_1: i32;
-    let $sroa_o_inner_21: ref "index_ref_mut_field_assign.wado//Holder<i32>";
-    local.tee $load_0(local.tee $sroa_o_inner_21(struct.new "index_ref_mut_field_assign.wado//Holder<i32>" { item: 1, cell: struct.new "index_ref_mut_field_assign.wado//Cell" { n: 1 } }).cell).n = 7;
+    local.tee $load_0(struct.new "index_ref_mut_field_assign.wado//Holder<i32>" { item: 1, cell: struct.new "index_ref_mut_field_assign.wado//Cell" { n: 1 } }.cell).n = 7;
     if @unlikely(local.tee $v0_1($load_0.n) != 7) {
         cold_path;
         "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through_every_one_of_them$cold1"($v0_1);

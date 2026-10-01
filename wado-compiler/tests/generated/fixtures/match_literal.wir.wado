@@ -167,24 +167,23 @@ fn "match_literal.wado/$cm_export__$test_14_a_wide_int_literal_past_64_bits_is_n
 }
 
 fn "match_literal.wado/$cm_export__$test_15_a_wide_int_scrutinee_is_evaluated_exactly_once"() {
-    let $cond_2: bool;
     global:match_literal.wado::OBSERVED = 0;
     global:match_literal.wado::OBSERVED = global:match_literal.wado::OBSERVED + 1;
-    if @unlikely(local.tee $cond_2(global:match_literal.wado::OBSERVED == 1) == 0) {
+    if @unlikely((global:match_literal.wado::OBSERVED == 1) == 0) {
         cold_path;
         "match_literal.wado/$test_15_a_wide_int_scrutinee_is_evaluated_exactly_once$cold2"();
         unreachable;
     }
     global:match_literal.wado::OBSERVED = 0;
     global:match_literal.wado::OBSERVED = global:match_literal.wado::OBSERVED + 1;
-    if @unlikely(local.tee $cond_2(global:match_literal.wado::OBSERVED == 1) == 0) {
+    if @unlikely((global:match_literal.wado::OBSERVED == 1) == 0) {
         cold_path;
         "match_literal.wado/$test_15_a_wide_int_scrutinee_is_evaluated_exactly_once$cold1"();
         unreachable;
     }
     global:match_literal.wado::OBSERVED = 0;
     global:match_literal.wado::OBSERVED = global:match_literal.wado::OBSERVED + 1;
-    if @unlikely(local.tee $cond_2(global:match_literal.wado::OBSERVED == 1) == 0) {
+    if @unlikely((global:match_literal.wado::OBSERVED == 1) == 0) {
         cold_path;
         "match_literal.wado/$test_15_a_wide_int_scrutinee_is_evaluated_exactly_once$cold0"();
         unreachable;

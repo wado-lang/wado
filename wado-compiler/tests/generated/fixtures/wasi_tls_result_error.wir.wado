@@ -131,11 +131,10 @@ global global:core:prelude/types.wado::$const_obj_12: ref null Array<u8> = array
 global global:core:prelude/types.wado::$const_obj_13: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "wasi_tls_result_error.wado/run"() with Stdout, Connector, Error {
-    let $match_1: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
     let packed_12: i64;
     let rx_13: i32;
     let tx_14: i32;
-    if local.tee $match_1("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_result_error.wado/$cm_binding__Connector_connect"("wasi_tls_result_error.wado/$cm_binding__Connector_new"(), global:wasi_tls_result_error.wado::$const_obj_3))).discriminant == 0 {
+    if "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_result_error.wado/$cm_binding__Connector_connect"("wasi_tls_result_error.wado/$cm_binding__Connector_new"(), global:wasi_tls_result_error.wado::$const_obj_3)).discriminant == 0 {
         rx_13 = builtin::i32_wrap_i64(local.tee packed_12("wasi/stream-new"()));
         tx_14 = builtin::i32_wrap_i64(packed_12 >> 32_i64);
         rx_13 = "wasi_tls_result_error.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
@@ -185,13 +184,11 @@ fn "wasi_tls_result_error.wado/$cm_binding__Connector_connect"(this, server_name
 }
 
 fn "wasi_tls_result_error.wado/$cm_lift__Connector_connect"($outptr) {
-    let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" {
+    return (if builtin::load_u8($outptr) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" {
         struct.new "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" { 0 };
     } else {
         struct.new "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err" { discriminant: 1, payload_0: builtin::load_i32($outptr + 4) };
-    }));
+    });
 }
 
 fn "wasi_tls_result_error.wado/$cm_export__run"() {

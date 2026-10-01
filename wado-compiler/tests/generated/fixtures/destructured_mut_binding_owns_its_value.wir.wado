@@ -103,7 +103,6 @@ global global:core:prelude/list.wado::$const_obj_26: ref null Array<u8> = array.
 
 fn "destructured_mut_binding_owns_its_value.wado/run"() with Stdout {
     let o: ref null "destructured_mut_binding_owns_its_value.wado//Shape";
-    let $match_mut_lift_7: ref "destructured_mut_binding_owns_its_value.wado//Shape";
     let packed_36: i64;
     let rx_37: i32;
     let tx_38: i32;
@@ -131,7 +130,7 @@ fn "destructured_mut_binding_owns_its_value.wado/run"() with Stdout {
     $mv_arg_2 = global:destructured_mut_binding_owns_its_value.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_38, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_37);
-    $sroa_$sroa_a_axes_151_repr_163 = local.tee v_114(local.tee $match_mut_lift_7(ref.as_non_null(local.tee o(struct.new "destructured_mut_binding_owns_its_value.wado//Shape" { axes: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }), used: 1 } }))).axes).repr;
+    $sroa_$sroa_a_axes_151_repr_163 = local.tee v_114(ref.as_non_null(local.tee o(struct.new "destructured_mut_binding_owns_its_value.wado//Shape" { axes: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }), used: 1 } })).axes).repr;
     rx_37 = v_114.used;
     let $array_clone_dst_8: ref "Array<core:prelude/string.wado/String>";
     $array_clone_dst_8 = builtin::array_new<ref "core:prelude/string.wado//String">(rx_37);
@@ -157,7 +156,7 @@ fn "destructured_mut_binding_owns_its_value.wado/run"() with Stdout {
         unreachable;
     }
     builtin::array_set<ref "core:prelude/string.wado//String">($array_clone_dst_8, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83), used: 1 });
-    tx_38 = local.tee v_114(local.tee $match_mut_lift_7(ref.as_non_null(o)).axes).used;
+    tx_38 = local.tee v_114(ref.as_non_null(o).axes).used;
     if @unlikely(0 >= tx_38) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(tx_38);

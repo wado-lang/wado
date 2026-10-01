@@ -351,13 +351,12 @@ fn "spec_control_flow_loops.wado/$test_3_each_iteration_has_its_own_bindings"() 
     let $v5_seen: bool;
     let $v6: bool;
     let $v6_seen: bool;
-    let elements: ref Array<fn()->i32>;
     let value_30: ref "spec_control_flow_loops.wado//$Closure_0";
     let used: i32;
     let value_35: ref struct;
     let $v1_44: i32;
     let $v1_50: i32;
-    fs = struct.new "core:prelude//List<fn()->i32>" { repr: local.tee elements(array.new_fixed<ref struct>()), used: 0 };
+    fs = struct.new "core:prelude//List<fn()->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i = 0;
     b8: block {
         l9: loop {
@@ -514,7 +513,6 @@ fn "spec_control_flow_loops.wado/$test_5_for_of"() {
     let sum: i32;
     let $v2: i32;
     let $v3: bool;
-    let $cond_12: bool;
     let order: ref "core:prelude//List<i32>";
     let $local_28: ref "core:prelude/string.wado//String";
     let $local_29: ref "core:prelude/format.wado//Formatter";
@@ -555,13 +553,13 @@ fn "spec_control_flow_loops.wado/$test_5_for_of"() {
     item_41 = sum == 45;
     $sroa_$iter_0_index_90 = 0;
     item_47 = 0;
-    if @unlikely(local.tee $cond_12((if item_41 -> i32 {
+    if @unlikely((if item_41 -> i32 {
         $v3 = $v2 = 1; $sroa_$iter_0_index_90 = 1; 1 == 1;
         item_47 = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "spec_control_flow_loops.wado/$test_5_for_of$cold0"(sum, item_41, $v2, $sroa_$iter_0_index_90, $v3, item_47);
         unreachable;
@@ -703,7 +701,6 @@ fn "spec_control_flow_loops.wado/$test_8_break_and_continue"() {
     let $local_16: ref "core:prelude/format.wado//Formatter";
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_19: ref "core:prelude/string.wado//String";
-    let elements: ref Array<i32>;
     let used: i32;
     i = 0;
     b50: block {
@@ -719,7 +716,7 @@ fn "spec_control_flow_loops.wado/$test_8_break_and_continue"() {
         "spec_control_flow_loops.wado/$test_8_break_and_continue$cold0"(i);
         unreachable;
     }
-    kept = struct.new "core:prelude//List<i32>" { repr: local.tee elements(array.new_fixed<i32>()), used: 0 };
+    kept = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i = 0;
     b53: block {
         l54: loop {
@@ -1198,8 +1195,7 @@ fn "spec_control_flow_loops.wado/$test_3_each_iteration_has_its_own_bindings$col
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    let $arg_spill_6: ref "core:prelude/string.wado//String";
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_6($sroa_$f_buf_330), text_145.repr, text_145.used);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_330, text_145.repr, text_145.used);
     if @unlikely(local.tee $v1(text_77.used + 10) > builtin::array_len(text_77.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(text_77, $v1);
@@ -3113,8 +3109,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
 }
 
 fn "closure/spec_control_flow_loops.wado/$closure_wrapper_0"($env) {
-    let $typed_env: ref "spec_control_flow_loops.wado//$Closure_0";
-    return "spec_control_flow_loops.wado/spec_control_flow_loops.wado/$Closure_0::$call"(local.tee $typed_env(ref.cast "spec_control_flow_loops.wado//$Closure_0"($env)));
+    return "spec_control_flow_loops.wado/spec_control_flow_loops.wado/$Closure_0::$call"(ref.cast "spec_control_flow_loops.wado//$Closure_0"($env));
 }
 
 export fn "spec_control_flow_loops.wado/$cm_export__$test_0_while" as "$test_0_while"

@@ -546,12 +546,10 @@ fn "http_base64_decode.wado/$cm_task_entry__handle"(request) {
     let $cond: bool;
     let $local_13: ref "core:prelude/string.wado//String";
     let $local_14: ref "core:prelude/format.wado//Formatter";
-    let $pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed_193: i64;
     let tx_195: i32;
     let rx_197: i32;
     let tx_198: i32;
-    let self_211: ref "core:prelude/string.wado//StrUtf8ByteIter";
     if @unlikely(local.tee $cond((if ref.is_null(local.tee result(block -> ref null "core:prelude//List<u8>" {
         let $mv_arg_1: ref "core:prelude/slice.wado//Slice<u8>";
         global:http_base64_decode.wado::$const_obj_8 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: ref.as_non_null(global:http_base64_decode.wado::$const_obj_9 = array.new_fixed<u8>(89, 87, 74, 106); global:http_base64_decode.wado::$const_obj_9), start: 0, end: 4 };
@@ -587,7 +585,7 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
     tx_195 = builtin::i32_wrap_i64(packed_193 >> 32_i64);
     rx_197 = builtin::i32_wrap_i64(local.tee packed_193("wasi/stream-new"()));
     tx_198 = builtin::i32_wrap_i64(packed_193 >> 32_i64);
-    $cond = local.tee $pattern_temp_2("http_base64_decode.wado/$cm_binding__Response_new"("http_base64_decode.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_197 }, $cond)).0;
+    $cond = "http_base64_decode.wado/$cm_binding__Response_new"("http_base64_decode.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_197 }, $cond).0;
     rx_197 = 0;
     rx_197 = $cond;
     "wasi/task-return:handle"(0, rx_197, 0, 0_i64, 0, 0, 0, 0);
@@ -629,7 +627,7 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 65, 73, 76), used: 4 };
     });
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_198, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(local.tee self_211(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_13.repr, used: $local_13.used, index: 0 })));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_198, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_13.repr, used: $local_13.used, index: 0 }));
     "wasi/stream-drop-writable"(tx_198);
     "http_base64_decode.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_195, global:http_base64_decode.wado::$const_obj_4);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
@@ -1330,7 +1328,6 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond: bool;
     if @unlikely(local.tee n("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, start, len)) <= 0) {
         cold_path;
         len = (if n == 0 -> i32 {
@@ -1347,13 +1344,13 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     $v1 = n >= 2;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2 = n; $v2_seen = 1; $v2 <= 4;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/decode_utf8_scalar$cold0"($load_0, len, bytes.end, n, $v1, $v2, $v2_seen, $v3, $v3_seen);
         unreachable;
@@ -2562,7 +2559,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond_16: bool;
     $v2_2 = bytes.end - bytes.start;
     if @unlikely(prefix == $v2_2) {
         cold_path;
@@ -2576,13 +2572,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     $v1 = local.tee $v2_2("core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len"(bytes, prefix)) >= 1;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond_16((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2_12 = $v2_2; $v2_seen = 1; $v2_12 <= 3;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$cold0"($v2_2, $v1, $v2_12, $v2_seen, $v3, $v3_seen);
         unreachable;

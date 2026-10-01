@@ -506,7 +506,6 @@ fn "spec_effects_install.wado/$test_1_a__with__is_an_expression"() {
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $local_7: ref null "spec_effects_install.wado//$Dispatch_Random";
-    let $local_8: ref "spec_effects_install.wado//$Dispatch_Random";
     let $local_9: ref "core:uuid//Uuid";
     let self_13: v128;
     let s: ref "core:prelude/string.wado//String";
@@ -515,7 +514,7 @@ fn "spec_effects_install.wado/$test_1_a__with__is_an_expression"() {
     let b: ref Array<u8>;
     let i: i32;
     rng = struct.new "spec_effects_install.wado//Zeros" {  };
-    global:spec_effects_install.wado::$effect_Random = local.tee $local_8(struct.new "spec_effects_install.wado//$Dispatch_Random" { outer: local.tee $local_7(global:spec_effects_install.wado::$effect_Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_effects_install.wado//$Closure_3" { $capture_0: rng }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_3" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_effects_install.wado//$Closure_4" {  }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_4" } });
+    global:spec_effects_install.wado::$effect_Random = struct.new "spec_effects_install.wado//$Dispatch_Random" { outer: local.tee $local_7(global:spec_effects_install.wado::$effect_Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_effects_install.wado//$Closure_3" { $capture_0: rng }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_3" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_effects_install.wado//$Closure_4" {  }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_4" } };
     $local_9 = "core:uuid/core:uuid/Uuid::v4"();
     global:spec_effects_install.wado::$effect_Random = $local_7;
     self_13 = $local_9.bytes;
@@ -2614,20 +2613,17 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 }
 
 fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_0::$call"(self) {
-    let self_1: ref "spec_effects_install.wado//Script";
-    return local.tee self_1(self.$capture_0).line;
+    return self.$capture_0.line;
 }
 
 fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_1::$call"(self) {
-    let self_1: ref "spec_effects_install.wado//Script";
-    return local.tee self_1(self.$capture_0).line;
+    return self.$capture_0.line;
 }
 
 fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_2::$call"(self, line) {
-    let self_2: ref "spec_effects_install.wado//Capture";
     let self_4: ref "core:prelude//List<core:prelude/string.wado/String>";
     let used: i32;
-    if @unlikely(local.tee used(local.tee self_4(local.tee self_2(self.$capture_0).lines).used) >= builtin::array_len(self_4.repr)) {
+    if @unlikely(local.tee used(local.tee self_4(self.$capture_0.lines).used) >= builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_4);
     }
@@ -2638,10 +2634,9 @@ fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_2::$call"(self,
 fn "spec_effects_install.wado/spec_effects_install.wado/$Closure_3::$call"(max_len) {
     let out: ref "core:prelude//List<u8>";
     let i: i32;
-    let elements: ref Array<u8>;
     let used: i32;
     let $licm_arith_13: i32;
-    return out = struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 }, i = 0, $licm_arith_13 = builtin::i32_wrap_i64(max_len), b302: block {
+    return out = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, i = 0, $licm_arith_13 = builtin::i32_wrap_i64(max_len), b302: block {
         l303: loop {
             break_if b302 i >= $licm_arith_13;
             if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
@@ -2683,14 +2678,12 @@ fn "core:uuid/core:uuid/Uuid::write_to$scalar"(self, out) {
     let $v2_seen_23: bool;
     let $v3_24: bool;
     let $v3_seen_25: bool;
-    let $cond_26: bool;
     let nibble_35: i32;
     let $v1_36: bool;
     let $v2_37: i32;
     let $v2_seen_38: bool;
     let $v3_39: bool;
     let $v3_seen_40: bool;
-    let $cond_41: bool;
     i = 0;
     b305: block {
         l306: loop {
@@ -2770,24 +2763,24 @@ fn "core:uuid/core:uuid/Uuid::write_to$scalar"(self, out) {
                 };
                 i8x16.extract_lane_u(14, self);
             };
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $v1_21 = local.tee nibble_20((byte_3 >> 4) & 15) >= 0; $v2_seen_23 = 0; $v3_seen_25 = 0; if @unlikely(local.tee $cond_26((if $v1_21 -> i32 {
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $v1_21 = local.tee nibble_20((byte_3 >> 4) & 15) >= 0; $v2_seen_23 = 0; $v3_seen_25 = 0; if @unlikely((if $v1_21 -> i32 {
                 $v3_24 = $v2_22 = nibble_20; $v2_seen_23 = 1; $v2_22 < 16;
                 $v3_seen_25 = 1;
                 $v3_24;
             } else {
                 0;
-            })) == 0) {
+            }) == 0) {
                 cold_path;
                 "core:uuid/hex_digit$cold0"(nibble_20, $v1_21, $v2_22, $v2_seen_23, $v3_24, $v3_seen_25);
                 unreachable;
             }; select char(nibble_20 < 10, (48 + (nibble_20 & 255)) & 255, (97 + ((nibble_20 - 10) & 255)) & 255));
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $v1_36 = local.tee nibble_35(byte_3 & 15) >= 0; $v2_seen_38 = 0; $v3_seen_40 = 0; if @unlikely(local.tee $cond_41((if $v1_36 -> i32 {
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(out, $v1_36 = local.tee nibble_35(byte_3 & 15) >= 0; $v2_seen_38 = 0; $v3_seen_40 = 0; if @unlikely((if $v1_36 -> i32 {
                 $v3_39 = $v2_37 = nibble_35; $v2_seen_38 = 1; $v2_37 < 16;
                 $v3_seen_40 = 1;
                 $v3_39;
             } else {
                 0;
-            })) == 0) {
+            }) == 0) {
                 cold_path;
                 "core:uuid/hex_digit$cold0"(nibble_35, $v1_36, $v2_37, $v2_seen_38, $v3_39, $v3_seen_40);
                 unreachable;
@@ -2890,18 +2883,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "closure/spec_effects_install.wado/$closure_wrapper_0"($env) {
-    let $typed_env: ref "spec_effects_install.wado//$Closure_0";
-    return "spec_effects_install.wado/spec_effects_install.wado/$Closure_0::$call"(local.tee $typed_env(ref.cast "spec_effects_install.wado//$Closure_0"($env)));
+    return "spec_effects_install.wado/spec_effects_install.wado/$Closure_0::$call"(ref.cast "spec_effects_install.wado//$Closure_0"($env));
 }
 
 fn "closure/spec_effects_install.wado/$closure_wrapper_1"($env) {
-    let $typed_env: ref "spec_effects_install.wado//$Closure_1";
-    return "spec_effects_install.wado/spec_effects_install.wado/$Closure_1::$call"(local.tee $typed_env(ref.cast "spec_effects_install.wado//$Closure_1"($env)));
+    return "spec_effects_install.wado/spec_effects_install.wado/$Closure_1::$call"(ref.cast "spec_effects_install.wado//$Closure_1"($env));
 }
 
 fn "closure/spec_effects_install.wado/$closure_wrapper_2"($env, $p0) {
-    let $typed_env: ref "spec_effects_install.wado//$Closure_2";
-    "spec_effects_install.wado/spec_effects_install.wado/$Closure_2::$call"(local.tee $typed_env(ref.cast "spec_effects_install.wado//$Closure_2"($env)), $p0);
+    "spec_effects_install.wado/spec_effects_install.wado/$Closure_2::$call"(ref.cast "spec_effects_install.wado//$Closure_2"($env), $p0);
 }
 
 fn "closure/spec_effects_install.wado/$closure_wrapper_3"($env, $p0) {

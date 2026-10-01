@@ -431,7 +431,6 @@ fn "prelude_pub_api_types_nameable.wado/run"() with Stdout {
     let $v0_6: ref "core:prelude/string.wado//StrSplitWhitespaceIter";
     let $v0_9: ref "core:prelude/string.wado//StrLinesIter";
     let $v0_12: ref null "core:prelude/string.wado//StrCharIndicesIter";
-    let e_18: ref "core:prelude/traits.wado//LenientParseError";
     let $local_19: ref "core:prelude/string.wado//String";
     let $local_20: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_32: i32;
@@ -443,7 +442,6 @@ fn "prelude_pub_api_types_nameable.wado/run"() with Stdout {
     let $iter_0_76: ref "core:prelude/string.wado//StrLinesIter";
     let $iter_0_83: ref "core:prelude/string.wado//StrCharIndicesIter";
     let $local_4_86: ref null "tuple//[i32, char]";
-    let it_91: ref "core:prelude/slice.wado//SliceRefMutIter<prelude_pub_api_types_nameable.wado/Cell>";
     let ref_val: ref "prelude_pub_api_types_nameable.wado//Cell";
     let packed: i64;
     let $sroa_$iter_0_repr_125: ref "Array<prelude_pub_api_types_nameable.wado/Cell>";
@@ -543,8 +541,7 @@ condition: count_lines(\"a\\nb\".lines()) == 2
         b17: block {
             l18: loop {
                 if ref.is_null(local.tee $local_4_86("core:prelude/string.wado/core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"($iter_0_83))) == 0 {
-                    let $variant_payload_9: ref "tuple//[i32, char]";
-                    break $inline_first_index_17: local.tee n_48(local.tee $variant_payload_9(ref.as_non_null($local_4_86)).0);
+                    break $inline_first_index_17: local.tee n_48(ref.as_non_null($local_4_86).0);
                 } else {
                     break b17;
                 }
@@ -559,7 +556,7 @@ condition: first_index(\"xy\".char_indices()) == 0
 "), used: 50 }, 50); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_19.repr, $fuse_at_32 + 50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"xy\".char_indices(): "), used: 21 }, 21); $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_19); "core:prelude/traits.wado/core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(ref.as_non_null($v0_12), $local_20); $fuse_at_32 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_19, 35); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_19.repr, $fuse_at_32, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_19.repr, $fuse_at_32 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("first_index(\"xy\".char_indices()): "), used: 34 }, 34); $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_19); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: n_48 }, $local_20); $mv_arg_2 = global:prelude_pub_api_types_nameable.wado::$const_obj_4; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_19, $mv_arg_2.repr, $mv_arg_2.used); $local_19);
         unreachable;
     }
-    $sroa_$iter_0_repr_125 = local.tee it_91(struct.new "core:prelude/slice.wado//SliceRefMutIter<prelude_pub_api_types_nameable.wado/Cell>" { repr: local.tee $sroa_cells_repr_207(array.new_fixed<ref "prelude_pub_api_types_nameable.wado//Cell">(struct.new "prelude_pub_api_types_nameable.wado//Cell" { n: 1 }, struct.new "prelude_pub_api_types_nameable.wado//Cell" { n: 2 })), index: 0, end: 2 }).repr;
+    $sroa_$iter_0_repr_125 = struct.new "core:prelude/slice.wado//SliceRefMutIter<prelude_pub_api_types_nameable.wado/Cell>" { repr: local.tee $sroa_cells_repr_207(array.new_fixed<ref "prelude_pub_api_types_nameable.wado//Cell">(struct.new "prelude_pub_api_types_nameable.wado//Cell" { n: 1 }, struct.new "prelude_pub_api_types_nameable.wado//Cell" { n: 2 })), index: 0, end: 2 }.repr;
     n_48 = 0;
     b20: block {
         l21: loop {
@@ -578,7 +575,7 @@ condition: first_index(\"xy\".char_indices()) == 0
     let $mv$$match_31$2: ref null "core:prelude/traits.wado//LenientParseError";
     multivalue_bind [n_48, $fuse_at_32, $mv$$match_31$2] = "core:prelude/primitive.wado/bool^core:prelude/traits.wado/LenientFromStr::from_str_lenient<core:prelude/string.wado/String>"(local.tee $local_19(global:prelude_pub_api_types_nameable.wado::$const_obj_3).repr, $local_19.used);
     if n_48 == 1 {
-        $local_19 = local.tee e_18(ref.as_non_null($mv$$match_31$2)).reason;
+        $local_19 = ref.as_non_null($mv$$match_31$2).reason;
         n_48 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
         $fuse_at_32 = builtin::i32_wrap_i64(packed >> 32_i64);
         n_48 = "prelude_pub_api_types_nameable.wado/$cm_binding__Stdout_write_via_stream"(n_48);

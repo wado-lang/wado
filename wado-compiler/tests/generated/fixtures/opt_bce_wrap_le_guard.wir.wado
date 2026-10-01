@@ -55,8 +55,7 @@ fn "opt_bce_wrap_le_guard.wado/$cm_export__run"() {
             break_if b0 i > 2147483647;
             if @unlikely(i >= -2147483644) {
                 cold_path;
-                let $mv_field_1: ref Array<u8>;
-                "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("boom: bound overflowed")), 22);
+                "core:rt/panic"(array.new_data<u8>("boom: bound overflowed"), 22);
                 unreachable;
             }
             i = i + 1;

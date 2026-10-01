@@ -264,9 +264,8 @@ condition: first_of(&strs.to_array()) == 102
 
 fn "concrete_impl_on_builtin_array.wado/$test_1_a_method_call_reaches_each_instantiation"() {
     let elements_11: ref "Array<core:prelude/string.wado/String>";
-    let out_18: ref "Array<core:prelude/string.wado/String>";
     elements_11 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 });
-    builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee out_18(builtin::array_new<ref "core:prelude/string.wado//String">(2)), 0, elements_11, 0, 2);
+    builtin::array_copy<ref "core:prelude/string.wado//String">(builtin::array_new<ref "core:prelude/string.wado//String">(2), 0, elements_11, 0, 2);
 }
 
 fn "concrete_impl_on_builtin_array.wado/$test_2_an_array_argument_of_another_head_matches"() {

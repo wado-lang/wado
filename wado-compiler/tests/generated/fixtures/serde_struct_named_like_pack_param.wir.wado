@@ -576,7 +576,6 @@ global mut global:core:prelude/traits.wado::$const_obj_280: ref null "tuple//[co
 fn "serde_struct_named_like_pack_param.wado/$test_1_tuple_serde_still_works_alongside_struct_t"() {
     let tup: ref "tuple//[i32, core:prelude/string.wado/String, bool]";
     let s: ref "core:prelude/string.wado//String";
-    let xs: ref "core:prelude//List<i32>";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let a: ref Array<u8>;
     let b: ref Array<u8>;
@@ -620,7 +619,7 @@ fn "serde_struct_named_like_pack_param.wado/$test_1_tuple_serde_still_works_alon
     let $mv$r$2: ref null "core:serde//DeserializeError";
     multivalue_bind [i, $mv$r$1, $mv$r$2] = "core:json/core/json/from_bytes<core:prelude/list.wado/List<i32>,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: b, start: 0, end: 7 });
     if @unlikely(local.tee $mv$$vr_12$0((if i == 0 -> bool {
-        local.tee xs(ref.as_non_null($mv$r$1)).used == 3;
+        ref.as_non_null($mv$r$1).used == 3;
     } else {
         0;
     })) == 0) {
@@ -653,7 +652,6 @@ condition: r matches { Ok(xs) && xs.len() == 3 }
 }
 
 fn "serde_struct_named_like_pack_param.wado/$cm_export__$test_0_struct_named_t_deserializes"() {
-    let x: ref "serde_struct_named_like_pack_param.wado//T";
     let $cond: bool;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
@@ -671,7 +669,7 @@ fn "serde_struct_named_like_pack_param.wado/$cm_export__$test_0_struct_named_t_d
     let $mv$r$2: ref null "core:serde//DeserializeError";
     multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/from_bytes<serde_struct_named_like_pack_param.wado/T,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_input_repr_18, start: 0, end: 7 });
     if @unlikely(local.tee $cond((if $mv$r$0 == 0 -> bool {
-        local.tee x(ref.as_non_null($mv$r$1)).v == 5;
+        ref.as_non_null($mv$r$1).v == 5;
     } else {
         0;
     })) == 0) {
@@ -2393,10 +2391,9 @@ fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(
     let new_used_29: i32;
     let start_30: i32;
     let val_i64_65: i64;
-    let repr: ref Array<u8>;
     $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0: block {
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0 i <= run_start;
-        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr(s.repr), start: run_start, end: i };
+        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: run_start, end: i };
         $inline_core_prelude_string_wado_String__internal_push_view_6: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_view_6 local.tee i(i - run_start) == 0;
             if @unlikely(local.tee new_used_29(buf.used + i) > builtin::array_len(buf.repr)) {
@@ -3431,7 +3428,6 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     let $local_3: ref "core:prelude/string.wado//String";
     let offset_10: i64;
     let start_23: i32;
-    let $sroa_$f_buf_83: ref "core:prelude/string.wado//String";
     let $av_86: i32;
     if local.tee $av_86(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start)) {
         return 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, builtin::i64_extend_i32_s($av_86);
@@ -3445,7 +3441,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = $load_3;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_11, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), c & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, c & 255);
     if @unlikely(local.tee c($local_3.used + 10) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, c);
@@ -3453,7 +3449,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = c;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_10, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), $av_86 & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, $av_86 & 255);
     if @unlikely(local.tee $av_86($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $av_86);
@@ -4448,8 +4444,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(cap
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(self) {
-    let repr: ref Array<u8>;
-    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee repr(self.repr), start: 0, end: self.used };
+    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self.repr, start: 0, end: self.used };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -5460,7 +5455,6 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
     let item: i32;
     let $local_17: ref null "core:serde//DeserializeError";
     let used_32: i32;
-    let elements: ref Array<i32>;
     let $mv$$vr_19$0: i32;
     let $mv$$vr_19$1: ref null "core:json//JsonSeqAccess";
     let $mv$$vr_19$2: ref null "core:serde//DeserializeError";
@@ -5540,7 +5534,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
             cold_path;
             return 1, ref.null none, $qm_e_15;
         }
-        return 0, struct.new "core:prelude//List<i32>" { repr: local.tee elements(array.new_fixed<i32>()), used: 0 }, ref.null none;
+        return 0, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 }, ref.null none;
     }
 }
 
@@ -6431,7 +6425,6 @@ fn "core:serde/[i32,core:prelude/string.wado/String,bool]^core:serde/Serialize::
     let start_33: i32;
     let r_79: ref null "core:serde//SerializeError";
     let start_91: i32;
-    let ser_95: ref "core:json//JsonSerializer";
     if @unlikely(local.tee new_used_32(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_32);
@@ -6457,7 +6450,7 @@ fn "core:serde/[i32,core:prelude/string.wado/String,bool]^core:serde/Serialize::
     start_91 = s.used;
     s.used = start_33;
     builtin::array_copy<u8>(s.repr, start_91, global:core:prelude/traits.wado::$const_obj_55, 0, 1);
-    if @likely(ref.is_null(local.tee r_79("core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool"(local.tee ser_95(struct.new "core:json//JsonSerializer" { buf: s }), new_used_32)))) {
+    if @likely(ref.is_null(local.tee r_79("core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool"(struct.new "core:json//JsonSerializer" { buf: s }, new_used_32)))) {
     } else {
         $local_15 = ref.as_non_null(r_79);
         cold_path;

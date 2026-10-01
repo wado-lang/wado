@@ -1083,13 +1083,12 @@ condition: 'Z'.to_string() == \"Z\"
 
 fn "display_trait.wado/test_custom"() with Stdout {
     let buf_1: ref "core:prelude/string.wado//String";
-    let f: ref "core:prelude/format.wado//Formatter";
     let buf_5: ref "core:prelude/string.wado//String";
     let packed_11: i64;
     let rx_12: i32;
     let tx_13: i32;
     buf_5 = local.tee buf_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(64), used: 0 });
-    "display_trait.wado/display_trait.wado/DisplayPoint^core:prelude/traits.wado/Display::fmt$scalar$spec0"(local.tee f(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf_5 }).buf);
+    "display_trait.wado/display_trait.wado/DisplayPoint^core:prelude/traits.wado/Display::fmt$scalar$spec0"(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf_5 }.buf);
     buf_5 = buf_1;
     rx_12 = builtin::i32_wrap_i64(local.tee packed_11("wasi/stream-new"()));
     tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
@@ -1097,7 +1096,7 @@ fn "display_trait.wado/test_custom"() with Stdout {
     "core:rt/write_string_to_stream"(tx_13, buf_5.repr, buf_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_12);
     buf_5 = local.tee buf_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(64), used: 0 });
-    "display_trait.wado/display_trait.wado/DisplayPoint^core:prelude/traits.wado/Display::fmt$scalar$spec1"(local.tee f(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf_5 }).buf);
+    "display_trait.wado/display_trait.wado/DisplayPoint^core:prelude/traits.wado/Display::fmt$scalar$spec1"(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf_5 }.buf);
     rx_12 = builtin::i32_wrap_i64(local.tee packed_11("wasi/stream-new"()));
     tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
     rx_12 = "display_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_12);
@@ -6559,7 +6558,6 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let pos_84: i32;
     let temp: i64;
     let digit: i32;
-    let self_89: ref "core:prelude/string.wado//String";
     let n_96: i32;
     let new_used_100: i32;
     let start_101: i32;
@@ -6762,7 +6760,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                     $mv_arg_3 = global:core:prelude/format.wado::$const_obj_384;
                     "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"($fmt_buf_131, 0, $mv_arg_3.repr, $mv_arg_3.used, digit_count_71);
                 };
-                arr = local.tee self_89($fmt_buf_131.buf).repr;
+                arr = $fmt_buf_131.buf.repr;
                 pos_84 = offset_72 + digit_count_71;
                 if self_63 == 0_i64 {
                     builtin::array_set_u8(arr, offset_72, 48);
@@ -8502,7 +8500,6 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitud
     let top_digits: i32;
     let digit_count_13: i32;
     let arr_15: ref Array<u8>;
-    let self_22: ref "core:prelude/string.wado//String";
     let pos_27: i32;
     let i_29: i32;
     top = self.low;
@@ -8538,7 +8535,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitud
     }
     digit_count_13 = local.tee top_digits("core:prelude/primitive.wado/count_digits_u64"(top)) + ((chunks - 1) * 19);
     is_neg = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0"(f, is_neg, digit_count_13);
-    arr_15 = local.tee self_22(f.buf).repr;
+    arr_15 = f.buf.repr;
     digit_count_13 = is_neg + digit_count_13;
     if chunks == 3 {
         pos_27 = (digit_count_13 - 38) + 19;
@@ -8592,7 +8589,6 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitud
     let top_digits: i32;
     let digit_count_13: i32;
     let arr_15: ref Array<u8>;
-    let self_22: ref "core:prelude/string.wado//String";
     let pos_27: i32;
     let i_29: i32;
     top = self.low;
@@ -8628,7 +8624,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitud
     }
     digit_count_13 = local.tee top_digits("core:prelude/primitive.wado/count_digits_u64"(top)) + ((chunks - 1) * 19);
     is_neg = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1"(f, is_neg, digit_count_13);
-    arr_15 = local.tee self_22(f.buf).repr;
+    arr_15 = f.buf.repr;
     digit_count_13 = is_neg + digit_count_13;
     if chunks == 3 {
         pos_27 = (digit_count_13 - 38) + 19;
@@ -8801,11 +8797,10 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(self, f) {
     let x: i64;
     let arr: ref Array<u8>;
     let i: i32;
-    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0"(f, is_negative, self);
-    arr = local.tee self_14(f.buf).repr;
+    arr = f.buf.repr;
     is_negative = is_negative + self;
     i = 0;
     b1265: block {
@@ -8825,11 +8820,10 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec1"(self, f) {
     let x: i64;
     let arr: ref Array<u8>;
     let i: i32;
-    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1"(f, is_negative, self);
-    arr = local.tee self_14(f.buf).repr;
+    arr = f.buf.repr;
     is_negative = is_negative + self;
     i = 0;
     b1267: block {

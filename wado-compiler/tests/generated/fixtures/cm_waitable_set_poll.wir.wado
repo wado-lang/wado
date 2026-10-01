@@ -300,7 +300,6 @@ fn "cm_waitable_set_poll.wado/$cm_export__handle"(request) {
 fn "cm_waitable_set_poll.wado/$cm_task_entry__handle"(request) with WaitableSet {
     let ws_1: i32;
     let $tv_1_184: i32;
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let out_ptr: i32;
     let code: i32;
     let packed_362: i64;
@@ -316,7 +315,7 @@ fn "cm_waitable_set_poll.wado/$cm_task_entry__handle"(request) with WaitableSet 
         drop("mem/realloc"(out_ptr, 8, 4, 0));
         out_ptr = builtin::i32_wrap_i64(local.tee packed_362("wasi/future-new"()));
         code = builtin::i32_wrap_i64(packed_362 >> 32_i64);
-        out_ptr = local.tee $pattern_temp_1("cm_waitable_set_poll.wado/$cm_binding__Response_new"("cm_waitable_set_poll.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, out_ptr)).0;
+        out_ptr = "cm_waitable_set_poll.wado/$cm_binding__Response_new"("cm_waitable_set_poll.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, out_ptr).0;
         $tv_1_184 = 0;
         $tv_1_184 = out_ptr;
         "wasi/task-return:handle"(0, $tv_1_184, 0, 0_i64, 0, 0, 0, 0);
@@ -326,7 +325,7 @@ fn "cm_waitable_set_poll.wado/$cm_task_entry__handle"(request) with WaitableSet 
     "wasi/waitable-set-drop"(ws_1);
     ws_1 = builtin::i32_wrap_i64(local.tee packed_362("wasi/future-new"()));
     code = builtin::i32_wrap_i64(packed_362 >> 32_i64);
-    ws_1 = local.tee $pattern_temp_1("cm_waitable_set_poll.wado/$cm_binding__Response_new"("cm_waitable_set_poll.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, ws_1)).0;
+    ws_1 = "cm_waitable_set_poll.wado/$cm_binding__Response_new"("cm_waitable_set_poll.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, ws_1).0;
     $tv_1_184 = 0;
     $tv_1_184 = ws_1;
     "wasi/task-return:handle"(0, $tv_1_184, 0, 0_i64, 0, 0, 0, 0);

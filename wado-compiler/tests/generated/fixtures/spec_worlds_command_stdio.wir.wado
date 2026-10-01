@@ -233,7 +233,6 @@ global global:core:prelude/array.wado::$const_obj_75: ref null Array<u8> = array
 
 fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     let input: i32;
-    let $pattern_temp_0: ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
     let all: ref "core:prelude//List<u8>";
     let elements_14: ref Array<u8>;
     let slice: ref "core:prelude/slice.wado//Slice<u8>";
@@ -242,9 +241,8 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     let packed_46: i64;
     let other_len: i32;
     let new_used_105: i32;
-    let elements_110: ref Array<u8>;
     let f_130: ref "spec_worlds_command_stdio.wado//$Closure_0";
-    input = local.tee $pattern_temp_0("spec_worlds_command_stdio.wado/$cm_binding__Stdin_read_via_stream"()).0;
+    input = "spec_worlds_command_stdio.wado/$cm_binding__Stdin_read_via_stream"().0;
     $mv$chunk$items = $inline_core_prelude_types_wado_Stream_u8___read_to_end_1: block -> ref "core:prelude//List<u8>" {
         all = struct.new "core:prelude//List<u8>" { repr: local.tee elements_14(array.new_fixed<u8>()), used: 0 };
         block {
@@ -274,7 +272,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         input = $mv$chunk$items.used;
         elements_14 = $mv$chunk$items.repr;
         new_used_105 = 0;
-        all = struct.new "core:prelude//List<u8>" { repr: local.tee elements_110(array.new_fixed<u8>()), used: 0 };
+        all = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
         b4: block {
             l5: loop {
                 break_if b4 new_used_105 >= input;
@@ -482,7 +480,6 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond: bool;
     if @unlikely(local.tee n("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, start, len)) <= 0) {
         cold_path;
         len = (if n == 0 -> i32 {
@@ -499,13 +496,13 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     $v1 = n >= 2;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2 = n; $v2_seen = 1; $v2 <= 4;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/decode_utf8_scalar$cold0"($load_0, len, bytes.end, n, $v1, $v2, $v2_seen, $v3, $v3_seen);
         unreachable;
@@ -1037,7 +1034,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond_16: bool;
     $v2_2 = bytes.end - bytes.start;
     if @unlikely(prefix == $v2_2) {
         cold_path;
@@ -1051,13 +1047,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     $v1 = local.tee $v2_2("core:prelude/string.wado/core:prelude/string.wado/String::utf8_invalid_len"(bytes, prefix)) >= 1;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond_16((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2_12 = $v2_2; $v2_seen = 1; $v2_12 <= 3;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$cold0"($v2_2, $v1, $v2_12, $v2_seen, $v3, $v3_seen);
         unreachable;

@@ -310,7 +310,6 @@ fn "spec_types_newtype.wado/$cm_export__$test_2_casts_through_a_chain"() {
 fn "spec_types_newtype.wado/$cm_export__$test_3_function_types"() {
     let double: ref struct;
     let $v0_2: f64;
-    let $functor_12: ref "spec_types_newtype.wado//$Closure_0";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:spec_types_newtype.wado::$modules_initialized);
         cold_path;
@@ -318,7 +317,7 @@ fn "spec_types_newtype.wado/$cm_export__$test_3_function_types"() {
         "core:rt/$initialize_module"();
         global:spec_types_newtype.wado::$modules_initialized = 1;
     };
-    double = struct.new "canonical//CanonicalClosure_0" { env: local.tee $functor_12(struct.new "spec_types_newtype.wado//$Closure_0" {  }), func: ref.func "closure/spec_types_newtype.wado/$closure_wrapper_0" };
+    double = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_types_newtype.wado//$Closure_0" {  }, func: ref.func "closure/spec_types_newtype.wado/$closure_wrapper_0" };
     if @unlikely((local.tee $v0_2(block -> f64 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(double)).env, 1.5);

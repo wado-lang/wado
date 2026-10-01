@@ -1150,15 +1150,14 @@ fn "core:prelude/traits.wado/reflect_anon_struct.wado/$anon_{x:i32,y:core:prelud
 }
 
 fn "reflect_anon_struct.wado/reflect_anon_struct.wado/$anon_{x:i32,y:core:prelude/string.wado/String}^reflect_anon_struct.wado/Describe::describe"() {
-    let out: ref "core:prelude/string.wado//String";
     let self_6: ref "core:prelude/string.wado//String";
     let result_8: ref "core:prelude/string.wado//String";
-    self_6 = local.tee out(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
+    self_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee result_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(1), used: 0 }), self_6);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_8, global:reflect_anon_struct.wado::$const_obj_24);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee self_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee result_8(local.tee out(result_8)).used + 1), used: 0 }), result_8);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee self_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee result_8(result_8).used + 1), used: 0 }), result_8);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(self_6, global:reflect_anon_struct.wado::$const_obj_23);
-    return local.tee out(self_6);
+    return self_6;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {

@@ -131,14 +131,11 @@ fn "const_object_globalization_let_escape.wado/make"() {
 }
 
 fn "const_object_globalization_let_escape.wado/take_field"() {
-    let k: ref "const_object_globalization_let_escape.wado//K";
-    return local.tee k("const_object_globalization_let_escape.wado/make"()).data;
+    return "const_object_globalization_let_escape.wado/make"().data;
 }
 
 fn "const_object_globalization_let_escape.wado/take_alias"() {
-    let k: ref "const_object_globalization_let_escape.wado//K";
-    let data: ref "core:prelude//List<i32>";
-    return local.tee data(local.tee k("const_object_globalization_let_escape.wado/make"()).data);
+    return "const_object_globalization_let_escape.wado/make"().data;
 }
 
 fn "const_object_globalization_let_escape.wado/take_wrapped"() {
@@ -186,7 +183,6 @@ fn "const_object_globalization_let_escape.wado/run"() with Stdout {
     let used_12: i32;
     let used_19: i32;
     let self_24: ref null "core:prelude//List<i32>";
-    let v_25: ref "core:prelude//List<i32>";
     let used_28: i32;
     let handle: i32;
     let new_used_55: i32;
@@ -231,8 +227,7 @@ fn "const_object_globalization_let_escape.wado/run"() with Stdout {
                 $sroa_slot_122 = 0;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_spec0_0;
             };
-            let $match_scrut_0: i32;
-            if local.tee $match_scrut_0($sroa_slot_122) == 0 {
+            if $sroa_slot_122 == 0 {
                 if @unlikely(local.tee used_12(local.tee a("const_object_globalization_let_escape.wado/take_field"()).used) >= builtin::array_len(a.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(a);
@@ -247,7 +242,7 @@ fn "const_object_globalization_let_escape.wado/run"() with Stdout {
                 b.used = used_19 + 1;
                 if @unlikely(local.tee used_28(local.tee c($inline_core_prelude_types_wado_Option_core_prelude_list_wado_List_i32____unwrap_9: block -> ref "core:prelude//List<i32>" {
                     if @likely(ref.is_null(local.tee self_24("const_object_globalization_let_escape.wado/take_wrapped"())) == 0) {
-                        break $inline_core_prelude_types_wado_Option_core_prelude_list_wado_List_i32____unwrap_9: local.tee v_25(ref.as_non_null(self_24));
+                        break $inline_core_prelude_types_wado_Option_core_prelude_list_wado_List_i32____unwrap_9: ref.as_non_null(self_24);
                     } else {
                     }
                     cold_path;

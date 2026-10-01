@@ -209,7 +209,6 @@ fn "retain_bounded_destination.wado/run"() {
     let elements_26: ref "Array<retain_bounded_destination.wado/Bag>";
     let new_used_38: i32;
     let start_39: i32;
-    let self_81: ref "core:prelude//List<core:prelude/string.wado/String>";
     filler = struct.new "retain_bounded_destination.wado//Bag" { tags: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_25(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }) };
     kept = struct.new "core:prelude//List<retain_bounded_destination.wado/Bag>" { repr: local.tee elements_26(array.new_fixed<ref "retain_bounded_destination.wado//Bag">()), used: 0 };
     unread = struct.new "retain_bounded_destination.wado//Slot" { b: filler };
@@ -264,20 +263,20 @@ condition: tag_count(&seen) == 1
     }
     builtin::array_set<ref "retain_bounded_destination.wado//Bag">(local.tee elements_26(kept.repr), new_used_38, filler);
     kept.used = new_used_38 + 1;
-    if @unlikely(local.tee start_39(local.tee self_81(new_used_38 = kept.used; if @unlikely(0 >= new_used_38) {
+    if @unlikely(local.tee start_39(new_used_38 = kept.used; if @unlikely(0 >= new_used_38) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<retain_bounded_destination.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, new_used_38);
         unreachable;
-    }; builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">(elements_26, 0).tags).used) != 2) {
+    }; builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">(elements_26, 0).tags.used) != 2) {
         cold_path;
         "retain_bounded_destination.wado/run$cold1"(start_39);
         unreachable;
     }
-    if @unlikely(local.tee new_used_38(local.tee self_81(if @unlikely(1 >= new_used_38) {
+    if @unlikely(local.tee new_used_38(if @unlikely(1 >= new_used_38) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<retain_bounded_destination.wado/Bag>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(1, new_used_38);
         unreachable;
-    }; builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">(elements_26, 1).tags).used) != 1) {
+    }; builtin::array_get_value<ref "retain_bounded_destination.wado//Bag">(elements_26, 1).tags.used) != 1) {
         cold_path;
         "retain_bounded_destination.wado/run$cold0"(new_used_38);
         unreachable;
@@ -1397,7 +1396,6 @@ fn "core:prelude/traits.wado/retain_bounded_destination.wado/Slot^core:prelude/t
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
-    let inner: ref "retain_bounded_destination.wado//Bag";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<retain_bounded_destination.wado/Slot,[&retain_bounded_destination.wado/Bag]>$scalar"(self.b, f);
         return;
@@ -1437,7 +1435,7 @@ fn "core:prelude/traits.wado/retain_bounded_destination.wado/Slot^core:prelude/t
     start_22 = self_9.used;
     self_9.used = new_used_21;
     builtin::array_copy<u8>(self_9.repr, start_22, global:core:prelude/traits.wado::$const_obj_8, 0, 1);
-    "core:prelude/traits.wado/retain_bounded_destination.wado/Bag^core:prelude/traits.wado/Inspect::inspect"(local.tee inner(self.b), f);
+    "core:prelude/traits.wado/retain_bounded_destination.wado/Bag^core:prelude/traits.wado/Inspect::inspect"(self.b, f);
     if @unlikely(local.tee start_22(local.tee self_9(f.buf).used + 2) > builtin::array_len(self_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, start_22);

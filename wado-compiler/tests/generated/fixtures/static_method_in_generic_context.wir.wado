@@ -267,7 +267,6 @@ global global:core:json::$const_obj_50: ref null "core:prelude/string.wado//Stri
 
 fn "static_method_in_generic_context.wado/$test_0_roundtrip"() {
     let j: ref "core:prelude/string.wado//String";
-    let f: ref "static_method_in_generic_context.wado//Foo";
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let a: ref Array<u8>;
@@ -331,7 +330,7 @@ condition: j == `\"42\"`
         let $mv$restored$2: ref null "core:serde//DeserializeError";
         multivalue_bind [i, $mv$restored$1, $mv$restored$2] = "core:json/core/json/from_bytes<static_method_in_generic_context.wado/Foo,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: b, start: 0, end: j.used });
         if @likely(i == 0) {
-            if @unlikely(local.tee i(local.tee f(ref.as_non_null($mv$restored$1)).value) != 42) {
+            if @unlikely(local.tee i(ref.as_non_null($mv$restored$1).value) != 42) {
                 cold_path;
                 "static_method_in_generic_context.wado/$test_0_roundtrip$cold0"(i);
                 unreachable;
@@ -982,10 +981,9 @@ fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(
     let new_used_29: i32;
     let start_30: i32;
     let val_i64_65: i64;
-    let repr: ref Array<u8>;
     $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0: block {
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0 i <= run_start;
-        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr(s.repr), start: run_start, end: i };
+        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: run_start, end: i };
         $inline_core_prelude_string_wado_String__internal_push_view_6: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_view_6 local.tee i(i - run_start) == 0;
             if @unlikely(local.tee new_used_29(buf.used + i) > builtin::array_len(buf.repr)) {

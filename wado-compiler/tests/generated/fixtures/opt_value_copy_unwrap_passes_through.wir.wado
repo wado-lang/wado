@@ -106,10 +106,9 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     let packed_54: i64;
     let $sroa_o_value_85: ref null "opt_value_copy_unwrap_passes_through.wado//Shape";
     let self_90: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let v_92: ref "opt_value_copy_unwrap_passes_through.wado//Shape";
     $sroa_o_value_85 = struct.new "opt_value_copy_unwrap_passes_through.wado//Shape" { axes: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 })), used: builtin::array_len(elements) }) };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_90(local.tee v_92(ref.as_non_null($sroa_o_value_85)).axes).used, $local_2);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_90(ref.as_non_null($sroa_o_value_85).axes).used, $local_2);
     if @unlikely(local.tee new_used_27($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_27);
@@ -117,7 +116,7 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     start_28 = $local_2.used;
     $local_2.used = new_used_27;
     builtin::array_copy<u8>(local.tee $load_4($local_2.repr), start_28, global:opt_value_copy_unwrap_passes_through.wado::$const_obj_1, 0, 1);
-    start_28 = local.tee self_90(local.tee v_92(ref.as_non_null($sroa_o_value_85)).axes).used;
+    start_28 = local.tee self_90(ref.as_non_null($sroa_o_value_85).axes).used;
     if @unlikely(0 >= start_28) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, start_28);
@@ -144,7 +143,7 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     start_28 = "opt_value_copy_unwrap_passes_through.wado/$cm_binding__Stdout_write_via_stream"(start_28);
     "core:rt/write_string_to_stream"(start_52, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_28);
-    start_28 = local.tee self_90(local.tee v_92(ref.as_non_null($sroa_o_value_85)).axes).used;
+    start_28 = local.tee self_90(ref.as_non_null($sroa_o_value_85).axes).used;
     if @unlikely(1 >= start_28) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(1, start_28);

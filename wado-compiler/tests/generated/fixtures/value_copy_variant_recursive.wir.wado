@@ -201,17 +201,16 @@ global global:core:prelude/primitive.wado::$const_obj_69: ref null "core:prelude
 fn "value_copy_variant_recursive.wado/$test_0_recursive_struct_copy_is_deep"() {
     let $load_0: ref null "value_copy_variant_recursive.wado//Node";
     let b: ref "value_copy_variant_recursive.wado//Node";
-    let n_2: ref "value_copy_variant_recursive.wado//Node";
     let $v0_6: i32;
     let $sroa_a_next_22: ref null "value_copy_variant_recursive.wado//Node";
     $sroa_a_next_22 = struct.new "value_copy_variant_recursive.wado//Node" { value: 2, next: ref.null none };
     local.tee b("value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node"(struct.new "value_copy_variant_recursive.wado//Node" { value: 1, next: $sroa_a_next_22 })).value = 10;
     if ref.is_null(local.tee $load_0(b.next)) == 0 {
-        local.tee n_2(ref.as_non_null($load_0)).value = 20;
+        ref.as_non_null($load_0).value = 20;
     } else {
     }
     if ref.is_null($sroa_a_next_22) == 0 {
-        if @unlikely(local.tee $v0_6(local.tee n_2(ref.as_non_null($sroa_a_next_22)).value) != 2) {
+        if @unlikely(local.tee $v0_6(ref.as_non_null($sroa_a_next_22).value) != 2) {
             cold_path;
             "value_copy_variant_recursive.wado/$test_0_recursive_struct_copy_is_deep$cold2"($v0_6);
             unreachable;
@@ -349,9 +348,8 @@ fn "value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.w
 }
 
 fn "value_copy_variant_recursive.wado/$value_copy$core:prelude/types.wado/Option<value_copy_variant_recursive.wado/Node>"(v) {
-    let $vc_payload_0: ref "value_copy_variant_recursive.wado//Node";
     return (if ref.is_null(v) == 0 -> ref null "value_copy_variant_recursive.wado//Node" {
-        ref.as_non_null("value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node"(local.tee $vc_payload_0(ref.as_non_null(v))));
+        ref.as_non_null("value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node"(ref.as_non_null(v)));
     } else {
         v;
     });

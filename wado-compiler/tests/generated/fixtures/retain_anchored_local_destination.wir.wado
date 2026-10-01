@@ -80,7 +80,6 @@ fn "retain_anchored_local_destination.wado/fill"(p) {
 
 fn "retain_anchored_local_destination.wado/$cm_export__$test_0_a_bounded_retention_leaves_the_write_back_standing"() {
     let $load_0: ref null "core:prelude/string.wado//String";
-    let $cond: bool;
     let $write_back_1: ref "core:prelude/types.wado//Box<retain_anchored_local_destination.wado/Payload>";
     let $write_back_before_2: ref null "core:prelude/string.wado//String";
     let $sroa_b_item_9: ref null "core:prelude/string.wado//String";
@@ -90,7 +89,7 @@ fn "retain_anchored_local_destination.wado/$cm_export__$test_0_a_bounded_retenti
     if ref.eq(local.tee $load_0($write_back_1.value), $write_back_before_2) == 0 {
         $sroa_b_item_9 = $load_0;
     }
-    if @unlikely(local.tee $cond(ref.is_null($sroa_b_item_9) == 0) == 0) {
+    if @unlikely((ref.is_null($sroa_b_item_9) == 0) == 0) {
         cold_path;
         "retain_anchored_local_destination.wado/$test_0_a_bounded_retention_leaves_the_write_back_standing$cold0"();
         unreachable;

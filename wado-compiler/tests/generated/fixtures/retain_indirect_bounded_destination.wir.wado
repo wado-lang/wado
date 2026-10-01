@@ -193,9 +193,8 @@ fn "retain_indirect_bounded_destination.wado/$cm_export__run"() {
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
-    let elements: ref "Array<core:prelude/string.wado/String>";
     let $sroa_filler_tags_10: ref "core:prelude//List<core:prelude/string.wado/String>";
-    $sroa_filler_tags_10 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 };
+    $sroa_filler_tags_10 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     if @unlikely(local.tee $v2("retain_indirect_bounded_destination.wado/count_through$$Closure_0$scalar"()) != 2) {
         cold_path;
         $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(214)), 68);
@@ -240,7 +239,6 @@ fn "retain_indirect_bounded_destination.wado/count_through$$Closure_0$scalar"() 
     let start_17: i32;
     let elements_24: ref "Array<core:prelude/string.wado/String>";
     let elements_30: ref "Array<retain_indirect_bounded_destination.wado/Bag>";
-    let self_38: ref "core:prelude//List<core:prelude/string.wado/String>";
     origin = struct.new "retain_indirect_bounded_destination.wado//Bag" { tags: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_24(array.new_fixed<ref "core:prelude/string.wado//String">($local_5_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; if @unlikely(local.tee new_used(0 + 1) > builtin::array_len($local_5_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_3, new_used);
@@ -252,7 +250,7 @@ fn "retain_indirect_bounded_destination.wado/count_through$$Closure_0$scalar"() 
     }
     builtin::array_set<ref "retain_indirect_bounded_destination.wado//Bag">(local.tee elements_30(kept.repr), 0, origin);
     kept.used = 1;
-    return local.tee self_38(builtin::array_get_value<ref "retain_indirect_bounded_destination.wado//Bag">(elements_30, 0).tags).used;
+    return builtin::array_get_value<ref "retain_indirect_bounded_destination.wado//Bag">(elements_30, 0).tags.used;
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {
@@ -1553,8 +1551,7 @@ fn "closure/retain_indirect_bounded_destination.wado/$closure_wrapper_0"($env, $
 }
 
 fn "closure/retain_indirect_bounded_destination.wado/$closure_inspect_wrapper_0"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "retain_indirect_bounded_destination.wado/retain_indirect_bounded_destination.wado/$Closure_1^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "retain_indirect_bounded_destination.wado/retain_indirect_bounded_destination.wado/$Closure_1^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 export fn "retain_indirect_bounded_destination.wado/$cm_export__run" as "run"

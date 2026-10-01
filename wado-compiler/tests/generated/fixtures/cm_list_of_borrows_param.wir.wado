@@ -80,8 +80,7 @@ fn "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(items) with Api {
     let $licm_repr_18: ref "Array<&cm_list_of_borrows_param.wado/Item>";
     if @unlikely((local.tee $items_len(items.used) < 0) | ($items_len > 536870911)) {
         cold_path;
-        let $mv_field_1: ref Array<u8>;
-        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("a buffer's length is negative or past what linear memory can address")), 68);
+        "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;
     }
     $items_base = "mem/realloc"(0, 0, 4, $items_len * 4);

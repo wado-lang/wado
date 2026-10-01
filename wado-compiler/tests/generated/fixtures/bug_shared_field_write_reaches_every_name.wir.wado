@@ -490,7 +490,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<b
     let start_25: i32;
     let new_used_61: i32;
     let start_62: i32;
-    let v_98: ref "bug_shared_field_write_reaches_every_name.wado//Inner";
     let v_205: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let v_313: ref "core:prelude//List<i32>";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_34) {
@@ -554,7 +553,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<b
     start_25 = self_12.used;
     self_12.used = new_used_24;
     builtin::array_copy<u8>(self_12.repr, start_25, global:core:prelude/traits.wado::$const_obj_8, 0, 2);
-    "core:prelude/traits.wado/bug_shared_field_write_reaches_every_name.wado/Inner^core:prelude/traits.wado/Inspect::inspect"(local.tee v_98(v.inner), f);
+    "core:prelude/traits.wado/bug_shared_field_write_reaches_every_name.wado/Inner^core:prelude/traits.wado/Inspect::inspect"(v.inner, f);
     if @unlikely(local.tee start_25(local.tee self_12(f.buf).used + 1) > builtin::array_len(self_12.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_12, start_25);
@@ -1377,8 +1376,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<b
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_pattern"(self) {
-    let d: ref "bug_shared_field_write_reaches_every_name.wado//Inner";
-    local.tee d(self.inner).x = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+    self.inner.x = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::pattern_read"(self) {
@@ -1760,7 +1758,6 @@ fn "core:prelude/traits.wado/bug_shared_field_write_reaches_every_name.wado/Hold
     let self_11: ref "core:prelude/string.wado//String";
     let new_used_23: i32;
     let start_24: i32;
-    let v_91: ref "bug_shared_field_write_reaches_every_name.wado//Inner";
     let v_159: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let v_228: ref "core:prelude//List<i32>";
     if f.alternate {
@@ -1803,7 +1800,7 @@ fn "core:prelude/traits.wado/bug_shared_field_write_reaches_every_name.wado/Hold
     new_used_23 = self_11.used;
     self_11.used = start_24;
     builtin::array_copy<u8>(self_11.repr, new_used_23, global:core:prelude/traits.wado::$const_obj_8, 0, 2);
-    "core:prelude/traits.wado/bug_shared_field_write_reaches_every_name.wado/Inner^core:prelude/traits.wado/Inspect::inspect"(local.tee v_91(self.inner), f);
+    "core:prelude/traits.wado/bug_shared_field_write_reaches_every_name.wado/Inner^core:prelude/traits.wado/Inspect::inspect"(self.inner, f);
     $mv_1_2 = global:core:prelude/traits.wado::$const_obj_14.1;
     if @unlikely(local.tee new_used_23(local.tee self_11(f.buf).used + 2) > builtin::array_len(self_11.repr)) {
         cold_path;

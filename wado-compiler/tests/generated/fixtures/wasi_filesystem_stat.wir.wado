@@ -647,14 +647,12 @@ fn "wasi_filesystem_stat.wado/$cm_binding__Descriptor_stat"(self) with Descripto
 
 fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_stat_at"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
     let $local_4: ref "wasi:filesystem/types.wado//DescriptorType";
     let $local_6: ref null "core:prelude/string.wado//String";
     let $local_7: i64;
     let $local_8: i64;
     let $local_10: ref null "wasi:clocks/system_clock.wado//Instant";
     let $local_11: i64;
-    let $local_13: ref "wasi:clocks/system_clock.wado//Instant";
     let $local_15: ref null "wasi:clocks/system_clock.wado//Instant";
     let $local_20: ref null "wasi:clocks/system_clock.wado//Instant";
     let $local_24: ref "wasi:filesystem/types.wado//DescriptorStat";
@@ -662,7 +660,7 @@ fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_stat_at"($outptr) {
     let len_30: i32;
     let arr_37: ref Array<u8>;
     let i_38: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 8)) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
             struct.new "wasi:filesystem/types.wado//DescriptorType" { 0 };
         } else if $disc == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
@@ -700,21 +698,21 @@ fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_stat_at"($outptr) {
         if len_30 != 0 {
             $local_11 = builtin::load_i64((($outptr + 8) + 32) + 8);
             len_30 = builtin::load_i32(((($outptr + 8) + 32) + 8) + 8);
-            $local_10 = local.tee $local_13(struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 });
+            $local_10 = struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 };
         }
         len_30 = builtin::load_u8(($outptr + 8) + 56);
         $local_15 = ref.null none;
         if len_30 != 0 {
             $local_11 = builtin::load_i64((($outptr + 8) + 56) + 8);
             len_30 = builtin::load_i32(((($outptr + 8) + 56) + 8) + 8);
-            $local_15 = local.tee $local_13(struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 });
+            $local_15 = struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 };
         }
         len_30 = builtin::load_u8(($outptr + 8) + 80);
         $local_20 = ref.null none;
         if len_30 != 0 {
             $local_11 = builtin::load_i64((($outptr + 8) + 80) + 8);
             len_30 = builtin::load_i32(((($outptr + 8) + 80) + 8) + 8);
-            $local_20 = local.tee $local_13(struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 });
+            $local_20 = struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 };
         }
         $local_24 = struct.new "wasi:filesystem/types.wado//DescriptorStat" { type: $local_4, link_count: $local_7, size: $local_8, data_access_timestamp: $local_10, data_modification_timestamp: $local_15, status_change_timestamp: $local_20 };
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: $local_24 };
@@ -808,18 +806,17 @@ fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_stat_at"($outptr) {
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_26 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_open_at"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let $local_4: ref "wasi:filesystem/types.wado//ErrorCode";
     let $local_6: ref null "core:prelude/string.wado//String";
     let len_8: i32;
     let arr_12: ref Array<u8>;
     let i: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
     } else {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:filesystem/types.wado//ErrorCode" {
@@ -911,19 +908,17 @@ fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_open_at"($outptr) {
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_4 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_stat"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
     let $local_4: ref "wasi:filesystem/types.wado//DescriptorType";
     let $local_6: ref null "core:prelude/string.wado//String";
     let $local_7: i64;
     let $local_8: i64;
     let $local_10: ref null "wasi:clocks/system_clock.wado//Instant";
     let $local_11: i64;
-    let $local_13: ref "wasi:clocks/system_clock.wado//Instant";
     let $local_15: ref null "wasi:clocks/system_clock.wado//Instant";
     let $local_20: ref null "wasi:clocks/system_clock.wado//Instant";
     let $local_24: ref "wasi:filesystem/types.wado//DescriptorStat";
@@ -931,7 +926,7 @@ fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_stat"($outptr) {
     let len_30: i32;
     let arr_37: ref Array<u8>;
     let i_38: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 8)) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
             struct.new "wasi:filesystem/types.wado//DescriptorType" { 0 };
         } else if $disc == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
@@ -969,21 +964,21 @@ fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_stat"($outptr) {
         if len_30 != 0 {
             $local_11 = builtin::load_i64((($outptr + 8) + 32) + 8);
             len_30 = builtin::load_i32(((($outptr + 8) + 32) + 8) + 8);
-            $local_10 = local.tee $local_13(struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 });
+            $local_10 = struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 };
         }
         len_30 = builtin::load_u8(($outptr + 8) + 56);
         $local_15 = ref.null none;
         if len_30 != 0 {
             $local_11 = builtin::load_i64((($outptr + 8) + 56) + 8);
             len_30 = builtin::load_i32(((($outptr + 8) + 56) + 8) + 8);
-            $local_15 = local.tee $local_13(struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 });
+            $local_15 = struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 };
         }
         len_30 = builtin::load_u8(($outptr + 8) + 80);
         $local_20 = ref.null none;
         if len_30 != 0 {
             $local_11 = builtin::load_i64((($outptr + 8) + 80) + 8);
             len_30 = builtin::load_i32(((($outptr + 8) + 80) + 8) + 8);
-            $local_20 = local.tee $local_13(struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 });
+            $local_20 = struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: $local_11, nanoseconds: len_30 };
         }
         $local_24 = struct.new "wasi:filesystem/types.wado//DescriptorStat" { type: $local_4, link_count: $local_7, size: $local_8, data_access_timestamp: $local_10, data_modification_timestamp: $local_15, status_change_timestamp: $local_20 };
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: $local_24 };
@@ -1077,7 +1072,7 @@ fn "wasi_filesystem_stat.wado/$cm_lift__Descriptor_stat"($outptr) {
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_26 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_stat.wado/$cm_export__run"() {

@@ -72,12 +72,11 @@ fn "bug_ctfe_mut_writeback_call_traps.wado/$cm_binding__Stdout_write_via_stream"
 
 fn "bug_ctfe_mut_writeback_call_traps.wado/$cm_export__run"() {
     let $local_0: ref "core:prelude/string.wado//String";
-    let x_11: ref "core:prelude/types.wado//Box<i32>";
     let packed: i64;
     let rx_15: i32;
     let tx_16: i32;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    local.tee x_11(struct.new "core:prelude/types.wado//Box<i32>" { value: 1 }).value = 5;
+    struct.new "core:prelude/types.wado//Box<i32>" { value: 1 }.value = 5;
     drop(10 / 0);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(5, $local_0);
     rx_15 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

@@ -76,10 +76,9 @@ import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_import_user_result_error_type.wado/$cm_binding__Gfx_count"() with Gfx {
     let $outptr: i32;
-    let $disc: i32;
     let $result_val: ref "core:prelude/types.wado//Result<u32,u32>";
     "wasi/wasi:demo/Gfx::count"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
-    $result_val = (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<u32,u32>" {
+    $result_val = (if builtin::load_u8($outptr) == 0 -> ref "core:prelude/types.wado//Result<u32,u32>" {
         struct.new "core:prelude/types.wado//Result<u32,u32>::Ok" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
     } else {
         struct.new "core:prelude/types.wado//Result<u32,u32>::Err" { discriminant: 1, payload_0: builtin::load_i32($outptr + 4) };
@@ -121,10 +120,9 @@ fn "cm_import_user_result_error_type.wado/$cm_binding__Gfx_name"() with Gfx {
 
 fn "cm_import_user_result_error_type.wado/$cm_binding__Gfx_flag"() with Gfx {
     let $outptr: i32;
-    let $disc: i32;
     let $result_val: ref "core:prelude/types.wado//Result<bool,()>";
     "wasi/wasi:demo/Gfx::flag"(local.tee $outptr("mem/realloc"(0, 0, 1, 2)));
-    $result_val = (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<bool,()>" {
+    $result_val = (if builtin::load_u8($outptr) == 0 -> ref "core:prelude/types.wado//Result<bool,()>" {
         struct.new "core:prelude/types.wado//Result<bool,()>::Ok" { discriminant: 0, payload_0: builtin::load_u8($outptr + 1) != 0 };
     } else {
         struct.new "core:prelude/types.wado//Result<bool,()>" { 1 };

@@ -348,9 +348,8 @@ fn "opt_value_copy_demote_shared_elements.wado/escape"(y) {
 }
 
 fn "opt_value_copy_demote_shared_elements.wado/fresh"() {
-    let lit: ref "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>";
     let elements: ref "Array<opt_value_copy_demote_shared_elements.wado/S>";
-    return local.tee lit(struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: local.tee elements(array.new_fixed<ref "opt_value_copy_demote_shared_elements.wado//S">(struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: black_box(1) }, struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: 2 })), used: builtin::array_len(elements) });
+    return struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: local.tee elements(array.new_fixed<ref "opt_value_copy_demote_shared_elements.wado//S">(struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: black_box(1) }, struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: 2 })), used: builtin::array_len(elements) };
 }
 
 fn "opt_value_copy_demote_shared_elements.wado/run"() with Stdout {
@@ -437,8 +436,7 @@ fn "opt_value_copy_demote_shared_elements.wado/$cm_export__run"() {
 }
 
 fn "opt_value_copy_demote_shared_elements.wado/$initialize_module"() {
-    let elements: ref "Array<opt_value_copy_demote_shared_elements.wado/S>";
-    global:opt_value_copy_demote_shared_elements.wado::G = struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: local.tee elements(array.new_fixed<ref "opt_value_copy_demote_shared_elements.wado//S">()), used: 0 };
+    global:opt_value_copy_demote_shared_elements.wado::G = struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: array.new_fixed<ref "opt_value_copy_demote_shared_elements.wado//S">(), used: 0 };
 }
 
 fn "opt_value_copy_demote_shared_elements.wado/$value_copy$opt_value_copy_demote_shared_elements.wado/S"(v) {
@@ -749,8 +747,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
 }
 
 fn "closure/opt_value_copy_demote_shared_elements.wado/$closure_wrapper_0"($env) {
-    let $typed_env: ref "opt_value_copy_demote_shared_elements.wado//$Closure_0";
-    "opt_value_copy_demote_shared_elements.wado/opt_value_copy_demote_shared_elements.wado/$Closure_0::$call"(local.tee $typed_env(ref.cast "opt_value_copy_demote_shared_elements.wado//$Closure_0"($env)));
+    "opt_value_copy_demote_shared_elements.wado/opt_value_copy_demote_shared_elements.wado/$Closure_0::$call"(ref.cast "opt_value_copy_demote_shared_elements.wado//$Closure_0"($env));
 }
 
 export fn "opt_value_copy_demote_shared_elements.wado/$cm_export__run" as "run"

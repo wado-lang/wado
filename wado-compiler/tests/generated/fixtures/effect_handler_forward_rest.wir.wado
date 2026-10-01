@@ -161,14 +161,13 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     let $save_Log_9: ref null "effect_handler_forward_rest.wado//$Dispatch_Log";
     let $save_Log_12: ref null "effect_handler_forward_rest.wado//$Dispatch_Log";
     let $d_Log_13: ref "effect_handler_forward_rest.wado//$Dispatch_Log";
-    let elements: ref "Array<core:prelude/string.wado/String>";
     let $local_1_16: ref null "effect_handler_forward_rest.wado//$Dispatch_Log";
     let $local_3_18: bool;
     let message_19: ref "core:prelude/string.wado//String";
     let packed_41: i64;
     let tx_43: i32;
     let self_53: ref "core:prelude//List<core:prelude/string.wado/String>";
-    base = struct.new "effect_handler_forward_rest.wado//Base" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }) };
+    base = struct.new "effect_handler_forward_rest.wado//Base" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }) };
     global:effect_handler_forward_rest.wado::$effect_Log = local.tee $d_Log_13(struct.new "effect_handler_forward_rest.wado//$Dispatch_Log" { outer: local.tee $save_Log_12(global:effect_handler_forward_rest.wado::$effect_Log), op_enabled: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_rest.wado//$Closure_0" { $capture_0: base }, func: ref.func "closure/effect_handler_forward_rest.wado/$closure_wrapper_0" }, op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_rest.wado//$Closure_1" { $capture_0: base }, func: ref.func "closure/effect_handler_forward_rest.wado/$closure_wrapper_1" } });
     global:effect_handler_forward_rest.wado::$effect_Log = local.tee $d_Log_13(struct.new "effect_handler_forward_rest.wado//$Dispatch_Log" { outer: local.tee $save_Log_9(global:effect_handler_forward_rest.wado::$effect_Log), op_enabled: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_rest.wado//$Closure_2" {  }, func: ref.func "closure/effect_handler_forward_rest.wado/$closure_wrapper_2" }, op_emit: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_rest.wado//$Closure_3" {  }, func: ref.func "closure/effect_handler_forward_rest.wado/$closure_wrapper_3" } });
     $h_Log_5 = global:effect_handler_forward_rest.wado::$const_obj_2;
@@ -492,10 +491,9 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_0
 }
 
 fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_1::$call"(self, message) {
-    let self_2: ref "effect_handler_forward_rest.wado//Base";
     let self_4: ref "core:prelude//List<core:prelude/string.wado/String>";
     let used: i32;
-    if @unlikely(local.tee used(local.tee self_4(local.tee self_2(self.$capture_0).lines).used) >= builtin::array_len(self_4.repr)) {
+    if @unlikely(local.tee used(local.tee self_4(self.$capture_0.lines).used) >= builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_4);
     }
@@ -560,8 +558,7 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_4
 }
 
 fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_5::$call"(self, message) {
-    let $arg_spill_1: ref "effect_handler_forward_rest.wado//Prefix";
-    "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/Prefix^effect_handler_forward_rest.wado/Log::emit"(local.tee $arg_spill_1(self.$capture_0), message.repr, message.used);
+    "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/Prefix^effect_handler_forward_rest.wado/Log::emit"(self.$capture_0, message.repr, message.used);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
@@ -613,8 +610,7 @@ fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_0"($env, $p0) {
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_1"($env, $p0) {
-    let $typed_env: ref "effect_handler_forward_rest.wado//$Closure_1";
-    "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_1::$call"(local.tee $typed_env(ref.cast "effect_handler_forward_rest.wado//$Closure_1"($env)), $p0);
+    "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_1::$call"(ref.cast "effect_handler_forward_rest.wado//$Closure_1"($env), $p0);
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_2"($env, $p0) {
@@ -630,8 +626,7 @@ fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_4"($env, $p0) {
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_5"($env, $p0) {
-    let $typed_env: ref "effect_handler_forward_rest.wado//$Closure_5";
-    "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_5::$call"(local.tee $typed_env(ref.cast "effect_handler_forward_rest.wado//$Closure_5"($env)), $p0);
+    "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_5::$call"(ref.cast "effect_handler_forward_rest.wado//$Closure_5"($env), $p0);
 }
 
 export fn "effect_handler_forward_rest.wado/$cm_export__run" as "run"

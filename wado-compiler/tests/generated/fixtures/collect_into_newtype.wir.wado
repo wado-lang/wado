@@ -155,16 +155,12 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     let rx_33: i32;
     let tx_34: i32;
     let result_42: ref "core:prelude//List<u8>";
-    let self_58: ref "core:prelude/string.wado//StrUtf8ByteIter";
     let self_71: ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>";
     let f_74: ref "collect_into_newtype.wado//$Closure_0";
     let result_76: ref "core:prelude//List<u32>";
-    let elements_104: ref Array<i32>;
     let text: ref "core:prelude/string.wado//String";
     let $sroa_s_repr_156: ref Array<u8>;
-    let elements_182: ref Array<u8>;
     let used_189: i32;
-    let elements_195: ref Array<u32>;
     let $sroa_$f_buf_450: ref "core:prelude/string.wado//String";
     $sroa_s_repr_156 = array.new_fixed<u8>(65, 66);
     rx_33 = builtin::i32_wrap_i64(local.tee packed_32("wasi/stream-new"()));
@@ -175,7 +171,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(tx_34, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_33);
     rx_33 = 0;
-    result_42 = struct.new "core:prelude//List<u8>" { repr: local.tee elements_182(array.new_fixed<u8>()), used: 0 };
+    result_42 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
     b0: block {
         l1: loop {
             break_if b0 rx_33 >= 2;
@@ -196,7 +192,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     rx_33 = "collect_into_newtype.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
     "core:rt/write_string_to_stream"(used_189, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_33);
-    $mv_arg_2 = "core:prelude/bytes.wado/core:prelude/bytes.wado/ByteList::to_hex"("core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(local.tee self_58(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $sroa_s_repr_156, used: 2, index: 0 })));
+    $mv_arg_2 = "core:prelude/bytes.wado/core:prelude/bytes.wado/ByteList::to_hex"("core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $sroa_s_repr_156, used: 2, index: 0 }));
     rx_33 = builtin::i32_wrap_i64(local.tee packed_32("wasi/stream-new"()));
     used_189 = builtin::i32_wrap_i64(packed_32 >> 32_i64);
     rx_33 = "collect_into_newtype.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
@@ -204,7 +200,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_33);
     f_74 = struct.new "collect_into_newtype.wado//$Closure_0" {  };
     self_71 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>" { inner: ref.as_non_null(struct.new "core:prelude/string.wado//StrCharIter" { repr: $sroa_s_repr_156, used: 2, byte_index: 0 }), f: struct.new "canonical//CanonicalClosure_0" { env: f_74, func: ref.func "closure/collect_into_newtype.wado/$closure_wrapper_0" } };
-    result_76 = struct.new "core:prelude//List<u32>" { repr: local.tee elements_195(array.new_fixed<u32>()), used: 0 };
+    result_76 = struct.new "core:prelude//List<u32>" { repr: array.new_fixed<u32>(), used: 0 };
     b3: block {
         l4: loop {
             multivalue_bind [rx_33, used_189] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next"(self_71);
@@ -234,8 +230,8 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     used_189 = "collect_into_newtype.wado/$cm_binding__Stdout_write_via_stream"(used_189);
     "core:rt/write_string_to_stream"(tx_34, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(used_189);
-    it = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee elements_104(array.new_fixed<i32>(10, 20, 30)), index: 0, end: 3 };
-    builtin::array_copy<i32>(local.tee elements_104(builtin::array_new<i32>(3)), 0, it.repr, 0, 3);
+    it = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: array.new_fixed<i32>(10, 20, 30), index: 0, end: 3 };
+    builtin::array_copy<i32>(builtin::array_new<i32>(3), 0, it.repr, 0, 3);
     it.index = 3;
     $sroa_$f_buf_450 = local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(3, $sroa_$f_buf_450);

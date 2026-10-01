@@ -420,17 +420,16 @@ fn "spec_functions_declarations.wado/$cm_export__$test_4_a_function_declared_lat
     let $v1_seen: bool;
     let $v2: bool;
     let $v2_seen: bool;
-    let $cond: bool;
     $v0 = "spec_functions_declarations.wado/is_even"(10);
     $v1_seen = 0;
     $v2_seen = 0;
-    if @unlikely(local.tee $cond((if $v0 -> i32 {
+    if @unlikely((if $v0 -> i32 {
         $v2 = $v1 = "spec_functions_declarations.wado/is_even"(7); $v1_seen = 1; $v1 == 0;
         $v2_seen = 1;
         $v2;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "spec_functions_declarations.wado/$test_4_a_function_declared_later$cold0"($v0, $v1, $v1_seen, $v2, $v2_seen);
         unreachable;

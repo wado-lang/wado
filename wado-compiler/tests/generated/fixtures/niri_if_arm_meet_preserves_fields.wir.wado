@@ -108,8 +108,7 @@ fn "niri_if_arm_meet_preserves_fields.wado/check_no_else_falling_through"(flag) 
 
 fn "niri_if_arm_meet_preserves_fields.wado/check_arm_writes_diverge"(flag) {
     let arr: ref "core:prelude//List<u16>";
-    let repr: ref Array<u16>;
-    arr = struct.new "core:prelude//List<u16>" { repr: local.tee repr(builtin::array_new<u16>(16)), used: 16 };
+    arr = struct.new "core:prelude//List<u16>" { repr: builtin::array_new<u16>(16), used: 16 };
     if flag {
         if @unlikely(16 >= builtin::array_len(arr.repr)) {
             cold_path;

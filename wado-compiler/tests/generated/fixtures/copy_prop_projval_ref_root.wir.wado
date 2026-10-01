@@ -86,13 +86,12 @@ fn "copy_prop_projval_ref_root.wado/foo"(s, depth) {
 }
 
 fn "copy_prop_projval_ref_root.wado/run"() with Stdout {
-    let n: ref "copy_prop_projval_ref_root.wado//Node";
     let g: ref "copy_prop_projval_ref_root.wado//Graph";
     let $local_2: ref "core:prelude/string.wado//String";
     let packed: i64;
     let rx_16: i32;
     let tx_17: i32;
-    g = struct.new "copy_prop_projval_ref_root.wado//Graph" { a: local.tee n(struct.new "copy_prop_projval_ref_root.wado//Node" { value: 5 }), pad: 0 };
+    g = struct.new "copy_prop_projval_ref_root.wado//Graph" { a: struct.new "copy_prop_projval_ref_root.wado//Node" { value: 5 }, pad: 0 };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"("copy_prop_projval_ref_root.wado/foo"(g, 0), $local_2);
     rx_16 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

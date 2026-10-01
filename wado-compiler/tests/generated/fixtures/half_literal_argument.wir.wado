@@ -78,16 +78,15 @@ fn "half_literal_argument.wado/$cm_export__$test_0"() {
     let $v0_9: bool;
     let $v1_10: bool;
     let $v1_seen: bool;
-    let $cond_12: bool;
     $v0_9 = builtin::f32_reinterpret_i32(16384 << 16) == builtin::f32_reinterpret_i32(16384 << 16);
     $v1_seen = 0;
-    if @unlikely(local.tee $cond_12((if $v0_9 -> i32 {
+    if @unlikely((if $v0_9 -> i32 {
         $v1_10 = builtin::f32_reinterpret_i32(16384 << 16) == builtin::f32_reinterpret_i32(16384 << 16);
         $v1_seen = 1;
         $v1_10;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "half_literal_argument.wado/$test_0$cold0"($v0_9, $v1_10, $v1_seen);
         unreachable;

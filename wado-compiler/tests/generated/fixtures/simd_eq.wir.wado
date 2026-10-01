@@ -116,45 +116,44 @@ fn "simd_eq.wado/run"() {
     let a: v128;
     let b: v128;
     let c: v128;
-    let $cond_3: bool;
     let $v0: v128;
     let $v1_10: v128;
     a = v128.const(792281625327110816715484692490);
     b = v128.const(792281625327110816715484692490);
     c = v128.const(871509787859821898387033161739);
-    if @unlikely(local.tee $cond_3(i8x16.all_true(a i8x16.eq b)) == 0) {
+    if @unlikely(i8x16.all_true(a i8x16.eq b) == 0) {
         cold_path;
         "simd_eq.wado/run$cold6"(a, b);
         unreachable;
     }
-    if @unlikely(local.tee $cond_3(i8x16.all_true(a i8x16.eq c) == 0) == 0) {
+    if @unlikely((i8x16.all_true(a i8x16.eq c) == 0) == 0) {
         cold_path;
         "simd_eq.wado/run$cold5"(a, c);
         unreachable;
     }
-    if @unlikely(local.tee $cond_3(i8x16.all_true(local.tee c(i32x4.replace_lane(3, a, 11)) i8x16.eq a) == 0) == 0) {
+    if @unlikely((i8x16.all_true(local.tee c(i32x4.replace_lane(3, a, 11)) i8x16.eq a) == 0) == 0) {
         cold_path;
         "simd_eq.wado/run$cold4"(a, c);
         unreachable;
     }
-    if @unlikely(local.tee $cond_3(i8x16.all_true(local.tee c(f32x4.splat(builtin::f32_reinterpret_i32(2143289344))) i8x16.eq c)) == 0) {
+    if @unlikely(i8x16.all_true(local.tee c(f32x4.splat(builtin::f32_reinterpret_i32(2143289344))) i8x16.eq c) == 0) {
         cold_path;
         "simd_eq.wado/run$cold3"(c);
         unreachable;
     }
     $v0 = v128.const(0);
     $v1_10 = v128.const(-170141183420855150465331762880109871104);
-    if @unlikely(local.tee $cond_3(i8x16.all_true($v0 i8x16.eq $v1_10) == 0) == 0) {
+    if @unlikely((i8x16.all_true($v0 i8x16.eq $v1_10) == 0) == 0) {
         cold_path;
         "simd_eq.wado/run$cold2"($v0, $v1_10);
         unreachable;
     }
-    if @unlikely(local.tee $cond_3(i8x16.all_true(a i8x16.eq b)) == 0) {
+    if @unlikely(i8x16.all_true(a i8x16.eq b) == 0) {
         cold_path;
         "simd_eq.wado/run$cold1"(a, b);
         unreachable;
     }
-    if @unlikely(local.tee $cond_3(i8x16.all_true(c i8x16.eq c)) == 0) {
+    if @unlikely(i8x16.all_true(c i8x16.eq c) == 0) {
         cold_path;
         "simd_eq.wado/run$cold0"(c);
         unreachable;

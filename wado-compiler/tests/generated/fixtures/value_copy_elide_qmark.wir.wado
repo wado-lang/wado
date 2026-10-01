@@ -74,11 +74,9 @@ fn "value_copy_elide_qmark.wado/run"() with Stdout {
     let $qm_v: ref "value_copy_elide_qmark.wado//Pair";
     let packed_20: i64;
     let tx_22: i32;
-    let $sroa_slot_33: ref null "value_copy_elide_qmark.wado//Pair";
     let $sroa_slot_36: i32;
     $sroa_slot_36 = 0;
-    $sroa_slot_33 = ref.null none;
-    $sroa_slot_36 = local.tee $qm_v(ref.as_non_null(local.tee $sroa_slot_33(struct.new "value_copy_elide_qmark.wado//Pair" { a: 10, b: 20 }))).a + $qm_v.b;
+    $sroa_slot_36 = local.tee $qm_v(struct.new "value_copy_elide_qmark.wado//Pair" { a: 10, b: 20 }).a + $qm_v.b;
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_slot_36, $local_1);
     $sroa_slot_36 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));

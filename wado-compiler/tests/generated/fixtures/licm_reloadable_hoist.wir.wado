@@ -83,7 +83,6 @@ fn "licm_reloadable_hoist.wado/$cm_export__run"() {
 
 fn "licm_reloadable_hoist.wado/escape_quotes$spec0"(buf, s) {
     let i: i32;
-    let b: u8;
     let new_used: i32;
     let start_23: i32;
     let $licm_repr_25: ref Array<u8>;
@@ -92,7 +91,7 @@ fn "licm_reloadable_hoist.wado/escape_quotes$spec0"(buf, s) {
     b0: block {
         l1: loop {
             break_if b0 i >= 7;
-            if local.tee b(builtin::array_get_value<u8>($licm_repr_25, i)) == 34 {
+            if builtin::array_get_value<u8>($licm_repr_25, i) == 34 {
                 if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);

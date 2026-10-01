@@ -512,7 +512,6 @@ fn "spec_traits_marker_impl.wado/$test_0"() {
     let a: ref Array<u8>;
     let b: ref Array<u8>;
     let i: i32;
-    let v_28: ref "spec_traits_marker_impl.wado//User";
     let e_29: ref "core:serde//DeserializeError";
     let $mv$self_12$0: i32;
     let $mv$self_12$1: ref null "core:prelude/string.wado//String";
@@ -575,7 +574,7 @@ condition: json == `{\"name\":\"Ann\",\"age\":30}`
         unreachable;
     }
     if @unlikely(local.tee i(b = v_13.repr; let $mv$self_27$1: ref null "spec_traits_marker_impl.wado//User"; let $mv$self_27$2: ref null "core:serde//DeserializeError"; multivalue_bind [i, $mv$self_27$1, $mv$self_27$2] = "core:json/core/json/from_bytes<spec_traits_marker_impl.wado/User,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: b, start: 0, end: v_13.used }); (if @likely(i == 0) -> ref "spec_traits_marker_impl.wado//User" {
-        local.tee v_28(ref.as_non_null($mv$self_27$1));
+        ref.as_non_null($mv$self_27$1);
     } else if i == 1 -> ref "spec_traits_marker_impl.wado//User" {
         e_29 = ref.as_non_null($mv$self_27$2);
         "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:serde/DeserializeError>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, e_29);
@@ -1803,10 +1802,9 @@ fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(
     let new_used_29: i32;
     let start_30: i32;
     let val_i64_65: i64;
-    let repr: ref Array<u8>;
     $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0: block {
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0 i <= run_start;
-        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr(s.repr), start: run_start, end: i };
+        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: run_start, end: i };
         $inline_core_prelude_string_wado_String__internal_push_view_6: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_view_6 local.tee i(i - run_start) == 0;
             if @unlikely(local.tee new_used_29(buf.used + i) > builtin::array_len(buf.repr)) {
@@ -2922,7 +2920,6 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     let $local_3: ref "core:prelude/string.wado//String";
     let offset_10: i64;
     let start_23: i32;
-    let $sroa_$f_buf_83: ref "core:prelude/string.wado//String";
     let $av_86: i32;
     if local.tee $av_86(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start)) {
         return 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, builtin::i64_extend_i32_s($av_86);
@@ -2936,7 +2933,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = $load_3;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_6, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), c & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, c & 255);
     if @unlikely(local.tee c($local_3.used + 10) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, c);
@@ -2944,7 +2941,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = c;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_5, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), $av_86 & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, $av_86 & 255);
     if @unlikely(local.tee $av_86($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $av_86);
@@ -3892,8 +3889,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(cap
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(self) {
-    let repr: ref Array<u8>;
-    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee repr(self.repr), start: 0, end: self.used };
+    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self.repr, start: 0, end: self.used };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -4731,7 +4727,7 @@ fn "core:serde/spec_traits_marker_impl.wado/User^core:serde/Deserialize::deseria
                 index_10 = $vr_payload_0_$mv$$vr_52$1;
                 taken = 0;
                 if index_10 == 0 {
-                    if @unlikely(let $match_scrut_6: ref null "core:prelude/string.wado//String"; ref.is_null(local.tee $match_scrut_6($sroa_slots_0_428)) == 0) {
+                    if @unlikely(ref.is_null($sroa_slots_0_428) == 0) {
                         cold_path;
                         $qm_e_15 = struct.new "core:serde//DeserializeError" { kind: 3, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("duplicate field: \"name\""), used: 23 }, offset: -1_i64 };
                         cold_path;

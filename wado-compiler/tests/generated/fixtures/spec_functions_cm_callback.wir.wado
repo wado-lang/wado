@@ -668,8 +668,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>"(
 }
 
 fn "core:rt/$initialize_module"() {
-    let elements: ref Array<fn()->()>;
-    global:core:rt::CM_CALLBACKS = struct.new "core:prelude//List<fn()->()>" { repr: local.tee elements(array.new_fixed<ref struct>()), used: 0 };
+    global:core:rt::CM_CALLBACKS = struct.new "core:prelude//List<fn()->()>" { repr: array.new_fixed<ref struct>(), used: 0 };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index, $v1) {
@@ -1223,8 +1222,7 @@ fn "closure/spec_functions_cm_callback.wado/$closure_wrapper_0"($env, $p0, $p1) 
 }
 
 fn "closure/spec_functions_cm_callback.wado/$closure_wrapper_1"($env, $p0) {
-    let $typed_env: ref "spec_functions_cm_callback.wado//$Closure_1";
-    "spec_functions_cm_callback.wado/spec_functions_cm_callback.wado/$Closure_1::$call"(local.tee $typed_env(ref.cast "spec_functions_cm_callback.wado//$Closure_1"($env)), $p0);
+    "spec_functions_cm_callback.wado/spec_functions_cm_callback.wado/$Closure_1::$call"(ref.cast "spec_functions_cm_callback.wado//$Closure_1"($env), $p0);
 }
 
 export fn "spec_functions_cm_callback.wado/$cm_export__$test_0" as "$test_0"

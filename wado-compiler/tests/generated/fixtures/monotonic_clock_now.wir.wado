@@ -64,11 +64,10 @@ fn "monotonic_clock_now.wado/$cm_binding__MonotonicClock_now"() with MonotonicCl
 
 fn "monotonic_clock_now.wado/$cm_export__run"() {
     let t1: u64;
-    let t2: u64;
     let rx_8: i32;
     let tx_9: i32;
     t1 = "monotonic_clock_now.wado/$cm_binding__MonotonicClock_now"();
-    if local.tee t2("monotonic_clock_now.wado/$cm_binding__MonotonicClock_now"()) >=u t1 {
+    if "monotonic_clock_now.wado/$cm_binding__MonotonicClock_now"() >=u t1 {
         rx_8 = builtin::i32_wrap_i64(local.tee t1("wasi/stream-new"()));
         tx_9 = builtin::i32_wrap_i64(t1 >> 32_i64);
         rx_8 = "monotonic_clock_now.wado/$cm_binding__Stdout_write_via_stream"(rx_8);

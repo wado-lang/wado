@@ -644,7 +644,6 @@ fn "http_request_setter_errors.wado/$cm_binding__Request_set_scheme"(self, schem
 fn "http_request_setter_errors.wado/$cm_binding__Request_get_scheme"(self) with Request {
     let $outptr: i32;
     let $option_result: ref null "wasi:http/types.wado//Scheme";
-    let $vresult: ref "wasi:http/types.wado//Scheme";
     let len_7: i32;
     let arr_11: ref Array<u8>;
     let i: i32;
@@ -653,7 +652,7 @@ fn "http_request_setter_errors.wado/$cm_binding__Request_get_scheme"(self) with 
     self = builtin::load_u8($outptr);
     $option_result = ref.null none;
     if self != 0 {
-        $option_result = local.tee $vresult((if local.tee self(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//Scheme" {
+        $option_result = (if local.tee self(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//Scheme" {
             struct.new "wasi:http/types.wado//Scheme" { 0 };
         } else if self == 1 -> ref "wasi:http/types.wado//Scheme" {
             struct.new "wasi:http/types.wado//Scheme" { 1 };
@@ -666,7 +665,7 @@ fn "http_request_setter_errors.wado/$cm_binding__Request_get_scheme"(self) with 
                     continue l19;
                 };
             }; struct.new "core:prelude/string.wado//String" { repr: arr_11, used: len_7 }) };
-        }));
+        });
     }
     drop("mem/realloc"($outptr, 16, 4, 0));
     return $option_result;
@@ -775,7 +774,6 @@ fn "http_request_setter_errors.wado/$cm_binding__Client_send"(request) with Clie
 
 fn "http_request_setter_errors.wado/$cm_lift__Client_send"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $local_4: ref "wasi:http/types.wado//ErrorCode";
     let $local_5: i32;
     let $local_6: ref null "core:prelude/string.wado//String";
@@ -790,7 +788,7 @@ fn "http_request_setter_errors.wado/$cm_lift__Client_send"($outptr) {
     let len_56: i32;
     let arr_84: ref Array<u8>;
     let i_85: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32($outptr + 8) };
     } else {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 8)) == 0 -> ref "wasi:http/types.wado//ErrorCode" {
@@ -1060,7 +1058,7 @@ fn "http_request_setter_errors.wado/$cm_lift__Client_send"($outptr) {
             struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_4 };
-    }));
+    });
 }
 
 fn "http_request_setter_errors.wado/$cm_export__handle"(request) {
@@ -1090,7 +1088,6 @@ fn "http_request_setter_errors.wado/$cm_task_entry__handle"(request) with Client
     let $local_85: ref null "wasi:http/types.wado//FieldSizePayload";
     let $local_93: ref "wasi:http/types.wado//FieldSizePayload";
     let $local_97: i32;
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Request, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed: i64;
     let rx: i32;
     let tx: i32;
@@ -1108,7 +1105,7 @@ fn "http_request_setter_errors.wado/$cm_task_entry__handle"(request) with Client
     headers = "http_request_setter_errors.wado/$cm_binding__Fields_new"();
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    if @unlikely(local.tee headers(local.tee ok_path("http_request_setter_errors.wado/$cm_binding__Request_set_path_with_query"(local.tee rx(local.tee $pattern_temp_1("http_request_setter_errors.wado/$cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 })).0), global:http_request_setter_errors.wado::$const_obj_22)).discriminant == 0) == 0) {
+    if @unlikely(local.tee headers(local.tee ok_path("http_request_setter_errors.wado/$cm_binding__Request_set_path_with_query"(local.tee rx("http_request_setter_errors.wado/$cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 }).0), global:http_request_setter_errors.wado::$const_obj_22)).discriminant == 0) == 0) {
         cold_path;
         headers = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_21("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(137)), 62);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_21.repr, headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -1191,8 +1188,7 @@ condition: none_scheme matches { Ok(_) }
         "core:rt/panic"($local_21.repr, $local_21.used);
         unreachable;
     }
-    let $match_scrut_4: ref null "wasi:http/types.wado//Scheme";
-    if @unlikely(local.tee headers(ref.is_null(local.tee $match_scrut_4("http_request_setter_errors.wado/$cm_binding__Request_get_scheme"(rx)))) == 0) {
+    if @unlikely(local.tee headers(ref.is_null("http_request_setter_errors.wado/$cm_binding__Request_get_scheme"(rx))) == 0) {
         cold_path;
         headers = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_21("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(123)), 62);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_21.repr, headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -2595,11 +2591,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let v_7: ref "core:prelude/types.wado//Result<(),()>";
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    if local.tee v_7(self.value).discriminant == 0 {
+    if self.value.discriminant == 0 {
         if @unlikely(local.tee new_used_22(local.tee self_10(f.buf).used + 6) > builtin::array_len(self_10.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, new_used_22);
@@ -2621,12 +2616,12 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/
         start_23 = self_10.used;
         self_10.used = new_used_22;
         builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_28, 0, 2);
-        if @unlikely(local.tee v_7(self.value).discriminant != 0) {
+        if @unlikely(self.value.discriminant != 0) {
             unreachable;
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<()>"(f);
     }
-    if local.tee v_7(self.value).discriminant == 1 {
+    if self.value.discriminant == 1 {
         if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 6) > builtin::array_len(self_10.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, start_23);
@@ -2648,7 +2643,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/
         new_used_22 = self_10.used;
         self_10.used = start_23;
         builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_27, 0, 3);
-        if @unlikely(local.tee v_7(self.value).discriminant != 1) {
+        if @unlikely(self.value.discriminant != 1) {
             unreachable;
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<()>"(f);

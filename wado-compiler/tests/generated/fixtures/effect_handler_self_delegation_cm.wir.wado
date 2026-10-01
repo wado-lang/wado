@@ -476,11 +476,10 @@ fn "effect_handler_self_delegation_cm.wado/effect_handler_self_delegation_cm.wad
     let self_2: ref "effect_handler_self_delegation_cm.wado//FixedRandom";
     let out: ref "core:prelude//List<u8>";
     let i: i32;
-    let elements: ref Array<u8>;
     let used: i32;
     let $licm_byte_14: u8;
     let $licm_arith_15: i32;
-    return self_2 = self.$capture_0, out = struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 }, i = 0, $licm_byte_14 = self_2.byte, $licm_arith_15 = builtin::i32_wrap_i64(max_len), b46: block {
+    return self_2 = self.$capture_0, out = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, i = 0, $licm_byte_14 = self_2.byte, $licm_arith_15 = builtin::i32_wrap_i64(max_len), b46: block {
         l47: loop {
             break_if b46 i >= $licm_arith_15;
             if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
@@ -587,8 +586,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
 }
 
 fn "closure/effect_handler_self_delegation_cm.wado/$closure_wrapper_0"($env, $p0) {
-    let $typed_env: ref "effect_handler_self_delegation_cm.wado//$Closure_0";
-    return "effect_handler_self_delegation_cm.wado/effect_handler_self_delegation_cm.wado/$Closure_0::$call"(local.tee $typed_env(ref.cast "effect_handler_self_delegation_cm.wado//$Closure_0"($env)), $p0);
+    return "effect_handler_self_delegation_cm.wado/effect_handler_self_delegation_cm.wado/$Closure_0::$call"(ref.cast "effect_handler_self_delegation_cm.wado//$Closure_0"($env), $p0);
 }
 
 fn "closure/effect_handler_self_delegation_cm.wado/$closure_wrapper_1"($env) {

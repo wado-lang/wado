@@ -1527,14 +1527,13 @@ fn "template_string.wado/$test_21_a_template_built_in_a_loop_keeps_each_iteratio
     let i_3: i32;
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_11: ref "core:prelude/format.wado//Formatter";
-    let elements_18: ref "Array<template_string.wado/Case>";
     let v_37: ref "core:prelude/string.wado//String";
     let new_used_54: i32;
     let start_55: i32;
     let value_58: ref "template_string.wado//Case";
     let self_65: ref null "core:prelude/string.wado//String";
     let $sroa_labels_repr_111: ref "Array<core:prelude/string.wado/String>";
-    cases = struct.new "core:prelude//List<template_string.wado/Case>" { repr: local.tee elements_18(array.new_fixed<ref "template_string.wado//Case">()), used: 0 };
+    cases = struct.new "core:prelude//List<template_string.wado/Case>" { repr: array.new_fixed<ref "template_string.wado//Case">(), used: 0 };
     $sroa_labels_repr_111 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("BinOp"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 97, 115, 115), used: 4 });
     i_3 = 0;
     b120: block {
@@ -3072,7 +3071,6 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let pos_84: i32;
     let temp: i64;
     let digit: i32;
-    let self_89: ref "core:prelude/string.wado//String";
     let n_96: i32;
     let new_used_100: i32;
     let start_101: i32;
@@ -3275,7 +3273,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                     $mv_arg_3 = global:template_string.wado::$const_obj_62;
                     "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"($fmt_buf_131, 0, $mv_arg_3.repr, $mv_arg_3.used, digit_count_71);
                 };
-                arr = local.tee self_89($fmt_buf_131.buf).repr;
+                arr = $fmt_buf_131.buf.repr;
                 pos_84 = offset_72 + digit_count_71;
                 if self_63 == 0_i64 {
                     builtin::array_set_u8(arr, offset_72, 48);
@@ -3426,12 +3424,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 
 fn "template_string.wado/template_string.wado/Wrapper<core:prelude/string.wado/String>::both"(self) {
     let $local_1: ref "core:prelude/string.wado//String";
-    let $local_2: ref "core:prelude/format.wado//Formatter";
     let f_19: ref "core:prelude/format.wado//Formatter";
     let text: ref "core:prelude/string.wado//String";
     let new_used_40: i32;
     let start_41: i32;
-    return local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 }).used = 8, builtin::array_copy<u8>($local_1.repr, 0, global:template_string.wado::$const_obj_98, 0, 8), f_19 = local.tee $local_2(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 }), $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__8: block {
+    return local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 }).used = 8, builtin::array_copy<u8>($local_1.repr, 0, global:template_string.wado::$const_obj_98, 0, 8), f_19 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 }, $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__8: block {
         text = self.value;
         let $arg_spill_1: ref "core:prelude/string.wado//String";
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_1(f_19.buf), text.repr, text.used);
@@ -3439,7 +3436,7 @@ fn "template_string.wado/template_string.wado/Wrapper<core:prelude/string.wado/S
     }, if @unlikely(local.tee new_used_40($local_1.used + 9) > builtin::array_len($local_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_40);
-    }, start_41 = $local_1.used, $local_1.used = new_used_40, builtin::array_copy<u8>($local_1.repr, start_41, global:template_string.wado::$const_obj_97, 0, 9), text = local.tee $local_2(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 }).buf; $arg_spill_1 = self.value; "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar"(text, $arg_spill_1.repr, $arg_spill_1.used), $local_1;
+    }, start_41 = $local_1.used, $local_1.used = new_used_40, builtin::array_copy<u8>($local_1.repr, start_41, global:template_string.wado::$const_obj_97, 0, 9), text = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 }.buf; $arg_spill_1 = self.value; "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar"(text, $arg_spill_1.repr, $arg_spill_1.used), $local_1;
 }
 
 fn "core:prelude/traits.wado/template_string.wado/Wrapper<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(self, f) {

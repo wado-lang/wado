@@ -96,7 +96,6 @@ fn "opt_sroa_stores_ref_mixed.wado/read_point"(p) {
 
 fn "opt_sroa_stores_ref_mixed.wado/run"() {
     let $v2: i32;
-    let b: ref "opt_sroa_stores_ref_mixed.wado//Point";
     let $sroa_a_x_18: i32;
     let $sroa_a_y_19: i32;
     $sroa_a_x_18 = black_box(1);
@@ -107,7 +106,7 @@ fn "opt_sroa_stores_ref_mixed.wado/run"() {
         "opt_sroa_stores_ref_mixed.wado/run$cold2"($sroa_a_y_19, $sroa_a_x_18, $v2);
         unreachable;
     }
-    if @unlikely(local.tee $v2(local.tee b(struct.new "opt_sroa_stores_ref_mixed.wado//Point" { x: black_box(3), y: black_box(4) }).x) != 3) {
+    if @unlikely(local.tee $v2(struct.new "opt_sroa_stores_ref_mixed.wado//Point" { x: black_box(3), y: black_box(4) }.x) != 3) {
         cold_path;
         "opt_sroa_stores_ref_mixed.wado/run$cold1"($v2);
         unreachable;

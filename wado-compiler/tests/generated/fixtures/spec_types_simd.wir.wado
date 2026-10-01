@@ -192,7 +192,6 @@ fn "spec_types_simd.wado/$cm_export__$test_0_lanes"() {
     let $v3_seen: bool;
     let $v4: bool;
     let $v4_seen: bool;
-    let $cond_9: bool;
     let v_24: v128;
     let $sroa_w_value_44: v128;
     v_24 = v128.const(316912650112397582603894390785);
@@ -200,13 +199,13 @@ fn "spec_types_simd.wado/$cm_export__$test_0_lanes"() {
     $v2 = local.tee $v1_3(i32x4.extract_lane(0, local.tee sum(v_24 + $sroa_w_value_44))) == 11;
     $v3_seen = 0;
     $v4_seen = 0;
-    if @unlikely(local.tee $cond_9((if $v2 -> i32 {
+    if @unlikely((if $v2 -> i32 {
         $v4 = $v3 = i32x4.extract_lane(3, sum); $v3_seen = 1; $v3 == 14;
         $v4_seen = 1;
         $v4;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "spec_types_simd.wado/$test_0_lanes$cold1"(sum, $v1_3, $v2, $v3, $v3_seen, $v4, $v4_seen);
         unreachable;

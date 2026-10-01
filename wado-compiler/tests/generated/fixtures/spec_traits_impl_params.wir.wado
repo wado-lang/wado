@@ -164,6 +164,7 @@ fn "spec_traits_impl_params.wado/$test_0"() {
     let $local_20: ref "core:prelude/string.wado//String";
     let $local_21: ref "core:prelude/format.wado//Formatter";
     let $local_22: ref "core:prelude/string.wado//String";
+    let $local_24: ref "core:prelude/string.wado//String";
     let $local_26: ref "core:prelude/string.wado//String";
     let $sroa_s_items_97: ref "core:prelude//List<i32>";
     let new_repr: ref Array<i32>;
@@ -231,10 +232,10 @@ fn "spec_traits_impl_params.wado/$test_0"() {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
-        $v5 = (if $v6_seen -> ref "core:prelude/string.wado//String" {
-            $local_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(ref.as_non_null(local.tee $v5("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16))));
+        $local_24 = (if $v6_seen -> ref "core:prelude/string.wado//String" {
+            $local_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_24("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
             "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: $v6 }, $local_21);
-            ref.as_non_null($v5);
+            $local_24;
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
@@ -281,9 +282,9 @@ condition: s.size() == 2 && s.is_sorted() && `${s}` == \"2 ints\"
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $v6, $local_22, i_115);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $v6 + i_115, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $v6 + (1 + i_115), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`${s}` == \"2 ints\": "), used: 20 }, 20);
-        i_115 = "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"($v5.used);
+        i_115 = "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"($local_24.used);
         $v6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_26, 1 + i_115);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $v6, ref.as_non_null($v5), i_115);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $v6, $local_24, i_115);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_26.repr, $v6 + i_115, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:rt/panic"($local_26.repr, $local_26.used);
         unreachable;
@@ -1703,7 +1704,6 @@ fn "spec_traits_impl_params.wado/core:prelude/list.wado/List<i32>::sort_by$$Clos
     let i: i32;
     let j: i32;
     let k: i32;
-    let $match_13: "core:prelude/traits.wado//enum:Ordering";
     let b_14: i32;
     let value_32: i32;
     let value_37: i32;
@@ -1733,7 +1733,7 @@ fn "spec_traits_impl_params.wado/core:prelude/list.wado/List<i32>::sort_by$$Clos
                                 if j < end {
                                     $sroa_a_value_41 = builtin::array_get_value<i32>($licm_repr_40, i);
                                     $sroa_b_value_42 = builtin::array_get_value<i32>($licm_repr_40, j);
-                                    if local.tee $match_13($inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_4: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                    if $inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_4: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         if $sroa_a_value_41 < $sroa_b_value_42 {
                                             break $inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_4: 0;
                                         }
@@ -1741,7 +1741,7 @@ fn "spec_traits_impl_params.wado/core:prelude/list.wado/List<i32>::sort_by$$Clos
                                             break $inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_4: 2;
                                         }
                                         break $inline_i32_core_prelude_traits_wado_Ord__cmp_scalar_4: 1;
-                                    }) == 2 {
+                                    } == 2 {
                                         builtin::array_set<i32>(buf, k, $sroa_b_value_42);
                                         j = j + 1;
                                     } else {

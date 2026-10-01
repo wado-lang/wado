@@ -431,7 +431,6 @@ global global:core:prelude/traits.wado::$const_obj_174: ref null Array<u8> = arr
 global mut global:core:prelude/traits.wado::$const_obj_195: ref null "tuple//[core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>]" = ref.null none;
 
 fn "spec_modules_impl_needs_trait.wado/$cm_export__$test_0"() {
-    let v: ref "spec_modules_impl_needs_trait.wado//Config";
     let e: ref "core:serde//DeserializeError";
     let $sroa_input_repr_15: ref Array<u8>;
     $inline__initialize_modules_0: block {
@@ -442,7 +441,7 @@ fn "spec_modules_impl_needs_trait.wado/$cm_export__$test_0"() {
         global:spec_modules_impl_needs_trait.wado::$modules_initialized = 1;
     };
     if @unlikely(local.tee $mv$self_6$0($sroa_input_repr_15 = array.new_data<u8>("{\"port\":80}"); let $mv$self_6$0: i32; let $mv$self_6$1: ref null "spec_modules_impl_needs_trait.wado//Config"; let $mv$self_6$2: ref null "core:serde//DeserializeError"; multivalue_bind [$mv$self_6$0, $mv$self_6$1, $mv$self_6$2] = "core:json/core/json/from_bytes<spec_modules_impl_needs_trait.wado/Config,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_input_repr_15, start: 0, end: 11 }); (if @likely($mv$self_6$0 == 0) -> ref "spec_modules_impl_needs_trait.wado//Config" {
-        local.tee v(ref.as_non_null($mv$self_6$1));
+        ref.as_non_null($mv$self_6$1);
     } else if $mv$self_6$0 == 1 -> ref "spec_modules_impl_needs_trait.wado//Config" {
         e = ref.as_non_null($mv$self_6$2);
         "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:serde/DeserializeError>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, e);
@@ -2309,7 +2308,6 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     let $local_3: ref "core:prelude/string.wado//String";
     let offset_10: i64;
     let start_23: i32;
-    let $sroa_$f_buf_83: ref "core:prelude/string.wado//String";
     let $av_86: i32;
     if local.tee $av_86(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start)) {
         return 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, builtin::i64_extend_i32_s($av_86);
@@ -2323,7 +2321,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = $load_3;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_5, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), c & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, c & 255);
     if @unlikely(local.tee c($local_3.used + 10) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, c);
@@ -2331,7 +2329,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = c;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_4, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), $av_86 & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, $av_86 & 255);
     if @unlikely(local.tee $av_86($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $av_86);
@@ -3275,8 +3273,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(cap
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(self) {
-    let repr: ref Array<u8>;
-    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee repr(self.repr), start: 0, end: self.used };
+    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self.repr, start: 0, end: self.used };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {

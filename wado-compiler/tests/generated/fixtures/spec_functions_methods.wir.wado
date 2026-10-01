@@ -185,7 +185,6 @@ fn "spec_functions_methods.wado/$test_3_self_names_the_impl_s_type"() {
     let $v6_seen: bool;
     let $v7: bool;
     let $v7_seen: bool;
-    let $cond: bool;
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_18: ref "core:prelude/format.wado//Formatter";
     let $local_19: ref "core:prelude/string.wado//String";
@@ -215,7 +214,7 @@ fn "spec_functions_methods.wado/$test_3_self_names_the_impl_s_type"() {
     $v5_seen = 0;
     $v6_seen = 0;
     $v7_seen = 0;
-    if @unlikely(local.tee $cond((if $v3 -> i32 {
+    if @unlikely((if $v3 -> i32 {
         $v7 = $v5 = struct.new "core:prelude/types.wado//Box<spec_functions_methods.wado/Shape>" { value: ref.as_non_null($v4 = struct.new "spec_functions_methods.wado//Shape::Square" { discriminant: 1, payload_0: 1 }; $v4_seen = 1; ref.as_non_null($v4)) }; $v5_seen = 1; $v6 = (if $load_2 = local.tee $match_scrut_0(struct.new "tuple//[spec_functions_methods.wado/Shape, spec_functions_methods.wado/Shape]" { 0: struct.new "spec_functions_methods.wado//Shape::Circle" { discriminant: 0, payload_0: 1 }, 1: $v5.value }).0; $load_1 = $match_scrut_0.1; (if ref.test "spec_functions_methods.wado//Shape::Circle"($load_2) & ref.test "spec_functions_methods.wado//Shape::Circle"($load_1) -> i32 {
             drop(ref.cast "spec_functions_methods.wado//Shape::Circle"($load_2).payload_0);
             drop(ref.cast "spec_functions_methods.wado//Shape::Circle"($load_1).payload_0);
@@ -237,7 +236,7 @@ fn "spec_functions_methods.wado/$test_3_self_names_the_impl_s_type"() {
         $v7;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         $local_17 = (if $v4_seen -> ref "core:prelude/string.wado//String" {
             $local_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_17("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));

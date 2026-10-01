@@ -1695,7 +1695,6 @@ fn "core:json/core/json/from_bytes<reflect_wire_name_folds.wado/Rank,core:prelud
     let self_42: ref "core:json//JsonDeserializer";
     let va_57: ref "core:prelude/string.wado//String";
     let s_71: ref "core:prelude/string.wado//String";
-    let $sroa_slot_241: ref null "core:serde//CaseKey";
     let $sroa_slot_264: i32;
     let $sroa_slot_265: "reflect_wire_name_folds.wado//enum:Rank";
     let $sroa_slot_266: ref null "core:serde//DeserializeError";
@@ -1719,11 +1718,10 @@ fn "core:json/core/json/from_bytes<reflect_wire_name_folds.wado/Rank,core:prelud
         } else {
             unreachable;
         });
-        $sroa_slot_241 = ref.null none;
         va_57 = $qm_v_10.variant;
         cold_path;
         va_57 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = va_57.repr; $mv$$vr_25$0 = va_57.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($mv$$vr_25$0)), 0, $array_clone_src_1, 0, $mv$$vr_25$0); $array_clone_dst_2), used: $mv$$vr_25$0 };
-        if local.tee $mv$$vr_25$0((if ref.test "core:serde//CaseKey::Disc"(local.tee $qm_v_14(ref.as_non_null(local.tee $sroa_slot_241(struct.new "core:serde//CaseKey::Name" { discriminant: 1, payload_0: va_57 })))) -> bool {
+        if local.tee $mv$$vr_25$0((if ref.test "core:serde//CaseKey::Disc"(local.tee $qm_v_14(struct.new "core:serde//CaseKey::Name" { discriminant: 1, payload_0: va_57 })) -> bool {
             ref.cast "core:serde//CaseKey::Disc"($qm_v_14).payload_0 == 0;
         } else {
             va_57 = ref.cast "core:serde//CaseKey::Name"($qm_v_14).payload_0;
@@ -2349,10 +2347,9 @@ fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(
     let new_used_29: i32;
     let start_30: i32;
     let val_i64_65: i64;
-    let repr: ref Array<u8>;
     $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0: block {
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0 i <= run_start;
-        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr(s.repr), start: run_start, end: i };
+        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: run_start, end: i };
         $inline_core_prelude_string_wado_String__internal_push_view_6: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_view_6 local.tee i(i - run_start) == 0;
             if @unlikely(local.tee new_used_29(buf.used + i) > builtin::array_len(buf.repr)) {
@@ -3517,7 +3514,6 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     let $local_3: ref "core:prelude/string.wado//String";
     let offset_10: i64;
     let start_23: i32;
-    let $sroa_$f_buf_83: ref "core:prelude/string.wado//String";
     let $av_86: i32;
     if local.tee $av_86(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start)) {
         return 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, builtin::i64_extend_i32_s($av_86);
@@ -3531,7 +3527,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = $load_3;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_4, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), c & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, c & 255);
     if @unlikely(local.tee c($local_3.used + 10) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, c);
@@ -3539,7 +3535,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = c;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_3, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), $av_86 & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, $av_86 & 255);
     if @unlikely(local.tee $av_86($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $av_86);

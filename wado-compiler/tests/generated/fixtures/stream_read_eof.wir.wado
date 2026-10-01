@@ -147,13 +147,12 @@ fn "stream_read_eof.wado/run"() with Stdout {
     let packed_11: i64;
     let rx_12: i32;
     let all: ref "core:prelude//List<u8>";
-    let elements: ref Array<u8>;
     let other_len: i32;
     let new_used: i32;
     rx_12 = builtin::i32_wrap_i64(local.tee packed_11("wasi/stream-new"()));
     "wasi/stream-drop-writable"(builtin::i32_wrap_i64(packed_11 >> 32_i64));
     if @unlikely((local.tee new_used(local.tee $mv$chunk$items($inline_core_prelude_types_wado_Stream_u8___read_to_end_2: block -> ref "core:prelude//List<u8>" {
-        all = struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 };
+        all = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
         block {
             l2: loop {
                 let $mv$chunk$items: ref "core:prelude//List<u8>";

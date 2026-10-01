@@ -254,7 +254,6 @@ fn "list_from_le_bytes.wado/run"() {
     let m: ref "core:prelude//List<u16>";
     let $local_39: ref "core:prelude/string.wado//String";
     let $local_40: ref "core:prelude/format.wado//Formatter";
-    let bytes: ref "core:prelude//List<u8>";
     let a_end_112: i32;
     let i_117: i32;
     let elements_186: ref Array<u16>;
@@ -268,7 +267,7 @@ fn "list_from_le_bytes.wado/run"() {
         global:list_from_le_bytes.wado::$modules_initialized = 1;
     };
     $sroa_f_repr_229 = array.new_fixed<f32>(1_f32, -2.5_f32);
-    g = "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:prelude/bytes.wado/ByteList>"(local.tee bytes(black_box(struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>(0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x20, 0xc0), used: 8 })));
+    g = "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:prelude/bytes.wado/ByteList>"(black_box(struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>(0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x20, 0xc0), used: 8 }));
     if @unlikely(local.tee i_117($inline_core_prelude_array_wado_seq_eq_f32__8: block -> bool {
         if local.tee a_end_112(g.used) != 2 {
             break $inline_core_prelude_array_wado_seq_eq_f32__8: 0;
@@ -2274,7 +2273,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>::from_le_bytes<core:
     let $v5_seen: bool;
     let $v6: bool;
     let $v6_seen: bool;
-    let $cond: bool;
     let bits_43: u64;
     let i_44: i32;
     let $sroa_view_repr_66: ref Array<u8>;
@@ -2306,13 +2304,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u16>::from_le_bytes<core:
         l273: loop {
             break_if b272 i_5 >= n;
             at_17 = i_5 * 2;
-            at_17 = builtin::i32_wrap_i64($v1 = 0 <= at_17; $v2_seen = 0; $v3_seen = 0; $v4_seen = 0; $v5_seen = 0; $v6_seen = 0; if @unlikely(local.tee $cond((if $v1 -> i32 {
+            at_17 = builtin::i32_wrap_i64($v1 = 0 <= at_17; $v2_seen = 0; $v3_seen = 0; $v4_seen = 0; $v5_seen = 0; $v6_seen = 0; if @unlikely((if $v1 -> i32 {
                 $v6 = $v2 = at_17; $v2_seen = 1; $v2 <= $v5 = $v3 = $sroa_view_end_68; $v3_seen = 1; $v3 - $v4 = 2; $v4_seen = 1; 2; $v5_seen = 1; $v5;
                 $v6_seen = 1;
                 $v6;
             } else {
                 0;
-            })) == 0) {
+            }) == 0) {
                 cold_path;
                 "core:prelude/bytes.wado/le_bits$cold0"(at_17, $v1, $v2, $v2_seen, $v3, $v3_seen, $v4, $v4_seen, $v5, $v5_seen, $v6, $v6_seen);
                 unreachable;
@@ -2377,7 +2375,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:
     let $v5_seen: bool;
     let $v6: bool;
     let $v6_seen: bool;
-    let $cond: bool;
     let bits_47: u64;
     let i_48: i32;
     let $sroa_view_repr_70: ref Array<u8>;
@@ -2406,13 +2403,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:
         l283: loop {
             break_if b282 i_5 >= n;
             at_17 = i_5 * 4;
-            value_14 = builtin::f32_reinterpret_i32(builtin::i32_wrap_i64($v1 = 0 <= at_17; $v2_seen = 0; $v3_seen = 0; $v4_seen = 0; $v5_seen = 0; $v6_seen = 0; if @unlikely(local.tee $cond((if $v1 -> i32 {
+            value_14 = builtin::f32_reinterpret_i32(builtin::i32_wrap_i64($v1 = 0 <= at_17; $v2_seen = 0; $v3_seen = 0; $v4_seen = 0; $v5_seen = 0; $v6_seen = 0; if @unlikely((if $v1 -> i32 {
                 $v6 = $v2 = at_17; $v2_seen = 1; $v2 <= $v5 = $v3 = end; $v3_seen = 1; $v3 - $v4 = 4; $v4_seen = 1; 4; $v5_seen = 1; $v5;
                 $v6_seen = 1;
                 $v6;
             } else {
                 0;
-            })) == 0) {
+            }) == 0) {
                 cold_path;
                 "core:prelude/bytes.wado/le_bits$cold0"(at_17, $v1, $v2, $v2_seen, $v3, $v3_seen, $v4, $v4_seen, $v5, $v5_seen, $v6, $v6_seen);
                 unreachable;

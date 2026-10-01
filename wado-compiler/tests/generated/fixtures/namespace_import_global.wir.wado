@@ -82,15 +82,14 @@ fn "namespace_import_global.wado/$cm_export__$test_0_namespace_global_read"() {
 }
 
 fn "namespace_import_global.wado/$cm_export__$test_1_namespace_mutable_global_write"() {
-    let $cond_0: bool;
     global:./sub/ns_robust_helper.wado::COUNTER = 7;
-    if @unlikely(local.tee $cond_0(global:./sub/ns_robust_helper.wado::COUNTER == 7) == 0) {
+    if @unlikely((global:./sub/ns_robust_helper.wado::COUNTER == 7) == 0) {
         cold_path;
         "namespace_import_global.wado/$test_1_namespace_mutable_global_write$cold1"();
         unreachable;
     }
     global:./sub/ns_robust_helper.wado::COUNTER = global:./sub/ns_robust_helper.wado::COUNTER + 1;
-    if @unlikely(local.tee $cond_0(global:./sub/ns_robust_helper.wado::COUNTER == 8) == 0) {
+    if @unlikely((global:./sub/ns_robust_helper.wado::COUNTER == 8) == 0) {
         cold_path;
         "namespace_import_global.wado/$test_1_namespace_mutable_global_write$cold0"();
         unreachable;

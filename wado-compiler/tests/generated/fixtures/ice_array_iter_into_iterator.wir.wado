@@ -528,7 +528,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     let $v2_12: i32;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond_16: bool;
     let b1: u8;
     $load_0 = bytes.start;
     $v2_2 = bytes.end - $load_0;
@@ -571,13 +570,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     }) >= 1;
     $v2_2 = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond_16((if b1 -> i32 {
+    if @unlikely((if b1 -> i32 {
         $v3 = $v2_12 = $load_0; $v2_2 = 1; $v2_12 <= 3;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$cold0"($load_0, b1, $v2_12, $v2_2, $v3, $v3_seen);
         unreachable;

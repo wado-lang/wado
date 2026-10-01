@@ -286,19 +286,17 @@ global global:core:prelude/primitive.wado::$const_obj_186: ref null Array<u8> = 
 global global:core:prelude/primitive.wado::$const_obj_190: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
 
 fn "opt_sroa_single_field.wado/conditional_wrapper"(flag) {
-    let w: ref "opt_sroa_single_field.wado//Wrapper";
-    return "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::get$scalar"(local.tee w((if flag -> ref "opt_sroa_single_field.wado//Wrapper" {
+    return "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::get$scalar"((if flag -> ref "opt_sroa_single_field.wado//Wrapper" {
         struct.new "opt_sroa_single_field.wado//Wrapper" { inner: black_box(10) };
     } else {
         struct.new "opt_sroa_single_field.wado//Wrapper" { inner: black_box(20) };
-    })).inner);
+    }).inner);
 }
 
 fn "opt_sroa_single_field.wado/mixed_single_fields"() {
     let $sroa_w_inner_3: i32;
-    let $sroa_f_set_4: bool;
     $sroa_w_inner_3 = black_box(42);
-    return (if "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Flag::is_set$scalar"(local.tee $sroa_f_set_4(black_box(1))) -> i32 {
+    return (if "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Flag::is_set$scalar"(black_box(1)) -> i32 {
         "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::get$scalar"($sroa_w_inner_3);
     } else {
         0;
@@ -540,7 +538,7 @@ condition: conditional_wrapper(builtin::black_box(false)) == 20
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    }); let $arg_spill_1: ref "core:prelude/string.wado//String"; "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_1($sroa_$f_buf_198), text.repr, text.used); if @unlikely(local.tee $v0($local_68.used + 49) > builtin::array_len($local_68.repr)) {
+    }); "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_198, text.repr, text.used); if @unlikely(local.tee $v0($local_68.used + 49) > builtin::array_len($local_68.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_68, $v0);
     }; new_used_92 = $local_68.used; $local_68.used = $v0; builtin::array_copy<u8>(local.tee $load_2($local_68.repr), new_used_92, global:opt_sroa_single_field.wado::$const_obj_99, 0, 1); new_used_92 = new_used_92 + 1; builtin::array_copy<u8>($load_2, new_used_92, global:opt_sroa_single_field.wado::$const_obj_132, 0, 48); $sroa_$f_buf_198 = $local_68; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_198); if @unlikely(local.tee $v1($local_68.used + 1) > builtin::array_len($local_68.repr)) {
@@ -567,7 +565,7 @@ fn "opt_sroa_single_field.wado/run$cold6"($v0, $v1) with Stdout {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    }); let $arg_spill_1: ref "core:prelude/string.wado//String"; "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_1($sroa_$f_buf_198), text.repr, text.used); if @unlikely(local.tee $v0($local_66.used + 48) > builtin::array_len($local_66.repr)) {
+    }); "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_198, text.repr, text.used); if @unlikely(local.tee $v0($local_66.used + 48) > builtin::array_len($local_66.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_66, $v0);
     }; new_used_92 = $local_66.used; $local_66.used = $v0; builtin::array_copy<u8>(local.tee $load_2($local_66.repr), new_used_92, global:opt_sroa_single_field.wado::$const_obj_99, 0, 1); new_used_92 = new_used_92 + 1; builtin::array_copy<u8>($load_2, new_used_92, global:opt_sroa_single_field.wado::$const_obj_142, 0, 47); $sroa_$f_buf_198 = $local_66; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v1, $sroa_$f_buf_198); if @unlikely(local.tee $v1($local_66.used + 1) > builtin::array_len($local_66.repr)) {

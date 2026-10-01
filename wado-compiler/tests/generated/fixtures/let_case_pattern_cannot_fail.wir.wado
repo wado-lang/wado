@@ -205,9 +205,8 @@ global global:let_case_pattern_cannot_fail.wado::$const_obj_77: ref null Array<u
 global global:core:prelude/primitive.wado::$const_obj_79: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "let_case_pattern_cannot_fail.wado/$cm_export__$test_0_a_one_case_variant"() {
-    let w: ref "let_case_pattern_cannot_fail.wado//W";
     let x: i32;
-    if @unlikely(local.tee x(ref.cast "let_case_pattern_cannot_fail.wado//W::A"(local.tee w(struct.new "let_case_pattern_cannot_fail.wado//W::A" { discriminant: 0, payload_0: 3 })).payload_0) != 3) {
+    if @unlikely(local.tee x(ref.cast "let_case_pattern_cannot_fail.wado//W::A"(struct.new "let_case_pattern_cannot_fail.wado//W::A" { discriminant: 0, payload_0: 3 }).payload_0) != 3) {
         cold_path;
         "let_case_pattern_cannot_fail.wado/$test_0_a_one_case_variant$cold0"(x);
         unreachable;
@@ -258,9 +257,8 @@ fn "let_case_pattern_cannot_fail.wado/$cm_export__$test_2_nested_in_a_tuple_and_
     let $v2: i32;
     let $v4: i32;
     let $v6: i32;
-    let $sroa_$pattern_temp_0_0_15: ref "let_case_pattern_cannot_fail.wado//W";
-    x = ref.cast "let_case_pattern_cannot_fail.wado//W::A"(local.tee $sroa_$pattern_temp_0_0_15(struct.new "let_case_pattern_cannot_fail.wado//W::A" { discriminant: 0, payload_0: 5 })).payload_0;
-    z = ref.cast "let_case_pattern_cannot_fail.wado//W::A"(local.tee $sroa_$pattern_temp_0_0_15(struct.new "let_case_pattern_cannot_fail.wado//W::A" { discriminant: 0, payload_0: 6 })).payload_0;
+    x = ref.cast "let_case_pattern_cannot_fail.wado//W::A"(struct.new "let_case_pattern_cannot_fail.wado//W::A" { discriminant: 0, payload_0: 5 }).payload_0;
+    z = ref.cast "let_case_pattern_cannot_fail.wado//W::A"(struct.new "let_case_pattern_cannot_fail.wado//W::A" { discriminant: 0, payload_0: 6 }).payload_0;
     if @unlikely(local.tee $v6(local.tee $v4(local.tee $v2(x + 1) + z) + 7) != 19) {
         cold_path;
         "let_case_pattern_cannot_fail.wado/$test_2_nested_in_a_tuple_and_a_struct$cold0"(x, z, $v2, $v4, $v6);
@@ -275,8 +273,7 @@ fn "let_case_pattern_cannot_fail.wado/$cm_export__$test_3_a_case_name_at_the_roo
 
 fn "let_case_pattern_cannot_fail.wado/$cm_export__$test_4_mut_binds_every_name_mutably"() {
     let x: i32;
-    let $pattern_temp_0: ref "let_case_pattern_cannot_fail.wado//W";
-    if @unlikely(local.tee x(local.tee x(ref.cast "let_case_pattern_cannot_fail.wado//W::A"(local.tee $pattern_temp_0(struct.new "let_case_pattern_cannot_fail.wado//W::A" { discriminant: 0, payload_0: 3 })).payload_0) + 1) != 4) {
+    if @unlikely(local.tee x(local.tee x(ref.cast "let_case_pattern_cannot_fail.wado//W::A"(struct.new "let_case_pattern_cannot_fail.wado//W::A" { discriminant: 0, payload_0: 3 }).payload_0) + 1) != 4) {
         cold_path;
         "let_case_pattern_cannot_fail.wado/$test_4_mut_binds_every_name_mutably$cold0"(x);
         unreachable;

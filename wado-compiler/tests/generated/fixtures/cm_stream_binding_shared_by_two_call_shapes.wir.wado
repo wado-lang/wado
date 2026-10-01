@@ -129,7 +129,6 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/run"() with Stdout {
     let rx_11: i32;
     let all: ref "core:prelude//List<u32>";
     let chunk_18: ref "core:prelude/types.wado//StreamChunk<u32>";
-    let elements: ref Array<u32>;
     let other_len: i32;
     let new_used_81: i32;
     let $sroa_$f_buf_95: ref "core:prelude/string.wado//String";
@@ -140,7 +139,7 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/run"() with Stdout {
     rx_11 = builtin::i32_wrap_i64(local.tee packed_10("wasi/stream-new:val-u32"()));
     "wasi/stream-drop-writable:val-u32"(builtin::i32_wrap_i64(packed_10 >> 32_i64));
     all = $inline_core_prelude_types_wado_Stream_u32___read_to_end_3: block -> ref "core:prelude//List<u32>" {
-        all = struct.new "core:prelude//List<u32>" { repr: local.tee elements(array.new_fixed<u32>()), used: 0 };
+        all = struct.new "core:prelude//List<u32>" { repr: array.new_fixed<u32>(), used: 0 };
         block {
             l1: loop {
                 chunk_18 = "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_stream_read_val_u32$spec1"(rx_11, 4096);

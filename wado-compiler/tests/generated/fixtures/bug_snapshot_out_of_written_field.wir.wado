@@ -81,9 +81,7 @@ global global:bug_snapshot_out_of_written_field.wado::$const_obj_8: ref null Arr
 fn "bug_snapshot_out_of_written_field.wado/$cm_export__$test_0_a_snapshot_out_of_a_written_field_keeps_its_own_value"() {
     let $v0: i32;
     let snapshot: ref "core:prelude//List<i32>";
-    let $sroa_hh_items_15: ref "core:prelude//List<i32>";
-    snapshot = local.tee $sroa_hh_items_15(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 });
-    $sroa_hh_items_15 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+    snapshot = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     if @unlikely(local.tee $v0(builtin::array_get_value<i32>(snapshot.repr, 0)) != 1) {
         cold_path;
         "bug_snapshot_out_of_written_field.wado/$test_0_a_snapshot_out_of_a_written_field_keeps_its_own_value$cold0"($v0);

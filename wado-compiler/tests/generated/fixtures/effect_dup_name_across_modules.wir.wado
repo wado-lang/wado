@@ -107,14 +107,13 @@ fn "effect_dup_name_across_modules.wado/run"() with Stdout {
     let sink: ref "effect_dup_name_across_modules.wado//Sink";
     let $save_Log: ref null "effect_dup_name_across_modules.wado//$Dispatch_Log";
     let $d_Log: ref "effect_dup_name_across_modules.wado//$Dispatch_Log";
-    let elements: ref "Array<core:prelude/string.wado/String>";
     let message_7: ref "core:prelude/string.wado//String";
     let $local_1_8: ref null "effect_dup_name_across_modules.wado//$Dispatch_Log";
     let new_used: i32;
     let start_33: i32;
     let packed: i64;
     let $sroa_$f_buf_59: ref "core:prelude/string.wado//String";
-    sink = struct.new "effect_dup_name_across_modules.wado//Sink" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }) };
+    sink = struct.new "effect_dup_name_across_modules.wado//Sink" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }) };
     global:effect_dup_name_across_modules.wado::$effect_Log = local.tee $d_Log(struct.new "effect_dup_name_across_modules.wado//$Dispatch_Log" { outer: local.tee $save_Log(global:effect_dup_name_across_modules.wado::$effect_Log), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_dup_name_across_modules.wado//$Closure_0" { $capture_0: sink }, func: ref.func "closure/effect_dup_name_across_modules.wado/$closure_wrapper_0" } });
     $inline__effect_dispatch__Log__emit_2: block {
         message_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
@@ -317,10 +316,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 }
 
 fn "effect_dup_name_across_modules.wado/effect_dup_name_across_modules.wado/$Closure_0::$call"(self, message) {
-    let self_2: ref "effect_dup_name_across_modules.wado//Sink";
     let self_4: ref "core:prelude//List<core:prelude/string.wado/String>";
     let used: i32;
-    if @unlikely(local.tee used(local.tee self_4(local.tee self_2(self.$capture_0).lines).used) >= builtin::array_len(self_4.repr)) {
+    if @unlikely(local.tee used(local.tee self_4(self.$capture_0.lines).used) >= builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_4);
     }
@@ -373,8 +371,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
 }
 
 fn "closure/effect_dup_name_across_modules.wado/$closure_wrapper_0"($env, $p0) {
-    let $typed_env: ref "effect_dup_name_across_modules.wado//$Closure_0";
-    "effect_dup_name_across_modules.wado/effect_dup_name_across_modules.wado/$Closure_0::$call"(local.tee $typed_env(ref.cast "effect_dup_name_across_modules.wado//$Closure_0"($env)), $p0);
+    "effect_dup_name_across_modules.wado/effect_dup_name_across_modules.wado/$Closure_0::$call"(ref.cast "effect_dup_name_across_modules.wado//$Closure_0"($env), $p0);
 }
 
 export fn "effect_dup_name_across_modules.wado/$cm_export__run" as "run"

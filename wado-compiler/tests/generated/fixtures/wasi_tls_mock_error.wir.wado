@@ -278,13 +278,11 @@ fn "wasi_tls_mock_error.wado/$cm_binding__Error_to_debug_string"(self) with Erro
 }
 
 fn "wasi_tls_mock_error.wado/$cm_lift__Connector_connect"($outptr) {
-    let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" {
+    return (if builtin::load_u8($outptr) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" {
         struct.new "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" { 0 };
     } else {
         struct.new "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err" { discriminant: 1, payload_0: builtin::load_i32($outptr + 4) };
-    }));
+    });
 }
 
 fn "wasi_tls_mock_error.wado/$cm_export__run"() {

@@ -1371,7 +1371,6 @@ fn "reflect_serde_poc.wado/$test_5_a_unit_case_round_trips_through_construct"() 
     let $vc_payload_1: ref "core:prelude/string.wado//String";
     let $vc_payload_3: ref "core:prelude//List<reflect_serde_poc.wado/Entry>";
     let $vc_payload_4: ref "core:prelude//List<reflect_serde_poc.wado/Node>";
-    let a_30: ref "reflect_serde_poc.wado//Payload";
     let $match_6: ref "core:prelude/types.wado//Result<reflect_serde_poc.wado/Payload,reflect_serde_poc.wado/WireError>";
     wire = struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Node>" { value: ref.as_non_null("reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado/ToWire::to_wire"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: struct.new "reflect_serde_poc.wado//Payload" { 2 } })) };
     $v2 = struct.new "reflect_serde_poc.wado//Node::Obj" { discriminant: 3, payload_0: ref.as_non_null(struct.new "core:prelude//List<reflect_serde_poc.wado/Entry>" { repr: local.tee $array_clone_dst_7(array.new_fixed<ref "reflect_serde_poc.wado//Entry">(struct.new "reflect_serde_poc.wado//Entry" { key: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Nothing"), used: 7 }, value: ref.as_non_null((if ref.test "reflect_serde_poc.wado//Node::Int"(local.tee $v1_1(struct.new "reflect_serde_poc.wado//Node::Arr" { discriminant: 4, payload_0: ref.as_non_null(struct.new "core:prelude//List<reflect_serde_poc.wado/Node>" { repr: local.tee elements_20(array.new_fixed<ref "reflect_serde_poc.wado//Node">()), used: 0 }) })) -> ref "reflect_serde_poc.wado//Node" {
@@ -1455,7 +1454,7 @@ condition: wire == Node::Obj([ Entry { key: \"Nothing\", value: Node::Arr([]) },
     } else {
         struct.new "core:prelude/types.wado//Result<reflect_serde_poc.wado/Payload,reflect_serde_poc.wado/WireError>::Err" { discriminant: 1, payload_0: ref.as_non_null($mv$$v1_4$2) };
     }))) -> bool {
-        "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^core:prelude/traits.wado/Eq::eq$scalar"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: local.tee a_30(ref.cast "core:prelude/types.wado//Result<reflect_serde_poc.wado/Payload,reflect_serde_poc.wado/WireError>::Ok"($match_6).payload_0) }, global:reflect_serde_poc.wado::$const_obj_30);
+        "reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^core:prelude/traits.wado/Eq::eq$scalar"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: ref.cast "core:prelude/types.wado//Result<reflect_serde_poc.wado/Payload,reflect_serde_poc.wado/WireError>::Ok"($match_6).payload_0 }, global:reflect_serde_poc.wado::$const_obj_30);
     } else {
         drop(ref.cast "core:prelude/types.wado//Result<reflect_serde_poc.wado/Payload,reflect_serde_poc.wado/WireError>::Err"($match_6).payload_0);
         0;
@@ -2493,8 +2492,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<r
     let start_28: i32;
     let new_used_64: i32;
     let start_65: i32;
-    let v_317: ref "reflect_serde_poc.wado//Inner";
-    let v_632: ref "reflect_serde_poc.wado//Payload";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_192) {
         let $mv_0_1: ref "core:prelude/traits.wado//StructField<reflect_serde_poc.wado/Outer,i32>";
         let $mv_1_2: ref "core:prelude/traits.wado//StructField<reflect_serde_poc.wado/Outer,core:prelude/string.wado/String>";
@@ -2654,7 +2651,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<r
     start_28 = self_15.used;
     self_15.used = new_used_27;
     builtin::array_copy<u8>(self_15.repr, start_28, global:core:prelude/traits.wado::$const_obj_73, 0, 2);
-    "core:prelude/traits.wado/reflect_serde_poc.wado/Inner^core:prelude/traits.wado/Inspect::inspect"(local.tee v_317(v.inner), f);
+    "core:prelude/traits.wado/reflect_serde_poc.wado/Inner^core:prelude/traits.wado/Inspect::inspect"(v.inner, f);
     if @unlikely(local.tee start_28(local.tee self_15(f.buf).used + 1) > builtin::array_len(self_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, start_28);
@@ -2795,7 +2792,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<r
     start_28 = self_15.used;
     self_15.used = new_used_27;
     builtin::array_copy<u8>(self_15.repr, start_28, global:core:prelude/traits.wado::$const_obj_73, 0, 2);
-    "core:prelude/traits.wado/reflect_serde_poc.wado/Payload^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: ref.as_non_null(local.tee v_632(v.payload)) }, f);
+    "core:prelude/traits.wado/reflect_serde_poc.wado/Payload^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: ref.as_non_null(v.payload) }, f);
     if @unlikely(local.tee start_28(local.tee self_15(f.buf).used + 1) > builtin::array_len(self_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, start_28);
@@ -3436,7 +3433,6 @@ fn "core:serde/core/serde/apply_case<core:prelude/string.wado/String>"($mv$s$rep
     let new_used_68: i32;
     let start_69: i32;
     let $licm_repr_79: ref Array<u8>;
-    let self_79: ref Array<u8>;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>($mv$s$used + 4), used: 0 };
     word = -1;
     at_head = 1;
@@ -3463,7 +3459,7 @@ fn "core:serde/core/serde/apply_case<core:prelude/string.wado/String>"($mv$s$rep
                     } else {
                         0;
                     }), (i + 1) < $mv$s$used, 0) -> i32 {
-                        (local.tee b_30(builtin::array_get_value<u8>(local.tee self_79($licm_repr_79), i + 1)) >=u 97) & (b_30 <=u 122);
+                        (local.tee b_30(builtin::array_get_value<u8>($licm_repr_79, i + 1)) >=u 97) & (b_30 <=u 122);
                     } else {
                         0;
                     });
@@ -3941,7 +3937,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<r
     let start_24: i32;
     let new_used_60: i32;
     let start_61: i32;
-    let v_204: ref "reflect_serde_poc.wado//Node";
     if @unlikely(local.tee new_used_23(local.tee self_11(f.buf).used + 5) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, new_used_23);
@@ -4042,7 +4037,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<r
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:core:prelude/traits.wado::$const_obj_73, 0, 2);
-    "core:prelude/traits.wado/reflect_serde_poc.wado/Node^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Node>" { value: ref.as_non_null(local.tee v_204(v.value)) }, f);
+    "core:prelude/traits.wado/reflect_serde_poc.wado/Node^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Node>" { value: ref.as_non_null(v.value) }, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -4980,8 +4975,6 @@ fn "core:prelude/traits.wado/reflect_serde_poc.wado/Outer^core:prelude/traits.wa
     let self_14: ref "core:prelude/string.wado//String";
     let new_used_26: i32;
     let start_27: i32;
-    let v_232: ref "reflect_serde_poc.wado//Inner";
-    let v_430: ref "reflect_serde_poc.wado//Payload";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<reflect_serde_poc.wado/Outer,[i32,core:prelude/string.wado/String,reflect_serde_poc.wado/Inner,reflect_serde_poc.wado/Rank,reflect_serde_poc.wado/Perms,reflect_serde_poc.wado/Payload]>"(self, f);
         return;
@@ -5072,7 +5065,7 @@ fn "core:prelude/traits.wado/reflect_serde_poc.wado/Outer^core:prelude/traits.wa
     new_used_26 = self_14.used;
     self_14.used = start_27;
     builtin::array_copy<u8>(self_14.repr, new_used_26, global:core:prelude/traits.wado::$const_obj_73, 0, 2);
-    "core:prelude/traits.wado/reflect_serde_poc.wado/Inner^core:prelude/traits.wado/Inspect::inspect"(local.tee v_232(self.inner), f);
+    "core:prelude/traits.wado/reflect_serde_poc.wado/Inner^core:prelude/traits.wado/Inspect::inspect"(self.inner, f);
     $mv_3_4 = global:core:prelude/traits.wado::$const_obj_85.3;
     if @unlikely(local.tee new_used_26(local.tee self_14(f.buf).used + 2) > builtin::array_len(self_14.repr)) {
         cold_path;
@@ -5141,7 +5134,7 @@ fn "core:prelude/traits.wado/reflect_serde_poc.wado/Outer^core:prelude/traits.wa
     start_27 = self_14.used;
     self_14.used = new_used_26;
     builtin::array_copy<u8>(self_14.repr, start_27, global:core:prelude/traits.wado::$const_obj_73, 0, 2);
-    "core:prelude/traits.wado/reflect_serde_poc.wado/Payload^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: ref.as_non_null(local.tee v_430(self.payload)) }, f);
+    "core:prelude/traits.wado/reflect_serde_poc.wado/Payload^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: ref.as_non_null(self.payload) }, f);
     if @unlikely(local.tee start_27(local.tee self_14(f.buf).used + 2) > builtin::array_len(self_14.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_14, start_27);
@@ -5384,13 +5377,10 @@ fn "core:prelude/traits.wado/reflect_serde_poc.wado/Node^core:prelude/traits.wad
 
 fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/ToWire::to_wire"(self) {
     let entries: ref "core:prelude//List<reflect_serde_poc.wado/Entry>";
-    let elements: ref "Array<reflect_serde_poc.wado/Entry>";
     let value_13: ref "reflect_serde_poc.wado//Entry";
     let o_17: ref "core:prelude/string.wado//String";
-    let v_54: ref "reflect_serde_poc.wado//Inner";
-    let v_93: ref "reflect_serde_poc.wado//Payload";
     let $av_143: i32;
-    entries = struct.new "core:prelude//List<reflect_serde_poc.wado/Entry>" { repr: local.tee elements(array.new_fixed<ref "reflect_serde_poc.wado//Entry">()), used: 0 };
+    entries = struct.new "core:prelude//List<reflect_serde_poc.wado/Entry>" { repr: array.new_fixed<ref "reflect_serde_poc.wado//Entry">(), used: 0 };
     if ref.is_null(global:reflect_serde_poc.wado::$const_obj_110) {
         let $mv_0_1: ref "core:prelude/traits.wado//StructField<reflect_serde_poc.wado/Outer,i32>";
         let $mv_1_2: ref "core:prelude/traits.wado//StructField<reflect_serde_poc.wado/Outer,core:prelude/string.wado/String>";
@@ -5428,7 +5418,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/T
     $mv_2_3 = global:reflect_serde_poc.wado::$const_obj_110.2;
     value_13 = struct.new "reflect_serde_poc.wado//Entry" { key: ref.as_non_null($av_143 = local.tee o_17(block -> ref "core:prelude/string.wado//String" {
         "core:serde/core/serde/apply_case<core:prelude/string.wado/String>"(local.tee o_17($mv_2_3.field_name).repr, o_17.used);
-    }).used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null($array_clone_dst_9 = o_17.repr; builtin::array_copy<u8>(local.tee $array_clone_src_8(builtin::array_new<u8>($av_143)), 0, $array_clone_dst_9, 0, $av_143); $array_clone_src_8), used: $av_143 }), value: ref.as_non_null("reflect_serde_poc.wado/reflect_serde_poc.wado/Inner^reflect_serde_poc.wado/ToWire::to_wire"(local.tee v_54(self.inner))) };
+    }).used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null($array_clone_dst_9 = o_17.repr; builtin::array_copy<u8>(local.tee $array_clone_src_8(builtin::array_new<u8>($av_143)), 0, $array_clone_dst_9, 0, $av_143); $array_clone_src_8), used: $av_143 }), value: ref.as_non_null("reflect_serde_poc.wado/reflect_serde_poc.wado/Inner^reflect_serde_poc.wado/ToWire::to_wire"(self.inner)) };
     if @unlikely(local.tee $av_143(entries.used) >= builtin::array_len(entries.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<reflect_serde_poc.wado/Entry>::grow"(entries);
@@ -5468,7 +5458,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/T
     $mv_5_6 = global:reflect_serde_poc.wado::$const_obj_110.5;
     value_13 = struct.new "reflect_serde_poc.wado//Entry" { key: ref.as_non_null($av_143 = local.tee o_17(block -> ref "core:prelude/string.wado//String" {
         "core:serde/core/serde/apply_case<core:prelude/string.wado/String>"(local.tee o_17($mv_5_6.field_name).repr, o_17.used);
-    }).used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null($array_clone_src_8 = o_17.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_9(builtin::array_new<u8>($av_143)), 0, $array_clone_src_8, 0, $av_143); $array_clone_dst_9), used: $av_143 }), value: ref.as_non_null("reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado/ToWire::to_wire"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: ref.as_non_null(local.tee v_93(self.payload)) })) };
+    }).used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null($array_clone_src_8 = o_17.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_9(builtin::array_new<u8>($av_143)), 0, $array_clone_src_8, 0, $av_143); $array_clone_dst_9), used: $av_143 }), value: ref.as_non_null("reflect_serde_poc.wado/reflect_serde_poc.wado/Payload^reflect_serde_poc.wado/ToWire::to_wire"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Payload>" { value: ref.as_non_null(self.payload) })) };
     if @unlikely(local.tee $av_143(entries.used) >= builtin::array_len(entries.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<reflect_serde_poc.wado/Entry>::grow"(entries);
@@ -5992,9 +5982,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 
 fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Perms^reflect_serde_poc.wado/ToWire::to_wire"(self) {
     let set: ref "core:prelude//List<reflect_serde_poc.wado/Node>";
-    let elements: ref "Array<reflect_serde_poc.wado/Node>";
     let used_25: i32;
-    set = struct.new "core:prelude//List<reflect_serde_poc.wado/Node>" { repr: local.tee elements(array.new_fixed<ref "reflect_serde_poc.wado//Node">()), used: 0 };
+    set = struct.new "core:prelude//List<reflect_serde_poc.wado/Node>" { repr: array.new_fixed<ref "reflect_serde_poc.wado//Node">(), used: 0 };
     if (builtin::i64_extend_i32_u(self.value) & 1_i64) != 0_i64 {
         if @unlikely(0 >= builtin::array_len(set.repr)) {
             cold_path;
@@ -6196,7 +6185,6 @@ fn "core:prelude/traits.wado/reflect_serde_poc.wado/Entry^core:prelude/traits.wa
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    let v_158: ref "reflect_serde_poc.wado//Node";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<reflect_serde_poc.wado/Entry,[core:prelude/string.wado/String,reflect_serde_poc.wado/Node]>"(self, f);
         return;
@@ -6252,7 +6240,7 @@ fn "core:prelude/traits.wado/reflect_serde_poc.wado/Entry^core:prelude/traits.wa
     start_23 = self_10.used;
     self_10.used = new_used_22;
     builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_73, 0, 2);
-    "core:prelude/traits.wado/reflect_serde_poc.wado/Node^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Node>" { value: ref.as_non_null(local.tee v_158(self.value)) }, f);
+    "core:prelude/traits.wado/reflect_serde_poc.wado/Node^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<reflect_serde_poc.wado/Node>" { value: ref.as_non_null(self.value) }, f);
     if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, start_23);
@@ -6475,7 +6463,6 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Perms^reflect_serde_poc.wado/F
     let $load_14: ref Array<u8>;
     let items: ref "core:prelude//List<reflect_serde_poc.wado/Node>";
     let raw_3: u64;
-    let $qm_v: ref "core:prelude/string.wado//String";
     let $qm_e: ref "reflect_serde_poc.wado//WireError";
     let name: ref "core:prelude/string.wado//String";
     let $local_12: ref "core:prelude/string.wado//String";
@@ -6519,7 +6506,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Perms^reflect_serde_poc.wado/F
                 };
                 let $match_scrut_2: i32;
                 name = (if local.tee $match_scrut_2($vr_22.0) == 0 -> ref "core:prelude/string.wado//String" {
-                    local.tee $qm_v(ref.as_non_null($vr_22.1));
+                    ref.as_non_null($vr_22.1);
                 } else if @unlikely($match_scrut_2 == 1) -> ref "core:prelude/string.wado//String" {
                     $qm_e = ref.as_non_null($vr_22.2);
                     cold_path;

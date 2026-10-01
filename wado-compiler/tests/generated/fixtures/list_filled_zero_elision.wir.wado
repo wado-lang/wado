@@ -232,7 +232,6 @@ fn "list_filled_zero_elision.wado/run"() {
     let $v3_seen_6: bool;
     let $v4_7: bool;
     let $v4_seen_8: bool;
-    let $cond_9: bool;
     let $v3_14: i32;
     let $v4_16: bool;
     let $v1_21: f64;
@@ -258,13 +257,13 @@ fn "list_filled_zero_elision.wado/run"() {
     $v2_4 = local.tee $v1_3(builtin::array_get_value<i32>(repr_126, 0)) == 0;
     $v3_seen_6 = 0;
     $v4_seen_8 = 0;
-    if @unlikely(local.tee $cond_9((if $v2_4 -> i32 {
+    if @unlikely((if $v2_4 -> i32 {
         $v4_7 = $v3_5 = builtin::array_get_value<i32>(repr_126, 4); $v3_seen_6 = 1; $v3_5 == 0;
         $v4_seen_8 = 1;
         $v4_7;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         $local_50 = (if $v3_seen_6 -> ref "core:prelude/string.wado//String" {
             $local_51 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_50("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));

@@ -514,7 +514,6 @@ global global:core:prelude/primitive.wado::$const_obj_74: ref null "core:prelude
 
 fn "http_method_and_scheme_variants.wado/method_name"(m) {
     let $load_0: i32;
-    let s: ref "core:prelude/string.wado//String";
     return (if local.tee $load_0(m.discriminant) == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(71, 69, 84), used: 3 };
     } else if $load_0 == 1 -> ref "core:prelude/string.wado//String" {
@@ -534,7 +533,7 @@ fn "http_method_and_scheme_variants.wado/method_name"(m) {
     } else if $load_0 == 8 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PATCH"), used: 5 };
     } else {
-        local.tee s(ref.cast "wasi:http/types.wado//Method::Other"(m).payload_0);
+        ref.cast "wasi:http/types.wado//Method::Other"(m).payload_0;
     });
 }
 
@@ -581,7 +580,6 @@ fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_method"(self) 
 fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_scheme"(self) with Request {
     let $outptr: i32;
     let $option_result: ref null "wasi:http/types.wado//Scheme";
-    let $vresult: ref "wasi:http/types.wado//Scheme";
     let len_7: i32;
     let arr_11: ref Array<u8>;
     let i: i32;
@@ -590,7 +588,7 @@ fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_scheme"(self) 
     self = builtin::load_u8($outptr);
     $option_result = ref.null none;
     if self != 0 {
-        $option_result = local.tee $vresult((if local.tee self(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//Scheme" {
+        $option_result = (if local.tee self(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//Scheme" {
             struct.new "wasi:http/types.wado//Scheme" { 0 };
         } else if self == 1 -> ref "wasi:http/types.wado//Scheme" {
             struct.new "wasi:http/types.wado//Scheme" { 1 };
@@ -603,7 +601,7 @@ fn "http_method_and_scheme_variants.wado/$cm_binding__Request_get_scheme"(self) 
                     continue l24;
                 };
             }; struct.new "core:prelude/string.wado//String" { repr: arr_11, used: len_7 }) };
-        }));
+        });
     }
     drop("mem/realloc"($outptr, 16, 4, 0));
     return $option_result;
@@ -645,14 +643,13 @@ fn "http_method_and_scheme_variants.wado/$cm_task_entry__handle"(request) {
     let $v3_seen: bool;
     let $local_43: ref "core:prelude/string.wado//String";
     let $local_44: ref "core:prelude/format.wado//Formatter";
+    let $local_65: ref "core:prelude/string.wado//String";
     let $local_67: ref "core:prelude/string.wado//String";
-    let $pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let a_281: ref Array<u8>;
     let a_end_283: i32;
     let b_284: ref Array<u8>;
     let i_288: i32;
     let packed_403: i64;
-    let self_410: ref "core:prelude/string.wado//StrUtf8ByteIter";
     let a_end_428: i32;
     let i_433: i32;
     $v1_2 = "http_method_and_scheme_variants.wado/method_name"(local.tee custom(struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PURGE"), used: 5 } }));
@@ -917,10 +914,10 @@ condition: scheme_name(Scheme::Other(\"wss\")) == \"wss\"
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
             });
-            $v2 = (if $v3_seen -> ref "core:prelude/string.wado//String" {
-                $local_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(ref.as_non_null(local.tee $v2("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16))));
+            $local_65 = (if $v3_seen -> ref "core:prelude/string.wado//String" {
+                $local_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_65("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
                 "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: $v3 }, $local_44);
-                ref.as_non_null($v2);
+                $local_65;
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
             });
@@ -952,9 +949,9 @@ condition: name == \"http\" || name == \"https\"
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_67.repr, $v3, $local_43, i_288);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_67.repr, $v3 + i_288, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_67.repr, $v3 + (1 + i_288), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("name == \"https\": "), used: 17 }, 17);
-            i_288 = "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"($v2.used);
+            i_288 = "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"($local_65.used);
             $v3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_67, 1 + i_288);
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_67.repr, $v3, ref.as_non_null($v2), i_288);
+            "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_67.repr, $v3, $local_65, i_288);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_67.repr, $v3 + i_288, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
             "core:rt/panic"($local_67.repr, $local_67.used);
             unreachable;
@@ -965,11 +962,11 @@ condition: name == \"http\" || name == \"https\"
     $v3 = builtin::i32_wrap_i64(packed_403 >> 32_i64);
     $v3_seen = builtin::i32_wrap_i64(local.tee packed_403("wasi/stream-new"()));
     a_end_283 = builtin::i32_wrap_i64(packed_403 >> 32_i64);
-    i_288 = local.tee $pattern_temp_2("http_method_and_scheme_variants.wado/$cm_binding__Response_new"("http_method_and_scheme_variants.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: $v3_seen }, i_288)).0;
+    i_288 = "http_method_and_scheme_variants.wado/$cm_binding__Response_new"("http_method_and_scheme_variants.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: $v3_seen }, i_288).0;
     $v3_seen = 0;
     $v3_seen = i_288;
     "wasi/task-return:handle"(0, $v3_seen, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(a_end_283, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(local.tee self_410(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_method_and_scheme_variants.wado::$const_obj_6), used: 2, index: 0 })));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(a_end_283, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_method_and_scheme_variants.wado::$const_obj_6), used: 2, index: 0 }));
     "wasi/stream-drop-writable"(a_end_283);
     "http_method_and_scheme_variants.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($v3, global:http_method_and_scheme_variants.wado::$const_obj_5);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);

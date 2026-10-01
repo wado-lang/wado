@@ -238,7 +238,6 @@ global global:core:prelude/traits.wado::$const_obj_230: ref null Array<u8> = arr
 fn "spec_control_flow_match.wado/$test_7_range_patterns"() {
     let grade: ref "core:prelude/string.wado//String";
     let $v2: bool;
-    let $cond: bool;
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let $local_11: ref "core:prelude/string.wado//String";
@@ -281,13 +280,13 @@ fn "spec_control_flow_match.wado/$test_7_range_patterns"() {
         break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     };
     a_end = 0;
-    if @unlikely(local.tee $cond((if i -> i32 {
+    if @unlikely((if i -> i32 {
         $v2 = 1;
         a_end = 1;
         1;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         $local_9 = (if a_end -> ref "core:prelude/string.wado//String" {
             $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
@@ -445,9 +444,8 @@ fn "spec_control_flow_match.wado/$cm_export__$test_3_exhaustiveness"() {
 }
 
 fn "spec_control_flow_match.wado/$cm_export__$test_4_a_case_with_no_value_needs_no_arm"() {
-    let r: ref "core:prelude/types.wado//Result<i32,!>";
     let v: i32;
-    if @unlikely(local.tee v(ref.cast "core:prelude/types.wado//Result<i32,!>::Ok"(local.tee r(struct.new "core:prelude/types.wado//Result<i32,!>::Ok" { discriminant: 0, payload_0: 1 })).payload_0) != 1) {
+    if @unlikely(local.tee v(ref.cast "core:prelude/types.wado//Result<i32,!>::Ok"(struct.new "core:prelude/types.wado//Result<i32,!>::Ok" { discriminant: 0, payload_0: 1 }).payload_0) != 1) {
         cold_path;
         "spec_control_flow_match.wado/$test_4_a_case_with_no_value_needs_no_arm$cold0"(v);
         unreachable;

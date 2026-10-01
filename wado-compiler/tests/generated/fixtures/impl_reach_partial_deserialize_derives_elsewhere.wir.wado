@@ -517,8 +517,6 @@ fn "impl_reach_partial_deserialize_derives_elsewhere.wado/$test_0_the_written_im
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond_10: bool;
-    let v_22: ref "impl_reach_partial_deserialize_derives_elsewhere.wado//Pair<core:prelude/string.wado/String,i32>";
     let e_23: ref "core:serde//DeserializeError";
     let v_28: ref "impl_reach_partial_deserialize_derives_elsewhere.wado//Pair<i32,i64>";
     let repr_34: ref Array<u8>;
@@ -527,15 +525,15 @@ fn "impl_reach_partial_deserialize_derives_elsewhere.wado/$test_0_the_written_im
     let $mv$self_21$1: ref null "impl_reach_partial_deserialize_derives_elsewhere.wado//Pair<core:prelude/string.wado/String,i32>";
     let $mv$self_21$2: ref null "core:serde//DeserializeError";
     multivalue_bind [$mv$self_21$0, $mv$self_21$1, $mv$self_21$2] = "core:json/core/json/from_bytes<impl_reach_partial_deserialize_derives_elsewhere.wado/Pair<core:prelude/string.wado/String,i32>,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr_34, start: 0, end: 1 });
-    if @unlikely(local.tee $mv$self_21$0(local.tee v_22((if @likely($mv$self_21$0 == 0) -> ref "impl_reach_partial_deserialize_derives_elsewhere.wado//Pair<core:prelude/string.wado/String,i32>" {
-        local.tee v_22(ref.as_non_null($mv$self_21$1));
+    if @unlikely(local.tee $mv$self_21$0((if @likely($mv$self_21$0 == 0) -> ref "impl_reach_partial_deserialize_derives_elsewhere.wado//Pair<core:prelude/string.wado/String,i32>" {
+        ref.as_non_null($mv$self_21$1);
     } else if $mv$self_21$0 == 1 -> ref "impl_reach_partial_deserialize_derives_elsewhere.wado//Pair<core:prelude/string.wado/String,i32>" {
         e_23 = ref.as_non_null($mv$self_21$2);
         "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:serde/DeserializeError>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, e_23);
         unreachable;
     } else {
         unreachable;
-    })).b) != 7) {
+    }).b) != 7) {
         cold_path;
         "impl_reach_partial_deserialize_derives_elsewhere.wado/$test_0_the_written_impl_answers_where_it_reaches__the_derived_body_elsewhere$cold1"($mv$self_21$0);
         unreachable;
@@ -554,13 +552,13 @@ fn "impl_reach_partial_deserialize_derives_elsewhere.wado/$test_0_the_written_im
     })).a) == 1;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond_10((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2 = v_28.b; $v2_seen = 1; $v2 == 2_i64;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "impl_reach_partial_deserialize_derives_elsewhere.wado/$test_0_the_written_impl_answers_where_it_reaches__the_derived_body_elsewhere$cold0"($mv$self_21$0, $v1, $v2, $v2_seen, $v3, $v3_seen);
         unreachable;
@@ -3061,7 +3059,6 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     let $local_3: ref "core:prelude/string.wado//String";
     let offset_10: i64;
     let start_23: i32;
-    let $sroa_$f_buf_83: ref "core:prelude/string.wado//String";
     let $av_86: i32;
     if local.tee $av_86(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start)) {
         return 8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, builtin::i64_extend_i32_s($av_86);
@@ -3075,7 +3072,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = $load_3;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_5, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), c & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, c & 255);
     if @unlikely(local.tee c($local_3.used + 10) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, c);
@@ -3083,7 +3080,7 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
     start_23 = $local_3.used;
     $local_3.used = c;
     builtin::array_copy<u8>($local_3.repr, start_23, global:core:json::$const_obj_4, 0, 10);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee $sroa_$f_buf_83($local_3), $av_86 & 255);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, $av_86 & 255);
     if @unlikely(local.tee $av_86($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $av_86);
@@ -4099,7 +4096,6 @@ fn "core:json/core:json/JsonDeserializer::skip_value"(self, depth) {
 fn "core:json/core:json/JsonDeserializer^core:serde/Deserializer::deserialize_i64"(self) {
     let lead: i32;
     let start: i64;
-    let $qm_v: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//DeserializeError";
     lead = "core:json/core:json/JsonDeserializer::peek_after_whitespace"(self);
     start = builtin::i64_extend_i32_s(self.pos);
@@ -4108,15 +4104,15 @@ fn "core:json/core:json/JsonDeserializer^core:serde/Deserializer::deserialize_i6
         let $mv$$vr_6$1: ref null "core:prelude/string.wado//String";
         let $mv$$vr_6$2: ref null "core:serde//DeserializeError";
         multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:json/core:json/JsonDeserializer::read_json_string"(self);
-        return "core:json/core/json/parse_i64_from<&core:prelude/string.wado/String>"(local.tee $qm_v((if $mv$$vr_6$0 == 0 -> ref "core:prelude/string.wado//String" {
-            local.tee $qm_v(ref.as_non_null($mv$$vr_6$1));
+        return "core:json/core/json/parse_i64_from<&core:prelude/string.wado/String>"((if $mv$$vr_6$0 == 0 -> ref "core:prelude/string.wado//String" {
+            ref.as_non_null($mv$$vr_6$1);
         } else if @unlikely($mv$$vr_6$0 == 1) -> ref "core:prelude/string.wado//String" {
             $qm_e = ref.as_non_null($mv$$vr_6$2);
             cold_path;
             return 1, 0_i64, $qm_e;
         } else {
             unreachable;
-        })), start);
+        }), start);
     }
     return "core:json/core:json/JsonDeserializer::parse_i64_with_lead"(self, lead);
 }
@@ -4156,8 +4152,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(cap
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::as_bytes"(self) {
-    let repr: ref Array<u8>;
-    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee repr(self.repr), start: 0, end: self.used };
+    return struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self.repr, start: 0, end: self.used };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -4352,8 +4347,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::get_byte_unchecked"(self, index) {
-    let self_2: ref Array<u8>;
-    return builtin::array_get_value<u8>(local.tee self_2(self.repr), self.start + index);
+    return builtin::array_get_value<u8>(self.repr, self.start + index);
 }
 
 fn "core:serde/core:serde/DeserializeError::eof"(offset) {

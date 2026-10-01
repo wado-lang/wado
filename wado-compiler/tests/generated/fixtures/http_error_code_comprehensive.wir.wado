@@ -643,14 +643,12 @@ fn "http_error_code_comprehensive.wado/$cm_task_entry__handle"(request) {
     let field_payload: ref "wasi:http/types.wado//FieldSizePayload";
     let $local_174: ref "core:prelude/string.wado//String";
     let $local_175: ref "core:prelude/format.wado//Formatter";
-    let $pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let a_778: ref Array<u8>;
     let b_781: ref Array<u8>;
     let i_785: i32;
     let packed_916: i64;
     let rx_920: i32;
     let tx_921: i32;
-    let self_923: ref "core:prelude/string.wado//StrUtf8ByteIter";
     dns_payload = struct.new "wasi:http/types.wado//DnsErrorPayload" { rcode: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NXDOMAIN"), used: 8 }, info_code: struct.new "core:prelude/types.wado//Option<u16>::Some" { discriminant: 0, payload_0: 3 } };
     let $match_scrut_0: ref null "core:prelude/string.wado//String";
     if @unlikely(local.tee $cond_50(ref.is_null(local.tee $match_scrut_0(dns_payload.rcode)) == 0) == 0) {
@@ -1029,11 +1027,11 @@ condition: error_tag(&header_err) == \"http-request-header-size\"
     $cond_50 = builtin::i32_wrap_i64(packed_916 >> 32_i64);
     rx_920 = builtin::i32_wrap_i64(local.tee packed_916("wasi/stream-new"()));
     tx_921 = builtin::i32_wrap_i64(packed_916 >> 32_i64);
-    i_785 = local.tee $pattern_temp_2("http_error_code_comprehensive.wado/$cm_binding__Response_new"("http_error_code_comprehensive.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_920 }, i_785)).0;
+    i_785 = "http_error_code_comprehensive.wado/$cm_binding__Response_new"("http_error_code_comprehensive.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_920 }, i_785).0;
     rx_920 = 0;
     rx_920 = i_785;
     "wasi/task-return:handle"(0, rx_920, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_921, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(local.tee self_923(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_error_code_comprehensive.wado::$const_obj_8), used: 2, index: 0 })));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_921, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_error_code_comprehensive.wado::$const_obj_8), used: 2, index: 0 }));
     "wasi/stream-drop-writable"(tx_921);
     "http_error_code_comprehensive.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($cond_50, global:http_error_code_comprehensive.wado::$const_obj_7);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
@@ -2696,8 +2694,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     let start_24: i32;
     let new_used_60: i32;
     let start_61: i32;
-    let v_97: ref null "core:prelude/string.wado//String";
-    let v_202: ref "core:prelude/types.wado//Option<u32>";
     if @unlikely(local.tee new_used_23(local.tee self_11(f.buf).used + 16) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, new_used_23);
@@ -2751,7 +2747,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: local.tee v_97(v.field_name) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: v.field_name }, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -2797,7 +2793,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<u32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u32>>" { value: ref.as_non_null(local.tee v_202(v.field_size)) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<u32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u32>>" { value: ref.as_non_null(v.field_size) }, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -2846,8 +2842,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     let start_24: i32;
     let new_used_60: i32;
     let start_61: i32;
-    let v_97: ref "core:prelude/types.wado//Option<u8>";
-    let v_202: ref null "core:prelude/string.wado//String";
     if @unlikely(local.tee new_used_23(local.tee self_11(f.buf).used + 23) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, new_used_23);
@@ -2901,7 +2895,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<u8>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u8>>" { value: ref.as_non_null(local.tee v_97(v.alert_id)) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<u8>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u8>>" { value: ref.as_non_null(v.alert_id) }, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -2947,7 +2941,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: local.tee v_202(v.alert_message) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: v.alert_message }, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -2996,8 +2990,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     let start_24: i32;
     let new_used_60: i32;
     let start_61: i32;
-    let v_97: ref null "core:prelude/string.wado//String";
-    let v_202: ref "core:prelude/types.wado//Option<u16>";
     if @unlikely(local.tee new_used_23(local.tee self_11(f.buf).used + 15) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, new_used_23);
@@ -3051,7 +3043,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: local.tee v_97(v.rcode) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: v.rcode }, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -3097,7 +3089,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<w
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<u16>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u16>>" { value: ref.as_non_null(local.tee v_202(v.info_code)) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<u16>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u16>>" { value: ref.as_non_null(v.info_code) }, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -5208,8 +5200,6 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/DnsErrorPayload^core:prelude/t
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    let v_90: ref null "core:prelude/string.wado//String";
-    let v_156: ref "core:prelude/types.wado//Option<u16>";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<wasi:http/types.wado/DnsErrorPayload,[core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:prelude/types.wado/Option<u16>]>"(self, f);
         return;
@@ -5242,7 +5232,7 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/DnsErrorPayload^core:prelude/t
     new_used_22 = self_10.used;
     self_10.used = start_23;
     builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: local.tee v_90(self.rcode) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: self.rcode }, f);
     if @unlikely(local.tee new_used_22(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, new_used_22);
@@ -5264,7 +5254,7 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/DnsErrorPayload^core:prelude/t
     start_23 = self_10.used;
     self_10.used = new_used_22;
     builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<u16>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u16>>" { value: ref.as_non_null(local.tee v_156(self.info_code)) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<u16>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u16>>" { value: ref.as_non_null(self.info_code) }, f);
     if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, start_23);
@@ -5278,8 +5268,6 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/TlsAlertReceivedPayload^core:p
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    let v_90: ref "core:prelude/types.wado//Option<u8>";
-    let v_156: ref null "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<wasi:http/types.wado/TlsAlertReceivedPayload,[core:prelude/types.wado/Option<u8>,core:prelude/types.wado/Option<core:prelude/string.wado/String>]>"(self, f);
         return;
@@ -5312,7 +5300,7 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/TlsAlertReceivedPayload^core:p
     new_used_22 = self_10.used;
     self_10.used = start_23;
     builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<u8>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u8>>" { value: ref.as_non_null(local.tee v_90(self.alert_id)) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<u8>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u8>>" { value: ref.as_non_null(self.alert_id) }, f);
     if @unlikely(local.tee new_used_22(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, new_used_22);
@@ -5334,7 +5322,7 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/TlsAlertReceivedPayload^core:p
     start_23 = self_10.used;
     self_10.used = new_used_22;
     builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: local.tee v_156(self.alert_message) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: self.alert_message }, f);
     if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, start_23);
@@ -5519,8 +5507,6 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/FieldSizePayload^core:prelude/
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    let v_90: ref null "core:prelude/string.wado//String";
-    let v_156: ref "core:prelude/types.wado//Option<u32>";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<wasi:http/types.wado/FieldSizePayload,[core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:prelude/types.wado/Option<u32>]>"(self, f);
         return;
@@ -5553,7 +5539,7 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/FieldSizePayload^core:prelude/
     new_used_22 = self_10.used;
     self_10.used = start_23;
     builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: local.tee v_90(self.field_name) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { value: self.field_name }, f);
     if @unlikely(local.tee new_used_22(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, new_used_22);
@@ -5575,7 +5561,7 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/FieldSizePayload^core:prelude/
     start_23 = self_10.used;
     self_10.used = new_used_22;
     builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_197, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<u32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u32>>" { value: ref.as_non_null(local.tee v_156(self.field_size)) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<u32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<u32>>" { value: ref.as_non_null(self.field_size) }, f);
     if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, start_23);

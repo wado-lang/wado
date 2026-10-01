@@ -219,9 +219,8 @@ fn "value_copy_array_get_ref_mono.wado/$cm_export__$test_0_for_of_by_ref_deref_c
 fn "value_copy_array_get_ref_mono.wado/$cm_export__$test_1_list_index_still_copies_when_array_get_ref_is_monomorphized"() {
     let $v0_2: i32;
     let arr: ref "Array<value_copy_array_get_ref_mono.wado/Cell>";
-    let r: ref "value_copy_array_get_ref_mono.wado//Cell";
     builtin::array_set<ref "value_copy_array_get_ref_mono.wado//Cell">(local.tee arr(builtin::array_new<ref "value_copy_array_get_ref_mono.wado//Cell">(1)), 0, struct.new "value_copy_array_get_ref_mono.wado//Cell" { v: 9 });
-    if @unlikely(local.tee $v0_2(local.tee r(builtin::array_get_value<ref "value_copy_array_get_ref_mono.wado//Cell">(arr, 0)).v) != 9) {
+    if @unlikely(local.tee $v0_2(builtin::array_get_value<ref "value_copy_array_get_ref_mono.wado//Cell">(arr, 0).v) != 9) {
         cold_path;
         "value_copy_array_get_ref_mono.wado/$test_1_list_index_still_copies_when_array_get_ref_is_monomorphized$cold2"($v0_2);
         unreachable;

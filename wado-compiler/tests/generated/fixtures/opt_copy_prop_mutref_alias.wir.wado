@@ -97,11 +97,10 @@ global global:opt_copy_prop_mutref_alias.wado::$const_obj_99: ref null Array<u8>
 fn "opt_copy_prop_mutref_alias.wado/$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value"() {
     let y: ref "opt_copy_prop_mutref_alias.wado//Big";
     let z: ref "opt_copy_prop_mutref_alias.wado//Big";
-    let r: ref "opt_copy_prop_mutref_alias.wado//Big";
     let $v0_8: i32;
     y = struct.new "opt_copy_prop_mutref_alias.wado//Big" { a: 1, b: 1, c: 1, d: 1, e: 1, f: 1, g: 1, h: 1, i: 1, j: 1, k: 1, l: 1, m: 1, n: 1, o: 1, p: 1 };
-    r = local.tee z(struct.new "opt_copy_prop_mutref_alias.wado//Big" { a: 2, b: 2, c: 2, d: 2, e: 2, f: 2, g: 2, h: 2, i: 2, j: 2, k: 2, l: 2, m: 2, n: 2, o: 2, p: 2 });
-    local.tee r(y).a = 50;
+    drop(local.tee z(struct.new "opt_copy_prop_mutref_alias.wado//Big" { a: 2, b: 2, c: 2, d: 2, e: 2, f: 2, g: 2, h: 2, i: 2, j: 2, k: 2, l: 2, m: 2, n: 2, o: 2, p: 2 }));
+    y.a = 50;
     if @unlikely(local.tee $v0_8(z.a) != 2) {
         cold_path;
         "opt_copy_prop_mutref_alias.wado/$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value$cold0"($v0_8);

@@ -629,13 +629,12 @@ fn "wasi_filesystem_metadata_hash.wado/$cm_binding__Descriptor_is_same_object"(s
 
 fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_open_at"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let $local_4: ref "wasi:filesystem/types.wado//ErrorCode";
     let $local_6: ref null "core:prelude/string.wado//String";
     let len_8: i32;
     let arr_12: ref Array<u8>;
     let i: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
     } else {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:filesystem/types.wado//ErrorCode" {
@@ -727,12 +726,11 @@ fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_open_at"($outptr) {
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_4 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_metadata_hash"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/MetadataHashValue,wasi:filesystem/types.wado/ErrorCode>";
     let $local_3: i64;
     let $local_4: i64;
     let $local_5: ref "wasi:filesystem/types.wado//MetadataHashValue";
@@ -741,7 +739,7 @@ fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_metadata_hash"($outp
     let len_11: i32;
     let arr_15: ref Array<u8>;
     let i: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/MetadataHashValue,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/MetadataHashValue,wasi:filesystem/types.wado/ErrorCode>" {
         $local_3 = builtin::load_i64($outptr + 8);
         $local_4 = builtin::load_i64(($outptr + 8) + 8);
         $local_5 = struct.new "wasi:filesystem/types.wado//MetadataHashValue" { lower: $local_3, upper: $local_4 };
@@ -836,12 +834,11 @@ fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_metadata_hash"($outp
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_9 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/MetadataHashValue,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_7 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_metadata_hash_at"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/MetadataHashValue,wasi:filesystem/types.wado/ErrorCode>";
     let $local_3: i64;
     let $local_4: i64;
     let $local_5: ref "wasi:filesystem/types.wado//MetadataHashValue";
@@ -850,7 +847,7 @@ fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_metadata_hash_at"($o
     let len_11: i32;
     let arr_15: ref Array<u8>;
     let i: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/MetadataHashValue,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/MetadataHashValue,wasi:filesystem/types.wado/ErrorCode>" {
         $local_3 = builtin::load_i64($outptr + 8);
         $local_4 = builtin::load_i64(($outptr + 8) + 8);
         $local_5 = struct.new "wasi:filesystem/types.wado//MetadataHashValue" { lower: $local_3, upper: $local_4 };
@@ -945,7 +942,7 @@ fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_metadata_hash_at"($o
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_9 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/MetadataHashValue,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_7 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_metadata_hash.wado/$cm_lift__Descriptor_is_same_object"($outptr) {

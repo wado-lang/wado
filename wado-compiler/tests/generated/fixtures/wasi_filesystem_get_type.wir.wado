@@ -636,14 +636,13 @@ fn "wasi_filesystem_get_type.wado/$cm_binding__Descriptor_get_flags"(self) with 
 
 fn "wasi_filesystem_get_type.wado/$cm_lift__Descriptor_get_type"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorType,wasi:filesystem/types.wado/ErrorCode>";
     let $local_4: ref "wasi:filesystem/types.wado//DescriptorType";
     let $local_6: ref null "core:prelude/string.wado//String";
     let $local_8: ref "wasi:filesystem/types.wado//ErrorCode";
     let len_12: i32;
     let arr_19: ref Array<u8>;
     let i_20: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorType,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorType,wasi:filesystem/types.wado/ErrorCode>" {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
             struct.new "wasi:filesystem/types.wado//DescriptorType" { 0 };
         } else if $disc == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
@@ -765,18 +764,17 @@ fn "wasi_filesystem_get_type.wado/$cm_lift__Descriptor_get_type"($outptr) {
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorType,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_8 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_get_type.wado/$cm_lift__Descriptor_open_at"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let $local_4: ref "wasi:filesystem/types.wado//ErrorCode";
     let $local_6: ref null "core:prelude/string.wado//String";
     let len_8: i32;
     let arr_12: ref Array<u8>;
     let i: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
     } else {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:filesystem/types.wado//ErrorCode" {
@@ -868,18 +866,17 @@ fn "wasi_filesystem_get_type.wado/$cm_lift__Descriptor_open_at"($outptr) {
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_4 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_get_type.wado/$cm_lift__Descriptor_get_flags"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<u32,wasi:filesystem/types.wado/ErrorCode>";
     let $local_4: ref "wasi:filesystem/types.wado//ErrorCode";
     let $local_6: ref null "core:prelude/string.wado//String";
     let len_8: i32;
     let arr_12: ref Array<u8>;
     let i: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<u32,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<u32,wasi:filesystem/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<u32,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_u8($outptr + 4) };
     } else {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:filesystem/types.wado//ErrorCode" {
@@ -971,7 +968,7 @@ fn "wasi_filesystem_get_type.wado/$cm_lift__Descriptor_get_flags"($outptr) {
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<u32,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_4 };
-    }));
+    });
 }
 
 fn "wasi_filesystem_get_type.wado/$cm_export__run"() {

@@ -402,14 +402,13 @@ fn "http_response_ops.wado/$cm_task_entry__handle"(request) {
     let default_status: u16;
     let $local_11: ref "core:prelude/string.wado//String";
     let $local_12: ref "core:prelude/format.wado//Formatter";
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $fuse_at_186: i32;
     let packed: i64;
     let rx: i32;
     let tx: i32;
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    if @unlikely(local.tee default_status("http_response_ops.wado/$cm_binding__Response_get_status_code"(local.tee rx(local.tee $pattern_temp_1("http_response_ops.wado/$cm_binding__Response_new"("http_response_ops.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx)).0))) != 200) {
+    if @unlikely(local.tee default_status("http_response_ops.wado/$cm_binding__Response_get_status_code"(local.tee rx("http_response_ops.wado/$cm_binding__Response_new"("http_response_ops.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx).0))) != 200) {
         cold_path;
         $fuse_at_186 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_11("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(140)), 53);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_11.repr, $fuse_at_186, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);

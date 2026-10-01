@@ -377,13 +377,12 @@ fn "mut_ref_write_back_variant_field.wado/hoists_a_by_value_arg"(xs, b) {
 
 fn "mut_ref_write_back_variant_field.wado/reads_a_local_before_the_place"(bs) {
     let $load_4: ref null "core:prelude/string.wado//String";
-    let n: ref "mut_ref_write_back_variant_field.wado//Counter";
     let $write_back_place_3: ref "mut_ref_write_back_variant_field.wado//Bag";
     let $write_back_4: ref "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>";
     let $write_back_before_5: ref null "core:prelude/string.wado//String";
     let index_10: i32;
     let $v1: i32;
-    index_10 = "mut_ref_write_back_variant_field.wado/first"(local.tee n(struct.new "mut_ref_write_back_variant_field.wado//Counter" { n: 0 }));
+    index_10 = "mut_ref_write_back_variant_field.wado/first"(struct.new "mut_ref_write_back_variant_field.wado//Counter" { n: 0 });
     $v1 = bs.used;
     if @unlikely(index_10 >= $v1) {
         cold_path;
@@ -495,14 +494,13 @@ fn "mut_ref_write_back_variant_field.wado/$test_2_an_indirect_call_writes_back_t
     let t: ref "core:prelude/string.wado//String";
     let $write_back_7: ref "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>";
     let $write_back_before_8: ref null "core:prelude/string.wado//String";
-    let $functor_14: ref "mut_ref_write_back_variant_field.wado//$Closure_5";
     let $sroa_b_item_15: ref null "core:prelude/string.wado//String";
     let a: ref Array<u8>;
     let a_end: i32;
     let b_20: ref Array<u8>;
     let i: i32;
     $sroa_b_item_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
-    via = struct.new "canonical//CanonicalClosure_1" { env: local.tee $functor_14(struct.new "mut_ref_write_back_variant_field.wado//$Closure_5" {  }), func: ref.func "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_3" };
+    via = struct.new "canonical//CanonicalClosure_1" { env: struct.new "mut_ref_write_back_variant_field.wado//$Closure_5" {  }, func: ref.func "closure/mut_ref_write_back_variant_field.wado/$closure_wrapper_3" };
     $write_back_before_8 = local.tee $write_back_7(struct.new "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>" { value: $sroa_b_item_15 }).value;
     let $indirect_call_1: ref "canonical//CanonicalClosure_1";
     call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(via)).env, $write_back_7);

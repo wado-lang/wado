@@ -146,13 +146,12 @@ global global:core:prelude/array.wado::$const_obj_47: ref null Array<u8> = array
 global global:core:prelude/primitive.wado::$const_obj_56: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "elide_box_local_read_added_by_ref_elim.wado/$cm_export__$test_0_the_alias_s_read_keeps_the_binding"() {
-    let arr: ref Array<i32>;
     let $v1: i32;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
     let $sroa_s_buf_9: ref "elide_box_local_read_added_by_ref_elim.wado//Vec3";
-    $sroa_s_buf_9 = struct.new "elide_box_local_read_added_by_ref_elim.wado//Vec3" { repr: local.tee arr(builtin::array_new<i32>(3)), used: black_box(3) };
+    $sroa_s_buf_9 = struct.new "elide_box_local_read_added_by_ref_elim.wado//Vec3" { repr: builtin::array_new<i32>(3), used: black_box(3) };
     if @unlikely(local.tee $v1(block -> i32 {
         "elide_box_local_read_added_by_ref_elim.wado/moved_into_a_literal$scalar"($sroa_s_buf_9.repr, $sroa_s_buf_9.used);
     }) != 3) {
@@ -897,7 +896,6 @@ fn "core:prelude/traits.wado/elide_box_local_read_added_by_ref_elim.wado/S^core:
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
-    let v_89: ref "elide_box_local_read_added_by_ref_elim.wado//Vec3";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<elide_box_local_read_added_by_ref_elim.wado/S,[elide_box_local_read_added_by_ref_elim.wado/Vec3]>$scalar"(self.buf, f);
         return;
@@ -930,7 +928,7 @@ fn "core:prelude/traits.wado/elide_box_local_read_added_by_ref_elim.wado/S^core:
     new_used_21 = self_9.used;
     self_9.used = start_22;
     builtin::array_copy<u8>(self_9.repr, new_used_21, global:core:prelude/traits.wado::$const_obj_5, 0, 2);
-    "core:prelude/traits.wado/elide_box_local_read_added_by_ref_elim.wado/Vec3^core:prelude/traits.wado/Inspect::inspect"(local.tee v_89(self.buf), f);
+    "core:prelude/traits.wado/elide_box_local_read_added_by_ref_elim.wado/Vec3^core:prelude/traits.wado/Inspect::inspect"(self.buf, f);
     if @unlikely(local.tee new_used_21(local.tee self_9(f.buf).used + 2) > builtin::array_len(self_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, new_used_21);

@@ -157,7 +157,6 @@ fn "value_copy_array_get_mono.wado/$test_3_element_pushed_into_another_list_is_i
 fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body"() {
     let sum: i32;
     let i: i32;
-    let v: ref "value_copy_array_get_mono.wado//Cell";
     let $sroa_e_v_44: i32;
     let $sroa_src_repr_46: ref "Array<value_copy_array_get_mono.wado/Cell>";
     $sroa_src_repr_46 = array.new_fixed<ref "value_copy_array_get_mono.wado//Cell">(struct.new "value_copy_array_get_mono.wado//Cell" { v: 1 }, struct.new "value_copy_array_get_mono.wado//Cell" { v: 2 });
@@ -166,7 +165,7 @@ fn "value_copy_array_get_mono.wado/$test_4_copy_in_a_loop_body"() {
     b4: block {
         l5: loop {
             break_if b4 i >= 2;
-            $sroa_e_v_44 = local.tee $sroa_e_v_44(local.tee v(builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">($sroa_src_repr_46, i)).v) + 100;
+            $sroa_e_v_44 = local.tee $sroa_e_v_44(builtin::array_get_value<ref "value_copy_array_get_mono.wado//Cell">($sroa_src_repr_46, i).v) + 100;
             sum = sum + $sroa_e_v_44;
             i = i + 1;
             continue l5;

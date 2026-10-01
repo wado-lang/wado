@@ -431,15 +431,14 @@ fn "variadic.wado/$cm_export__$test_15_spread_prepend"() {
 }
 
 fn "variadic.wado/$cm_export__$test_16_spread_eval_once"() {
-    let $cond_6: bool;
     global:variadic.wado::call_count = global:variadic.wado::call_count + 1;
-    if @unlikely(local.tee $cond_6(global:variadic.wado::call_count == 1) == 0) {
+    if @unlikely((global:variadic.wado::call_count == 1) == 0) {
         cold_path;
         "variadic.wado/$test_16_spread_eval_once$cold4"();
         unreachable;
     }
     global:variadic.wado::call_count = global:variadic.wado::call_count + 1;
-    if @unlikely(local.tee $cond_6(global:variadic.wado::call_count == 2) == 0) {
+    if @unlikely((global:variadic.wado::call_count == 2) == 0) {
         cold_path;
         "variadic.wado/$test_16_spread_eval_once$cold0"();
         unreachable;

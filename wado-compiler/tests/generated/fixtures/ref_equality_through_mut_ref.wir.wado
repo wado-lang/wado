@@ -121,10 +121,9 @@ fn "ref_equality_through_mut_ref.wado/$test_0_a_mutable_reference_to_a_string_eq
     let $cond_2: bool;
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let other_13: ref "core:prelude/string.wado//String";
-    let repr_19: ref Array<u8>;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
     other_13 = global:ref_equality_through_mut_ref.wado::$const_obj_7;
-    if @unlikely(local.tee $cond_2("core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_19(s.repr), start: 0, end: 1 }, other_13)) == 0) {
+    if @unlikely(local.tee $cond_2("core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: 0, end: 1 }, other_13)) == 0) {
         cold_path;
         $cond_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee other_13("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(114)), 124);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(other_13.repr, $cond_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -147,7 +146,7 @@ condition: r == \"x\"
         "core:rt/panic"(other_13.repr, other_13.used);
         unreachable;
     }
-    if @unlikely(local.tee $cond_2(other_13 = global:ref_equality_through_mut_ref.wado::$const_obj_5; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_19(s.repr), start: 0, end: s.used }, other_13) == 0) == 0) {
+    if @unlikely(local.tee $cond_2(other_13 = global:ref_equality_through_mut_ref.wado::$const_obj_5; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: 0, end: s.used }, other_13) == 0) == 0) {
         cold_path;
         $cond_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee other_13("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(114)), 124);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(other_13.repr, $cond_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);

@@ -230,8 +230,6 @@ fn "opt_sroa_variant_return_try_seq_bind.wado/run"() {
     let $cond_1: bool;
     let $local_6: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/format.wado//Formatter";
-    let $local_13: ref "opt_sroa_variant_return_try_seq_bind.wado//StepErr";
-    let elements_23: ref "Array<core:prelude/string.wado/String>";
     let $mv$ok$0: i32;
     let $mv$ok$1: i32;
     let $mv$ok$2: ref null "opt_sroa_variant_return_try_seq_bind.wado//StepErr";
@@ -269,11 +267,11 @@ condition: ok matches { Ok(6) }
     }
     multivalue_bind [$mv$ok$1, $mv$ok$0, $mv$ok$2] = "opt_sroa_variant_return_try_seq_bind.wado/total_len"(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 100), used: 2 }), used: 3 });
     if @unlikely(local.tee $cond_1((if (if $mv$ok$1 == 1 -> i32 {
-        local.tee $local_13(ref.as_non_null($mv$ok$2)).discriminant == 0;
+        ref.as_non_null($mv$ok$2).discriminant == 0;
     } else {
         0;
     }) -> bool {
-        $local_13 = ref.as_non_null($mv$ok$2);
+        drop(ref.as_non_null($mv$ok$2));
         1;
     } else {
         0;
@@ -303,7 +301,7 @@ condition: bad matches { Err(StepErr::Empty) }
         "core:rt/panic"($local_6.repr, $local_6.used);
         unreachable;
     }
-    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_try_seq_bind.wado/total_len"(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_23(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 });
+    multivalue_bind [$mv$ok$0, $mv$ok$1, $mv$ok$2] = "opt_sroa_variant_return_try_seq_bind.wado/total_len"(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 });
     if @unlikely(local.tee $cond_1((if ($mv$ok$0 == 0) & ($mv$ok$1 == 0) -> bool {
         1;
     } else {

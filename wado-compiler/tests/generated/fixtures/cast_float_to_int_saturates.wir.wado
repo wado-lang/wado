@@ -128,7 +128,6 @@ fn "cast_float_to_int_saturates.wado/show"(f) with Stdout {
     let new_used_24: i32;
     let start_25: i32;
     let self_154: ref "core:prelude/int128.wado//i128";
-    let self_176: ref "core:prelude/int128.wado//u128";
     let lo: i64;
     let hi: i64;
     let $sroa_$f_buf_232: ref "core:prelude/string.wado//String";
@@ -221,7 +220,7 @@ fn "cast_float_to_int_saturates.wado/show"(f) with Stdout {
     $local_1.used = new_used_24;
     builtin::array_copy<u8>($local_1.repr, start_25, global:cast_float_to_int_saturates.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_232 = $local_1;
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"(local.tee self_176($inline_core_prelude_int128_wado_u128__from_f64_79: block -> ref "core:prelude/int128.wado//u128" {
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"($inline_core_prelude_int128_wado_u128__from_f64_79: block -> ref "core:prelude/int128.wado//u128" {
         if (f > 0) == 0 {
             break $inline_core_prelude_int128_wado_u128__from_f64_79: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
         }
@@ -230,7 +229,7 @@ fn "cast_float_to_int_saturates.wado/show"(f) with Stdout {
         }
         $load_32 = builtin::i64_trunc_sat_f64_u(f / 18446744073709552000);
         break $inline_core_prelude_int128_wado_u128__from_f64_79: struct.new "core:prelude/int128.wado//u128" { low: builtin::i64_trunc_sat_f64_u(f - (builtin::f64_convert_i64_u($load_32) * 18446744073709552000)), high: $load_32 };
-    }), $sroa_$f_buf_232, 0);
+    }, $sroa_$f_buf_232, 0);
     start_25 = builtin::i32_wrap_i64(local.tee $load_32("wasi/stream-new"()));
     new_used_24 = builtin::i32_wrap_i64($load_32 >> 32_i64);
     start_25 = "cast_float_to_int_saturates.wado/$cm_binding__Stdout_write_via_stream"(start_25);
@@ -245,7 +244,6 @@ fn "cast_float_to_int_saturates.wado/run"() with Stdout {
     let item: f64;
     let packed_99: i64;
     let self_149: ref "core:prelude/int128.wado//i128";
-    let self_171: ref "core:prelude/int128.wado//u128";
     let $sroa_values_used_189: i32;
     let lo: i64;
     let hi: i64;
@@ -341,7 +339,7 @@ fn "cast_float_to_int_saturates.wado/run"() with Stdout {
     $local_4_4.used = $sroa_$iter_0_index_207;
     builtin::array_copy<u8>($local_4_4.repr, $sroa_values_used_189, global:cast_float_to_int_saturates.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_233 = $local_4_4;
-    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"(local.tee self_171($inline_core_prelude_int128_wado_u128__from_f64_76: block -> ref "core:prelude/int128.wado//u128" {
+    "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"($inline_core_prelude_int128_wado_u128__from_f64_76: block -> ref "core:prelude/int128.wado//u128" {
         if (local.tee item(builtin::f64_promote_f32(g)) > 0) == 0 {
             break $inline_core_prelude_int128_wado_u128__from_f64_76: struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 0_i64 };
         }
@@ -350,7 +348,7 @@ fn "cast_float_to_int_saturates.wado/run"() with Stdout {
         }
         packed_99 = builtin::i64_trunc_sat_f64_u(item / 18446744073709552000);
         break $inline_core_prelude_int128_wado_u128__from_f64_76: struct.new "core:prelude/int128.wado//u128" { low: builtin::i64_trunc_sat_f64_u(item - (builtin::f64_convert_i64_u(packed_99) * 18446744073709552000)), high: packed_99 };
-    }), $sroa_$f_buf_233, 0);
+    }, $sroa_$f_buf_233, 0);
     $sroa_values_used_189 = builtin::i32_wrap_i64(local.tee packed_99("wasi/stream-new"()));
     $sroa_$iter_0_index_207 = builtin::i32_wrap_i64(packed_99 >> 32_i64);
     $sroa_values_used_189 = "cast_float_to_int_saturates.wado/$cm_binding__Stdout_write_via_stream"($sroa_values_used_189);

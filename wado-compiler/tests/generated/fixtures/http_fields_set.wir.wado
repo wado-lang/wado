@@ -433,7 +433,6 @@ fn "http_fields_set.wado/$cm_binding__Fields_append"(self, name, value) with Fie
     let $name_packed: i64;
     let $value_packed: i64;
     let $result_val: ref null "wasi:http/types.wado//HeaderError";
-    let $local_9: ref "wasi:http/types.wado//HeaderError";
     let $local_11: ref null "core:prelude/string.wado//String";
     let bytes_14: ref Array<u8>;
     let ptr_15: i32;
@@ -469,31 +468,29 @@ fn "http_fields_set.wado/$cm_binding__Fields_append"(self, name, value) with Fie
     "wasi/wasi:http/Fields::append"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), builtin::i32_wrap_i64($value_packed), builtin::i32_wrap_i64($value_packed >> 32_i64), self_16);
     $result_val = (if local.tee self(builtin::load_u8(self_16)) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
         ref.null none;
+    } else if local.tee self(builtin::load_u8(self_16 + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
+        struct.new "wasi:http/types.wado//HeaderError" { 0 };
+    } else if self == 1 -> ref "wasi:http/types.wado//HeaderError" {
+        struct.new "wasi:http/types.wado//HeaderError" { 1 };
+    } else if self == 2 -> ref "wasi:http/types.wado//HeaderError" {
+        struct.new "wasi:http/types.wado//HeaderError" { 2 };
+    } else if self == 3 -> ref "wasi:http/types.wado//HeaderError" {
+        struct.new "wasi:http/types.wado//HeaderError" { 3 };
     } else {
-        local.tee $local_9((if local.tee self(builtin::load_u8(self_16 + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
-            struct.new "wasi:http/types.wado//HeaderError" { 0 };
-        } else if self == 1 -> ref "wasi:http/types.wado//HeaderError" {
-            struct.new "wasi:http/types.wado//HeaderError" { 1 };
-        } else if self == 2 -> ref "wasi:http/types.wado//HeaderError" {
-            struct.new "wasi:http/types.wado//HeaderError" { 2 };
-        } else if self == 3 -> ref "wasi:http/types.wado//HeaderError" {
-            struct.new "wasi:http/types.wado//HeaderError" { 3 };
-        } else {
-            self = builtin::load_u8((self_16 + 4) + 4);
-            $local_11 = ref.null none;
-            if self != 0 {
-                $local_11 = ref.as_non_null(self = builtin::load_i32(((self_16 + 4) + 4) + 4); bytes_14 = builtin::array_new<u8>(local.tee ptr_15(builtin::load_i32((((self_16 + 4) + 4) + 4) + 4))); i_22 = 0; b10: block {
-                    l11: loop {
-                        break_if b10 i_22 >= ptr_15;
-                        builtin::array_set_u8(bytes_14, i_22, builtin::load_u8(self + i_22));
-                        i_22 = i_22 + 1;
-                        continue l11;
-                    };
-                }; struct.new "core:prelude/string.wado//String" { repr: bytes_14, used: ptr_15 });
-                drop("mem/realloc"(builtin::load_i32(((self_16 + 4) + 4) + 4), builtin::load_i32((((self_16 + 4) + 4) + 4) + 4), 1, 0));
-            }
-            struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: $local_11 };
-        }));
+        self = builtin::load_u8((self_16 + 4) + 4);
+        $local_11 = ref.null none;
+        if self != 0 {
+            $local_11 = ref.as_non_null(self = builtin::load_i32(((self_16 + 4) + 4) + 4); bytes_14 = builtin::array_new<u8>(local.tee ptr_15(builtin::load_i32((((self_16 + 4) + 4) + 4) + 4))); i_22 = 0; b10: block {
+                l11: loop {
+                    break_if b10 i_22 >= ptr_15;
+                    builtin::array_set_u8(bytes_14, i_22, builtin::load_u8(self + i_22));
+                    i_22 = i_22 + 1;
+                    continue l11;
+                };
+            }; struct.new "core:prelude/string.wado//String" { repr: bytes_14, used: ptr_15 });
+            drop("mem/realloc"(builtin::load_i32(((self_16 + 4) + 4) + 4), builtin::load_i32((((self_16 + 4) + 4) + 4) + 4), 1, 0));
+        }
+        struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: $local_11 };
     });
     drop("mem/realloc"(self_16, 20, 4, 0));
     return $result_val;
@@ -530,7 +527,6 @@ fn "http_fields_set.wado/$cm_binding__Fields_set"(self, name, value) with Fields
     let $list_addr: i32;
     let $list_elem: u8;
     let $result_val: ref null "wasi:http/types.wado//HeaderError";
-    let $local_19: ref "wasi:http/types.wado//HeaderError";
     let $local_21: ref null "core:prelude/string.wado//String";
     let bytes_24: ref Array<u8>;
     let ptr_25: i32;
@@ -596,31 +592,29 @@ fn "http_fields_set.wado/$cm_binding__Fields_set"(self, name, value) with Fields
     "wasi/wasi:http/Fields::set"(self, builtin::i32_wrap_i64($name_packed), builtin::i32_wrap_i64($name_packed >> 32_i64), ptr_25, self_26, $list_elem);
     $result_val = (if local.tee self_26(builtin::load_u8($list_elem)) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
         ref.null none;
+    } else if local.tee self_26(builtin::load_u8($list_elem + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
+        struct.new "wasi:http/types.wado//HeaderError" { 0 };
+    } else if self_26 == 1 -> ref "wasi:http/types.wado//HeaderError" {
+        struct.new "wasi:http/types.wado//HeaderError" { 1 };
+    } else if self_26 == 2 -> ref "wasi:http/types.wado//HeaderError" {
+        struct.new "wasi:http/types.wado//HeaderError" { 2 };
+    } else if self_26 == 3 -> ref "wasi:http/types.wado//HeaderError" {
+        struct.new "wasi:http/types.wado//HeaderError" { 3 };
     } else {
-        local.tee $local_19((if local.tee self_26(builtin::load_u8($list_elem + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
-            struct.new "wasi:http/types.wado//HeaderError" { 0 };
-        } else if self_26 == 1 -> ref "wasi:http/types.wado//HeaderError" {
-            struct.new "wasi:http/types.wado//HeaderError" { 1 };
-        } else if self_26 == 2 -> ref "wasi:http/types.wado//HeaderError" {
-            struct.new "wasi:http/types.wado//HeaderError" { 2 };
-        } else if self_26 == 3 -> ref "wasi:http/types.wado//HeaderError" {
-            struct.new "wasi:http/types.wado//HeaderError" { 3 };
-        } else {
-            self_26 = builtin::load_u8(($list_elem + 4) + 4);
-            $local_21 = ref.null none;
-            if self_26 != 0 {
-                $local_21 = ref.as_non_null(self_26 = builtin::load_i32((($list_elem + 4) + 4) + 4); bytes_24 = builtin::array_new<u8>(local.tee ptr_25(builtin::load_i32(((($list_elem + 4) + 4) + 4) + 4))); self = 0; b28: block {
-                    l29: loop {
-                        break_if b28 self >= ptr_25;
-                        builtin::array_set_u8(bytes_24, self, builtin::load_u8(self_26 + self));
-                        self = self + 1;
-                        continue l29;
-                    };
-                }; struct.new "core:prelude/string.wado//String" { repr: bytes_24, used: ptr_25 });
-                drop("mem/realloc"(builtin::load_i32((($list_elem + 4) + 4) + 4), builtin::load_i32(((($list_elem + 4) + 4) + 4) + 4), 1, 0));
-            }
-            struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: $local_21 };
-        }));
+        self_26 = builtin::load_u8(($list_elem + 4) + 4);
+        $local_21 = ref.null none;
+        if self_26 != 0 {
+            $local_21 = ref.as_non_null(self_26 = builtin::load_i32((($list_elem + 4) + 4) + 4); bytes_24 = builtin::array_new<u8>(local.tee ptr_25(builtin::load_i32(((($list_elem + 4) + 4) + 4) + 4))); self = 0; b28: block {
+                l29: loop {
+                    break_if b28 self >= ptr_25;
+                    builtin::array_set_u8(bytes_24, self, builtin::load_u8(self_26 + self));
+                    self = self + 1;
+                    continue l29;
+                };
+            }; struct.new "core:prelude/string.wado//String" { repr: bytes_24, used: ptr_25 });
+            drop("mem/realloc"(builtin::load_i32((($list_elem + 4) + 4) + 4), builtin::load_i32(((($list_elem + 4) + 4) + 4) + 4), 1, 0));
+        }
+        struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: $local_21 };
     });
     drop("mem/realloc"($list_elem, 20, 4, 0));
     return $result_val;
@@ -729,9 +723,7 @@ fn "http_fields_set.wado/$cm_task_entry__handle"(request) {
     let set_result: ref null "wasi:http/types.wado//HeaderError";
     let $local_16: ref "core:prelude/string.wado//String";
     let $local_17: ref "core:prelude/format.wado//Formatter";
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $fuse_at_191: i32;
-    let elements_199: ref "Array<core:prelude/list.wado/List<u8>>";
     let packed: i64;
     drop("http_fields_set.wado/$cm_binding__Fields_append"(local.tee fields("http_fields_set.wado/$cm_binding__Fields_new"()), global:http_fields_set.wado::$const_obj_7, global:http_fields_set.wado::$const_obj_13));
     if @unlikely(local.tee $v1_3("http_fields_set.wado/$cm_binding__Fields_has"(fields, global:http_fields_set.wado::$const_obj_7)) == 0) {
@@ -762,7 +754,7 @@ condition: fields.has(\"x-test\" as FieldName)
         "core:rt/panic"($local_16.repr, $local_16.used);
         unreachable;
     }
-    new_values = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: local.tee elements_199(array.new_fixed<ref "core:prelude//List<u8>">(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(110, 101, 119), used: 3 })), used: 1 };
+    new_values = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: array.new_fixed<ref "core:prelude//List<u8>">(struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(110, 101, 119), used: 3 }), used: 1 };
     if @unlikely(ref.is_null(local.tee set_result("http_fields_set.wado/$cm_binding__Fields_set"(fields, global:http_fields_set.wado::$const_obj_7, new_values))) == 0) {
         drop(ref.as_non_null(set_result));
         cold_path;
@@ -799,7 +791,7 @@ condition: got.len() == 1
     }
     $v1_3 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     $fuse_at_191 = builtin::i32_wrap_i64(packed >> 32_i64);
-    $v1_3 = local.tee $pattern_temp_1("http_fields_set.wado/$cm_binding__Response_new"(fields, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $v1_3)).0;
+    $v1_3 = "http_fields_set.wado/$cm_binding__Response_new"(fields, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $v1_3).0;
     fields = 0;
     fields = $v1_3;
     "wasi/task-return:handle"(0, fields, 0, 0_i64, 0, 0, 0, 0);

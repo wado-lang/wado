@@ -1658,7 +1658,6 @@ fn "anon_struct.wado/$cm_export__$test_8_an_explicit_field_with_a_new_name_exten
 }
 
 fn "anon_struct.wado/$cm_export__$test_9_the_base_is_evaluated_once"() {
-    let $cond_7: bool;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:anon_struct.wado::$modules_initialized);
         cold_path;
@@ -1668,7 +1667,7 @@ fn "anon_struct.wado/$cm_export__$test_9_the_base_is_evaluated_once"() {
     };
     global:anon_struct.wado::COMPOSE_CALLS = 0;
     global:anon_struct.wado::COMPOSE_CALLS = global:anon_struct.wado::COMPOSE_CALLS + 1;
-    if @unlikely(local.tee $cond_7(global:anon_struct.wado::COMPOSE_CALLS == 1) == 0) {
+    if @unlikely((global:anon_struct.wado::COMPOSE_CALLS == 1) == 0) {
         cold_path;
         "anon_struct.wado/$test_9_the_base_is_evaluated_once$cold0"();
         unreachable;
@@ -1688,7 +1687,6 @@ fn "anon_struct.wado/$cm_export__$test_10_the_base_value_is_not_mutated"() {
 }
 
 fn "anon_struct.wado/$cm_export__$test_11_subexpressions_evaluate_in_source_order"() {
-    let $cond_7: bool;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:anon_struct.wado::$modules_initialized);
         cold_path;
@@ -1699,7 +1697,7 @@ fn "anon_struct.wado/$cm_export__$test_11_subexpressions_evaluate_in_source_orde
     global:anon_struct.wado::ORDER = 0;
     global:anon_struct.wado::ORDER = (global:anon_struct.wado::ORDER * 10) + 1;
     global:anon_struct.wado::ORDER = (global:anon_struct.wado::ORDER * 10) + 2;
-    if @unlikely(local.tee $cond_7(global:anon_struct.wado::ORDER == 12) == 0) {
+    if @unlikely((global:anon_struct.wado::ORDER == 12) == 0) {
         cold_path;
         "anon_struct.wado/$test_11_subexpressions_evaluate_in_source_order$cold2"();
         unreachable;
@@ -1707,7 +1705,7 @@ fn "anon_struct.wado/$cm_export__$test_11_subexpressions_evaluate_in_source_orde
     global:anon_struct.wado::ORDER = 0;
     global:anon_struct.wado::ORDER = (global:anon_struct.wado::ORDER * 10) + 2;
     global:anon_struct.wado::ORDER = (global:anon_struct.wado::ORDER * 10) + 1;
-    if @unlikely(local.tee $cond_7(global:anon_struct.wado::ORDER == 21) == 0) {
+    if @unlikely((global:anon_struct.wado::ORDER == 21) == 0) {
         cold_path;
         "anon_struct.wado/$test_11_subexpressions_evaluate_in_source_order$cold0"();
         unreachable;
@@ -2694,10 +2692,9 @@ fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(
     let new_used_29: i32;
     let start_30: i32;
     let val_i64_65: i64;
-    let repr: ref Array<u8>;
     $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0: block {
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0 i <= run_start;
-        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr(s.repr), start: run_start, end: i };
+        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: run_start, end: i };
         $inline_core_prelude_string_wado_String__internal_push_view_6: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_view_6 local.tee i(i - run_start) == 0;
             if @unlikely(local.tee new_used_29(buf.used + i) > builtin::array_len(buf.repr)) {
@@ -4562,7 +4559,6 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
     let current: ref "core:prelude/types.wado//Option<i32>";
     let n_idx: i32;
     let n: ref "core:collections//TreeMapNode<core:prelude/string.wado/String>";
-    let entry: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>";
     let $local_6: "core:prelude/traits.wado//enum:Ordering";
     let $licm_nodes_21: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
     let $licm_entries_24: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";
@@ -4646,7 +4642,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
                         "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexRef<i32>::index_ref$cold0"($load_10, $licm_used_27);
                         unreachable;
                     }
-                    if local.tee entry(builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">($licm_repr_28, $load_10)).deleted {
+                    if builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">($licm_repr_28, $load_10).deleted {
                         return -1;
                     }
                     return $load_10;

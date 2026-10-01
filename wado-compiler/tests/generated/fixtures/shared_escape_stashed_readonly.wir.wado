@@ -187,7 +187,6 @@ fn "shared_escape_stashed_readonly.wado/run"() with Stdout {
     let keep: ref "core:prelude//List<shared_escape_stashed_readonly.wado/Holder>";
     let h: ref "shared_escape_stashed_readonly.wado//Holder";
     let $local_6: ref "core:prelude/string.wado//String";
-    let elements_9: ref "Array<shared_escape_stashed_readonly.wado/Holder>";
     let used: i32;
     let packed: i64;
     let current: i32;
@@ -203,7 +202,7 @@ fn "shared_escape_stashed_readonly.wado/run"() with Stdout {
     };
     z = black_box(0);
     total = 0;
-    keep = struct.new "core:prelude//List<shared_escape_stashed_readonly.wado/Holder>" { repr: local.tee elements_9(array.new_fixed<ref "shared_escape_stashed_readonly.wado//Holder">()), used: 0 };
+    keep = struct.new "core:prelude//List<shared_escape_stashed_readonly.wado/Holder>" { repr: array.new_fixed<ref "shared_escape_stashed_readonly.wado//Holder">(), used: 0 };
     $sroa_$iter_0_start_86 = 0;
     b6: block {
         l7: loop {
@@ -233,8 +232,7 @@ fn "shared_escape_stashed_readonly.wado/run"() with Stdout {
                 $sroa_slot_85 = 0;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_spec1_0;
             };
-            let $match_scrut_0: i32;
-            if local.tee $match_scrut_0($sroa_slot_85) == 0 {
+            if $sroa_slot_85 == 0 {
                 h = "shared_escape_stashed_readonly.wado/stash"(global:shared_escape_stashed_readonly.wado::$const_obj_16, z);
                 total = (total + $load_1 = local.tee $load_0(h.data).used; if @unlikely(z >= $load_1) {
                     cold_path;

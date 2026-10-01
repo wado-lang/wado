@@ -127,7 +127,6 @@ fn "allocator_heap_past_2gib.wado/run"() with Stdout {
     let $v5_seen: bool;
     let $v6: bool;
     let $v6_seen: bool;
-    let $cond_14: bool;
     let packed: i64;
     pages = builtin::memory_size();
     small = "mem/realloc"(0, 0, 8, 1024);
@@ -140,13 +139,13 @@ fn "allocator_heap_past_2gib.wado/run"() with Stdout {
     $v4_9 = small <u $v0;
     $v5_seen = 0;
     $v6_seen = 0;
-    if @unlikely(local.tee $cond_14((if $v4_9 -> i32 {
+    if @unlikely((if $v4_9 -> i32 {
         $v6 = $v5 = pages; $v5_seen = 1; $v5 >u -2147483648;
         $v6_seen = 1;
         $v6;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "allocator_heap_past_2gib.wado/run$cold3"(small, $v0, small, $v0, $v4_9, $v5, $v5_seen, $v6, $v6_seen);
         unreachable;

@@ -193,7 +193,6 @@ fn "spec_modules_wasm_imports.wado/$test_0"() {
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond_6: bool;
     let $v0_9: ref "core:prelude/string.wado//String";
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_18: ref "core:prelude/format.wado//Formatter";
@@ -202,13 +201,13 @@ fn "spec_modules_wasm_imports.wado/$test_0"() {
     $v1 = local.tee $v0_0("wasm:./sub/wasm_import_user.wat/add_one"(41)) == 42;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond_6((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2 = "wasm:./sub/wasm_import_user.wasm/twice"(1.5); $v2_seen = 1; $v2 == 3;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "spec_modules_wasm_imports.wado/$test_0$cold0"($v0_0, $v1, $v2, $v2_seen, $v3, $v3_seen);
         unreachable;

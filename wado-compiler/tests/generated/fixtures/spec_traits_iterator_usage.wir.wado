@@ -194,7 +194,6 @@ fn "spec_traits_iterator_usage.wado/$test_0"() {
     let item_32: i32;
     let repr_67: ref Array<i32>;
     let elements_74: ref Array<i32>;
-    let self_83: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>";
     let pred: ref "spec_traits_iterator_usage.wado//$Closure_0";
     let $sroa_self_value_94: ref "core:prelude/types.wado//Option<i32>";
     let $tmpl_buf_100: ref "core:prelude/string.wado//String";
@@ -260,7 +259,7 @@ condition: rest == [2, 3, 4, 5]
         unreachable;
     }
     pred = struct.new "spec_traits_iterator_usage.wado//$Closure_0" {  };
-    multivalue_bind [$sroa_$iter_0_index_142, item_32] = "spec_traits_iterator_usage.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::reduce$$Closure_1"(local.tee self_83(struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr_139, index: 0, end: 5 }, pred: struct.new "canonical//CanonicalClosure_0" { env: pred, func: ref.func "closure/spec_traits_iterator_usage.wado/$closure_wrapper_0" } }));
+    multivalue_bind [$sroa_$iter_0_index_142, item_32] = "spec_traits_iterator_usage.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::reduce$$Closure_1"(struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr_139, index: 0, end: 5 }, pred: struct.new "canonical//CanonicalClosure_0" { env: pred, func: ref.func "closure/spec_traits_iterator_usage.wado/$closure_wrapper_0" } });
     if @unlikely(local.tee tx_106((if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $sroa_self_value_94((if $sroa_$iter_0_index_142 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
         struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: item_32 };
     } else {
@@ -1241,8 +1240,7 @@ fn "spec_traits_iterator_usage.wado/core:prelude/traits.wado/IterFilter<core:pre
                     };
                     unreachable;
                 };
-                let $match_scrut_1: i32;
-                if local.tee $match_scrut_1($match_5.0) == 0 {
+                if $match_5.0 == 0 {
                     $load_4 = $load_4 + $match_5.1;
                 } else {
                     break b164;

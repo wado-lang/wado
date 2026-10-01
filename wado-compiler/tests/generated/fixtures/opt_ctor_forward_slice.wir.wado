@@ -92,7 +92,6 @@ fn "opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(
     let ptr: i32;
     let status_2: i32;
     let result: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
-    let $result_val: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
     let ws: i32;
     let evt_ptr: i32;
     let status_13: i32;
@@ -110,7 +109,7 @@ fn "opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(
     }
     result = ref.null none;
     if (status_2 & 15) == 0 {
-        result = local.tee $result_val((if local.tee status_2(builtin::load_u8(ptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
+        result = (if local.tee status_2(builtin::load_u8(ptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
             struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
             status_2 = (if local.tee status_2(builtin::load_u8(ptr + 1)) == 0 -> "wasi:cli/types.wado//enum:ErrorCode" {
@@ -121,7 +120,7 @@ fn "opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(
                 2;
             });
             struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: status_2 };
-        }));
+        });
     }
     drop("mem/realloc"(ptr, 2, 1, 0));
     return result;

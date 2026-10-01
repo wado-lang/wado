@@ -1705,11 +1705,10 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(self, f) {
     let x: i64;
     let arr: ref Array<u8>;
     let i: i32;
-    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0"(f, is_negative, self);
-    arr = local.tee self_14(f.buf).repr;
+    arr = f.buf.repr;
     is_negative = is_negative + self;
     i = 0;
     b195: block {
@@ -1920,8 +1919,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "closure/global_template_string.wado/$closure_wrapper_0"($env) {
-    let $typed_env: ref "global_template_string.wado//$Closure_0";
-    return "global_template_string.wado/global_template_string.wado/$Closure_0::$call"(local.tee $typed_env(ref.cast "global_template_string.wado//$Closure_0"($env)));
+    return "global_template_string.wado/global_template_string.wado/$Closure_0::$call"(ref.cast "global_template_string.wado//$Closure_0"($env));
 }
 
 export fn "global_template_string.wado/$cm_export__$test_0_a_template_hole_reading_another_global" as "$test_0_a_template_hole_reading_another_global"

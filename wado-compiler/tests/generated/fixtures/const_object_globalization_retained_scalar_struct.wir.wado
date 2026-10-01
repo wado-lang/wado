@@ -135,7 +135,6 @@ fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
     let keep: ref "core:prelude//List<const_object_globalization_retained_scalar_struct.wado/Holder>";
     let h: ref "const_object_globalization_retained_scalar_struct.wado//Holder";
     let $local_6: ref "core:prelude/string.wado//String";
-    let elements: ref "Array<const_object_globalization_retained_scalar_struct.wado/Holder>";
     let used: i32;
     let packed: i64;
     let current: i32;
@@ -144,7 +143,7 @@ fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
     let $sroa_$f_buf_83: ref "core:prelude/string.wado//String";
     z = black_box(0);
     acc = 0;
-    keep = struct.new "core:prelude//List<const_object_globalization_retained_scalar_struct.wado/Holder>" { repr: local.tee elements(array.new_fixed<ref "const_object_globalization_retained_scalar_struct.wado//Holder">()), used: 0 };
+    keep = struct.new "core:prelude//List<const_object_globalization_retained_scalar_struct.wado/Holder>" { repr: array.new_fixed<ref "const_object_globalization_retained_scalar_struct.wado//Holder">(), used: 0 };
     $sroa_$iter_0_start_71 = 0;
     b6: block {
         l7: loop {
@@ -174,8 +173,7 @@ fn "const_object_globalization_retained_scalar_struct.wado/run"() with Stdout {
                 $sroa_slot_70 = 0;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_spec1_0;
             };
-            let $match_scrut_0: i32;
-            if local.tee $match_scrut_0($sroa_slot_70) == 0 {
+            if $sroa_slot_70 == 0 {
                 h = "const_object_globalization_retained_scalar_struct.wado/stash"(global:const_object_globalization_retained_scalar_struct.wado::$const_obj_1, z);
                 acc = ((acc + local.tee $load_0(h.p).x) + $load_0.y) + h.tag;
                 if @unlikely(local.tee used(keep.used) >= builtin::array_len(keep.repr)) {

@@ -998,8 +998,7 @@ condition: match s { Circle(r) => `circle r=${r}`, Rect([w, h]) => `rect ${w}x${
         unreachable;
     }
     $local_14 = (if @likely(ref.test "match_nested_pattern.wado//Shape::Labeled"(local.tee s2(struct.new "match_nested_pattern.wado//Shape::Labeled" { discriminant: 2, payload_0: struct.new "tuple//[core:prelude/string.wado/String, match_nested_pattern.wado/Point]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("origin"), used: 6 }, 1: struct.new "match_nested_pattern.wado//Point" { x: 0, y: 0 } } }))) -> ref "core:prelude/string.wado//String" {
-        let $variant_payload_4: ref "tuple//[core:prelude/string.wado/String, match_nested_pattern.wado/Point]";
-        $sroa_$f_buf_141 = local.tee $variant_payload_4(ref.cast "match_nested_pattern.wado//Shape::Labeled"(s2).payload_0).0;
+        $sroa_$f_buf_141 = ref.cast "match_nested_pattern.wado//Shape::Labeled"(s2).payload_0.0;
         $local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(51), used: 0 };
         if @unlikely(local.tee start_42(0 + 8) > builtin::array_len($local_14.repr)) {
             cold_path;
@@ -2083,7 +2082,6 @@ fn "match_nested_pattern.wado/$test_13_a_nested_pattern_with_the_matches_operato
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let $local_12: ref "core:prelude/types.wado//Option<i32>";
-    let $local_13: ref "match_nested_pattern.wado//Point";
     if @unlikely(local.tee $cond_3((if ref.is_null(local.tee opt2(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 })) == 0 -> i32 {
         if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_12(ref.as_non_null(opt2))) -> i32 {
             drop(ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_12).payload_0);
@@ -2117,7 +2115,7 @@ condition: opt2 matches { Some(Some(_)) }
         unreachable;
     }
     if @unlikely(local.tee $cond_3((if ref.is_null(local.tee opt3(struct.new "match_nested_pattern.wado//Point" { x: 0, y: 0 })) == 0 -> i32 {
-        (local.tee $local_13(ref.as_non_null(opt3)).x == 0) & 1;
+        (ref.as_non_null(opt3).x == 0) & 1;
     } else {
         0;
     })) == 0) {
@@ -4204,7 +4202,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<m
     let start_24: i32;
     let new_used_60: i32;
     let start_61: i32;
-    let v_204: ref "core:prelude/types.wado//Option<i32>";
     if @unlikely(local.tee new_used_23(local.tee self_11(f.buf).used + 6) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, new_used_23);
@@ -4305,7 +4302,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<m
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:match_nested_pattern.wado::$const_obj_44, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: ref.as_non_null(local.tee v_204(v.value)) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: ref.as_non_null(v.value) }, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -6737,7 +6734,6 @@ fn "core:prelude/traits.wado/match_nested_pattern.wado/Tagged^core:prelude/trait
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    let v_158: ref "core:prelude/types.wado//Option<i32>";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<match_nested_pattern.wado/Tagged,[core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>]>"(self, f);
         return;
@@ -6793,7 +6789,7 @@ fn "core:prelude/traits.wado/match_nested_pattern.wado/Tagged^core:prelude/trait
     start_23 = self_10.used;
     self_10.used = new_used_22;
     builtin::array_copy<u8>(self_10.repr, start_23, global:match_nested_pattern.wado::$const_obj_44, 0, 2);
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: ref.as_non_null(local.tee v_158(self.value)) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: ref.as_non_null(self.value) }, f);
     if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, start_23);

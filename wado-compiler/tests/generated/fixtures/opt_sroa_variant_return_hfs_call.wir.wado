@@ -80,7 +80,6 @@ fn "opt_sroa_variant_return_hfs_call.wado/fail_at"(pos) {
 
 fn "opt_sroa_variant_return_hfs_call.wado/run"() {
     let ok: ref "opt_sroa_variant_return_hfs_call.wado//Cursor";
-    let f: ref "opt_sroa_variant_return_hfs_call.wado//Fail";
     ok = struct.new "opt_sroa_variant_return_hfs_call.wado//Cursor" { data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ab;cd"), used: 5 }, pos: 0 };
     let $mv$$vr_10$0: i32;
     let $mv$$vr_10$1: i32;
@@ -97,7 +96,7 @@ fn "opt_sroa_variant_return_hfs_call.wado/run"() {
     }
     multivalue_bind [$mv$$vr_10$1, $mv$$vr_10$0, $mv$$vr_10$2] = "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/Cursor::scan"(local.tee ok(struct.new "opt_sroa_variant_return_hfs_call.wado//Cursor" { data: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99, 100), used: 4 }, pos: 0 }));
     if @unlikely(local.tee $mv$$vr_10$1((if $mv$$vr_10$1 == 1 -> bool {
-        local.tee f(ref.as_non_null($mv$$vr_10$2)).at == 4;
+        ref.as_non_null($mv$$vr_10$2).at == 4;
     } else {
         0;
     })) == 0) {

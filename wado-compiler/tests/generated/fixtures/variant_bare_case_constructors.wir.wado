@@ -175,7 +175,6 @@ fn "variant_bare_case_constructors.wado/run"() {
     let $fuse_at_76: i32;
     let a_113: ref Array<u8>;
     let b_116: ref Array<u8>;
-    let $sroa_slot_148: ref null "core:prelude/string.wado//String";
     nested = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 2 };
     coerced = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     if @unlikely(local.tee $cond_8((if ref.is_null(nested) == 0 -> i32 {
@@ -236,8 +235,7 @@ condition: l.len() == 2
         "core:rt/panic"($local_36.repr, $local_36.used);
         unreachable;
     }
-    $sroa_slot_148 = ref.null none;
-    $local_36 = ref.as_non_null(local.tee $sroa_slot_148(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 100), used: 3 }));
+    $local_36 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 100), used: 3 };
     if @unlikely(local.tee $fuse_at_76($inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
         a_113 = $local_36.repr;
         $cond_8 = $local_36.used;

@@ -192,24 +192,22 @@ fn "opt_sroa_variant_per_case.wado/make_payload"(x) {
 }
 
 fn "opt_sroa_variant_per_case.wado/use_payload"(x) {
-    let p: ref "opt_sroa_variant_per_case.wado//Payload";
     let $mv$result$1: ref null "opt_sroa_variant_per_case.wado//Payload";
     let $mv$result$2: ref null "core:prelude/string.wado//String";
     multivalue_bind [x, $mv$result$1, $mv$result$2] = "opt_sroa_variant_per_case.wado/make_payload"(x);
     if x == 0 {
-        return local.tee p(ref.as_non_null($mv$result$1)).value;
+        return ref.as_non_null($mv$result$1).value;
     } else {
     }
     return -1;
 }
 
 fn "opt_sroa_variant_per_case.wado/use_err_branch"(x) {
-    let msg: ref "core:prelude/string.wado//String";
     let $mv$result$1: ref null "opt_sroa_variant_per_case.wado//Payload";
     let $mv$result$2: ref null "core:prelude/string.wado//String";
     multivalue_bind [x, $mv$result$1, $mv$result$2] = "opt_sroa_variant_per_case.wado/make_payload"(x);
     if x == 1 {
-        return local.tee msg(ref.as_non_null($mv$result$2));
+        return ref.as_non_null($mv$result$2);
     } else {
     }
     return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };

@@ -209,8 +209,6 @@ condition: x matches { None }
 }
 
 fn "null_never_option.wado/$cm_export__$test_1_a_null_through_a_generic_parameter"() {
-    let $cond_1: bool;
-    let $local_6: ref "core:prelude/types.wado//Option<!>";
     let $sroa_$vr_7_1_11: ref null "core:prelude/types.wado//Option<!>";
     if @unlikely(1 == 0) {
         cold_path;
@@ -218,14 +216,14 @@ fn "null_never_option.wado/$cm_export__$test_1_a_null_through_a_generic_paramete
         unreachable;
     }
     $sroa_$vr_7_1_11 = struct.new "core:prelude/types.wado//Option<!>" { 1 };
-    if @unlikely(local.tee $cond_1((if block -> i32 {
-        local.tee $local_6(ref.as_non_null($sroa_$vr_7_1_11)).discriminant == 1;
+    if @unlikely((if block -> i32 {
+        ref.as_non_null($sroa_$vr_7_1_11).discriminant == 1;
     } -> bool {
-        $local_6 = ref.as_non_null($sroa_$vr_7_1_11);
+        drop(ref.as_non_null($sroa_$vr_7_1_11));
         1;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "null_never_option.wado/$test_1_a_null_through_a_generic_parameter$cold0"();
         unreachable;
@@ -234,23 +232,21 @@ fn "null_never_option.wado/$cm_export__$test_1_a_null_through_a_generic_paramete
 }
 
 fn "null_never_option.wado/$cm_export__$test_2_a_null_as_a_case_payload"() {
-    let $cond_0: bool;
-    let $local_6: ref "core:prelude/types.wado//Option<!>";
     let $match_scrut_0: ref null "core:prelude/types.wado//Option<!>";
-    if @unlikely(local.tee $cond_0((if ref.is_null(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<!>" { 1 })) == 0 -> i32 {
-        local.tee $local_6(ref.as_non_null($match_scrut_0)).discriminant == 1;
+    if @unlikely((if ref.is_null(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<!>" { 1 })) == 0 -> i32 {
+        ref.as_non_null($match_scrut_0).discriminant == 1;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "null_never_option.wado/$test_2_a_null_as_a_case_payload$cold1"();
         unreachable;
     }
-    if @unlikely(local.tee $cond_0((if ref.is_null(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<!>" { 1 })) == 0 -> i32 {
-        local.tee $local_6(ref.as_non_null($match_scrut_0)).discriminant == 1;
+    if @unlikely((if ref.is_null(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<!>" { 1 })) == 0 -> i32 {
+        ref.as_non_null($match_scrut_0).discriminant == 1;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "null_never_option.wado/$test_2_a_null_as_a_case_payload$cold0"();
         unreachable;

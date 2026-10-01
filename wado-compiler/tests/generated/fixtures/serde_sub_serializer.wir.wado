@@ -159,7 +159,6 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     let self_24: ref "core:prelude/string.wado//String";
     let new_used_30: i32;
     let start_31: i32;
-    let s_51: ref "serde_sub_serializer.wado//TextSerializer";
     let other_138: ref "core:prelude/string.wado//String";
     let start_148: i32;
     let packed_150: i64;
@@ -183,7 +182,7 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
             self_24.used = start_31;
             builtin::array_copy<u8>(self_24.repr, new_used_30, global:serde_sub_serializer.wado::$const_obj_16, 0, 1);
         }
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee s_51($local_12.parent).buf, global:serde_sub_serializer.wado::$const_obj_19);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($local_12.parent.buf, global:serde_sub_serializer.wado::$const_obj_19);
         $local_12.count = $local_12.count + 1;
         if $local_12.count > 0 {
             if @unlikely(local.tee new_used_30(local.tee self_24($local_12.parent.buf).used + 1) > builtin::array_len(self_24.repr)) {
@@ -194,7 +193,7 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
             self_24.used = new_used_30;
             builtin::array_copy<u8>(self_24.repr, start_31, global:serde_sub_serializer.wado::$const_obj_16, 0, 1);
         }
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee s_51($local_12.parent).buf, global:serde_sub_serializer.wado::$const_obj_17);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($local_12.parent.buf, global:serde_sub_serializer.wado::$const_obj_17);
         $local_12.count = $local_12.count + 1;
         if $local_12.count > 0 {
             if @unlikely(local.tee start_31(local.tee self_24($local_12.parent.buf).used + 1) > builtin::array_len(self_24.repr)) {
@@ -205,7 +204,7 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
             self_24.used = start_31;
             builtin::array_copy<u8>(self_24.repr, new_used_30, global:serde_sub_serializer.wado::$const_obj_16, 0, 1);
         }
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee s_51($local_12.parent).buf, global:serde_sub_serializer.wado::$const_obj_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($local_12.parent.buf, global:serde_sub_serializer.wado::$const_obj_15);
         $local_12.count = $local_12.count + 1;
         if @unlikely(local.tee new_used_30(local.tee self_24($local_12.parent.buf).used + 1) > builtin::array_len(self_24.repr)) {
             cold_path;
@@ -465,7 +464,6 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
     let new_used_18: i32;
     let start_19: i32;
     let start_41: i32;
-    let s_65: ref "serde_sub_serializer.wado//TextSerializer";
     if self.count > 0 {
         if @unlikely(local.tee new_used_18(local.tee out_11(self.parent.buf).used + 1) > builtin::array_len(out_11.repr)) {
             cold_path;
@@ -498,7 +496,7 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
         name.used = start_41;
         builtin::array_copy<u8>(name.repr, new_used_18, out_11.repr, 0, start_19);
     };
-    drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string"(local.tee s_65(self.parent), value));
+    drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string"(self.parent, value));
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -525,7 +523,6 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
     let new_used_18: i32;
     let start_19: i32;
     let start_41: i32;
-    let s_65: ref "serde_sub_serializer.wado//TextSerializer";
     if self.count > 0 {
         if @unlikely(local.tee new_used_18(local.tee out_11(self.parent.buf).used + 1) > builtin::array_len(out_11.repr)) {
             cold_path;
@@ -558,7 +555,7 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
         name.used = start_41;
         builtin::array_copy<u8>(name.repr, new_used_18, out_11.repr, 0, start_19);
     };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee s_65(self.parent).buf, out_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(value, out_11); out_11);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(self.parent.buf, out_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(value, out_11); out_11);
     self.count = self.count + 1;
     return ref.null none;
 }

@@ -75,7 +75,6 @@ global global:async_export_called_directly.wado::$const_obj_0: ref null "core:pr
 
 fn "async_export_called_directly.wado/deliver"() with Stdout {
     let $task_result: ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
-    let $local_4_3: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let packed: i64;
     let rx_29: i32;
     let tx_30: i32;
@@ -88,7 +87,7 @@ fn "async_export_called_directly.wado/deliver"() with Stdout {
     "core:rt/write_string_to_stream"(tx_30, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_29);
     if @likely(ref.is_null(local.tee $task_result(struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 1 })) == 0) {
-        return local.tee $local_4_3(ref.as_non_null($task_result));
+        return ref.as_non_null($task_result);
     } else {
         unreachable;
     }

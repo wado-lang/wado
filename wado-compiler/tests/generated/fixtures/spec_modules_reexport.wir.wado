@@ -138,7 +138,6 @@ fn "spec_modules_reexport.wado/$cm_export__$test_0"() {
     let $v3_seen: bool;
     let $v4: bool;
     let $v4_seen: bool;
-    let $cond: bool;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:spec_modules_reexport.wado::$modules_initialized);
         cold_path;
@@ -151,13 +150,13 @@ fn "spec_modules_reexport.wado/$cm_export__$test_0"() {
     $v2 = $v0 == $v1;
     $v3_seen = 0;
     $v4_seen = 0;
-    if @unlikely(local.tee $cond((if $v2 -> i32 {
+    if @unlikely((if $v2 -> i32 {
         $v4 = $v3 = "wasm:core:libm.wat/libm_cos"(0); $v3_seen = 1; $v3 == 1;
         $v4_seen = 1;
         $v4;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "spec_modules_reexport.wado/$test_0$cold0"($v0, $v1, $v2, $v3, $v3_seen, $v4, $v4_seen);
         unreachable;

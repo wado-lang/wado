@@ -120,8 +120,6 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build"() {
     let tagged: i32;
     let i_3: i32;
     let rep: ref "opt_value_copy_ref_broken_out_of_block.wado//Rep";
-    let elements_7: ref "Array<opt_value_copy_ref_broken_out_of_block.wado/Op>";
-    let elements_8: ref "Array<opt_value_copy_ref_broken_out_of_block.wado/Held>";
     let value_11: ref "opt_value_copy_ref_broken_out_of_block.wado//Held";
     let used_12: i32;
     let used_21: i32;
@@ -129,8 +127,8 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build"() {
     let $vc_payload_1: ref "opt_value_copy_ref_broken_out_of_block.wado//Rep";
     let $sroa_op_value_33: ref "opt_value_copy_ref_broken_out_of_block.wado//Op";
     let v_33: ref "core:prelude//List<core:prelude/string.wado/String>";
-    ops = struct.new "core:prelude//List<opt_value_copy_ref_broken_out_of_block.wado/Op>" { repr: local.tee elements_7(array.new_fixed<ref "opt_value_copy_ref_broken_out_of_block.wado//Op">()), used: 0 };
-    held = struct.new "core:prelude//List<opt_value_copy_ref_broken_out_of_block.wado/Held>" { repr: local.tee elements_8(array.new_fixed<ref "opt_value_copy_ref_broken_out_of_block.wado//Held">()), used: 0 };
+    ops = struct.new "core:prelude//List<opt_value_copy_ref_broken_out_of_block.wado/Op>" { repr: array.new_fixed<ref "opt_value_copy_ref_broken_out_of_block.wado//Op">(), used: 0 };
+    held = struct.new "core:prelude//List<opt_value_copy_ref_broken_out_of_block.wado/Held>" { repr: array.new_fixed<ref "opt_value_copy_ref_broken_out_of_block.wado//Held">(), used: 0 };
     tagged = 0;
     i_3 = 0;
     b0: block {
@@ -144,8 +142,7 @@ fn "opt_value_copy_ref_broken_out_of_block.wado/build"() {
             })) {
                 rep = ref.cast "opt_value_copy_ref_broken_out_of_block.wado//Op::Repeat"($sroa_op_value_33).payload_0;
                 value_11 = struct.new "opt_value_copy_ref_broken_out_of_block.wado//Held" { r: ref.as_non_null(pick: block -> ref "opt_value_copy_ref_broken_out_of_block.wado//Rep" {
-                    let $match_scrut_1: i32;
-                    if local.tee $match_scrut_1(rep.tags.used) == 2 -> ref "opt_value_copy_ref_broken_out_of_block.wado//Rep" {
+                    if rep.tags.used == 2 -> ref "opt_value_copy_ref_broken_out_of_block.wado//Rep" {
                         break pick: rep;
                     } else {
                         break pick: rep;

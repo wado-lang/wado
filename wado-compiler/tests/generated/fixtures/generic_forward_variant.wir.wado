@@ -96,12 +96,11 @@ global global:generic_forward_variant.wado::$const_obj_7: ref null Array<u8> = a
 global global:generic_forward_variant.wado::$const_obj_8: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "generic_forward_variant.wado/$cm_export__run"() {
-    let c: ref "generic_forward_variant.wado//CircleData";
     let $sroa_counter_count_15: i32;
     $sroa_counter_count_15 = 0;
     let $match_scrut_0: ref "generic_forward_variant.wado//Shape";
     if @likely(ref.test "generic_forward_variant.wado//Shape::Circle"(local.tee $match_scrut_0(struct.new "generic_forward_variant.wado//Shape::Circle" { discriminant: 0, payload_0: struct.new "generic_forward_variant.wado//CircleData" { radius: 10 } }))) {
-        $sroa_counter_count_15 = local.tee c(ref.cast "generic_forward_variant.wado//Shape::Circle"($match_scrut_0).payload_0).radius;
+        $sroa_counter_count_15 = ref.cast "generic_forward_variant.wado//Shape::Circle"($match_scrut_0).payload_0.radius;
     } else {
         unreachable;
     }

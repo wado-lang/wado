@@ -240,7 +240,6 @@ global global:core:prelude/array.wado::$const_obj_63: ref null Array<u8> = array
 fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     let conn: i32;
     let $local_12: ref "core:prelude/string.wado//String";
-    let $pattern_temp_3: ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";
     let $match_17: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
     let packed_19: i64;
     let rx_20: i32;
@@ -250,7 +249,6 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     let start_50: i32;
     let all: ref "core:prelude//List<u8>";
     let elements_55: ref Array<u8>;
-    let elements_91: ref Array<u8>;
     conn = "wasi_tls_mock_recv.wado/$cm_binding__Connector_new"();
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
@@ -258,7 +256,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     "wasi/stream-drop-writable"(tx_21);
     tx_21 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     rx_20 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    tx_21 = local.tee $pattern_temp_3("wasi_tls_mock_recv.wado/$cm_binding__Connector_receive"(conn, tx_21)).0;
+    tx_21 = "wasi_tls_mock_recv.wado/$cm_binding__Connector_receive"(conn, tx_21).0;
     "wasi/stream-drop-writable"(rx_20);
     if @likely(local.tee $match_17("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait"("wasi_tls_mock_recv.wado/$cm_binding__Connector_connect"(conn, global:wasi_tls_mock_recv.wado::$const_obj_4))).discriminant == 0) {
     } else {
@@ -304,7 +302,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
     tx_21 = $mv$chunk$items.used;
     elements_55 = $mv$chunk$items.repr;
     start_50 = 0;
-    $mv$chunk$items = struct.new "core:prelude//List<u8>" { repr: local.tee elements_91(array.new_fixed<u8>()), used: 0 };
+    $mv$chunk$items = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
     b6: block {
         l7: loop {
             break_if b6 start_50 >= tx_21;
@@ -413,13 +411,11 @@ fn "wasi_tls_mock_recv.wado/$cm_binding__Error_to_debug_string"(self) with Error
 }
 
 fn "wasi_tls_mock_recv.wado/$cm_lift__Connector_connect"($outptr) {
-    let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" {
+    return (if builtin::load_u8($outptr) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" {
         struct.new "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>" { 0 };
     } else {
         struct.new "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err" { discriminant: 1, payload_0: builtin::load_i32($outptr + 4) };
-    }));
+    });
 }
 
 fn "wasi_tls_mock_recv.wado/$cm_export__run"() {
@@ -852,7 +848,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     let $v2_12: i32;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond_16: bool;
     let b1: u8;
     $load_0 = bytes.start;
     $v2_2 = bytes.end - $load_0;
@@ -895,13 +890,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     }) >= 1;
     $v2_2 = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond_16((if b1 -> i32 {
+    if @unlikely((if b1 -> i32 {
         $v3 = $v2_12 = $load_0; $v2_2 = 1; $v2_12 <= 3;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/Utf8Error::invalid$cold0"($load_0, b1, $v2_12, $v2_2, $v3, $v3_seen);
         unreachable;

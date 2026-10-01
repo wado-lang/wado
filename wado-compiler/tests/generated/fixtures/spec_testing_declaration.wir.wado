@@ -266,8 +266,7 @@ fn "spec_testing_declaration.wado/$cm_export__$test_trap_3_panics_on_bad_input"(
         global:spec_testing_declaration.wado::$modules_initialized = 1;
     };
     cold_path;
-    let $mv_field_1: ref Array<u8>;
-    "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("intentional panic")), 17);
+    "core:rt/panic"(array.new_data<u8>("intentional panic"), 17);
     unreachable;
     "wasi/task-return"(0);
 }
@@ -341,7 +340,6 @@ condition: p.length() == 5.0
 }
 
 fn "spec_testing_declaration.wado/$cm_export__$test_trap_7_panics_on_null_dereference"() {
-    let v: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:spec_testing_declaration.wado::$modules_initialized);
         cold_path;
@@ -352,19 +350,17 @@ fn "spec_testing_declaration.wado/$cm_export__$test_trap_7_panics_on_null_derefe
     drop($inline_core_prelude_types_wado_Option_i32___unwrap_2: block -> i32 {
         let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
         if @likely(ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<i32>" { 1 }))) {
-            break $inline_core_prelude_types_wado_Option_i32___unwrap_2: local.tee v(ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0);
+            break $inline_core_prelude_types_wado_Option_i32___unwrap_2: ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0;
         } else {
         }
         cold_path;
-        let $mv_field_1: ref Array<u8>;
-        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("called Option::unwrap() on a None value")), 39);
+        "core:rt/panic"(array.new_data<u8>("called Option::unwrap() on a None value"), 39);
         unreachable;
     });
     "wasi/task-return"(0);
 }
 
 fn "spec_testing_declaration.wado/$cm_export__$test_tm30000_8_large_data_processing"() {
-    let repr: ref Array<i32>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:spec_testing_declaration.wado::$modules_initialized);
         cold_path;
@@ -372,7 +368,7 @@ fn "spec_testing_declaration.wado/$cm_export__$test_tm30000_8_large_data_process
         "core:rt/$initialize_module"();
         global:spec_testing_declaration.wado::$modules_initialized = 1;
     };
-    builtin::array_fill<i32>(local.tee repr(builtin::array_new<i32>(100000)), 0, 1, 100000);
+    builtin::array_fill<i32>(builtin::array_new<i32>(100000), 0, 1, 100000);
     "wasi/task-return"(0);
 }
 

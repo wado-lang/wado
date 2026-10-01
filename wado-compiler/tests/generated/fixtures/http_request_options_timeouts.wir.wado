@@ -569,7 +569,6 @@ fn "http_request_options_timeouts.wado/$cm_binding__RequestOptions_set_connect_t
     let $duration_inner0: i64;
     let $outptr: i32;
     let $result_val: ref null "wasi:http/types.wado//RequestOptionsError";
-    let $local_10: ref "wasi:http/types.wado//RequestOptionsError";
     let $local_12: ref null "core:prelude/string.wado//String";
     let arr_18: ref Array<u8>;
     let i: i32;
@@ -583,27 +582,25 @@ fn "http_request_options_timeouts.wado/$cm_binding__RequestOptions_set_connect_t
     "wasi/wasi:http/RequestOptions::set_connect_timeout"(self, $duration_disc, $duration_inner0, $outptr);
     $result_val = (if local.tee $duration_disc(builtin::load_u8($outptr)) == 0 -> ref null "wasi:http/types.wado//RequestOptionsError" {
         ref.null none;
+    } else if local.tee $duration_disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//RequestOptionsError" {
+        struct.new "wasi:http/types.wado//RequestOptionsError" { 0 };
+    } else if $duration_disc == 1 -> ref "wasi:http/types.wado//RequestOptionsError" {
+        struct.new "wasi:http/types.wado//RequestOptionsError" { 1 };
     } else {
-        local.tee $local_10((if local.tee $duration_disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//RequestOptionsError" {
-            struct.new "wasi:http/types.wado//RequestOptionsError" { 0 };
-        } else if $duration_disc == 1 -> ref "wasi:http/types.wado//RequestOptionsError" {
-            struct.new "wasi:http/types.wado//RequestOptionsError" { 1 };
-        } else {
-            $duration_disc = builtin::load_u8(($outptr + 4) + 4);
-            $local_12 = ref.null none;
-            if $duration_disc != 0 {
-                $local_12 = ref.as_non_null($duration_disc = builtin::load_i32((($outptr + 4) + 4) + 4); arr_18 = builtin::array_new<u8>(local.tee self(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); i = 0; b8: block {
-                    l9: loop {
-                        break_if b8 i >= self;
-                        builtin::array_set_u8(arr_18, i, builtin::load_u8($duration_disc + i));
-                        i = i + 1;
-                        continue l9;
-                    };
-                }; struct.new "core:prelude/string.wado//String" { repr: arr_18, used: self });
-                drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
-            }
-            struct.new "wasi:http/types.wado//RequestOptionsError::Other" { discriminant: 2, payload_0: $local_12 };
-        }));
+        $duration_disc = builtin::load_u8(($outptr + 4) + 4);
+        $local_12 = ref.null none;
+        if $duration_disc != 0 {
+            $local_12 = ref.as_non_null($duration_disc = builtin::load_i32((($outptr + 4) + 4) + 4); arr_18 = builtin::array_new<u8>(local.tee self(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); i = 0; b8: block {
+                l9: loop {
+                    break_if b8 i >= self;
+                    builtin::array_set_u8(arr_18, i, builtin::load_u8($duration_disc + i));
+                    i = i + 1;
+                    continue l9;
+                };
+            }; struct.new "core:prelude/string.wado//String" { repr: arr_18, used: self });
+            drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
+        }
+        struct.new "wasi:http/types.wado//RequestOptionsError::Other" { discriminant: 2, payload_0: $local_12 };
     });
     drop("mem/realloc"($outptr, 20, 4, 0));
     return $result_val;
@@ -614,7 +611,6 @@ fn "http_request_options_timeouts.wado/$cm_binding__RequestOptions_set_first_byt
     let $duration_inner0: i64;
     let $outptr: i32;
     let $result_val: ref null "wasi:http/types.wado//RequestOptionsError";
-    let $local_10: ref "wasi:http/types.wado//RequestOptionsError";
     let $local_12: ref null "core:prelude/string.wado//String";
     let arr_18: ref Array<u8>;
     let i: i32;
@@ -628,27 +624,25 @@ fn "http_request_options_timeouts.wado/$cm_binding__RequestOptions_set_first_byt
     "wasi/wasi:http/RequestOptions::set_first_byte_timeout"(self, $duration_disc, $duration_inner0, $outptr);
     $result_val = (if local.tee $duration_disc(builtin::load_u8($outptr)) == 0 -> ref null "wasi:http/types.wado//RequestOptionsError" {
         ref.null none;
+    } else if local.tee $duration_disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//RequestOptionsError" {
+        struct.new "wasi:http/types.wado//RequestOptionsError" { 0 };
+    } else if $duration_disc == 1 -> ref "wasi:http/types.wado//RequestOptionsError" {
+        struct.new "wasi:http/types.wado//RequestOptionsError" { 1 };
     } else {
-        local.tee $local_10((if local.tee $duration_disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//RequestOptionsError" {
-            struct.new "wasi:http/types.wado//RequestOptionsError" { 0 };
-        } else if $duration_disc == 1 -> ref "wasi:http/types.wado//RequestOptionsError" {
-            struct.new "wasi:http/types.wado//RequestOptionsError" { 1 };
-        } else {
-            $duration_disc = builtin::load_u8(($outptr + 4) + 4);
-            $local_12 = ref.null none;
-            if $duration_disc != 0 {
-                $local_12 = ref.as_non_null($duration_disc = builtin::load_i32((($outptr + 4) + 4) + 4); arr_18 = builtin::array_new<u8>(local.tee self(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); i = 0; b15: block {
-                    l16: loop {
-                        break_if b15 i >= self;
-                        builtin::array_set_u8(arr_18, i, builtin::load_u8($duration_disc + i));
-                        i = i + 1;
-                        continue l16;
-                    };
-                }; struct.new "core:prelude/string.wado//String" { repr: arr_18, used: self });
-                drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
-            }
-            struct.new "wasi:http/types.wado//RequestOptionsError::Other" { discriminant: 2, payload_0: $local_12 };
-        }));
+        $duration_disc = builtin::load_u8(($outptr + 4) + 4);
+        $local_12 = ref.null none;
+        if $duration_disc != 0 {
+            $local_12 = ref.as_non_null($duration_disc = builtin::load_i32((($outptr + 4) + 4) + 4); arr_18 = builtin::array_new<u8>(local.tee self(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); i = 0; b15: block {
+                l16: loop {
+                    break_if b15 i >= self;
+                    builtin::array_set_u8(arr_18, i, builtin::load_u8($duration_disc + i));
+                    i = i + 1;
+                    continue l16;
+                };
+            }; struct.new "core:prelude/string.wado//String" { repr: arr_18, used: self });
+            drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
+        }
+        struct.new "wasi:http/types.wado//RequestOptionsError::Other" { discriminant: 2, payload_0: $local_12 };
     });
     drop("mem/realloc"($outptr, 20, 4, 0));
     return $result_val;
@@ -659,7 +653,6 @@ fn "http_request_options_timeouts.wado/$cm_binding__RequestOptions_set_between_b
     let $duration_inner0: i64;
     let $outptr: i32;
     let $result_val: ref null "wasi:http/types.wado//RequestOptionsError";
-    let $local_10: ref "wasi:http/types.wado//RequestOptionsError";
     let $local_12: ref null "core:prelude/string.wado//String";
     let arr_18: ref Array<u8>;
     let i: i32;
@@ -673,27 +666,25 @@ fn "http_request_options_timeouts.wado/$cm_binding__RequestOptions_set_between_b
     "wasi/wasi:http/RequestOptions::set_between_bytes_timeout"(self, $duration_disc, $duration_inner0, $outptr);
     $result_val = (if local.tee $duration_disc(builtin::load_u8($outptr)) == 0 -> ref null "wasi:http/types.wado//RequestOptionsError" {
         ref.null none;
+    } else if local.tee $duration_disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//RequestOptionsError" {
+        struct.new "wasi:http/types.wado//RequestOptionsError" { 0 };
+    } else if $duration_disc == 1 -> ref "wasi:http/types.wado//RequestOptionsError" {
+        struct.new "wasi:http/types.wado//RequestOptionsError" { 1 };
     } else {
-        local.tee $local_10((if local.tee $duration_disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:http/types.wado//RequestOptionsError" {
-            struct.new "wasi:http/types.wado//RequestOptionsError" { 0 };
-        } else if $duration_disc == 1 -> ref "wasi:http/types.wado//RequestOptionsError" {
-            struct.new "wasi:http/types.wado//RequestOptionsError" { 1 };
-        } else {
-            $duration_disc = builtin::load_u8(($outptr + 4) + 4);
-            $local_12 = ref.null none;
-            if $duration_disc != 0 {
-                $local_12 = ref.as_non_null($duration_disc = builtin::load_i32((($outptr + 4) + 4) + 4); arr_18 = builtin::array_new<u8>(local.tee self(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); i = 0; b22: block {
-                    l23: loop {
-                        break_if b22 i >= self;
-                        builtin::array_set_u8(arr_18, i, builtin::load_u8($duration_disc + i));
-                        i = i + 1;
-                        continue l23;
-                    };
-                }; struct.new "core:prelude/string.wado//String" { repr: arr_18, used: self });
-                drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
-            }
-            struct.new "wasi:http/types.wado//RequestOptionsError::Other" { discriminant: 2, payload_0: $local_12 };
-        }));
+        $duration_disc = builtin::load_u8(($outptr + 4) + 4);
+        $local_12 = ref.null none;
+        if $duration_disc != 0 {
+            $local_12 = ref.as_non_null($duration_disc = builtin::load_i32((($outptr + 4) + 4) + 4); arr_18 = builtin::array_new<u8>(local.tee self(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); i = 0; b22: block {
+                l23: loop {
+                    break_if b22 i >= self;
+                    builtin::array_set_u8(arr_18, i, builtin::load_u8($duration_disc + i));
+                    i = i + 1;
+                    continue l23;
+                };
+            }; struct.new "core:prelude/string.wado//String" { repr: arr_18, used: self });
+            drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
+        }
+        struct.new "wasi:http/types.wado//RequestOptionsError::Other" { discriminant: 2, payload_0: $local_12 };
     });
     drop("mem/realloc"($outptr, 20, 4, 0));
     return $result_val;
@@ -736,12 +727,10 @@ fn "http_request_options_timeouts.wado/$cm_task_entry__handle"(request) {
     let d_9: u64;
     let $local_43: ref "core:prelude/string.wado//String";
     let $local_44: ref "core:prelude/format.wado//Formatter";
-    let $pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $fuse_at_258: i32;
     let tx_269: i32;
     let rx_271: i32;
     let tx_272: i32;
-    let self_274: ref "core:prelude/string.wado//StrUtf8ByteIter";
     opts = "http_request_options_timeouts.wado/$cm_binding__RequestOptions_new"();
     let $match_scrut_0: ref "core:prelude/types.wado//Option<u64>";
     if @unlikely(local.tee $cond_2(local.tee $match_scrut_0("http_request_options_timeouts.wado/$cm_binding__RequestOptions_get_connect_timeout"(opts)).discriminant == 1) == 0) {
@@ -1065,11 +1054,11 @@ condition: result4 matches { Ok(_) }
     tx_269 = builtin::i32_wrap_i64(d_9 >> 32_i64);
     rx_271 = builtin::i32_wrap_i64(local.tee d_9("wasi/stream-new"()));
     tx_272 = builtin::i32_wrap_i64(d_9 >> 32_i64);
-    $fuse_at_258 = local.tee $pattern_temp_2("http_request_options_timeouts.wado/$cm_binding__Response_new"("http_request_options_timeouts.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_271 }, $fuse_at_258)).0;
+    $fuse_at_258 = "http_request_options_timeouts.wado/$cm_binding__Response_new"("http_request_options_timeouts.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_271 }, $fuse_at_258).0;
     rx_271 = 0;
     rx_271 = $fuse_at_258;
     "wasi/task-return:handle"(0, rx_271, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_272, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(local.tee self_274(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_request_options_timeouts.wado::$const_obj_7), used: 2, index: 0 })));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_272, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_request_options_timeouts.wado::$const_obj_7), used: 2, index: 0 }));
     "wasi/stream-drop-writable"(tx_272);
     "http_request_options_timeouts.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_269, global:http_request_options_timeouts.wado::$const_obj_6);
     "wasi/resource-drop:wasi/http/types.wado#request-options"($cond_2);

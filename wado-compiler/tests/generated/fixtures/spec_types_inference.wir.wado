@@ -195,7 +195,6 @@ fn "spec_types_inference.wado/$test_5_calls"() {
     let $v5_seen: bool;
     let $v6: bool;
     let $v6_seen: bool;
-    let $cond: bool;
     let $local_18: ref "core:prelude/string.wado//String";
     let $local_19: ref "core:prelude/format.wado//Formatter";
     let $local_22: ref "core:prelude/string.wado//String";
@@ -223,7 +222,7 @@ fn "spec_types_inference.wado/$test_5_calls"() {
     };
     $v5_seen = 0;
     $v6_seen = 0;
-    if @unlikely(local.tee $cond((if i -> i32 {
+    if @unlikely((if i -> i32 {
         $v5 = struct.new "core:prelude/types.wado//Option<i64>" { 1 };
         $v5_seen = 1;
         $v6 = (if ref.test "core:prelude/types.wado//Option<i64>::Some"($v5) -> bool {
@@ -236,7 +235,7 @@ fn "spec_types_inference.wado/$test_5_calls"() {
         $v6;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         $local_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_18("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
         "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($v2, $local_19);
@@ -405,7 +404,6 @@ fn "spec_types_inference.wado/$cm_export__$test_4_a_newtype_over_a_variant"() {
     let $v6_seen: bool;
     let $v7: bool;
     let $v7_seen: bool;
-    let $cond: bool;
     let $local_19: ref "core:prelude/string.wado//String";
     let $local_20: ref "core:prelude/format.wado//Formatter";
     let $local_21: ref "core:prelude/string.wado//String";
@@ -421,13 +419,13 @@ fn "spec_types_inference.wado/$cm_export__$test_4_a_newtype_over_a_variant"() {
     });
     $v6_seen = 0;
     $v7_seen = 0;
-    if @unlikely(local.tee $cond((if $v4 -> i32 {
+    if @unlikely((if $v4 -> i32 {
         $v7 = $v6 = 1_i64; $v6_seen = 1; 1_i64 == 1_i64;
         $v7_seen = 1;
         $v7;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_19("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
         "core:prelude/traits.wado/spec_types_inference.wado/Opt@144<i64>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i64>>" { value: b_1 }, $local_20);
@@ -1241,11 +1239,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/traits.wado/spec_types_inference.wado/Opt@144<i32>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let base: ref "core:prelude/types.wado//Option<i32>";
     let self_3: ref "core:prelude/string.wado//String";
     let new_used_15: i32;
     let start_16: i32;
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: local.tee base(self.value) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: self.value }, f);
     if @unlikely(local.tee new_used_15(local.tee self_3(f.buf).used + 4) > builtin::array_len(self_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_3, new_used_15);
@@ -1263,11 +1260,10 @@ fn "core:prelude/traits.wado/spec_types_inference.wado/Opt@144<i32>^core:prelude
 }
 
 fn "core:prelude/traits.wado/spec_types_inference.wado/Opt@144<i64>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let base: ref "core:prelude/types.wado//Option<i64>";
     let self_3: ref "core:prelude/string.wado//String";
     let new_used_15: i32;
     let start_16: i32;
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<i64>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i64>>" { value: local.tee base(self.value) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<i64>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i64>>" { value: self.value }, f);
     if @unlikely(local.tee new_used_15(local.tee self_3(f.buf).used + 4) > builtin::array_len(self_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_3, new_used_15);

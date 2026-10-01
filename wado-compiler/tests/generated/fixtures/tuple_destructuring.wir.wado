@@ -600,8 +600,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        let $arg_spill_7: ref "core:prelude/string.wado//String";
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_7($sroa_$f_buf_858), text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_858, text_47.repr, text_47.used);
         if @unlikely(local.tee x_7($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_7);
@@ -714,7 +713,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_7(text_47), $sroa_$f_buf_858.repr, $sroa_$f_buf_858.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(text_47, $sroa_$f_buf_858.repr, $sroa_$f_buf_858.used);
         if @unlikely(local.tee x_161($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_161);
@@ -758,13 +757,13 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(y_164, $sroa_$f_buf_858);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) -> i32 {
-        $sroa_y_repr_868 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_1).payload_0).repr;
-        builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee y_164($local_8_13.used))), 0, $sroa_y_repr_868, 0, y_164);
-        $sroa_x_repr_810 = $array_clone_src_1;
+        $array_clone_src_1 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_1).payload_0).repr;
+        builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee y_164($local_8_13.used))), 0, $array_clone_src_1, 0, y_164);
+        $sroa_x_repr_810 = $array_clone_dst_2;
         $sroa_x_used_811 = y_164;
-        $array_clone_src_1 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_0).payload_0).repr;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_868(builtin::array_new<u8>(local.tee y_164($local_8_13.used))), 0, $array_clone_src_1, 0, y_164);
-        $sroa_y_repr_888 = ref.as_non_null($sroa_y_repr_868);
+        $array_clone_dst_2 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_0).payload_0).repr;
+        builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee y_164($local_8_13.used))), 0, $array_clone_dst_2, 0, y_164);
+        $sroa_y_repr_888 = $array_clone_src_1;
         $sroa_y_used_889 = y_164;
         1;
     } else {
@@ -778,12 +777,12 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         }
         start_40 = $local_8_13.used;
         $local_8_13.used = y_164;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_868($local_8_13.repr), start_40, $sroa_x_repr_810, 0, $sroa_x_used_811);
+        builtin::array_copy<u8>(local.tee $array_clone_src_1($local_8_13.repr), start_40, $sroa_x_repr_810, 0, $sroa_x_used_811);
         $sroa_x_used_811 = start_40 + $sroa_x_used_811;
-        builtin::array_copy<u8>($sroa_y_repr_868, $sroa_x_used_811, global:tuple_destructuring.wado::$const_obj_34, 0, 1);
+        builtin::array_copy<u8>($array_clone_src_1, $sroa_x_used_811, global:tuple_destructuring.wado::$const_obj_34, 0, 1);
         $inline_core_prelude_string_wado_String__internal_push_string_108: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_108 $sroa_y_used_889 == 0;
-            if @unlikely(local.tee $sroa_x_used_811($local_8_13.used + $sroa_y_used_889) > builtin::array_len($sroa_y_repr_868)) {
+            if @unlikely(local.tee $sroa_x_used_811($local_8_13.used + $sroa_y_used_889) > builtin::array_len($array_clone_src_1)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, $sroa_x_used_811);
             }
@@ -823,7 +822,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_7($sroa_$f_buf_858), text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_858, text_47.repr, text_47.used);
         if @unlikely(local.tee x_315($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_315);
@@ -867,13 +866,13 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(y_318, text_47);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) -> i32 {
-        $sroa_y_repr_888 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_0).payload_0).repr;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_868(builtin::array_new<u8>(local.tee y_318($local_8_13.used))), 0, $sroa_y_repr_888, 0, y_318);
-        $sroa_x_repr_822 = ref.as_non_null($sroa_y_repr_868);
+        $array_clone_src_1 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_0).payload_0).repr;
+        builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee y_318($local_8_13.used))), 0, $array_clone_src_1, 0, y_318);
+        $sroa_x_repr_822 = $array_clone_dst_2;
         $sroa_x_used_823 = y_318;
-        $sroa_y_repr_868 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_1).payload_0).repr;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_888(builtin::array_new<u8>(local.tee y_318($local_8_13.used))), 0, $sroa_y_repr_868, 0, y_318);
-        $sroa_y_repr_908 = ref.as_non_null($sroa_y_repr_888);
+        $array_clone_dst_2 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_1).payload_0).repr;
+        builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee y_318($local_8_13.used))), 0, $array_clone_dst_2, 0, y_318);
+        $sroa_y_repr_908 = $array_clone_src_1;
         $sroa_y_used_909 = y_318;
         1;
     } else {
@@ -887,12 +886,12 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         }
         start_40 = $local_8_13.used;
         $local_8_13.used = y_318;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_888($local_8_13.repr), start_40, $sroa_x_repr_822, 0, $sroa_x_used_823);
+        builtin::array_copy<u8>(local.tee $array_clone_src_1($local_8_13.repr), start_40, $sroa_x_repr_822, 0, $sroa_x_used_823);
         $sroa_x_used_823 = start_40 + $sroa_x_used_823;
-        builtin::array_copy<u8>($sroa_y_repr_888, $sroa_x_used_823, global:tuple_destructuring.wado::$const_obj_34, 0, 1);
+        builtin::array_copy<u8>($array_clone_src_1, $sroa_x_used_823, global:tuple_destructuring.wado::$const_obj_34, 0, 1);
         $inline_core_prelude_string_wado_String__internal_push_string_165: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_165 $sroa_y_used_909 == 0;
-            if @unlikely(local.tee $sroa_x_used_823($local_8_13.used + $sroa_y_used_909) > builtin::array_len($sroa_y_repr_888)) {
+            if @unlikely(local.tee $sroa_x_used_823($local_8_13.used + $sroa_y_used_909) > builtin::array_len($array_clone_src_1)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, $sroa_x_used_823);
             }
@@ -932,7 +931,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_7(text_47), $sroa_$f_buf_858.repr, $sroa_$f_buf_858.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(text_47, $sroa_$f_buf_858.repr, $sroa_$f_buf_858.used);
         if @unlikely(local.tee x_469($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_469);
@@ -976,13 +975,13 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(y_472, $sroa_$f_buf_858);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) -> i32 {
-        $sroa_y_repr_908 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_1).payload_0).repr;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_888(builtin::array_new<u8>(local.tee y_472($local_8_13.used))), 0, $sroa_y_repr_908, 0, y_472);
-        $sroa_x_repr_834 = ref.as_non_null($sroa_y_repr_888);
+        $array_clone_src_1 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_1).payload_0).repr;
+        builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee y_472($local_8_13.used))), 0, $array_clone_src_1, 0, y_472);
+        $sroa_x_repr_834 = $array_clone_dst_2;
         $sroa_x_used_835 = y_472;
-        $sroa_y_repr_888 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_0).payload_0).repr;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_908(builtin::array_new<u8>(local.tee y_472($local_8_13.used))), 0, $sroa_y_repr_888, 0, y_472);
-        $sroa_y_repr_928 = ref.as_non_null($sroa_y_repr_908);
+        $array_clone_dst_2 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_0).payload_0).repr;
+        builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee y_472($local_8_13.used))), 0, $array_clone_dst_2, 0, y_472);
+        $sroa_y_repr_928 = $array_clone_src_1;
         $sroa_y_used_929 = y_472;
         1;
     } else {
@@ -996,12 +995,12 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         }
         start_40 = $local_8_13.used;
         $local_8_13.used = y_472;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_908($local_8_13.repr), start_40, $sroa_x_repr_834, 0, $sroa_x_used_835);
+        builtin::array_copy<u8>(local.tee $array_clone_src_1($local_8_13.repr), start_40, $sroa_x_repr_834, 0, $sroa_x_used_835);
         $sroa_x_used_835 = start_40 + $sroa_x_used_835;
-        builtin::array_copy<u8>($sroa_y_repr_908, $sroa_x_used_835, global:tuple_destructuring.wado::$const_obj_34, 0, 1);
+        builtin::array_copy<u8>($array_clone_src_1, $sroa_x_used_835, global:tuple_destructuring.wado::$const_obj_34, 0, 1);
         $inline_core_prelude_string_wado_String__internal_push_string_222: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_222 $sroa_y_used_929 == 0;
-            if @unlikely(local.tee $sroa_x_used_835($local_8_13.used + $sroa_y_used_929) > builtin::array_len($sroa_y_repr_908)) {
+            if @unlikely(local.tee $sroa_x_used_835($local_8_13.used + $sroa_y_used_929) > builtin::array_len($array_clone_src_1)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, $sroa_x_used_835);
             }
@@ -1041,7 +1040,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_7($sroa_$f_buf_858), text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_858, text_47.repr, text_47.used);
         if @unlikely(local.tee x_623($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_623);
@@ -1085,13 +1084,13 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(y_626, text_47);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) -> i32 {
-        $sroa_y_repr_928 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_0).payload_0).repr;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_908(builtin::array_new<u8>(local.tee y_626($local_8_13.used))), 0, $sroa_y_repr_928, 0, y_626);
-        $sroa_x_repr_846 = ref.as_non_null($sroa_y_repr_908);
+        $array_clone_src_1 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_0).payload_0).repr;
+        builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee y_626($local_8_13.used))), 0, $array_clone_src_1, 0, y_626);
+        $sroa_x_repr_846 = $array_clone_dst_2;
         $sroa_x_used_847 = y_626;
-        $sroa_y_repr_908 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_1).payload_0).repr;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_928(builtin::array_new<u8>(local.tee y_626($local_8_13.used))), 0, $sroa_y_repr_908, 0, y_626);
-        $sroa_y_repr_948 = ref.as_non_null($sroa_y_repr_928);
+        $array_clone_dst_2 = local.tee $local_8_13(ref.cast "tuple_destructuring.wado//TupleValue::Text"($load_1).payload_0).repr;
+        builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee y_626($local_8_13.used))), 0, $array_clone_dst_2, 0, y_626);
+        $sroa_y_repr_948 = $array_clone_src_1;
         $sroa_y_used_949 = y_626;
         1;
     } else {
@@ -1105,12 +1104,12 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         }
         start_40 = $local_8_13.used;
         $local_8_13.used = y_626;
-        builtin::array_copy<u8>(local.tee $sroa_y_repr_928($local_8_13.repr), start_40, $sroa_x_repr_846, 0, $sroa_x_used_847);
+        builtin::array_copy<u8>(local.tee $array_clone_src_1($local_8_13.repr), start_40, $sroa_x_repr_846, 0, $sroa_x_used_847);
         $sroa_x_used_847 = start_40 + $sroa_x_used_847;
-        builtin::array_copy<u8>($sroa_y_repr_928, $sroa_x_used_847, global:tuple_destructuring.wado::$const_obj_34, 0, 1);
+        builtin::array_copy<u8>($array_clone_src_1, $sroa_x_used_847, global:tuple_destructuring.wado::$const_obj_34, 0, 1);
         $inline_core_prelude_string_wado_String__internal_push_string_279: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_279 $sroa_y_used_949 == 0;
-            if @unlikely(local.tee $sroa_x_used_847($local_8_13.used + $sroa_y_used_949) > builtin::array_len($sroa_y_repr_928)) {
+            if @unlikely(local.tee $sroa_x_used_847($local_8_13.used + $sroa_y_used_949) > builtin::array_len($array_clone_src_1)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, $sroa_x_used_847);
             }

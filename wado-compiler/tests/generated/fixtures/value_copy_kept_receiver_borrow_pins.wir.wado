@@ -107,9 +107,8 @@ global global:core:prelude/list.wado::$const_obj_13: ref null Array<u8> = array.
 global global:core:prelude/list.wado::$const_obj_14: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "value_copy_kept_receiver_borrow_pins.wado/bound"() {
-    let elements_5: ref Array<i32>;
     let $sroa_b_xs_17: ref "core:prelude//List<i32>";
-    $sroa_b_xs_17 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_5(array.new_fixed<i32>()), used: 0 };
+    $sroa_b_xs_17 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $sroa_b_xs_17 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
     if @unlikely(1 >= builtin::array_len($sroa_b_xs_17.repr)) {
         cold_path;
@@ -122,14 +121,12 @@ fn "value_copy_kept_receiver_borrow_pins.wado/bound"() {
 
 fn "value_copy_kept_receiver_borrow_pins.wado/pushed"() {
     let keep: ref "core:prelude//List<&core:prelude/list.wado/List<i32>>";
-    let elements_5: ref Array<i32>;
-    let elements_6: ref "Array<&core:prelude/list.wado/List<i32>>";
     let $v1: i32;
     let $sroa_a_xs_33: ref "core:prelude//List<i32>";
     let $sroa_b_xs_34: ref "core:prelude//List<i32>";
     $sroa_a_xs_33 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
-    $sroa_b_xs_34 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_5(array.new_fixed<i32>()), used: 0 };
-    keep = struct.new "core:prelude//List<&core:prelude/list.wado/List<i32>>" { repr: local.tee elements_6(array.new_fixed<ref "core:prelude//List<i32>">()), used: 0 };
+    $sroa_b_xs_34 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
+    keep = struct.new "core:prelude//List<&core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(), used: 0 };
     if @unlikely(0 >= builtin::array_len(keep.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<&core:prelude/list.wado/List<i32>>::grow"(keep);
@@ -157,8 +154,6 @@ fn "value_copy_kept_receiver_borrow_pins.wado/run"() with Stdout {
     let new_used_23: i32;
     let start_24: i32;
     let packed: i64;
-    let elements: ref Array<i32>;
-    let $sroa_next_101: ref Array<i32>;
     let $sroa_$f_buf_110: ref "core:prelude/string.wado//String";
     $sroa_$f_buf_110 = local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"("value_copy_kept_receiver_borrow_pins.wado/bound"(), $sroa_$f_buf_110);
@@ -170,8 +165,7 @@ fn "value_copy_kept_receiver_borrow_pins.wado/run"() with Stdout {
     $local_0.used = new_used_23;
     builtin::array_copy<u8>($local_0.repr, start_24, global:value_copy_kept_receiver_borrow_pins.wado::$const_obj_1, 0, 1);
     $sroa_$f_buf_110 = $local_0;
-    elements = array.new_fixed<i32>();
-    builtin::array_set<i32>(local.tee elements(local.tee $sroa_next_101(array.new_fixed<i32>(1))), 0, 7);
+    builtin::array_set<i32>(array.new_fixed<i32>(1), 0, 7);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, $sroa_$f_buf_110);
     if @unlikely(local.tee start_24($local_0.used + 1) > builtin::array_len($local_0.repr)) {
         cold_path;

@@ -85,8 +85,7 @@ global global:core:prelude/format.wado::$const_obj_34: ref null Array<u8> = arra
 fn "string_truncate_panic.wado/$cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
     let $v2: bool;
-    let repr: ref Array<u8>;
-    if @unlikely(local.tee $v2((builtin::array_get_value<u8>(local.tee repr(local.tee s(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 }).repr), 4) & 192) != 128) == 0) {
+    if @unlikely(local.tee $v2((builtin::array_get_value<u8>(local.tee s(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 }).repr, 4) & 192) != 128) == 0) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::truncate$cold0"(s, $v2);
         unreachable;

@@ -296,14 +296,13 @@ fn "http_future_new.wado/$cm_export__handle"(request) {
 
 fn "http_future_new.wado/$cm_task_entry__handle"(request) {
     let $tv_1: i32;
-    let $pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed_183: i64;
     let rx_184: i32;
     let tx_185: i32;
     drop("wasi/future-new"());
     rx_184 = builtin::i32_wrap_i64(local.tee packed_183("wasi/future-new"()));
     tx_185 = builtin::i32_wrap_i64(packed_183 >> 32_i64);
-    rx_184 = local.tee $pattern_temp_2("http_future_new.wado/$cm_binding__Response_new"("http_future_new.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx_184)).0;
+    rx_184 = "http_future_new.wado/$cm_binding__Response_new"("http_future_new.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx_184).0;
     $tv_1 = 0;
     $tv_1 = rx_184;
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);

@@ -3418,8 +3418,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::get_byte_unchecked"(self, index) {
-    let self_2: ref Array<u8>;
-    return builtin::array_get_value<u8>(local.tee self_2(self.repr), self.start + index);
+    return builtin::array_get_value<u8>(self.repr, self.start + index);
 }
 
 fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/LenientFromStr::from_str_lenient<core:prelude/string.wado/String>"($mv$s$repr, $mv$s$used) {
@@ -3778,8 +3777,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:pre
 }
 
 fn "core:prelude/intparse.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/From<core:prelude/intparse.wado/ParseIntError>::from$scalar"(e) {
-    let reason_1: ref "core:prelude/string.wado//String";
-    return struct.new "core:prelude/traits.wado//LenientParseError" { reason: local.tee reason_1((if e == 0 -> ref "core:prelude/string.wado//String" {
+    return struct.new "core:prelude/traits.wado//LenientParseError" { reason: (if e == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty integer string"), used: 20 };
     } else if e == 1 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid digit in integer string"), used: 31 };
@@ -3787,16 +3785,15 @@ fn "core:prelude/intparse.wado/core:prelude/traits.wado/LenientParseError^core:p
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("integer string overflows the target type"), used: 40 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("integer string underflows the target type"), used: 41 };
-    })) };
+    }) };
 }
 
 fn "core:prelude/intparse.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/From<core:prelude/intparse.wado/ParseFloatError>::from$scalar"(e) {
-    let reason_1: ref "core:prelude/string.wado//String";
-    return struct.new "core:prelude/traits.wado//LenientParseError" { reason: local.tee reason_1((if e == 0 -> ref "core:prelude/string.wado//String" {
+    return struct.new "core:prelude/traits.wado//LenientParseError" { reason: (if e == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("empty float string"), used: 18 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid float string"), used: 20 };
-    })) };
+    }) };
 }
 
 fn "core:prelude/primitive.wado/f64::inspect_into$scalar$spec0$scalar"(self, f) {

@@ -1304,7 +1304,6 @@ fn "core:prelude/primitive.wado/write_int_exp"(f, is_negative, abs_value) {
     let buf_20: ref "core:prelude/string.wado//String";
     let other: ref "core:prelude/string.wado//StrSlice";
     let start_65: i32;
-    let repr_112: ref Array<u8>;
     let $sroa_exponent_value_149: i32;
     precision = f.precision;
     $sroa_exponent_value_149 = "core:prelude/primitive.wado/count_digits_u64"(abs_value) - 1;
@@ -1374,7 +1373,7 @@ fn "core:prelude/primitive.wado/write_int_exp"(f, is_negative, abs_value) {
         $load_2.used = drop_7;
         builtin::array_set_u8($load_2.repr, is_negative, 43);
     }
-    drop_7 = multivalue_bind [is_negative, drop_7] = "core:prelude/string.wado/decode_char_at"(local.tee repr_112(buf_20.repr)); struct.new "tuple//[u32, i32]" { 0: is_negative, 1: drop_7 }.0;
+    drop_7 = multivalue_bind [is_negative, drop_7] = "core:prelude/string.wado/decode_char_at"(buf_20.repr); struct.new "tuple//[u32, i32]" { 0: is_negative, 1: drop_7 }.0;
     "core:prelude/string.wado/core:prelude/string.wado/String::push"(f.buf, drop_7);
     if (if precision > 0 -> i32 {
         1;
@@ -1391,7 +1390,7 @@ fn "core:prelude/primitive.wado/write_int_exp"(f, is_negative, abs_value) {
         $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__15: block {
             $load_2 = f.buf;
             break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__15 local.tee is_negative(buf_20.used) <= 1;
-            other = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_112(buf_20.repr), start: 1, end: is_negative };
+            other = struct.new "core:prelude/string.wado//StrSlice" { repr: buf_20.repr, start: 1, end: is_negative };
             $inline_core_prelude_string_wado_String__internal_push_view_22: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_22 local.tee is_negative(is_negative - 1) == 0;
                 if @unlikely(local.tee drop_7($load_2.used + is_negative) > builtin::array_len($load_2.repr)) {
@@ -1627,7 +1626,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_format_equiv.wado/$tmpl$8c07fa04581871ff,[f64,i32,i32,i32,i32,i32,i32,core:prelude/string.wado/String,core:prelude/string.wado/String,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Meters,&core:prelude/string.wado/String,&core:prelude/string.wado/String,bool,char,i32]>"(t) {
     let out_1: ref "core:prelude/string.wado//String";
-    let h_16: ref "core:prelude/traits.wado//TemplateHole<tagged_template_format_equiv.wado/$tmpl$8c07fa04581871ff,tagged_template_format_equiv.wado/Meters>";
     let f_40: ref "core:prelude/format.wado//Formatter";
     let f_46: ref "core:prelude/format.wado//Formatter";
     let val_i64_58: i64;
@@ -3520,7 +3518,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
         f_40 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 1, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf };
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(offset_62, f_40);
     };
-    $mv_arg_3 = local.tee h_16(global:core:prelude/traits.wado::$const_obj_152.12).lit;
+    $mv_arg_3 = global:core:prelude/traits.wado::$const_obj_152.12.lit;
     if @unlikely(local.tee offset_62(out_1.used + 1) > builtin::array_len(out_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1, offset_62);

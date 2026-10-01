@@ -136,7 +136,6 @@ fn "spec_modules_type_attribute.wado/$cm_export__$test_0"() {
     let $v2_seen: bool;
     let $v3: bool;
     let $v3_seen: bool;
-    let $cond: bool;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:spec_modules_type_attribute.wado::$modules_initialized);
         cold_path;
@@ -147,13 +146,13 @@ fn "spec_modules_type_attribute.wado/$cm_export__$test_0"() {
     $v1 = local.tee $v0("wasm:./sub/wasm_import_user.wasm/add_one"(1)) == 2;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely(local.tee $cond((if $v1 -> i32 {
+    if @unlikely((if $v1 -> i32 {
         $v3 = $v2 = "wasm:./sub/wasm_import_user.wasm/twice"(2); $v2_seen = 1; $v2 == 4;
         $v3_seen = 1;
         $v3;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "spec_modules_type_attribute.wado/$test_0$cold0"($v0, $v1, $v2, $v2_seen, $v3, $v3_seen);
         unreachable;

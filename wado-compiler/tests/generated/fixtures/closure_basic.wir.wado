@@ -475,9 +475,8 @@ fn "closure_basic.wado/$test_31_loop_scope_c_style_for"() {
     let get_i: ref struct;
     let $local_18: ref "core:prelude/string.wado//String";
     let $local_19: ref "core:prelude/format.wado//Formatter";
-    let elements: ref Array<fn(i32)->i32>;
     let used: i32;
-    closures = struct.new "core:prelude//List<fn(i32)->i32>" { repr: local.tee elements(array.new_fixed<ref struct>()), used: 0 };
+    closures = struct.new "core:prelude//List<fn(i32)->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     i = 0;
     b5: block {
         l6: loop {
@@ -708,11 +707,10 @@ fn "closure_basic.wado/$test_32_loop_scope_for_of"() {
     let $local_20: ref "core:prelude/string.wado//String";
     let $local_21: ref "core:prelude/format.wado//Formatter";
     let elements_51: ref Array<i32>;
-    let elements_52: ref Array<fn(i32)->i32>;
     let item_58: i32;
     let $sroa_$iter_0_index_122: i32;
     elements_51 = array.new_fixed<i32>(10, 20, 30, 40, 50);
-    closures = struct.new "core:prelude//List<fn(i32)->i32>" { repr: local.tee elements_52(array.new_fixed<ref struct>()), used: 0 };
+    closures = struct.new "core:prelude//List<fn(i32)->i32>" { repr: array.new_fixed<ref struct>(), used: 0 };
     $sroa_$iter_0_index_122 = 0;
     b23: block {
         l24: loop {
@@ -3638,7 +3636,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
     let k: i32;
     let a_11: ref "core:prelude/types.wado//Box<i32>";
     let b_12: ref "core:prelude/types.wado//Box<i32>";
-    let $match_13: "core:prelude/traits.wado//enum:Ordering";
     let b_15: i32;
     let value_28: i32;
     let value_33: i32;
@@ -3666,10 +3663,10 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                                 if j < end {
                                     a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_36, i) };
                                     b_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_36, j) };
-                                    if local.tee $match_13(block -> "core:prelude/traits.wado//enum:Ordering" {
+                                    if block -> "core:prelude/traits.wado//enum:Ordering" {
                                         let $indirect_call_1: ref "canonical//CanonicalClosure_3";
                                         call_ref "functype/$canonical_closure_fn_3"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_3"(cmp)).env, a_11, b_12);
-                                    }) == 2 {
+                                    } == 2 {
                                         builtin::array_set<i32>(buf, k, b_12.value);
                                         j = j + 1;
                                     } else {
@@ -3999,7 +3996,6 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_68"(se
     let i: i32;
     let j: i32;
     let k: i32;
-    let $match_13: "core:prelude/traits.wado//enum:Ordering";
     let b_14: i32;
     let value_30: i32;
     let value_35: i32;
@@ -4029,7 +4025,7 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_68"(se
                                 if j < end {
                                     $sroa_a_value_39 = builtin::array_get_value<i32>($licm_repr_38, i);
                                     $sroa_b_value_40 = builtin::array_get_value<i32>($licm_repr_38, j);
-                                    if local.tee $match_13($inline_closure_basic_wado__Closure_68___call_3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                    if $inline_closure_basic_wado__Closure_68___call_3: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         if $sroa_a_value_39 < $sroa_b_value_40 {
                                             break $inline_closure_basic_wado__Closure_68___call_3: 0;
                                         }
@@ -4037,7 +4033,7 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_68"(se
                                             break $inline_closure_basic_wado__Closure_68___call_3: 2;
                                         }
                                         break $inline_closure_basic_wado__Closure_68___call_3: 1;
-                                    }) == 2 {
+                                    } == 2 {
                                         builtin::array_set<i32>(buf, k, $sroa_b_value_40);
                                         j = j + 1;
                                     } else {
@@ -4080,7 +4076,6 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_69"(se
     let i: i32;
     let j: i32;
     let k: i32;
-    let $match_13: "core:prelude/traits.wado//enum:Ordering";
     let b_14: i32;
     let value_30: i32;
     let value_35: i32;
@@ -4110,7 +4105,7 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_69"(se
                                 if j < end {
                                     $sroa_a_value_39 = builtin::array_get_value<i32>($licm_repr_38, i);
                                     $sroa_b_value_40 = builtin::array_get_value<i32>($licm_repr_38, j);
-                                    if local.tee $match_13($inline_closure_basic_wado__Closure_69___call_3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                    if $inline_closure_basic_wado__Closure_69___call_3: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         if $sroa_a_value_39 > $sroa_b_value_40 {
                                             break $inline_closure_basic_wado__Closure_69___call_3: 0;
                                         }
@@ -4118,7 +4113,7 @@ fn "closure_basic.wado/core:prelude/list.wado/List<i32>::sort_by$$Closure_69"(se
                                             break $inline_closure_basic_wado__Closure_69___call_3: 2;
                                         }
                                         break $inline_closure_basic_wado__Closure_69___call_3: 1;
-                                    }) == 2 {
+                                    } == 2 {
                                         builtin::array_set<i32>(buf, k, $sroa_b_value_40);
                                         j = j + 1;
                                     } else {
@@ -4241,23 +4236,19 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_0"($env, $p0) {
-    let $typed_env: ref "closure_basic.wado//$Closure_50";
-    return "closure_basic.wado/closure_basic.wado/$Closure_50::$call"(local.tee $typed_env(ref.cast "closure_basic.wado//$Closure_50"($env)));
+    return "closure_basic.wado/closure_basic.wado/$Closure_50::$call"(ref.cast "closure_basic.wado//$Closure_50"($env));
 }
 
 fn "closure/closure_basic.wado/$closure_inspect_wrapper_0"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "closure_basic.wado/closure_basic.wado/$Closure_50^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "closure_basic.wado/closure_basic.wado/$Closure_50^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_1"($env, $p0) {
-    let $typed_env: ref "closure_basic.wado//$Closure_51";
-    return "closure_basic.wado/closure_basic.wado/$Closure_51::$call"(local.tee $typed_env(ref.cast "closure_basic.wado//$Closure_51"($env)));
+    return "closure_basic.wado/closure_basic.wado/$Closure_51::$call"(ref.cast "closure_basic.wado//$Closure_51"($env));
 }
 
 fn "closure/closure_basic.wado/$closure_inspect_wrapper_1"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "closure_basic.wado/closure_basic.wado/$Closure_51^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "closure_basic.wado/closure_basic.wado/$Closure_51^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_2"($env, $p0) {
@@ -4269,8 +4260,7 @@ fn "closure/closure_basic.wado/$closure_wrapper_3"($env, $p0) {
 }
 
 fn "closure/closure_basic.wado/$closure_inspect_wrapper_3"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "closure_basic.wado/closure_basic.wado/$Closure_57^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "closure_basic.wado/closure_basic.wado/$Closure_57^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_4"($env, $p0) {
@@ -4278,8 +4268,7 @@ fn "closure/closure_basic.wado/$closure_wrapper_4"($env, $p0) {
 }
 
 fn "closure/closure_basic.wado/$closure_inspect_wrapper_4"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "closure_basic.wado/closure_basic.wado/$Closure_58^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "closure_basic.wado/closure_basic.wado/$Closure_58^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_5"($env, $p0) {
@@ -4287,8 +4276,7 @@ fn "closure/closure_basic.wado/$closure_wrapper_5"($env, $p0) {
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_6"($env, $p0) {
-    let $typed_env: ref "closure_basic.wado//$Closure_61";
-    return "closure_basic.wado/closure_basic.wado/$Closure_61::$call"(local.tee $typed_env(ref.cast "closure_basic.wado//$Closure_61"($env)), $p0);
+    return "closure_basic.wado/closure_basic.wado/$Closure_61::$call"(ref.cast "closure_basic.wado//$Closure_61"($env), $p0);
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_7"($env, $p0) {
@@ -4296,18 +4284,15 @@ fn "closure/closure_basic.wado/$closure_wrapper_7"($env, $p0) {
 }
 
 fn "closure/closure_basic.wado/$closure_inspect_wrapper_7"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "closure_basic.wado/closure_basic.wado/$Closure_66^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "closure_basic.wado/closure_basic.wado/$Closure_66^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_8"($env, $p0) {
-    let $typed_env: ref "closure_basic.wado//$Closure_67";
-    return "closure_basic.wado/closure_basic.wado/$Closure_67::$call"(local.tee $typed_env(ref.cast "closure_basic.wado//$Closure_67"($env)), $p0);
+    return "closure_basic.wado/closure_basic.wado/$Closure_67::$call"(ref.cast "closure_basic.wado//$Closure_67"($env), $p0);
 }
 
 fn "closure/closure_basic.wado/$closure_inspect_wrapper_8"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "closure_basic.wado/closure_basic.wado/$Closure_67^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "closure_basic.wado/closure_basic.wado/$Closure_67^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 fn "closure/closure_basic.wado/$closure_wrapper_9"($env, $p0, $p1) {

@@ -697,7 +697,6 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
     let self_45: ref "core:prelude/string.wado//String";
     let new_used: i32;
     let start_48: i32;
-    let elements_67: ref "Array<core:prelude/string.wado/String>";
     let v_75: ref "core:prelude/string.wado//String";
     let v_76: ref "core:prelude/string.wado//String";
     let value_82: ref "core:prelude/string.wado//String";
@@ -717,7 +716,6 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
     let b_126: ref Array<u8>;
     let len_129: i32;
     let i_130: i32;
-    let repr_132: ref Array<u8>;
     let self_135: ref "core:prelude/string.wado//StrSlice";
     let repr_136: ref Array<u8>;
     let len_138: i32;
@@ -791,7 +789,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
         pairs.used = have_current + 1;
     }
     current_value = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    slaves = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_67(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 };
+    slaves = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     current_name = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     self_45 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     name = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
@@ -875,7 +873,7 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text$spec0"(text) {
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec1_6: 1;
             } {
-                self_135 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_132(v_76.repr), start: 0, end: v_76.used };
+                self_135 = struct.new "core:prelude/string.wado//StrSlice" { repr: v_76.repr, start: 0, end: v_76.used };
                 repr_136 = local.tee self_87("core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"(let $mv_repr_10: ref Array<u8>; let $mv_start_11: i32; let $mv_end_12: i32; multivalue_bind [$mv_repr_10, $mv_start_11, $mv_end_12] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_135); struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_repr_10, start: $mv_start_11, end: $mv_end_12 })).repr;
                 $load_35 = self_87.start;
                 builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee len_138(self_87.end - $load_35))), 0, repr_136, $load_35, len_138);

@@ -404,7 +404,6 @@ fn "cm_newtype_resource_shared_binding.wado/$cm_task_entry__handle"(request) {
     let has_marker: bool;
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $fuse_at_182: i32;
     let packed: i64;
     headers = "cm_newtype_resource_shared_binding.wado/$cm_binding__Fields_new"();
@@ -433,7 +432,7 @@ condition: !has_marker
     }
     has_marker = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     $fuse_at_182 = builtin::i32_wrap_i64(packed >> 32_i64);
-    has_marker = local.tee $pattern_temp_1("cm_newtype_resource_shared_binding.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, has_marker)).0;
+    has_marker = "cm_newtype_resource_shared_binding.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, has_marker).0;
     headers = 0;
     headers = has_marker;
     "wasi/task-return:handle"(0, headers, 0, 0_i64, 0, 0, 0, 0);

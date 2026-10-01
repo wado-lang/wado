@@ -213,7 +213,6 @@ fn "variadic_nested_unroll_pack_element.wado/$test_0_a_nested_walk_over_the_same
     let $load_0: i32;
     let $load_19: i32;
     let copies: ref "core:prelude//List<variadic_nested_unroll_pack_element.wado/Mixed>";
-    let $cond_6: bool;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let $local_9: ref "core:prelude/string.wado//String";
@@ -267,7 +266,7 @@ condition: copies.len() == 3
             break_if b1 $fuse_at_12 >= $load_0;
             v_25 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: local.tee $av_54(local.tee v_25(builtin::array_get_value<ref "variadic_nested_unroll_pack_element.wado//Mixed">($sroa_$iter_1_repr_51, $fuse_at_12)).count), label: ref.as_non_null($local_7 = v_25.label; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = $local_7.repr; $load_19 = $local_7.used; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($load_19)), 0, $array_clone_src_4, 0, $load_19); $array_clone_dst_5), used: $load_19 }), on: v_25.on };
             $fuse_at_12 = $fuse_at_12 + 1;
-            if @unlikely(local.tee $cond_6(select i32((if $av_54 == 7 -> i32 {
+            if @unlikely(select i32((if $av_54 == 7 -> i32 {
                 $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: block -> bool {
                     a = local.tee $mv_arg_3(v_25.label).repr;
                     a_end = $mv_arg_3.used;
@@ -290,7 +289,7 @@ condition: copies.len() == 3
                 };
             } else {
                 0;
-            }), v_25.on == 1, 0)) == 0) {
+            }), v_25.on == 1, 0) == 0) {
                 cold_path;
                 $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(132)), 126);
                 "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);

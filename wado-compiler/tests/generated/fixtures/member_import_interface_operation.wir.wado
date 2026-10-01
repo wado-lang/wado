@@ -213,7 +213,6 @@ fn "member_import_interface_operation.wado/greet"() with Greeting {
 
 fn "member_import_interface_operation.wado/run"() with Stdout, Greeting {
     let $save_Greeting: ref null "member_import_interface_operation.wado//$Dispatch_Greeting";
-    let $d_Greeting: ref "member_import_interface_operation.wado//$Dispatch_Greeting";
     let message_8: ref "core:prelude/string.wado//String";
     let packed_13: i64;
     let rx_14: i32;
@@ -230,7 +229,7 @@ fn "member_import_interface_operation.wado/run"() with Stdout, Greeting {
     rx_14 = "member_import_interface_operation.wado/$cm_binding__Stdout_write_via_stream"(rx_14);
     "core:rt/write_string_to_stream"(tx_15, message_8.repr, message_8.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_14);
-    global:member_import_interface_operation.wado::$effect_Greeting = local.tee $d_Greeting(struct.new "member_import_interface_operation.wado//$Dispatch_Greeting" { outer: local.tee $save_Greeting(global:member_import_interface_operation.wado::$effect_Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "member_import_interface_operation.wado//$Closure_0" {  }, func: ref.func "closure/member_import_interface_operation.wado/$closure_wrapper_0" }, op_bye: struct.new "canonical//CanonicalClosure_1" { env: struct.new "member_import_interface_operation.wado//$Closure_1" {  }, func: ref.func "closure/member_import_interface_operation.wado/$closure_wrapper_1" } });
+    global:member_import_interface_operation.wado::$effect_Greeting = struct.new "member_import_interface_operation.wado//$Dispatch_Greeting" { outer: local.tee $save_Greeting(global:member_import_interface_operation.wado::$effect_Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "member_import_interface_operation.wado//$Closure_0" {  }, func: ref.func "closure/member_import_interface_operation.wado/$closure_wrapper_0" }, op_bye: struct.new "canonical//CanonicalClosure_1" { env: struct.new "member_import_interface_operation.wado//$Closure_1" {  }, func: ref.func "closure/member_import_interface_operation.wado/$closure_wrapper_1" } };
     message_8 = "member_import_interface_operation.wado/greet"();
     rx_14 = builtin::i32_wrap_i64(local.tee packed_13("wasi/stream-new"()));
     tx_15 = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -288,7 +287,6 @@ fn "member_import_interface_operation.wado/$cm_future_read_core:prelude/types.wa
     let ptr: i32;
     let status_2: i32;
     let result: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
-    let $result_val: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
     let ws: i32;
     let evt_ptr: i32;
     let status_13: i32;
@@ -306,7 +304,7 @@ fn "member_import_interface_operation.wado/$cm_future_read_core:prelude/types.wa
     }
     result = ref.null none;
     if (status_2 & 15) == 0 {
-        result = local.tee $result_val((if local.tee status_2(builtin::load_u8(ptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
+        result = (if local.tee status_2(builtin::load_u8(ptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
             struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
         } else {
             status_2 = (if local.tee status_2(builtin::load_u8(ptr + 1)) == 0 -> "wasi:cli/types.wado//enum:ErrorCode" {
@@ -317,7 +315,7 @@ fn "member_import_interface_operation.wado/$cm_future_read_core:prelude/types.wa
                 2;
             });
             struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: status_2 };
-        }));
+        });
     }
     drop("mem/realloc"(ptr, 2, 1, 0));
     return result;

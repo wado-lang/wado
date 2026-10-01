@@ -219,13 +219,12 @@ fn "opt_slot_temp_sroa_struct_block.wado/use_call"(p) {
 }
 
 fn "opt_slot_temp_sroa_struct_block.wado/use_half"(p) {
-    let x: ref "opt_slot_temp_sroa_struct_block.wado//Half";
-    return local.tee x($inline_pick_half_0: block -> ref "opt_slot_temp_sroa_struct_block.wado//Half" {
+    return $inline_pick_half_0: block -> ref "opt_slot_temp_sroa_struct_block.wado//Half" {
         if (p >= 0) & (p < 8) {
             break $inline_pick_half_0: struct.new "opt_slot_temp_sroa_struct_block.wado//Half" { kept: builtin::i64_extend_i32_s(p), dropped: 7_i64 };
         }
         break $inline_pick_half_0: struct.new "opt_slot_temp_sroa_struct_block.wado//Half" { kept: builtin::i64_extend_i32_s(p) * 3_i64, dropped: 5_i64 };
-    }).kept;
+    }.kept;
 }
 
 fn "opt_slot_temp_sroa_struct_block.wado/wide_boxed"(p) {

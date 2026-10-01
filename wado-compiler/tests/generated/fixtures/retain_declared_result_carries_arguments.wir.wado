@@ -173,13 +173,12 @@ condition: got matches { Some(r) && r.v == 1 }
 }
 
 fn "retain_declared_result_carries_arguments.wado/$cm_export__$test_1_a_borrow_returned_through_black_box"() {
-    let x: ref "retain_declared_result_carries_arguments.wado//S";
     let got: ref null "retain_declared_result_carries_arguments.wado//S";
     let $cond_4: bool;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
-    if @unlikely(local.tee $cond_4((if ref.is_null(local.tee got(black_box(local.tee x(struct.new "retain_declared_result_carries_arguments.wado//S" { v: 1 })))) == 0 -> bool {
-        local.tee x(ref.as_non_null(got)).v == 1;
+    if @unlikely(local.tee $cond_4((if ref.is_null(local.tee got(black_box(struct.new "retain_declared_result_carries_arguments.wado//S" { v: 1 }))) == 0 -> bool {
+        ref.as_non_null(got).v == 1;
     } else {
         0;
     })) == 0) {

@@ -322,7 +322,6 @@ fn "spec_literals_null_value.wado/$test_0"() {
         };
     }; map) })) -> bool {
         map = ref.cast "spec_literals_null_value.wado//Value::Object"(value_14).payload_0;
-        let $match_scrut_2: ref "spec_literals_null_value.wado//Value";
         value_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nickname"), used: 8 };
         if @unlikely(local.tee end(block -> i32 {
             "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>::find_index"(map, value_8.repr, 8);
@@ -331,11 +330,11 @@ fn "spec_literals_null_value.wado/$test_0"() {
             "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>^core:prelude/traits.wado/IndexValue<K>::index_value$cold0"(value_8);
             unreachable;
         }
-        local.tee $match_scrut_2($v1 = local.tee $load_3(map.entries).used; if @unlikely(end >= $v1) {
+        $v1 = local.tee $load_3(map.entries).used; if @unlikely(end >= $v1) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(end, $v1);
             unreachable;
-        }; builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>">($load_3.repr, end).value).discriminant == 0;
+        }; builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>">($load_3.repr, end).value.discriminant == 0;
     } else {
         0;
     })) == 0) {
@@ -2281,7 +2280,6 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,sp
     let current: ref "core:prelude/types.wado//Option<i32>";
     let n_idx: i32;
     let n: ref "core:collections//TreeMapNode<core:prelude/string.wado/String>";
-    let entry: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>";
     let $local_6: "core:prelude/traits.wado//enum:Ordering";
     let $licm_nodes_21: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
     let $licm_entries_24: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>>";
@@ -2365,7 +2363,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,sp
                         "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>>^core:prelude/traits.wado/IndexRef<i32>::index_ref$cold0"($load_10, $licm_used_27);
                         unreachable;
                     }
-                    if local.tee entry(builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>">($licm_repr_28, $load_10)).deleted {
+                    if builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,spec_literals_null_value.wado/Value>">($licm_repr_28, $load_10).deleted {
                         return -1;
                     }
                     return $load_10;

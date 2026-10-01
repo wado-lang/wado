@@ -153,14 +153,13 @@ fn "deref_assign_list_writeback.wado/$test_2_deref_assign_of_a_list_with_a_refer
     let $v1_3: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
-    let elements_26: ref "Array<core:prelude/string.wado/String>";
     let a_38: ref Array<u8>;
     let a_end_40: i32;
     let b_41: ref Array<u8>;
     let i_45: i32;
     let $sroa_xs_repr_66: ref "Array<core:prelude/string.wado/String>";
     $sroa_xs_repr_66 = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 });
-    $v1_3 = builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $sroa_xs_repr_66(local.tee elements_26(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }))), 0);
+    $v1_3 = builtin::array_get_value<ref "core:prelude/string.wado//String">(local.tee $sroa_xs_repr_66(array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 })), 0);
     if @unlikely(local.tee i_45($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
         a_38 = $v1_3.repr;
         a_end_40 = $v1_3.used;
@@ -266,9 +265,8 @@ fn "deref_assign_list_writeback.wado/$cm_export__$test_1_deref_assign_of_a_list_
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_16: i32;
     let $sroa_xs_repr_45: ref Array<i32>;
-    let $sroa_v_repr_47: ref Array<i32>;
     $sroa_xs_repr_45 = array.new_fixed<i32>(1, 2, 3);
-    if @unlikely(local.tee $v1_3(builtin::array_get_value<i32>(local.tee $sroa_xs_repr_45(local.tee $sroa_v_repr_47(array.new_fixed<i32>(9, 9))), 0)) != 9) {
+    if @unlikely(local.tee $v1_3(builtin::array_get_value<i32>(local.tee $sroa_xs_repr_45(array.new_fixed<i32>(9, 9)), 0)) != 9) {
         cold_path;
         $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(141)), 105);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);

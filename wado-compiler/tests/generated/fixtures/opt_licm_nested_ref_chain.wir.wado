@@ -99,13 +99,11 @@ fn "opt_licm_nested_ref_chain.wado/drain"(cur) {
 }
 
 fn "opt_licm_nested_ref_chain.wado/run"() with Stdout {
-    let data: ref "opt_licm_nested_ref_chain.wado//Inner";
-    let cur: ref "opt_licm_nested_ref_chain.wado//Cursor";
     let result: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let packed: i64;
     let tx_18: i32;
-    result = "opt_licm_nested_ref_chain.wado/drain"(local.tee cur(struct.new "opt_licm_nested_ref_chain.wado//Cursor" { inner: local.tee data(struct.new "opt_licm_nested_ref_chain.wado//Inner" { limit: 5, pos: 0, acc: 0 }), started: 0 }));
+    result = "opt_licm_nested_ref_chain.wado/drain"(struct.new "opt_licm_nested_ref_chain.wado//Cursor" { inner: struct.new "opt_licm_nested_ref_chain.wado//Inner" { limit: 5, pos: 0, acc: 0 }, started: 0 });
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(result, $local_3);
     result = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

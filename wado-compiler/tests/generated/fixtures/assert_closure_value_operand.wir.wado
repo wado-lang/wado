@@ -143,8 +143,7 @@ fn "assert_closure_value_operand.wado/$cm_export__run"() {
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
-    let $functor_9: ref "assert_closure_value_operand.wado//$Closure_0";
-    pred = struct.new "canonical//CanonicalClosure_1" { env: local.tee $functor_9(struct.new "assert_closure_value_operand.wado//$Closure_0" {  }), inspect: ref.func "closure/assert_closure_value_operand.wado/$closure_inspect_wrapper_0", func: ref.func "closure/assert_closure_value_operand.wado/$closure_wrapper_0" };
+    pred = struct.new "canonical//CanonicalClosure_1" { env: struct.new "assert_closure_value_operand.wado//$Closure_0" {  }, inspect: ref.func "closure/assert_closure_value_operand.wado/$closure_inspect_wrapper_0", func: ref.func "closure/assert_closure_value_operand.wado/$closure_wrapper_0" };
     if @unlikely(local.tee $v1(block -> bool {
         let $indirect_call_1: ref "canonical//CanonicalClosure_1";
         call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(pred)).env, 2);
@@ -985,8 +984,7 @@ fn "closure/assert_closure_value_operand.wado/$closure_wrapper_0"($env, $p0) {
 }
 
 fn "closure/assert_closure_value_operand.wado/$closure_inspect_wrapper_0"($env, $formatter) {
-    let $typed_formatter: ref "core:prelude/format.wado//Formatter";
-    "assert_closure_value_operand.wado/assert_closure_value_operand.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect"(local.tee $typed_formatter(ref.cast "core:prelude/format.wado//Formatter"($formatter)));
+    "assert_closure_value_operand.wado/assert_closure_value_operand.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 export fn "assert_closure_value_operand.wado/$cm_export__run" as "run"

@@ -2456,7 +2456,6 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<f16>"(repr
     let mantissa: u32;
     let magic: f32;
     let shifted: f32;
-    let bits_93: u32;
     if f.alternate {
         "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<f16>"(repr, end, f, limit);
         return;
@@ -2498,7 +2497,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<f16>"(repr
                     }
                     magic = builtin::f32_reinterpret_i32(947912704);
                     shifted = builtin::f32_reinterpret_i32(947912704 | (mantissa << 13));
-                    break $inline_f32_core_prelude_traits_wado_From_f16___from_1: builtin::f32_reinterpret_i32(local.tee bits_93(sign | builtin::i32_reinterpret_f32(shifted - magic)));
+                    break $inline_f32_core_prelude_traits_wado_From_f16___from_1: builtin::f32_reinterpret_i32(sign | builtin::i32_reinterpret_f32(shifted - magic));
                 } else if exp == 31 {
                     break $inline_f32_core_prelude_traits_wado_From_f16___from_1: builtin::f32_reinterpret_i32((sign | 2139095040) | (mantissa << 13));
                 } else {
@@ -3518,7 +3517,6 @@ fn "half_compare.wado/core:prelude/list.wado/List<f16>::sort_by$$Closure_0"(self
     let i: i32;
     let j: i32;
     let k: i32;
-    let $match_13: "core:prelude/traits.wado//enum:Ordering";
     let b_14: i32;
     let value_32: u16;
     let value_37: u16;
@@ -3556,7 +3554,7 @@ fn "half_compare.wado/core:prelude/list.wado/List<f16>::sort_by$$Closure_0"(self
                                     $sroa_b_value_51 = builtin::array_get_value<u16>($licm_repr_40, j);
                                     $sroa_self_value_52 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($sroa_a_value_50);
                                     other_42 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($sroa_b_value_51);
-                                    if local.tee $match_13($inline_f32_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                    if $inline_f32_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
                                         $sroa_self_value_8 = $inline_f32_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_total_order_key_32_2: block -> u32 {
                                             if (local.tee bits_46(builtin::i32_reinterpret_f32($sroa_self_value_52)) & -2147483648) != 0 {
                                                 break $inline_f32_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_total_order_key_32_2: bits_46 ^ -1;
@@ -3576,7 +3574,7 @@ fn "half_compare.wado/core:prelude/list.wado/List<f16>::sort_by$$Closure_0"(self
                                             break $inline_f32_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: 2;
                                         }
                                         break $inline_f32_core_prelude_traits_wado_Ord__cmp_scalar_0__$inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
-                                    }) == 2 {
+                                    } == 2 {
                                         builtin::array_set<u16>(buf, k, $sroa_b_value_51);
                                         j = j + 1;
                                     } else {

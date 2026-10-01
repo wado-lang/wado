@@ -789,12 +789,11 @@ condition: `${WRAPS_THEN_WIDENS} ${NARROWS_THEN_ADDS} ${UNSIGNED_WRAPS}` == \"-2
 
 fn "global_variable.wado/$test_11_a_genuinely_nullable_global_keeps_its_none"() {
     let $v0_0: i32;
-    let c_13: ref "global_variable.wado//Counter";
     let $local_1_14: ref null "global_variable.wado//Counter";
     global:global_variable.wado::current_counter = ref.null none;
     if @unlikely(local.tee $v0_0($inline_read_counter_0: block -> i32 {
         if ref.is_null(local.tee $local_1_14(global:global_variable.wado::current_counter)) == 0 {
-            break $inline_read_counter_0: local.tee c_13(ref.as_non_null($local_1_14)).value;
+            break $inline_read_counter_0: ref.as_non_null($local_1_14).value;
         } else {
         }
         break $inline_read_counter_0: -1;
@@ -803,10 +802,10 @@ fn "global_variable.wado/$test_11_a_genuinely_nullable_global_keeps_its_none"() 
         "global_variable.wado/$test_11_a_genuinely_nullable_global_keeps_its_none$cold2"($v0_0);
         unreachable;
     }
-    global:global_variable.wado::current_counter = local.tee c_13(struct.new "global_variable.wado//Counter" { value: 7 });
+    global:global_variable.wado::current_counter = struct.new "global_variable.wado//Counter" { value: 7 };
     if @unlikely(local.tee $v0_0($inline_read_counter_1: block -> i32 {
         if ref.is_null(local.tee $local_1_14(global:global_variable.wado::current_counter)) == 0 {
-            break $inline_read_counter_1: local.tee c_13(ref.as_non_null($local_1_14)).value;
+            break $inline_read_counter_1: ref.as_non_null($local_1_14).value;
         } else {
         }
         break $inline_read_counter_1: -1;
@@ -818,7 +817,7 @@ fn "global_variable.wado/$test_11_a_genuinely_nullable_global_keeps_its_none"() 
     global:global_variable.wado::current_counter = ref.null none;
     if @unlikely(local.tee $v0_0($inline_read_counter_2: block -> i32 {
         if ref.is_null(local.tee $local_1_14(global:global_variable.wado::current_counter)) == 0 {
-            break $inline_read_counter_2: local.tee c_13(ref.as_non_null($local_1_14)).value;
+            break $inline_read_counter_2: ref.as_non_null($local_1_14).value;
         } else {
         }
         break $inline_read_counter_2: -1;
@@ -830,49 +829,44 @@ fn "global_variable.wado/$test_11_a_genuinely_nullable_global_keeps_its_none"() 
 }
 
 fn "global_variable.wado/$test_12_an_option_global_declared_null_keeps_its_none__whatever_it_wraps"() {
-    let $cond_0: bool;
-    let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
-    if @unlikely(local.tee $cond_0(local.tee $match_scrut_0(global:global_variable.wado::SCALAR_NONE).discriminant == 1) == 0) {
+    if @unlikely((global:global_variable.wado::SCALAR_NONE.discriminant == 1) == 0) {
         cold_path;
         "global_variable.wado/$test_12_an_option_global_declared_null_keeps_its_none__whatever_it_wraps$cold7"();
         unreachable;
     }
     let $match_scrut_1: ref "core:prelude/types.wado//Option<bool>";
-    if @unlikely(local.tee $cond_0(local.tee $match_scrut_1(global:global_variable.wado::SCALAR_NONE_MUT).discriminant == 1) == 0) {
+    if @unlikely((local.tee $match_scrut_1(global:global_variable.wado::SCALAR_NONE_MUT).discriminant == 1) == 0) {
         cold_path;
         "global_variable.wado/$test_12_an_option_global_declared_null_keeps_its_none__whatever_it_wraps$cold6"();
         unreachable;
     }
-    let $match_scrut_2: ref null "global_variable.wado//Shape";
-    if @unlikely(local.tee $cond_0(ref.is_null(local.tee $match_scrut_2(global:global_variable.wado::VARIANT_NONE))) == 0) {
+    if @unlikely(ref.is_null(global:global_variable.wado::VARIANT_NONE) == 0) {
         cold_path;
         "global_variable.wado/$test_12_an_option_global_declared_null_keeps_its_none__whatever_it_wraps$cold5"();
         unreachable;
     }
-    let $match_scrut_3: ref null "global_variable.wado//GPoint";
-    if @unlikely(local.tee $cond_0(ref.is_null(local.tee $match_scrut_3(global:global_variable.wado::STRUCT_NONE))) == 0) {
+    if @unlikely(ref.is_null(global:global_variable.wado::STRUCT_NONE) == 0) {
         cold_path;
         "global_variable.wado/$test_12_an_option_global_declared_null_keeps_its_none__whatever_it_wraps$cold4"();
         unreachable;
     }
-    let $match_scrut_4: ref null "core:prelude/string.wado//String";
-    if @unlikely(local.tee $cond_0(ref.is_null(local.tee $match_scrut_4(global:global_variable.wado::STRING_NONE))) == 0) {
+    if @unlikely(ref.is_null(global:global_variable.wado::STRING_NONE) == 0) {
         cold_path;
         "global_variable.wado/$test_12_an_option_global_declared_null_keeps_its_none__whatever_it_wraps$cold3"();
         unreachable;
     }
     global:global_variable.wado::SCALAR_NONE_MUT = struct.new "core:prelude/types.wado//Option<bool>::Some" { discriminant: 0, payload_0: 1 };
-    if @unlikely(local.tee $cond_0((if ref.test "core:prelude/types.wado//Option<bool>::Some"(local.tee $match_scrut_1(global:global_variable.wado::SCALAR_NONE_MUT)) -> i32 {
+    if @unlikely((if ref.test "core:prelude/types.wado//Option<bool>::Some"(local.tee $match_scrut_1(global:global_variable.wado::SCALAR_NONE_MUT)) -> i32 {
         ref.cast "core:prelude/types.wado//Option<bool>::Some"($match_scrut_1).payload_0 == 1;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "global_variable.wado/$test_12_an_option_global_declared_null_keeps_its_none__whatever_it_wraps$cold1"();
         unreachable;
     }
     global:global_variable.wado::SCALAR_NONE_MUT = struct.new "core:prelude/types.wado//Option<bool>" { 1 };
-    if @unlikely(local.tee $cond_0(local.tee $match_scrut_1(global:global_variable.wado::SCALAR_NONE_MUT).discriminant == 1) == 0) {
+    if @unlikely((local.tee $match_scrut_1(global:global_variable.wado::SCALAR_NONE_MUT).discriminant == 1) == 0) {
         cold_path;
         "global_variable.wado/$test_12_an_option_global_declared_null_keeps_its_none__whatever_it_wraps$cold0"();
         unreachable;
@@ -893,7 +887,6 @@ fn "global_variable.wado/$cm_export__$test_0_literal_initializers"() {
 }
 
 fn "global_variable.wado/$cm_export__$test_1_a_mutable_global_is_written_and_read_back"() {
-    let $cond_0: bool;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_variable.wado::$modules_initialized);
         cold_path;
@@ -903,26 +896,26 @@ fn "global_variable.wado/$cm_export__$test_1_a_mutable_global_is_written_and_rea
         global:global_variable.wado::$modules_initialized = 1;
     };
     global:global_variable.wado::CURRENT = 120;
-    if @unlikely(local.tee $cond_0(global:global_variable.wado::CURRENT == 120) == 0) {
+    if @unlikely((global:global_variable.wado::CURRENT == 120) == 0) {
         cold_path;
         "global_variable.wado/$test_1_a_mutable_global_is_written_and_read_back$cold3"();
         unreachable;
     }
     global:global_variable.wado::CURRENT = 90;
-    if @unlikely(local.tee $cond_0(global:global_variable.wado::CURRENT == 90) == 0) {
+    if @unlikely((global:global_variable.wado::CURRENT == 90) == 0) {
         cold_path;
         "global_variable.wado/$test_1_a_mutable_global_is_written_and_read_back$cold2"();
         unreachable;
     }
     global:global_variable.wado::counter = 0;
     global:global_variable.wado::counter = global:global_variable.wado::counter + 1;
-    if @unlikely(local.tee $cond_0(global:global_variable.wado::counter == 1) == 0) {
+    if @unlikely((global:global_variable.wado::counter == 1) == 0) {
         cold_path;
         "global_variable.wado/$test_1_a_mutable_global_is_written_and_read_back$cold1"();
         unreachable;
     }
     global:global_variable.wado::counter = global:global_variable.wado::counter + 10;
-    if @unlikely(local.tee $cond_0(global:global_variable.wado::counter == 11) == 0) {
+    if @unlikely((global:global_variable.wado::counter == 11) == 0) {
         cold_path;
         "global_variable.wado/$test_1_a_mutable_global_is_written_and_read_back$cold0"();
         unreachable;
@@ -1086,7 +1079,6 @@ fn "global_variable.wado/$cm_export__$test_9_an_enum_global_holds_its_discrimina
 }
 
 fn "global_variable.wado/$cm_export__$test_10_a_unit_global_gets_no_slot_but_still_runs_its_initializer"() {
-    let $cond_0: bool;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_variable.wado::$modules_initialized);
         cold_path;
@@ -1095,13 +1087,13 @@ fn "global_variable.wado/$cm_export__$test_10_a_unit_global_gets_no_slot_but_sti
         "global_variable.wado/$initialize_module"();
         global:global_variable.wado::$modules_initialized = 1;
     };
-    if @unlikely(local.tee $cond_0(global:global_variable.wado::INIT_MARKS == 1) == 0) {
+    if @unlikely((global:global_variable.wado::INIT_MARKS == 1) == 0) {
         cold_path;
         "global_variable.wado/$test_10_a_unit_global_gets_no_slot_but_still_runs_its_initializer$cold2"();
         unreachable;
     }
     global:global_variable.wado::INIT_MARKS = global:global_variable.wado::INIT_MARKS + 1;
-    if @unlikely(local.tee $cond_0(global:global_variable.wado::INIT_MARKS == 2) == 0) {
+    if @unlikely((global:global_variable.wado::INIT_MARKS == 2) == 0) {
         cold_path;
         "global_variable.wado/$test_10_a_unit_global_gets_no_slot_but_still_runs_its_initializer$cold1"();
         unreachable;

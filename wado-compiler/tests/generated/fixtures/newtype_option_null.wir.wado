@@ -214,7 +214,6 @@ fn "newtype_option_null.wado/$test_4_a_field_default__a_method_argument__and_an_
     let $v3_seen: bool;
     let $v4: bool;
     let $v4_seen: bool;
-    let $cond_14: bool;
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_18: ref "core:prelude/format.wado//Formatter";
     let $local_27: ref "core:prelude/string.wado//String";
@@ -310,7 +309,7 @@ condition: s.value == null
     });
     $v3_seen = 0;
     $v4_seen = 0;
-    if @unlikely(local.tee $cond_14((if $cond_2 -> i32 {
+    if @unlikely((if $cond_2 -> i32 {
         $v4 = $v3 = builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">(elements, 1); $v3_seen = 1; (if ref.test "core:prelude/types.wado//Option<i32>::Some"($v3) -> bool {
             drop(ref.cast "core:prelude/types.wado//Option<i32>::Some"($v3).payload_0);
             0;
@@ -321,7 +320,7 @@ condition: s.value == null
         $v4;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         $local_17 = (if $v3_seen -> ref "core:prelude/string.wado//String" {
             $local_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_17("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(16)));
@@ -677,7 +676,6 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<newtype_op
     let self_7: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
-    let base: ref "core:prelude/types.wado//Option<i32>";
     let self_29: ref "core:prelude/string.wado//String";
     let new_used_41: i32;
     let start_42: i32;
@@ -715,7 +713,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<newtype_op
                 self_7.used = new_used_21;
                 builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_36, 0, 2);
             }
-            "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: local.tee base(builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">(repr, i)) }, f);
+            "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">(repr, i) }, f);
             if @unlikely(local.tee new_used_41(local.tee self_29(f.buf).used + 4) > builtin::array_len(self_29.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_29, new_used_41);
@@ -770,7 +768,6 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<newtyp
     let start_20: i32;
     let new_used_56: i32;
     let start_57: i32;
-    let base: ref "core:prelude/types.wado//Option<i32>";
     let $licm_arith_172: bool;
     let new_used_182: i32;
     let start_183: i32;
@@ -827,7 +824,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<newtyp
                     continue l74;
                 };
             };
-            "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: local.tee base(builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">(repr, i_6)) }, f);
+            "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">(repr, i_6) }, f);
             if @unlikely(local.tee start_183(local.tee self_7(f.buf).used + 4) > builtin::array_len(self_7.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, start_183);
@@ -1218,11 +1215,10 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<newtype_option_null.wado/
 }
 
 fn "core:prelude/traits.wado/newtype_option_null.wado/MaybeInt^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let base: ref "core:prelude/types.wado//Option<i32>";
     let self_3: ref "core:prelude/string.wado//String";
     let new_used_15: i32;
     let start_16: i32;
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: local.tee base(self.value) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: self.value }, f);
     if @unlikely(local.tee new_used_15(local.tee self_3(f.buf).used + 4) > builtin::array_len(self_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_3, new_used_15);
@@ -1240,11 +1236,10 @@ fn "core:prelude/traits.wado/newtype_option_null.wado/MaybeInt^core:prelude/trai
 }
 
 fn "core:prelude/traits.wado/newtype_option_null.wado/Opt<i64>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let base: ref "core:prelude/types.wado//Option<i64>";
     let self_3: ref "core:prelude/string.wado//String";
     let new_used_15: i32;
     let start_16: i32;
-    "core:prelude/traits.wado/core:prelude/types.wado/Option<i64>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i64>>" { value: local.tee base(self.value) }, f);
+    "core:prelude/traits.wado/core:prelude/types.wado/Option<i64>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i64>>" { value: self.value }, f);
     if @unlikely(local.tee new_used_15(local.tee self_3(f.buf).used + 4) > builtin::array_len(self_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_3, new_used_15);

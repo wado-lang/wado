@@ -496,8 +496,7 @@ fn "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_e
 }
 
 fn "cm_component_import_unit_result_arms.wado/$cm_binding__CmCatalog_id_result_unit"(v) with CmCatalog {
-    let $disc: i32;
-    return (if local.tee $disc("wasi/wado-lang:cm-catalog/CmCatalog::id_result_unit"(v.discriminant)) == 0 -> ref "core:prelude/types.wado//Result<(),()>" {
+    return (if "wasi/wado-lang:cm-catalog/CmCatalog::id_result_unit"(v.discriminant) == 0 -> ref "core:prelude/types.wado//Result<(),()>" {
         struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
     } else {
         struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
@@ -1597,11 +1596,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let v_7: ref "core:prelude/types.wado//Result<(),()>";
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    if local.tee v_7(self.value).discriminant == 0 {
+    if self.value.discriminant == 0 {
         if @unlikely(local.tee new_used_22(local.tee self_10(f.buf).used + 6) > builtin::array_len(self_10.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, new_used_22);
@@ -1623,12 +1621,12 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/
         start_23 = self_10.used;
         self_10.used = new_used_22;
         builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_25, 0, 2);
-        if @unlikely(local.tee v_7(self.value).discriminant != 0) {
+        if @unlikely(self.value.discriminant != 0) {
             unreachable;
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<()>"(f);
     }
-    if local.tee v_7(self.value).discriminant == 1 {
+    if self.value.discriminant == 1 {
         if @unlikely(local.tee start_23(local.tee self_10(f.buf).used + 6) > builtin::array_len(self_10.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, start_23);
@@ -1650,7 +1648,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/
         new_used_22 = self_10.used;
         self_10.used = start_23;
         builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_24, 0, 3);
-        if @unlikely(local.tee v_7(self.value).discriminant != 1) {
+        if @unlikely(self.value.discriminant != 1) {
             unreachable;
         }
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<()>"(f);

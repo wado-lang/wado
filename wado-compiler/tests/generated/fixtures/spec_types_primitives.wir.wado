@@ -163,7 +163,6 @@ fn "spec_types_primitives.wado/$test_0"() {
     let $v7_seen: bool;
     let $v8: bool;
     let $v8_seen: bool;
-    let $cond_36: bool;
     $v1_23 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from$spec0"() == "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(14336);
     $v2_seen_25 = 0;
     $v3_seen_27 = 0;
@@ -186,13 +185,13 @@ fn "spec_types_primitives.wado/$test_0"() {
     });
     $v7_seen = 0;
     $v8_seen = 0;
-    if @unlikely(local.tee $cond_36((if $v6_31 -> i32 {
+    if @unlikely((if $v6_31 -> i32 {
         $v8 = $v7 = 97; $v7_seen = 1; 97 == 97;
         $v8_seen = 1;
         $v8;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "spec_types_primitives.wado/$test_0$cold0"($v1_23, $v2_24, $v2_seen_25, $v3_26, $v3_seen_27, $v4_28, $v5_29, $v5_seen_30, $v6_31, $v7, $v7_seen, $v8, $v8_seen);
         unreachable;
@@ -321,8 +320,7 @@ condition: half.0 == 0.5 && half.1 == 0.5 && flag && letter == 'a'
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    let $arg_spill_8: ref "core:prelude/string.wado//String";
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(local.tee $arg_spill_8($sroa_$f_buf_442), text_200.repr, text_200.used);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_442, text_200.repr, text_200.used);
     if @unlikely(local.tee $v1(text_127.used + 9) > builtin::array_len(text_127.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(text_127, $v1);

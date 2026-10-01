@@ -422,13 +422,12 @@ fn "bug_for_of_pattern_match_ergonomics.wado/$test_3_nested_pattern_over__list"(
 
 fn "bug_for_of_pattern_match_ergonomics.wado/$test_4_tuple_pattern_over__mut_list_mutates_in_place"() {
     let $load_0: ref "Array<[bug_for_of_pattern_match_ergonomics.wado/P,bug_for_of_pattern_match_ergonomics.wado/P]>";
-    let ts: ref "core:prelude//List<[bug_for_of_pattern_match_ergonomics.wado/P,bug_for_of_pattern_match_ergonomics.wado/P]>";
     let a: ref "bug_for_of_pattern_match_ergonomics.wado//P";
     let b: ref "bug_for_of_pattern_match_ergonomics.wado//P";
     let $match_12: ref null "tuple//[bug_for_of_pattern_match_ergonomics.wado/P, bug_for_of_pattern_match_ergonomics.wado/P]";
     let ref_val: ref "tuple//[bug_for_of_pattern_match_ergonomics.wado/P, bug_for_of_pattern_match_ergonomics.wado/P]";
     let $sroa_$iter_0_index_42: i32;
-    $load_0 = local.tee ts(struct.new "core:prelude//List<[bug_for_of_pattern_match_ergonomics.wado/P,bug_for_of_pattern_match_ergonomics.wado/P]>" { repr: array.new_fixed<ref "tuple//[bug_for_of_pattern_match_ergonomics.wado/P, bug_for_of_pattern_match_ergonomics.wado/P]">(struct.new "tuple//[bug_for_of_pattern_match_ergonomics.wado/P, bug_for_of_pattern_match_ergonomics.wado/P]" { 0: struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 1, y: 2 }, 1: struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 3, y: 4 } }), used: 1 }).repr;
+    $load_0 = struct.new "core:prelude//List<[bug_for_of_pattern_match_ergonomics.wado/P,bug_for_of_pattern_match_ergonomics.wado/P]>" { repr: array.new_fixed<ref "tuple//[bug_for_of_pattern_match_ergonomics.wado/P, bug_for_of_pattern_match_ergonomics.wado/P]">(struct.new "tuple//[bug_for_of_pattern_match_ergonomics.wado/P, bug_for_of_pattern_match_ergonomics.wado/P]" { 0: struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 1, y: 2 }, 1: struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 3, y: 4 } }), used: 1 }.repr;
     $sroa_$iter_0_index_42 = 0;
     b20: block {
         l21: loop {
@@ -467,12 +466,10 @@ fn "bug_for_of_pattern_match_ergonomics.wado/$test_4_tuple_pattern_over__mut_lis
 
 fn "bug_for_of_pattern_match_ergonomics.wado/$test_5_nested_pattern_over__mut_list_mutates_in_place"() {
     let $load_0: ref "Array<bug_for_of_pattern_match_ergonomics.wado/Line>";
-    let ls: ref "core:prelude//List<bug_for_of_pattern_match_ergonomics.wado/Line>";
-    let a: ref "bug_for_of_pattern_match_ergonomics.wado//P";
     let $match_11: ref null "bug_for_of_pattern_match_ergonomics.wado//Line";
     let ref_val: ref "bug_for_of_pattern_match_ergonomics.wado//Line";
     let $sroa_$iter_0_index_41: i32;
-    $load_0 = local.tee ls(struct.new "core:prelude//List<bug_for_of_pattern_match_ergonomics.wado/Line>" { repr: array.new_fixed<ref "bug_for_of_pattern_match_ergonomics.wado//Line">(struct.new "bug_for_of_pattern_match_ergonomics.wado//Line" { a: struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 1, y: 2 }, b: struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 } }), used: 1 }).repr;
+    $load_0 = struct.new "core:prelude//List<bug_for_of_pattern_match_ergonomics.wado/Line>" { repr: array.new_fixed<ref "bug_for_of_pattern_match_ergonomics.wado//Line">(struct.new "bug_for_of_pattern_match_ergonomics.wado//Line" { a: struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 1, y: 2 }, b: struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 } }), used: 1 }.repr;
     $sroa_$iter_0_index_41 = 0;
     b28: block {
         l29: loop {
@@ -484,8 +481,7 @@ fn "bug_for_of_pattern_match_ergonomics.wado/$test_5_nested_pattern_over__mut_li
                 $sroa_$iter_0_index_41 = $sroa_$iter_0_index_41 + 1;
                 break $inline_core_prelude_slice_wado_SliceRefMutIter_bug_for_of_pattern_match_ergonomics_wado_Line__core_prelude_traits_wado_Iterator__next_3: ref_val;
             })) == 0 {
-                let $variant_payload_1: ref "bug_for_of_pattern_match_ergonomics.wado//Line";
-                local.tee a(local.tee $variant_payload_1(ref.as_non_null($match_11)).a).x = 7;
+                ref.as_non_null($match_11).a.x = 7;
             } else {
                 break b28;
             }
@@ -611,8 +607,7 @@ fn "bug_for_of_pattern_match_ergonomics.wado/$test_8_match_and_if_let_through_a_
     if @likely(ref.is_null(local.tee $sroa_ro_value_27(struct.new "tuple//[i32, bug_for_of_pattern_match_ergonomics.wado/P]" { 0: 10, 1: struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 1, y: 2 } })) == 0) {
         let $variant_payload_1: ref "tuple//[i32, bug_for_of_pattern_match_ergonomics.wado/P]";
         n = struct.new "core:prelude/types.wado//Box<i32>" { value: local.tee $variant_payload_1(ref.as_non_null($sroa_ro_value_27)).0 };
-        let $tuple_elem_2: ref "bug_for_of_pattern_match_ergonomics.wado//P";
-        x_10 = struct.new "core:prelude/types.wado//Box<i32>" { value: local.tee $tuple_elem_2($variant_payload_1.1).x };
+        x_10 = struct.new "core:prelude/types.wado//Box<i32>" { value: $variant_payload_1.1.x };
         s = n.value;
         $v3 = x_10.value;
         if @unlikely(local.tee $v4(s + $v3) != 11) {

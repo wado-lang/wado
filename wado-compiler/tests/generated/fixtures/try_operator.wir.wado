@@ -365,13 +365,9 @@ fn "try_operator.wado/test_try_op_result_basic"() with Stdout {
     let b_31: ref Array<u8>;
     let i: i32;
     let packed: i64;
-    let $sroa_slot_55: ref null "core:prelude/string.wado//String";
-    let $sroa_slot_57: ref null "core:prelude/string.wado//String";
-    $sroa_slot_57 = ref.null none;
-    $sroa_slot_55 = ref.null none;
-    $qm_e_21 = ref.as_non_null(local.tee $sroa_slot_55(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("division by zero"), used: 16 }));
+    $qm_e_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("division by zero"), used: 16 };
     cold_path;
-    $qm_e_21 = ref.as_non_null(local.tee $sroa_slot_57($qm_e_21));
+    $qm_e_21 = $qm_e_21;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
         a_28 = $qm_e_21.repr;
         a_end = $qm_e_21.used;
@@ -410,13 +406,9 @@ fn "try_operator.wado/test_try_op_result_from"() with Stdout {
     let $qm_e_20: ref "try_operator.wado//LowError";
     let packed: i64;
     let tx_31: i32;
-    let $sroa_slot_43: ref null "try_operator.wado//LowError";
-    let $sroa_slot_45: ref null "try_operator.wado//HighError";
-    $sroa_slot_45 = ref.null none;
-    $sroa_slot_43 = ref.null none;
-    $qm_e_20 = ref.as_non_null(local.tee $sroa_slot_43(struct.new "try_operator.wado//LowError" { code: 42 }));
+    $qm_e_20 = struct.new "try_operator.wado//LowError" { code: 42 };
     cold_path;
-    if @likely(ref.test "try_operator.wado//HighError::Low"(local.tee e(ref.as_non_null(local.tee $sroa_slot_45(ref.as_non_null("try_operator.wado/try_operator.wado/HighError^core:prelude/traits.wado/From<try_operator.wado/LowError>::from"($qm_e_20))))))) {
+    if @likely(ref.test "try_operator.wado//HighError::Low"(local.tee e(ref.as_non_null("try_operator.wado/try_operator.wado/HighError^core:prelude/traits.wado/From<try_operator.wado/LowError>::from"($qm_e_20))))) {
         if @unlikely(local.tee $v0(local.tee $qm_e_20(ref.cast "try_operator.wado//HighError::Low"(e).payload_0).code) != 42) {
             cold_path;
             "try_operator.wado/test_try_op_result_from$cold0"($v0);
@@ -438,7 +430,6 @@ fn "try_operator.wado/test_try_op_result_from"() with Stdout {
 
 fn "try_operator.wado/test_try_op_variant_from"() with Stdout {
     let e_4: ref "try_operator.wado//AppError";
-    let inner_5: ref "try_operator.wado//IoError";
     let $v0_6: ref "core:prelude/string.wado//String";
     let $local_15: ref "core:prelude/string.wado//String";
     let $local_16: ref "core:prelude/format.wado//Formatter";
@@ -446,8 +437,6 @@ fn "try_operator.wado/test_try_op_variant_from"() with Stdout {
     let b_28: ref Array<u8>;
     let packed: i64;
     let $qm_e_61: ref "try_operator.wado//ParseError";
-    let $sroa_slot_15: ref null "core:prelude/string.wado//String";
-    let $sroa_slot_19: ref null "try_operator.wado//ParseError";
     if ref.is_null(global:try_operator.wado::$const_obj_27) {
         let $mv_0_1: i32;
         let $mv_1_2: i32;
@@ -469,7 +458,7 @@ fn "try_operator.wado/test_try_op_variant_from"() with Stdout {
     multivalue_bind [$mv_1_2, $mv_0_1, $mv_2_3] = "try_operator.wado/process$spec1"();
     if @likely($mv_1_2 == 1) {
         if @likely(ref.test "try_operator.wado//AppError::Io"(local.tee e_4(ref.as_non_null($mv_2_3)))) {
-            $v0_6 = local.tee inner_5(ref.cast "try_operator.wado//AppError::Io"(e_4).payload_0).message;
+            $v0_6 = ref.cast "try_operator.wado//AppError::Io"(e_4).payload_0.message;
             if @unlikely(local.tee $mv_1_2($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
                 a_25 = $v0_6.repr;
                 $mv_1_2 = $v0_6.used;
@@ -507,10 +496,7 @@ condition: inner.message == \"disk error\"
         unreachable;
     }
     $mv_2_3 = ref.null none;
-    $sroa_slot_15 = ref.null none;
-    drop(ref.as_non_null(local.tee $sroa_slot_15(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 })));
-    $sroa_slot_19 = ref.null none;
-    $qm_e_61 = ref.as_non_null(local.tee $sroa_slot_19(struct.new "try_operator.wado//ParseError" { input: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 100), used: 3 } }));
+    $qm_e_61 = struct.new "try_operator.wado//ParseError" { input: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 100), used: 3 } };
     cold_path;
     if @likely(ref.test "try_operator.wado//AppError::Parse"(local.tee e_4(ref.as_non_null(local.tee $mv_2_3(ref.as_non_null("try_operator.wado/try_operator.wado/AppError^core:prelude/traits.wado/From<try_operator.wado/ParseError>::from"($qm_e_61))))))) {
         $local_15 = local.tee $qm_e_61(ref.cast "try_operator.wado//AppError::Parse"(e_4).payload_0).input;
@@ -558,7 +544,6 @@ fn "try_operator.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
 }
 
 fn "try_operator.wado/$cm_export__run"() {
-    let msg: ref "core:prelude/traits.wado//ConvertError";
     let $local_23: ref "core:prelude/string.wado//String";
     let $local_1_47: ref "core:prelude/string.wado//String";
     let $local_2_48: ref "core:prelude/format.wado//Formatter";
@@ -566,10 +551,8 @@ fn "try_operator.wado/$cm_export__run"() {
     let b: ref Array<u8>;
     let i: i32;
     let packed_76: i64;
-    let $sroa_slot_74: ref null "core:prelude/traits.wado//ConvertError";
-    $sroa_slot_74 = ref.null none;
     cold_path;
-    $local_1_47 = local.tee msg(ref.as_non_null(local.tee $sroa_slot_74(ref.as_non_null("core:prelude/traits.wado/core:prelude/traits.wado/ConvertError::new"($local_2_48 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_1_47("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(37))); "core:prelude/primitive.wado/i64^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i64>" { value: 3000000000_i64 }, $local_2_48); let $mv_field_2: ref Array<u8>; $mv_field_2 = array.new_data<u8>(" out of range for i32"); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_47, $mv_field_2, 21); $local_1_47))))).message;
+    $local_1_47 = ref.as_non_null("core:prelude/traits.wado/core:prelude/traits.wado/ConvertError::new"($local_2_48 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_1_47("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(37))); "core:prelude/primitive.wado/i64^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i64>" { value: 3000000000_i64 }, $local_2_48); let $mv_field_2: ref Array<u8>; $mv_field_2 = array.new_data<u8>(" out of range for i32"); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_1_47, $mv_field_2, 21); $local_1_47)).message;
     if @unlikely(local.tee i($inline_test_try_from_narrowing_0__$inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
         $mv_field_2 = $local_1_47.repr;
         a_end = $local_1_47.used;
@@ -749,7 +732,6 @@ fn "try_operator.wado/pipeline$spec1"() {
 fn "try_operator.wado/process$spec0"() {
     let $qm_v_0: ref "core:prelude/string.wado//String";
     let $qm_e_4: ref "try_operator.wado//ParseError";
-    let $sroa_slot_15: ref null "core:prelude/string.wado//String";
     let $sroa_slot_17: i32;
     let $sroa_slot_18: i32;
     let $sroa_slot_19: ref null "try_operator.wado//ParseError";
@@ -757,8 +739,7 @@ fn "try_operator.wado/process$spec0"() {
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    $sroa_slot_15 = ref.null none;
-    $qm_v_0 = ref.as_non_null(local.tee $sroa_slot_15(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 }));
+    $qm_v_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 };
     $sroa_slot_17 = 0;
     $sroa_slot_18 = 0;
     $sroa_slot_19 = ref.null none;
@@ -809,7 +790,6 @@ fn "try_operator.wado/process$spec1"() {
     let $qm_e_1: ref "try_operator.wado//IoError";
     let raw: ref "core:prelude/string.wado//String";
     let $qm_e_4: ref "try_operator.wado//ParseError";
-    let $sroa_slot_16: ref null "try_operator.wado//IoError";
     let $sroa_slot_17: i32;
     let $sroa_slot_18: i32;
     let $sroa_slot_19: ref null "try_operator.wado//ParseError";
@@ -817,8 +797,7 @@ fn "try_operator.wado/process$spec1"() {
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    $sroa_slot_16 = ref.null none;
-    $qm_e_1 = ref.as_non_null(local.tee $sroa_slot_16(struct.new "try_operator.wado//IoError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("disk error"), used: 10 } }));
+    $qm_e_1 = struct.new "try_operator.wado//IoError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("disk error"), used: 10 } };
     cold_path;
     raw = return 1, 0, "try_operator.wado/try_operator.wado/AppError^core:prelude/traits.wado/From<try_operator.wado/IoError>::from"($qm_e_1);
     $sroa_slot_17 = 0;

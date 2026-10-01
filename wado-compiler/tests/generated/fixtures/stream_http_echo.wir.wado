@@ -388,15 +388,13 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
     let $load_2: i32;
     let $load_10: i32;
     let chunks: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
-    let $pattern_temp_1: ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>]";
-    let $pattern_temp_4: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let elements: ref "Array<core:prelude/list.wado/List<u8>>";
     let value_196: ref "core:prelude//List<u8>";
     let used: i32;
     let packed_203: i64;
     let $sroa_$pattern_temp_0_0_216: i32;
     $sroa_$pattern_temp_0_0_216 = builtin::i32_wrap_i64("wasi/future-new:transmission-wasi/http/types.wado#error-code"());
-    $sroa_$pattern_temp_0_0_216 = local.tee $pattern_temp_1("stream_http_echo.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0_216)).0;
+    $sroa_$pattern_temp_0_0_216 = "stream_http_echo.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0_216).0;
     chunks = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: local.tee elements(array.new_fixed<ref "core:prelude//List<u8>">()), used: 0 };
     b1: block {
         l2: loop {
@@ -418,7 +416,7 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
     $load_2 = builtin::i32_wrap_i64(packed_203 >> 32_i64);
     request = builtin::i32_wrap_i64(local.tee packed_203("wasi/stream-new"()));
     used = builtin::i32_wrap_i64(packed_203 >> 32_i64);
-    $sroa_$pattern_temp_0_0_216 = local.tee $pattern_temp_4("stream_http_echo.wado/$cm_binding__Response_new"("stream_http_echo.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: request }, $sroa_$pattern_temp_0_0_216)).0;
+    $sroa_$pattern_temp_0_0_216 = "stream_http_echo.wado/$cm_binding__Response_new"("stream_http_echo.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: request }, $sroa_$pattern_temp_0_0_216).0;
     request = 0;
     request = $sroa_$pattern_temp_0_0_216;
     "wasi/task-return:handle"(0, request, 0, 0_i64, 0, 0, 0, 0);

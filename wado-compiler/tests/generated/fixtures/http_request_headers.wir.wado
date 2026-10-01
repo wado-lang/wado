@@ -541,7 +541,6 @@ fn "http_request_headers.wado/$cm_task_entry__handle"(request) {
     let $local_12: ref "core:prelude/string.wado//String";
     let $local_13: ref "core:prelude/format.wado//Formatter";
     let $tv_1: i32;
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $fuse_at_187: i32;
     let packed: i64;
     if @unlikely(local.tee $v1_2("http_request_headers.wado/$cm_binding__Fields_has"(local.tee req_headers("http_request_headers.wado/$cm_binding__Request_get_headers"(request)), global:http_request_headers.wado::$const_obj_6)) == 0) {
@@ -601,7 +600,7 @@ condition: values.len() == 1
     }
     $v1_2 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     $fuse_at_187 = builtin::i32_wrap_i64(packed >> 32_i64);
-    $v1_2 = local.tee $pattern_temp_1("http_request_headers.wado/$cm_binding__Response_new"("http_request_headers.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $v1_2)).0;
+    $v1_2 = "http_request_headers.wado/$cm_binding__Response_new"("http_request_headers.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $v1_2).0;
     $tv_1 = 0;
     $tv_1 = $v1_2;
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);

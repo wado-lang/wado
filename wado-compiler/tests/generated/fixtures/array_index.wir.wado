@@ -935,11 +935,9 @@ condition: seen == [0, 1, 1]
 }
 
 fn "array_index.wado/$test_8_index_a_none_element_with_a_heap_payload"() {
-    let $cond_1: bool;
     let elements_10: ref "Array<core:prelude/types.wado/Option<core:prelude/list.wado/List<core:prelude/string.wado/String>>>";
     elements_10 = array.new_fixed<ref null "core:prelude//List<core:prelude/string.wado/String>">(ref.null none, struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), used: 1 });
-    let $match_scrut_0: ref null "core:prelude//List<core:prelude/string.wado/String>";
-    if @unlikely(local.tee $cond_1(ref.is_null(local.tee $match_scrut_0(builtin::array_get_value<ref null "core:prelude//List<core:prelude/string.wado/String>">(elements_10, 0)))) == 0) {
+    if @unlikely(ref.is_null(builtin::array_get_value<ref null "core:prelude//List<core:prelude/string.wado/String>">(elements_10, 0)) == 0) {
         cold_path;
         "array_index.wado/$test_8_index_a_none_element_with_a_heap_payload$cold1"();
         unreachable;
@@ -987,7 +985,6 @@ fn "array_index.wado/$test_9_by_ref_iteration_over_none_elements"() {
 
 fn "array_index.wado/$test_10_assign_into_a_none_slot_then_read_it_back"() {
     let $cond_1: bool;
-    let inner: ref "core:prelude//List<core:prelude/string.wado/String>";
     let value_13: ref null "core:prelude//List<core:prelude/string.wado/String>";
     let $sroa_w_repr_41: ref "Array<core:prelude/types.wado/Option<core:prelude/list.wado/List<core:prelude/string.wado/String>>>";
     $sroa_w_repr_41 = array.new_fixed<ref null "core:prelude//List<core:prelude/string.wado/String>">(ref.null none, ref.null none);
@@ -1000,7 +997,7 @@ fn "array_index.wado/$test_10_assign_into_a_none_slot_then_read_it_back"() {
     }
     $cond_1 = 0;
     if ref.is_null(local.tee value_13(builtin::array_get_value<ref null "core:prelude//List<core:prelude/string.wado/String>">($sroa_w_repr_41, 0))) == 0 {
-        $cond_1 = local.tee inner(ref.as_non_null(value_13)).used;
+        $cond_1 = ref.as_non_null(value_13).used;
     } else {
     }
     if @unlikely($cond_1 != 1) {
@@ -2124,7 +2121,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<a
     let start_24: i32;
     let new_used_60: i32;
     let start_61: i32;
-    let v_97: ref "array_index.wado//Keys<core:prelude/string.wado/String>";
     if @unlikely(local.tee new_used_23(local.tee self_11(f.buf).used + 4) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, new_used_23);
@@ -2178,7 +2174,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<a
     start_24 = self_11.used;
     self_11.used = new_used_23;
     builtin::array_copy<u8>(self_11.repr, start_24, global:core:prelude/traits.wado::$const_obj_25, 0, 2);
-    "core:prelude/traits.wado/array_index.wado/Keys<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(local.tee v_97(v.root), f);
+    "core:prelude/traits.wado/array_index.wado/Keys<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(v.root, f);
     if @unlikely(local.tee start_24(local.tee self_11(f.buf).used + 1) > builtin::array_len(self_11.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_11, start_24);
@@ -2432,7 +2428,6 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>"(rep
     let self_7: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
-    let self_28: bool;
     let text: ref "core:prelude/string.wado//String";
     let $licm_arith_65: bool;
     let new_used_69: i32;
@@ -2468,7 +2463,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>"(rep
                 self_7.used = new_used_21;
                 builtin::array_copy<u8>(self_7.repr, start_22, global:array_index.wado::$const_obj_2, 0, 2);
             }
-            text = (if local.tee self_28(builtin::array_get_value<bool>(repr, i)) -> ref "core:prelude/string.wado//String" {
+            text = (if builtin::array_get_value<bool>(repr, i) -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -3619,7 +3614,6 @@ fn "core:prelude/traits.wado/array_index.wado/Tree<core:prelude/string.wado/Stri
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
-    let v_90: ref "array_index.wado//Keys<core:prelude/string.wado/String>";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<array_index.wado/Tree<core:prelude/string.wado/String>,[array_index.wado/Keys<core:prelude/string.wado/String>,i32]>"(self, f);
         return;
@@ -3652,7 +3646,7 @@ fn "core:prelude/traits.wado/array_index.wado/Tree<core:prelude/string.wado/Stri
     new_used_22 = self_10.used;
     self_10.used = start_23;
     builtin::array_copy<u8>(self_10.repr, new_used_22, global:core:prelude/traits.wado::$const_obj_25, 0, 2);
-    "core:prelude/traits.wado/array_index.wado/Keys<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(local.tee v_90(self.root), f);
+    "core:prelude/traits.wado/array_index.wado/Keys<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(self.root, f);
     if @unlikely(local.tee new_used_22(local.tee self_10(f.buf).used + 2) > builtin::array_len(self_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_10, new_used_22);

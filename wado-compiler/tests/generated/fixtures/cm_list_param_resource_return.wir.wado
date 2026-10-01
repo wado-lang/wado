@@ -76,8 +76,7 @@ fn "cm_list_param_resource_return.wado/$cm_binding__Api_make_layout"(entries) wi
     let $licm_repr_18: ref Array<u32>;
     if @unlikely((local.tee $entries_len(entries.used) < 0) | ($entries_len > 536870911)) {
         cold_path;
-        let $mv_field_1: ref Array<u8>;
-        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("a buffer's length is negative or past what linear memory can address")), 68);
+        "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;
     }
     $entries_base = "mem/realloc"(0, 0, 4, $entries_len * 4);

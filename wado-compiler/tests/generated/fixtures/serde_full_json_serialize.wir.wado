@@ -255,8 +255,6 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     let rx_20: i32;
     let tx_21: i32;
     let writer_32: ref "serde_full_json_serialize.wado//JsonWriter";
-    let ser_33: ref "serde_full_json_serialize.wado//JsonSerializer";
-    let elements_74: ref "Array<core:prelude/string.wado/String>";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:serde_full_json_serialize.wado::$modules_initialized);
         cold_path;
@@ -270,7 +268,7 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     rx_20 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
     "core:rt/write_string_to_stream"(tx_21, writer_11.repr, writer_11.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_20);
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSerializer^serde_full_json_serialize.wado/Serializer::serialize_string"(local.tee ser_33(struct.new "serde_full_json_serialize.wado//JsonSerializer" { w: local.tee writer_32(struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }) }), global:serde_full_json_serialize.wado::$const_obj_24));
+    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSerializer^serde_full_json_serialize.wado/Serializer::serialize_string"(struct.new "serde_full_json_serialize.wado//JsonSerializer" { w: local.tee writer_32(struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }) }, global:serde_full_json_serialize.wado::$const_obj_24));
     writer_11 = writer_32.buf;
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
@@ -293,7 +291,7 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     rx_20 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
     "core:rt/write_string_to_stream"(tx_21, writer_11.repr, writer_11.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_20);
-    user = struct.new "serde_full_json_serialize.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, age: 25, active: 0, location: ref.null none, tags: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_74(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }) };
+    user = struct.new "serde_full_json_serialize.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, age: 25, active: 0, location: ref.null none, tags: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }) };
     writer_32 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$scalar"(user, writer_32));
     writer_11 = writer_32.buf;
@@ -947,7 +945,6 @@ fn "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonStructSeri
 
 fn "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonStructSerializer^serde_full_json_serialize.wado/SerializeStruct::field<core:prelude/string.wado/String>"(self, name, value) {
     let $load_11: ref Array<u8>;
-    let ser: ref "serde_full_json_serialize.wado//JsonSerializer";
     let out_14: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
@@ -986,13 +983,12 @@ fn "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonStructSeri
         name.used = start_44;
         builtin::array_copy<u8>(name.repr, new_used_21, out_14.repr, 0, start_22);
     };
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSerializer^serde_full_json_serialize.wado/Serializer::serialize_string"(local.tee ser(struct.new "serde_full_json_serialize.wado//JsonSerializer" { w: self.w }), value));
+    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSerializer^serde_full_json_serialize.wado/Serializer::serialize_string"(struct.new "serde_full_json_serialize.wado//JsonSerializer" { w: self.w }, value));
     self.count = self.count + 1;
     return ref.null none;
 }
 
 fn "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSeqSerializer^serde_full_json_serialize.wado/SerializeSeq::element<core:prelude/string.wado/String>"(self, value) {
-    let ser: ref "serde_full_json_serialize.wado//JsonSerializer";
     let out_10: ref "core:prelude/string.wado//String";
     let new_used: i32;
     let start_18: i32;
@@ -1005,7 +1001,7 @@ fn "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSeqSeriali
         out_10.used = new_used;
         builtin::array_copy<u8>(out_10.repr, start_18, global:serde_full_json_serialize.wado::$const_obj_39, 0, 1);
     }
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSerializer^serde_full_json_serialize.wado/Serializer::serialize_string"(local.tee ser(struct.new "serde_full_json_serialize.wado//JsonSerializer" { w: self.w }), value));
+    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonSerializer^serde_full_json_serialize.wado/Serializer::serialize_string"(struct.new "serde_full_json_serialize.wado//JsonSerializer" { w: self.w }, value));
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -1307,7 +1303,6 @@ fn "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonStructSeri
     let start_22: i32;
     let self_24: ref "serde_full_json_serialize.wado//JsonWriter";
     let start_44: i32;
-    let v: ref "serde_full_json_serialize.wado//Point";
     if self.count > 0 {
         if @unlikely(local.tee new_used_21(local.tee out_14(self.w.buf).used + 1) > builtin::array_len(out_14.repr)) {
             cold_path;
@@ -1344,7 +1339,7 @@ fn "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonStructSeri
     self_24 = self.w;
     drop($inline_core_prelude_types_wado_Option_serde_full_json_serialize_wado_Point__serde_full_json_serialize_wado_Serialize__serialize_serde_full_json_serialize_wado_JsonSerializer__25: block -> ref null "serde_full_json_serialize.wado//SerializeError" {
         if ref.is_null(value) == 0 {
-            break $inline_core_prelude_types_wado_Option_serde_full_json_serialize_wado_Point__serde_full_json_serialize_wado_Serialize__serialize_serde_full_json_serialize_wado_JsonSerializer__25: "serde_full_json_serialize.wado/serde_full_json_serialize.wado/Point^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$scalar"(local.tee v(ref.as_non_null(value)), self_24);
+            break $inline_core_prelude_types_wado_Option_serde_full_json_serialize_wado_Point__serde_full_json_serialize_wado_Serialize__serialize_serde_full_json_serialize_wado_JsonSerializer__25: "serde_full_json_serialize.wado/serde_full_json_serialize.wado/Point^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$scalar"(ref.as_non_null(value), self_24);
         } else {
         }
         "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonWriter::write$scalar"(self_24.buf, global:serde_full_json_serialize.wado::$const_obj_139);

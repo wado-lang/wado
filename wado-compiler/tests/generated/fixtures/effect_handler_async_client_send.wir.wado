@@ -521,7 +521,6 @@ global global:core:prelude/primitive.wado::$const_obj_29: ref null "core:prelude
 
 fn "effect_handler_async_client_send.wado/fetch_upstream"() with Client {
     let headers: i32;
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Request, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let v_12: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $vc_payload_1: ref "wasi:http/types.wado//ErrorCode";
     let $local_1: ref null "effect_handler_async_client_send.wado//$Dispatch_Client";
@@ -530,7 +529,7 @@ fn "effect_handler_async_client_send.wado/fetch_upstream"() with Client {
     let v_21: ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>";
     headers = "effect_handler_async_client_send.wado/$cm_binding__Fields_new"();
     $sroa_$pattern_temp_0_0_19 = builtin::i32_wrap_i64("wasi/future-new"());
-    drop("effect_handler_async_client_send.wado/$cm_binding__Request_set_path_with_query"(local.tee $sroa_$pattern_temp_0_0_19(local.tee $pattern_temp_1("effect_handler_async_client_send.wado/$cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $sroa_$pattern_temp_0_0_19, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 })).0), global:effect_handler_async_client_send.wado::$const_obj_3));
+    drop("effect_handler_async_client_send.wado/$cm_binding__Request_set_path_with_query"(local.tee $sroa_$pattern_temp_0_0_19("effect_handler_async_client_send.wado/$cm_binding__Request_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, $sroa_$pattern_temp_0_0_19, struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/RequestOptions>" { 1 }).0), global:effect_handler_async_client_send.wado::$const_obj_3));
     return (if @likely(ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(local.tee v_12((if ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"(local.tee v_12("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"($inline__effect_dispatch__Client__send_2: block -> ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>" {
         if ref.is_null(local.tee $local_1(global:effect_handler_async_client_send.wado::$effect_Client)) == 0 {
             global:effect_handler_async_client_send.wado::$effect_Client = local.tee $local_2(ref.as_non_null($local_1)).outer;
@@ -685,7 +684,6 @@ fn "effect_handler_async_client_send.wado/$cm_binding__Client_send"(request) wit
 
 fn "effect_handler_async_client_send.wado/$cm_lift__Client_send"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $local_4: ref "wasi:http/types.wado//ErrorCode";
     let $local_5: i32;
     let $local_6: ref null "core:prelude/string.wado//String";
@@ -700,7 +698,7 @@ fn "effect_handler_async_client_send.wado/$cm_lift__Client_send"($outptr) {
     let len_56: i32;
     let arr_84: ref Array<u8>;
     let i_85: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32($outptr + 8) };
     } else {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 8)) == 0 -> ref "wasi:http/types.wado//ErrorCode" {
@@ -970,7 +968,7 @@ fn "effect_handler_async_client_send.wado/$cm_lift__Client_send"($outptr) {
             struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_4 };
-    }));
+    });
 }
 
 fn "effect_handler_async_client_send.wado/$cm_wrap_async__Client_send"($value) {
@@ -1322,17 +1320,14 @@ fn "effect_handler_async_client_send.wado/$cm_task_entry__handle"(request) {
     let $local_12: ref "core:prelude/string.wado//String";
     let $local_13: ref "core:prelude/format.wado//Formatter";
     let $local_186: ref null "effect_handler_async_client_send.wado//$Dispatch_Client";
-    let $local_187: ref "effect_handler_async_client_send.wado//$Dispatch_Client";
     let $local_188: i32;
-    let $pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $fuse_at_192: i32;
     let packed_194: i64;
     let tx_196: i32;
     let rx_198: i32;
     let tx_199: i32;
-    let self_220: ref "core:prelude/string.wado//StrUtf8ByteIter";
     mock = struct.new "effect_handler_async_client_send.wado//MockClient" { calls: 0 };
-    global:effect_handler_async_client_send.wado::$effect_Client = local.tee $local_187(struct.new "effect_handler_async_client_send.wado//$Dispatch_Client" { outer: local.tee $local_186(global:effect_handler_async_client_send.wado::$effect_Client), op_send: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_async_client_send.wado//$Closure_2" { $capture_0: mock }, func: ref.func "closure/effect_handler_async_client_send.wado/$closure_wrapper_2" } });
+    global:effect_handler_async_client_send.wado::$effect_Client = struct.new "effect_handler_async_client_send.wado//$Dispatch_Client" { outer: local.tee $local_186(global:effect_handler_async_client_send.wado::$effect_Client), op_send: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_async_client_send.wado//$Closure_2" { $capture_0: mock }, func: ref.func "closure/effect_handler_async_client_send.wado/$closure_wrapper_2" } };
     $local_188 = "effect_handler_async_client_send.wado/fetch_upstream"();
     global:effect_handler_async_client_send.wado::$effect_Client = $local_186;
     if @unlikely(local.tee $v0(mock.calls) != 1) {
@@ -1363,14 +1358,14 @@ condition: mock.calls == 1
     tx_196 = builtin::i32_wrap_i64(packed_194 >> 32_i64);
     rx_198 = builtin::i32_wrap_i64(local.tee packed_194("wasi/stream-new"()));
     tx_199 = builtin::i32_wrap_i64(packed_194 >> 32_i64);
-    $fuse_at_192 = local.tee $pattern_temp_2("effect_handler_async_client_send.wado/$cm_binding__Response_new"("effect_handler_async_client_send.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_198 }, $fuse_at_192)).0;
+    $fuse_at_192 = "effect_handler_async_client_send.wado/$cm_binding__Response_new"("effect_handler_async_client_send.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_198 }, $fuse_at_192).0;
     rx_198 = 0;
     rx_198 = $fuse_at_192;
     "wasi/task-return:handle"(0, rx_198, 0, 0_i64, 0, 0, 0, 0);
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_199, $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; if @unlikely(local.tee rx_198(0 + 9) > builtin::array_len($local_12.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, rx_198);
-    }; $fuse_at_192 = $local_12.used; $local_12.used = rx_198; builtin::array_copy<u8>($local_12.repr, $fuse_at_192, global:effect_handler_async_client_send.wado::$const_obj_5, 0, 9); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v0, $local_12); "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(local.tee self_220(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_12.repr, used: $local_12.used, index: 0 })));
+    }; $fuse_at_192 = $local_12.used; $local_12.used = rx_198; builtin::array_copy<u8>($local_12.repr, $fuse_at_192, global:effect_handler_async_client_send.wado::$const_obj_5, 0, 9); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v0, $local_12); "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_12.repr, used: $local_12.used, index: 0 }));
     "wasi/stream-drop-writable"(tx_199);
     "effect_handler_async_client_send.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_196, global:effect_handler_async_client_send.wado::$const_obj_4);
     "wasi/resource-drop:wasi/http/types.wado#response"($local_188);
@@ -2229,7 +2224,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/MockClient^wasi:http/client.wado/Client::send"(self, request) {
     let $drop_spill_9: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $local_10: ref "core:prelude/string.wado//String";
-    let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
@@ -2266,7 +2260,7 @@ fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/
         unreachable;
     }
     i = builtin::i32_wrap_i64("wasi/future-new"());
-    drop("effect_handler_async_client_send.wado/$cm_binding__Response_set_status_code"(local.tee i(local.tee $pattern_temp_1("effect_handler_async_client_send.wado/$cm_binding__Response_new"("effect_handler_async_client_send.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, i)).0), 201));
+    drop("effect_handler_async_client_send.wado/$cm_binding__Response_set_status_code"(local.tee i("effect_handler_async_client_send.wado/$cm_binding__Response_new"("effect_handler_async_client_send.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, i).0), 201));
     $drop_spill_9 = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: i };
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
     return $drop_spill_9;
@@ -2871,8 +2865,7 @@ fn "closure/effect_handler_async_client_send.wado/$closure_wrapper_1"($env, $p0)
 }
 
 fn "closure/effect_handler_async_client_send.wado/$closure_wrapper_2"($env, $p0) {
-    let $typed_env: ref "effect_handler_async_client_send.wado//$Closure_2";
-    return "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/$Closure_2::$call"(local.tee $typed_env(ref.cast "effect_handler_async_client_send.wado//$Closure_2"($env)), $p0);
+    return "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/$Closure_2::$call"(ref.cast "effect_handler_async_client_send.wado//$Closure_2"($env), $p0);
 }
 
 export fn "effect_handler_async_client_send.wado/$cm_export__handle" as "handle"

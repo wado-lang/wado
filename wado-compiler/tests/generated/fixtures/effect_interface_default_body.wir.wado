@@ -438,8 +438,7 @@ fn "effect_interface_default_body.wado/$cm_export__run"() {
 }
 
 fn "effect_interface_default_body.wado/$initialize_module"() {
-    let elements: ref "Array<core:prelude/string.wado/String>";
-    global:effect_interface_default_body.wado::LINES = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 };
+    global:effect_interface_default_body.wado::LINES = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
 }
 
 fn "core:rt/panic"(message) {
@@ -585,13 +584,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 }
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_0::$call"(self) {
-    let self_1: ref "effect_interface_default_body.wado//Collect";
-    return local.tee self_1(self.$capture_0).tag;
+    return self.$capture_0.tag;
 }
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_1::$call"(self, message) {
-    let $arg_spill_1: ref "effect_interface_default_body.wado//Collect";
-    "effect_interface_default_body.wado/effect_interface_default_body.wado/Collect^effect_interface_default_body.wado/Log::emit"(local.tee $arg_spill_1(self.$capture_0), message.repr, message.used);
+    "effect_interface_default_body.wado/effect_interface_default_body.wado/Collect^effect_interface_default_body.wado/Log::emit"(self.$capture_0, message.repr, message.used);
 }
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_2::$call"(level) {
@@ -679,13 +676,11 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
 }
 
 fn "closure/effect_interface_default_body.wado/$closure_wrapper_0"($env) {
-    let $typed_env: ref "effect_interface_default_body.wado//$Closure_0";
-    return "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_0::$call"(local.tee $typed_env(ref.cast "effect_interface_default_body.wado//$Closure_0"($env)));
+    return "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_0::$call"(ref.cast "effect_interface_default_body.wado//$Closure_0"($env));
 }
 
 fn "closure/effect_interface_default_body.wado/$closure_wrapper_1"($env, $p0) {
-    let $typed_env: ref "effect_interface_default_body.wado//$Closure_1";
-    "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_1::$call"(local.tee $typed_env(ref.cast "effect_interface_default_body.wado//$Closure_1"($env)), $p0);
+    "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_1::$call"(ref.cast "effect_interface_default_body.wado//$Closure_1"($env), $p0);
 }
 
 fn "closure/effect_interface_default_body.wado/$closure_wrapper_2"($env, $p0) {

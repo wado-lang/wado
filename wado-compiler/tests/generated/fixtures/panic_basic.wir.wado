@@ -49,8 +49,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 
 fn "panic_basic.wado/$cm_export__run"() {
     cold_path;
-    let $mv_field_1: ref Array<u8>;
-    "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("This is a panic message")), 23);
+    "core:rt/panic"(array.new_data<u8>("This is a panic message"), 23);
     unreachable;
     "wasi/task-return"(0);
 }

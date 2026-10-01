@@ -481,9 +481,8 @@ fn "reference.wado/ref_deref_assign_variant"() with Stdout {
     let packed_9: i64;
     let rx_10: i32;
     let tx_11: i32;
-    let $sroa_a_value_52: ref "core:prelude/types.wado//Option<i32>";
     if ref.is_null(global:reference.wado::$const_obj_33) {
-        global:reference.wado::$const_obj_33 = "reference.wado/maybe_read$scalar"(local.tee $sroa_a_value_52(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 }));
+        global:reference.wado::$const_obj_33 = "reference.wado/maybe_read$scalar"(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 });
     }
     rx_10 = builtin::i32_wrap_i64(local.tee packed_9("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
@@ -688,7 +687,6 @@ fn "reference.wado/ref_swap_test"() with Stdout {
 fn "reference.wado/ref_reassign_test"() with Stdout {
     let a: ref "core:prelude/types.wado//Box<i32>";
     let b: ref "core:prelude/types.wado//Box<i32>";
-    let mr: ref "core:prelude/types.wado//Box<i32>";
     let packed_23: i64;
     let rx_24: i32;
     let tx_25: i32;
@@ -708,8 +706,8 @@ fn "reference.wado/ref_reassign_test"() with Stdout {
     rx_24 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_24);
     "core:rt/write_string_to_stream"(tx_25, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_24);
-    local.tee mr(a).value = 100;
-    local.tee mr(b).value = 200;
+    a.value = 100;
+    b.value = 200;
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(a.value, $mv_arg_2);
     rx_24 = builtin::i32_wrap_i64(local.tee packed_23("wasi/stream-new"()));

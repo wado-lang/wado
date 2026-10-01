@@ -162,12 +162,10 @@ global global:core:prelude/primitive.wado::$const_obj_79: ref null "core:prelude
 
 fn "float_nan_constant_positive.wado/run"() with Stdout {
     let $v2: bool;
-    let $cond: bool;
     let $local_5: ref "core:prelude/string.wado//String";
     let self_23: u64;
     let digit_count_31: i32;
     let offset_32: i32;
-    let self_36: ref "core:prelude/string.wado//String";
     let self_107: f64;
     let self_108: f32;
     let bits_116: u64;
@@ -188,7 +186,7 @@ fn "float_nan_constant_positive.wado/run"() with Stdout {
         break $inline_count_digits_u64_base_7: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(self_23))) - 1) / 4) + 1;
     };
     offset_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_139, 0, digit_count_31);
-    "core:prelude/primitive.wado/write_u64_base_digits"(local.tee self_36($sroa_$f_buf_139).repr, offset_32, self_23, digit_count_31, 4, 15, 0);
+    "core:prelude/primitive.wado/write_u64_base_digits"($sroa_$f_buf_139.repr, offset_32, self_23, digit_count_31, 4, 15, 0);
     if @unlikely(local.tee digit_count_31($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, digit_count_31);
@@ -232,7 +230,7 @@ fn "float_nan_constant_positive.wado/run"() with Stdout {
         break $inline_count_digits_u64_base_26: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(bits_116))) - 1) / 4) + 1;
     };
     digit_count_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_139, 0, offset_32);
-    "core:prelude/primitive.wado/write_u64_base_digits"(local.tee self_36($sroa_$f_buf_139).repr, digit_count_31, bits_116, offset_32, 4, 15, 0);
+    "core:prelude/primitive.wado/write_u64_base_digits"($sroa_$f_buf_139.repr, digit_count_31, bits_116, offset_32, 4, 15, 0);
     if @unlikely(local.tee offset_32($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, offset_32);
@@ -269,13 +267,13 @@ fn "float_nan_constant_positive.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(offset_32);
     offset_32 = local.tee self_107(builtin::f64_reinterpret_i64(9221120237041090560_i64)) != self_107;
     digit_count_31 = 0;
-    if @unlikely(local.tee $cond((if offset_32 -> i32 {
+    if @unlikely((if offset_32 -> i32 {
         $v2 = local.tee self_108(builtin::f32_reinterpret_i32(2143289344)) != self_108;
         digit_count_31 = 1;
         $v2;
     } else {
         0;
-    })) == 0) {
+    }) == 0) {
         cold_path;
         "float_nan_constant_positive.wado/run$cold0"(offset_32, $v2, digit_count_31);
         unreachable;

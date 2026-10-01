@@ -103,7 +103,6 @@ global global:core:prelude/format.wado::$const_obj_48: ref null Array<u8> = arra
 
 fn "string_substr_bytes_panic_boundary.wado/$cm_export__run"() {
     let self_5: ref "core:prelude/string.wado//StrSlice";
-    let part: ref Array<u8>;
     let $sroa_s_repr_17: ref Array<u8>;
     self_5 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $sroa_s_repr_17(array.new_data<u8>("日本語")), start: 0, end: 9 };
     $inline_core_prelude_string_wado_StrSlice__to_string_1: block {
@@ -111,7 +110,7 @@ fn "string_substr_bytes_panic_boundary.wado/$cm_export__run"() {
         let $mv_end_3: i32;
         multivalue_bind [$sroa_s_repr_17, $mv_start_2, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice"(self_5);
         $sroa_s_repr_17 = local.tee self_5(struct.new "core:prelude/string.wado//StrSlice" { repr: $sroa_s_repr_17, start: $mv_start_2, end: $mv_end_3 }).repr;
-        builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee $mv_end_3($mv_end_3 - $mv_start_2))), 0, $sroa_s_repr_17, $mv_start_2, $mv_end_3);
+        builtin::array_copy<u8>(builtin::array_new<u8>(local.tee $mv_end_3($mv_end_3 - $mv_start_2)), 0, $sroa_s_repr_17, $mv_start_2, $mv_end_3);
         break $inline_core_prelude_string_wado_StrSlice__to_string_1;
     };
     "wasi/task-return"(0);

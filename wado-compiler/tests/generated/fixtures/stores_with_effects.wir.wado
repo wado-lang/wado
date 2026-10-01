@@ -92,7 +92,6 @@ fn "stores_with_effects.wado/$cm_binding__Stdout_write_via_stream"(data) with St
 
 fn "stores_with_effects.wado/$cm_export__run"() {
     let d: ref "stores_with_effects.wado//Data";
-    let c: ref "stores_with_effects.wado//Container";
     let packed: i64;
     let rx_34: i32;
     let tx_35: i32;
@@ -104,7 +103,7 @@ fn "stores_with_effects.wado/$cm_export__run"() {
     $mv_field_2 = array.new_data<u8>("Storing data with value: 99");
     "core:rt/write_string_to_stream"(tx_35, $mv_field_2, 27);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_34);
-    if @unlikely(local.tee rx_34(local.tee c(struct.new "stores_with_effects.wado//Container" { data: d }).data.value) != 99) {
+    if @unlikely(local.tee rx_34(struct.new "stores_with_effects.wado//Container" { data: d }.data.value) != 99) {
         cold_path;
         "stores_with_effects.wado/run$cold0"(rx_34);
         unreachable;

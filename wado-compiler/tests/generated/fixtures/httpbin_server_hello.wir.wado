@@ -407,13 +407,11 @@ fn "httpbin_server_hello.wado/$cm_export__handle"(request) {
 
 fn "httpbin_server_hello.wado/$cm_task_entry__handle"(request) {
     let path: ref null "core:prelude/string.wado//String";
-    let p: ref null "core:prelude/string.wado//String";
-    let $pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
+    let p: ref "core:prelude/string.wado//String";
     let packed_186: i64;
     let tx_188: i32;
     let rx_190: i32;
     let tx_191: i32;
-    let self_193: ref "core:prelude/string.wado//StrUtf8ByteIter";
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
@@ -441,27 +439,27 @@ fn "httpbin_server_hello.wado/$cm_task_entry__handle"(request) {
             break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
         } {
             i = 200;
-            p = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, world!
+            path = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, world!
 "), used: 14 };
         } else {
             i = 404;
-            p = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Not Found
+            path = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Not Found
 "), used: 10 };
         }
     } else {
         i = 404;
-        p = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Not Found
+        path = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Not Found
 "), used: 10 };
     }
     a_end = builtin::i32_wrap_i64(local.tee packed_186("wasi/future-new"()));
     tx_188 = builtin::i32_wrap_i64(packed_186 >> 32_i64);
     rx_190 = builtin::i32_wrap_i64(local.tee packed_186("wasi/stream-new"()));
     tx_191 = builtin::i32_wrap_i64(packed_186 >> 32_i64);
-    drop("httpbin_server_hello.wado/$cm_binding__Response_set_status_code"(local.tee a_end(local.tee $pattern_temp_2("httpbin_server_hello.wado/$cm_binding__Response_new"("httpbin_server_hello.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_190 }, a_end)).0), i));
+    drop("httpbin_server_hello.wado/$cm_binding__Response_set_status_code"(local.tee a_end("httpbin_server_hello.wado/$cm_binding__Response_new"("httpbin_server_hello.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_190 }, a_end).0), i));
     i = 0;
     i = a_end;
     "wasi/task-return:handle"(0, i, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_191, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(local.tee self_193(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: p.repr, used: p.used, index: 0 })));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_191, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: path.repr, used: path.used, index: 0 }));
     "wasi/stream-drop-writable"(tx_191);
     "httpbin_server_hello.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_188, global:httpbin_server_hello.wado::$const_obj_1);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);

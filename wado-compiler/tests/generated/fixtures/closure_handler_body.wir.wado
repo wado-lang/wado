@@ -125,15 +125,12 @@ fn "closure_handler_body.wado/run"() with Stdout {
     let parenthesized: ref "closure_handler_body.wado//Sink";
     let blocked: ref "closure_handler_body.wado//Sink";
     let $local_6: ref "core:prelude/string.wado//String";
-    let elements_8: ref "Array<core:prelude/string.wado/String>";
     let new_used: i32;
     let start_33: i32;
     let packed: i64;
-    let $functor_50: ref "closure_handler_body.wado//$Closure_0";
-    let $functor_51: ref "closure_handler_body.wado//$Closure_2";
     let $sroa_$f_buf_62: ref "core:prelude/string.wado//String";
-    "closure_handler_body.wado/closure_handler_body.wado/$Closure_0::$call"(local.tee $functor_50(struct.new "closure_handler_body.wado//$Closure_0" { $capture_0: local.tee parenthesized(struct.new "closure_handler_body.wado//Sink" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_8(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }) }) }));
-    "closure_handler_body.wado/closure_handler_body.wado/$Closure_2::$call"(local.tee $functor_51(struct.new "closure_handler_body.wado//$Closure_2" { $capture_0: local.tee blocked(struct.new "closure_handler_body.wado//Sink" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_8(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }) }) }));
+    "closure_handler_body.wado/closure_handler_body.wado/$Closure_0::$call"(struct.new "closure_handler_body.wado//$Closure_0" { $capture_0: local.tee parenthesized(struct.new "closure_handler_body.wado//Sink" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }) }) });
+    "closure_handler_body.wado/closure_handler_body.wado/$Closure_2::$call"(struct.new "closure_handler_body.wado//$Closure_2" { $capture_0: local.tee blocked(struct.new "closure_handler_body.wado//Sink" { lines: ref.as_non_null(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }) }) });
     $sroa_$f_buf_62 = local.tee $local_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(parenthesized.lines.used, $sroa_$f_buf_62);
     if @unlikely(local.tee new_used($local_6.used + 1) > builtin::array_len($local_6.repr)) {
@@ -345,10 +342,9 @@ fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_0::$call"(self)
 }
 
 fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_1::$call"(self, message) {
-    let self_2: ref "closure_handler_body.wado//Sink";
     let self_4: ref "core:prelude//List<core:prelude/string.wado/String>";
     let used: i32;
-    if @unlikely(local.tee used(local.tee self_4(local.tee self_2(self.$capture_0).lines).used) >= builtin::array_len(self_4.repr)) {
+    if @unlikely(local.tee used(local.tee self_4(self.$capture_0.lines).used) >= builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_4);
     }
@@ -391,10 +387,9 @@ fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_2::$call"(self)
 }
 
 fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_3::$call"(self, message) {
-    let self_2: ref "closure_handler_body.wado//Sink";
     let self_4: ref "core:prelude//List<core:prelude/string.wado/String>";
     let used: i32;
-    if @unlikely(local.tee used(local.tee self_4(local.tee self_2(self.$capture_0).lines).used) >= builtin::array_len(self_4.repr)) {
+    if @unlikely(local.tee used(local.tee self_4(self.$capture_0.lines).used) >= builtin::array_len(self_4.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_4);
     }
@@ -447,13 +442,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
 }
 
 fn "closure/closure_handler_body.wado/$closure_wrapper_1"($env, $p0) {
-    let $typed_env: ref "closure_handler_body.wado//$Closure_1";
-    "closure_handler_body.wado/closure_handler_body.wado/$Closure_1::$call"(local.tee $typed_env(ref.cast "closure_handler_body.wado//$Closure_1"($env)), $p0);
+    "closure_handler_body.wado/closure_handler_body.wado/$Closure_1::$call"(ref.cast "closure_handler_body.wado//$Closure_1"($env), $p0);
 }
 
 fn "closure/closure_handler_body.wado/$closure_wrapper_3"($env, $p0) {
-    let $typed_env: ref "closure_handler_body.wado//$Closure_3";
-    "closure_handler_body.wado/closure_handler_body.wado/$Closure_3::$call"(local.tee $typed_env(ref.cast "closure_handler_body.wado//$Closure_3"($env)), $p0);
+    "closure_handler_body.wado/closure_handler_body.wado/$Closure_3::$call"(ref.cast "closure_handler_body.wado//$Closure_3"($env), $p0);
 }
 
 export fn "closure_handler_body.wado/$cm_export__run" as "run"

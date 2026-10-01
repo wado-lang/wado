@@ -234,7 +234,6 @@ fn "result_unit_cm_variant_passthrough.wado/write_helper"(dir, path, content) {
     let $vc_payload_1: ref "wasi:filesystem/types.wado//ErrorCode";
     let result: ref "core:prelude//List<u8>";
     let packed: i64;
-    let elements: ref Array<u8>;
     let byte: u8;
     let used: i32;
     let $sroa_self_repr_41: ref Array<u8>;
@@ -253,7 +252,7 @@ fn "result_unit_cm_variant_passthrough.wado/write_helper"(dir, path, content) {
         $sroa_self_repr_41 = content.repr;
         $sroa_self_used_42 = content.used;
         $sroa_self_index_43 = 0;
-        result = struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 };
+        result = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
         b2: block {
             l3: loop {
                 break_if b2 $sroa_self_index_43 >= $sroa_self_used_42;
@@ -282,15 +281,14 @@ fn "result_unit_cm_variant_passthrough.wado/write_helper"(dir, path, content) {
 fn "result_unit_cm_variant_passthrough.wado/run"() with Stdout, Preopens {
     let $load_0: i32;
     let dirs: ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
-    let result: ref null "wasi:filesystem/types.wado//ErrorCode";
     if local.tee $load_0(local.tee dirs("result_unit_cm_variant_passthrough.wado/$cm_binding__Preopens_get_directories"()).used) == 0 {
         return;
     }
-    if ref.is_null(local.tee result("result_unit_cm_variant_passthrough.wado/write_helper"(if @unlikely(0 >= $load_0) {
+    if ref.is_null("result_unit_cm_variant_passthrough.wado/write_helper"(if @unlikely(0 >= $load_0) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($load_0);
         unreachable;
-    }; builtin::array_get_value<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("never_actually_opened.txt"), used: 25 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }))) == 0 {
+    }; builtin::array_get_value<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("never_actually_opened.txt"), used: 25 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 })) == 0 {
         return;
     } else {
     }
@@ -384,13 +382,12 @@ fn "result_unit_cm_variant_passthrough.wado/$cm_binding__Preopens_get_directorie
 
 fn "result_unit_cm_variant_passthrough.wado/$cm_lift__Descriptor_open_at"($outptr) {
     let $disc: i32;
-    let $result_val: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let $local_4: ref "wasi:filesystem/types.wado//ErrorCode";
     let $local_6: ref null "core:prelude/string.wado//String";
     let len_8: i32;
     let arr_12: ref Array<u8>;
     let i: i32;
-    return local.tee $result_val((if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
+    return (if local.tee $disc(builtin::load_u8($outptr)) == 0 -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: builtin::load_i32($outptr + 4) };
     } else {
         $local_4 = (if local.tee $disc(builtin::load_u8($outptr + 4)) == 0 -> ref "wasi:filesystem/types.wado//ErrorCode" {
@@ -482,7 +479,7 @@ fn "result_unit_cm_variant_passthrough.wado/$cm_lift__Descriptor_open_at"($outpt
             struct.new "wasi:filesystem/types.wado//ErrorCode::Other" { discriminant: 36, payload_0: $local_6 };
         });
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: $local_4 };
-    }));
+    });
 }
 
 fn "result_unit_cm_variant_passthrough.wado/$cm_export__run"() {
