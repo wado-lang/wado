@@ -804,11 +804,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         scope.sem.decls.impl_sigs.insert(impl_def, sig);
     }
 
-    /// Require the impl's target and trait reference to name, between them, every
-    /// type parameter it declares — a use site determines them from the receiver
-    /// and trait arguments alone, so one they never mention has no value to be
-    /// given (Rust's E0207). A bound's arguments count as mentions, its subject
-    /// does not; an effect parameter is bound by the handler.
     /// Every `P: Trait<Assoc = …>` bound on the block's parameters that names
     /// another of them, which a use site then reads off `P`'s argument.
     fn impl_projections(&mut self, impl_block: &ast::ImplBlock) -> Vec<ImplProjection> {
@@ -840,6 +835,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         projections
     }
 
+    /// Require the impl's target and trait reference to name, between them, every
+    /// type parameter it declares — a use site determines them from the receiver
+    /// and trait arguments alone, so one they never mention has no value to be
+    /// given (Rust's E0207). A bound's arguments count as mentions, its subject
+    /// does not; an effect parameter is bound by the handler.
     fn check_impl_params_constrained(&mut self, impl_block: &ast::ImplBlock) {
         let mut named: Vec<String> = Vec::new();
         impl_block.ty.mentioned_names(&mut named);

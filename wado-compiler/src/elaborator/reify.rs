@@ -2750,7 +2750,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         TirExprKind::Cast {
                             expr: cast_inner,
                             target_type,
-                        } if matches!(&cast_inner.kind, TirExprKind::IntLiteral { .. }) => {
+                        } => {
                             if let TirExprKind::IntLiteral { value, repr } = &cast_inner.kind {
                                 let neg_literal = TirExpr::new(
                                     TirExprKind::IntLiteral {
@@ -2760,14 +2760,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                     cast_inner.type_id,
                                     span,
                                 );
-                                return TirExpr::new(
-                                    TirExprKind::Cast {
-                                        expr: Box::new(neg_literal),
-                                        target_type: *target_type,
-                                    },
-                                    *target_type,
-                                    span,
-                                );
+                                return bare_cast(neg_literal, *target_type, span);
                             }
                         }
                         _ => {}
@@ -8457,14 +8450,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (false, true) => return handle_from_f64(inner, target_type),
             _ => inner,
         };
-        TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(inner),
-                target_type,
-            },
-            target_type,
-            span,
-        )
+        bare_cast(inner, target_type, span)
     }
 
     /// A cast with `f16` or `bf16` on either side. No instruction converts
@@ -8533,27 +8519,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// A call of the `core:rt` function `item` on `arg`.
-    fn rt_call(
+    pub(super) fn rt_call(
         &self,
         item: CompilerItem,
         arg: TirExpr,
         result_type: TypeId,
         span: Span,
     ) -> TirExpr {
-        unary_call(self.rt_function(item), arg, result_type, span)
-    }
-
-    /// The `core:rt` function the compiler item `item` names.
-    fn rt_function(&self, item: CompilerItem) -> FunctionRef {
-        let type_table = self.tysys.type_table.borrow();
-        let (module_source, name) = type_table.compiler_items().require_function(item);
-        FunctionRef {
-            module_source: module_source.clone(),
-            name: name.to_string(),
-            template: None,
-            monomorph_info: None,
-            method_info: None,
-        }
+        let func = {
+            let type_table = self.tysys.type_table.borrow();
+            let (module_source, name) = type_table.compiler_items().require_function(item);
+            FunctionRef {
+                module_source: module_source.clone(),
+                name: name.to_string(),
+                template: None,
+                monomorph_info: None,
+                method_info: None,
+            }
+        };
+        unary_call(func, arg, result_type, span)
     }
 
     /// A cast with a wide integer on either side, `inner` already read through

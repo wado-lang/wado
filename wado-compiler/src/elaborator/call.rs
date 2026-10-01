@@ -3424,11 +3424,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let mut tt = self.tysys.type_table.borrow_mut();
                             trait_
                                 .and_then(|trait_| {
-                                    tt.resolve_assoc_type_of_trait(owner_ty, &trait_, &assoc.name)
+                                    tt.resolve_trait_assoc_type_of_instance(
+                                        owner_ty,
+                                        &trait_,
+                                        &assoc.name,
+                                    )
                                 })
-                                .or_else(|| tt.resolve_assoc_type(owner_ty, &assoc.name))
                                 .or_else(|| {
-                                    tt.resolve_generic_assoc_type_mono(owner_ty, &assoc.name)
+                                    tt.resolve_assoc_type_of_instance(owner_ty, &assoc.name)
                                 })
                         };
                         // Reflection's associated types are registered by a
