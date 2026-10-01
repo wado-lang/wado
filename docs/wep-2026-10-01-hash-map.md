@@ -98,6 +98,11 @@ other's variant, and `core:collections` holds them as peers:
 `collections/treemap.wado`, `collections/hashmap.wado`, and the shared
 `collections/entries.wado` behind the facade.
 
+Comparison reads the same entries. Two maps are equal when they hold equal
+entries in the same insertion order, and order entry by entry, then by length,
+as a `List` of pairs does. A seed, the index layout, and what was removed on the
+way take no part.
+
 ### `Hash` joins the prelude
 
 ```wado
@@ -106,7 +111,7 @@ pub trait Hasher with () {
     fn write_bytes(&mut self, bytes: ByteSlice);
 }
 
-pub trait Hash with () {
+pub trait Hash: Eq with () {
     fn hash<H: Hasher>(&self, h: &mut H);
 }
 ```

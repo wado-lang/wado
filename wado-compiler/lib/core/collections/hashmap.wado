@@ -245,11 +245,7 @@ impl<K: Hash, V> HashMap<K, V> {
 
     /// Returns the value corresponding to the key, or null if not found.
     pub fn get(&self, key: K) -> Option<V> {
-        let index = self.find_index(&key);
-        if index >= 0 {
-            return Option::Some(self.log.values[index]);
-        }
-        return null;
+        return self.log.value_at(self.find_index(&key));
     }
 
     /// Removes a key from the map and returns true if the key was present.
@@ -307,11 +303,7 @@ impl<K: Hash, V> HashMap<K, V> {
 impl<V> HashMap<String, V> {
     /// Returns the value stored under text equal to `key`, or null.
     pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V> {
-        let index = self.find_index_str(key.as_str_slice());
-        if index >= 0 {
-            return Option::Some(self.log.values[index]);
-        }
-        return null;
+        return self.log.value_at(self.find_index_str(key.as_str_slice()));
     }
 
     /// Returns true if some key spells the same text as `key`.
@@ -344,11 +336,7 @@ impl<V> HashMap<String, V> {
 impl<V: Ref> HashMap<String, V> {
     /// Returns a reference to the value stored under text equal to `key`.
     pub fn get_ref_str<S: AsStrSlice>(&self, key: S) -> Option<&V> {
-        let index = self.find_index_str(key.as_str_slice());
-        if index >= 0 {
-            return Option::Some(&self.log.values[index]);
-        }
-        return null;
+        return self.log.value_ref_at(self.find_index_str(key.as_str_slice()));
     }
 }
 
@@ -378,11 +366,7 @@ impl<K: Hash, V> IndexValue<K> for HashMap<K, V> {
     type Output = V;
 
     fn index_value(&self, key: K) -> Self::Output {
-        let index = self.find_index(&key);
-        if index < 0 {
-            panic(`key not found: ${key:?}`);
-        }
-        return self.log.values[index];
+        return self.log.values[self.log.found(self.find_index(&key), &key)];
     }
 }
 
@@ -390,11 +374,7 @@ impl<K: Hash, V: Ref> IndexRef<K> for HashMap<K, V> {
     type Output = V;
 
     fn index_ref(&self, key: K) -> &V {
-        let index = self.find_index(&key);
-        if index < 0 {
-            panic(`key not found: ${key:?}`);
-        }
-        return &self.log.values[index];
+        return &self.log.values[self.log.found(self.find_index(&key), &key)];
     }
 }
 
@@ -402,10 +382,7 @@ impl<K: Hash, V: RefMut> IndexRefMut<K> for HashMap<K, V> {
     type Output = V;
 
     fn index_ref_mut(&mut self, key: K) -> &mut V {
-        let index = self.find_index(&key);
-        if index < 0 {
-            panic(`key not found: ${key:?}`);
-        }
+        let index = self.log.found(self.find_index(&key), &key);
         return &mut self.log.values[index];
     }
 }

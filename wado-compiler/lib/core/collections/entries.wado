@@ -101,6 +101,23 @@ impl<K, V> EntryLog<K, V> {
         self.deleted_count = 0;
     }
 
+    /// The value of entry `e`, which a lookup answered, or null for its miss
+    /// (`e < 0`).
+    internal fn value_at(&self, e: i32) -> Option<V> {
+        if e < 0 {
+            return null;
+        }
+        return Option::Some(self.values[e]);
+    }
+
+    /// `e`, which a lookup of `key` answered; its miss (`e < 0`) panics.
+    internal fn found(&self, e: i32, key: &K) -> i32 {
+        if e < 0 {
+            panic(`key not found: ${*key:?}`);
+        }
+        return e;
+    }
+
     /// The first live entry from `from` on, or `count` for none. A log nothing
     /// was removed from has no dead entry to skip.
     fn next_live(&self, from: i32) -> i32 {
@@ -123,6 +140,16 @@ impl<K, V> EntryLog<K, V> {
 
     internal fn entries(&self) -> MapEntriesRefIter<K, V> {
         return MapEntriesRefIter { log: self, index: 0 };
+    }
+}
+
+impl<K, V: Ref> EntryLog<K, V> {
+    /// `value_at`, borrowing the value.
+    internal fn value_ref_at(&self, e: i32) -> Option<&V> {
+        if e < 0 {
+            return null;
+        }
+        return Option::Some(&self.values[e]);
     }
 }
 
