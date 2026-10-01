@@ -2688,21 +2688,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .pointee_of(receiver)
                 .expect("a reference key is asked of a reference receiver")
         });
-        let concrete_type_args: Vec<TypeId> = match pointee {
-            Some(pointee) => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_type_args(pointee)
-                .unwrap_or_default(),
-            None => {
-                if let ResolvedType::GenericInstance { type_args, .. } =
-                    self.tysys.type_table.borrow().get(receiver).clone()
-                {
-                    type_args
-                } else {
-                    Vec::new()
-                }
+        let concrete_type_args: Vec<TypeId> = {
+            let table = self.tysys.type_table.borrow();
+            if let Some(pointee) = pointee {
+                table.nominal_type_args(pointee).unwrap_or_default()
+            } else if let Some(args) =
+                target.decl().and_then(|decl| table.args_at_decl(receiver, decl))
+            {
+                // A generic newtype's own impls bind its own arguments.
+                args
+            } else if let ResolvedType::GenericInstance { type_args, .. } = table.get(receiver) {
+                type_args.clone()
+            } else {
+                Vec::new()
             }
         };
 

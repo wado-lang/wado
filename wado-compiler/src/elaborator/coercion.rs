@@ -1292,7 +1292,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// An unnamed struct literal against a newtype over a struct, built as that
-    /// struct: literal coercion reaches a newtype as it reaches its base.
+    /// struct: literal coercion reaches a newtype as it reaches its base. A
+    /// newtype building from pairs itself is a map, which takes the literal.
     pub(super) fn try_coerce_struct_newtype(
         &mut self,
         expr: &Expr,
@@ -1307,7 +1308,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .newtype_representation(target_type)?;
-        if struct_lit.name.is_some() || self.implicit_struct_target(Some(base)).is_none() {
+        if struct_lit.name.is_some()
+            || self.implicit_struct_target(Some(base)).is_none()
+            || self.is_key_value_literal_target(target_type)
+        {
             return None;
         }
         self.resolve_expr(expr, ctx, Some(base));
@@ -1677,7 +1681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .nominal_type_args(output_type)
+                .declared_type_args(output_type)
                 .unwrap_or_default(),
             type_arg_names: Vec::new(),
             method,

@@ -1983,9 +1983,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // The identity, not the representation: an erased generic newtype
-        // reads as its base, whose statics its own would lose to.
-        let resolved = self.tysys.type_table.borrow().get_unerased(target_type_id).clone();
+        let resolved = self.tysys.type_table.borrow().get(target_type_id).clone();
         let (struct_name, struct_module, mangled_struct_name, struct_type_args) = match resolved {
             ResolvedType::Struct { .. }
             | ResolvedType::Resource { .. }
