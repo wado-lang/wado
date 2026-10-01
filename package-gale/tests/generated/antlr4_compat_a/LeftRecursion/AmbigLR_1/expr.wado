@@ -1628,57 +1628,11 @@ impl Parser {
     }
 }
 
-fn scan_stat_alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
-    let mut pos = pos;
-    pos = scan_expr(tokens, pos, memo, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_NEWLINE { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_stat_alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
-    pos += 1;
-    pos = scan_expr(tokens, pos, memo, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_NEWLINE { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_stat(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(kind) {
-        if kind == TK_ID {
-            let mut best: i32 = -1;
-            let try_0_end = scan_stat_alt_0(tokens, start, memo);
-            if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_stat_alt_1(tokens, start, memo);
-            if try_1_end > best { best = try_1_end; }
-            if best >= 0 { pos = best; return pos; }
-            return -1;
-        } else if _kind_set_1(kind) {
-            return scan_stat_alt_0(tokens, start, memo);
-        }
-    }
-    if kind == TK_NEWLINE {
-        pos = start + 1;
-        return pos;
-    }
-    return -1;
-}
-
 fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_2(kind) {
+    if _kind_set_4(kind) {
         pos = start + 1;
         return pos;
     } else if kind == TK_LIT_LPAREN {
@@ -1697,7 +1651,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32
 
 fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_2(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_expr(tokens, pos, memo, 3);
     if pos < 0 { return -1; }
@@ -1706,7 +1660,7 @@ fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32
 
 fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_4(tokens[pos]) { return -1; }
+    if pos >= tokens.len() || !_kind_set_3(tokens[pos]) { return -1; }
     pos += 1;
     pos = scan_expr(tokens, pos, memo, 2);
     if pos < 0 { return -1; }
@@ -1729,7 +1683,7 @@ fn scan_expr__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, min_p
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_3(suffix_kind) {
+        if _kind_set_2(suffix_kind) {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_0(tokens, pos, memo);
@@ -1737,7 +1691,7 @@ fn scan_expr__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, min_p
             } else {
                 break;
             }
-        } else if _kind_set_4(suffix_kind) {
+        } else if _kind_set_3(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_expr_lr_1(tokens, pos, memo);
@@ -1752,18 +1706,13 @@ fn scan_expr__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, min_p
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser) -> () {
-    p.site = 0;
-    _parse_stat(p);
-    return;
-}
-
 fn _parse_prog(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_PROG, _start);
-    _parse_prog__inner(p);
+    p.site = 0;
+    _parse_stat(p);
     if p.recovering { let _ = p.recover_rule(RK_PROG, "prog", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -1777,6 +1726,15 @@ fn _parse_stat__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
+fn scan_stat__alt_0(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
+    let mut pos = pos;
+    pos = scan_expr(tokens, pos, memo, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_NEWLINE { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
     p.b.set_alt(1);
     p.expect(TK_ID, &SYNC_0, false);
@@ -1787,6 +1745,19 @@ fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
+fn scan_stat__alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
+    pos += 1;
+    pos = scan_expr(tokens, pos, memo, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_NEWLINE { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_stat__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
@@ -1794,8 +1765,8 @@ fn _parse_stat__inner(p: &mut Parser) -> () {
         if kind == TK_ID {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_1 = scan_stat_alt_1(_sd_tokens, _sd_pos, &mut p.memo);
-            let _sd_p_0 = scan_stat_alt_0(_sd_tokens, _sd_pos, &mut p.memo);
+            let _sd_p_1 = scan_stat__alt_1(_sd_tokens, _sd_pos, &mut p.memo);
+            let _sd_p_0 = scan_stat__alt_0(_sd_tokens, _sd_pos, &mut p.memo);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -1874,7 +1845,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _kind_set_3(_sk) {
+        if _kind_set_2(_sk) {
             if 2 >= min_prec {
                 if scan_expr_lr_0(&p.kinds, p.pos, &mut p.memo) < 0 {
                     break;
@@ -1888,7 +1859,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
             } else {
                 break;
             }
-        } else if _kind_set_4(_sk) {
+        } else if _kind_set_3(_sk) {
             if 1 >= min_prec {
                 if scan_expr_lr_1(&p.kinds, p.pos, &mut p.memo) < 0 {
                     break;
@@ -1983,15 +1954,15 @@ fn _kind_set_1(k: i32) -> bool {
 }
 
 fn _kind_set_2(k: i32) -> bool {
-    return k matches { TK_ID | TK_INT };
-}
-
-fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_DIV | TK_MUL };
 }
 
-fn _kind_set_4(k: i32) -> bool {
+fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_ADD | TK_SUB };
+}
+
+fn _kind_set_4(k: i32) -> bool {
+    return k matches { TK_ID | TK_INT };
 }
 
 global EMPTY_SYNC: List<i32> = [];

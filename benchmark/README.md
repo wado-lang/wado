@@ -293,14 +293,14 @@ mishandled are written another way at the same token count.
 Generate a Rust parser from an ANTLR4 `.g4` grammar. Gale is an
 ANTLR4-compatible generator, so the head-to-head comparison is against
 [ANTLR4](https://www.antlr.org/) itself over the **identical grammar** —
-`RustLexer.g4` + `RustParser.g4` (41870 bytes), same input, same ALL(\*)
+`RustLexer.g4` + `RustParser.g4` (42155 bytes), same input, same ALL(\*)
 algorithm family, both emitting a parser. Throughput is grammar bytes processed
 per second (higher is better).
 
 | Implementation  |  Throughput |    ms/iter | vs best |
 | --------------- | ----------: | ---------: | ------- |
-| Java (ANTLR4)   | 752.40 KB/s |  56.028 ms | 1.00x   |
-| **Wado** (Gale) | 336.76 KB/s | 125.177 ms | 2.23x   |
+| Java (ANTLR4)   | 728.03 KB/s |  57.902 ms | 1.00x   |
+| **Wado** (Gale) | 375.67 KB/s | 112.211 ms | 1.94x   |
 
 Both rows run in-process and warm, emitting a parser and no listeners: Gale a
 Wado recursive-descent one from memory, ANTLR4 Java onto disk.

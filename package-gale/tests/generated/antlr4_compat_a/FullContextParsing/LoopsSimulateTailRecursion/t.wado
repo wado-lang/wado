@@ -2689,42 +2689,6 @@ struct ExprOrAssignVals {
     _span_hi_expr: i32 = -1,
 }
 
-fn scan_expr_or_assign_alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(20);
-    pos = scan_expr(tokens, pos, atn, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_expr_or_assign_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(25);
-    pos = scan_expr(tokens, pos, atn, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_expr_or_assign(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_0(kind) {
-        let mut best: i32 = -1;
-        let try_0_end = scan_expr_or_assign_alt_0(tokens, start, atn, follow);
-        if try_0_end > best { best = try_0_end; }
-        let try_1_end = scan_expr_or_assign_alt_1(tokens, start, atn, follow);
-        if try_1_end > best { best = try_1_end; }
-        if best >= 0 { pos = best; return pos; }
-        return -1;
-    }
-    return -1;
-}
-
 fn scan_expr(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(30);
@@ -2747,26 +2711,6 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0)
     return pos;
 }
 
-fn scan_expr_primary_alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_expr_primary_alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_expr_primary(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -2785,9 +2729,9 @@ fn scan_expr_primary(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
     if kind == TK_ID {
         let _atn_alt = atn_predict_once(&ATN_SIM, 3, atn, tokens, pos, TK_EOF, 0);
         if _atn_alt == 1 {
-            return scan_expr_primary_alt_1(tokens, start, atn);
+            return scan_expr_primary__alt_1(tokens, start, atn);
         }
-        return scan_expr_primary_alt_2(tokens, start, atn);
+        return scan_expr_primary__alt_2(tokens, start, atn);
     }
     return -1;
 }
@@ -2831,6 +2775,17 @@ fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Exp
     return vals;
 }
 
+fn scan_expr_or_assign__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    atn.stack.push(20);
+    pos = scan_expr(tokens, pos, atn, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: i64 = 0, vals: ExprOrAssignVals = ExprOrAssignVals {}) -> ExprOrAssignVals {
     let mut vals = vals;
     vals._span_lo_expr = p.pos;
@@ -2844,6 +2799,15 @@ fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: i64 = 0, vals: Exp
     return vals;
 }
 
+fn scan_expr_or_assign__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    atn.stack.push(25);
+    pos = scan_expr(tokens, pos, atn, follow);
+    atn.stack.pop();
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn _parse_expr_or_assign__inner(p: &mut Parser, follow: i64 = 0) -> ExprOrAssignVals {
     let mut vals = ExprOrAssignVals {};
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
@@ -2851,8 +2815,8 @@ fn _parse_expr_or_assign__inner(p: &mut Parser, follow: i64 = 0) -> ExprOrAssign
     if _kind_set_0(kind) {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_1 = scan_expr_or_assign_alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
-        let _sd_p_0 = scan_expr_or_assign_alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_1 = scan_expr_or_assign__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_0 = scan_expr_or_assign__alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -2926,9 +2890,29 @@ fn _parse_expr_primary__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
+fn scan_expr_primary__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_expr_primary__inner_alt_2(p: &mut Parser) -> () {
     p.expect(TK_ID, &EMPTY_SYNC, true);
     return;
+}
+
+fn scan_expr_primary__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn _parse_expr_primary__inner(p: &mut Parser) -> () {

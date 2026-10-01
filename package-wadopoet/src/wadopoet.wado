@@ -1,13 +1,118 @@
 use { ReflectTemplate } from "core:prelude";
+use { TreeMap, TreeSet } from "core:collections";
 
-/// Indentation and blocks for generated Wado source. The builder specs
-/// (`StructSpec`, `VariantSpec`, `FnSpec`, …) construct declarations around it;
-/// function bodies stay string-based.
+/// What a call does with the callee's result.
+pub variant CallForm {
+    /// `callee(args);`
+    Discard,
+    /// `return callee(args);`
+    Return,
+    /// The prefix given, then the call: `let x = callee(args);`, `pos = …`.
+    Bind(String),
+}
+
+/// A call statement kept apart from the text around it, so `prune` can see
+/// which function it calls and with what.
+pub struct CallStmt {
+    /// Statements that run just before the call, each on its own line. They
+    /// travel with the call when `prune` forwards it.
+    pub pre: List<String> = [],
+    pub form: CallForm = CallForm::Discard,
+    pub callee: String,
+    pub args: List<String>,
+}
+
+enum SegKind {
+    /// Lines written as text.
+    Text,
+    /// A function's head: its signature and what `prune` reads of it.
+    FnOpen,
+    /// The brace closing a function body.
+    Close,
+    Call,
+    /// One statement a forwarded function contributed at a call site, after
+    /// the call's `pre`.
+    Line,
+    /// `return;`.
+    Return,
+}
+
+enum Form {
+    Discard,
+    Return,
+    /// The `bind` span, then the call.
+    Bind,
+}
+
+/// A piece of a `CodeWriter`. Every text it prints is a byte range of the
+/// writer's `buf` and every name it references a range of its `names`, so a
+/// segment is one object however much it holds: the writer keeps thousands
+/// live until `prune`, and each object is one more for every collection to
+/// copy. What a pass asks of a segment is counted as it is written, never read
+/// back from its text.
+struct Seg {
+    kind: SegKind,
+    /// The indentation depth. For `Text`, the levels added to every line start
+    /// when printed: an `append` records the depth it spliced at.
+    depth: i32,
+    /// `Text`: the text. `FnOpen`: the signature. `Call`: the callee. `Line`:
+    /// the statement.
+    text_start: i32 = 0,
+    text_end: i32 = 0,
+    /// Names the segment references for `prune`, beyond a call's callee.
+    names_start: i32 = 0,
+    names_end: i32 = 0,
+    /// `Call`, `Line`: statements run first, each ending in a newline.
+    pre_start: i32 = 0,
+    pre_end: i32 = 0,
+    /// `Call`: the arguments, joined by `, `.
+    args_start: i32 = 0,
+    args_end: i32 = 0,
+    arg_count: i32 = 0,
+    form: Form = Form::Discard,
+    bind_start: i32 = 0,
+    bind_end: i32 = 0,
+    /// `Text`: statement lines (`line` calls, block openers and closers), and
+    /// whether `write` or `raw` wrote some text whose lines are not counted.
+    lines: i32 = 0,
+    opaque: bool = false,
+    /// `Text`: the first `line` call's text, and whether `stmt` wrote it.
+    first_start: i32 = 0,
+    first_end: i32 = 0,
+    movable: bool = false,
+    /// `Close`: a blank line follows.
+    blank_after: bool = false,
+    /// `FnOpen`: the name, the parameter names joined by `, `, each
+    /// parameter's default (empty for none) ending in a newline, and what
+    /// `prune` may do with it.
+    name_start: i32 = 0,
+    name_end: i32 = 0,
+    params_start: i32 = 0,
+    params_end: i32 = 0,
+    param_count: i32 = 0,
+    defaults_start: i32 = 0,
+    defaults_end: i32 = 0,
+    prunable: bool = false,
+    returns_unit: bool = false,
+}
+
+/// Generated Wado source: indentation and blocks for the text, and the
+/// functions, calls and references within it held apart, so `prune` can forward
+/// and drop functions before anything is printed. The builder specs
+/// (`StructSpec`, `VariantSpec`, `FnSpec`, …) construct declarations around it.
 pub struct CodeWriter {
+    /// Every byte a segment prints, and the text still being written from
+    /// `cur.text_start` on.
     buf: String,
+    names: List<String>,
+    segs: List<Seg>,
+    /// The text being written, which `flush_text` ends at `buf`'s end.
+    cur: Seg,
     indent_level: i32,
     fresh_line: bool,
     id_counter: i32,
+    /// Per open block, whether it is a function body `FnSpec::emit_begin` opened.
+    fn_blocks: List<bool> = [],
     hoisted_names: List<[String, String]> = [],
     hoisted: String = "",
 }
@@ -22,6 +127,9 @@ impl CodeWriter {
     pub fn with_capacity(initial: i32) -> CodeWriter {
         return CodeWriter {
             buf: String::with_capacity(initial),
+            names: [],
+            segs: [],
+            cur: Seg { kind: SegKind::Text, depth: 0 },
             indent_level: 0,
             fresh_line: true,
             id_counter: 0,
@@ -30,6 +138,7 @@ impl CodeWriter {
 
     /// Write text with auto-indentation at line starts.
     pub fn write<S: AsStrSlice>(&mut self, text: S) {
+        self.cur.opaque = true;
         for let c of text.chars() {
             if c == '\n' {
                 self.buf.push('\n');
@@ -44,9 +153,22 @@ impl CodeWriter {
         }
     }
 
+    /// Write a statement `prune` may move to a call site, where a function body
+    /// is this statement alone: one that neither leaves the function nor binds
+    /// a name, so it means there what it means here.
+    pub fn stmt<S: AsStrSlice>(&mut self, text: S) {
+        self.cur.movable = self.cur.lines == 0;
+        self.line(text);
+    }
+
     /// Write a complete line (auto-indented, with trailing newline).
     pub fn line<S: AsStrSlice>(&mut self, text: S) {
         self.write_indent();
+        if self.cur.lines == 0 {
+            self.cur.first_start = self.buf.len();
+            self.cur.first_end = self.buf.len() + text.len();
+        }
+        self.cur.lines += 1;
         self.buf.push_str(text);
         self.buf.push('\n');
         self.fresh_line = true;
@@ -54,6 +176,12 @@ impl CodeWriter {
 
     /// Emit a blank line.
     pub fn blank(&mut self) {
+        let n = self.segs.len();
+        if n > 0 && self.segs[n - 1].kind matches { Close } && !self.segs[n - 1].blank_after && self.cur_is_empty() {
+            self.segs[n - 1].blank_after = true;
+            self.fresh_line = true;
+            return;
+        }
         self.buf.push('\n');
         self.fresh_line = true;
     }
@@ -63,38 +191,189 @@ impl CodeWriter {
         self.write_indent();
         self.buf.push_str(opener);
         self.buf.push_str(" {\n");
+        self.cur.lines += 1;
         self.fresh_line = true;
         self.indent_level += 1;
+        self.fn_blocks.push(false);
     }
 
     /// End a block: decreases indentation and emits "}".
     pub fn end(&mut self) {
         self.indent_level -= 1;
+        if self.fn_blocks.pop().unwrap_or(false) {
+            self.flush_text();
+            self.push_seg(Seg { kind: SegKind::Close, depth: self.indent_level });
+            return;
+        }
         self.write_indent();
         self.buf.push_str("}\n");
+        self.cur.lines += 1;
         self.fresh_line = true;
     }
 
     /// End a block with a trailing suffix, e.g. "," or "\n".
     pub fn end_with<S: AsStrSlice>(&mut self, suffix: S) {
         self.indent_level -= 1;
+        assert !self.fn_blocks.pop().unwrap_or(false), "CodeWriter: a function body closes with `end`";
         self.write_indent();
         self.buf.push('}');
         self.buf.push_str(suffix);
         self.buf.push('\n');
+        self.cur.lines += 1;
         self.fresh_line = true;
     }
 
     /// Close the current block and open a new one: "} opener {".
     /// Useful for else-if chains: `w.else_begin("else if cond")`.
     pub fn else_begin<S: AsStrSlice>(&mut self, opener: S) {
+        assert !self.fn_blocks.last().unwrap_or(false), "CodeWriter: a function body has no else";
         self.indent_level -= 1;
         self.write_indent();
         self.buf.push_str("} ");
         self.buf.push_str(opener);
         self.buf.push_str(" {\n");
+        self.cur.lines += 1;
         self.fresh_line = true;
         self.indent_level += 1;
+    }
+
+    /// A call statement at the current depth.
+    pub fn call(&mut self, call: CallStmt) {
+        self.flush_text();
+        let mut seg = Seg { kind: SegKind::Call, depth: self.indent_level, arg_count: call.args.len() };
+        seg.pre_start = self.buf.len();
+        for let p of &call.pre {
+            self.buf.push_str(p);
+            self.buf.push('\n');
+        }
+        seg.pre_end = self.buf.len();
+        seg.form = match &call.form {
+            Discard => Form::Discard,
+            Return => Form::Return,
+            Bind(prefix) => {
+                seg.bind_start = self.buf.len();
+                self.buf.push_str(prefix);
+                seg.bind_end = self.buf.len();
+                Form::Bind;
+            },
+        };
+        seg.text_start = self.buf.len();
+        self.buf.push_str(&call.callee);
+        seg.text_end = self.buf.len();
+        seg.args_start = self.buf.len();
+        for let mut i = 0; i < call.args.len(); i += 1 {
+            if i > 0 {
+                self.buf.push_str(", ");
+            }
+            self.buf.push_str(&call.args[i]);
+        }
+        seg.args_end = self.buf.len();
+        self.push_seg(seg);
+    }
+
+    /// `return;` at the current depth.
+    pub fn ret(&mut self) {
+        self.flush_text();
+        self.push_seg(Seg { kind: SegKind::Return, depth: self.indent_level });
+    }
+
+    /// Record that the text here references `name`, which keeps a function or
+    /// global of that name through `prune`.
+    pub fn note<S: AsStrSlice>(&mut self, name: S) {
+        self.names.push(name.to_string());
+    }
+
+    /// Splice in what `other` wrote, indented to the current depth.
+    pub fn append(&mut self, other: &CodeWriter) {
+        assert other.indent_level == 0, `CodeWriter: appending an unbalanced writer (level=${other.indent_level})`;
+        assert other.hoisted.is_empty(), "CodeWriter: an appended writer holds a hoisted definition never written";
+        self.flush_text();
+        let text_base = self.buf.len();
+        let names_base = self.names.len();
+        self.buf.push_str(&other.buf);
+        self.names.extend(&other.names);
+        let d = self.indent_level;
+        for let seg of &other.segs {
+            self.segs.push(seg.moved(text_base, names_base, d));
+        }
+        if !other.cur_is_empty() {
+            let mut rest = other.cur.moved(text_base, names_base, d);
+            rest.text_end = self.buf.len();
+            rest.names_end = self.names.len();
+            self.segs.push(rest);
+        }
+        self.restart_text();
+        self.fresh_line = true;
+    }
+
+    fn open_fn(&mut self, spec: &FnSpec) {
+        self.flush_text();
+        let mut seg = Seg {
+            kind: SegKind::FnOpen,
+            depth: self.indent_level,
+            param_count: spec.params.len(),
+            prunable: spec.prunable,
+            returns_unit: spec.returns_unit(),
+        };
+        seg.text_start = self.buf.len();
+        self.buf.push_str(&spec.signature());
+        seg.text_end = self.buf.len();
+        seg.name_start = self.buf.len();
+        self.buf.push_str(&spec.name);
+        seg.name_end = self.buf.len();
+        seg.params_start = self.buf.len();
+        for let mut i = 0; i < spec.params.len(); i += 1 {
+            if i > 0 {
+                self.buf.push_str(", ");
+            }
+            self.buf.push_str(&spec.params[i].name);
+        }
+        seg.params_end = self.buf.len();
+        seg.defaults_start = self.buf.len();
+        for let p of &spec.params {
+            if let Some(d) = &p.default_value {
+                assert !d.contains("\n"), `CodeWriter: a default spanning lines: ${*d}`;
+                self.buf.push_str(d);
+            }
+            self.buf.push('\n');
+        }
+        seg.defaults_end = self.buf.len();
+        self.push_seg(seg);
+        self.indent_level += 1;
+        self.fn_blocks.push(true);
+    }
+
+    /// Add a segment other than text. The caller has ended the text before it
+    /// with `flush_text`, before writing any bytes of the segment's own.
+    fn push_seg(&mut self, seg: Seg) {
+        self.segs.push(seg);
+        self.restart_text();
+        self.fresh_line = true;
+    }
+
+    fn cur_is_empty(&self) -> bool {
+        return self.cur.text_start == self.buf.len() && self.cur.names_start == self.names.len();
+    }
+
+    fn flush_text(&mut self) {
+        if self.cur_is_empty() {
+            return;
+        }
+        let mut seg = self.cur;
+        seg.text_end = self.buf.len();
+        seg.names_end = self.names.len();
+        self.segs.push(seg);
+        self.restart_text();
+    }
+
+    /// Start the text segment at the ends of `buf` and `names`.
+    fn restart_text(&mut self) {
+        self.cur = Seg {
+            kind: SegKind::Text,
+            depth: 0,
+            text_start: self.buf.len(),
+            names_start: self.names.len(),
+        };
     }
 
     /// Increase indentation level manually.
@@ -140,6 +419,7 @@ impl CodeWriter {
 
     /// Append raw text with no indentation handling.
     pub fn raw<S: AsStrSlice>(&mut self, text: S) {
+        self.cur.opaque = true;
         self.buf.push_str(text);
         if text.len() > 0 {
             self.fresh_line = text.as_str_slice().ends_with("\n");
@@ -150,13 +430,526 @@ impl CodeWriter {
     pub fn to_string(&self) -> String {
         assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level=${self.indent_level})`;
         assert self.hoisted.is_empty(), "CodeWriter: a hoisted definition was never written";
-        return self.buf;
+        if self.segs.is_empty() && self.cur.text_start == 0 {
+            return self.buf;
+        }
+        let mut out = String::with_capacity(self.buf.len());
+        for let seg of &self.segs {
+            self.print_seg(seg, &mut out);
+        }
+        out.push_str(&self.slice(self.cur.text_start, self.buf.len()));
+        return out;
+    }
+
+    /// Whether `other` holds what this writer holds, segment for segment, so
+    /// both print the same code. It compares without printing either, and can
+    /// miss two writers that print alike from segments built differently.
+    pub fn same_code(&self, other: &CodeWriter) -> bool {
+        return self.buf == other.buf && self.names == other.names && self.segs == other.segs && self.cur == other.cur;
+    }
+
+    /// Forward calls through functions that only forward, then drop each
+    /// function `FnSpec::set_prunable` marked that nothing kept calls or
+    /// `note`s. Everything else written at the top level is kept, and what it
+    /// references.
+    ///
+    /// A prunable function forwards when its body, apart from `note`d names, is
+    /// one call returned, one call then `return;`, or one `stmt` line then
+    /// `return;`. A call to it passing its own parameters by name becomes that
+    /// body, the call's statements and the callee's `pre` included. A call
+    /// passing anything else is renamed to the inner callee instead, where the
+    /// body forwards every parameter in order and runs nothing before.
+    pub fn prune(&mut self) {
+        self.flush_text();
+        let items = self.items();
+        let mut item_of = TreeMap::<String, i32>::new();
+        for let mut k = 0; k < items.len(); k += 1 {
+            let head = &self.segs[items[k].start];
+            item_of[self.slice(head.name_start, head.name_end).to_string()] = k;
+        }
+        for let mut round = 0; round < MAX_FORWARD_ROUNDS; round += 1 {
+            if !self.forward_calls(&items, &item_of) {
+                break;
+            }
+        }
+        self.drop_unreached(&items, &item_of);
+        // Forwarding appends joined spans past the text it flushed, which are
+        // no text of the writer's own.
+        self.restart_text();
+    }
+
+    /// Every name the text `note`s or a call statement calls.
+    pub fn references(&self) -> TreeSet<String> {
+        let mut found = TreeSet::<String>::new();
+        for let seg of &self.segs {
+            if seg.kind matches { Call } {
+                found.insert(self.slice(seg.text_start, seg.text_end).to_string());
+            }
+            for let mut i = seg.names_start; i < seg.names_end; i += 1 {
+                found.insert(self.names[i]);
+            }
+        }
+        for let mut i = self.cur.names_start; i < self.names.len(); i += 1 {
+            found.insert(self.names[i]);
+        }
+        return found;
     }
 
     fn write_indent(&mut self) {
         for let mut i = 0; i < self.indent_level; i += 1 {
             self.buf.push_str("    ");
         }
+    }
+
+    fn slice(&self, start: i32, end: i32) -> StrSlice {
+        return self.buf.as_str_slice().slice(start, end);
+    }
+
+    fn same_text(&self, a_start: i32, a_end: i32, b_start: i32, b_end: i32) -> bool {
+        return self.slice(a_start, a_end) == self.slice(b_start, b_end);
+    }
+
+    /// The top-level function items, in order.
+    fn items(&self) -> List<Item> {
+        let mut items: List<Item> = [];
+        let mut opened_at: Option<i32> = null;
+        for let mut i = 0; i < self.segs.len(); i += 1 {
+            let seg = &self.segs[i];
+            if seg.depth != 0 {
+                continue;
+            }
+            if seg.kind matches { FnOpen } {
+                opened_at = Option::Some(i);
+            } else if seg.kind matches { Close } {
+                let Some(start) = opened_at else {
+                    panic("CodeWriter: a function body closes that never opened");
+                };
+                items.push(Item { start, end: i });
+                opened_at = null;
+            }
+        }
+        return items;
+    }
+
+    /// One round of forwarding over the functions `items`, `item_of` indexing
+    /// them by name. Whether any call changed.
+    fn forward_calls(&mut self, items: &List<Item>, item_of: &TreeMap<String, i32>) -> bool {
+        let mut forwards: List<Option<Forward>> = [];
+        let mut any = false;
+        for let item of items {
+            let fw = if self.segs[item.start].prunable { self.forward_of(item) } else { null };
+            any = any || fw matches { Some(_) };
+            forwards.push(fw);
+        }
+        if !any {
+            return false;
+        }
+        let mut changed = false;
+        for let mut i = 0; i < self.segs.len(); i += 1 {
+            let site = &self.segs[i];
+            if !site.kind matches { Call } {
+                continue;
+            }
+            let Some(k) = self.item_called(site, item_of) else {
+                continue;
+            };
+            let Some(fw) = &forwards[k] else {
+                continue;
+            };
+            if let Some(seg) = self.forward_site(i, items[k].start, fw, items, item_of) {
+                self.segs[i] = seg;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /// What a call to `item` can run instead, or `null`.
+    fn forward_of(&mut self, item: &Item) -> Option<Forward> {
+        let mut names = [0, 0];
+        let mut body: List<i32> = [];
+        for let mut i = item.start + 1; i < item.end; i += 1 {
+            let seg = &self.segs[i];
+            if seg.kind matches { Text } {
+                names = self.join_names(names, [seg.names_start, seg.names_end]);
+                if seg.text_start == seg.text_end {
+                    continue;
+                }
+            }
+            if body.len() == 2 {
+                return null;
+            }
+            body.push(i);
+        }
+        if body.is_empty() {
+            return null;
+        }
+        let first = &self.segs[body[0]];
+        let call_forwards = if body.len() == 1 {
+            first.kind matches { Call } && first.form matches { Return };
+        } else {
+            if !self.segs[body[1]].kind matches { Return } {
+                return null;
+            }
+            first.kind matches { Call } && first.form matches { Discard };
+        };
+        if call_forwards {
+            let [start, end] = self.join_names(names, [first.names_start, first.names_end]);
+            return Option::Some(Forward { call: Option::Some(*first), names_start: start, names_end: end });
+        }
+        if body.len() == 2 && first.kind matches { Text } && first.lines == 1 && first.movable && !first.opaque {
+            return Option::Some(Forward {
+                call: null,
+                stmt_start: first.first_start,
+                stmt_end: first.first_end,
+                names_start: names.0,
+                names_end: names.1,
+            });
+        }
+        return null;
+    }
+
+    /// What the call `segs[site_i]` to the function headed `segs[head_i]`
+    /// becomes under `fw`, or `null` where it cannot be forwarded.
+    fn forward_site(
+        &mut self,
+        site_i: i32,
+        head_i: i32,
+        fw: &Forward,
+        items: &List<Item>,
+        item_of: &TreeMap<String, i32>,
+    ) -> Option<Seg> {
+        let site = self.segs[site_i];
+        let head = &self.segs[head_i];
+        let passes_params = self.same_text(site.args_start, site.args_end, head.params_start, head.params_end);
+        let [names_start, names_end] = self.join_names([site.names_start, site.names_end], [
+            fw.names_start, fw.names_end,
+        ]);
+        let Some(inner) = &fw.call else {
+            if !passes_params || !site.form matches { Discard } {
+                return null;
+            }
+            return Option::Some(Seg {
+                kind: SegKind::Line,
+                depth: site.depth,
+                text_start: fw.stmt_start,
+                text_end: fw.stmt_end,
+                pre_start: site.pre_start,
+                pre_end: site.pre_end,
+                names_start,
+                names_end,
+            });
+        };
+        if self.same_text(inner.text_start, inner.text_end, head.name_start, head.name_end) {
+            return null;
+        }
+        // A body discarding the inner result forwards a value only where there is
+        // none to discard.
+        if inner.form matches { Discard } && !site.form matches { Discard } {
+            let Some(k) = self.item_called(inner, item_of) else {
+                return null;
+            };
+            if !self.segs[items[k].start].returns_unit {
+                return null;
+            }
+        }
+        let mut seg = site;
+        seg.text_start = inner.text_start;
+        seg.text_end = inner.text_end;
+        seg.names_start = names_start;
+        seg.names_end = names_end;
+        if passes_params {
+            let [pre_start, pre_end] = self.join_text([site.pre_start, site.pre_end], [inner.pre_start, inner.pre_end]);
+            seg.pre_start = pre_start;
+            seg.pre_end = pre_end;
+            seg.args_start = inner.args_start;
+            seg.args_end = inner.args_end;
+            seg.arg_count = inner.arg_count;
+            return Option::Some(seg);
+        }
+        if inner.pre_start != inner.pre_end
+            || !self.same_text(inner.args_start, inner.args_end, head.params_start, head.params_end)
+            || !self.renamed_call_keeps_defaults(&site, head, inner, items, item_of) {
+            return null;
+        }
+        return Option::Some(seg);
+    }
+
+    /// Whether `site`, leaving out defaulted parameters of the function `head`
+    /// opens, gets the same defaults from `inner`'s callee.
+    fn renamed_call_keeps_defaults(
+        &self,
+        site: &Seg,
+        head: &Seg,
+        inner: &Seg,
+        items: &List<Item>,
+        item_of: &TreeMap<String, i32>,
+    ) -> bool {
+        if site.arg_count == head.param_count {
+            return true;
+        }
+        let Some(k) = self.item_called(inner, item_of) else {
+            return false;
+        };
+        let target = &self.segs[items[k].start];
+        for let mut i = site.arg_count; i < head.param_count; i += 1 {
+            if i >= target.param_count || self.default_of(head, i) != self.default_of(target, i) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// The function item the call `call` calls, where the writer holds it.
+    fn item_called(&self, call: &Seg, item_of: &TreeMap<String, i32>) -> Option<i32> {
+        return item_of.get_str(self.slice(call.text_start, call.text_end));
+    }
+
+    /// The default of the function `head` opens' parameter `i`; empty for none.
+    fn default_of(&self, head: &Seg, i: i32) -> StrSlice {
+        assert i < head.param_count, `default_of: parameter ${i} of ${head.param_count}`;
+        let mut start = head.defaults_start;
+        let mut n = 0;
+        for let mut j = start; j < head.defaults_end; j += 1 {
+            if self.buf.get_byte_unchecked(j) != b'\n' {
+                continue;
+            }
+            if n == i {
+                return self.slice(start, j);
+            }
+            n += 1;
+            start = j + 1;
+        }
+        unreachable();
+    }
+
+    /// The names spans `a` and `b` hold, as one span: either where the other is
+    /// empty or they adjoin, else a copy of both at the end of `names`.
+    fn join_names(&mut self, a: [i32, i32], b: [i32, i32]) -> [i32, i32] {
+        if b.0 == b.1 {
+            return a;
+        }
+        if a.0 == a.1 {
+            return b;
+        }
+        if a.1 == b.0 {
+            return [a.0, b.1];
+        }
+        let start = self.names.len();
+        for let mut i = a.0; i < a.1; i += 1 {
+            self.names.push(self.names[i]);
+        }
+        for let mut i = b.0; i < b.1; i += 1 {
+            self.names.push(self.names[i]);
+        }
+        return [start, self.names.len()];
+    }
+
+    /// `join_names` for byte spans of `buf`.
+    fn join_text(&mut self, a: [i32, i32], b: [i32, i32]) -> [i32, i32] {
+        if b.0 == b.1 {
+            return a;
+        }
+        if a.0 == a.1 {
+            return b;
+        }
+        if a.1 == b.0 {
+            return [a.0, b.1];
+        }
+        let start = self.buf.len();
+        let joined = `${self.slice(a.0, a.1)}${self.slice(b.0, b.1)}`;
+        self.buf.push_str(&joined);
+        return [start, self.buf.len()];
+    }
+
+    /// Mark kept the item a name the segments `from..=to` reference names.
+    fn reach_from(
+        &self,
+        from: i32,
+        to: i32,
+        item_of: &TreeMap<String, i32>,
+        kept: &mut List<bool>,
+        queue: &mut List<i32>,
+    ) {
+        for let mut i = from; i <= to; i += 1 {
+            let seg = &self.segs[i];
+            if seg.kind matches { Call } {
+                reach(self.slice(seg.text_start, seg.text_end), item_of, kept, queue);
+            }
+            for let mut n = seg.names_start; n < seg.names_end; n += 1 {
+                reach(&self.names[n], item_of, kept, queue);
+            }
+        }
+    }
+
+    /// Drop the prunable functions of `items` nothing kept reaches.
+    fn drop_unreached(&mut self, items: &List<Item>, item_of: &TreeMap<String, i32>) {
+        let mut kept: List<bool> = [];
+        let mut queue: List<i32> = [];
+        for let item of items {
+            let root = !self.segs[item.start].prunable;
+            kept.push(root);
+            if root {
+                queue.push(kept.len() - 1);
+            }
+        }
+        let mut from = 0;
+        for let item of items {
+            self.reach_from(from, item.start - 1, item_of, &mut kept, &mut queue);
+            from = item.end + 1;
+        }
+        self.reach_from(from, self.segs.len() - 1, item_of, &mut kept, &mut queue);
+        while let Some(k) = queue.pop() {
+            self.reach_from(items[k].start, items[k].end, item_of, &mut kept, &mut queue);
+        }
+        let mut out: List<Seg> = [];
+        let mut next = 0;
+        for let mut i = 0; i < self.segs.len(); i += 1 {
+            if next < items.len() && i == items[next].start {
+                if !kept[next] {
+                    i = items[next].end;
+                    next += 1;
+                    continue;
+                }
+                next += 1;
+            }
+            out.push(self.segs[i]);
+        }
+        self.segs = out;
+    }
+
+    fn print_seg(&self, seg: &Seg, out: &mut String) {
+        match seg.kind {
+            Text => print_shifted(out, self.slice(seg.text_start, seg.text_end), seg.depth),
+            FnOpen => {
+                push_indent(out, seg.depth);
+                out.push_str(self.slice(seg.text_start, seg.text_end));
+                out.push_str(" {\n");
+            },
+            Close => {
+                push_indent(out, seg.depth);
+                out.push_str(if seg.blank_after { "}\n\n" } else { "}\n" });
+            },
+            Call => {
+                print_lines(out, self.slice(seg.pre_start, seg.pre_end), seg.depth);
+                push_indent(out, seg.depth);
+                match seg.form {
+                    Discard => {
+                    },
+                    Return => out.push_str("return "),
+                    Bind => out.push_str(self.slice(seg.bind_start, seg.bind_end)),
+                }
+                out.push_str(self.slice(seg.text_start, seg.text_end));
+                out.push('(');
+                out.push_str(self.slice(seg.args_start, seg.args_end));
+                out.push_str(");\n");
+            },
+            Line => {
+                print_lines(out, self.slice(seg.pre_start, seg.pre_end), seg.depth);
+                push_indent(out, seg.depth);
+                out.push_str(self.slice(seg.text_start, seg.text_end));
+                out.push('\n');
+            },
+            Return => {
+                push_indent(out, seg.depth);
+                out.push_str("return;\n");
+            },
+        }
+    }
+}
+
+/// Forwarding rounds before `prune` stops following chains of forwarders. Each
+/// round resolves one link of every chain, and generated code nests few.
+global MAX_FORWARD_ROUNDS: i32 = 8;
+
+/// A top-level function: the segments of its head and closing brace.
+struct Item {
+    start: i32,
+    end: i32,
+}
+
+/// What a forwarding function runs: its one call, or where that is `null` the
+/// one statement in `stmt`; and the names its body `note`s.
+struct Forward {
+    call: Option<Seg>,
+    stmt_start: i32 = 0,
+    stmt_end: i32 = 0,
+    names_start: i32,
+    names_end: i32,
+}
+
+/// Mark the item `name` names kept, if there is one.
+fn reach<S: AsStrSlice>(name: S, item_of: &TreeMap<String, i32>, kept: &mut List<bool>, queue: &mut List<i32>) {
+    if let Some(k) = item_of.get_str(name) {
+        if !kept[k] {
+            kept[k] = true;
+            queue.push(k);
+        }
+    }
+}
+
+impl Seg {
+    /// This segment of another writer, moved into one whose `buf` and `names`
+    /// hold that writer's from `t` and `names_base` on, `levels` deeper.
+    fn moved(&self, t: i32, names_base: i32, levels: i32) -> Seg {
+        return Seg {
+            ..*self,
+            depth: self.depth + levels,
+            text_start: self.text_start + t,
+            text_end: self.text_end + t,
+            names_start: self.names_start + names_base,
+            names_end: self.names_end + names_base,
+            pre_start: self.pre_start + t,
+            pre_end: self.pre_end + t,
+            args_start: self.args_start + t,
+            args_end: self.args_end + t,
+            bind_start: self.bind_start + t,
+            bind_end: self.bind_end + t,
+            first_start: self.first_start + t,
+            first_end: self.first_end + t,
+            name_start: self.name_start + t,
+            name_end: self.name_end + t,
+            params_start: self.params_start + t,
+            params_end: self.params_end + t,
+            defaults_start: self.defaults_start + t,
+            defaults_end: self.defaults_end + t,
+        };
+    }
+}
+
+/// Each newline-ended line of `lines` at `depth`.
+fn print_lines(out: &mut String, lines: StrSlice, depth: i32) {
+    let mut start = 0;
+    for let mut i = 0; i < lines.len(); i += 1 {
+        if lines.get_byte_unchecked(i) == b'\n' {
+            push_indent(out, depth);
+            out.push_str(lines.slice(start, i + 1));
+            start = i + 1;
+        }
+    }
+}
+
+fn push_indent(out: &mut String, depth: i32) {
+    for let mut i = 0; i < depth; i += 1 {
+        out.push_str("    ");
+    }
+}
+
+/// `text` with `levels` more indentation at each line start that has content.
+fn print_shifted(out: &mut String, text: StrSlice, levels: i32) {
+    if levels == 0 {
+        out.push_str(text);
+        return;
+    }
+    let mut fresh = true;
+    for let c of text.chars() {
+        if c == '\n' {
+            fresh = true;
+        } else if fresh {
+            push_indent(out, levels);
+            fresh = false;
+        }
+        out.push(c);
     }
 }
 
@@ -621,6 +1414,8 @@ pub struct FnSpec {
     /// type (e.g. `["Stdout", "Stderr"]` → ` with (Stdout, Stderr)`).
     effects: List<String>,
     receiver: Option<String>,
+    /// Whether `CodeWriter::prune` may drop it when nothing kept references it.
+    prunable: bool = false,
 }
 
 impl FnSpec {
@@ -634,6 +1429,21 @@ impl FnSpec {
             generics: [],
             effects: [],
             receiver: null,
+        };
+    }
+
+    /// Let `CodeWriter::prune` drop the function when nothing kept calls it or
+    /// `note`s its name, and forward calls through it. Every reference to it
+    /// must then be a `CallStmt` or a `note`.
+    pub fn set_prunable(&mut self) -> &mut FnSpec {
+        self.prunable = true;
+        return self;
+    }
+
+    fn returns_unit(&self) -> bool {
+        return match &self.return_type {
+            None => true,
+            Some(t) => *t == "()",
         };
     }
 
@@ -677,7 +1487,7 @@ impl FnSpec {
     /// Emit the function signature as a `begin` block (opens `{`).
     /// Caller writes the body via `w`, then calls `w.end()`.
     pub fn emit_begin(&self, w: &mut CodeWriter) {
-        w.begin(&self.signature());
+        w.open_fn(self);
     }
 
     /// Build the full signature string.

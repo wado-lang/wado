@@ -9,8 +9,8 @@ it. A package names it under `[dependencies]` and imports it from
 `CodeWriter` holds the text and its indentation. `begin` opens a block, `end`
 closes it, and `line` writes one line at the current depth. The specs
 (`StructSpec`, `VariantSpec`, `EnumSpec`, `FnSpec`, `GlobalSpec`, `ImplSpec`)
-build a declaration and emit it into a writer. A function body stays plain
-lines.
+build a declaration and emit it into a writer. Most of a function body is
+plain lines.
 
 ```wado
 use { CodeWriter, FnSpec, StructSpec, Vis } from "lib:wadopoet";
@@ -30,6 +30,37 @@ w.end();
 
 let source = w.to_string();
 ```
+
+`append` splices in what another writer holds, indented to the current depth.
+Build a body in its own writer and append it, rather than printing it with
+`to_string` and writing the text: text loses the calls and names below.
+
+## Pruning Functions
+
+`prune` drops the functions nothing uses and forwards calls through the ones
+that only forward. It reads what the writer holds apart from the text, so the
+generator states each use:
+
+- `call(CallStmt)` writes a call statement. `pre` holds statements that run just
+  before it, and `form` says whether the result is discarded, returned, or bound
+  (`CallForm::Bind("let x = ")`).
+- `stmt(text)` writes a statement line `prune` may move into a caller: one that
+  neither leaves the function nor binds a name.
+- `ret()` writes a bare `return;`.
+- `note(name)` records that the text around it references `name`.
+
+`FnSpec::set_prunable` marks a function `prune` may drop. Every use of one must
+be a `call` or a `note`, since `prune` does not read the text. Everything else at
+the top level is kept, and so is everything it reaches.
+
+A prunable function forwards when its body is one call it returns, one call then
+`return;`, or one `stmt` line then `return;`. A call passing it its own
+parameters by name gets that body instead. A call passing other arguments is
+renamed to the inner callee, when the body passes every parameter on in order
+and runs nothing first.
+
+`references()` lists every name the writer still notes or calls. A generator
+that builds tables only for what kept code names asks it after `prune`.
 
 A name the generator mints from its input must not be reserved. Check it with
 `is_reserved`. An enum case or another qualified name need only avoid

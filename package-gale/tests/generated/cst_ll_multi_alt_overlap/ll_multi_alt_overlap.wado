@@ -1542,25 +1542,6 @@ impl Parser {
     }
 }
 
-fn scan_a_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
-    pos += 1;
-    pos = scan_a(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)));
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_Y && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
-        pos += 1;
-    }
-    return pos;
-}
-
-fn scan_a_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1568,14 +1549,14 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if kind == TK_X {
         let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
         if la_1 == TK_X {
-            return scan_a_alt_0(tokens, start, follow);
+            return scan_a__alt_0(tokens, start, follow);
         } else if _kind_set_0(la_1) {
-            return scan_a_alt_1(tokens, start, follow);
+            return scan_a__alt_1(tokens, start, follow);
         } else {
             let mut best: i32 = -1;
-            let try_0_end = scan_a_alt_0(tokens, start, follow);
+            let try_0_end = scan_a__alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_a_alt_1(tokens, start, follow);
+            let try_1_end = scan_a__alt_1(tokens, start, follow);
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; return pos; }
         }
@@ -1652,9 +1633,28 @@ fn _parse_a__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_a__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
+    pos += 1;
+    pos = scan_a(tokens, pos, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)));
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && tokens[pos] == TK_Y && (!follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(tokens, pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
+        pos += 1;
+    }
+    return pos;
+}
+
 fn _parse_a__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_X, &EMPTY_SYNC, true);
     return;
+}
+
+fn scan_a__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -1668,8 +1668,8 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_a_alt_0(_sd_tokens, _sd_pos, follow);
-            let _sd_p_1 = scan_a_alt_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = scan_a__alt_0(_sd_tokens, _sd_pos, follow);
+            let _sd_p_1 = scan_a__alt_1(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {

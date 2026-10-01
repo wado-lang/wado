@@ -33,7 +33,7 @@ use { RecoverySets, empty_recovery_sets } from "./recovery_sets.wado";
 use { gate_body_of, SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 
 /// A token-kind set interned during parser codegen. Multi-element
 /// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
@@ -171,6 +171,11 @@ pub struct GenContext {
     /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
     /// terminal on the valid hot path never rebuilds or copies the set.
     sync_set_registry: TreeMap<String, KindSetEntry>,
+    /// Per function being emitted, innermost last, the top-level names its text
+    /// references, which it `note`s at its end for `CodeWriter::prune`.
+    ref_frames: List<TreeSet<String>>,
+    /// Names referenced outside any function frame.
+    root_refs: TreeSet<String>,
     /// Cache of `tail_greedy_first(rule)` indexed by dense rule id (see
     /// the memo caches above).
     tail_greedy_cache: List<Option<List<String>>>,
@@ -318,18 +323,13 @@ pub struct GenContext {
     /// The block a finished alternative leaves by, where the rule's `@after`
     /// follows it; a finished alternative returns where this is `null`.
     alt_exit_label: Option<String>,
-    /// By helper name, the one call a helper that only forwards would make,
-    /// which its callers make instead.
-    forwarded_calls: TreeMap<String, Forwarded>,
     /// By rule name, the ways a rule begins that `first2_of_element` found
     /// without meeting a cycle.
     first2_cache: TreeMap<String, Heads>,
-}
-
-/// A forwarding helper's one call, and the call-site stamps it sets first.
-pub struct Forwarded {
-    pub stamps: List<String>,
-    pub call: String,
+    /// Per rule index, whether emitted code calls one of the rule's scan
+    /// functions; `scan_queue` holds the called rules not yet emitted.
+    scan_called: List<bool>,
+    scan_queue: List<i32>,
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -386,6 +386,8 @@ impl GenContext {
             follow_mask_registry: TreeMap::new(),
             follow_mask_depths: [],
             sync_set_registry: TreeMap::new(),
+            ref_frames: [],
+            root_refs: TreeSet::new(),
             tail_greedy_cache: none_list_cache(rule_count),
             diagnostics: [],
             caller_follow_gate_seen: false,
@@ -430,9 +432,26 @@ impl GenContext {
             one_token_rules,
             snake_index,
             alt_exit_label: null,
-            forwarded_calls: TreeMap::new(),
             first2_cache: TreeMap::new(),
+            scan_called: false_flags(rule_count),
+            scan_queue: [],
         };
+    }
+
+    /// `scan_<snake>`, the name of a scan function rule `snake` defines, for
+    /// a call: the call is what has the rule's scan functions emitted.
+    pub fn scan_fn_of<S: AsStrSlice>(&mut self, snake: S) -> String {
+        let rule = self.snake_index[snake.to_string()];
+        if !self.scan_called[rule] {
+            self.scan_called[rule] = true;
+            self.scan_queue.push(rule);
+        }
+        return self.noted(scan_fn_name(snake));
+    }
+
+    /// The next rule whose scan functions are called and not yet emitted.
+    pub fn next_called_scan(&mut self) -> Option<i32> {
+        return self.scan_queue.pop();
     }
 
     /// The rule whose scan a scan call to `snake` can call instead: past every
@@ -706,16 +725,16 @@ impl GenContext {
     /// The trailing arguments of a scan call for the parser state it borrows:
     /// the gate, the ATN state, then the memo. Empty where the scan borrows
     /// none of them.
-    pub fn scan_state_args(&self) -> String {
-        let mut args = String::new();
+    pub fn scan_state_args(&self) -> List<String> {
+        let mut args: List<String> = [];
         if self.emit_scan_gate() {
-            args.push_str(`, ${self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD)}`);
+            args.push(self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD));
         }
         if self.needs_atn() {
-            args.push_str(`, ${self.atn_state_arg()}`);
+            args.push(self.atn_state_arg());
         }
         if self.scan_memo {
-            args.push_str(`, ${self.state_arg(SCAN_MEMO_HANDLE, SCAN_MEMO_HANDLE)}`);
+            args.push(self.state_arg(SCAN_MEMO_HANDLE, SCAN_MEMO_HANDLE));
         }
         return args;
     }
@@ -876,40 +895,29 @@ impl GenContext {
         return &self.recovery;
     }
 
-    /// What may follow terminal `leaf_site` inside its rule, as `TK_*` names,
+    /// What may follow terminal `leaf_site` inside its rule, as kind ids,
     /// and whether the rule may end after it.
-    pub fn leaf_follow(&self, leaf_site: i32) -> [List<String>, bool] {
+    pub fn leaf_follow(&self, leaf_site: i32) -> [List<i32>, bool] {
         let r = &self.recovery;
         assert leaf_site >= 0 && leaf_site < r.leaf_follow.len(), `terminal ${leaf_site} has an ATN state`;
-        return [self.token_kinds.names_of(&r.leaf_follow[leaf_site]), r.leaf_follow_ends[leaf_site]];
+        return [r.leaf_follow[leaf_site], r.leaf_follow_ends[leaf_site]];
     }
 
-    /// What a subrule expects on entry, as `TK_*` names; `null` where its
+    /// What a subrule expects on entry, as kind ids; `null` where its
     /// rule may end there instead, or the site names no decision.
-    pub fn decision_entry_expect(&self, site: i32) -> Option<List<String>> {
-        return self.expect_names(&self.recovery.decision_entry, site);
+    pub fn decision_entry_expect(&self, site: i32) -> Option<List<i32>> {
+        return expect_ids(&self.recovery.decision_entry, site);
     }
 
     /// What a `*` / `+` expects after an iteration.
-    pub fn decision_back_expect(&self, site: i32) -> Option<List<String>> {
-        return self.expect_names(&self.recovery.decision_back, site);
+    pub fn decision_back_expect(&self, site: i32) -> Option<List<i32>> {
+        return expect_ids(&self.recovery.decision_back, site);
     }
 
     /// What a rule's own alternative block expects on entry.
-    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<String>> {
+    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<i32>> {
         assert rule >= 0 && rule < self.recovery.rule_entry.len(), `rule_entry_expect: rule ${rule} has no entry set`;
-        return self.expect_names(&self.recovery.rule_entry, rule);
-    }
-
-    fn expect_names(&self, sets: &List<Option<List<i32>>>, i: i32) -> Option<List<String>> {
-        // `Atn.decision_sites` is sparse: a site past its end marks no decision.
-        if i < 0 || i >= sets.len() {
-            return null;
-        }
-        if let Some(ids) = &sets[i] {
-            return Option::Some(self.token_kinds.names_of(ids));
-        }
-        return null;
+        return expect_ids(&self.recovery.rule_entry, rule);
     }
 
     /// Whether a `*` / `+` at decision `site` may exit on a token in `kinds`,
@@ -2542,7 +2550,10 @@ impl GenContext {
     /// (regardless of order or repeated elements) collapse to the same
     /// canonical form and therefore the same helper id.
     fn canonical_kind_ids(&mut self, tokens: &List<String>) -> List<i32> {
-        let mut ids = self.names_to_ids(tokens);
+        return self.canonical_ids(self.names_to_ids(tokens));
+    }
+
+    fn canonical_ids(&mut self, mut ids: List<i32>) -> List<i32> {
         self.ensure_kind_rank();
         let rank = &self.kind_rank;
         ids.sort_by(|a: &i32, b: &i32| rank[*a].cmp(&rank[*b]));
@@ -2584,11 +2595,44 @@ impl GenContext {
         return self.kind_set_registry.values().iter_value().collect();
     }
 
+    /// Open the reference frame of a function about to be emitted: what
+    /// `note_ref` records until `end_ref_frame` is that function's.
+    pub fn begin_ref_frame(&mut self) {
+        self.ref_frames.push(TreeSet::new());
+    }
+
+    /// Close the innermost reference frame, handing back what it recorded.
+    pub fn end_ref_frame(&mut self) -> TreeSet<String> {
+        return self.ref_frames.pop().unwrap();
+    }
+
+    /// What was referenced outside every function frame.
+    pub fn take_root_refs(&mut self) -> TreeSet<String> {
+        let refs = self.root_refs;
+        self.root_refs = TreeSet::new();
+        return refs;
+    }
+
+    /// Record that the text being built references the top-level `name`.
+    pub fn note_ref(&mut self, name: &String) {
+        let n = self.ref_frames.len();
+        if n == 0 {
+            self.root_refs.insert(*name);
+        } else {
+            self.ref_frames[n - 1].insert(*name);
+        }
+    }
+
+    fn noted(&mut self, name: String) -> String {
+        self.note_ref(&name);
+        return name;
+    }
+
     /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
     /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
     /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
-    pub fn intern_sync_set(&mut self, tokens: &List<String>) -> Option<i32> {
-        let ids = self.canonical_kind_ids(tokens);
+    pub fn sync_set(&mut self, ids: List<i32>) -> Option<i32> {
+        let ids = self.canonical_ids(ids);
         if ids.is_empty() {
             return null;
         }
@@ -2601,43 +2645,36 @@ impl GenContext {
         return Option::<i32>::Some(id);
     }
 
-    pub fn set_forwarded_call<S: AsStrSlice>(&mut self, helper: S, forwarded: Forwarded) {
-        self.forwarded_calls[helper.to_string()] = forwarded;
-    }
-
-    pub fn forwarded_call<S: AsStrSlice>(&self, helper: S) -> Option<Forwarded> {
-        return self.forwarded_calls.get_str(helper);
-    }
-
     pub fn set_alt_exit_label(&mut self, label: Option<String>) {
         self.alt_exit_label = label;
     }
 
-    /// The statement a finished alternative leaves by, handing on `value`
-    /// (empty for none).
-    pub fn alt_exit<S: AsStrSlice>(&self, value: S) -> String {
-        let Some(label) = &self.alt_exit_label else {
-            return if value.is_empty() { String::from("return;") } else { `return ${value};` };
-        };
-        return if value.is_empty() { `break ${label};` } else { `break ${label}: ${value};` };
+    /// The block a finished alternative breaks out of, or `null` where it returns.
+    pub fn alt_exit_label(&self) -> Option<String> {
+        return self.alt_exit_label;
+    }
+
+    /// `sync_set` of a set of `TK_*` names.
+    pub fn sync_name_set(&mut self, tokens: &List<String>) -> Option<i32> {
+        return self.sync_set(self.names_to_ids(tokens));
     }
 
     /// `SYNC_<id>`, the set as the bits a membership test reads, or
     /// `EMPTY_SYNC`.
-    pub fn sync_bits_ref(&mut self, tokens: &List<String>) -> String {
-        let Some(id) = self.intern_sync_set(tokens) else {
+    pub fn sync_bits_ref(&mut self, set: Option<i32>) -> String {
+        let Some(id) = set else {
             return String::from("EMPTY_SYNC");
         };
-        return `SYNC_${id}`;
+        return self.noted(sync_bits_name(id));
     }
 
     /// `EXPECTED_<id>`, the set as the kind list a diagnostic names, or
     /// `EMPTY_SYNC`.
-    pub fn sync_list_ref(&mut self, tokens: &List<String>) -> String {
-        let Some(id) = self.intern_sync_set(tokens) else {
+    pub fn sync_list_ref(&mut self, set: Option<i32>) -> String {
+        let Some(id) = set else {
             return String::from("EMPTY_SYNC");
         };
-        return `EXPECTED_${id}`;
+        return self.noted(sync_list_name(id));
     }
 
     /// The interned sync sets, in id order.
@@ -2696,8 +2733,8 @@ impl GenContext {
     }
 
     /// The global naming FOLLOW mask `id`.
-    pub fn follow_mask_ref(&self, id: i32) -> String {
-        return `FOLLOW_MASK_${id}`;
+    pub fn follow_mask_ref(&mut self, id: i32) -> String {
+        return self.noted(follow_mask_name(id));
     }
 
     /// The interned FOLLOW masks, in `FOLLOW_MASK_<id>` order.
@@ -2721,8 +2758,12 @@ impl GenContext {
         if tokens.len() == 1 {
             return `${expr} == ${tokens[0]}`;
         }
+        return `${self.kind_set_fn(tokens)}(${expr})`;
+    }
+
+    fn kind_set_fn(&mut self, tokens: &List<String>) -> String {
         let id = self.intern_kind_set(tokens);
-        return `_kind_set_${id}(${expr})`;
+        return self.noted(kind_set_fn_name(id));
     }
 
     /// Render a guard: enter, or go round again, while the lookahead is in
@@ -2889,8 +2930,7 @@ impl GenContext {
         if tokens.len() == 1 {
             return `${expr} != ${tokens[0]}`;
         }
-        let id = self.intern_kind_set(tokens);
-        return `!_kind_set_${id}(${expr})`;
+        return `!${self.kind_set_fn(tokens)}(${expr})`;
     }
 }
 
@@ -2905,6 +2945,40 @@ fn join_ids(ids: &List<i32>) -> String {
         s.push_display(&ids[i]);
     }
     return s;
+}
+
+/// `scan_<snake>`, the name of the rule `snake`'s scan function where it is
+/// defined. A call takes the name from `GenContext::scan_fn_of`.
+pub fn scan_fn_name<S: AsStrSlice>(snake: S) -> String {
+    return `scan_${snake}`;
+}
+
+/// The `SYNC_<id>` global: interned sync set `id` as membership bits.
+pub fn sync_bits_name(id: i32) -> String {
+    return `SYNC_${id}`;
+}
+
+/// The `EXPECTED_<id>` global: interned sync set `id` as the kinds a diagnostic names.
+pub fn sync_list_name(id: i32) -> String {
+    return `EXPECTED_${id}`;
+}
+
+/// The `FOLLOW_MASK_<id>` global.
+pub fn follow_mask_name(id: i32) -> String {
+    return `FOLLOW_MASK_${id}`;
+}
+
+/// The `_kind_set_<id>` membership helper.
+pub fn kind_set_fn_name(id: i32) -> String {
+    return `_kind_set_${id}`;
+}
+
+fn expect_ids(sets: &List<Option<List<i32>>>, i: i32) -> Option<List<i32>> {
+    // `Atn.decision_sites` is sparse: a site past its end marks no decision.
+    if i < 0 || i >= sets.len() {
+        return null;
+    }
+    return sets[i];
 }
 
 /// Registry key of a canonical K-prefix mask: depths joined with `;`,

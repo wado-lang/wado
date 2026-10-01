@@ -1456,21 +1456,6 @@ impl Parser {
     }
 }
 
-fn scan_content_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_ANY_CHAR { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_content_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if !((false)) { return -1; }
-    if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn scan_content(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1478,17 +1463,17 @@ fn scan_content(tokens: &Array<i32>, pos: i32) -> i32 {
     if true {
         if kind == TK_ANY_CHAR {
             let mut best: i32 = -1;
-            let try_0_end = scan_content_alt_0(tokens, start);
+            let try_0_end = scan_content__alt_0(tokens, start);
             if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_content_alt_1(tokens, start);
+            let try_1_end = scan_content__alt_1(tokens, start);
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; return pos; }
             return -1;
         } else {
             let mut best: i32 = -1;
-            let try_0_end = scan_content_alt_0(tokens, start);
+            let try_0_end = scan_content__alt_0(tokens, start);
             if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_content_alt_1(tokens, start);
+            let try_1_end = scan_content__alt_1(tokens, start);
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; return pos; }
         }
@@ -1548,9 +1533,24 @@ fn _parse_cpp_compilation_unit(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
+fn scan_content__alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_ANY_CHAR { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn _parse_content__inner_alt_1(p: &mut Parser) -> () {
     p.any();
     return;
+}
+
+fn scan_content__alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if !((false)) { return -1; }
+    if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn _parse_content__inner(p: &mut Parser) -> () {
@@ -1560,8 +1560,8 @@ fn _parse_content__inner(p: &mut Parser) -> () {
         if kind == TK_ANY_CHAR {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_content_alt_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = scan_content_alt_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = scan_content__alt_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = scan_content__alt_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
@@ -1582,8 +1582,8 @@ fn _parse_content__inner(p: &mut Parser) -> () {
         } else {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
-            let _sd_p_0 = scan_content_alt_0(_sd_tokens, _sd_pos);
-            let _sd_p_1 = scan_content_alt_1(_sd_tokens, _sd_pos);
+            let _sd_p_0 = scan_content__alt_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = scan_content__alt_1(_sd_tokens, _sd_pos);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_0 > _sd_best_p {
