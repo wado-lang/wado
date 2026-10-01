@@ -121,9 +121,14 @@ pub trait Hash: Eq with () {
 implementation keeps `a == b` implying equal hashes. `String` and `StrSlice`
 hash alike, so `HashMap<String, V>` offers `get_str` as `TreeMap` does.
 
-The hash function is a seeded multiply-and-fold hash, chosen by measurement. Wasm
-has no 64×64→128 multiply, so the candidates are timed as Wasm rather than taken
-from their native rankings. SipHash is too slow for the role.
+The hash function is a seeded multiply-and-fold hash, chosen by measurement.
+Each word is folded into the state by a full-width multiply with a seeded key,
+the two halves of the product XORed together. A multiply that keeps only the
+low half carries a difference only upward, so the next word can cancel a
+difference in the top bit whatever the seed. The 64×64→128 multiply is Wasm's
+wide-arithmetic proposal, or a software fallback without it, so the candidates
+are timed as Wasm rather than taken from their native rankings. SipHash is too
+slow for the role.
 
 ### `TreeMap` stays
 
@@ -167,7 +172,8 @@ function does ([WEP: Declared absence](./wep-2026-09-13-declared-absence.md)).
 
 - Floating-point keys have no `Hash`. Their `==` follows IEEE 754, under which
   `-0.0 == 0.0` and `NaN != NaN`, and `Ord` follows the total order instead.
-- Until the refusal lands, deriving `Serialize` for a `HashMap` writes its
-  internals, seed included.
+- Until the refusal lands, a `HashMap` is refused `Serialize` only because the
+  `Array` behind its entries has none. The error walks the private fields to
+  `Array` rather than stating the reason.
 - Derivation serializes private fields of any type without a hand-written impl.
   `core:prng`'s `Seed` serializes its state words this way.
