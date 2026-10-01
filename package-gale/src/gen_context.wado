@@ -2654,15 +2654,6 @@ impl GenContext {
         return self.alt_exit_label;
     }
 
-    /// The statement a finished alternative leaves by, handing on `value`
-    /// (empty for none).
-    pub fn alt_exit<S: AsStrSlice>(&self, value: S) -> String {
-        let Some(label) = &self.alt_exit_label else {
-            return if value.is_empty() { String::from("return;") } else { `return ${value};` };
-        };
-        return if value.is_empty() { `break ${label};` } else { `break ${label}: ${value};` };
-    }
-
     /// `sync_set` of a set of `TK_*` names.
     pub fn sync_name_set(&mut self, tokens: &List<String>) -> Option<i32> {
         return self.sync_set(self.names_to_ids(tokens));

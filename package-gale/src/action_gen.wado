@@ -1079,11 +1079,15 @@ pub fn emit_alt_helper_exit<S: AsStrSlice>(w: &mut CodeWriter, fn_name: S, idx: 
 /// Leave the finished alternative, handing on `vals` where the rule has them.
 pub fn emit_alt_exit(w: &mut CodeWriter, ctx: &GenContext) {
     let emits_vals = current_rule_emits_vals(ctx);
-    if !emits_vals && ctx.alt_exit_label() matches { None } {
-        w.ret();
+    let Some(label) = ctx.alt_exit_label() else {
+        if emits_vals {
+            w.line("return vals;");
+        } else {
+            w.ret();
+        }
         return;
-    }
-    w.line(&ctx.alt_exit(if emits_vals { "vals" } else { "" }));
+    };
+    w.line(if emits_vals { `break ${label}: vals;` } else { `break ${label};` });
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.
