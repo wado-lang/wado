@@ -96,10 +96,7 @@ The last row exists for speed. `==` on a `String` or a `List` stops at a length
 mismatch, where `cmp` must walk the common prefix. C++20 kept the two apart for
 the same reason: a written `<=>` does not generate `==` (P1185, "`<=>` != `==`").
 
-Nothing proves a written pair agrees, and that risk is accepted. The `test`
-world narrows it: each call to either method also computes the other and traps
-when they disagree. Production code pays nothing. A disagreement surfaces in a
-test rather than as a sort that panics in production, as Rust 1.81's did.
+Nothing proves or checks that a written pair agrees, and that risk is accepted.
 
 The rule reads `Eq<Self>` only. An `Eq<Rhs>` for another type, such as
 `StrSlice == String`, has no `Ord` beside it to agree with, and nothing ties it
@@ -255,6 +252,9 @@ Where the optimizer proves an operand is not a NaN, the test goes.
 - IEEE 754 `totalOrder` as the order. It reads a NaN's bits, which Wasm leaves
   to the host. It also orders `-0.0 < 0.0`, and with the operators reading it,
   `x == 0.0` would be false for a `-0.0` that ordinary arithmetic produced.
+- Checking a written `eq` and `cmp` against each other in the `test` world, on
+  every call. A `cmp` that calls `==` on its own type would recurse through the
+  check, and nested types would pay it once per level.
 - NaN least, as Go and the Haskell proposal chose. A guard `x <= limit` would
   then pass a NaN, where IEEE rejects it.
 
@@ -269,8 +269,6 @@ Where the optimizer proves an operand is not a NaN, the test goes.
 - [ ] Derive `Eq` from a written `cmp`, and reject a use of `Ord` on a type
   whose `Eq` is written and whose `cmp` is not, a marker included. Each with a
   fixture.
-- [ ] In the `test` world, check every call to a written `eq` or `cmp` against
-  the other, with a fixture whose disagreeing pair traps.
 - [ ] Make `f32::min`, `f64::min` and their `max` follow the order, add
   `minimum` and `maximum` on the Wasm instructions, and make `clamp` keep a NaN
   `x` and trap on a NaN bound, `high` included, which `low <= high` passes.

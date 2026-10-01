@@ -408,12 +408,7 @@ construction, since both come from one source
 ([Derivation Policy](./spec-traits.md#derivation-policy)).
 
 A type may write both, so that `==` can answer faster than `cmp`, as a length
-check does for a `String`. Nothing proves such a pair agrees. In the
-[`test` world](./spec-worlds.md#the-test-world), each call to either method also computes the
-other and traps if they disagree. A disagreement no test reaches goes
-unreported.
-
-> Not yet implemented: the `test` world does not check a written pair.
+check does for a `String`. Nothing proves or checks that such a pair agrees.
 
 Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 
