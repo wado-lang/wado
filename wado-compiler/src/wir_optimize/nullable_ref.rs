@@ -543,8 +543,15 @@ fn transform_instr(
         } => {
             transform_instr(array, types, vci, nullable_map);
             transform_instr(index, types, vci, nullable_map);
+            // The element type as substituted, read as nullable where the read
+            // asked to be: a deep copy reads an unset slot's null.
             if let Some(WirTypeDef::Array(at)) = types.get(type_id.index() as usize) {
-                *result_ty = at.element_type.clone();
+                let nullable_read = result_ty.is_reference() && !result_ty.is_nonnull_ref();
+                *result_ty = if nullable_read {
+                    at.element_type.clone().as_nullable()
+                } else {
+                    at.element_type.clone()
+                };
             }
         }
 
