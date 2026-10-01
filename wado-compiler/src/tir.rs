@@ -6540,7 +6540,6 @@ impl TypeTable {
         slots
     }
 
-<<<<<<< HEAD
     /// The declaration impl block `def` targets, past any reference.
     pub fn impl_target_decl(&self, def: DefId) -> Option<DefId> {
         self.nominal_def(self.peel_refs(self.impl_target(def).whole))
@@ -6562,8 +6561,8 @@ impl TypeTable {
             };
             link = *base_type;
         }
-||||||| f6456a9545c
-=======
+    }
+
     /// Fill the slots impl block `def`'s bounds project from those `slots`
     /// already holds: `X` in `impl<T: Tr<Assoc = List<X>>, X>` once `T` is
     /// settled, read through `Tr` itself, so another trait's `Assoc` on the
@@ -6625,7 +6624,6 @@ impl TypeTable {
         let mut bound = self.bind_type_params(&rest_written, &rest_concrete)?;
         bound.insert(self.param_slot(written[at])?, pack);
         Some(bound)
->>>>>>> origin/main
     }
 
     fn impl_target(&self, def: DefId) -> &ImplTarget {
