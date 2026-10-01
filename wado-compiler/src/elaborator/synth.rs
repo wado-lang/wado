@@ -297,7 +297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ArgClass::IntLit => {
                 is_primitive_literal_target(&tt, param)
-                    || tt.wide_int_item(tt.representation_head(param)).is_some()
+                    || tt.is_wide_int(param)
             }
             ArgClass::FloatLit => tt.is_float(param) || tt.is_half(param),
             ArgClass::StrLit => tt.is_string(tt.representation_head(param)),

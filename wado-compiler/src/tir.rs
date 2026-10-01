@@ -1689,7 +1689,7 @@ impl TypeTable {
     /// Whether `id` is stored as `i128` or `u128`, newtypes of them included.
     #[must_use]
     pub fn is_wide_int(&self, id: TypeId) -> bool {
-        self.wide_int_item(self.representation_head(id)).is_some()
+        self.wide_int_item(id).is_some()
     }
 
     /// A struct head as a mangled name embeds it: the declaration when it names
@@ -2189,17 +2189,18 @@ impl TypeTable {
         matches!(
             self.primitive_head(type_id),
             Some(PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64)
-        ) || self.wide_int_item(self.representation_head(type_id)) == Some(CompilerItem::U128)
+        ) || self.wide_int_item(type_id) == Some(CompilerItem::U128)
     }
 
-    /// Which wide-integer prelude struct `type_id` is, `None` for anything else.
-    /// By declaration identity: a name match also answers for a user type.
+    /// Which wide-integer prelude struct `type_id` is stored as, through any
+    /// newtype chain; `None` for anything else. By declaration identity: a
+    /// name match also answers for a user type.
     #[must_use]
     pub fn wide_int_item(&self, type_id: TypeId) -> Option<CompilerItem> {
         let ResolvedType::Struct {
             def: StructDef::Decl(def),
             ..
-        } = self.get(type_id)
+        } = self.get(self.representation_head(type_id))
         else {
             return None;
         };
@@ -4356,6 +4357,15 @@ impl TypeTable {
             ResolvedType::TypeParam { .. }
                 | ResolvedType::TypePack { .. }
                 | ResolvedType::AssocTypeProjection { .. }
+        )
+    }
+
+    /// Whether `id`'s representation is known only once substitution settles
+    /// it: a type parameter or a projection, read through newtypes.
+    pub fn representation_awaits_substitution(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(self.representation_head(id)),
+            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
         )
     }
 

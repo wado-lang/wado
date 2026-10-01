@@ -314,16 +314,35 @@ fn imposes_no_representation(tt: &TypeTable, id: TypeId) -> bool {
 /// refused: only a newtype step its bounds prove holds for every type that
 /// settles it, and nothing judges the cast again once one does.
 fn unsettled_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    let unsettled = |id| {
-        matches!(
-            tt.get(tt.representation_head(id)),
-            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. }
-        )
-    };
+    let unsettled = |id| tt.representation_awaits_substitution(id);
     (unsettled(source) || unsettled(target)).then(|| {
         "a generic type casts only where a `ReflectNewtype` bound makes the cast a newtype step"
             .to_string()
     })
+}
+
+/// The reason a cast from `i128` / `u128` is refused: one converts only to a
+/// number, which reify lowers (`lower_int128_source_cast`). A `char` target is
+/// [`char_cast_hint`]'s to answer.
+fn wide_int_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let reaches = tt.is_wide_int(target)
+        || tt.is_numeric(target)
+        || tt.is_half(target)
+        || tt.representation_head(target) == TypeTable::CHAR;
+    (tt.is_wide_int(source) && !reaches)
+        .then(|| "i128/u128 can only be cast to numeric types".to_string())
+}
+
+/// The reason a cast to or from `char` is refused: only a `u8` is always a
+/// Unicode scalar value, and a `char` converts only to its code point.
+fn char_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let (source, target) = (tt.representation_head(source), tt.representation_head(target));
+    if target == TypeTable::CHAR && source != TypeTable::CHAR && source != TypeTable::U8 {
+        return Some("use char::from_u32() or char::from_i32() for checked conversion".to_string());
+    }
+    let integer_target = tt.is_integer(target) || tt.is_wide_int(target);
+    (source == TypeTable::CHAR && target != TypeTable::CHAR && !integer_target)
+        .then(|| "char can only be cast to integer types".to_string())
 }
 
 /// The reason a cast to a reference is refused: only a reference converts to
@@ -3614,6 +3633,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
                 .or_else(|| aggregate_cast_hint(&tt, source_type, target_type))
                 .or_else(|| unsettled_cast_hint(&tt, source_type, target_type))
+                .or_else(|| wide_int_cast_hint(&tt, source_type, target_type))
+                .or_else(|| char_cast_hint(&tt, source_type, target_type))
                 .map(|hint| {
                     let (from, to) = tt.type_names_for_mismatch(source_type, target_type);
                     (from, to, hint)
@@ -3627,87 +3648,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: cast.span,
             });
             return target_type;
-        }
-
-        // Casts *from* i128/u128 (including newtypes of them) support:
-        // f64/f32 (correctly rounded), the integer widths (truncating),
-        // and i128 ↔ u128 (bit reinterpret) — each modulo newtypes, which
-        // share their base's representation. Reify lowers them
-        // (`lower_int128_source_cast`); here reject anything else, so
-        // an unsupported target fails with a diagnostic instead of leaking
-        // the wide-int struct ref into codegen. `char` targets are
-        // excluded: the char-cast diagnostic below already covers them.
-        {
-            let tt = self.tysys.type_table.borrow();
-            let target_supported = !tt.is_wide_int(source_type)
-                || tt.is_wide_int(target_type)
-                || matches!(
-                    tt.get(tt.representation_head(target_type)),
-                    ResolvedType::Primitive(
-                        PrimitiveType::F64
-                            | PrimitiveType::F32
-                            | PrimitiveType::F16
-                            | PrimitiveType::Bf16
-                            | PrimitiveType::I64
-                            | PrimitiveType::U64
-                            | PrimitiveType::I32
-                            | PrimitiveType::U32
-                            | PrimitiveType::I16
-                            | PrimitiveType::U16
-                            | PrimitiveType::I8
-                            | PrimitiveType::U8
-                            | PrimitiveType::Char,
-                    )
-                );
-            if !target_supported {
-                let (from_name, to_name) = tt.type_names_for_mismatch(source_type, target_type);
-                drop(tt);
-                let _ = self.emit(TypeError::InvalidCast {
-                    from: from_name,
-                    to: to_name,
-                    hint: "i128/u128 can only be cast to numeric types".to_string(),
-                    span: cast.span,
-                });
-            }
-        }
-
-        // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
-        // Exception: u8 -> char is always valid (0..255 are valid Unicode scalar values)
-        let source_base = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(source_type);
-        let target_base = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(target_type);
-        if target_base == TypeTable::CHAR
-            && source_base != TypeTable::CHAR
-            && source_base != TypeTable::U8
-        {
-            let from_name = self.tysys.type_table.borrow().type_name(source_type);
-            let _ = self.emit(TypeError::InvalidCast {
-                from: from_name,
-                to: "char".to_string(),
-                hint: "use char::from_u32() or char::from_i32() for checked conversion".to_string(),
-                span: cast.span,
-            });
-        }
-        // char -> non-integer is invalid (char -> integer extracts code point)
-        let integer_target = {
-            let tt = self.tysys.type_table.borrow();
-            tt.is_integer(target_base) || tt.is_wide_int(target_base)
-        };
-        if source_base == TypeTable::CHAR && target_base != TypeTable::CHAR && !integer_target {
-            let to_name = self.tysys.type_table.borrow().type_name(target_type);
-            let _ = self.emit(TypeError::InvalidCast {
-                from: "char".to_string(),
-                to: to_name,
-                hint: "char can only be cast to integer types".to_string(),
-                span: cast.span,
-            });
         }
 
         // Reify rebuilds the `Cast` from `cast.expr` + the target

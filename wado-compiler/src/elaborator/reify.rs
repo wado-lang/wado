@@ -8430,6 +8430,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `inner as target_type`, `inner` already read through its references:
     /// the prelude calls a half or a wide integer needs, then the bare `Cast`.
     fn lower_cast(&self, inner: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
+        if self.is_newtype_step(inner.type_id, target_type) {
+            return bare_cast(inner, target_type, span);
+        }
         let inner = match self.lower_half_cast(inner, target_type, span) {
             ControlFlow::Break(lowered) => return lowered,
             ControlFlow::Continue(inner) => inner,
@@ -8453,11 +8456,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         bare_cast(inner, target_type, span)
     }
 
+    /// Whether `source as target` changes no representation: both share one,
+    /// or either is still generic, where the checker admits only a newtype
+    /// step (`cast_needs_no_judgment`).
+    fn is_newtype_step(&self, source: TypeId, target: TypeId) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        tt.share_common_base(source, target)
+            || tt.representation_awaits_substitution(source)
+            || tt.representation_awaits_substitution(target)
+    }
+
     /// A cast with `f16` or `bf16` on either side. No instruction converts
     /// either, so a half widens to its exact `f32` and casts on from there,
     /// and a number reaches a half through the prelude conversion that rounds
-    /// it once. `Continue` hands `inner` on where neither side is a half, or
-    /// the cast is only a newtype step.
+    /// it once. `Continue` hands `inner` on where neither side is a half.
     fn lower_half_cast(
         &self,
         inner: TirExpr,
@@ -8466,9 +8478,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> ControlFlow<TirExpr, TirExpr> {
         let (source_half, target_half) = {
             let tt = self.tysys.type_table.borrow();
-            if tt.share_common_base(inner.type_id, target_type) {
-                return ControlFlow::Continue(inner);
-            }
             let half = |id| tt.primitive_head(id).filter(|p| p.is_half());
             (half(inner.type_id), half(target_type))
         };
@@ -8552,11 +8561,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
     ) -> ControlFlow<TirExpr, TirExpr> {
         let tt = self.tysys.type_table.borrow();
-        if tt.is_wide_int(tt.representation_head(inner.type_id)) {
+        if tt.is_wide_int(inner.type_id) {
             drop(tt);
             return self.lower_int128_source_cast(inner, target_type, span);
         }
-        let Some(item) = tt.wide_int_item(tt.representation_head(target_type)) else {
+        let Some(item) = tt.wide_int_item(target_type) else {
             return ControlFlow::Continue(inner);
         };
         ControlFlow::Break(create_conversion(item, inner, target_type, &tt, span))
@@ -8595,8 +8604,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let signed_source = source_item == CompilerItem::I128;
 
         enum Lowering {
-            /// `i128 as i128` / `u128 as u128` — no-op.
-            Identity,
             /// `&self` accessor returning the target primitive directly.
             Method(CompilerItem),
             /// `low()` then a primitive cast down to the target width.
@@ -8626,19 +8633,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
             _ => match target_item {
-                Some(item) if item == source_item => {
-                    if target_type == source_type {
-                        Lowering::Identity
+                Some(item) => {
+                    assert_ne!(
+                        item, source_item,
+                        "`lower_cast` takes a cast within one base as a newtype step"
+                    );
+                    Lowering::Reinterpret(if signed_source {
+                        CompilerItem::U128FromI128
                     } else {
-                        // Same wide base but a newtype on either side: the
-                        // bare `Cast` emitted by the caller is the correct
-                        // repr-compatible reinterpret.
-                        return ControlFlow::Continue(inner);
-                    }
+                        CompilerItem::I128FromU128
+                    })
                 }
-                Some(CompilerItem::I128) => Lowering::Reinterpret(CompilerItem::I128FromU128),
-                Some(CompilerItem::U128) => Lowering::Reinterpret(CompilerItem::U128FromI128),
-                Some(other) => unreachable!("wide_int_item answered {other:?}"),
                 None => return ControlFlow::Continue(inner),
             },
         };
@@ -8647,7 +8652,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // below see their declared receiver/argument type.
         let inner = bare_cast(inner, source_base, span);
         match lowering {
-            Lowering::Identity => ControlFlow::Break(inner),
             Lowering::Method(item) => {
                 let func = method_ref(&self.tysys.type_table.borrow(), item);
                 let receiver = adjust_receiver_for_self_kind(
