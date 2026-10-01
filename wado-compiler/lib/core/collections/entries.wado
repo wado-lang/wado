@@ -182,14 +182,6 @@ impl<K: Inspect, V: Inspect> EntryLog<K, V> {
     }
 }
 
-/// The live entries alone: a derived `Inspect` of a type holding a log must not
-/// read the slots past `count`, which hold nothing.
-impl<K: Inspect, V: Inspect> Inspect for EntryLog<K, V> {
-    fn inspect(&self, f: &mut Formatter) {
-        self.inspect_as(f, false);
-    }
-}
-
 impl<K, V: Ref> EntryLog<K, V> {
     /// `value_at`, borrowing the value.
     internal fn value_ref_at(&self, e: i32) -> Option<&V> {
