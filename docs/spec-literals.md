@@ -152,7 +152,8 @@ test {
 }
 ```
 
-A cast to an integer type types the literal as an annotation does:
+A cast types the literal as an annotation does (see
+[Numeric Casts](./spec-expressions.md#numeric-casts)):
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -179,20 +180,19 @@ assert t & (1 << 31) == 0x8000_0000;
 
 A literal's value must lie in its type's range: `[MIN, MAX]` for a signed type,
 `[0, MAX]` for an unsigned one. This holds in every base, so a hex, octal or
-binary literal is a number, not a bit pattern. An explicit `as` cast
-reinterprets a bit pattern as a signed integer:
+binary literal is a number, not a bit pattern. A bit pattern is reinterpreted
+by casting a value of the unsigned type:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
 ```wado
 let a: i8 = 127;                  // OK: max i8
 let c: i8 = -128;                 // OK: min i8
-let f: i8 = 0xFF as i8;           // OK: explicit bit-pattern reinterpretation
-let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation
-assert a == i8::MAX && c == i8::MIN && f == -1 && h == -1;
+let h = (0xFFFF_FFFF as u32) as i32;  // OK: a u32 value transmuted to i32
+assert a == i8::MAX && c == i8::MIN && h == -1;
 ```
 
-A value outside the range is an error in any base:
+A value outside the range is an error in any base, annotated or cast:
 
 <!-- {"fixture":"spec_literals_int_range.wado"} -->
 
@@ -204,9 +204,8 @@ let g: i32 = 0xFFFF_FFFF;         // compile error: literal out of range for `i3
 let i: u32 = 0x1_0000_0000;       // compile error: literal out of range for `u32`: 0x1_0000_0000
 ```
 
-A float has no bit pattern for `as` to reinterpret. An integer literal cast to
-`f32` or `f64` converts by value, as the annotated form does, and the same
-range check applies.
+An integer literal cast to a float type converts by value, as the annotated
+form does, and the same range check applies.
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 

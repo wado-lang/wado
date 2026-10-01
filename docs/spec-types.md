@@ -51,9 +51,8 @@ methods, such as `i32::MAX` and `f64::sqrt`.
 arithmetic:
 
 - No arithmetic or bitwise operator applies to either, unary `-` included.
-- `as` does not convert them in either direction (see
-  [Type Cast](./spec-expressions.md#type-cast-as)). The error names the method to
-  write instead.
+- `as` converts them as it does any float (see
+  [Numeric Casts](./spec-expressions.md#numeric-casts)).
 - A numeric literal coerces to either type and is rounded once (see
   [Floating-Point Literals](./spec-literals.md#floating-point-literals)).
 - A comparison widens both operands to `f32` and compares those, so `<` is
@@ -86,9 +85,9 @@ assert f16::try_from(wide).unwrap() == one;   // 1.0 survives the round trip
 - `from_str` rounds the decimal text once, as a literal is rounded. Text that
   rounds past the largest finite value parses to an infinity.
   `from_str_lenient` takes the spellings `LenientFromStr` accepts.
-- There is no conversion between `f16` and `bf16`, because each keeps something
-  the other drops: `f16` has the shorter exponent range, `bf16` the shorter
-  significand. Widen to `f32` and narrow again.
+- No conversion trait links `f16` and `bf16`, because each keeps something the
+  other drops: `f16` has the shorter exponent range, `bf16` the shorter
+  significand. `as` converts between them, rounding to nearest.
 
 Both types carry `f32`'s associated constants under the same names (`MAX`,
 `MIN`, `MIN_POSITIVE`, `EPSILON`, `INFINITY`, `NAN`, `MANTISSA_DIGITS`, …) and
@@ -133,17 +132,18 @@ Literal and range patterns work on them in every pattern position, nested ones
 included: `match [x, y] { [1..=5, _] => … }`. Each pattern matches exactly when
 the equivalent `==` or range comparison holds.
 
-`as` casts follow Rust semantics in both directions:
+`as` casts them as it does any integer (see
+[Numeric Casts](./spec-expressions.md#numeric-casts)):
 
 <!-- {"fixture":"spec_types_wide_int.wado"} -->
 
 ```wado
 let a = 42 as u128;                    // numeric → wide int
 assert 1.0e40 as u128 == u128::MAX;    // float → wide int saturates
-assert 'A' as i128 == 65;              // bool, char, enum, flags → wide int, as to any integer
+assert 'A' as i128 == 65;              // bool, char → wide int, as to any integer
 assert a as f64 == 42.0;               // wide int → float, rounded to nearest, ties to even
-assert (a + 256) as u8 == 42;          // wide int → int keeps the low bits
-assert (-1 as i128) as u128 == u128::MAX;  // i128 ↔ u128 reinterprets the bits
+assert (a + 256) as u8 == 42;          // wide int → int truncates
+assert (-1 as i128) as u128 == u128::MAX;  // i128 ↔ u128 transmutes
 ```
 
 `TryFrom` gives the checked conversions, such as `i64::try_from(a)` and

@@ -7,7 +7,7 @@ use crate::resolve::Resolutions;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no
-/// value of `target_type`. Every format checks the numeric range: `0xFF as i8` reinterprets.
+/// value of `target_type`. Every base checks the numeric range, annotated or cast.
 pub(super) fn int_literal_range_error(
     magnitude: u128,
     negated: bool,

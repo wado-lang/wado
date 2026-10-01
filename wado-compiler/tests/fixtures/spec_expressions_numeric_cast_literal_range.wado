@@ -1,0 +1,10 @@
+// A cast types its literal operand as an annotation does, range check included.
+
+test {
+    let a = 0xFF as i8;   // compile error: literal out of range for `i8`: 0xFF
+    let b = 300 as u8;    // compile error: literal out of range for `u8`: 300
+    let c = -1 as u32;    // compile error: literal out of range for `u32`: -1
+}
+
+__DATA__
+{"compile_error":"literal out of range for `i8`: 0xFF","compile_errors_contains":["literal out of range for `u8`: 300","literal out of range for `u32`: -1"]}

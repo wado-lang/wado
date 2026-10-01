@@ -72,7 +72,7 @@ global CONST_UNSIGNED: u32 = 4000000000 + 300000000;
 global CONST_SMALL: u8 = 200 as u8 + 100 as u8;
 
 global WRAPS_THEN_WIDENS: i64 = (2147483647 + 1) as i64;
-global NARROWS_THEN_ADDS: i32 = (300 as u8) as i32 + 1;
+global NARROWS_THEN_ADDS: i32 = ((300 as u16) as u8) as i32 + 1;
 global UNSIGNED_WRAPS: i64 = (3000000000 as u32 * 2) as i64;
 
 global DEFAULT_LEVEL: Level = Level::Debug;
@@ -243,7 +243,7 @@ test "a cast in an initializer converts, at each operand's own width" {
     // Each global is compared against the identical local expression, which
     // goes through the ordinary evaluator.
     let wraps_then_widens: i64 = (2147483647 + 1) as i64;
-    let narrows_then_adds: i32 = (300 as u8) as i32 + 1;
+    let narrows_then_adds: i32 = ((300 as u16) as u8) as i32 + 1;
     let unsigned_wraps: i64 = (3000000000 as u32 * 2) as i64;
     assert WRAPS_THEN_WIDENS == wraps_then_widens;
     assert NARROWS_THEN_ADDS == narrows_then_adds;
@@ -256,8 +256,8 @@ test "an enum global holds its discriminant" {
     // The generic heap-type default yields `(global (mut i32) (ref.null none))`,
     // which fails validation.
     RUNTIME_LEVEL = DEFAULT_LEVEL;
-    assert DEFAULT_LEVEL as i32 == 1;
-    assert RUNTIME_LEVEL as i32 == 1;
+    assert ReflectEnum::<Level>::discriminant(&DEFAULT_LEVEL) == 1;
+    assert ReflectEnum::<Level>::discriminant(&RUNTIME_LEVEL) == 1;
     set_level(Level::Info);
     assert RUNTIME_LEVEL >= Level::Info;
 }

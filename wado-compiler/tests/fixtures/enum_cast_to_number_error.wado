@@ -1,0 +1,13 @@
+// An enum casts to no number and from none; reflection reads its tag.
+
+enum Color { Red, Green, Blue }
+
+test {
+    let c = Color::Blue;
+    let a = c as i32;       // compile error
+    let b = c as f64;       // compile error
+    let d = 1 as Color;     // compile error
+}
+
+__DATA__
+{"compile_error":"cannot cast 'Color' to 'i32': an enum casts to no number; `ReflectEnum::<Color>::discriminant` reads its tag","compile_errors_contains":["cannot cast 'Color' to 'f64'","cannot cast 'i32' to 'Color'"]}

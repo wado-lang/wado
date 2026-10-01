@@ -466,14 +466,12 @@ annotation: `Pair { a: 1, b: 2 } as Wide`, where `type Wide = Pair<u64>`, builds
 a `Pair<u64>`. A diverging operand (`!`) casts to any type. References and
 function types follow [Casts](./spec-types.md#casts).
 
-Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
-direction, and an integer converts to `char` only from `u8` (see
-[`char` Casts](#char-casts)).
-
-A float converts to an integer as Rust's `as` does. It truncates toward zero,
-and a value outside the target's range becomes the target's `MIN` or `MAX`.
-NaN becomes 0. The cast never traps, whatever the target's width, `i128` and
-`u128` included.
+Between primitives, `as` follows Rust's `as`. A cast between two numbers is a
+[numeric cast](#numeric-casts), and `bool` and `char` have rules of their own
+([`bool` Casts](#bool-casts), [`char` Casts](#char-casts)). An `enum` or a
+`variant` casts to no number and from none. `ReflectEnum::<T>::discriminant(&v)`
+reads a case's tag, and `ReflectEnum::<T>::from_discriminant(tag)` finds the
+case with a tag (see [Static Reflection](./spec-reflection.md)).
 
 By its [precedence](#precedence), `-x as u32` is `(-x) as u32`, and
 `a / b as f64` is `a / (b as f64)`.
@@ -496,10 +494,105 @@ let result = (a as f64) + b;
 assert result == 1.5;
 ```
 
+#### Numeric Casts
+
+A numeric cast converts between two integer or float types. The integer types
+include `i128` and `u128`, and the float types include `f16` and `bf16`. The
+result is stated in these terms, which follow the Rust Reference:
+
+- Transmute: keep the bit pattern and read it as the target type. Wado names
+  the operation but offers no operator for it.
+- Truncate: keep the low bits that fit the target's width.
+- Zero-extend: widen by filling the new high bits with 0.
+- Sign-extend: widen by filling the new high bits with the sign bit.
+- Round toward zero: drop the fractional part.
+- Saturate: replace a value below the target's range with its `MIN`, and one
+  above it with its `MAX`.
+- Round to nearest: take the target's value closest to the source, and the one
+  with an even last digit on a tie. A value beyond the target's finite range
+  becomes an infinity of its sign.
+
+Each pair of types gets one of them:
+
+| Source → target                  | Result                                                   |
+| -------------------------------- | -------------------------------------------------------- |
+| integer → integer of equal width | transmute                                                |
+| integer → narrower integer       | truncate                                                 |
+| unsigned integer → wider integer | zero-extend                                              |
+| signed integer → wider integer   | sign-extend                                              |
+| float → integer                  | round toward zero, then saturate; NaN becomes 0          |
+| integer → float                  | round to nearest                                         |
+| float → float                    | round to nearest; exact where the target holds the value |
+
+A float-to-float cast keeps a NaN a NaN. No numeric cast traps.
+
+<!-- {"fixture":"spec_expressions_numeric_casts.wado"} -->
+
+```wado
+let n: i32 = -1;
+assert n as u32 == u32::MAX;           // transmute
+assert 300 as u16 as u8 == 44;         // truncate
+assert (200 as u8) as i32 == 200;      // zero-extend
+assert n as i64 == -1;                 // sign-extend
+assert -3.9 as i32 == -3;              // round toward zero
+assert 1.0e10 as i32 == i32::MAX;      // saturate
+assert f64::NAN as u8 == 0;
+assert 16_777_217 as f32 == 16_777_216.0;   // round to nearest
+let big: f64 = 1.0e300;
+assert big as f32 == f32::INFINITY;    // round to nearest
+assert 0.1 as f16 as f32 == 0.0999755859375;
+```
+
+A cast types a literal operand as an annotation of its target would, wherever
+the literal can take that type: an integer literal takes any numeric type, and
+a float literal any float type. The literal must then lie in the target's range
+(see
+[Compile-time range checking](./spec-literals.md#compile-time-range-checking)).
+Rust gives an integer literal no type from a float target and types it `i32`,
+so `3_000_000_000 as f64` is an error there. Wado types it by every numeric
+target alike, since Rust's exception for float targets is the inconsistent rule.
+A float literal cast to an integer type stays a float and converts as a float
+value does. To reinterpret a bit pattern, cast a value that already has the
+unsigned type:
+
+<!-- {"fixture":"spec_expressions_numeric_casts.wado"} -->
+
+```wado
+assert (0xFF as u8) as i8 == -1;
+```
+
+<!-- {"fixture":"spec_expressions_numeric_cast_literal_range.wado"} -->
+
+```wado
+let a = 0xFF as i8;   // compile error: literal out of range for `i8`: 0xFF
+let b = 300 as u8;    // compile error: literal out of range for `u8`: 300
+let c = -1 as u32;    // compile error: literal out of range for `u32`: -1
+```
+
+#### `bool` Casts
+
+A `bool` casts to any integer type: `false` is 0 and `true` is 1. It casts to no
+float, and nothing casts to `bool`:
+
+<!-- {"fixture":"spec_expressions_numeric_casts.wado"} -->
+
+```wado
+assert true as i32 == 1 && false as u8 == 0;
+```
+
+<!-- {"fixture":"spec_expressions_bool_cast_error.wado"} -->
+
+```wado
+let x: i32 = 1;
+let a = x as bool;     // compile error
+let b = 1.0 as bool;   // compile error
+let c = true as f64;   // compile error
+```
+
 #### `char` Casts
 
 A `char` casts to any integer type, which yields its Unicode scalar value. A
-type too narrow for the value keeps its low bits:
+type too narrow for the value truncates it:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -511,13 +604,15 @@ let byte = c as u8;     // truncated to low byte
 assert code == 65 && ucode == 65 && byte == 65;
 ```
 
-`u8 as char` is allowed, because every `u8` value is a Unicode scalar value:
+`u8 as char` is allowed, because every `u8` value is a Unicode scalar value. An
+integer literal cast to `char` is typed `u8`:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
 ```wado
 let b: u8 = 65;
 assert b as char == 'A';
+assert 97 as char == 'a';
 ```
 
 Every other integer-to-`char` cast is an error, because the source type holds
@@ -554,6 +649,34 @@ A `char` casts to no type but an integer:
 let c = 'A';
 let f = c as f64;     // compile error: char can only be cast to integer types
 let s = c as String;  // compile error: the two types share no representation
+```
+
+#### Casts in Generic Code
+
+A cast with a type parameter or a projection on either side is judged by the
+bounds alone, as Rust's is, since every type that settles it later must take
+the same cast. A `ReflectNewtype<Base = B>` bound makes the cast a newtype step
+to or from `B`, and a cast it does not make one is an error:
+
+<!-- {"fixture":"cast_type_param_newtype_bound.wado"} -->
+
+```wado
+fn to_base<N: ReflectNewtype<Base = B>, B>(n: N) -> B {
+    return n as B;
+}
+
+test {
+    let m: Meters = 2.5;
+    assert to_base(m) == 2.5;
+}
+```
+
+<!-- {"fixture":"cast_type_param_source.wado"} -->
+
+```wado
+fn to_f32<T>(x: T) -> f32 {
+    return x as f32;
+}
 ```
 
 ### Parentheses for Grouping
@@ -657,7 +780,7 @@ let a = 10..<5;           // Error: reversed range
 <!-- {"fixture":"spec_lexical_range_reversed_cast.wado"} -->
 
 ```wado
-let b = (-1 as u8)..=5;   // Error: `-1 as u8` is 255
+let b = (10 as u8)..=5;   // Error: reversed range
 ```
 
 <!-- {"fixture":"spec_lexical_ranges.wado"} -->

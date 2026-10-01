@@ -14,8 +14,8 @@ test "operators" {
 test "casts" {
     let a = 42 as u128;                    // numeric → wide int
     assert 1.0e40 as u128 == u128::MAX;    // float → wide int saturates
-    assert 'A' as i128 == 65;              // bool, char, enum, flags → wide int, as to any integer
+    assert 'A' as i128 == 65;              // bool, char → wide int, as to any integer
     assert a as f64 == 42.0;               // wide int → float, rounded to nearest, ties to even
-    assert (a + 256) as u8 == 42;          // wide int → int keeps the low bits
-    assert (-1 as i128) as u128 == u128::MAX;  // i128 ↔ u128 reinterprets the bits
+    assert (a + 256) as u8 == 42;          // wide int → int truncates
+    assert (-1 as i128) as u128 == u128::MAX;  // i128 ↔ u128 transmutes
 }

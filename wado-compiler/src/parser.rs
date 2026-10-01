@@ -868,6 +868,17 @@ impl Parser {
         self.skipped_span(before)
     }
 
+    /// Consume the `,` separating two entries of an angle-bracket list. A `>`
+    /// left pending by splitting `>>` has already closed the list, so the `,`
+    /// after it belongs to the enclosing one.
+    fn eat_angle_list_comma(&mut self) -> bool {
+        if self.pending_gt || !self.check(&TokenKind::Comma) {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
     /// Parse a comma-separated type list inside angle brackets, the opening `<`
     /// already consumed, splitting `>>` for nested generics via `pending_gt`.
     /// Recovery is element-local: a malformed argument is reported, skipped to
@@ -885,8 +896,7 @@ impl Parser {
                     args.push(Type::Error(span));
                 }
             }
-            if !self.pending_gt && self.check(&TokenKind::Comma) {
-                self.advance();
+            if self.eat_angle_list_comma() {
                 continue;
             }
             break;
@@ -4084,8 +4094,7 @@ impl Parser {
             Ok(t) => type_args.push(t),
             Err(_) => spec_ok = false,
         }
-        while spec_ok && self.check(&TokenKind::Comma) {
-            self.advance();
+        while spec_ok && self.eat_angle_list_comma() {
             match self.parse_type() {
                 Ok(t) => type_args.push(t),
                 Err(_) => spec_ok = false,
@@ -5248,7 +5257,7 @@ impl Parser {
 
         let mut params = Vec::new();
 
-        while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
+        while !self.check(&TokenKind::Gt) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
             let start_span = self.peek().span;
 
@@ -5312,9 +5321,7 @@ impl Parser {
                 span: start_span,
             });
 
-            if self.check(&TokenKind::Comma) {
-                self.advance();
-            } else {
+            if !self.eat_angle_list_comma() {
                 break;
             }
         }
@@ -5380,9 +5387,7 @@ impl Parser {
                         "a trait argument cannot follow an associated type binding",
                     ));
                 }
-                if self.check(&TokenKind::Comma) {
-                    self.advance();
-                } else {
+                if !self.eat_angle_list_comma() {
                     break;
                 }
             }
@@ -5994,7 +5999,7 @@ impl Parser {
         self.advance(); // consume '<'
 
         let mut args: Vec<Type> = Vec::new();
-        while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
+        while !self.check(&TokenKind::Gt) && !self.is_at_end() {
             // Bounded type param: `ident : bounds`
             if matches!(self.peek_kind(), TokenKind::Ident(_))
                 && self.peek_nth(1).kind == TokenKind::Colon
@@ -6026,9 +6031,7 @@ impl Parser {
                 args.push(self.parse_type()?);
             }
 
-            if self.check(&TokenKind::Comma) {
-                self.advance();
-            } else {
+            if !self.eat_angle_list_comma() {
                 break;
             }
         }

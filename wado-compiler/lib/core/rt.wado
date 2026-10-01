@@ -11,7 +11,9 @@ use { Array } from "core:prelude/array.wado";
 use { Slice } from "core:prelude/slice.wado";
 use { List } from "core:prelude/list.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { Inspect, struct_close, struct_field, struct_field_end, struct_open } from "core:prelude/traits.wado";
+use { u64_bit_len } from "core:prelude/fpfmt.wado";
+use { i128, u128 } from "core:prelude/int128.wado";
+use { From, Inspect, struct_close, struct_field, struct_field_end, struct_open } from "core:prelude/traits.wado";
 use {
     Option,
     Result,
@@ -521,4 +523,87 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
     return Option::Some(WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 });
+}
+
+// `as` with a half on either side. No instruction converts a half, so a half
+// widens to its exact `f32`, and a number reaches a half rounded once.
+
+#[compiler_item("f16_widen")]
+internal fn f16_widen(v: f16) -> f32 {
+    return f32::from(v);
+}
+
+#[compiler_item("bf16_widen")]
+internal fn bf16_widen(v: bf16) -> f32 {
+    return f32::from(v);
+}
+
+/// Also lowers `as f16` from an integer: `f64` holds every one up to 2^53
+/// exactly, and f16's range ends far below that.
+#[compiler_item("f16_from_f64")]
+internal fn f16_from_f64(v: f64) -> f16 {
+    return f16::from_f64(v);
+}
+
+/// Also lowers `as bf16` from an integer of 32 bits or fewer, which `f64`
+/// holds exactly.
+#[compiler_item("bf16_from_f64")]
+internal fn bf16_from_f64(v: f64) -> bf16 {
+    return bf16::from_f64(v);
+}
+
+#[compiler_item("bf16_from_i64")]
+internal fn bf16_from_i64(v: i64) -> bf16 {
+    let magnitude = if v < 0 { 0 - v as u64 } else { v as u64 };
+    return bf16::from_f64(with_sign(v < 0, round_to_odd_f64(magnitude)));
+}
+
+#[compiler_item("bf16_from_u64")]
+internal fn bf16_from_u64(v: u64) -> bf16 {
+    return bf16::from_f64(round_to_odd_f64(v));
+}
+
+#[compiler_item("bf16_from_i128")]
+internal fn bf16_from_i128(v: i128) -> bf16 {
+    let negative = v < 0;
+    let magnitude = u128::from_i128(if negative { -v } else { v });
+    return bf16::from_f64(with_sign(negative, round_to_odd_f64_wide(magnitude)));
+}
+
+#[compiler_item("bf16_from_u128")]
+internal fn bf16_from_u128(v: u128) -> bf16 {
+    return bf16::from_f64(round_to_odd_f64_wide(v));
+}
+
+/// `m` as the f64 neighbour with an odd last bit where it is inexact, so that
+/// narrowing it again rounds as narrowing `m` itself would.
+fn round_to_odd_f64(m: u64) -> f64 {
+    let near = m as f64;
+    // 2^64 is the one neighbour past u64's range, and `as u64` saturates it.
+    let beyond = near >= 18446744073709551616.0 || near as u64 > m;
+    let bits = near.to_bits();
+    if !beyond && near as u64 == m || bits & 1 == 1 {
+        return near;
+    }
+    return f64::from_bits(if beyond { bits - 1 } else { bits + 1 });
+}
+
+/// `m` rounded to odd as [`round_to_odd_f64`] does, for a magnitude past 64
+/// bits: the top 64 keep a sticky bit for the rest, and scaling by a power of
+/// two is exact.
+fn round_to_odd_f64_wide(m: u128) -> f64 {
+    let high = m.high();
+    let low = m.low();
+    if high == 0 {
+        return round_to_odd_f64(low);
+    }
+    let n = u64_bit_len(high) as u64;
+    let [top, rest] = if n == 64 { [high, low] } else { [high << 64 - n | low >> n, low << 64 - n] };
+    let sticky: u64 = if rest == 0 { 0 } else { 1 };
+    let scale = f64::from_bits(1023 + n << 52);
+    return round_to_odd_f64(top | sticky) * scale;
+}
+
+fn with_sign(negative: bool, magnitude: f64) -> f64 {
+    return if negative { -magnitude } else { magnitude };
 }

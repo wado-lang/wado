@@ -343,8 +343,9 @@ pub(crate) enum BlanketParamSource {
     /// The impl's receiver, which the call site's receiver type fills.
     Receiver,
     /// A predicate on another parameter: `..F` in
-    /// `impl<S: ReflectStruct<FieldTypes = [..F]>, ..F>`.
-    Projection(DefId, String),
+    /// `impl<S: ReflectStruct<FieldTypes = [..F]>, ..F>`, read through the
+    /// impl's recorded projections.
+    Projection,
     /// A predicate names it, but the bound's site reaches no declaration.
     /// Its own answer: reading it as [`Self::Receiver`] would fill a pack from
     /// the call site's receiver type.
@@ -372,23 +373,24 @@ fn blanket_param_sources(
                 if tp.name == blanket.param {
                     return BlanketParamSource::Receiver;
                 }
-                let Some((bound, assoc)) = header
+                let Some(bound) = header
                     .type_params
                     .iter()
                     .flat_map(|other| &other.bounds)
-                    .flat_map(|bound| bound.assoc_types.iter().map(move |a| (bound, a)))
-                    .find(|(_, assoc)| {
-                        let mut named = Vec::new();
-                        assoc.ty.mentioned_names(&mut named);
-                        named.iter().any(|n| n == &tp.name)
+                    .find(|bound| {
+                        bound.assoc_types.iter().any(|assoc| {
+                            let mut named = Vec::new();
+                            assoc.ty.mentioned_names(&mut named);
+                            named.iter().any(|n| n == &tp.name)
+                        })
                     })
                 else {
                     return BlanketParamSource::Unresolved;
                 };
-                let Some(def) = resolutions.bound_decl(bound) else {
+                if resolutions.bound_decl(bound).is_none() {
                     return BlanketParamSource::Unresolved;
-                };
-                BlanketParamSource::Projection(def, assoc.name.clone())
+                }
+                BlanketParamSource::Projection
             })
             .collect();
         out.insert(blanket.def, sources);

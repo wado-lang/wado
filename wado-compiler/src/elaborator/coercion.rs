@@ -572,30 +572,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // above, and the gate admits no other struct.
         if !util::is_float_only_literal(repr) {
             let wide = self.tysys.type_table.borrow().wide_int_item(target_type);
-            // A negated literal only ever lands on `i128`; `u128` has no
-            // negative values to land on.
-            if let Some(item) = wide
-                && (item == CompilerItem::I128 || neg.is_none())
-            {
-                let name = item.attr_name();
-                let parsed = if neg.is_some() {
-                    util::parse_i128_literal(&format!("-{repr}")).is_ok()
-                } else if item == CompilerItem::U128 {
-                    util::parse_u128_literal(repr).is_ok()
-                } else {
-                    util::parse_i128_literal(repr).is_ok()
+            if let Some(item) = wide {
+                let in_range = match (item, neg.is_some()) {
+                    (CompilerItem::U128, true) => util::parse_u128_literal(repr) == Ok(0),
+                    (CompilerItem::U128, false) => util::parse_u128_literal(repr).is_ok(),
+                    (_, true) => util::parse_i128_literal(&format!("-{repr}")).is_ok(),
+                    (_, false) => util::parse_i128_literal(repr).is_ok(),
                 };
-                if parsed {
-                    return Some(target_type);
+                if !in_range {
+                    let name = item.attr_name();
+                    let _ = self.emit(TypeError::InvalidLiteral {
+                        message: format!("literal out of range for `{name}`: {sign}{repr}"),
+                        span: whole_span,
+                    });
                 }
-                let _ = self.emit(TypeError::InvalidLiteral {
-                    message: format!("invalid {name} literal: {sign}{repr}"),
-                    span: whole_span,
-                });
+                return Some(target_type);
             }
         }
 
-        // A float-only literal at a wide integer, or a negated one at `u128`.
+        // A float-only literal at a wide integer.
         None
     }
 
@@ -1153,25 +1148,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(coerced);
         }
 
-        // String/template literal → String newtype
-        let is_string_or_template = matches!(
-            expr,
-            Expr::Literal(lit) if matches!(&lit.value, Literal::String(_))
-        ) || matches!(expr, Expr::TemplateString(_));
-
-        if is_string_or_template {
-            let is_string_newtype = {
+        // A string, template, `bool` or `char` literal → a newtype over its type.
+        let literal_type = match expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::String(_) => Some(self.get_string_struct_type()),
+                Literal::Bool(_) => Some(TypeTable::BOOL),
+                Literal::Char(_) => Some(TypeTable::CHAR),
+                _ => None,
+            },
+            Expr::TemplateString(_) => Some(self.get_string_struct_type()),
+            _ => None,
+        };
+        if let Some(literal_type) = literal_type {
+            let is_literal_newtype = {
                 let tt = self.tysys.type_table.borrow();
                 let base_id = tt.representation_head(target_type);
-                tt.is_string(base_id) && target_type != base_id
+                tt.share_common_base(base_id, literal_type) && target_type != base_id
             };
-            if is_string_newtype {
+            if is_literal_newtype {
                 // Walk the inner literal / template for fact recording.
                 self.resolve_expr(expr, ctx, None);
-                self.record_coercion(expr.id(), CoercionKind::StringNewtype, target_type);
+                self.record_coercion(expr.id(), CoercionKind::LiteralNewtype, target_type);
                 // The inner resolve_expr wrote expression_types[expr.id]
-                // with the unwrapped String type; overwrite with the
-                // outer target newtype so reify reads the newtype here.
+                // with the literal's own type; overwrite with the outer
+                // target newtype so reify reads the newtype here.
                 self.record_expression_type(expr.id(), target_type);
                 return Some(target_type);
             }
@@ -1233,7 +1233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // captures, body) under the unwrapped fn type.
                 self.resolve_expr(expr, ctx, Some(base_id));
                 self.record_coercion(expr.id(), CoercionKind::ClosureToFnNewtype, target_type);
-                // Same pattern as StringNewtype above: overwrite the
+                // Same pattern as LiteralNewtype above: overwrite the
                 // map's base-fn-type write with the outer newtype.
                 self.record_expression_type(expr.id(), target_type);
                 return Some(target_type);

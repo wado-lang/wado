@@ -208,7 +208,7 @@ bool
 // wide integers (GC types, work like primitives)
 i128, u128
 
-// half precision: storage only, no arithmetic and no `as` cast.
+// half precision: storage only, no arithmetic; `as` converts as for any float.
 // Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32` /
 // `from_f64`, text via `from_str` (each rounded once, as a literal is).
 // Every comparison hands the widened value to f32's, so `==` and `<` are IEEE
@@ -619,11 +619,14 @@ See the spec on [precedence](./spec-expressions.md#precedence) and [overloading]
 // Assignment
 = += -= *= /= %= &= |= ^= <<= >>=
 
-// Type cast
+// Type cast: numeric casts follow Rust's `as`
 42 as f64
 300.7 as u8             // 255: float -> int truncates and saturates, NaN -> 0
+(0xFF as u8) as i8      // -1; `0xFF as i8` is a compile error, as in Rust
+true as i32             // bool -> int: 1; nothing casts to bool
 'A' as i32              // char -> i32: 65
-// 65 as char           // compile error: use char::from_u32()
+97 as char              // 'a': only a u8 casts to char; else char::from_u32()
+// Color::Red as i32    // compile error: ReflectEnum::<Color>::discriminant(&c)
 
 // Range: exclusive and inclusive
 ..<  ..=

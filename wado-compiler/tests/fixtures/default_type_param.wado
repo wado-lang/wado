@@ -22,18 +22,14 @@ test "an omitted argument falls back to the declared default type" {
     assert pick(42) == 42;
 }
 
-struct Wrap<T> {
-    v: T,
-}
-
-fn wrap<T, U = T>(v: T) -> Wrap<U> {
-    return Wrap { v: v as U };
+fn zero<T, U: Default = T>(v: T) -> U {
+    return U::default();
 }
 
 // `U` appears only in the return type, so nothing but its default can bind it.
 test "a default naming an earlier type parameter picks up that one's argument" {
-    assert wrap(7).v == 7;
-    assert wrap(true).v == true;
+    assert `${zero(7):?}` == "0";
+    assert `${zero(true):?}` == "false";
 }
 
 struct NoFields {}

@@ -949,17 +949,7 @@ impl Monomorphizer {
             .filter(|p| !p.is_pack)
             .count();
         for param in &generic.impl_type_params {
-            if let Some((src_idx, assoc_name)) = &param.projected_from {
-                // A projected pack `..F` (`impl<T: ReflectStruct<FieldTypes = [..F]>>`) is
-                // not caller-supplied: resolve `T::Fields` for the concrete `T`,
-                // which precedes the pack and is already bound.
-                let projected = substitution
-                    .get(src_idx)
-                    .copied()
-                    .and_then(|src| type_table.resolve_assoc_type_of_instance(src, assoc_name))
-                    .unwrap_or_else(|| type_table.make_tuple(vec![]));
-                substitution.insert(param.index, projected);
-            } else if param.is_pack {
+            if param.is_pack && !param.projected {
                 // Read the shape off the declaration, never off `key`:
                 // `InstantiationKey` leaves `method_info` out of its equality
                 // and hash, so two keys differing only there share one entry.
@@ -992,14 +982,15 @@ impl Monomorphizer {
                 substitution.insert(param.index, arg);
             }
         }
-        // A parameter nested in the target (`T` in `Pair<List<T>, i32>`) sits
-        // past the receiver's positions, and is read out of the argument there.
+        // A parameter nested in the target (`T` in `Pair<List<T>, i32>`) or
+        // projected by a bound sits past the receiver's positions, and is read
+        // out of the arguments there.
         if let Some(block) = generic.impl_origin
-            && let written = type_table.impl_target_args(block)
-            && let Some(positions) = key.impl_type_args.get(..written.len())
-            && let Some(bound) = type_table.bind_type_params(written, positions)
+            && let Some(positions) = key
+                .impl_type_args
+                .get(..type_table.impl_target_args(block).len())
         {
-            for (slot, ty) in bound {
+            for (slot, ty) in type_table.impl_slots(block, positions) {
                 substitution.entry(slot).or_insert(ty);
             }
         }
@@ -2749,7 +2740,7 @@ impl Monomorphizer {
         } else {
             // Blanket impl: an associated-type projection (`S::SeqSerializer^…`)
             // keeps `new_func_name`; every other blanket is keyed by its own
-            // receiver param. The impl args below stay `ReflectStruct`-only.
+            // receiver param.
             let recv_inner = type_table.peel_refs(receiver_type_id);
             // A blanket `impl<T: Bound<Assoc = P>, P> Trait for T` is keyed by
             // `[T, T::Assoc, …]`, so its instance name matches the template's

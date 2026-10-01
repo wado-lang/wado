@@ -119,7 +119,7 @@ pub(crate) fn classify_ctor(type_table: &TypeTable, mangled: &str) -> Option<Wid
 /// `operand as <item>` for an operand that is not itself a wide int, through
 /// the `f64`, `i64` or `u64` whose constructor keeps its value as Rust's `as`
 /// does: a float saturates, a signed integer sign-extends, and anything else
-/// that casts to an integer (unsigned, `bool`, `char`, an enum, flags)
+/// that casts to an integer (unsigned, `bool`, `char`, flags)
 /// zero-extends.
 pub(crate) fn create_conversion(
     item: CompilerItem,
