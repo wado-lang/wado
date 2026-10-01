@@ -84,25 +84,27 @@ impl Monomorphizer {
         let impl_type_args = if template.impl_type_params.is_empty() {
             Vec::new()
         } else {
-            self.impl_args_at(&template, site.template, &site, type_table)?
-        };
-        // A written target takes one argument per position, and the slots past
-        // them (nested in an argument, projected by a bound) are read out of
-        // those; any other target takes one per scalar parameter.
-        let required = match template.impl_origin {
-            _ if template.impl_type_params.is_empty() => 0,
-            Some(block) if !type_table.impl_target_args(block).is_empty() => {
-                type_table.impl_target_args(block).len()
+            let args = self.impl_args_at(&template, site.template, &site, type_table)?;
+            // A written target takes one argument per position, and the slots
+            // past them (nested in an argument, projected by a bound) are read
+            // out of those; any other target takes one per scalar parameter.
+            let positions = template
+                .impl_origin
+                .map_or(0, |block| type_table.impl_target_args(block).len());
+            let required = if positions > 0 {
+                positions
+            } else {
+                template
+                    .impl_type_params
+                    .iter()
+                    .filter(|param| !param.is_pack)
+                    .count()
+            };
+            if args.len() < required {
+                return None;
             }
-            _ => template
-                .impl_type_params
-                .iter()
-                .filter(|param| !param.is_pack)
-                .count(),
+            args
         };
-        if impl_type_args.len() < required {
-            return None;
-        }
         let method_type_args = method_args_at(&template, &site, type_table)?;
         Some(InstantiationKey {
             def: None,
