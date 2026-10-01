@@ -550,7 +550,7 @@ impl CodeWriter {
             if !site.kind matches { Call } {
                 continue;
             }
-            let Some(k) = item_of.get_str(self.slice(site.text_start, site.text_end)) else {
+            let Some(k) = self.item_called(site, item_of) else {
                 continue;
             };
             let Some(fw) = &forwards[k] else {
@@ -646,7 +646,7 @@ impl CodeWriter {
         // A body discarding the inner result forwards a value only where there is
         // none to discard.
         if inner.form matches { Discard } && !site.form matches { Discard } {
-            let Some(k) = item_of.get_str(self.slice(inner.text_start, inner.text_end)) else {
+            let Some(k) = self.item_called(inner, item_of) else {
                 return null;
             };
             if !self.segs[items[k].start].returns_unit {
@@ -688,7 +688,7 @@ impl CodeWriter {
         if site.arg_count == head.param_count {
             return true;
         }
-        let Some(k) = item_of.get_str(self.slice(inner.text_start, inner.text_end)) else {
+        let Some(k) = self.item_called(inner, item_of) else {
             return false;
         };
         let target = &self.segs[items[k].start];
@@ -698,6 +698,11 @@ impl CodeWriter {
             }
         }
         return true;
+    }
+
+    /// The function item the call `call` calls, where the writer holds it.
+    fn item_called(&self, call: &Seg, item_of: &TreeMap<String, i32>) -> Option<i32> {
+        return item_of.get_str(self.slice(call.text_start, call.text_end));
     }
 
     /// The default of the function `head` opens' parameter `i`; empty for none.
@@ -748,6 +753,9 @@ impl CodeWriter {
         if a.0 == a.1 {
             return b;
         }
+        if a.1 == b.0 {
+            return [a.0, b.1];
+        }
         let start = self.buf.len();
         let joined = `${self.slice(a.0, a.1)}${self.slice(b.0, b.1)}`;
         self.buf.push_str(&joined);
@@ -785,15 +793,12 @@ impl CodeWriter {
                 queue.push(kept.len() - 1);
             }
         }
-        let mut next_item = 0;
-        for let mut i = 0; i < self.segs.len(); i += 1 {
-            if next_item < items.len() && i == items[next_item].start {
-                i = items[next_item].end;
-                next_item += 1;
-                continue;
-            }
-            self.reach_from(i, i, item_of, &mut kept, &mut queue);
+        let mut from = 0;
+        for let item of items {
+            self.reach_from(from, item.start - 1, item_of, &mut kept, &mut queue);
+            from = item.end + 1;
         }
+        self.reach_from(from, self.segs.len() - 1, item_of, &mut kept, &mut queue);
         while let Some(k) = queue.pop() {
             self.reach_from(items[k].start, items[k].end, item_of, &mut kept, &mut queue);
         }
@@ -885,10 +890,8 @@ fn reach<S: AsStrSlice>(name: S, item_of: &TreeMap<String, i32>, kept: &mut List
 
 impl Seg {
     /// This segment of another writer, moved into one whose `buf` and `names`
-    /// hold that writer's from `text_base` and `names_base` on, `levels`
-    /// deeper.
-    fn moved(&self, text_base: i32, names_base: i32, levels: i32) -> Seg {
-        let t = text_base;
+    /// hold that writer's from `t` and `names_base` on, `levels` deeper.
+    fn moved(&self, t: i32, names_base: i32, levels: i32) -> Seg {
         return Seg {
             ..*self,
             depth: self.depth + levels,

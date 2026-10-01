@@ -171,6 +171,7 @@ test "intern_follow_mask: same mask returns same id, empty returns null" {
     let empty_depths: List<List<String>> = [[], []];
     let id_empty = ctx.intern_follow_mask(&empty_depths);
     assert id_empty matches { None }, "all-empty mask interns to null";
+    assert ctx.follow_masks().len() == 2, "only the two real masks are registered";
 }
 
 test "a table reference belongs to the innermost function frame, else to the root" {

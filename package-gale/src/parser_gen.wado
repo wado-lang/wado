@@ -227,12 +227,17 @@ fn add_follow_param(f: &mut FnSpec) {
     });
 }
 
-/// `", <FollowArg args>"` when the grammar emits FOLLOW machinery, else `""`.
-fn follow_arg_sep(ctx: &mut GenContext, emit_follow: bool, arg: &FollowArg) -> String {
-    if emit_follow {
-        return `, ${follow_arg_expr(ctx, arg)}`;
+/// What every call to `_parse_<r.target_snake>` passes: the parser, the
+/// caller's FOLLOW where the callee reads one, and the baked `min_prec`.
+fn parse_call_args(r: &RuleCallOp, ctx: &mut GenContext) -> List<String> {
+    let mut args: List<String> = ["p"];
+    if ctx.rule_reads_follow(&r.target_snake) {
+        args.push(follow_arg_expr(ctx, &r.follow_arg));
     }
-    return "";
+    if let Some(min_prec) = r.min_prec_arg {
+        args.push(`${min_prec}`);
+    }
+    return args;
 }
 
 pub fn gen_parser(
@@ -457,12 +462,8 @@ fn end_fn(w: &mut CodeWriter, ctx: &mut GenContext) {
 /// The walker takes its `min_prec` after these, so a call to it passes that
 /// itself.
 fn scan_trailing_args(ctx: &GenContext, to_walker: bool = false) -> String {
-    let mut out = String::new();
-    for let a of &scan_trailing_arg_list(ctx, to_walker) {
-        out.push_str(", ");
-        out.push_str(a);
-    }
-    return out;
+    let args = scan_trailing_arg_list(ctx, to_walker);
+    return if args.is_empty() { "" } else { `, ${join_kinds(&args)}` };
 }
 
 /// `scan_trailing_args`, one argument each.
@@ -3978,18 +3979,14 @@ fn gen_op_leaf(
             // threaded at runtime via `follow_arg` rather than selecting a
             // cloned `__follow_<id>`.
             let span_field = open_call_capture(w, op, ctx);
-            let mut args: List<String> = ["p"];
-            if ctx.rule_reads_follow(&r.target_snake) {
-                args.push(follow_arg_expr(ctx, &r.follow_arg));
-            }
             // `RuleCallOp.min_prec_arg` carries the resolved precedence
             // for every self-recursive call that needs one — `lower_lr_alt_suffix`
             // stamps internal LR-suffix self-refs via
             // `stamp_lr_self_ref_min_prec`, and `lower_alt_body` stamps the
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
-            if let Some(min_prec) = r.min_prec_arg {
-                args.push(`${min_prec}`);
+            let mut args = parse_call_args(&r, ctx);
+            if r.min_prec_arg matches { Some(_) } {
                 if let Some(cont) = lr_cont_expr(r.lr_cont_mask, ctx) {
                     args.push(cont);
                 }
@@ -6603,14 +6600,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
 fn rep_recovery_expr(rep_op: &RepeatOp, ctx: &mut GenContext) -> Option<String> {
     if let LeafRuleCall = rep_op.body_shape {
         if let RuleCall(r) = &rep_op.body {
-            let fn_name = `_parse_${r.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&r.target_snake), &r.follow_arg);
-            let call = if let Some(min_prec) = r.min_prec_arg {
-                `${fn_name}(p${follow_arg_str}, ${min_prec})`;
-            } else {
-                `${fn_name}(p${follow_arg_str})`;
-            };
-            return Option::Some(call);
+            return Option::Some(`_parse_${r.target_snake}(${join_kinds(&parse_call_args(r, ctx))})`);
         }
     }
     return null;
@@ -7712,16 +7702,11 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
     } else {
         panic("SimpleCst group alt op is not RuleCall");
     };
-    let fn_name = `_parse_${rc.target_snake}`;
     let local_var = rc.target_snake;
-    let args = if let Some(min_prec) = rc.min_prec_arg {
-        `p${follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}, ${min_prec}`;
-    } else {
-        `p${follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}`;
-    };
+    let args = join_kinds(&parse_call_args(rc, ctx));
     let span_field = open_call_capture(w, op, ctx);
     gen_call_site_stamps(w, ctx, rc.atn_call_site);
-    w.line(`${leaf_binding(ctx, &local_var, &local_var)}${fn_name}(${args});`);
+    w.line(`${leaf_binding(ctx, &local_var, &local_var)}_parse_${rc.target_snake}(${args});`);
     close_call_capture(w, &span_field);
 }
 

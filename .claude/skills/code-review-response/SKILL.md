@@ -64,7 +64,8 @@ a reviewer asked is how a design drifts without anyone deciding.
 
 ## Then invoke `/distill`
 
-Commit the fixes, then invoke the `/distill` skill. This is not a decision. Do
+Commit the fixes, then invoke the `/distill` skill. Always start the skill
+itself: a pass from memory of its rules is not one. This is not a decision. Do
 not ask whether to run it, do not offer it as a next step, and do not stop
 before it: there is no case where the answer is no, and the moment you wonder is
 the moment to run it. A response that ends without it is unfinished.
