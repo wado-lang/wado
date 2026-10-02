@@ -18,6 +18,11 @@ export fn run() {
         1_i32 => 1,              // compile error: pattern mismatch: expected 'i32', found 'u8'
         _ => 0,
     };
+    let y: f32 = 1.5;
+    let k = match y {
+        1_f32..=2_f32 => 1,      // compile error: range pattern bounds must be integer or char literals
+        _ => 0,
+    };
 }
 
 __DATA__
@@ -32,6 +37,7 @@ __DATA__
     "cannot use float literal '3.5' as integer",
     "expected 'i64', found 'i32'",
     "expected 'Meters', found 'f64'",
-    "pattern mismatch: expected 'i32', found 'u8'"
+    "pattern mismatch: expected 'i32', found 'u8'",
+    "range pattern bounds must be integer or char literals"
   ]
 }

@@ -98,6 +98,17 @@ test "a suffixed literal is a pattern of its type" {
         _ => 0,
     };
     assert j == 1;
+    let r = match x {
+        0_u8..=9_u8 => 0,
+        250_u8..=255_u8 => 1,
+        _ => 2,
+    };
+    assert r == 1;
+}
+
+test "an integer suffix keeps a constant tuple index" {
+    let t = [10, "twenty"];
+    assert t[0_i32] == 10;
 }
 
 __DATA__

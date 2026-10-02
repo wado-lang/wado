@@ -2029,11 +2029,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(repr, None),
+                value: ast::Literal::Number(repr, suffix),
                 ..
             }) = &index.index
-                && !util::is_float_only_literal(repr)
-                && let Ok(idx) = repr.parse::<usize>()
+                && let Some(digits) = util::integer_digits(repr, *suffix)
+                && let Ok(idx) = digits.parse::<usize>()
             {
                 match self.tysys.tuple_literal_index_type(elements, idx) {
                     Ok(elem) => return elem,

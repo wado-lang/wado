@@ -5893,8 +5893,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         if let Some(elems) = &tuple_elems
             && let ast::Expr::Literal(lit) = &index.index
-            && let ast::Literal::Number(repr, None) = &lit.value
-            && let Ok(idx) = repr.parse::<usize>()
+            && let ast::Literal::Number(repr, suffix) = &lit.value
+            && let Some(digits) = util::integer_digits(repr, *suffix)
+            && let Ok(idx) = digits.parse::<usize>()
             && let Ok(elem) = self.tysys.tuple_literal_index_type(elems, idx)
         {
             return TirExpr::new(

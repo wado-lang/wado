@@ -71,7 +71,9 @@ pub(super) fn range_endpoint_to_i128(
 ) -> Option<i128> {
     use crate::ast::{Literal, Pattern};
     match pattern {
-        Pattern::Literal(Literal::Number(repr, _)) => parse_int_bits(repr, is_unsigned).ok(),
+        Pattern::Literal(Literal::Number(repr, suffix)) => {
+            parse_int_bits(integer_digits(repr, *suffix)?, is_unsigned).ok()
+        }
         Pattern::Literal(Literal::Char(raw)) => {
             unescape_char(raw).ok().map(|c| i128::from(c as u32))
         }
@@ -164,6 +166,12 @@ pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
 /// suffix names a float type.
 pub(super) fn denotes_float(repr: &str, suffix: Option<NumericSuffix>) -> bool {
     is_float_only_literal(repr) || suffix.is_some_and(NumericSuffix::is_float)
+}
+
+/// The digits of a number literal that denotes an integer, the reading every
+/// constant that must be one takes: a range bound, a lane, a tuple index.
+pub(super) fn integer_digits(repr: &str, suffix: Option<NumericSuffix>) -> Option<&str> {
+    (!denotes_float(repr, suffix)).then_some(repr)
 }
 
 /// Check if a number literal can only be a float (has decimal point or negative exponent).
