@@ -66,8 +66,8 @@ use crate::elaborator::stmt::{
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
-    parse_i128_literal, parse_u128_literal, pattern_literal, range_bound_literal,
-    lower_literal_pattern, settles_literal_patterns,
+    lower_literal_pattern, parse_i128_literal, parse_u128_literal, pattern_literal,
+    range_bound_literal, settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
