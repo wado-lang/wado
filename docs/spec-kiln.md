@@ -6,9 +6,9 @@ an input file into Wado source, and then compiles that source like any
 hand-written module. A `use` names the input file, and its `with` clause names
 the generator ([Import Attributes](./spec-modules.md#import-attributes-with)).
 
-A `use` whose source is neither a `.wado` module nor a Wasm asset (`.wasm` /
-`.wat`) goes through Kiln. `.g4`, `.proto`, `.onnx`, and a Wado dialect's own
-extension all take this path.
+A `use` with a `generator` attribute goes through Kiln, whatever its path's
+extension ([How an Import Is Read](./spec-modules.md#how-an-import-is-read)).
+A `type` beside `generator` is passed to the generator.
 
 <!-- {"source": "wado-cli/tests/fixtures/kiln_nested/src/main.wado"} -->
 
@@ -101,16 +101,6 @@ on disk. Only the diagnostics a generator reports itself point into its input
 files.
 
 ### Import Errors
-
-A `use` of a file that is neither `.wado` nor a Wasm asset is
-`KILN_MISSING_WITH` when the importing file declares no `with { generator }`
-clause for it:
-
-<!-- {"fixture": "spec_kiln_missing_with.wado"} -->
-
-```wado
-use { Parser } from "./Calc.g4";   // error: no `with { generator }`
-```
 
 A `use` whose generator produced no module for that schema is
 `KILN_NO_GENERATED_MODULE`. The compiler never falls back to parsing the schema
