@@ -81,7 +81,8 @@ Sizes of the zlib benchmark's core module:
 | wasm-opt `-O3`    | 67,979 |
 | wasm-opt `-Oz`    | 67,853 |
 
-Re-encoding alone makes the module larger, so Wado's encoding wastes nothing.
+Re-encoding alone makes this module 467 bytes larger, so binaryen's encoding
+finds nothing to save in Wado's.
 
 In 2026-09, on Node 26, decompression ran faster under wasm-opt `-O2` and
 `-Os`: the median rose 10–40% across two sessions. Compression, and everything
