@@ -3,15 +3,17 @@
 //
 // - `TABLE` promotes to an eager constant. Its slot then holds a non-null value
 //   from instantiation on, so it is declared non-null and no read narrows it.
-// - `BANNER` stays lazy: its slot is nullable until `$initialize_module`
-//   stores it. `POINTS[i].y` reads a `ref` element, and so does calling
-//   `lens[0]`, before casting it to its closure type. A `struct.get` and a cast
-//   to a non-null type trap on a null object by themselves, so none of these
-//   reads is narrowed first. The assert reads `BANNER` through a local, so its
-//   failure path, which keeps the operands it reports, holds no read of the
-//   global that needs one.
+// - `BANNER` stays lazy, so its slot is nullable until `$initialize_module`
+//   stores it. `BANNER.len()` reads it as the object of a `struct.get`, which
+//   traps on null by itself, so the read is not narrowed.
+// - `POINTS[i].y` reads a `ref` element as the object of a `struct.get`, and
+//   `lens[0]()` reads one to cast to its closure type, which traps on null as
+//   well. Neither element read is narrowed.
 // - A closure capturing the `for` header's string copies it into a block whose
 //   last value is the fresh array, which is non-null without a check.
+//
+// The assert on `BANNER` goes through a local. Its failure path keeps the
+// operands it reports, and a read of the global into one would need narrowing.
 //
 // Below `-O2` the element reads stay calls, whose non-null results are narrowed
 // where the callee reads them.

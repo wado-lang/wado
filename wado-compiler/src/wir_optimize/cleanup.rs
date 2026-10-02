@@ -102,13 +102,10 @@ impl WirMutVisitor for CleanupVisitor {
     }
 }
 
-/// A GC access, and a cast to a non-null type, traps on a null object by
-/// itself, so its object need not be narrowed first: neither by a
-/// `RefAsNonNull`, nor by the `ref.as_non_null` codegen adds after a non-null
-/// read of a nullable global or array slot.
-/// Leaving the narrowing out moves the trap from the object to the access, past
-/// the operands evaluated between them, so it applies only where those have no
-/// effect.
+/// A GC access traps on a null object by itself, as a cast to a non-null type
+/// does, so its object need not be narrowed first: neither by a `RefAsNonNull`,
+/// nor by the `ref.as_non_null` codegen adds after a non-null read of a
+/// nullable global or array slot.
 fn relax_null_trapping_objects(instr: &mut WirInstr) {
     match instr {
         WirInstr::StructGet { expr: object, .. }
@@ -117,12 +114,12 @@ fn relax_null_trapping_objects(instr: &mut WirInstr) {
             nullable: false,
             expr: object,
             ..
-        } => relax_nonnull(object),
+        } => relax_nonnull(object, &[]),
         WirInstr::StructSet {
             expr: object,
             value,
             ..
-        } => relax_nonnull_before(object, &[&**value]),
+        } => relax_nonnull(object, &[&**value]),
         WirInstr::ArrayGet {
             array: object,
             index,
@@ -137,20 +134,20 @@ fn relax_null_trapping_objects(instr: &mut WirInstr) {
             array: object,
             index,
             ..
-        } => relax_nonnull_before(object, &[&**index]),
+        } => relax_nonnull(object, &[&**index]),
         WirInstr::ArraySet {
             array: object,
             index,
             value,
             ..
-        } => relax_nonnull_before(object, &[&**index, &**value]),
+        } => relax_nonnull(object, &[&**index, &**value]),
         WirInstr::ArrayFill {
             array: object,
             offset,
             value,
             len,
             ..
-        } => relax_nonnull_before(object, &[&**offset, &**value, &**len]),
+        } => relax_nonnull(object, &[&**offset, &**value, &**len]),
         WirInstr::ArrayCopy {
             dest,
             dest_offset,
@@ -159,31 +156,32 @@ fn relax_null_trapping_objects(instr: &mut WirInstr) {
             len,
             ..
         } => {
-            relax_nonnull_before(src, &[&**src_offset, &**len]);
-            relax_nonnull_before(dest, &[&**dest_offset, &**src, &**src_offset, &**len]);
+            relax_nonnull(src, &[&**src_offset, &**len]);
+            relax_nonnull(dest, &[&**dest_offset, &**src, &**src_offset, &**len]);
         }
         _ => {}
     }
 }
 
-fn relax_nonnull_before(object: &mut WirInstr, later: &[&WirInstr]) {
-    if later.iter().all(|operand| is_side_effect_free(operand)) {
-        relax_nonnull(object);
-    }
-}
-
-fn relax_nonnull(object: &mut WirInstr) {
+/// Leave out the narrowing of `object`. That moves its trap to the access, past
+/// the `later` operands evaluated between them, so it is done only where those
+/// have no effect, and they are checked only where there is a narrowing.
+fn relax_nonnull(object: &mut WirInstr, later: &[&WirInstr]) {
+    let trap_may_move = || later.iter().all(|operand| is_side_effect_free(operand));
     match object {
-        WirInstr::RefAsNonNull(inner) => {
+        WirInstr::RefAsNonNull(inner) if trap_may_move() => {
             *object = std::mem::replace(inner.as_mut(), WirInstr::Nop);
-            relax_nonnull(object);
+            // `later` has just passed the check.
+            relax_nonnull(object, &[]);
         }
         WirInstr::Seq(items) => {
             if let Some(value) = items.last_mut() {
-                relax_nonnull(value);
+                relax_nonnull(value, later);
             }
         }
-        WirInstr::GlobalGet { result_ty, .. } | WirInstr::ArrayGet { result_ty, .. } => {
+        WirInstr::GlobalGet { result_ty, .. } | WirInstr::ArrayGet { result_ty, .. }
+            if result_ty.is_nonnull_ref() && trap_may_move() =>
+        {
             result_ty.set_nullable();
         }
         _ => {}
