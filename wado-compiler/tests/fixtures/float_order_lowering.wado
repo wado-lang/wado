@@ -19,6 +19,7 @@ fn same(a: f32, b: f32) -> bool {
     return a == b;
 }
 
+#[inline(never)]
 fn differs(a: f64, b: f64) -> bool {
     return !(a == 2.0) && b != 2.0;
 }
@@ -61,7 +62,7 @@ __DATA__
         "return (a <= b) | (b != b);",
         "return (a == b) | ((a != a) & (b != b));"
     ],
-    "wir_expect:O1": ["(nan != 2) & (nan != 2)", "ordered = ordered + "],
-    "wir_not_expect:O1": ["(nan == 2) == 0"],
+    "wir_expect:O1": ["return (a != 2) & (b != 2);", "ordered = ordered + "],
+    "wir_not_expect:O1": ["(a == 2) == 0"],
     "wir_not_expect:O2": ["f64::clamp$cold0", "1 != 1"]
 }
