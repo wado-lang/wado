@@ -852,7 +852,8 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries<'static>, Vec<Opti
     let bodies: Vec<BodySummary> = project
         .functions
         .iter()
-        .map(|f| summarize_body(&f.borrow(), &builtins, &leaves, &types))
+        .zip(&leaves)
+        .map(|(f, &leaf)| summarize_body(&f.borrow(), leaf, &builtins, &leaves, &types))
         .collect();
     (solve(Cow::Owned(bodies)), builtins)
 }
@@ -867,21 +868,24 @@ pub(super) fn summarize_memo<'m>(
     let types = project.type_table.borrow();
     let (leaves, builtins) = leaf_effects(project);
     let bodies = memo.refresh(project, gate, |f| {
-        summarize_body(f, &builtins, &leaves, &types)
+        let leaf = leaves[f.id.expect("func_id assigned at lower").index()];
+        summarize_body(f, leaf, &builtins, &leaves, &types)
     });
     solve(Cow::Borrowed(bodies))
 }
 
-/// One function's [`BodySummary`], given every function's [`leaf_effects`].
+/// One function's [`BodySummary`]. `leaf` is its own [`leaf_effect`], and
+/// `builtins` / `leaves` are every function's, by `func_id.index()`.
 fn summarize_body(
     f: &NirFunction,
+    leaf: FnEffect,
     builtins: &[Option<Builtin<'_>>],
     leaves: &[FnEffect],
     types: &TypeTable,
 ) -> BodySummary {
     let Some(body) = &f.body else {
         return BodySummary {
-            own: leaves[f.id.expect("func_id assigned at lower").index()],
+            own: leaf,
             callees: Vec::new(),
             proofs: Proofs::default(),
         };

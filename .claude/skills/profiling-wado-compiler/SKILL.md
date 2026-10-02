@@ -124,15 +124,7 @@ node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
 # Profile a different binary
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
   /tmp/prof.json --binary wado-lsp
-
-# Which callee of a frame its time goes to (the outermost frame matching)
-node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
-  /tmp/prof.json --under 'inline_functions \('
 ```
-
-`--binary` names the main binary by file name, so a copy profiled at
-`/tmp/wado-base` takes `--binary wado-base`, or the Rust-only views come out
-empty.
 
 ## Memory
 

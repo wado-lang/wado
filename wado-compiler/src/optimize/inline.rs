@@ -1625,7 +1625,14 @@ pub(super) fn find_recursive_functions(call_sites: &[Vec<FuncId>]) -> IndexSet<F
     let n = call_sites.len();
     let call_graph: Vec<Vec<usize>> = call_sites
         .iter()
-        .map(|sites| sites.iter().map(|callee| callee.index()).collect())
+        .map(|sites| {
+            sites
+                .iter()
+                .map(|callee| callee.index())
+                .collect::<IndexSet<usize>>()
+                .into_iter()
+                .collect()
+        })
         .collect();
 
     // A function is recursive iff it lies on a call cycle — i.e. it is a member
