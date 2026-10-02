@@ -67,7 +67,7 @@ use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
     parse_i128_literal, parse_u128_literal, pattern_literal, range_bound_literal,
-    settles_literal_patterns,
+    lower_literal_pattern, settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -8982,7 +8982,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirPattern {
         let type_table = self.tysys.type_table.borrow();
         if settles_literal_patterns(&type_table, scrutinee_type) {
-            pattern.lower(type_table.is_unsigned_int(scrutinee_type))
+            lower_literal_pattern(&pattern, scrutinee_type, &type_table)
         } else {
             TirPattern::PerInstance {
                 pattern,

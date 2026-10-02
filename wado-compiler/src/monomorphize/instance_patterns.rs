@@ -5,7 +5,7 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::elaborator::types::TypeError;
-use crate::elaborator::util::{pattern_literal_error, range_bound_errors};
+use crate::elaborator::util::{lower_literal_pattern, pattern_literal_error, range_bound_errors};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, Logger};
 use crate::tir::{InstancePattern, TirPattern, TypeTable};
@@ -68,6 +68,6 @@ impl TirMutVisitor for Lowering<'_> {
             self.errors
                 .push(error.at(scrutinee_type, *span, self.type_table));
         }
-        *pattern = instance.lower(self.type_table.is_unsigned_int(scrutinee_type));
+        *pattern = lower_literal_pattern(instance, scrutinee_type, self.type_table);
     }
 }

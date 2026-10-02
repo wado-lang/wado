@@ -1,0 +1,40 @@
+// A literal or range pattern under a reference scrutinee reads the referent's
+// type: match ergonomics binds the payload as `&i32`, and the literal is an
+// `i32`.
+
+variant Extent {
+    Static(i32),
+    Unknown,
+}
+
+fn is_one(e: &Extent) -> bool {
+    return e matches { Static(1) };
+}
+
+fn bucket(e: &Extent) -> i32 {
+    return match e {
+        Static(2) => 1,
+        Static(3..=5) => 2,
+        _ => 0,
+    };
+}
+
+fn is_high<T>(x: &T) -> bool {
+    return x matches { 0x8000_0000..=0xFFFF_FFFF };
+}
+
+test "a range under a reference to a type parameter reads each instance" {
+    assert is_high(&builtin::black_box(0x9000_0000_u32));
+    assert !is_high(&builtin::black_box(5_u32));
+}
+
+test "a literal matches through a reference" {
+    assert is_one(&Extent::Static(1));
+    assert !is_one(&Extent::Unknown);
+    assert bucket(&Extent::Static(4)) == 2;
+    assert bucket(&Extent::Static(2)) == 1;
+    assert bucket(&Extent::Static(9)) == 0;
+}
+
+__DATA__
+{"test": {}}

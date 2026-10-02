@@ -7,7 +7,7 @@ use crate::elaborator::types::TypeError;
 use crate::escape::{unescape_byte, unescape_char};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
-use crate::tir::{PatternLiteral, ResolvedType, TypeId, TypeTable};
+use crate::tir::{InstancePattern, PatternLiteral, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no
@@ -107,7 +107,7 @@ pub(super) fn range_bound_literal(
 /// head cannot: an unresolved type is reported where it is unresolved, and a
 /// type parameter is judged per instance, as `TirPattern::PerInstance`.
 pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId) -> bool {
-    let head = type_table.representation_head(scrutinee);
+    let head = type_table.representation_head(type_table.peel_refs(scrutinee));
     match type_table.get(head) {
         ResolvedType::Primitive(_)
         | ResolvedType::Struct { .. }
@@ -120,8 +120,18 @@ pub(super) fn settles_literal_patterns(type_table: &TypeTable, scrutinee: TypeId
     }
 }
 
+/// `pattern` on `scrutinee`, settled: an unsigned instance compares unsigned.
+pub(crate) fn lower_literal_pattern(
+    pattern: &InstancePattern,
+    scrutinee: TypeId,
+    type_table: &TypeTable,
+) -> TirPattern {
+    pattern.lower(type_table.is_unsigned_int(type_table.peel_refs(scrutinee)))
+}
+
 /// Why a literal pattern or range bound names no value of the settled
-/// `scrutinee`.
+/// `scrutinee`. A reference scrutinee is read through, as match ergonomics
+/// reads it: a literal under `&i32` names an `i32`.
 pub(crate) enum PatternLiteralError {
     /// Of another kind: the type it demands.
     Mismatch(String),
@@ -135,7 +145,7 @@ impl PatternLiteralError {
         match self {
             PatternLiteralError::Mismatch(expected) => TypeError::PatternTypeMismatch {
                 expected,
-                found: type_table.type_name(scrutinee),
+                found: type_table.type_name(type_table.peel_refs(scrutinee)),
                 span,
             },
             PatternLiteralError::Invalid(message) => TypeError::InvalidPattern { message, span },
@@ -149,6 +159,7 @@ pub(crate) fn pattern_literal_error(
     scrutinee: TypeId,
     type_table: &mut TypeTable,
 ) -> Option<PatternLiteralError> {
+    let scrutinee = type_table.peel_refs(scrutinee);
     if let Some(expected) = pattern_literal_mismatch(lit, scrutinee, type_table) {
         return Some(PatternLiteralError::Mismatch(expected));
     }
@@ -176,6 +187,7 @@ pub(super) fn pattern_literal_mismatch(
     scrutinee: TypeId,
     type_table: &mut TypeTable,
 ) -> Option<String> {
+    let scrutinee = type_table.peel_refs(scrutinee);
     let head = type_table.representation_head(scrutinee);
     let expected = match lit {
         PatternLiteral::Int {
