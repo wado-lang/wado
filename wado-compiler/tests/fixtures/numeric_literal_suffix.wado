@@ -106,6 +106,18 @@ test "a suffixed literal is a pattern of its type" {
     assert r == 1;
 }
 
+fn is_one_byte<T>(x: T) -> i32 {
+    return match x {
+        1_u8 => 1,
+        _ => 0,
+    };
+}
+
+test "a suffixed pattern is judged per instance under a type parameter" {
+    assert is_one_byte(1_u8) == 1;
+    assert is_one_byte(2_u8) == 0;
+}
+
 test "an integer suffix keeps a constant tuple index" {
     let t = [10, "twenty"];
     assert t[0_i32] == 10;

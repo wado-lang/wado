@@ -2136,25 +2136,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         lit: &Literal,
         scrutinee_type: TypeId,
     ) -> Option<String> {
-        if let Literal::Number(_, Some(suffix)) = lit {
-            let mut type_table = self.tysys.type_table.borrow_mut();
-            let suffix_type = type_table.numeric_suffix_type(*suffix);
-            return (type_table.type_key(suffix_type) != type_table.type_key(scrutinee_type))
-                .then(|| type_table.type_name(suffix_type));
-        }
-        let type_table = self.tysys.type_table.borrow();
+        let mut type_table = self.tysys.type_table.borrow_mut();
         let head = type_table.representation_head(scrutinee_type);
-        let expected = match lit {
-            Literal::Number(..) | Literal::Byte(_)
-                if !type_table.is_integer(head) && !type_table.is_wide_int(head) =>
-            {
-                "an integer type"
-            }
-            Literal::String(_) if !type_table.is_string(head) => "String",
-            Literal::Char(_) if !type_table.is_primitive(head, PrimitiveType::Char) => "char",
-            Literal::Bool(_) if !type_table.is_primitive(head, PrimitiveType::Bool) => "bool",
-            _ => return None,
-        };
         // An unsettled head judges nothing: an unresolved type is reported
         // where it is unresolved, and a type parameter decided per instance.
         let settled = match type_table.get(head) {
@@ -2167,10 +2150,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::GenericInstance { .. } => type_table.is_concrete(head),
             _ => false,
         };
-        drop(type_table);
         if !settled {
             return None;
         }
+        if let Literal::Number(_, Some(suffix)) = lit {
+            let suffix_type = type_table.numeric_suffix_type(*suffix);
+            return (type_table.type_key(suffix_type) != type_table.type_key(scrutinee_type))
+                .then(|| type_table.type_name(suffix_type));
+        }
+        let expected = match lit {
+            Literal::Number(..) | Literal::Byte(_)
+                if !type_table.is_integer(head) && !type_table.is_wide_int(head) =>
+            {
+                "an integer type"
+            }
+            Literal::String(_) if !type_table.is_string(head) => "String",
+            Literal::Char(_) if !type_table.is_primitive(head, PrimitiveType::Char) => "char",
+            Literal::Bool(_) if !type_table.is_primitive(head, PrimitiveType::Bool) => "bool",
+            _ => return None,
+        };
+        drop(type_table);
         // A string-literal arm tests the scrutinee with `==`, so any type
         // answering `Eq<String>` matches one the way a `String` does.
         if matches!(lit, Literal::String(_)) && self.compares_with_string_literal(scrutinee_type) {
