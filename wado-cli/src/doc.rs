@@ -7,6 +7,7 @@ use wado_compiler::doc::{
     DocEffect, DocEnum, DocFlags, DocModule, DocPrimitiveType, DocResource, DocStruct, DocTrait,
     DocVariant, extract_doc_with, extract_stdlib_doc_with, read_stdlib_import,
 };
+use wado_compiler::path::is_cwd_relative;
 
 use crate::args::{self, CliExit};
 
@@ -253,8 +254,7 @@ fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
     let dir = path.parent().unwrap_or(Path::new(""));
     let read_import = |import: &str| {
         read_stdlib_import(import).or_else(|| {
-            let relative = import.starts_with("./") || import.starts_with("../");
-            relative
+            is_cwd_relative(import)
                 .then(|| fs::read_to_string(dir.join(import)).ok())
                 .flatten()
         })
@@ -445,11 +445,7 @@ mod format_contract_tests {
     }
 
     fn markdown_of(source: &str) -> String {
-        let parsed = wado_compiler::parse(source)
-            .into_fail_fast()
-            .expect("parse");
-        let doc = wado_compiler::doc::extract_doc(&parsed.ast, &parsed.trivia, source, "demo");
-        render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
+        markdown_importing(source, &read_stdlib_import)
     }
 
     fn simple_all_of(source: &str) -> String {

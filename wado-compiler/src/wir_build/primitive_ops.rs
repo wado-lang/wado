@@ -412,7 +412,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// `operands` as instructions each safe to evaluate more than once, and
     /// the `local.set`s that evaluate them once, in order, ahead of the reads.
-    /// Operands that are all reads already need none.
+    /// A `local.get` stays in place only when every operand is a read: an
+    /// operand evaluated ahead of it may write the local it reads.
     fn bind_for_reuse(
         &mut self,
         operands: Vec<WirInstr>,

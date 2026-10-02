@@ -214,27 +214,9 @@ pub fn read_stdlib_import(path: &str) -> Option<String> {
     stdlib::get_stdlib_module(path).map(str::to_owned)
 }
 
-/// Extract the public-API documentation of a module whose imports reach only
-/// the standard library.
-pub fn extract_doc(
-    module: &Module,
-    trivia: &TriviaMap,
-    source: &str,
-    module_name: &str,
-) -> DocModule {
-    extract_doc_with(
-        module,
-        trivia,
-        source,
-        module_name,
-        false,
-        &read_stdlib_import,
-    )
-}
-
-/// [`extract_doc`] with explicit visibility and imports: `include_private`
-/// documents non-`pub` items, fields, and inherent methods too (the
-/// `wado doc --all` view). The default (`false`) is the public API.
+/// Extract the documentation of a module. `include_private` documents non-`pub`
+/// items, fields, and inherent methods too (the `wado doc --all` view); without
+/// it the page is the public API.
 pub fn extract_doc_with(
     module: &Module,
     trivia: &TriviaMap,
