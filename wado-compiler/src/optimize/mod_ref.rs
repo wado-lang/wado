@@ -4,10 +4,6 @@
 //! [`ExprKind`] / [`StmtKind`] variant must be added to `accumulate_expr` /
 //! `accumulate_stmt` explicitly, or it silently defaults to pure.
 
-use std::borrow::Cow;
-
-use cranelift_entity::EntityRef;
-
 use crate::builtin_registry::BuiltinRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -21,7 +17,6 @@ use crate::optimize::arena_query::{
     expr_node_may_trap_typed, field_receiver_nonnull, operand_values_may_trap, unary_may_trap,
 };
 use crate::optimize::bounds::{self, Builtin, Proofs};
-use crate::optimize::gate::{EditMemo, FunctionGate};
 use crate::optimize::inline::recursive_scc_members;
 use crate::tir::{BuiltinDeclarations, LinearMemory, TypeTable};
 
@@ -781,33 +776,20 @@ fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<Builtin<'_>>
 
 /// Every function's [`FnEffect`], and the [`Proofs`] for the builtin calls in
 /// its body, both indexed by `func_id.index()`.
-pub(super) struct FnSummaries<'a> {
+pub(super) struct FnSummaries {
     pub effects: Vec<FnEffect>,
-    bodies: Cow<'a, [BodySummary]>,
+    proofs: Vec<Proofs>,
 }
 
-impl FnSummaries<'_> {
+impl FnSummaries {
     /// What the calls in the body of function `index` may do.
     pub fn of_body(&self, index: usize) -> CallFacts<'_> {
         CallFacts {
             effects: &self.effects,
-            proofs: &self.bodies[index].proofs,
+            proofs: &self.proofs[index],
         }
     }
 }
-
-/// What one function contributes to [`summarize`] before its callees do: its
-/// own effect, the callees it reaches, and the [`Proofs`] for its builtin
-/// calls. A bodyless function contributes its leaf effect alone.
-#[derive(Debug, Clone, PartialEq)]
-pub(super) struct BodySummary {
-    own: FnEffect,
-    callees: Vec<usize>,
-    proofs: Proofs,
-}
-
-/// Each function's [`BodySummary`], memoized across the loop's rounds.
-pub(super) type BodySummaries = EditMemo<BodySummary>;
 
 /// What the calls in one body may do: each callee's summary, less the trap a
 /// proof for that call site rules out.
@@ -822,6 +804,8 @@ pub(super) struct CallFacts<'a> {
 impl CallFacts<'_> {
     /// The effect of the call `id` to `func_id`.
     pub fn call(&self, id: ExprId, func_id: FuncId) -> FnEffect {
+        use cranelift_entity::EntityRef;
+
         let mut effect = self
             .effects
             .get(func_id.index())
@@ -846,119 +830,102 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
 /// [`compute_fn_effects`] with each body's [`Proofs`], and what each builtin
 /// declared (indexed by `func_id.index()`), for a caller that proves a body
 /// again after changing it.
-pub(super) fn summarize(project: &NirPackage) -> (FnSummaries<'static>, Vec<Option<Builtin<'_>>>) {
-    let types = project.type_table.borrow();
-    let (leaves, builtins) = leaf_effects(project);
-    let bodies: Vec<BodySummary> = project
-        .functions
-        .iter()
-        .zip(&leaves)
-        .map(|(f, &leaf)| summarize_body(&f.borrow(), leaf, &builtins, &leaves, &types))
-        .collect();
-    (solve(Cow::Owned(bodies)), builtins)
-}
+pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<Builtin<'_>>>) {
+    use cranelift_entity::EntityRef;
 
-/// [`summarize`], scanning again only the bodies edited since `memo` last saw
-/// them.
-pub(super) fn summarize_memo<'m>(
-    project: &NirPackage,
-    gate: &FunctionGate,
-    memo: &'m mut BodySummaries,
-) -> FnSummaries<'m> {
+    let funcs = &project.functions;
     let types = project.type_table.borrow();
-    let (leaves, builtins) = leaf_effects(project);
-    let bodies = memo.refresh(project, gate, |f| {
-        let leaf = leaves[f.id.expect("func_id assigned at lower").index()];
-        summarize_body(f, leaf, &builtins, &leaves, &types)
-    });
-    solve(Cow::Borrowed(bodies))
-}
+    let (mut effects, builtins) = leaf_effects(project);
+    let mut proofs: Vec<Proofs> = funcs.iter().map(|_| Proofs::default()).collect();
+    // Callee edges as one flat run per function rather than an `IndexSet` each:
+    // this walks every function in the package three times per fixed-point round.
+    let mut callee_edges: Vec<usize> = Vec::new();
+    let mut edge_ranges: Vec<(usize, usize)> = vec![(0, 0); funcs.len()];
+    let mut last_seen: Vec<usize> = vec![usize::MAX; funcs.len()];
+    let mut stack: Vec<NodeRef> = Vec::new();
 
-/// One function's [`BodySummary`]. `leaf` is its own [`leaf_effect`], and
-/// `builtins` / `leaves` are every function's, by `func_id.index()`.
-fn summarize_body(
-    f: &NirFunction,
-    leaf: FnEffect,
-    builtins: &[Option<Builtin<'_>>],
-    leaves: &[FnEffect],
-    types: &TypeTable,
-) -> BodySummary {
-    let Some(body) = &f.body else {
-        return BodySummary {
-            own: leaf,
-            callees: Vec::new(),
-            proofs: Proofs::default(),
+    for (i, f) in funcs.iter().enumerate() {
+        let f = f.borrow();
+        let Some(body) = &f.body else {
+            continue;
         };
-    };
-    let bounds = bounds::analyze(body, types, |fid| builtins[fid.index()]);
-    let mut own = FnEffect {
-        writes_shared_heap: bounds.writes_shared_heap,
-        ..FnEffect::default()
-    };
-    let mut callees: IndexSet<usize> = IndexSet::default();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        own.may_trap |= operand_values_may_trap(body, node);
-        match node {
-            NodeRef::Stmt(s) => {
-                if matches!(body.stmts[s].kind, StmtKind::Loop { .. })
-                    && !bounds.counted.contains(&s)
-                {
-                    own.may_diverge = true;
+        let bounds = bounds::analyze(body, &types, |fid| builtins[fid.index()]);
+        let mut own = FnEffect {
+            writes_shared_heap: bounds.writes_shared_heap,
+            ..FnEffect::default()
+        };
+        let edge_start = callee_edges.len();
+        stack.clear();
+        stack.push(NodeRef::Block(body.root));
+        while let Some(node) = stack.pop() {
+            own.may_trap |= operand_values_may_trap(body, node);
+            match node {
+                NodeRef::Stmt(s) => {
+                    if matches!(body.stmts[s].kind, StmtKind::Loop { .. })
+                        && !bounds.counted.contains(&s)
+                    {
+                        own.may_diverge = true;
+                    }
                 }
+                NodeRef::Expr(id) => match &body.exprs[id].kind {
+                    ExprKind::GlobalVarGet { .. } => own.reads_mutable_state = true,
+                    ExprKind::GlobalVarSet { .. } => own.writes_state = true,
+                    ExprKind::CmRawCall { .. } | ExprKind::IndirectCall { .. } => {
+                        own.merge(FnEffect::opaque());
+                    }
+                    // The body scan answers for a builtin at its call site: its
+                    // `#[trap(...)]` checks, and whose memory it writes.
+                    ExprKind::Call { func_id, .. } if builtins[func_id.index()].is_some() => {
+                        own.merge(FnEffect {
+                            may_trap: !bounds.proofs.holds(id, *func_id),
+                            writes_shared_heap: false,
+                            ..effects[func_id.index()]
+                        });
+                    }
+                    // A direct call's trap arrives with its callee's summary.
+                    ExprKind::Call { func_id, .. } => {
+                        let callee = func_id.index();
+                        if last_seen.get(callee).is_some_and(|&run| run != i) {
+                            last_seen[callee] = i;
+                            callee_edges.push(callee);
+                        }
+                    }
+                    _ => own.may_trap |= expr_node_may_trap_typed(body, id, Some(&types)),
+                },
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
-            NodeRef::Expr(id) => match &body.exprs[id].kind {
-                ExprKind::GlobalVarGet { .. } => own.reads_mutable_state = true,
-                ExprKind::GlobalVarSet { .. } => own.writes_state = true,
-                ExprKind::CmRawCall { .. } | ExprKind::IndirectCall { .. } => {
-                    own.merge(FnEffect::opaque());
-                }
-                // The body scan answers for a builtin at its call site: its
-                // `#[trap(...)]` checks, and whose memory it writes.
-                ExprKind::Call { func_id, .. } if builtins[func_id.index()].is_some() => {
-                    own.merge(FnEffect {
-                        may_trap: !bounds.proofs.holds(id, *func_id),
-                        writes_shared_heap: false,
-                        ..leaves[func_id.index()]
-                    });
-                }
-                // A direct call's trap arrives with its callee's summary.
-                ExprKind::Call { func_id, .. } => {
-                    callees.insert(func_id.index());
-                }
-                _ => own.may_trap |= expr_node_may_trap_typed(body, id, Some(types)),
-            },
-            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            body.for_each_child(node, |c| stack.push(c));
         }
-        body.for_each_child(node, |c| stack.push(c));
+        // A declared effect is a caller-visible promise in its own right; treat
+        // it as opaque rather than re-deriving it. A retention is not: keeping a
+        // reference is a store the body scan sees, or a result the caller holds.
+        if !f.effects.is_empty() || f.is_async {
+            own.opaque = true;
+        }
+        effects[i] = own;
+        edge_ranges[i] = (edge_start, callee_edges.len());
+        proofs[i] = bounds.proofs;
     }
-    // A declared effect is a caller-visible promise in its own right; treat it
-    // as opaque rather than re-deriving it. A retention is not: keeping a
-    // reference is a store the body scan sees, or a result the caller holds.
-    if !f.effects.is_empty() || f.is_async {
-        own.opaque = true;
-    }
-    BodySummary {
-        own,
-        callees: callees.into_iter().collect(),
-        proofs: bounds.proofs,
-    }
-}
 
-/// The least fixpoint over the call graph the bodies span.
-fn solve(bodies: Cow<'_, [BodySummary]>) -> FnSummaries<'_> {
-    let mut effects: Vec<FnEffect> = bodies.iter().map(|b| b.own).collect();
-    let call_graph: Vec<Vec<usize>> = bodies.iter().map(|b| b.callees.clone()).collect();
+    let call_graph: Vec<Vec<usize>> = edge_ranges
+        .iter()
+        .map(|&(lo, hi)| callee_edges[lo..hi].to_vec())
+        .collect();
     for (effect, recursive) in effects.iter_mut().zip(recursive_scc_members(&call_graph)) {
         effect.may_diverge |= recursive;
     }
+
     loop {
         let mut changed = false;
-        for (i, callees) in call_graph.iter().enumerate() {
-            let merged = callees.iter().fold(effects[i], |mut acc, &c| {
-                acc.merge(effects[c]);
-                acc
-            });
+        for i in 0..effects.len() {
+            let (lo, hi) = edge_ranges[i];
+            let merged = callee_edges[lo..hi]
+                .iter()
+                .filter_map(|&c| effects.get(c).copied())
+                .fold(effects[i], |mut acc, e| {
+                    acc.merge(e);
+                    acc
+                });
             if merged != effects[i] {
                 effects[i] = merged;
                 changed = true;
@@ -968,7 +935,7 @@ fn solve(bodies: Cow<'_, [BodySummary]>) -> FnSummaries<'_> {
             break;
         }
     }
-    FnSummaries { effects, bodies }
+    (FnSummaries { effects, proofs }, builtins)
 }
 
 #[cfg(test)]

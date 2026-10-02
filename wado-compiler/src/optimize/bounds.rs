@@ -40,7 +40,7 @@ impl Builtin<'_> {
 
 /// The builtin calls in one body whose every `#[trap(...)]` check holds, each
 /// with the callee its checks were proven against.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default)]
 pub(super) struct Proofs(IndexMap<ExprId, FuncId>);
 
 impl Proofs {

@@ -42,7 +42,7 @@ use crate::nir_value_graph::OpaqueSource;
 use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::DescriptorCache;
-use crate::optimize::mod_ref::{BodySummaries, summarize_memo};
+use crate::optimize::mod_ref::compute_fn_effects;
 use crate::token::Span;
 use crate::trace::filter;
 
@@ -1984,7 +1984,6 @@ pub fn inline_functions(
     descriptor_cache: &mut DescriptorCache,
     call_sites: &mut CallSites,
     body_facts: &mut InlineFacts,
-    body_summaries: &mut BodySummaries,
 ) -> bool {
     // Callee identity by `func_id` (descriptor table built once from the records,
     // borrow-safe), so a call site is recognized by its stamped id rather than the
@@ -2014,7 +2013,7 @@ pub fn inline_functions(
     let sites = argument_sites(facts);
     let const_params = constant_params(project, facts, &sites);
     let safepoint_calls = safepoint_calls(project, descriptors);
-    let fn_effects = summarize_memo(project, gate, body_summaries).effects;
+    let fn_effects = compute_fn_effects(project);
     let foldable: Vec<bool> = project
         .functions
         .iter()

@@ -30,7 +30,7 @@ use super::string_push::{AppendFuseRule, ConstAsciiPushRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
 use crate::optimize::heap_effect::{HeapEffectsCache, LazyHeapFrame};
 use crate::optimize::match_to_switch::intern_cold_markers;
-use crate::optimize::mod_ref::{BodySummaries, summarize_memo};
+use crate::optimize::mod_ref::summarize;
 use crate::optimize::select_lowering::intern_select;
 
 /// Run the unified peephole rule set over every function body. Returns whether
@@ -45,7 +45,6 @@ pub(super) fn run_peephole(
     gate: &mut FunctionGate,
     pre_inline: bool,
     heap: &mut HeapEffectsCache,
-    body_summaries: &mut BodySummaries,
 ) -> bool {
     // Intern the builtins the bundled rules synthesize, before any shared
     // immutable borrow of `project`, so their calls are born resolved.
@@ -93,7 +92,7 @@ pub(super) fn run_peephole(
          built for a run that visits no function. `gated!` owns that skip."
     );
     // Once for the run.
-    let summaries = summarize_memo(project, gate, body_summaries);
+    let summaries = summarize(project).0;
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
