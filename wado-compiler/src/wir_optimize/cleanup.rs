@@ -8,6 +8,8 @@ use crate::hashmap::IndexSet;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
+use super::util::is_side_effect_free;
+
 pub(super) fn cleanup(module: &mut WirPackage) {
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
@@ -91,11 +93,156 @@ impl WirMutVisitor for CleanupVisitor {
 
     fn visit_instr(&mut self, instr: &mut WirInstr) {
         self.walk_instr(instr);
-        // Post-visit: elide redundant RefAsNonNull when the inner expression is already non-null.
         if let WirInstr::RefAsNonNull(inner) = instr
             && inner.is_nonnull_result()
         {
             *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
         }
+        relax_null_trapping_objects(instr);
+    }
+}
+
+/// A GC access, and a cast to a non-null type, traps on a null object by
+/// itself, so its object need not be narrowed first: neither by a
+/// `RefAsNonNull`, nor by the `ref.as_non_null` codegen adds after a non-null
+/// read of a nullable global or array slot.
+/// Leaving the narrowing out moves the trap from the object to the access, past
+/// the operands evaluated between them, so it applies only where those have no
+/// effect.
+fn relax_null_trapping_objects(instr: &mut WirInstr) {
+    match instr {
+        WirInstr::StructGet { expr: object, .. }
+        | WirInstr::ArrayLen(object)
+        | WirInstr::RefCast {
+            nullable: false,
+            expr: object,
+            ..
+        } => relax_nonnull(object),
+        WirInstr::StructSet {
+            expr: object,
+            value,
+            ..
+        } => relax_nonnull_before(object, &[&**value]),
+        WirInstr::ArrayGet {
+            array: object,
+            index,
+            ..
+        }
+        | WirInstr::ArrayGetS {
+            array: object,
+            index,
+            ..
+        }
+        | WirInstr::ArrayGetU {
+            array: object,
+            index,
+            ..
+        } => relax_nonnull_before(object, &[&**index]),
+        WirInstr::ArraySet {
+            array: object,
+            index,
+            value,
+            ..
+        } => relax_nonnull_before(object, &[&**index, &**value]),
+        WirInstr::ArrayFill {
+            array: object,
+            offset,
+            value,
+            len,
+            ..
+        } => relax_nonnull_before(object, &[&**offset, &**value, &**len]),
+        WirInstr::ArrayCopy {
+            dest,
+            dest_offset,
+            src,
+            src_offset,
+            len,
+            ..
+        } => {
+            relax_nonnull_before(src, &[&**src_offset, &**len]);
+            relax_nonnull_before(dest, &[&**dest_offset, &**src, &**src_offset, &**len]);
+        }
+        _ => {}
+    }
+}
+
+fn relax_nonnull_before(object: &mut WirInstr, later: &[&WirInstr]) {
+    if later.iter().all(|operand| is_side_effect_free(operand)) {
+        relax_nonnull(object);
+    }
+}
+
+fn relax_nonnull(object: &mut WirInstr) {
+    match object {
+        WirInstr::RefAsNonNull(inner) => {
+            *object = std::mem::replace(inner.as_mut(), WirInstr::Nop);
+            relax_nonnull(object);
+        }
+        WirInstr::Seq(items) => {
+            if let Some(value) = items.last_mut() {
+                relax_nonnull(value);
+            }
+        }
+        WirInstr::GlobalGet { result_ty, .. } | WirInstr::ArrayGet { result_ty, .. } => {
+            result_ty.set_nullable();
+        }
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use super::*;
+    use crate::wir::{WirFuncId, WirName, WirType, WirTypeId};
+
+    fn array_ty() -> WirTypeId {
+        WirTypeId::new(0, Rc::from("a"))
+    }
+
+    /// A non-null read of a nullable global slot, which codegen narrows.
+    fn global_read() -> WirInstr {
+        WirInstr::GlobalGet {
+            name: WirName { fq: "g".into() },
+            result_ty: WirType::Ref {
+                type_id: array_ty(),
+                nullable: false,
+            },
+        }
+    }
+
+    fn store_into(array: WirInstr, value: WirInstr) -> Vec<WirInstr> {
+        vec![WirInstr::ArraySet {
+            type_id: array_ty(),
+            array: Box::new(WirInstr::RefAsNonNull(Box::new(array))),
+            index: Box::new(WirInstr::I32Const(0)),
+            value: Box::new(value),
+        }]
+    }
+
+    fn stored_array(body: &[WirInstr]) -> &WirInstr {
+        let [WirInstr::ArraySet { array, .. }] = body else {
+            panic!("{body:?}");
+        };
+        array
+    }
+
+    #[test]
+    fn a_store_takes_its_array_unnarrowed() {
+        let mut body = store_into(global_read(), WirInstr::I32Const(1));
+        clean_body(&mut body);
+        assert!(!stored_array(&body).is_nonnull_result(), "{body:?}");
+    }
+
+    #[test]
+    fn a_store_whose_value_has_an_effect_keeps_the_narrowing() {
+        let effect = WirInstr::Call {
+            func_id: WirFuncId::new(0, Rc::from("f")),
+            args: Vec::new(),
+        };
+        let mut body = store_into(global_read(), effect);
+        clean_body(&mut body);
+        assert!(stored_array(&body).is_nonnull_result(), "{body:?}");
     }
 }

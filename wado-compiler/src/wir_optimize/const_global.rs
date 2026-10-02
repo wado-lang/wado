@@ -51,12 +51,14 @@ pub(super) fn promote_const_global_inits(module: &mut WirPackage) {
     for (g_idx, consensus) in state {
         if let Consensus::Const(value) = consensus {
             let global = &mut module.globals[g_idx];
+            // The slot was nullable only to hold `ref.null` until the deferred
+            // store; an eager non-null value never leaves it, so no read of it
+            // has to narrow.
+            if value.is_nonnull_result() {
+                global.ty = global.ty.clone().as_nonnull();
+            }
             global.init = value;
             global.mutable = false;
-            // Slot nullability is left as `register_globals` set it: a non-null
-            // const init is a valid subtype of a nullable slot, and the eager
-            // value is non-null, so codegen's `ref.as_non_null` reads stay
-            // correct.
             promoted.insert(global.name.fq.clone());
         }
     }

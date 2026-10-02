@@ -107,10 +107,12 @@ What wasm-opt removes, as open codegen targets:
   `wir_optimize/local_layout.rs` groups them, and puts the most used first.
 - [ ] Duplicate function types: 136 types, of which `-O2` keeps 69. Most of the
   rest go with the functions it inlines.
-- [ ] `ref.as_non_null`: `-O2` takes the count from 388 to 16, and
-  `optimize-instructions` alone to 49. About 320 wrap a `global.get` whose
-  value goes straight to an `array.get`, `array.set` or `struct.get`, which
-  traps on null by itself.
+- [x] `ref.as_non_null`: `-O2` takes the count from 388 to 16. Codegen added
+  most of them, after reads of nullable global slots. A global promoted to a
+  non-null constant now has a non-null slot
+  (`wir_optimize/const_global.rs`). The object of a GC access, which traps on
+  null by itself, is not narrowed (`wir_optimize/cleanup.rs`). The `-Os` build
+  keeps 17.
 - [x] Set-then-get: a `local.set X` followed at once by `local.get X` occurred
   1,191 times. wasm-opt turns it into a `local.tee` or removes it. The last WIR
   pass fuses each pair into a tee (`fuse_remaining_local_tees`), and copy

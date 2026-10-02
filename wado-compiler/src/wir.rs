@@ -1844,6 +1844,14 @@ impl WirInstr {
             | Self::ArrayGet { result_ty, .. }
             | Self::ArrayGetS { result_ty, .. }
             | Self::ArrayGetU { result_ty, .. } => result_ty.is_nonnull_ref(),
+            // Wasm validates a block's value against its declared result type.
+            Self::Block {
+                result: Some(ty), ..
+            }
+            | Self::If {
+                result: Some(ty), ..
+            } => ty.is_nonnull_ref(),
+            Self::Seq(items) => items.last().is_some_and(Self::is_nonnull_result),
             // A non-nullable `ref.cast` yields `(ref $T)` (or traps), so the
             // value is statically non-null.
             Self::RefCast {
