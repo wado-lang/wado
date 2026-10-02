@@ -3404,7 +3404,7 @@ fn "core:json/core/json/checked_int_f64<core:prelude/string.wado/String>$spec1"(
 
 fn "core:json/core/json/int_from_str_error<core:prelude/string.wado/String>$scalar"(e, range_msg, start) {
     return (if (0 | (e == 2)) | (e == 3) -> ref "core:serde//DeserializeError" {
-        struct.new "core:serde//DeserializeError" { kind: 5, message: ref.as_non_null(e = range_msg.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = range_msg.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(e)), 0, $array_clone_src_1, 0, e); $array_clone_dst_2), used: e }), offset: start };
+        struct.new "core:serde//DeserializeError" { kind: 5, message: e = range_msg.used; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = range_msg.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(e)), 0, $array_clone_src_1, 0, e); $array_clone_dst_2, used: e }, offset: start };
     } else {
         struct.new "core:serde//DeserializeError" { kind: 4, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid digit in number"), used: 23 }, offset: start };
     });
@@ -3448,26 +3448,6 @@ fn "core:json/core/json/to_string<u64>$scalar"(value, trailing_char) {
     return 0, struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; c = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(c)), 0, $array_clone_src_1, 0, c); $array_clone_dst_2, used: c }, ref.null none;
 }
 
-<<<<<<< HEAD
-||||||| ba07da1b9
-fn "core:json/core/json/int_from_str_error<core:prelude/string.wado/String>$scalar"(e, range_msg, start) {
-    return (if (0 | (e == 2)) | (e == 3) -> ref "core:serde//DeserializeError" {
-        struct.new "core:serde//DeserializeError" { kind: 5, message: ref.as_non_null(e = range_msg.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = range_msg.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(e)), 0, $array_clone_src_1, 0, e); $array_clone_dst_2), used: e }), offset: start };
-    } else {
-        struct.new "core:serde//DeserializeError" { kind: 4, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid digit in number"), used: 23 }, offset: start };
-    });
-}
-
-=======
-fn "core:json/core/json/int_from_str_error<core:prelude/string.wado/String>$scalar"(e, range_msg, start) {
-    return (if (0 | (e == 2)) | (e == 3) -> ref "core:serde//DeserializeError" {
-        struct.new "core:serde//DeserializeError" { kind: 5, message: e = range_msg.used; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = range_msg.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(e)), 0, $array_clone_src_1, 0, e); $array_clone_dst_2, used: e }, offset: start };
-    } else {
-        struct.new "core:serde//DeserializeError" { kind: 4, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid digit in number"), used: 23 }, offset: start };
-    });
-}
-
->>>>>>> origin/main
 fn "core:json/core/json/to_string<i64>$scalar$spec0"(trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//SerializeError";
