@@ -43,7 +43,7 @@ Infer — 24 samples of the forward path alone, no gradients:
 | Rust           | 4.45 k tokens/s | 86.252 ms | 1.05x   |
 | JavaScript     | 3.98 k tokens/s | 96.395 ms | 1.17x   |
 
-Wado beats JavaScript on both phases, and Rust on inference. It trails Rust on
+Wado beats JavaScript on both phases and Rust on inference, but trails Rust on
 training. Training spends most of its time in the backward pass, which
 sorts the whole graph topologically and then walks every edge again. That is
 pointer chasing over GC objects, where Rust's flat `Vec` of indices is at its
@@ -56,7 +56,7 @@ the mean is 7, and attention cost grows with the square of the position count.
 Rust makes a node a `usize` index into a `Vec<Value>`, because a `&mut` into a
 growing `Vec` is what the borrow checker forbids. Wado's `Graph::value` returns
 that `&mut Value` and a node holds those handles as its children, which is the
-shape the Python original has. The gap between the two rows is what that costs.
+shape the Python original has. The training gap is what that costs.
 
 All three arms print the same final loss and generate the same sample, so they
 are the same computation.
