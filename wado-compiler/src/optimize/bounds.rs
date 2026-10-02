@@ -113,19 +113,8 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
         let body = self.body;
         // A builtin checking an array's bounds does not rebind that array, so
         // its `&mut` writes elements and leaves every length read here intact.
+        // The walk reaches a call before its arguments, so one pass suffices.
         let mut element_writes: IndexSet<ExprId> = IndexSet::default();
-        body.for_each_reachable_node(|n| {
-            if let NodeRef::Expr(e) = n
-                && let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
-                && let Some(builtin) = (self.builtin)(*func_id)
-            {
-                for pos in builtin.checked_arrays() {
-                    if let Some(Operand::Expr(arr)) = args.get(pos).map(|a| a.expr) {
-                        element_writes.insert(arr);
-                    }
-                }
-            }
-        });
         let mut written = Vec::new();
         body.for_each_reachable_node(|n| match n {
             NodeRef::Stmt(s) => {
@@ -142,6 +131,15 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
                 }
             }
             NodeRef::Expr(e) => {
+                if let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind
+                    && let Some(builtin) = (self.builtin)(*func_id)
+                {
+                    for pos in builtin.checked_arrays() {
+                        if let Some(Operand::Expr(arr)) = args.get(pos).map(|a| a.expr) {
+                            element_writes.insert(arr);
+                        }
+                    }
+                }
                 if element_writes.contains(&e) {
                     return;
                 }

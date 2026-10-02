@@ -15,8 +15,8 @@ use crate::name::{
     split_local_method,
 };
 use crate::tir::{
-    EffectRef, FunctionRef, REFLECT_NEWTYPE_BASE, ResolvedType, SubstitutionContext, TirField,
-    TirStruct, TypeId, TypeKey, TypeTable,
+    EffectRef, FunctionRef, PatternLiteral, REFLECT_NEWTYPE_BASE, ResolvedType,
+    SubstitutionContext, TirField, TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -91,7 +91,7 @@ enum FuncRefInference {
 /// is settled by defaulting to `i32` rather than by a coercion.
 pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
     match &lit.value {
-        Literal::Number(repr) if !util::is_float_only_literal(repr) => Some(repr.as_str()),
+        Literal::Number(repr, None) if !util::is_float_only_literal(repr) => Some(repr.as_str()),
         _ => None,
     }
 }
@@ -657,6 +657,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
+        if let Some(suffixed) = self.resolve_suffixed_literal(expr) {
+            return suffixed;
+        }
+
         if let Some(target_type) = expected_type
             && let Some(coerced) = self
                 .defer_literal_at_var(expr, target_type)
@@ -840,7 +844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Unary(unary) => negated_literal(unary)?,
             _ => return None,
         };
-        let Literal::Number(repr) = &lit.value else {
+        let Literal::Number(repr, None) = &lit.value else {
             return None;
         };
         let integer = !util::is_float_only_literal(repr);
@@ -876,7 +880,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // diagnostics. The returned value is a placeholder, so this projects
         // only the type while preserving the validation side effects.
         match &lit.value {
-            Literal::Number(repr) => {
+            Literal::Number(_, Some(_)) => {
+                unreachable!("resolve_expr types a suffixed literal by its suffix")
+            }
+            Literal::Number(repr, None) => {
                 // Default type: i32 if integer-compatible, f64 if float-only
                 if util::is_float_only_literal(repr) {
                     // Must be float (has decimal point or negative exponent)
@@ -2022,11 +2029,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(repr),
+                value: ast::Literal::Number(repr, suffix),
                 ..
             }) = &index.index
-                && !util::is_float_only_literal(repr)
-                && let Ok(idx) = repr.parse::<usize>()
+                && let Some(digits) = util::integer_digits(repr, *suffix)
+                && let Ok(idx) = digits.parse::<usize>()
             {
                 match self.tysys.tuple_literal_index_type(elements, idx) {
                     Ok(elem) => return elem,
@@ -3227,28 +3234,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Option<Pat> {
-        // A literal that does not parse, or is of another kind than the
-        // scrutinee, was reported where it was lexed or resolved.
-        if self.literal_pattern_mismatch(lit, scrutinee_type).is_some() {
-            return None;
-        }
+        // A literal that names no value of the scrutinee was reported where it
+        // was lexed or resolved.
         let value = match lit {
-            Literal::Number(repr) if util::is_float_only_literal(repr) => return None,
-            Literal::Number(repr) => {
-                if self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .is_unsigned_int(scrutinee_type)
-                {
-                    util::parse_u128_literal(repr).map(|v| v as i128).ok()
-                } else {
-                    util::parse_i128_literal(repr).ok()
-                }
+            Literal::Number(..) | Literal::Byte(_) | Literal::Char(_) | Literal::Bool(_) => {
+                util::pattern_literal(lit).ok()?
             }
-            Literal::Bool(b) => return Some(Pat::Bool(*b)),
-            Literal::Char(raw) => escape::unescape_char(raw).ok().map(|c| c as i128),
-            Literal::Byte(raw) => escape::unescape_byte(raw).ok().map(i128::from),
+            Literal::String(_) => {
+                return self
+                    .literal_pattern_mismatch(lit, scrutinee_type)
+                    .is_none()
+                    .then_some(Pat::Opaque);
+            }
             // `null` is the `None` case where the scrutinee has one.
             Literal::Null => {
                 let none = self
@@ -3265,8 +3262,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return Some(Pat::Opaque),
         };
-        let value = value?;
-        self.tysys.exh_int(value, value, scrutinee_type)
+        // What a pattern on a type parameter names is decided per instance.
+        if !util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type) {
+            return Some(Pat::Opaque);
+        }
+        let error = util::pattern_literal_error(
+            &value,
+            scrutinee_type,
+            &mut self.tysys.type_table.borrow_mut(),
+        );
+        if error.is_some() {
+            return None;
+        }
+        match value {
+            PatternLiteral::Bool(b) => Some(Pat::Bool(b)),
+            _ => self
+                .tysys
+                .exh_int(value.bits(), value.bits(), scrutinee_type),
+        }
     }
 
     /// The case `name` of the enum or variant `scrutinee_type`, its payload
@@ -3389,28 +3402,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
     ) -> Option<Pat> {
         // Bad or empty bounds were reported where the pattern was resolved.
-        for bound in [start, end] {
-            if let ast::Pattern::Literal(lit) = bound
-                && self.literal_pattern_mismatch(lit, scrutinee_type).is_some()
-            {
-                return None;
-            }
-        }
-        let is_unsigned = self
-            .tysys
-            .type_table
-            .borrow()
-            .is_unsigned_int(scrutinee_type);
         let resolutions = &self.tysys.resolutions;
-        let start_val = util::range_endpoint_to_i128(start, is_unsigned, resolutions)?;
-        let end_val = util::range_endpoint_to_i128(end, is_unsigned, resolutions)?;
+        let start = util::range_bound_literal(start, resolutions)?.ok()?;
+        let end = util::range_bound_literal(end, resolutions)?.ok()?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
-        if order.is_gt() || (!inclusive && order.is_ge()) {
+        if util::range_order_error(&start, &end, inclusive).is_some() {
             return None;
         }
-        let hi = if inclusive { end_val } else { end_val - 1 };
-        self.tysys.exh_int(start_val, hi, scrutinee_type)
+        // What a pattern on a type parameter names is decided per instance.
+        if !util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type) {
+            return Some(Pat::Opaque);
+        }
+        let errors = util::range_bound_errors(
+            &start,
+            &end,
+            scrutinee_type,
+            &mut self.tysys.type_table.borrow_mut(),
+        );
+        if !errors.is_empty() {
+            return None;
+        }
+        let hi = if inclusive {
+            end.bits()
+        } else {
+            end.bits() - 1
+        };
+        self.tysys.exh_int(start.bits(), hi, scrutinee_type)
     }
 
     fn format_missing_cases(cases: &[String]) -> String {
@@ -5481,12 +5498,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn extract_literal_ord_value(&self, expr: &Expr) -> Option<LiteralOrdValue> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
-                Literal::Number(s) if util::is_float_only_literal(s) => {
+                Literal::Number(s, suffix) if util::denotes_float(s, *suffix) => {
                     float_literal_bits(s, FloatFormat::F64)
                         .ok()
                         .map(|bits| LiteralOrdValue::Float(f64::from_bits(bits)))
                 }
-                Literal::Number(s) => util::parse_i128_literal(s).ok().map(LiteralOrdValue::Int),
+                Literal::Number(s, _) => util::parse_i128_literal(s).ok().map(LiteralOrdValue::Int),
                 Literal::Char(s) => unescape_char(s)
                     .ok()
                     .map(|c| LiteralOrdValue::Char(c as u32)),

@@ -206,6 +206,16 @@ test "highlight range inside an or-pattern" {
     assert_highlights("fn f(c: char) -> i32 { match c { '-' | '0'..='9' => 1, _ => 0 }; }\n");
 }
 
+test "highlight numeric literal suffixes" {
+    let src = "fn f() { let a = 255_u8; let b = -1.5e3_f32; let c = 0xFF_u64; let d = 2_bf16; }\n";
+    assert parse(&src).ok(), "parse failed";
+    let html = highlight(src);
+    assert html.contains("<span class=\"number\">255_u8</span>"), "the suffix is part of the number";
+    assert html.contains("<span class=\"number\">1.5e3_f32</span>"), "a float takes a float suffix";
+    assert html.contains("<span class=\"number\">0xFF_u64</span>"), "a hex literal takes an integer suffix";
+    assert html.contains("<span class=\"number\">2_bf16</span>"), "an integer takes a float suffix";
+}
+
 test "highlight fn-type effect before next param" {
     assert_highlights("fn a(f: fn() with Stdout, x: i32) with Stdout { f(); }\n");
 }

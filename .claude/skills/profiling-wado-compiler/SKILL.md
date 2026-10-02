@@ -121,9 +121,14 @@ node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts /t
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
   /tmp/prof.json --top 60 --symbolicator addr2line
 
-# Profile a different binary
+# Profile a different binary, or a copy of `wado` aside for an A/B arm:
+# `--binary` names the file the Rust-only views keep
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
   /tmp/prof.json --binary wado-lsp
+
+# Split one function's inclusive cost by the frames it calls
+node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
+  /tmp/prof.json --under 'container_sroa::movers_of'
 ```
 
 ## Memory

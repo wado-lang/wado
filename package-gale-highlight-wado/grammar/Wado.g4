@@ -741,15 +741,26 @@ formatSpecAtom
     ;
 
 FLOAT
-    : [0-9] [0-9_]* '.' [0-9] [0-9_]* ([eE] [+-]? [0-9]+)?
-    | [0-9] [0-9_]* [eE] [+-]? [0-9]+
+    : [0-9] [0-9_]* '.' [0-9] [0-9_]* ([eE] [+-]? [0-9]+)? NUMBER_SUFFIX?
+    | [0-9] [0-9_]* [eE] [+-]? [0-9]+ NUMBER_SUFFIX?
     ;
 
+// In a hex literal `b` and `f` are digits, so a radix literal takes an
+// integer suffix only.
 INTEGER
-    : '0' [xX] [0-9a-fA-F] [0-9a-fA-F_]*
-    | '0' [bB] [01] [01_]*
-    | '0' [oO] [0-7] [0-7_]*
-    | [0-9] [0-9_]*
+    : '0' [xX] [0-9a-fA-F] [0-9a-fA-F_]* INTEGER_SUFFIX?
+    | '0' [bB] [01] [01_]* INTEGER_SUFFIX?
+    | '0' [oO] [0-7] [0-7_]* INTEGER_SUFFIX?
+    | [0-9] [0-9_]* NUMBER_SUFFIX?
+    ;
+
+fragment NUMBER_SUFFIX
+    : INTEGER_SUFFIX
+    | '_' ('f16' | 'bf16' | 'f32' | 'f64')
+    ;
+
+fragment INTEGER_SUFFIX
+    : '_' [iu] ('8' | '16' | '32' | '64' | '128')
     ;
 
 STRING_LITERAL

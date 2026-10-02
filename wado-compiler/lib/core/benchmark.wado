@@ -113,7 +113,7 @@ impl Benchmark {
         let target_ns = target_ms as u64 * 1_000_000;
         let mut result = f();
         let mut n = 1;
-        let mut elapsed = 0 as u64;
+        let mut elapsed = 0_u64;
         loop {
             let start = MonotonicClock::now();
             result = f();
@@ -216,13 +216,13 @@ fn report(label: String, elapsed_ns: u64, iterations: i32, work_per_iter: f64, u
 /// ceiling. When the estimate does not exceed `n` the loop has converged and
 /// the caller stops with the current measurement.
 fn next_iterations(n: i32, elapsed_ns: u64, target_ns: u64) -> i32 {
-    let e = if elapsed_ns == 0 { 1 as u64 } else { elapsed_ns };
+    let e = if elapsed_ns == 0 { 1_u64 } else { elapsed_ns };
     let mut est = n as u64 * target_ns / e;
     let hi = n as u64 * 100;
     if est > hi {
         est = hi;
     }
-    let ceiling = 1_000_000_000 as u64;
+    let ceiling = 1_000_000_000_u64;
     if est > ceiling {
         est = ceiling;
     }

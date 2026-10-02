@@ -229,6 +229,7 @@ function main(): void {
       "main-base": { type: "string", default: "0x100000000" },
       arch: { type: "string", default: machine() },
       symbolicator: { type: "string", default: "auto" },
+      under: { type: "string" },
     },
   });
 
@@ -236,10 +237,11 @@ function main(): void {
     console.error(
       "usage: analyze_native_profile.ts PROFILE.json [--top N] " +
         "[--binary wado] [--main-base 0x100000000] " +
-        "[--symbolicator auto|atos|addr2line]",
+        "[--symbolicator auto|atos|addr2line] [--under REGEX]",
     );
     process.exit(2);
   }
+  const under = values.under == null ? null : new RegExp(values.under as string);
 
   const profilePath = positionals[0];
   const top = parseInt(values.top as string, 10);
@@ -265,6 +267,7 @@ function main(): void {
   const libSelf = new Map<string, number>();
   const attr = new Map<string, number>(); // syscall/alloc leaf -> nearest Rust caller
   const allocBy = new Map<string, number>(); // allocation cost -> requesting caller
+  const calleesBy = new Map<string, number>(); // --under: the matched frame's callee
   let allocTotal = 0.0;
   let total = 0.0;
   let usedWallclock = false;
@@ -344,6 +347,21 @@ function main(): void {
           allocTotal += w;
         }
       }
+      // Under the outermost frame matching `under`, credit the frame it called:
+      // which child of a pass the pass's time goes to.
+      if (under != null) {
+        let callee = "[self]";
+        let matched = false;
+        for (let node: number | null = leaf, below: string | null = null; node != null; node = stPrefix[node]) {
+          const n = name(node);
+          if (under.test(n)) {
+            matched = true;
+            callee = below ?? "[self]";
+          }
+          below = n;
+        }
+        if (matched) add(calleesBy, callee, w);
+      }
       // attribute non-main-binary leaf CPU to nearest main-binary caller
       if (libName(leaf) !== binary) {
         cur = leaf;
@@ -406,6 +424,7 @@ function main(): void {
   show(
     `Allocation cost by requesting caller (${pct(allocTotal)} of total)`, allocBy,
   );
+  if (under != null) show(`Callees of the outermost frame matching /${under.source}/`, calleesBy);
 }
 
 main();

@@ -1,0 +1,12 @@
+// A float suffix needs a decimal literal. In hex `f` is a digit, so this is
+// the binary and octal case.
+
+export fn run() {
+    let a = 0b1_f32;             // compile error: a float suffix needs a decimal literal
+}
+
+__DATA__
+{
+  "compile_error": ":5:13: lexer error: a float suffix needs a decimal literal: `0b1_f32`",
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

@@ -991,18 +991,26 @@ fn apply_ENUM_actions(lx: &mut Lexer, start: i32, end: i32) {
     let mut pos = start;
     let la_start_0 = pos;
     let mut accept_0: i32 = -1;
+    let mut la_reach_0: i32 = -1;
     if pos >= chars.len() { return; }
     if !((chars[pos] matches { 'a'..='z' })) { return; }
     pos += 1;
-    let peek_save_1 = pos;
-    let mut peek_ok_1 = false;
-    peek_1: {
-        if !((chars_text(chars, start, pos) == "enum")) { break peek_1; }
-        peek_ok_1 = true;
+    let mut la_tot_1: i32 = -1;
+    let peek_save_2 = pos;
+    let mut peek_ok_2 = false;
+    let mut peek_end_2: i32 = -1;
+    peek_2: {
+        if !((chars_text(chars, start, pos) == "enum")) { break peek_2; }
+        peek_end_2 = pos;
+        peek_ok_2 = true;
     }
-    pos = peek_save_1;
-    if peek_ok_1 {
-        accept_0 = peek_save_1;
+    pos = peek_save_2;
+    if peek_ok_2 {
+        la_tot_1 = peek_end_2;
+    }
+    if la_tot_1 >= 0 && la_tot_1 >= la_reach_0 {
+        la_reach_0 = la_tot_1;
+        accept_0 = pos;
     }
     loop {
         let la_saved_0 = pos;
@@ -1010,15 +1018,22 @@ fn apply_ENUM_actions(lx: &mut Lexer, start: i32, end: i32) {
             if pos >= chars.len() { break la_rep_0; }
             if !((chars[pos] matches { 'a'..='z' })) { break la_rep_0; }
             pos += 1;
-            let peek_save_2 = pos;
-            let mut peek_ok_2 = false;
-            peek_2: {
-                if !((chars_text(chars, start, pos) == "enum")) { break peek_2; }
-                peek_ok_2 = true;
+            let mut la_tot_3: i32 = -1;
+            let peek_save_4 = pos;
+            let mut peek_ok_4 = false;
+            let mut peek_end_4: i32 = -1;
+            peek_4: {
+                if !((chars_text(chars, start, pos) == "enum")) { break peek_4; }
+                peek_end_4 = pos;
+                peek_ok_4 = true;
             }
-            pos = peek_save_2;
-            if peek_ok_2 {
-                accept_0 = peek_save_2;
+            pos = peek_save_4;
+            if peek_ok_4 {
+                la_tot_3 = peek_end_4;
+            }
+            if la_tot_3 >= 0 && la_tot_3 >= la_reach_0 {
+                la_reach_0 = la_tot_3;
+                accept_0 = pos;
             }
             continue;
         }
@@ -1046,15 +1061,15 @@ fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {
     pos += 1;
     if pos > end { return; }
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= chars.len() { break rep_3; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_3; }
+        let rep_saved_5 = pos;
+        rep_5: {
+            if pos >= chars.len() { break rep_5; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_5; }
             pos += 1;
-            if pos > end { break rep_3; }
+            if pos > end { break rep_5; }
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_5;
         break;
     }
     lx.emit(`ID ${chars_text(chars, start, pos)}\n`);
@@ -1062,45 +1077,60 @@ fn apply_ID_actions(lx: &mut Lexer, start: i32, end: i32) {
 
 fn try_ENUM(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_5: i32 = -1;
+    let mut accept_7: i32 = -1;
+    let mut la_reach_7: i32 = -1;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
-    let peek_save_6 = pos;
-    let mut peek_ok_6 = false;
-    peek_6: {
-        if !((chars_text(chars, start, pos) == "enum")) { break peek_6; }
-        peek_ok_6 = true;
+    let mut la_tot_8: i32 = -1;
+    let peek_save_9 = pos;
+    let mut peek_ok_9 = false;
+    let mut peek_end_9: i32 = -1;
+    peek_9: {
+        if !((chars_text(chars, start, pos) == "enum")) { break peek_9; }
+        peek_end_9 = pos;
+        peek_ok_9 = true;
     }
-    pos = peek_save_6;
-    if peek_ok_6 {
-        accept_5 = peek_save_6;
+    pos = peek_save_9;
+    if peek_ok_9 {
+        la_tot_8 = peek_end_9;
+    }
+    if la_tot_8 >= 0 && la_tot_8 >= la_reach_7 {
+        la_reach_7 = la_tot_8;
+        accept_7 = pos;
     }
     loop {
-        let la_saved_5 = pos;
-        la_rep_5: {
-            if pos >= chars.len() { break la_rep_5; }
-            if !((chars[pos] matches { 'a'..='z' })) { break la_rep_5; }
+        let la_saved_7 = pos;
+        la_rep_7: {
+            if pos >= chars.len() { break la_rep_7; }
+            if !((chars[pos] matches { 'a'..='z' })) { break la_rep_7; }
             pos += 1;
-            let peek_save_7 = pos;
-            let mut peek_ok_7 = false;
-            peek_7: {
-                if !((chars_text(chars, start, pos) == "enum")) { break peek_7; }
-                peek_ok_7 = true;
+            let mut la_tot_10: i32 = -1;
+            let peek_save_11 = pos;
+            let mut peek_ok_11 = false;
+            let mut peek_end_11: i32 = -1;
+            peek_11: {
+                if !((chars_text(chars, start, pos) == "enum")) { break peek_11; }
+                peek_end_11 = pos;
+                peek_ok_11 = true;
             }
-            pos = peek_save_7;
-            if peek_ok_7 {
-                accept_5 = peek_save_7;
+            pos = peek_save_11;
+            if peek_ok_11 {
+                la_tot_10 = peek_end_11;
+            }
+            if la_tot_10 >= 0 && la_tot_10 >= la_reach_7 {
+                la_reach_7 = la_tot_10;
+                accept_7 = pos;
             }
             continue;
         }
-        pos = la_saved_5;
+        pos = la_saved_7;
         break;
     }
-    if accept_5 < 0 {
+    if accept_7 < 0 {
         return -1;
     }
-    pos = accept_5;
+    pos = accept_7;
     if !((chars_text(chars, start, pos) == "enum")) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     return pos;
 }
@@ -1111,14 +1141,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_8 = pos;
-        rep_8: {
-            if pos >= chars.len() { break rep_8; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_8; }
+        let rep_saved_12 = pos;
+        rep_12: {
+            if pos >= chars.len() { break rep_12; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_12; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_8;
+        pos = rep_saved_12;
         break;
     }
     return pos;

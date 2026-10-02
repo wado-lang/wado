@@ -6,9 +6,12 @@
 mod call_instance;
 mod call_rewrite;
 mod func_inst;
+mod instance_patterns;
 mod state;
 mod struct_inst;
 mod substitute;
+
+pub use instance_patterns::lower_instance_patterns;
 
 use std::cell::RefCell;
 use std::rc::Rc;

@@ -339,52 +339,53 @@ fn extend_reachable_for_optimizer_passes(
 
     // An `array_clone::<T>` site reaches its helper through the element type
     // rather than a call edge, so seed one root per value-typed site.
-    let candidates: Vec<(FunctionId, Vec<FunctionId>)> = {
-        let type_table = project.type_table.borrow();
-        project
-            .functions
-            .iter()
-            .map(|func_rc| {
-                let func = func_rc.borrow();
-                let mut helpers = Vec::new();
-                if let Some(body) = func.body.as_ref() {
-                    let mut needed: IndexSet<tir::TypeId> = IndexSet::default();
-                    collect_array_clone_element_types(body, descriptors, &mut needed);
-                    for type_id in needed {
-                        // A stale `array_clone::<T>` can name a type already
-                        // pruned from the table; it has no helper, so skip it
-                        // rather than resolve an absent id (the structural key
-                        // recurses through `TypeTable::get`, which panics on a
-                        // missing slot). The top-level id suffices: `retain`
-                        // keeps the closure over exactly those edges.
-                        if type_table.get_pruned(type_id).is_none() {
-                            continue;
-                        }
-                        if let Some(helper) = project.value_copy_helpers.get(type_id, &type_table) {
-                            use cranelift_entity::EntityRef;
-                            let helper = project.functions[helper.index()].borrow();
-                            helpers.push(function_id_for(&helper));
-                        }
-                    }
-                }
-                (function_id_for(&func), helpers)
-            })
-            .collect()
-    };
+    //
     // Iterate to a fixpoint: a helper newly marked reachable may itself
     // call `array_clone::<T'>` for some `T'` whose helper isn't reachable
     // yet, and `compute_reachable` only follows direct call-graph edges
     // (it doesn't replay the array_clone scan). Single-pass would drop
     // inner helpers for chains like `List<List<List<T>>>`, and WIR build
-    // would find no function for the helper its clone loop calls.
+    // would find no function for the helper its clone loop calls. Only a
+    // reachable body seeds anything, so each is scanned once, when reached.
+    let type_table = project.type_table.borrow();
+    let ids: Vec<FunctionId> = project
+        .functions
+        .iter()
+        .map(|func_rc| function_id_for(&func_rc.borrow()))
+        .collect();
+    let mut scanned = vec![false; ids.len()];
     loop {
-        let fresh: Vec<FunctionId> = candidates
-            .iter()
-            .filter(|(func_id, _)| reachable.contains(func_id))
-            .flat_map(|(_, helpers)| helpers)
-            .filter(|helper_id| !reachable.contains(*helper_id))
-            .cloned()
-            .collect();
+        let mut fresh: Vec<FunctionId> = Vec::new();
+        for (index, func_rc) in project.functions.iter().enumerate() {
+            if scanned[index] || !reachable.contains(&ids[index]) {
+                continue;
+            }
+            scanned[index] = true;
+            let func = func_rc.borrow();
+            let Some(body) = func.body.as_ref() else {
+                continue;
+            };
+            let mut needed: IndexSet<tir::TypeId> = IndexSet::default();
+            collect_array_clone_element_types(body, descriptors, &mut needed);
+            for type_id in needed {
+                // A stale `array_clone::<T>` can name a type already
+                // pruned from the table; it has no helper, so skip it
+                // rather than resolve an absent id (the structural key
+                // recurses through `TypeTable::get`, which panics on a
+                // missing slot). The top-level id suffices: `retain`
+                // keeps the closure over exactly those edges.
+                if type_table.get_pruned(type_id).is_none() {
+                    continue;
+                }
+                if let Some(helper) = project.value_copy_helpers.get(type_id, &type_table) {
+                    use cranelift_entity::EntityRef;
+                    let helper_id = &ids[helper.index()];
+                    if !reachable.contains(helper_id) {
+                        fresh.push(helper_id.clone());
+                    }
+                }
+            }
+        }
         if fresh.is_empty() {
             break;
         }

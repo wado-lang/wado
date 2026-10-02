@@ -107,7 +107,7 @@ impl TokenKinds {
 
 fn bits_ensure(bits: &mut List<u64>, word: i32) {
     while bits.len() <= word {
-        bits.push(0 as u64);
+        bits.push(0_u64);
     }
 }
 
@@ -115,7 +115,7 @@ fn bits_ensure(bits: &mut List<u64>, word: i32) {
 pub fn bits_set(bits: &mut List<u64>, id: i32) {
     let word = id / 64;
     bits_ensure(bits, word);
-    bits[word] |= 1 as u64 << (id % 64) as u64;
+    bits[word] |= 1_u64 << (id % 64) as u64;
 }
 
 /// Test the bit for `id`.
@@ -124,7 +124,7 @@ pub fn bits_test(bits: &List<u64>, id: i32) -> bool {
     if word >= bits.len() {
         return false;
     }
-    return bits[word] & 1 as u64 << (id % 64) as u64 != 0 as u64;
+    return bits[word] & 1_u64 << (id % 64) as u64 != 0_u64;
 }
 
 /// OR `src` into `dst`, growing `dst` as needed. Returns whether `dst` grew.
@@ -132,7 +132,7 @@ pub fn bits_union_into(dst: &mut List<u64>, src: &List<u64>) -> bool {
     let mut changed = false;
     for let mut i = 0; i < src.len(); i += 1 {
         let sv = src[i];
-        if sv == 0 as u64 {
+        if sv == 0_u64 {
             continue;
         }
         bits_ensure(dst, i);
@@ -156,15 +156,15 @@ pub fn bits_of(ids: &List<i32>) -> List<u64> {
 
 /// Whether no bit is set.
 pub fn bits_is_empty(bits: &List<u64>) -> bool {
-    return bits.iter_ref().all(|w| *w == 0 as u64);
+    return bits.iter_ref().all(|w| *w == 0_u64);
 }
 
 /// Whether both hold the same ids, whatever their trailing zero words.
 pub fn bits_equal(a: &List<u64>, b: &List<u64>) -> bool {
     let n = i32::max(a.len(), b.len());
     for let mut i = 0; i < n; i += 1 {
-        let x = if i < a.len() { a[i] } else { 0 as u64 };
-        let y = if i < b.len() { b[i] } else { 0 as u64 };
+        let x = if i < a.len() { a[i] } else { 0_u64 };
+        let y = if i < b.len() { b[i] } else { 0_u64 };
         if x != y {
             return false;
         }
@@ -177,11 +177,11 @@ pub fn bits_ids(bits: &List<u64>) -> List<i32> {
     let mut ids: List<i32> = [];
     for let mut w = 0; w < bits.len(); w += 1 {
         let word = bits[w];
-        if word == 0 as u64 {
+        if word == 0_u64 {
             continue;
         }
         for let mut b = 0; b < 64; b += 1 {
-            if word & 1 as u64 << b as u64 != 0 as u64 {
+            if word & 1_u64 << b as u64 != 0_u64 {
                 ids.push(w * 64 + b);
             }
         }

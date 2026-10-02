@@ -993,18 +993,26 @@ fn apply_INDENT_actions(lx: &mut Lexer, start: i32, end: i32) {
     let mut pos = start;
     let la_start_0 = pos;
     let mut accept_0: i32 = -1;
+    let mut la_reach_0: i32 = -1;
     if pos >= chars.len() { return; }
     if !((chars[pos] matches { ' ' })) { return; }
     pos += 1;
-    let peek_save_1 = pos;
-    let mut peek_ok_1 = false;
-    peek_1: {
-        if !(char_pos_in_line(chars, start) == 0) { break peek_1; }
-        peek_ok_1 = true;
+    let mut la_tot_1: i32 = -1;
+    let peek_save_2 = pos;
+    let mut peek_ok_2 = false;
+    let mut peek_end_2: i32 = -1;
+    peek_2: {
+        if !(char_pos_in_line(chars, start) == 0) { break peek_2; }
+        peek_end_2 = pos;
+        peek_ok_2 = true;
     }
-    pos = peek_save_1;
-    if peek_ok_1 {
-        accept_0 = peek_save_1;
+    pos = peek_save_2;
+    if peek_ok_2 {
+        la_tot_1 = peek_end_2;
+    }
+    if la_tot_1 >= 0 && la_tot_1 >= la_reach_0 {
+        la_reach_0 = la_tot_1;
+        accept_0 = pos;
     }
     loop {
         let la_saved_0 = pos;
@@ -1012,15 +1020,22 @@ fn apply_INDENT_actions(lx: &mut Lexer, start: i32, end: i32) {
             if pos >= chars.len() { break la_rep_0; }
             if !((chars[pos] matches { ' ' })) { break la_rep_0; }
             pos += 1;
-            let peek_save_2 = pos;
-            let mut peek_ok_2 = false;
-            peek_2: {
-                if !(char_pos_in_line(chars, start) == 0) { break peek_2; }
-                peek_ok_2 = true;
+            let mut la_tot_3: i32 = -1;
+            let peek_save_4 = pos;
+            let mut peek_ok_4 = false;
+            let mut peek_end_4: i32 = -1;
+            peek_4: {
+                if !(char_pos_in_line(chars, start) == 0) { break peek_4; }
+                peek_end_4 = pos;
+                peek_ok_4 = true;
             }
-            pos = peek_save_2;
-            if peek_ok_2 {
-                accept_0 = peek_save_2;
+            pos = peek_save_4;
+            if peek_ok_4 {
+                la_tot_3 = peek_end_4;
+            }
+            if la_tot_3 >= 0 && la_tot_3 >= la_reach_0 {
+                la_reach_0 = la_tot_3;
+                accept_0 = pos;
             }
             continue;
         }
@@ -1042,45 +1057,60 @@ fn apply_INDENT_actions(lx: &mut Lexer, start: i32, end: i32) {
 
 fn try_INDENT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let mut accept_3: i32 = -1;
+    let mut accept_5: i32 = -1;
+    let mut la_reach_5: i32 = -1;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { ' ' })) { return -1; }
     pos += 1;
-    let peek_save_4 = pos;
-    let mut peek_ok_4 = false;
-    peek_4: {
-        if !(char_pos_in_line(chars, start) == 0) { break peek_4; }
-        peek_ok_4 = true;
+    let mut la_tot_6: i32 = -1;
+    let peek_save_7 = pos;
+    let mut peek_ok_7 = false;
+    let mut peek_end_7: i32 = -1;
+    peek_7: {
+        if !(char_pos_in_line(chars, start) == 0) { break peek_7; }
+        peek_end_7 = pos;
+        peek_ok_7 = true;
     }
-    pos = peek_save_4;
-    if peek_ok_4 {
-        accept_3 = peek_save_4;
+    pos = peek_save_7;
+    if peek_ok_7 {
+        la_tot_6 = peek_end_7;
+    }
+    if la_tot_6 >= 0 && la_tot_6 >= la_reach_5 {
+        la_reach_5 = la_tot_6;
+        accept_5 = pos;
     }
     loop {
-        let la_saved_3 = pos;
-        la_rep_3: {
-            if pos >= chars.len() { break la_rep_3; }
-            if !((chars[pos] matches { ' ' })) { break la_rep_3; }
+        let la_saved_5 = pos;
+        la_rep_5: {
+            if pos >= chars.len() { break la_rep_5; }
+            if !((chars[pos] matches { ' ' })) { break la_rep_5; }
             pos += 1;
-            let peek_save_5 = pos;
-            let mut peek_ok_5 = false;
-            peek_5: {
-                if !(char_pos_in_line(chars, start) == 0) { break peek_5; }
-                peek_ok_5 = true;
+            let mut la_tot_8: i32 = -1;
+            let peek_save_9 = pos;
+            let mut peek_ok_9 = false;
+            let mut peek_end_9: i32 = -1;
+            peek_9: {
+                if !(char_pos_in_line(chars, start) == 0) { break peek_9; }
+                peek_end_9 = pos;
+                peek_ok_9 = true;
             }
-            pos = peek_save_5;
-            if peek_ok_5 {
-                accept_3 = peek_save_5;
+            pos = peek_save_9;
+            if peek_ok_9 {
+                la_tot_8 = peek_end_9;
+            }
+            if la_tot_8 >= 0 && la_tot_8 >= la_reach_5 {
+                la_reach_5 = la_tot_8;
+                accept_5 = pos;
             }
             continue;
         }
-        pos = la_saved_3;
+        pos = la_saved_5;
         break;
     }
-    if accept_3 < 0 {
+    if accept_5 < 0 {
         return -1;
     }
-    pos = accept_3;
+    pos = accept_5;
     if !(char_pos_in_line(chars, start) == 0) { panic("lexer DFA invariant: gen_lexer_suffix_peek and the post-loop suffix commit must agree on match outcome (accept_<id> recorded a position the commit then rejected)"); }
     return pos;
 }
@@ -1092,14 +1122,14 @@ fn try_LATE(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_6 = pos;
-        rep_6: {
-            if pos >= chars.len() { break rep_6; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_6; }
+        let rep_saved_10 = pos;
+        rep_10: {
+            if pos >= chars.len() { break rep_10; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_10; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_6;
+        pos = rep_saved_10;
         break;
     }
     return pos;
@@ -1111,14 +1141,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_8 = pos;
-        rep_8: {
-            if pos >= chars.len() { break rep_8; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_8; }
+        let rep_saved_12 = pos;
+        rep_12: {
+            if pos >= chars.len() { break rep_12; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_12; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_8;
+        pos = rep_saved_12;
         break;
     }
     return pos;

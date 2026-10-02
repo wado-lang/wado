@@ -112,8 +112,8 @@ impl f16 {
 /// `kept` plus the round-to-nearest-ties-to-even increment for `dropped`'s low
 /// `shift` bits. A mantissa carry walks into the exponent `kept` also holds.
 fn round_to_even(kept: u16, dropped: u32, shift: u32) -> u16 {
-    let half = 1 as u32 << shift - 1;
-    let remainder = dropped & (1 as u32 << shift) - 1;
+    let half = 1_u32 << shift - 1;
+    let remainder = dropped & (1_u32 << shift) - 1;
     if remainder > half {
         return kept + 1;
     }

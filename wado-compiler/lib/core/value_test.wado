@@ -479,13 +479,13 @@ test "to_value keeps each primitive's width" {
     // A text round-trip (JSON) would collapse 42 to a Float; the direct
     // Value-building serializer keeps it an Int.
     assert to_value(&42) matches { Ok(Int(42)) };
-    assert to_value(&(-5 as i64)) matches { Ok(v) && v == Value::Int(-5) };
-    assert to_value(&(7 as u64)) matches { Ok(UInt(7)) };
-    assert to_value(&(7 as u32)) matches { Ok(v) && v == Value::UInt(7) };
+    assert to_value(&-5_i64) matches { Ok(v) && v == Value::Int(-5) };
+    assert to_value(&7_u64) matches { Ok(UInt(7)) };
+    assert to_value(&7_u32) matches { Ok(v) && v == Value::UInt(7) };
     assert to_value(&i128::MIN) matches { Ok(v) && v == Value::Int128(i128::MIN) };
     assert to_value(&u128::MAX) matches { Ok(v) && v == Value::UInt128(u128::MAX) };
     assert to_value(&3.5) matches { Ok(Float(_)) };
-    assert to_value(&(1.5 as f32)) matches { Ok(v) && v == Value::Float(1.5) };
+    assert to_value(&1.5_f32) matches { Ok(v) && v == Value::Float(1.5) };
     assert to_value(&'é') matches { Ok(v) && v == Value::String("é") };
 }
 
@@ -520,8 +520,8 @@ test "to_value on a payload variant yields an object" {
 }
 
 test "Value::from picks the arm of the source type" {
-    assert Value::from(-5 as i64) == Value::Int(-5);
-    assert Value::from(7 as u32) == Value::UInt(7);
+    assert Value::from(-5_i64) == Value::Int(-5);
+    assert Value::from(7_u32) == Value::UInt(7);
     assert Value::from(u64::MAX) == Value::UInt(u64::MAX);
 }
 
@@ -909,7 +909,7 @@ impl Serialize for ScalarKeys {
         let mut m = s.begin_map(3)?;
         m.key(&-1)?;
         m.value(&"int")?;
-        m.key(&(2 as u64))?;
+        m.key(&2_u64)?;
         m.value(&"uint")?;
         m.key(&true)?;
         m.value(&"bool")?;
@@ -933,7 +933,7 @@ test "a scalar map key round-trips through its object spelling" {
     let v = to_value(&wide).unwrap();
     assert `${v:?}` == "{\"1\": \"one\", \"-2\": \"minus two\"}";
     let back = from_value::<TreeMap<i128, String>>(&v).unwrap();
-    assert back.len() == 2 && back.get(-2 as i128) == Option::Some("minus two");
+    assert back.len() == 2 && back.get(-2_i128) == Option::Some("minus two");
     let mut floats = TreeMap::<f64, i32>::new();
     floats[0.5] = 1;
     assert `${to_value(&floats).unwrap():?}` == "{\"0.5\": 1}";

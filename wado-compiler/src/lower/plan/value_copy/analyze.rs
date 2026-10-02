@@ -352,7 +352,8 @@ pub(crate) fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl Fn
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
         | TirPattern::ConstantValue { .. }
-        | TirPattern::Range { .. } => {}
+        | TirPattern::Range { .. }
+        | TirPattern::PerInstance { .. } => {}
     }
 }
 

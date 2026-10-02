@@ -26,7 +26,7 @@ test "user-defined From: 0°C → 32°F" {
 }
 
 test "From<i32> for i32 is identity" {
-    assert i32::from(42 as i32) == 42;
+    assert i32::from(42_i32) == 42;
 }
 
 test "From<bool> for bool is identity" {
@@ -40,82 +40,82 @@ test "From<String> for String is identity" {
 }
 
 test "From<i8> for i16" {
-    assert i16::from(127 as i8) == 127 as i16;
-    assert i16::from(-128 as i8) == -128 as i16;
+    assert i16::from(127_i8) == 127_i16;
+    assert i16::from(-128_i8) == -128_i16;
 }
 
 test "From<i8> for i32" {
-    assert i32::from(42 as i8) == 42;
-    assert i32::from(-1 as i8) == -1;
+    assert i32::from(42_i8) == 42;
+    assert i32::from(-1_i8) == -1;
 }
 
 test "From<i8> for i64" {
-    assert i64::from(100 as i8) == 100 as i64;
+    assert i64::from(100_i8) == 100_i64;
 }
 
 test "From<i16> for i32" {
-    assert i32::from(1000 as i16) == 1000;
+    assert i32::from(1000_i16) == 1000;
 }
 
 test "From<i16> for i64" {
-    assert i64::from(1000 as i16) == 1000 as i64;
+    assert i64::from(1000_i16) == 1000_i64;
 }
 
 test "From<i32> for i64" {
-    assert i64::from(2147483647 as i32) == 2147483647 as i64;
-    assert i64::from(-2147483648 as i32) == -2147483648 as i64;
+    assert i64::from(2147483647_i32) == 2147483647_i64;
+    assert i64::from(-2147483648_i32) == -2147483648_i64;
 }
 
 test "From<u8> for u16" {
-    assert u16::from(255 as u8) == 255 as u16;
+    assert u16::from(255_u8) == 255_u16;
 }
 
 test "From<u8> for u32" {
-    assert u32::from(255 as u8) == 255 as u32;
+    assert u32::from(255_u8) == 255_u32;
 }
 
 test "From<u8> for u64" {
-    assert u64::from(255 as u8) == 255 as u64;
+    assert u64::from(255_u8) == 255_u64;
 }
 
 test "From<u8> for i16" {
-    assert i16::from(200 as u8) == 200 as i16;
+    assert i16::from(200_u8) == 200_i16;
 }
 
 test "From<u8> for i32" {
-    assert i32::from(200 as u8) == 200;
+    assert i32::from(200_u8) == 200;
 }
 
 test "From<u8> for i64" {
-    assert i64::from(200 as u8) == 200 as i64;
+    assert i64::from(200_u8) == 200_i64;
 }
 
 test "From<u16> for u32" {
-    assert u32::from(65535 as u16) == 65535 as u32;
+    assert u32::from(65535_u16) == 65535_u32;
 }
 
 test "From<u16> for u64" {
-    assert u64::from(65535 as u16) == 65535 as u64;
+    assert u64::from(65535_u16) == 65535_u64;
 }
 
 test "From<u16> for i32" {
-    assert i32::from(65535 as u16) == 65535;
+    assert i32::from(65535_u16) == 65535;
 }
 
 test "From<u16> for i64" {
-    assert i64::from(65535 as u16) == 65535 as i64;
+    assert i64::from(65535_u16) == 65535_i64;
 }
 
 test "From<u32> for u64" {
-    assert u64::from(4294967295 as u32) == 4294967295 as u64;
+    assert u64::from(4294967295_u32) == 4294967295_u64;
 }
 
 test "From<u32> for i64" {
-    assert i64::from(4294967295 as u32) == 4294967295 as i64;
+    assert i64::from(4294967295_u32) == 4294967295_i64;
 }
 
 test "From<f32> for f64" {
-    let v = f64::from(1.0 as f32);
+    let v = f64::from(1.0_f32);
     assert v == 1.0;
 }
 
@@ -164,24 +164,24 @@ test "user-defined TryFrom: Err" {
 }
 
 test "TryFrom<i64> for i32: in range" {
-    assert i32::try_from(42 as i64) matches { Ok(n) && n == 42 };
-    assert i32::try_from(2147483647 as i64) matches { Ok(n) && n == 2147483647 };
-    assert i32::try_from(-2147483648 as i64) matches { Ok(n) && n == -2147483648 };
+    assert i32::try_from(42_i64) matches { Ok(n) && n == 42 };
+    assert i32::try_from(2147483647_i64) matches { Ok(n) && n == 2147483647 };
+    assert i32::try_from(-2147483648_i64) matches { Ok(n) && n == -2147483648 };
 }
 
 test "TryFrom<i64> for i32: out of range" {
-    assert i32::try_from(2147483648 as i64) matches { Err(_) };
-    assert i32::try_from(-2147483649 as i64) matches { Err(_) };
+    assert i32::try_from(2147483648_i64) matches { Err(_) };
+    assert i32::try_from(-2147483649_i64) matches { Err(_) };
 }
 
 test "TryFrom<i32> for u32: non-negative" {
-    assert u32::try_from(0 as i32) matches { Ok(n) && n == 0 as u32 };
-    assert u32::try_from(2147483647 as i32) matches { Ok(n) && n == 2147483647 as u32 };
+    assert u32::try_from(0_i32) matches { Ok(n) && n == 0_u32 };
+    assert u32::try_from(2147483647_i32) matches { Ok(n) && n == 2147483647_u32 };
 }
 
 test "TryFrom<i32> for u32: negative fails" {
-    assert u32::try_from(-1 as i32) matches { Err(_) };
-    assert u32::try_from(-100 as i32) matches { Err(_) };
+    assert u32::try_from(-1_i32) matches { Err(_) };
+    assert u32::try_from(-100_i32) matches { Err(_) };
 }
 
 struct NetworkError {
@@ -216,20 +216,20 @@ type UserId = u64;
 type ProductId = u64;
 
 test "newtype From: base → newtype" {
-    let id = UserId::from(42 as u64);
-    assert id as u64 == 42 as u64;
+    let id = UserId::from(42_u64);
+    assert id as u64 == 42_u64;
 }
 
 test "newtype From: newtype → base" {
     let raw: UserId = 99 as UserId;
     let base = u64::from(raw);
-    assert base == 99 as u64;
+    assert base == 99_u64;
 }
 
 test "newtype From is type-safe: distinct newtypes do not convert" {
-    let uid = UserId::from(1 as u64);
+    let uid = UserId::from(1_u64);
     let pid = ProductId::from(u64::from(uid));
-    assert pid as u64 == 1 as u64;
+    assert pid as u64 == 1_u64;
 }
 
 variant JsonLike {
@@ -275,8 +275,8 @@ test "JsonLike: From<f64>" {
 }
 
 test "JsonLike: From<i32> widens to f64" {
-    assert JsonLike::from(42 as i32) matches { Number(n) && n == 42.0 };
-    assert JsonLike::from(-1 as i32) matches { Number(n) && n == -1.0 };
+    assert JsonLike::from(42_i32) matches { Number(n) && n == 42.0 };
+    assert JsonLike::from(-1_i32) matches { Number(n) && n == -1.0 };
 }
 
 test "JsonLike: From<String>" {
@@ -286,7 +286,7 @@ test "JsonLike: From<String>" {
 
 test "JsonLike: building a mixed array via From" {
     let mut items: List<JsonLike> = [];
-    items.push(JsonLike::from(1 as i32));
+    items.push(JsonLike::from(1_i32));
     items.push(JsonLike::from(true));
     items.push(JsonLike::from("ok"));
     let arr = JsonLike::Arr(items);
@@ -361,7 +361,7 @@ impl TryFrom<u32> for AccessFlags {
     type Err = ConvertError;
 
     fn try_from(value: u32) -> Result<AccessFlags, ConvertError> {
-        if value > 7 as u32 {
+        if value > 7_u32 {
             return Result::Err(ConvertError::new(`invalid flags: ${value as i32}`));
         }
         return Result::Ok(value as AccessFlags);
@@ -369,26 +369,26 @@ impl TryFrom<u32> for AccessFlags {
 }
 
 test "flags From<AccessFlags> for u32: individual bits" {
-    assert u32::from(AccessFlags::Read) == 1 as u32;
-    assert u32::from(AccessFlags::Write) == 2 as u32;
-    assert u32::from(AccessFlags::Execute) == 4 as u32;
+    assert u32::from(AccessFlags::Read) == 1_u32;
+    assert u32::from(AccessFlags::Write) == 2_u32;
+    assert u32::from(AccessFlags::Execute) == 4_u32;
 }
 
 test "flags From<AccessFlags> for u32: combined and edge values" {
-    assert u32::from(AccessFlags::Read | AccessFlags::Write) == 3 as u32;
-    assert u32::from(AccessFlags::all()) == 7 as u32;
-    assert u32::from(AccessFlags::none()) == 0 as u32;
+    assert u32::from(AccessFlags::Read | AccessFlags::Write) == 3_u32;
+    assert u32::from(AccessFlags::all()) == 7_u32;
+    assert u32::from(AccessFlags::none()) == 0_u32;
 }
 
 test "flags TryFrom<u32> for AccessFlags: valid bit patterns" {
-    assert AccessFlags::try_from(0 as u32) matches { Ok(f) && f == AccessFlags::none() };
-    assert AccessFlags::try_from(1 as u32) matches { Ok(f) && f == AccessFlags::Read };
-    assert AccessFlags::try_from(7 as u32) matches { Ok(f) && f == AccessFlags::all() };
+    assert AccessFlags::try_from(0_u32) matches { Ok(f) && f == AccessFlags::none() };
+    assert AccessFlags::try_from(1_u32) matches { Ok(f) && f == AccessFlags::Read };
+    assert AccessFlags::try_from(7_u32) matches { Ok(f) && f == AccessFlags::all() };
 }
 
 test "flags TryFrom<u32> for AccessFlags: invalid bit patterns" {
-    assert AccessFlags::try_from(8 as u32) matches { Err(_) };
-    assert AccessFlags::try_from(255 as u32) matches { Err(_) };
+    assert AccessFlags::try_from(8_u32) matches { Err(_) };
+    assert AccessFlags::try_from(255_u32) matches { Err(_) };
 }
 
 test "flags From + TryFrom: serialization round-trip" {
@@ -399,9 +399,9 @@ test "flags From + TryFrom: serialization round-trip" {
 }
 
 test "From<u64> for u128: widening is lossless" {
-    let small = 42 as u64;
+    let small = 42_u64;
     let wide = u128::from(small);
-    assert wide == 42 as u128;
+    assert wide == 42_u128;
 }
 
 test "From<u64> for u128: max u64 value fits" {
@@ -411,33 +411,33 @@ test "From<u64> for u128: max u64 value fits" {
 }
 
 test "From<i64> for i128: widening preserves sign" {
-    assert i128::from(100 as i64) == 100 as i128;
-    assert i128::from(-100 as i64) == -100 as i128;
+    assert i128::from(100_i64) == 100_i128;
+    assert i128::from(-100_i64) == -100_i128;
     assert i128::from(i64::MIN) == i64::MIN as i128;
     assert i128::from(i64::MAX) == i64::MAX as i128;
 }
 
 test "TryFrom<u128> for u64: in range" {
-    assert u64::try_from(0 as u128) matches { Ok(n) && n == 0 as u64 };
-    assert u64::try_from(42 as u128) matches { Ok(n) && n == 42 as u64 };
+    assert u64::try_from(0_u128) matches { Ok(n) && n == 0_u64 };
+    assert u64::try_from(42_u128) matches { Ok(n) && n == 42_u64 };
     assert u64::try_from(u64::MAX as u128) matches { Ok(n) && n == u64::MAX };
 }
 
 test "TryFrom<u128> for u64: out of range" {
-    let too_big = u64::MAX as u128 + 1 as u128;
+    let too_big = u64::MAX as u128 + 1_u128;
     assert u64::try_from(too_big) matches { Err(_) };
 }
 
 test "TryFrom<i128> for i64: in range" {
-    assert i64::try_from(0 as i128) matches { Ok(n) && n == 0 as i64 };
+    assert i64::try_from(0_i128) matches { Ok(n) && n == 0_i64 };
     assert i64::try_from(i64::MAX as i128) matches { Ok(n) && n == i64::MAX };
     assert i64::try_from(i64::MIN as i128) matches { Ok(n) && n == i64::MIN };
 }
 
 test "TryFrom<i128> for i64: out of range" {
-    let too_big: i128 = i64::MAX as i128 + 1 as i128;
+    let too_big: i128 = i64::MAX as i128 + 1_i128;
     assert i64::try_from(too_big) matches { Err(_) };
-    let too_small: i128 = i64::MIN as i128 - 1 as i128;
+    let too_small: i128 = i64::MIN as i128 - 1_i128;
     assert i64::try_from(too_small) matches { Err(_) };
 }
 
@@ -446,78 +446,78 @@ test "TryFrom<i128> for i64: out of range" {
 // f64 has a 53-bit mantissa (exact for integers up to ±2^53 = 9_007_199_254_740_992).
 
 test "TryFrom<i64> for f64: small values are exact" {
-    assert f64::try_from(0 as i64) matches { Ok(n) && n == 0.0 };
-    assert f64::try_from(1 as i64) matches { Ok(n) && n == 1.0 };
-    assert f64::try_from(-1 as i64) matches { Ok(n) && n == -1.0 };
-    assert f64::try_from(1_000_000 as i64) matches { Ok(n) && n == 1_000_000.0 };
+    assert f64::try_from(0_i64) matches { Ok(n) && n == 0.0 };
+    assert f64::try_from(1_i64) matches { Ok(n) && n == 1.0 };
+    assert f64::try_from(-1_i64) matches { Ok(n) && n == -1.0 };
+    assert f64::try_from(1_000_000_i64) matches { Ok(n) && n == 1_000_000.0 };
 }
 
 test "TryFrom<i64> for f64: boundary at ±2^53" {
-    assert f64::try_from(9_007_199_254_740_992 as i64) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
-    assert f64::try_from(-9_007_199_254_740_992 as i64) matches { Ok(n) && n == -9_007_199_254_740_992.0 };
-    assert f64::try_from(9_007_199_254_740_993 as i64) matches { Err(_) };
-    assert f64::try_from(-9_007_199_254_740_993 as i64) matches { Err(_) };
+    assert f64::try_from(9_007_199_254_740_992_i64) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
+    assert f64::try_from(-9_007_199_254_740_992_i64) matches { Ok(n) && n == -9_007_199_254_740_992.0 };
+    assert f64::try_from(9_007_199_254_740_993_i64) matches { Err(_) };
+    assert f64::try_from(-9_007_199_254_740_993_i64) matches { Err(_) };
 }
 
 test "TryFrom<i64> for f32: boundary at ±2^24" {
-    assert f32::try_from(16_777_216 as i64) matches { Ok(n) && n == 16_777_216.0 as f32 };
-    assert f32::try_from(-16_777_216 as i64) matches { Ok(n) && n == -16_777_216.0 as f32 };
-    assert f32::try_from(16_777_217 as i64) matches { Err(_) };
-    assert f32::try_from(-16_777_217 as i64) matches { Err(_) };
+    assert f32::try_from(16_777_216_i64) matches { Ok(n) && n == 16_777_216.0_f32 };
+    assert f32::try_from(-16_777_216_i64) matches { Ok(n) && n == -16_777_216.0_f32 };
+    assert f32::try_from(16_777_217_i64) matches { Err(_) };
+    assert f32::try_from(-16_777_217_i64) matches { Err(_) };
 }
 
 test "TryFrom<u64> for f64: boundary at 2^53" {
-    assert f64::try_from(9_007_199_254_740_992 as u64) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
-    assert f64::try_from(9_007_199_254_740_993 as u64) matches { Err(_) };
+    assert f64::try_from(9_007_199_254_740_992_u64) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
+    assert f64::try_from(9_007_199_254_740_993_u64) matches { Err(_) };
     assert f64::try_from(u64::MAX) matches { Err(_) };
 }
 
 test "TryFrom<u64> for f32: boundary at 2^24" {
-    assert f32::try_from(0 as u64) matches { Ok(n) && n == 0.0 as f32 };
-    assert f32::try_from(16_777_216 as u64) matches { Ok(n) && n == 16_777_216.0 as f32 };
-    assert f32::try_from(16_777_217 as u64) matches { Err(_) };
+    assert f32::try_from(0_u64) matches { Ok(n) && n == 0.0_f32 };
+    assert f32::try_from(16_777_216_u64) matches { Ok(n) && n == 16_777_216.0_f32 };
+    assert f32::try_from(16_777_217_u64) matches { Err(_) };
 }
 
 test "TryFrom<i128> for f64: boundary at ±2^53" {
-    assert f64::try_from(9_007_199_254_740_992 as i128) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
-    assert f64::try_from(-9_007_199_254_740_992 as i128) matches { Ok(n) && n == -9_007_199_254_740_992.0 };
-    assert f64::try_from(9_007_199_254_740_993 as i128) matches { Err(_) };
-    assert f64::try_from(i64::MAX as i128 + 1 as i128) matches { Err(_) };
+    assert f64::try_from(9_007_199_254_740_992_i128) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
+    assert f64::try_from(-9_007_199_254_740_992_i128) matches { Ok(n) && n == -9_007_199_254_740_992.0 };
+    assert f64::try_from(9_007_199_254_740_993_i128) matches { Err(_) };
+    assert f64::try_from(i64::MAX as i128 + 1_i128) matches { Err(_) };
 }
 
 test "TryFrom<i128> for f32: boundary at ±2^24" {
-    assert f32::try_from(16_777_216 as i128) matches { Ok(n) && n == 16_777_216.0 as f32 };
-    assert f32::try_from(-16_777_216 as i128) matches { Ok(n) && n == -16_777_216.0 as f32 };
-    assert f32::try_from(16_777_217 as i128) matches { Err(_) };
+    assert f32::try_from(16_777_216_i128) matches { Ok(n) && n == 16_777_216.0_f32 };
+    assert f32::try_from(-16_777_216_i128) matches { Ok(n) && n == -16_777_216.0_f32 };
+    assert f32::try_from(16_777_217_i128) matches { Err(_) };
 }
 
 test "TryFrom<u128> for f64: boundary at 2^53" {
-    assert f64::try_from(9_007_199_254_740_992 as u128) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
-    assert f64::try_from(9_007_199_254_740_993 as u128) matches { Err(_) };
+    assert f64::try_from(9_007_199_254_740_992_u128) matches { Ok(n) && n == 9_007_199_254_740_992.0 };
+    assert f64::try_from(9_007_199_254_740_993_u128) matches { Err(_) };
 }
 
 test "TryFrom<u128> for f32: boundary at 2^24" {
-    assert f32::try_from(16_777_216 as u128) matches { Ok(n) && n == 16_777_216.0 as f32 };
-    assert f32::try_from(16_777_217 as u128) matches { Err(_) };
+    assert f32::try_from(16_777_216_u128) matches { Ok(n) && n == 16_777_216.0_f32 };
+    assert f32::try_from(16_777_217_u128) matches { Err(_) };
 }
 
 test "int-to-float TryFrom: illustrate the precision loss semantics" {
     // `as` silently rounds; TryFrom surfaces the loss as Err
-    let lossy = 9_007_199_254_740_993 as i64 as f64;
+    let lossy = 9_007_199_254_740_993_i64 as f64;
     assert lossy == 9_007_199_254_740_992.0;
-    assert f64::try_from(9_007_199_254_740_993 as i64) matches { Err(_) };
+    assert f64::try_from(9_007_199_254_740_993_i64) matches { Err(_) };
 }
 
 test "u128 accumulation round-trip via From / TryFrom" {
     let chunk = u32::MAX as u64;
-    let mut acc = 0 as u128;
+    let mut acc = 0_u128;
     let mut i = 0;
     while i < 4 {
         acc += u128::from(chunk);
         i += 1;
     }
     // 4 × (2^32 - 1) = 17_179_869_180, fits in u64
-    assert u64::try_from(acc) matches { Ok(n) && n == 17179869180 as u64 };
+    assert u64::try_from(acc) matches { Ok(n) && n == 17179869180_u64 };
 }
 
 test "ConvertError renders its message" {
