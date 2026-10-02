@@ -2158,6 +2158,34 @@ fn test_format_underscore_literal_preserved() {
 }
 
 #[test]
+fn test_format_numeric_suffix_preserved() {
+    let source = r"fn run() {
+    let a = 1_000_u32;
+    let b = -128_i8;
+    let c = 1.5e3_f32;
+    let d = 0xFF_u8;
+    let e = match a {
+        7_u32 => 1,
+        _ => 0,
+    };
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    for kept in [
+        "let a = 1_000_u32;",
+        "let b = -128_i8;",
+        "let c = 1.5e3_f32;",
+        "let d = 0xFF_u8;",
+        "7_u32 => 1,",
+    ] {
+        assert!(
+            formatted.contains(kept),
+            "suffix should be preserved in `{kept}`: {formatted}"
+        );
+    }
+}
+
+#[test]
 fn test_format_float_preserves_decimal() {
     let source = r"fn run() {
     let x = 3.14159;

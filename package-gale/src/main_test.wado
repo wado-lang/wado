@@ -450,7 +450,7 @@ test "with no grant there is nothing to read" {
 
 test "a grammar that is not UTF-8 is refused" {
     let dir = scratch(SUITE, "not-utf8");
-    fs::write(`${dir}/Bad.g4`, &([0xff as u8] as ByteList)).unwrap();
+    fs::write(`${dir}/Bad.g4`, &([0xff_u8] as ByteList)).unwrap();
     let outcome = gale_in(&dir, ["gen", "Bad.g4"]);
     assert outcome.failure() == "gale: Bad.g4: not valid UTF-8: invalid utf-8 sequence of 1 bytes from index 0";
 }
@@ -516,7 +516,7 @@ test "an unknown fragment entry reaches the Kiln host as a warning" {
 }
 
 test "a Kiln input that is not UTF-8 is an invalid schema" {
-    let built = kiln(["Bad.g4", [0xff as u8] as ByteList], [], no_options());
+    let built = kiln(["Bad.g4", [0xff_u8] as ByteList], [], no_options());
     assert built.error() == "invalid schema: gale: 'Bad.g4' is not UTF-8: invalid utf-8 sequence of 1 bytes from index 0";
 }
 

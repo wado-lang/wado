@@ -251,10 +251,10 @@ test "f64.is_nan and f64.is_finite" {
 
 test "f32.is_nan and f32.is_finite" {
     assert f32::NAN.is_nan();
-    assert !(0.0 as f32).is_nan();
+    assert !0.0_f32.is_nan();
     assert !f32::INFINITY.is_nan();
 
-    assert (1.0 as f32).is_finite();
+    assert 1.0_f32.is_finite();
     assert !f32::INFINITY.is_finite();
     assert !f32::NAN.is_finite();
 }
@@ -328,14 +328,14 @@ test "f64::to_bits and f64::from_bits" {
 }
 
 test "f32::to_bits and f32::from_bits" {
-    let pi32 = 3.14159265 as f32;
+    let pi32 = 3.14159265_f32;
     let pi32_bits = pi32.to_bits();
     assert pi32_bits == 1078530011;
 
     let back_to_pi32 = f32::from_bits(pi32_bits);
     assert back_to_pi32 == pi32;
 
-    let zero32_bits = (0.0 as f32).to_bits();
+    let zero32_bits = 0.0_f32.to_bits();
     assert zero32_bits == 0;
 }
 

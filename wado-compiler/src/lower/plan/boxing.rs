@@ -565,6 +565,7 @@ fn remap_locals_in_pattern(pattern: &mut TirPattern, remap: &IndexMap<u32, u32>)
         TirPattern::Wildcard
         | TirPattern::Literal(_)
         | TirPattern::Enum { .. }
-        | TirPattern::Range { .. } => {}
+        | TirPattern::Range { .. }
+        | TirPattern::PerInstance { .. } => {}
     }
 }

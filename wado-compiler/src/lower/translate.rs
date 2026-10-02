@@ -2098,6 +2098,9 @@ impl FunctionTranslator<'_, '_> {
 
     fn convert_pattern(&self, pattern: &TirPattern) -> PatId {
         let kind = match pattern {
+            TirPattern::PerInstance { .. } => {
+                unreachable!("instance_patterns lowers every per-instance pattern")
+            }
             TirPattern::Wildcard => PatKind::Wildcard,
             TirPattern::Binding {
                 name,

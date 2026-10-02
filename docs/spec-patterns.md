@@ -36,6 +36,27 @@ newtype over either. A type parameter bounded by
 A float literal is not a pattern. A float matches a
 [range pattern](#range-patterns) instead.
 
+A literal or range pattern on a value whose type is a type parameter means, in
+each instance, what it means on that instance's type. An instance whose type
+the literal is not, or cannot hold its value, is an error at the pattern.
+
+<!-- {"fixture":"match_literal_pattern_type_param.wado"} -->
+
+```wado
+fn is_minus_one<T>(x: T) -> i32 {
+    return match x {
+        -1 => 1,
+        _ => 0,
+    };
+}
+
+test "a negative literal matches each signed width" {
+    assert is_minus_one(builtin::black_box(-1_i8)) == 1;
+    assert is_minus_one(builtin::black_box(-1_i64)) == 1;
+    assert is_minus_one(builtin::black_box(1_i32)) == 0;
+}
+```
+
 <!-- {"fixture":"spec_control_flow_match.wado"} -->
 
 ```wado

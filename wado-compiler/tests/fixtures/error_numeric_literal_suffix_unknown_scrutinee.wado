@@ -1,0 +1,15 @@
+// A scrutinee whose type is unresolved is reported once, where it is
+// unresolved: a suffixed pattern judges nothing against it.
+
+export fn run() {
+    let k = match nope {         // compile error: unknown identifier
+        1_u8 => 1,
+        _ => 0,
+    };
+}
+
+__DATA__
+{
+  "compile_error": "nope",
+  "compile_errors_not_contains": ["pattern mismatch"]
+}

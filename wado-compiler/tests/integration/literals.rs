@@ -73,7 +73,7 @@ fn test_integer_zero() {
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "0" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "0" => {}
         other => panic!("expected Number(\"0\"), got {other:?}"),
     }
 }
@@ -84,7 +84,7 @@ fn test_integer_positive() {
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "42" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "42" => {}
         other => panic!("expected Number(\"42\"), got {other:?}"),
     }
 }
@@ -95,7 +95,7 @@ fn test_integer_large() {
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "9223372036854775807" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "9223372036854775807" => {}
         other => panic!("expected Number(\"9223372036854775807\"), got {other:?}"),
     }
 }
@@ -105,7 +105,7 @@ fn test_integer_with_separator() {
     let module = parse_expr("1_000_000").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "1_000_000" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "1_000_000" => {}
         other => panic!("expected Number(\"1_000_000\"), got {other:?}"),
     }
 }
@@ -115,7 +115,7 @@ fn test_integer_hex() {
     let module = parse_expr("0xFF").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "0xFF" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "0xFF" => {}
         other => panic!("expected Number(\"0xFF\"), got {other:?}"),
     }
 }
@@ -125,7 +125,7 @@ fn test_integer_binary() {
     let module = parse_expr("0b1010").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "0b1010" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "0b1010" => {}
         other => panic!("expected Number(\"0b1010\"), got {other:?}"),
     }
 }
@@ -135,7 +135,7 @@ fn test_integer_octal() {
     let module = parse_expr("0o755").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "0o755" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "0o755" => {}
         other => panic!("expected Number(\"0o755\"), got {other:?}"),
     }
 }
@@ -146,7 +146,7 @@ fn test_float_simple() {
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "3.25" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "3.25" => {}
         other => panic!("expected Number(\"3.25\"), got {other:?}"),
     }
 }
@@ -157,7 +157,7 @@ fn test_float_zero() {
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "0.0" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "0.0" => {}
         other => panic!("expected Number(\"0.0\"), got {other:?}"),
     }
 }
@@ -168,7 +168,7 @@ fn test_float_leading_zero() {
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "0.5" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "0.5" => {}
         other => panic!("expected Number(\"0.5\"), got {other:?}"),
     }
 }
@@ -179,7 +179,7 @@ fn test_float_many_decimals() {
     let lit = extract_literal(&module).expect("no literal found");
 
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "1.23456789012345" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "1.23456789012345" => {}
         other => panic!("expected Number(\"1.23456789012345\"), got {other:?}"),
     }
 }
@@ -189,7 +189,7 @@ fn test_float_scientific() {
     let module = parse_expr("6.022e23").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "6.022e23" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "6.022e23" => {}
         other => panic!("expected Number(\"6.022e23\"), got {other:?}"),
     }
 }
@@ -199,7 +199,7 @@ fn test_float_with_separator() {
     let module = parse_expr("1_000_000.5").expect("parse failed");
     let lit = extract_literal(&module).expect("no literal found");
     match lit {
-        wado_compiler::ast::Literal::Number(repr) if repr == "1_000_000.5" => {}
+        wado_compiler::ast::Literal::Number(repr, None) if repr == "1_000_000.5" => {}
         other => panic!("expected Number(\"1_000_000.5\"), got {other:?}"),
     }
 }

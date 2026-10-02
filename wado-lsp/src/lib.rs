@@ -98,7 +98,8 @@ pub struct Engine {
     /// position-bearing query.
     position_encoding: PositionEncoding,
     /// Surface unused / dead-code warnings in `diagnostics` (on by default;
-    /// mirrors `CompilerOptions::unused_diagnostics`).
+    /// mirrors `CompilerOptions::unused_diagnostics`). The other lints show
+    /// either way, as in the batch compiler.
     unused_diagnostics: bool,
 }
 
@@ -694,21 +695,14 @@ impl Engine {
             diagnostics::from_compiler_diagnostic(d, lines.as_ref(), encoding)
         };
         let semantic = snapshot.semantic_diagnostics();
-        let mut out: Vec<Diagnostic> = snapshot
+        let lints = wado_compiler::lint_diagnostics(&snapshot.sem, self.unused_diagnostics, false);
+        snapshot
             .diagnostics
             .iter()
             .chain(semantic.iter())
+            .chain(lints.iter())
             .filter_map(&convert)
-            .collect();
-        if self.unused_diagnostics {
-            out.extend(
-                wado_compiler::unused_diagnostics(&snapshot.sem, false)
-                    .iter()
-                    .chain(wado_compiler::shadowing_diagnostics(&snapshot.sem).iter())
-                    .filter_map(&convert),
-            );
-        }
-        out
+            .collect()
     }
 }
 

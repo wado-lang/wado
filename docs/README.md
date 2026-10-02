@@ -193,6 +193,7 @@
 - [Test Coverage](./wep-2026-09-28-test-coverage.md)
 - [A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
 - [HashMap](./wep-2026-10-01-hash-map.md)
+- [Numeric Literal Suffixes](./wep-2026-10-01-numeric-literal-suffixes.md)
 
 ## Standard Library
 
