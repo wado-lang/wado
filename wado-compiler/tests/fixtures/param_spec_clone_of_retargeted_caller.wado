@@ -1,0 +1,51 @@
+// Test: a caller cloned in the round its call is retargeted keeps the
+// retarget. `pick` and `work` are specialized in the same `param_spec` round:
+// `pick`'s callers disagree on `mode`, and `work`'s on `level`. A clone of
+// `pick` copied from the body before its call was pointed at `work$spec0`
+// still called the original `work` with `(6, 0)`. Its calls then became the
+// original's only ones, so their constants were propagated into it, leaving
+// `work` identical to `work$spec0`.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn work(n: i32, level: i32, strategy: i32) -> i32 {
+    if level == 0 {
+        return n;
+    }
+    if strategy == 1 {
+        return n * level;
+    }
+    return n + level;
+}
+
+#[inline(never)]
+fn outer(n: i32, level: i32, strategy: i32) -> i32 {
+    return work(n, level, strategy);
+}
+
+#[inline(never)]
+fn pick(n: i32, mode: i32) -> i32 {
+    if mode == 1 {
+        return work(n, 6, 0) + 1;
+    }
+    return work(n, 6, 0);
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(7);
+    println(`${pick(n, 1)}`);
+    println(`${pick(n, 2)}`);
+    println(`${outer(n, 6, 0)}`);
+}
+
+__DATA__
+{
+    "stdout": "14\n13\n13\n",
+    "wir_expect:O2": [
+        "/work$spec0\"(n)"
+    ],
+    "wir_not_expect:O2": [
+        "/work\"(n)"
+    ]
+}
