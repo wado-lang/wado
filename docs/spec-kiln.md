@@ -88,10 +88,6 @@ reaches with ordinary `use` statements. The entry module does not need to exist
 before the first compile, because the generator runs before the import is
 resolved.
 
-A clause applies in the file that declares it. Another `use` of the same schema
-in that file, with no `with` of its own, binds against the same entry. Another
-file gets no binding from it.
-
 Clauses are collected from every module the program reaches, so a module deep
 in the graph can import a generated module of its own.
 

@@ -338,8 +338,8 @@ use { println, Stdout } from "core:cli" with { tpye: "wasm", provider: 1 };
 
 ### How an Import Is Read
 
-A `use` never looks at its path's extension. Its attributes decide how the file
-is read:
+`type` is `"wasm"` or `"wat"`. A `use` never looks at its path's extension. Its
+attributes decide how the file is read:
 
 1. With `generator`, a [Kiln generator](./spec-kiln.md) reads it. A `type`
    beside `generator` is passed to the generator.
