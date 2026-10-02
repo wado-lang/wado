@@ -245,10 +245,24 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
         let func_rc = &project.functions[fid.index()];
-        // Skip CM bindings (ABI bridges) and body-less declarations.
+        // Skip CM bindings (ABI bridges) and body-less declarations, and a body
+        // holding no candidate, which the rewrite would find before anything
+        // else: the session's indices cost a walk of the whole body.
         {
             let func = func_rc.borrow();
-            if func.is_cm_binding || func.body.is_none() {
+            let Some(body) = func.body.as_ref().filter(|_| !func.is_cm_binding) else {
+                return false;
+            };
+            let type_table = type_table_rc.borrow();
+            if collect_candidates(
+                body,
+                &type_table,
+                &struct_index,
+                &method_sig,
+                &value_copy_ids,
+            )
+            .is_empty()
+            {
                 return false;
             }
         }
