@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790897592592,
+  "lastUpdate": 1790906250472,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62733,6 +62733,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 281092,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6007ff518a58b85afc8c48f82f7b96725cd364a1",
+          "message": "Merge pull request #2243 from wado-lang/gale-gen-id-sync-sets\n\nperf(optimize): converge the NIR loop in fewer rounds",
+          "timestamp": "2026-10-02T10:27:16+09:00",
+          "tree_id": "b03ff8ebcf45ea0a0f6f2a3940cb38fcfd4a99cf",
+          "url": "https://github.com/wado-lang/wado/commit/6007ff518a58b85afc8c48f82f7b96725cd364a1"
+        },
+        "date": 1790906249654,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6262,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20671,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281097,
             "unit": "bytes"
           }
         ]
