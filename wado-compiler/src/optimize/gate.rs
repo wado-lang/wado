@@ -45,6 +45,9 @@ pub enum GatedPass {
     ValueCopyDemote,
     ScalarForward,
     LetBlockFlatten,
+    /// Whole-program only: the column says whether any function changed since
+    /// the pass last ran, never which ones to skip.
+    ParamSpec,
     /// The post-loop cleanup fixpoints ([`super::run_bounded_fixpoint`]). Each
     /// owns a fresh gate, so `BranchPrune` serves both of its passes.
     StoreLoadForward,
@@ -53,7 +56,7 @@ pub enum GatedPass {
 }
 
 impl GatedPass {
-    const COUNT: usize = 19;
+    const COUNT: usize = 20;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -203,6 +206,14 @@ impl FunctionGate {
         }
     }
 
+    /// Mark every function in `0..len` seen by `pass`: a whole-program pass that
+    /// ran to its own fixed point leaves nothing pending behind it.
+    pub fn catch_up(&mut self, pass: GatedPass, len: usize) {
+        for i in 0..len {
+            self.seen(pass, FuncId::new(i));
+        }
+    }
+
     /// Whether any function in `0..len` is still dirty for `pass`. Lets a
     /// caller skip whole-program work it would only need inside the loop.
     pub fn any_pending(&mut self, pass: GatedPass, len: usize) -> bool {
@@ -265,6 +276,7 @@ mod tests {
             GatedPass::ValueCopyDemote,
             GatedPass::ScalarForward,
             GatedPass::LetBlockFlatten,
+            GatedPass::ParamSpec,
             GatedPass::StoreLoadForward,
             GatedPass::BranchPrune,
             GatedPass::CondImplPostPromote,
@@ -287,6 +299,7 @@ mod tests {
                 | GatedPass::ValueCopyDemote
                 | GatedPass::ScalarForward
                 | GatedPass::LetBlockFlatten
+                | GatedPass::ParamSpec
                 | GatedPass::StoreLoadForward
                 | GatedPass::BranchPrune
                 | GatedPass::CondImplPostPromote => {}
@@ -355,6 +368,16 @@ mod tests {
         gate.seen(GatedPass::PeepholePre, f);
         assert!(!gate.needs(GatedPass::PeepholePre, f));
         assert!(gate.needs(GatedPass::PeepholePost, f));
+    }
+
+    #[test]
+    fn catch_up_drains_the_column_until_a_change() {
+        let mut gate = gate_with_graph(2, &[]);
+        gate.catch_up(GatedPass::ParamSpec, 2);
+        assert!(!gate.any_pending(GatedPass::ParamSpec, 2));
+        assert!(gate.any_pending(GatedPass::CopyProp, 2));
+        gate.mark_changed(FuncId::new(1));
+        assert!(gate.any_pending(GatedPass::ParamSpec, 2));
     }
 
     #[test]
