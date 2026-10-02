@@ -51,9 +51,8 @@ pub(super) fn promote_const_global_inits(module: &mut WirPackage) {
     for (g_idx, consensus) in state {
         if let Consensus::Const(value) = consensus {
             let global = &mut module.globals[g_idx];
-            // The slot was nullable only to hold `ref.null` until the deferred
-            // store; an eager non-null value never leaves it, so no read of it
-            // has to narrow.
+            // An immutable slot holds its eager value and nothing else, so a
+            // non-null value makes it non-null, and no read of it narrows.
             if value.is_nonnull_result() {
                 global.ty = global.ty.clone().as_nonnull();
             }

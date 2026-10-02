@@ -237,57 +237,64 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
     )
 }
 
-/// True if `instr` or any descendant can trap at runtime, which keeps a
-/// `Drop(value)` whose value is otherwise side-effect-free: Wado requires the
-/// trap of `let _ = arr[-1]` to be observable. Distinct from
-/// [`is_root_observable`], kept lax so CSE can still touch a trapping operation
-/// whose result *is* used. Nullability comes from the [`Nullability`] oracle.
-pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
-    // Operand-dependent: `ref.as_non_null(inner)` only traps when `inner`
-    // could itself produce null.
-    if let WirInstr::RefAsNonNull(inner) = instr {
-        return may_trap_in(inner, null) || !null.is_nonnull(inner);
+/// What an instruction traps on by itself, apart from what its operands do.
+pub(super) struct OwnTraps {
+    /// The operands, by position in evaluation order, it traps on when null.
+    on_null: [Option<usize>; 2],
+    /// Whether it can also trap for another reason: an index out of bounds, a
+    /// failed cast, a zero divisor, an explicit trap.
+    otherwise: bool,
+}
+
+impl OwnTraps {
+    const NONE: Self = Self::new(&[], false);
+
+    const fn new(on_null: &[usize], otherwise: bool) -> Self {
+        let mut slots = [None, None];
+        let mut i = 0;
+        while i < on_null.len() {
+            slots[i] = Some(on_null[i]);
+            i += 1;
+        }
+        Self {
+            on_null: slots,
+            otherwise,
+        }
     }
-    // Operand-dependent: `ref.cast T(struct.new T { … })` is identity
-    // (`struct.new` always produces exactly `T`), so the cast can't
-    // trap. Only handles the direct-`StructNew`-operand case; tracing
-    // through `LocalGet` would need def-use analysis.
-    if let WirInstr::RefCast { type_id, expr, .. } = instr
-        && let WirInstr::StructNew {
-            type_id: src_type, ..
-        } = expr.as_ref()
-        && src_type == type_id
-    {
-        return may_trap_in(expr, null);
+
+    /// The positions of the operands it traps on when null, in evaluation order.
+    pub(super) fn on_null(&self) -> impl Iterator<Item = usize> {
+        self.on_null.into_iter().flatten()
     }
-    // Operand-dependent: `struct.get` traps only on a null receiver (field
-    // indices are statically in range), `array.len` only on a null array.
-    if let WirInstr::StructGet { expr, .. } = instr {
-        return may_trap_in(expr, null) || !null.is_nonnull(expr);
-    }
-    if let WirInstr::ArrayLen(inner) = instr {
-        return may_trap_in(inner, null) || !null.is_nonnull(inner);
-    }
-    if matches!(
-        instr,
-        // GC array reads trap on null / OOB.
-        //
+}
+
+/// The one answer to how `instr` itself traps, which [`may_trap_in`] and the
+/// passes that move a null trap read alike.
+pub(super) fn own_traps(instr: &WirInstr) -> OwnTraps {
+    match instr {
+        WirInstr::StructGet { .. }
+        | WirInstr::StructSet { .. }
+        | WirInstr::ArrayLen(_)
+        | WirInstr::RefAsNonNull(_)
+        | WirInstr::I31GetS(_)
+        | WirInstr::I31GetU(_) => OwnTraps::new(&[0], false),
+        WirInstr::ArrayGet { .. }
+        | WirInstr::ArrayGetS { .. }
+        | WirInstr::ArrayGetU { .. }
+        | WirInstr::ArraySet { .. }
+        | WirInstr::ArrayFill { .. }
+        | WirInstr::RefCast {
+            nullable: false, ..
+        } => OwnTraps::new(&[0], true),
+        WirInstr::ArrayCopy { .. } => OwnTraps::new(&[0, 2], true),
+        // The function reference is evaluated after every argument.
+        WirInstr::CallRef { args, .. } => OwnTraps::new(&[args.len()], false),
         // `array.new_data` is absent although Wasm traps when offset + len
         // overruns the segment: its only two producers —
         // `translate_packed_array` and `promote_constant_arrays_to_data` —
         // emit offset 0 with the registered segment's exact length, so the
         // shape cannot overrun.
-        WirInstr::ArrayGet { .. }
-        | WirInstr::ArrayGetS { .. }
-        | WirInstr::ArrayGetU { .. }
-        // Ref cast / non-null assertion trap on failure. The
-        // operand-dependent early returns above peel off the
-        // statically-safe shapes; whatever's left here is the
-        // conservative case.
-        | WirInstr::RefAsNonNull(_)
-        | WirInstr::RefCast { .. }
-        // Integer divide / remainder trap on zero divisor (and signed
-        // div/rem of MIN by -1 overflows).
+        WirInstr::RefCast { nullable: true, .. }
         | WirInstr::I32DivS(_, _)
         | WirInstr::I32DivU(_, _)
         | WirInstr::I32RemS(_, _)
@@ -296,7 +303,6 @@ pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
         | WirInstr::I64DivU(_, _)
         | WirInstr::I64RemS(_, _)
         | WirInstr::I64RemU(_, _)
-        // Linear-memory loads trap on out-of-bounds access.
         | WirInstr::I32Load { .. }
         | WirInstr::I32Load8U { .. }
         | WirInstr::I32Load8S { .. }
@@ -304,18 +310,44 @@ pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
         | WirInstr::I32Load16S { .. }
         | WirInstr::I64Load { .. }
         | WirInstr::V128Load { .. }
-        // `table.get` traps when the index is out of bounds.
+        | WirInstr::I32Store { .. }
+        | WirInstr::I32Store8 { .. }
+        | WirInstr::I32Store16 { .. }
+        | WirInstr::I64Store { .. }
+        | WirInstr::V128Store { .. }
+        | WirInstr::MemoryFill { .. }
         | WirInstr::TableGet { .. }
-        // Explicit trap.
-        | WirInstr::Unreachable
-    ) {
-        return true;
+        | WirInstr::TableSet { .. }
+        | WirInstr::Unreachable => OwnTraps::new(&[], true),
+        _ => OwnTraps::NONE,
     }
-    let mut trap = false;
+}
+
+/// True if `instr` or any descendant can trap at runtime, which keeps a
+/// `Drop(value)` whose value is otherwise side-effect-free: Wado requires the
+/// trap of `let _ = arr[-1]` to be observable. Distinct from
+/// [`is_root_observable`], kept lax so CSE can still touch a trapping operation
+/// whose result *is* used. Nullability comes from the [`Nullability`] oracle.
+pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
+    // `ref.cast T(struct.new T { … })` is identity (`struct.new` always
+    // produces exactly `T`), so the cast can't trap. Only handles the direct
+    // operand; tracing through `LocalGet` would need def-use analysis.
+    if let WirInstr::RefCast { type_id, expr, .. } = instr
+        && let WirInstr::StructNew {
+            type_id: src_type, ..
+        } = expr.as_ref()
+        && src_type == type_id
+    {
+        return may_trap_in(expr, null);
+    }
+    let own = own_traps(instr);
+    let mut trap = own.otherwise;
+    let mut position = 0;
     instr.for_each_child(&mut |child| {
-        if !trap && may_trap_in(child, null) {
-            trap = true;
-        }
+        trap = trap
+            || may_trap_in(child, null)
+            || (own.on_null().any(|p| p == position) && !null.is_nonnull(child));
+        position += 1;
     });
     trap
 }
