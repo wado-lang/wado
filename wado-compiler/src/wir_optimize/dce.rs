@@ -107,14 +107,11 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
         return;
     }
 
-    // Translate an absolute Wasm function index (the value carried by
-    // `WirFuncId`) into a 0-based index into `module.functions`. Returns
-    // `None` for imported functions (whose index is below the base) and
-    // for indices outside the defined-function range. Imports have no
-    // body and cannot be DCE'd by this pass.
-    let base = module.defined_func_base;
-    let to_array_idx =
-        |abs_idx: u32| -> Option<u32> { abs_idx.checked_sub(base).filter(|i| *i < num_funcs) };
+    // Imports have no body and cannot be DCE'd by this pass.
+    let to_array_idx = |abs_idx: u32| -> Option<u32> {
+        let position = module.defined_func_position(abs_idx)?;
+        Some(u32::try_from(position).expect("function count fits u32"))
+    };
 
     let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(module.functions.len());
     for func in &module.functions {
@@ -345,28 +342,22 @@ fn compact_funcs(module: &mut WirPackage) {
         return;
     }
 
-    // Build remap: old WirFuncId (base + i) → new WirFuncId (base + new_i).
-    // The base is taken from `module.defined_func_base` so this works for
-    // both the GC module (`DEFINED_FUNC_BASE`) and the memory module (`0`).
-    let base = module.defined_func_base;
-    let dead = &module.dead_func_indices;
+    // Keep the survivors, mapping each one's old `WirFuncId` index to its new one.
+    let old_functions = std::mem::take(&mut module.functions);
     let mut remap: IndexMap<u32, u32> = IndexMap::default();
-    let mut new_i = 0u32;
-    for i in 0..u32::try_from(module.functions.len()).unwrap() {
-        if !dead.contains(&i) {
-            remap.insert(base + i, base + new_i);
-            new_i += 1;
+    for (old, func) in old_functions.into_iter().enumerate() {
+        if module
+            .dead_func_indices
+            .contains(&u32::try_from(old).unwrap())
+        {
+            continue;
         }
+        remap.insert(
+            module.defined_func_index(old),
+            module.defined_func_index(module.functions.len()),
+        );
+        module.functions.push(func);
     }
-
-    // Filter functions
-    let dead = module.dead_func_indices.clone();
-    let old_functions: Vec<_> = module.functions.drain(..).enumerate().collect();
-    module.functions = old_functions
-        .into_iter()
-        .filter(|(i, _)| !dead.contains(&u32::try_from(*i).unwrap()))
-        .map(|(_, f)| f)
-        .collect();
 
     // Remap WirFuncId in all function bodies
     for func in &mut module.functions {

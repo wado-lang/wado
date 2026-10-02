@@ -29,43 +29,39 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//iterator.wado/$test_0_basic_next" = fn();  // TypeId(12)
+type "functype//iterator.wado/$test_3_strings" = fn();  // TypeId(12)
 
-type "functype//iterator.wado/$test_1_empty" = fn();  // TypeId(13)
+type "functype//iterator.wado/$cm_export__$test_0_basic_next" = fn();  // TypeId(13)
 
-type "functype//iterator.wado/$test_3_strings" = fn();  // TypeId(14)
+type "functype//iterator.wado/$cm_export__$test_1_empty" = fn();  // TypeId(14)
 
-type "functype//iterator.wado/$cm_export__$test_0_basic_next" = fn();  // TypeId(15)
+type "functype//iterator.wado/$cm_export__$test_2_into_iter" = fn();  // TypeId(15)
 
-type "functype//iterator.wado/$cm_export__$test_1_empty" = fn();  // TypeId(16)
+type "functype//iterator.wado/$cm_export__$test_3_strings" = fn();  // TypeId(16)
 
-type "functype//iterator.wado/$cm_export__$test_2_into_iter" = fn();  // TypeId(17)
+type "functype//iterator.wado/$test_2_into_iter$cold0" = fn(i32);  // TypeId(17)
 
-type "functype//iterator.wado/$cm_export__$test_3_strings" = fn();  // TypeId(18)
+type "functype//iterator.wado/$test_3_strings$cold0" = fn();  // TypeId(18)
 
-type "functype//iterator.wado/$test_2_into_iter$cold0" = fn(i32);  // TypeId(19)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(19)
 
-type "functype//iterator.wado/$test_3_strings$cold0" = fn();  // TypeId(20)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(20)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(21)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(22)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(23)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(30)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(28)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -90,12 +86,6 @@ global global:iterator.wado::$const_obj_42: ref null Array<u8> = array.new_fixed
 global global:iterator.wado::$const_obj_43: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 global mut global:iterator.wado::$const_obj_44: ref null "core:prelude/string.wado//String" = ref.null none;
 
-fn "iterator.wado/$test_0_basic_next"() {
-}
-
-fn "iterator.wado/$test_1_empty"() {
-}
-
 fn "iterator.wado/$test_3_strings"() {
     if @unlikely(ref.is_null(ref.null none) == 0) {
         cold_path;
@@ -105,12 +95,10 @@ fn "iterator.wado/$test_3_strings"() {
 }
 
 fn "iterator.wado/$cm_export__$test_0_basic_next"() {
-    "iterator.wado/$test_0_basic_next"();
     "wasi/task-return"(0);
 }
 
 fn "iterator.wado/$cm_export__$test_1_empty"() {
-    "iterator.wado/$test_1_empty"();
     "wasi/task-return"(0);
 }
 

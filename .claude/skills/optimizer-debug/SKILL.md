@@ -118,6 +118,9 @@ naming the passes still reporting changes. From there:
    change. The tail of that list is the culprit set.
 2. `WADO_TRACE=const_fold` names each function `const_fold` changed, so a
    pass that keeps reporting a change points at the body it keeps rewriting.
+   `WADO_TRACE=inline_sites` names, per round, the callees spliced into each
+   caller: a late round splicing small helpers is a callee that only shrank
+   under the threshold once its own callees were spliced.
 3. `WADO_DUMP_PASS_BEFORE`/`_AFTER=<pass>` around a late round, diffed, says
    which of three it is: nothing rewritten at all (the pass reports a change it
    did not make), a rewrite a later pass deletes (two passes fighting), or real

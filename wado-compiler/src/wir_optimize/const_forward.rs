@@ -4,11 +4,10 @@
 //! folds constant comparisons, and eliminates dead branches.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirFunction, WirInstr, WirPackage, WirTypeDef, WirTypeId};
+use crate::wir::{WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
 pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
     let types = &module.types;
-    let defined_func_base = module.defined_func_base;
     for func_idx in 0..module.functions.len() {
         let Some(body) = module.functions[func_idx].body.take() else {
             continue;
@@ -16,7 +15,7 @@ pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
         // Locals connected by plain local-to-local copies share one GC object;
         // mutations and aliasing must apply to the whole group.
         let copy_groups = collect_copy_groups(&body);
-        let mut aliased = collect_aliased_locals(&body, &module.functions, defined_func_base);
+        let mut aliased = collect_aliased_locals(&body, module);
         widen_aliased_across_copy_groups(&mut aliased, &copy_groups);
         // Locals assigned exactly once. `local_const` folds a `LocalGet` to its
         // bound constant, which is only sound for single-assignment locals: a
@@ -238,14 +237,10 @@ fn widen_aliased_across_copy_groups(
 /// Locals a reference to which outlives any one statement: address taken, or
 /// passed at a parameter position the callee retains. These hold no
 /// fact at all; what escapes at a point in the flow is invalidated there.
-fn collect_aliased_locals(
-    body: &[WirInstr],
-    functions: &[WirFunction],
-    defined_func_base: u32,
-) -> IndexSet<String> {
+fn collect_aliased_locals(body: &[WirInstr], module: &WirPackage) -> IndexSet<String> {
     let mut aliased = IndexSet::default();
     for instr in body {
-        collect_aliased_in_instr(instr, &mut aliased, functions, defined_func_base, false);
+        collect_aliased_in_instr(instr, &mut aliased, module, false);
     }
     aliased
 }
@@ -258,20 +253,16 @@ fn collect_aliased_locals(
 fn collect_aliased_in_instr(
     instr: &WirInstr,
     aliased: &mut IndexSet<String>,
-    functions: &[WirFunction],
-    defined_func_base: u32,
+    module: &WirPackage,
     in_non_stores_arg: bool,
 ) {
     match instr {
         // Direct function calls: check stores for each parameter.
         WirInstr::Call { func_id, args } => {
-            // `WirFuncId` carries the absolute Wasm function index; defined
-            // functions start at `defined_func_base`. Imports sit below the
-            // base and carry no retention — unknown, so conservative.
-            let callee = func_id
-                .index()
-                .checked_sub(defined_func_base)
-                .and_then(|i| functions.get(i as usize));
+            // An import carries no retention: unknown, so conservative.
+            let callee = module
+                .defined_func_position(func_id.index())
+                .map(|position| &module.functions[position]);
             for (i, arg) in args.iter().enumerate() {
                 let stores_param = match callee {
                     Some(f) => match f.param_names.get(i) {
@@ -283,7 +274,7 @@ fn collect_aliased_in_instr(
                 if stores_param {
                     yielded_locals(arg, aliased);
                 }
-                collect_aliased_in_instr(arg, aliased, functions, defined_func_base, !stores_param);
+                collect_aliased_in_instr(arg, aliased, module, !stores_param);
             }
             return;
         }
@@ -300,9 +291,9 @@ fn collect_aliased_in_instr(
         } => {
             for arg in args {
                 yielded_locals(arg, aliased);
-                collect_aliased_in_instr(arg, aliased, functions, defined_func_base, false);
+                collect_aliased_in_instr(arg, aliased, module, false);
             }
-            collect_aliased_in_instr(callee, aliased, functions, defined_func_base, false);
+            collect_aliased_in_instr(callee, aliased, module, false);
             return;
         }
         // RefAsNonNull of a LocalGet: address taken — but suppress if inside
@@ -315,13 +306,7 @@ fn collect_aliased_in_instr(
         _ => {}
     }
     instr.for_each_child(&mut |child| {
-        collect_aliased_in_instr(
-            child,
-            aliased,
-            functions,
-            defined_func_base,
-            in_non_stores_arg,
-        );
+        collect_aliased_in_instr(child, aliased, module, in_non_stores_arg);
     });
 }
 
@@ -1162,7 +1147,7 @@ mod tests {
 
     fn run_forward(body: &mut [WirInstr], types: &[WirTypeDef]) {
         let copy_groups = collect_copy_groups(body);
-        let mut aliased = collect_aliased_locals(body, &[], 0);
+        let mut aliased = collect_aliased_locals(body, &WirPackage::empty());
         widen_aliased_across_copy_groups(&mut aliased, &copy_groups);
         run_forward_with(body, types, &aliased, &copy_groups);
     }
