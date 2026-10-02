@@ -964,18 +964,26 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 {
     alts_0_0: {
         pos = alts_saved_0;
         let mut accept_1: i32 = -1;
+        let mut la_reach_1: i32 = -1;
         if pos >= chars.len() { break alts_0_0; }
         if !((chars[pos] matches { 'a'..='z' })) { break alts_0_0; }
         pos += 1;
-        let peek_save_2 = pos;
-        let mut peek_ok_2 = false;
-        peek_2: {
-            if !( chars_text(chars, start, pos) == "cat" ) { break peek_2; }
-            peek_ok_2 = true;
+        let mut la_tot_2: i32 = -1;
+        let peek_save_3 = pos;
+        let mut peek_ok_3 = false;
+        let mut peek_end_3: i32 = -1;
+        peek_3: {
+            if !( chars_text(chars, start, pos) == "cat" ) { break peek_3; }
+            peek_end_3 = pos;
+            peek_ok_3 = true;
         }
-        pos = peek_save_2;
-        if peek_ok_2 {
-            accept_1 = peek_save_2;
+        pos = peek_save_3;
+        if peek_ok_3 {
+            la_tot_2 = peek_end_3;
+        }
+        if la_tot_2 >= 0 && la_tot_2 >= la_reach_1 {
+            la_reach_1 = la_tot_2;
+            accept_1 = pos;
         }
         loop {
             let la_saved_1 = pos;
@@ -983,15 +991,22 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 {
                 if pos >= chars.len() { break la_rep_1; }
                 if !((chars[pos] matches { 'a'..='z' })) { break la_rep_1; }
                 pos += 1;
-                let peek_save_3 = pos;
-                let mut peek_ok_3 = false;
-                peek_3: {
-                    if !( chars_text(chars, start, pos) == "cat" ) { break peek_3; }
-                    peek_ok_3 = true;
+                let mut la_tot_4: i32 = -1;
+                let peek_save_5 = pos;
+                let mut peek_ok_5 = false;
+                let mut peek_end_5: i32 = -1;
+                peek_5: {
+                    if !( chars_text(chars, start, pos) == "cat" ) { break peek_5; }
+                    peek_end_5 = pos;
+                    peek_ok_5 = true;
                 }
-                pos = peek_save_3;
-                if peek_ok_3 {
-                    accept_1 = peek_save_3;
+                pos = peek_save_5;
+                if peek_ok_5 {
+                    la_tot_4 = peek_end_5;
+                }
+                if la_tot_4 >= 0 && la_tot_4 >= la_reach_1 {
+                    la_reach_1 = la_tot_4;
+                    accept_1 = pos;
                 }
                 continue;
             }
@@ -1026,14 +1041,14 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_4 = pos;
-        rep_4: {
-            if pos >= chars.len() { break rep_4; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_4; }
+        let rep_saved_6 = pos;
+        rep_6: {
+            if pos >= chars.len() { break rep_6; }
+            if !((chars[pos] matches { 'a'..='z' })) { break rep_6; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_4;
+        pos = rep_saved_6;
         break;
     }
     return pos;
