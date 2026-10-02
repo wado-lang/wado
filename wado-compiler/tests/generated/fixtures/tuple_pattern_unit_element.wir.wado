@@ -72,10 +72,10 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:tuple_pattern_unit_element.wado::$const_obj_4: ref null Array<u8> = array.new_fixed<u8>(32);
-global global:tuple_pattern_unit_element.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(40, 41);
-global global:tuple_pattern_unit_element.wado::$const_obj_7: ref null Array<u8> = array.new_fixed<u8>(38, 40, 41);
-global global:tuple_pattern_unit_element.wado::$const_obj_10: ref null Array<u8> = array.new_fixed<u8>(38);
+global global:tuple_pattern_unit_element.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(32);
+global global:tuple_pattern_unit_element.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(40, 41);
+global global:tuple_pattern_unit_element.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(38, 40, 41);
+global global:tuple_pattern_unit_element.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(38);
 
 fn "tuple_pattern_unit_element.wado/run"() with Stdout {
     let $load_7: ref Array<u8>;
@@ -90,10 +90,10 @@ fn "tuple_pattern_unit_element.wado/run"() with Stdout {
     let rx_250: i32;
     let tx_251: i32;
     x = struct.new "core:prelude/types.wado//Box<i32>" { value: 7 };
-    if ref.is_null(local.tee o(ref.as_non_null(block -> ref "tuple//[&(), core:prelude/types.wado/Box<i32>]" {
+    if ref.is_null(local.tee o(block -> ref "tuple//[&(), core:prelude/types.wado/Box<i32>]" {
         struct.new "tuple//[&(), core:prelude/types.wado/Box<i32>]" { 1: x };
-    }))) == 0 {
-        v_3 = ref.as_non_null(o).1;
+    })) == 0 {
+        v_3 = o.1;
         $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(v_3.value, $local_10);
         rx_250 = builtin::i32_wrap_i64(local.tee packed_249("wasi/stream-new"()));
@@ -104,7 +104,7 @@ fn "tuple_pattern_unit_element.wado/run"() with Stdout {
     } else {
     }
     if ref.is_null(o) == 0 {
-        v_3 = ref.as_non_null(o).1;
+        v_3 = o.1;
         $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
         $local_1_35 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         if @unlikely(local.tee rx_250(0 + 1) > builtin::array_len($local_1_35.repr)) {

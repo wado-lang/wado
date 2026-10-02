@@ -149,14 +149,18 @@ fn "resource_method_static.wado/$cm_binding__TcpSocket_create"(address_family) w
             address_family = builtin::load_u8(($outptr + 4) + 4);
             $local_7 = ref.null none;
             if address_family != 0 {
-                $local_7 = ref.as_non_null(address_family = builtin::load_i32((($outptr + 4) + 4) + 4); arr_13 = builtin::array_new<u8>(local.tee len_9(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); i = 0; b16: block {
+                address_family = builtin::load_i32((($outptr + 4) + 4) + 4);
+                arr_13 = builtin::array_new<u8>(local.tee len_9(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)));
+                i = 0;
+                b16: block {
                     l17: loop {
                         break_if b16 i >= len_9;
                         builtin::array_set_u8(arr_13, i, builtin::load_u8(address_family + i));
                         i = i + 1;
                         continue l17;
                     };
-                }; struct.new "core:prelude/string.wado//String" { repr: arr_13, used: len_9 });
+                };
+                $local_7 = struct.new "core:prelude/string.wado//String" { repr: arr_13, used: len_9 };
                 drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             struct.new "wasi:sockets/types.wado//ErrorCode::Other" { discriminant: 14, payload_0: $local_7 };

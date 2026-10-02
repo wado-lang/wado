@@ -102,8 +102,8 @@ import fn wasi/resource-drop:wasi/sockets/types.wado#tcp-socket from "wasi/resou
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:resource_method_instance.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 97, 105, 108, 101, 100, 32, 116, 111, 32, 99, 114, 101, 97, 116, 101, 32, 115, 111, 99, 107, 101, 116), used: 23 };
-global global:resource_method_instance.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 115, 111, 117, 114, 99, 101, 32, 101, 120, 116, 114, 97, 99, 116, 101, 100, 32, 102, 114, 111, 109, 32, 82, 101, 115, 117, 108, 116), used: 30 };
+global global:resource_method_instance.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 97, 105, 108, 101, 100, 32, 116, 111, 32, 99, 114, 101, 97, 116, 101, 32, 115, 111, 99, 107, 101, 116), used: 23 };
+global global:resource_method_instance.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 115, 111, 117, 114, 99, 101, 32, 101, 120, 116, 114, 97, 99, 116, 101, 100, 32, 102, 114, 111, 109, 32, 82, 101, 115, 117, 108, 116), used: 30 };
 
 fn "resource_method_instance.wado/run"() with Stdout, TcpSocket {
     let result: ref "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
@@ -180,14 +180,18 @@ fn "resource_method_instance.wado/$cm_binding__TcpSocket_create"(address_family)
             address_family = builtin::load_u8(($outptr + 4) + 4);
             $local_7 = ref.null none;
             if address_family != 0 {
-                $local_7 = ref.as_non_null(address_family = builtin::load_i32((($outptr + 4) + 4) + 4); arr_13 = builtin::array_new<u8>(local.tee len_9(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4))); i = 0; b17: block {
+                address_family = builtin::load_i32((($outptr + 4) + 4) + 4);
+                arr_13 = builtin::array_new<u8>(local.tee len_9(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)));
+                i = 0;
+                b17: block {
                     l18: loop {
                         break_if b17 i >= len_9;
                         builtin::array_set_u8(arr_13, i, builtin::load_u8(address_family + i));
                         i = i + 1;
                         continue l18;
                     };
-                }; struct.new "core:prelude/string.wado//String" { repr: arr_13, used: len_9 });
+                };
+                $local_7 = struct.new "core:prelude/string.wado//String" { repr: arr_13, used: len_9 };
                 drop("mem/realloc"(builtin::load_i32((($outptr + 4) + 4) + 4), builtin::load_i32(((($outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             struct.new "wasi:sockets/types.wado//ErrorCode::Other" { discriminant: 14, payload_0: $local_7 };

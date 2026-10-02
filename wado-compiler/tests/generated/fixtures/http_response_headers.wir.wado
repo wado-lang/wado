@@ -289,9 +289,9 @@ import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-drop:wasi/http/types.wado#request";
 import fn wasi/future-write from "wasi/future-write";
 
-global global:http_response_headers.wado::$const_obj_0: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
-global global:http_response_headers.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 119, 97, 100, 111), used: 6 };
-global global:http_response_headers.wado::$const_obj_2: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+global global:http_response_headers.wado::$const_obj_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+global global:http_response_headers.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 119, 97, 100, 111), used: 6 };
+global global:http_response_headers.wado::$const_obj_2: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
 
 fn "http_response_headers.wado/$cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
@@ -348,14 +348,18 @@ fn "http_response_headers.wado/$cm_binding__Fields_append"(self, name, value) wi
         self = builtin::load_u8((self_16 + 4) + 4);
         $local_11 = ref.null none;
         if self != 0 {
-            $local_11 = ref.as_non_null(self = builtin::load_i32(((self_16 + 4) + 4) + 4); bytes_14 = builtin::array_new<u8>(local.tee ptr_15(builtin::load_i32((((self_16 + 4) + 4) + 4) + 4))); i_22 = 0; b10: block {
+            self = builtin::load_i32(((self_16 + 4) + 4) + 4);
+            bytes_14 = builtin::array_new<u8>(local.tee ptr_15(builtin::load_i32((((self_16 + 4) + 4) + 4) + 4)));
+            i_22 = 0;
+            b10: block {
                 l11: loop {
                     break_if b10 i_22 >= ptr_15;
                     builtin::array_set_u8(bytes_14, i_22, builtin::load_u8(self + i_22));
                     i_22 = i_22 + 1;
                     continue l11;
                 };
-            }; struct.new "core:prelude/string.wado//String" { repr: bytes_14, used: ptr_15 });
+            };
+            $local_11 = struct.new "core:prelude/string.wado//String" { repr: bytes_14, used: ptr_15 };
             drop("mem/realloc"(builtin::load_i32(((self_16 + 4) + 4) + 4), builtin::load_i32((((self_16 + 4) + 4) + 4) + 4), 1, 0));
         }
         struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: $local_11 };

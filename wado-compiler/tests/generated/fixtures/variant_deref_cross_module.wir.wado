@@ -183,11 +183,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:variant_deref_cross_module.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
-global global:variant_deref_cross_module.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100);
-global global:core:prelude/format.wado::$const_obj_4: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
-global global:core:prelude/format.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(92, 117, 123);
-global global:core:prelude/primitive.wado::$const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:variant_deref_cross_module.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
+global global:variant_deref_cross_module.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100);
+global global:core:prelude/format.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
+global global:core:prelude/format.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
+global global:core:prelude/primitive.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "variant_deref_cross_module.wado/$test_0_recursive_variant_deref_from_another_module"() {
     let out: ref "core:prelude/string.wado//String";
@@ -254,10 +254,10 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
     let v_3: ref "core:prelude//List<./sub/variant_deref_helper.wado/Elem>";
     return struct.new "./sub/variant_deref_helper.wado//Alt" { label: (if ref.is_null(local.tee v_1(v.label)) == 0 -> ref null "core:prelude/string.wado//String" {
         $vc_payload_0 = ref.as_non_null(v_1);
-        struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_0.repr; $load_2 = $vc_payload_0.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2), used: $load_2 };
+        struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_0.repr; $load_2 = $vc_payload_0.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
     } else {
         v_1;
-    }), elements: ref.as_non_null(v_3 = v.elements; struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: ref.as_non_null(let $array_clone_src_4: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_3.repr; $load_2 = v_3.used; let $array_clone_dst_5: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">($load_2); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "./sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
+    }), elements: v_3 = v.elements; struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: let $array_clone_src_4: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_3.repr; $load_2 = v_3.used; let $array_clone_dst_5: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">($load_2); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "./sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
         l6: loop {
             break_if $array_clone_deep_prefix $array_clone_i_7 >= $load_2;
             $array_clone_elem_8 = builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Elem">($array_clone_src_4, $array_clone_i_7);
@@ -269,13 +269,13 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
             $array_clone_i_7 = $array_clone_i_7 + 1;
             continue l6;
         };
-    }; $array_clone_dst_5), used: v_3.used }) };
+    }; $array_clone_dst_5, used: v_3.used } };
 }
 
 fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/LabelElem"(v) {
     let $load_2: i32;
     let v_1: ref "core:prelude/string.wado//String";
-    return struct.new "./sub/variant_deref_helper.wado//LabelElem" { name: ref.as_non_null(v_1 = v.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_1.repr; $load_2 = v_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2), used: $load_2 }), element: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v.element)) };
+    return struct.new "./sub/variant_deref_helper.wado//LabelElem" { name: v_1 = v.name; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_1.repr; $load_2 = v_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 }, element: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v.element)) };
 }
 
 fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v) {
@@ -286,19 +286,19 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
     let $vc_payload_5: ref "./sub/variant_deref_helper.wado//LabelElem";
     return (if ref.test "./sub/variant_deref_helper.wado//Elem::TokenRef"(v) -> ref "./sub/variant_deref_helper.wado//Elem" {
         $vc_payload_0 = ref.cast "./sub/variant_deref_helper.wado//Elem::TokenRef"(v).payload_0;
-        struct.new "./sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_12: ref Array<u8>; $array_clone_src_12 = $vc_payload_0.repr; $load_1 = $vc_payload_0.used; let $array_clone_dst_13: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_13(builtin::array_new<u8>($load_1)), 0, $array_clone_src_12, 0, $load_1); $array_clone_dst_13), used: $load_1 } };
+        struct.new "./sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_12: ref Array<u8>; $array_clone_src_12 = $vc_payload_0.repr; $load_1 = $vc_payload_0.used; let $array_clone_dst_13: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_13(builtin::array_new<u8>($load_1)), 0, $array_clone_src_12, 0, $load_1); $array_clone_dst_13, used: $load_1 } };
     } else if ref.test "./sub/variant_deref_helper.wado//Elem::Literal"(v) -> ref "./sub/variant_deref_helper.wado//Elem" {
         $vc_payload_0 = ref.cast "./sub/variant_deref_helper.wado//Elem::Literal"(v).payload_0;
-        struct.new "./sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null($array_clone_dst_13 = $vc_payload_0.repr; builtin::array_copy<u8>(local.tee $array_clone_src_12(builtin::array_new<u8>(local.tee $load_1($vc_payload_0.used))), 0, $array_clone_dst_13, 0, $load_1); $array_clone_src_12), used: $load_1 } };
+        struct.new "./sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_13 = $vc_payload_0.repr; builtin::array_copy<u8>(local.tee $array_clone_src_12(builtin::array_new<u8>(local.tee $load_1($vc_payload_0.used))), 0, $array_clone_dst_13, 0, $load_1); $array_clone_src_12, used: $load_1 } };
     } else if ref.test "./sub/variant_deref_helper.wado//Elem::RuleRef"(v) -> ref "./sub/variant_deref_helper.wado//Elem" {
         $vc_payload_0 = ref.cast "./sub/variant_deref_helper.wado//Elem::RuleRef"(v).payload_0;
-        struct.new "./sub/variant_deref_helper.wado//Elem::RuleRef" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null($array_clone_src_12 = $vc_payload_0.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_13(builtin::array_new<u8>(local.tee $load_1($vc_payload_0.used))), 0, $array_clone_src_12, 0, $load_1); $array_clone_dst_13), used: $load_1 } };
+        struct.new "./sub/variant_deref_helper.wado//Elem::RuleRef" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_12 = $vc_payload_0.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_13(builtin::array_new<u8>(local.tee $load_1($vc_payload_0.used))), 0, $array_clone_src_12, 0, $load_1); $array_clone_dst_13, used: $load_1 } };
     } else if ref.test "./sub/variant_deref_helper.wado//Elem::Repeat"(v) -> ref "./sub/variant_deref_helper.wado//Elem" {
         $vc_payload_3 = ref.cast "./sub/variant_deref_helper.wado//Elem::Repeat"(v).payload_0;
         struct.new "./sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem"($vc_payload_3)) };
     } else if ref.test "./sub/variant_deref_helper.wado//Elem::Group"(v) -> ref "./sub/variant_deref_helper.wado//Elem" {
         $vc_payload_4 = ref.cast "./sub/variant_deref_helper.wado//Elem::Group"(v).payload_0;
-        struct.new "./sub/variant_deref_helper.wado//Elem::Group" { discriminant: 4, payload_0: struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Alt>" { repr: ref.as_non_null(let $array_clone_src_1: ref "Array<./sub/variant_deref_helper.wado/Alt>"; $array_clone_src_1 = $vc_payload_4.repr; $load_1 = $vc_payload_4.used; let $array_clone_dst_2: ref "Array<./sub/variant_deref_helper.wado/Alt>"; $array_clone_dst_2 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Alt">($load_1); let $array_clone_i_4: i32; $array_clone_i_4 = 0; let $array_clone_elem_5: ref null "./sub/variant_deref_helper.wado//Alt"; $array_clone_deep_prefix: block {
+        struct.new "./sub/variant_deref_helper.wado//Elem::Group" { discriminant: 4, payload_0: struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Alt>" { repr: let $array_clone_src_1: ref "Array<./sub/variant_deref_helper.wado/Alt>"; $array_clone_src_1 = $vc_payload_4.repr; $load_1 = $vc_payload_4.used; let $array_clone_dst_2: ref "Array<./sub/variant_deref_helper.wado/Alt>"; $array_clone_dst_2 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Alt">($load_1); let $array_clone_i_4: i32; $array_clone_i_4 = 0; let $array_clone_elem_5: ref null "./sub/variant_deref_helper.wado//Alt"; $array_clone_deep_prefix: block {
             l13: loop {
                 break_if $array_clone_deep_prefix $array_clone_i_4 >= $load_1;
                 $array_clone_elem_5 = builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Alt">($array_clone_src_1, $array_clone_i_4);
@@ -310,7 +310,7 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 continue l13;
             };
-        }; $array_clone_dst_2), used: $vc_payload_4.used } };
+        }; $array_clone_dst_2, used: $vc_payload_4.used } };
     } else {
         $vc_payload_5 = ref.cast "./sub/variant_deref_helper.wado//Elem::Label"(v).payload_0;
         struct.new "./sub/variant_deref_helper.wado//Elem::Label" { discriminant: 5, payload_0: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/LabelElem"($vc_payload_5)) };
@@ -390,12 +390,12 @@ fn "variant_deref_cross_module.wado/process$scalar"(elem, out) {
                 break_if b23 start_30 >= n_25;
                 drop((if ref.is_null(local.tee v_69(local.tee v_68(builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Alt">($sroa_$iter_0_repr_75, start_30)).label)) == 0 -> ref null "core:prelude/string.wado//String" {
                     name_2 = ref.as_non_null(v_69);
-                    struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name_2.repr; new_used_29 = name_2.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(new_used_29)), 0, $array_clone_src_1, 0, new_used_29); $array_clone_dst_2), used: new_used_29 };
+                    struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name_2.repr; new_used_29 = name_2.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(new_used_29)), 0, $array_clone_src_1, 0, new_used_29); $array_clone_dst_2, used: new_used_29 };
                 } else {
                     v_69;
                 }));
                 v_71 = v_68.elements;
-                v_71 = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: ref.as_non_null(let $array_clone_src_4: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_71.repr; let $array_clone_len_6: i32; $array_clone_len_6 = v_71.used; let $array_clone_dst_5: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">($array_clone_len_6); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "./sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
+                v_71 = struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: let $array_clone_src_4: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_src_4 = v_71.repr; let $array_clone_len_6: i32; $array_clone_len_6 = v_71.used; let $array_clone_dst_5: ref "Array<./sub/variant_deref_helper.wado/Elem>"; $array_clone_dst_5 = builtin::array_new<ref "./sub/variant_deref_helper.wado//Elem">($array_clone_len_6); let $array_clone_i_7: i32; $array_clone_i_7 = 0; let $array_clone_elem_8: ref null "./sub/variant_deref_helper.wado//Elem"; $array_clone_deep_prefix: block {
                     l26: loop {
                         break_if $array_clone_deep_prefix $array_clone_i_7 >= $array_clone_len_6;
                         $array_clone_elem_8 = builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Elem">($array_clone_src_4, $array_clone_i_7);
@@ -407,7 +407,7 @@ fn "variant_deref_cross_module.wado/process$scalar"(elem, out) {
                         $array_clone_i_7 = $array_clone_i_7 + 1;
                         continue l26;
                     };
-                }; $array_clone_dst_5), used: v_71.used };
+                }; $array_clone_dst_5, used: v_71.used };
                 start_30 = start_30 + 1;
                 "variant_deref_cross_module.wado/process_all$scalar"(v_71, out);
                 continue l24;

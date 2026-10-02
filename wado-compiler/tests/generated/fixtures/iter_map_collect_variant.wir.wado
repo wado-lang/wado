@@ -101,7 +101,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:iter_map_collect_variant.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
+global global:iter_map_collect_variant.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
 
 fn "iter_map_collect_variant.wado/run"() with Stdout {
     let self_3: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>";
@@ -303,10 +303,10 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice
         break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_iter_map_collect_variant_wado_Color__core_prelude_traits_wado_Iterator__next_0 local.tee $load_1(local.tee $load_0(self.inner).index) >= $load_0.end;
         item_4 = builtin::array_get_value<ref "iter_map_collect_variant.wado//Color">($load_0.repr, $load_1);
         $load_0.index = $load_1 + 1;
-        return ref.as_non_null(block -> ref "core:prelude/string.wado//String" {
+        return block -> ref "core:prelude/string.wado//String" {
             let $indirect_call_1: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(self.f)).env, item_4);
-        });
+        };
     };
     return ref.null none;
 }
