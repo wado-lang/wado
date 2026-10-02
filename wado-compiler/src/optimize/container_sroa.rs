@@ -8,7 +8,7 @@
 //! replacing the shape whitelist with `value_copy_demote`'s element-immutability
 //! query so any element-immutable method counts as a SROA-safe use.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -222,13 +222,19 @@ enum CandidateInit {
 pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     // Build the method catalog + signature-kind index once, using an immutable
     // borrow on functions. Both indexes are derived from the same scan.
-    let (catalog, method_sig) = {
+    let (catalog, mut method_sig) = {
         let type_table = project.type_table.borrow();
         build_method_catalog(project, &type_table)
     };
     if catalog.is_empty() {
         return false;
     }
+    // The demotions walk every body once per element type, and most rounds
+    // reach no candidate, so they run at the first function holding one. Each
+    // only unclassifies, so a function with no candidate under the raw index
+    // has none under the demoted one; and every function before the first is
+    // left untouched, so the demotions see the program as the pass found it.
+    let mut demoted = false;
 
     // Build a struct lookup: (name, module_source) → &NirStruct. Used by
     // `collect_candidates` to expand `List<UserStruct>` element types.
@@ -245,12 +251,28 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
         let func_rc = &project.functions[fid.index()];
-        // Skip CM bindings (ABI bridges) and body-less declarations.
         {
             let func = func_rc.borrow();
-            if func.is_cm_binding || func.body.is_none() {
+            // Skip CM bindings (ABI bridges) and body-less declarations.
+            let Some(body) = func.body.as_ref().filter(|_| !func.is_cm_binding) else {
+                return false;
+            };
+            let type_table = type_table_rc.borrow();
+            if collect_candidates(
+                body,
+                &type_table,
+                &struct_index,
+                &method_sig,
+                &value_copy_ids,
+            )
+            .is_empty()
+            {
                 return false;
             }
+        }
+        if !demoted {
+            demoted = true;
+            demote_unsafe_families(project, &type_table_rc.borrow(), &mut method_sig);
         }
         let mut func = func_rc.borrow_mut();
         let rule = ContainerSroaRule {
@@ -316,7 +338,8 @@ fn build_struct_index(structs: &[NirStruct]) -> StructIndex<'_> {
 
 /// Build a catalog of monomorphized `List<T>::{method}` function references in
 /// this project, plus a parallel `SigKindIndex` that classifies each method
-/// family into an `ListMethodKind` based on its signature shape.
+/// family into an `ListMethodKind` based on its signature shape alone, before
+/// [`demote_unsafe_families`] reads the bodies.
 fn build_method_catalog(
     project: &NirPackage,
     type_table: &TypeTable,
@@ -378,11 +401,17 @@ fn build_method_catalog(
             id_kinds.insert(func_id, kind);
         }
     }
-    let mut sig = MethodSig {
+    let sig = MethodSig {
         id_kinds,
         id_sigkeys,
         kind_index,
     };
+    (catalog, sig)
+}
+
+/// Unclassify the method families whose members do more with a list than the
+/// rewrite can split per field.
+fn demote_unsafe_families(project: &NirPackage, type_table: &TypeTable, sig: &mut MethodSig) {
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let builtin_ids = |wanted: CtfeBuiltin| -> IndexSet<FuncId> {
         ctfe_builtins
@@ -392,14 +421,13 @@ fn build_method_catalog(
     };
     let array_len = builtin_ids(CtfeBuiltin::ArrayLen);
     let array_new = builtin_ids(CtfeBuiltin::ArrayNew);
-    demote_element_reading_queries(project, type_table, &array_len, &mut sig);
-    demote_filling_constructors(project, &array_new, &mut sig);
+    demote_element_reading_queries(project, type_table, &array_len, sig);
+    demote_filling_constructors(project, &array_new, sig);
     let storage_builtins: IndexSet<FuncId> = ctfe_builtins
         .iter()
         .filter_map(|(&id, &b)| is_storage_builtin(b).then_some(id))
         .collect();
-    demote_element_inspecting_handlers(project, type_table, &storage_builtins, &mut sig);
-    (catalog, sig)
+    demote_element_inspecting_handlers(project, type_table, &storage_builtins, sig);
 }
 
 /// The members of `kind` in `sig`, by id.
@@ -599,7 +627,11 @@ fn movers_of(
     storage_builtins: &IndexSet<FuncId>,
     value_copy_ids: &IndexSet<FuncId>,
 ) -> IndexSet<FuncId> {
-    let key = type_table.type_key(element);
+    let roles = ElementRoles {
+        type_table,
+        element: type_table.type_key(element),
+        memo: RefCell::default(),
+    };
     let mut movers: IndexSet<FuncId> = project
         .functions
         .iter()
@@ -612,7 +644,7 @@ fn movers_of(
                 .iter()
                 .map(|p| p.type_id)
                 .chain(std::iter::once(f.return_type))
-                .any(|t| holds_element(type_table, t, key));
+                .any(|t| roles.of(t) != ElementRole::Unrelated);
             touches.then_some(f.id).flatten()
         })
         .filter(|id| !value_copy_ids.contains(id))
@@ -623,9 +655,42 @@ fn movers_of(
                 || storage_builtins.contains(callee)
                 || value_copy_ids.contains(callee)
         };
-        moves_elements_only(func, type_table, key, &passes)
+        moves_elements_only(func, &roles, &passes)
     });
     movers
+}
+
+/// What a type is to the element type [`movers_of`] asks about.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ElementRole {
+    Element,
+    Holder,
+    Unrelated,
+}
+
+/// [`ElementRole`] by type, memoized: every operand of every body is asked,
+/// and the same few types recur.
+struct ElementRoles<'a> {
+    type_table: &'a TypeTable,
+    element: TypeKey,
+    memo: RefCell<IndexMap<TypeId, ElementRole>>,
+}
+
+impl ElementRoles<'_> {
+    fn of(&self, ty: TypeId) -> ElementRole {
+        if let Some(&role) = self.memo.borrow().get(&ty) {
+            return role;
+        }
+        let role = if self.type_table.type_key(ty) == self.element {
+            ElementRole::Element
+        } else if holds_element(self.type_table, ty, self.element) {
+            ElementRole::Holder
+        } else {
+            ElementRole::Unrelated
+        };
+        self.memo.borrow_mut().insert(ty, role);
+        role
+    }
 }
 
 /// Whether a value of type `ty` is, or holds, a value of the type `element`.
@@ -683,8 +748,7 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
 /// holds one to no callee but those `passes` admits.
 fn moves_elements_only(
     func: &NirFunction,
-    type_table: &TypeTable,
-    element: TypeKey,
+    roles: &ElementRoles,
     passes: &dyn Fn(&FuncId) -> bool,
 ) -> bool {
     let Some(body) = func.body.as_ref() else {
@@ -692,11 +756,13 @@ fn moves_elements_only(
     };
     let mut ok = true;
     body.for_each_reachable_node(|node| {
+        if !ok {
+            return;
+        }
         body.for_each_operand(node, |op| {
-            let ty = body.operand_type(op);
-            let is_element = type_table.type_key(ty) == element;
-            if ok && (is_element || holds_element(type_table, ty, element)) {
-                ok = accepts_element_operand(body, node, op, is_element, passes);
+            let role = roles.of(body.operand_type(op));
+            if ok && role != ElementRole::Unrelated {
+                ok = accepts_element_operand(body, node, op, role == ElementRole::Element, passes);
             }
         });
     });
