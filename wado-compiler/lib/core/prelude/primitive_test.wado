@@ -619,3 +619,27 @@ test "BITS is the width in bits" {
     assert i64::BITS == 64 && u64::BITS == 64 && f64::BITS == 64;
     assert i128::BITS == 128 && u128::BITS == 128;
 }
+
+test "cmp answers each Ordering, a float's NaN greatest" {
+    let one: f32 = builtin::black_box(1.0);
+    let nan: f32 = builtin::black_box(f32::NAN);
+    assert one.cmp(&nan) matches { Less } && nan.cmp(&one) matches { Greater };
+    assert nan.cmp(&nan) matches { Equal };
+    let low: u64 = builtin::black_box(1);
+    let high: u64 = builtin::black_box(u64::MAX);
+    assert low.cmp(&high) matches { Less } && high.cmp(&low) matches { Greater };
+    assert low.cmp(&low) matches { Equal };
+}
+
+test "an f32 inspects as the same value in f64 does" {
+    let exact: List<f64> = [1.5, 2.0, 0.25, 1048576.0, -0.0, f64::INFINITY, -f64::INFINITY, f64::NAN];
+    for let x of exact {
+        let narrow = builtin::black_box(x as f32);
+        assert `${narrow:?}` == `${x:?}`;
+    }
+    let tiny: f32 = builtin::black_box(0.00001);
+    let vast: f32 = builtin::black_box(1.0e20);
+    assert `${tiny:?}` == `${0.00001:?}` && `${vast:?}` == `${1.0e20:?}`;
+    let half: f32 = builtin::black_box(1.5);
+    assert `${half:.2?}` == "1.50";
+}
