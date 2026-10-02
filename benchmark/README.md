@@ -43,8 +43,7 @@ Infer — 24 samples of the forward path alone, no gradients:
 | Rust           | 4.45 k tokens/s | 86.252 ms | 1.05x   |
 | JavaScript     | 3.98 k tokens/s | 96.395 ms | 1.17x   |
 
-Wado beats JavaScript on both phases and Rust on inference, but trails Rust on
-training. Training spends most of its time in the backward pass, which
+Training spends most of its time in the backward pass, which
 sorts the whole graph topologically and then walks every edge again. That is
 pointer chasing over GC objects, where Rust's flat `Vec` of indices is at its
 strongest. Inference never builds that traversal.
@@ -338,8 +337,8 @@ Four workers — a small VM running one instance:
 | `POST /event/abcd1234/comment`  |     408,389 |                  247,858 |               131,493 |                    74,865 |
 | `GET /static/index.html`        |     413,977 |                  258,881 |               130,829 |                    82,791 |
 
-`wado serve` places third at both shapes, ahead of Hono on Node. What separates
-it from Axum is the component-model boundary, not the compiled code.
+What separates `wado serve` from Axum is the component-model boundary, not the
+compiled code.
 Lifting the arguments of a `wasi:http` call and lowering its result costs
 several times the guest code that call wraps.
 
