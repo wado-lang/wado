@@ -425,24 +425,45 @@ fn members_of(sig: &MethodSig, kind: ListMethodKind) -> IndexSet<FuncId> {
 }
 
 /// Shrink `holding` to the members whose `holds` stays true against what is
-/// left of it.
+/// left of it. `holds` sees `holding` only through the membership query it is
+/// handed.
 fn greatest_fixpoint(
     project: &NirPackage,
     holding: &mut IndexSet<FuncId>,
-    holds: impl Fn(&NirFunction, &IndexSet<FuncId>) -> bool,
+    holds: impl Fn(&NirFunction, &dyn Fn(&FuncId) -> bool) -> bool,
 ) {
-    loop {
-        let failing: Vec<FuncId> = holding
+    // A verdict changes only once a member it was answered `true` about
+    // leaves, so each round rechecks just the dependents of the last removals.
+    let mut dependents: IndexMap<FuncId, Vec<FuncId>> = IndexMap::default();
+    let mut pending: IndexSet<FuncId> = holding.clone();
+    while !pending.is_empty() {
+        let mut failing = Vec::new();
+        for id in pending {
+            let relied_on = RefCell::new(Vec::new());
+            let is_member = |callee: &FuncId| {
+                let member = holding.contains(callee);
+                if member {
+                    relied_on.borrow_mut().push(*callee);
+                }
+                member
+            };
+            if holds(&project.functions[id.index()].borrow(), &is_member) {
+                for callee in relied_on.into_inner() {
+                    dependents.entry(callee).or_default().push(id);
+                }
+            } else {
+                failing.push(id);
+            }
+        }
+        for id in &failing {
+            holding.shift_remove(id);
+        }
+        pending = failing
             .iter()
-            .copied()
-            .filter(|&id| !holds(&project.functions[id.index()].borrow(), holding))
+            .filter_map(|id| dependents.swap_remove(id))
+            .flatten()
+            .filter(|id| holding.contains(id))
             .collect();
-        if failing.is_empty() {
-            return;
-        }
-        for id in failing {
-            holding.shift_remove(&id);
-        }
     }
 }
 
@@ -472,8 +493,8 @@ fn demote_filling_constructors(
 ) {
     let constructors = members_of(sig, ListMethodKind::Constructor);
     let mut empty = constructors.clone();
-    greatest_fixpoint(project, &mut empty, |func, empty| {
-        builds_empty(func, array_new, empty)
+    greatest_fixpoint(project, &mut empty, |func, is_empty| {
+        builds_empty(func, array_new, is_empty)
     });
     demote_families(sig, &constructors, &empty);
 }
@@ -483,7 +504,7 @@ fn demote_filling_constructors(
 fn builds_empty(
     func: &NirFunction,
     array_new: &IndexSet<FuncId>,
-    empty: &IndexSet<FuncId>,
+    is_empty: &dyn Fn(&FuncId) -> bool,
 ) -> bool {
     let Some(body) = func.body.as_ref() else {
         return false;
@@ -498,8 +519,8 @@ fn builds_empty(
     let Some(e) = value.as_expr() else {
         return false;
     };
-    let pure_call = |func_id: &FuncId, args: &[ArenaCallArg], callees: &IndexSet<FuncId>| {
-        callees.contains(func_id) && args.iter().all(|a| is_pure_operand(body, a.expr))
+    let pure_call = |func_id: &FuncId, args: &[ArenaCallArg], admits: &dyn Fn(&FuncId) -> bool| {
+        admits(func_id) && args.iter().all(|a| is_pure_operand(body, a.expr))
     };
     match &body.exprs[e].kind {
         ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| {
@@ -507,11 +528,13 @@ fn builds_empty(
                 return body.operand_const_int(f.value) == Some(0);
             }
             match f.value.as_expr().map(|v| &body.exprs[v].kind) {
-                Some(ExprKind::Call { func_id, args, .. }) => pure_call(func_id, args, array_new),
+                Some(ExprKind::Call { func_id, args, .. }) => {
+                    pure_call(func_id, args, &|id| array_new.contains(id))
+                }
                 _ => is_pure_operand(body, f.value),
             }
         }),
-        ExprKind::Call { func_id, args, .. } => pure_call(func_id, args, empty),
+        ExprKind::Call { func_id, args, .. } => pure_call(func_id, args, is_empty),
         _ => false,
     }
 }
@@ -635,9 +658,9 @@ fn movers_of(
         })
         .filter(|id| !value_copy_ids.contains(id))
         .collect();
-    greatest_fixpoint(project, &mut movers, |func, movers| {
+    greatest_fixpoint(project, &mut movers, |func, is_mover| {
         let passes = |callee: &FuncId| {
-            movers.contains(callee)
+            is_mover(callee)
                 || storage_builtins.contains(callee)
                 || value_copy_ids.contains(callee)
         };
@@ -831,8 +854,8 @@ fn demote_element_reading_queries(
             .flatten()
     });
     let mut length_only: IndexSet<FuncId> = queries.iter().copied().chain(array_subjects).collect();
-    greatest_fixpoint(project, &mut length_only, |func, length_only| {
-        reads_length_only(func, array_len, length_only)
+    greatest_fixpoint(project, &mut length_only, |func, is_length_only| {
+        reads_length_only(func, array_len, is_length_only)
     });
     demote_families(sig, &queries, &length_only);
 }
@@ -842,7 +865,7 @@ fn demote_element_reading_queries(
 fn reads_length_only(
     func: &NirFunction,
     array_len: &IndexSet<FuncId>,
-    length_only: &IndexSet<FuncId>,
+    is_length_only: &dyn Fn(&FuncId) -> bool,
 ) -> bool {
     let (Some(body), Some(subject)) = (func.body.as_ref(), func.params.first()) else {
         return false;
@@ -851,7 +874,7 @@ fn reads_length_only(
         body,
         subject: subject.local_index,
         array_len,
-        length_only,
+        is_length_only,
     }
     .node(NodeRef::Block(body.root))
 }
@@ -861,7 +884,7 @@ struct LengthOnly<'a> {
     body: &'a Body,
     subject: u32,
     array_len: &'a IndexSet<FuncId>,
-    length_only: &'a IndexSet<FuncId>,
+    is_length_only: &'a dyn Fn(&FuncId) -> bool,
 }
 
 impl LengthOnly<'_> {
@@ -873,7 +896,7 @@ impl LengthOnly<'_> {
                     expr, field_index, ..
                 } if self.is_subject(*expr) => return *field_index == SeqField::Len.index(),
                 ExprKind::Call { func_id, args, .. }
-                    if (self.array_len.contains(func_id) || self.length_only.contains(func_id))
+                    if (self.array_len.contains(func_id) || (self.is_length_only)(func_id))
                         && args
                             .first()
                             .is_some_and(|a| self.is_subject_or_backing(a.expr)) =>
