@@ -1956,10 +1956,12 @@ fn "core:prelude/half.wado/round_to_odd_f32"(v) {
     let bits_2: u32;
     let beyond: bool;
     bits_2 = builtin::i32_reinterpret_f32(local.tee near(builtin::f32_demote_f64(v)));
-    if ((builtin::f64_promote_f32(near) == v) | (v != v)) | ((bits_2 & 1) == 1) {
+    if let $float_cmp_1: f64; (local.tee $float_cmp_1(builtin::f64_promote_f32(near)) == v) | (($float_cmp_1 != $float_cmp_1) & (v != v)) | ((bits_2 & 1) == 1) {
         return near;
     }
-    beyond = builtin::f64_abs(builtin::f64_promote_f32(near)) > builtin::f64_abs(v);
+    $float_cmp_1 = builtin::f64_abs(builtin::f64_promote_f32(near));
+    v = builtin::f64_abs(v);
+    beyond = (($float_cmp_1 <= v) | (v != v)) == 0;
     return builtin::f32_reinterpret_i32(select u32(beyond, bits_2 - 1, bits_2 + 1));
 }
 
@@ -6668,21 +6670,21 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
     let $cse_61: u32;
     let bits_83: u32;
     let kept_84: u16;
-    let remainder_133: u32;
-    let $av_136: i32;
+    let remainder_130: u32;
+    let $av_133: i32;
     $sroa_slot_58 = 0;
     $sroa_slot_59 = 0;
     $sroa_slot_60 = ref.null none;
     $inline_core_cbor_CborDeserializer__peek_byte_0: block {
-        if @unlikely(local.tee $av_136(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start))) {
+        if @unlikely(local.tee $av_133(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start))) {
             cold_path;
             $sroa_slot_58 = 1;
             $sroa_slot_59 = 0;
-            $sroa_slot_60 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_136)));
+            $sroa_slot_60 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_133)));
             break $inline_core_cbor_CborDeserializer__peek_byte_0;
         }
         $sroa_slot_58 = 0;
-        $sroa_slot_59 = builtin::array_get_value<u8>($load_1.repr, $load_3 + $av_136);
+        $sroa_slot_59 = builtin::array_get_value<u8>($load_1.repr, $load_3 + $av_133);
         $sroa_slot_60 = ref.null none;
         break $inline_core_cbor_CborDeserializer__peek_byte_0;
     };
@@ -6696,10 +6698,10 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
         unreachable;
     })) >>u 5) & 255;
     $sroa_slot_58 = $sroa_slot_58 & 31;
-    $av_136 = self.pos;
+    $av_133 = self.pos;
     if $sroa_slot_59 == 7 {
         if $sroa_slot_58 == 27 {
-            self.pos = $av_136 + 1;
+            self.pos = $av_133 + 1;
             return 0, let $mv$$vr_24$1: u64; multivalue_bind [$load_3, $mv$$vr_24$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 8); "core:prelude/half.wado/bf16::from_f64"(builtin::f64_reinterpret_i64((if $load_3 == 0 -> u64 {
                 $mv$$vr_24$1;
             } else if @unlikely($load_3 == 1) -> u64 {
@@ -6710,7 +6712,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                 unreachable;
             }))), ref.null none;
         } else if $sroa_slot_58 == 26 {
-            self.pos = $av_136 + 1;
+            self.pos = $av_133 + 1;
             return 0, multivalue_bind [$load_3, $mv$$vr_24$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 4); "core:prelude/half.wado/bf16::from_f64"(builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64((if $load_3 == 0 -> u64 {
                 $mv$$vr_24$1;
             } else if @unlikely($load_3 == 1) -> u64 {
@@ -6721,7 +6723,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                 unreachable;
             }))))), ref.null none;
         } else if $sroa_slot_58 == 25 {
-            self.pos = $av_136 + 1;
+            self.pos = $av_133 + 1;
             return 0, multivalue_bind [$load_3, $mv$$vr_24$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 2); "core:prelude/half.wado/bf16::from_f64"("core:cbor/decode_half"((if $load_3 == 0 -> u64 {
                 $mv$$vr_24$1;
             } else if @unlikely($load_3 == 1) -> u64 {
@@ -6738,7 +6740,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
     } else {
         0;
     }) {
-        self.pos = $av_136 + 1;
+        self.pos = $av_133 + 1;
         multivalue_bind [$sroa_slot_58, $mv$$vr_24$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, $sroa_slot_58);
         $mv$$vr_24$1 = (if $sroa_slot_58 == 0 -> u64 {
             $mv$$vr_24$1;
@@ -6816,15 +6818,15 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                         break $inline_core_cbor_int_item_bf16__16: "core:cbor/bf16^core:cbor/CborFloat::from_int$spec0"($mv$$vr_24$1);
                     }
                     if $mv$$vr_24$1 == -1_i64 {
-                        $av_136 = (local.tee $sroa_slot_59(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
+                        $av_133 = (local.tee $sroa_slot_59(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
                         $inline_round_to_even_10: block -> u16 {
                             if local.tee $load_3($sroa_slot_59 & 65535) >u 32768 {
-                                break $inline_round_to_even_10: ($av_136 + 1) & 65535;
+                                break $inline_round_to_even_10: ($av_133 + 1) & 65535;
                             }
-                            if ($load_3 == 32768) & (($av_136 & 1) == 1) {
-                                break $inline_round_to_even_10: ($av_136 + 1) & 65535;
+                            if ($load_3 == 32768) & (($av_133 & 1) == 1) {
+                                break $inline_round_to_even_10: ($av_133 + 1) & 65535;
                             }
-                            break $inline_round_to_even_10: $av_136;
+                            break $inline_round_to_even_10: $av_133;
                         };
                         break $inline_core_cbor_int_item_bf16__16;
                     }
@@ -6838,10 +6840,10 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<bf16>"(self) {
                     if $mv$$vr_24$1 == -1_i64 {
                         kept_84 = (local.tee bits_83(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 65535;
                         $inline_round_to_even_16: block -> u16 {
-                            if local.tee remainder_133(bits_83 & 65535) >u 32768 {
+                            if local.tee remainder_130(bits_83 & 65535) >u 32768 {
                                 break $inline_round_to_even_16: (kept_84 + 1) & 65535;
                             }
-                            if (remainder_133 == 32768) & ((kept_84 & 1) == 1) {
+                            if (remainder_130 == 32768) & ((kept_84 & 1) == 1) {
                                 break $inline_round_to_even_16: (kept_84 + 1) & 65535;
                             }
                             break $inline_round_to_even_16: kept_84;
@@ -6874,23 +6876,23 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
     let $sroa_slot_59: u8;
     let $sroa_slot_60: ref null "core:serde//DeserializeError";
     let dropped_86: i64;
-    let mask_103: u64;
-    let dropped_118: i64;
-    let mask_119: u64;
-    let $av_134: i32;
+    let mask_102: u64;
+    let dropped_116: i64;
+    let mask_117: u64;
+    let $av_131: i32;
     $sroa_slot_58 = 0;
     $sroa_slot_59 = 0;
     $sroa_slot_60 = ref.null none;
     $inline_core_cbor_CborDeserializer__peek_byte_0: block {
-        if @unlikely(local.tee $av_134(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start))) {
+        if @unlikely(local.tee $av_131(self.pos) >= (local.tee $load_1(self.input).end - local.tee $load_3($load_1.start))) {
             cold_path;
             $sroa_slot_58 = 1;
             $sroa_slot_59 = 0;
-            $sroa_slot_60 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_134)));
+            $sroa_slot_60 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_131)));
             break $inline_core_cbor_CborDeserializer__peek_byte_0;
         }
         $sroa_slot_58 = 0;
-        $sroa_slot_59 = builtin::array_get_value<u8>($load_1.repr, $load_3 + $av_134);
+        $sroa_slot_59 = builtin::array_get_value<u8>($load_1.repr, $load_3 + $av_131);
         $sroa_slot_60 = ref.null none;
         break $inline_core_cbor_CborDeserializer__peek_byte_0;
     };
@@ -6904,10 +6906,10 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
         unreachable;
     })) >>u 5) & 255;
     $sroa_slot_58 = $sroa_slot_58 & 31;
-    $av_134 = self.pos;
+    $av_131 = self.pos;
     if $sroa_slot_59 == 7 {
         if $sroa_slot_58 == 27 {
-            self.pos = $av_134 + 1;
+            self.pos = $av_131 + 1;
             return 0, let $mv$$vr_24$1: u64; multivalue_bind [$load_3, $mv$$vr_24$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 8); "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(builtin::f64_reinterpret_i64((if $load_3 == 0 -> u64 {
                 $mv$$vr_24$1;
             } else if @unlikely($load_3 == 1) -> u64 {
@@ -6918,7 +6920,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                 unreachable;
             })))), ref.null none;
         } else if $sroa_slot_58 == 26 {
-            self.pos = $av_134 + 1;
+            self.pos = $av_131 + 1;
             return 0, multivalue_bind [$load_3, $mv$$vr_24$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 4); "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(builtin::f64_promote_f32(builtin::f32_reinterpret_i32(builtin::i32_wrap_i64((if $load_3 == 0 -> u64 {
                 $mv$$vr_24$1;
             } else if @unlikely($load_3 == 1) -> u64 {
@@ -6929,7 +6931,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                 unreachable;
             })))))), ref.null none;
         } else if $sroa_slot_58 == 25 {
-            self.pos = $av_134 + 1;
+            self.pos = $av_131 + 1;
             return 0, multivalue_bind [$load_3, $mv$$vr_24$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_be"(self, 2); "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"("core:cbor/decode_half"((if $load_3 == 0 -> u64 {
                 $mv$$vr_24$1;
             } else if @unlikely($load_3 == 1) -> u64 {
@@ -6946,7 +6948,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
     } else {
         0;
     }) {
-        self.pos = $av_134 + 1;
+        self.pos = $av_131 + 1;
         multivalue_bind [$sroa_slot_58, $mv$$vr_24$1, $sroa_slot_60] = "core:cbor/core:cbor/CborDeserializer::read_arg"(self, $sroa_slot_58);
         $mv$$vr_24$1 = (if $sroa_slot_58 == 0 -> u64 {
             $mv$$vr_24$1;
@@ -6986,29 +6988,29 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
             } else {
                 unreachable;
             })).0;
-            $av_134 = $pattern_temp_0.1;
+            $av_131 = $pattern_temp_0.1;
             $load_3 = builtin::i32_wrap_i64(local.tee $mv$$vr_24$1($pattern_temp_0.2));
             if $sroa_slot_58 == 7 {
-                if $av_134 == 27 {
-                    return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"((if $av_134 == 27 -> f64 {
+                if $av_131 == 27 {
+                    return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"((if $av_131 == 27 -> f64 {
                         builtin::f64_reinterpret_i64($mv$$vr_24$1);
-                    } else if $av_134 == 26 -> f64 {
+                    } else if $av_131 == 26 -> f64 {
                         builtin::f64_promote_f32(builtin::f32_reinterpret_i32($load_3));
                     } else {
                         "core:cbor/decode_half"($mv$$vr_24$1);
                     }))), ref.null none;
-                } else if $av_134 == 26 {
-                    return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"((if $av_134 == 27 -> f64 {
+                } else if $av_131 == 26 {
+                    return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"((if $av_131 == 27 -> f64 {
                         builtin::f64_reinterpret_i64($mv$$vr_24$1);
-                    } else if $av_134 == 26 -> f64 {
+                    } else if $av_131 == 26 -> f64 {
                         builtin::f64_promote_f32(builtin::f32_reinterpret_i32($load_3));
                     } else {
                         "core:cbor/decode_half"($mv$$vr_24$1);
                     }))), ref.null none;
-                } else if $av_134 == 25 {
-                    return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"((if $av_134 == 27 -> f64 {
+                } else if $av_131 == 25 {
+                    return 0, "core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"((if $av_131 == 27 -> f64 {
                         builtin::f64_reinterpret_i64($mv$$vr_24$1);
-                    } else if $av_134 == 26 -> f64 {
+                    } else if $av_131 == 26 -> f64 {
                         builtin::f64_promote_f32(builtin::f32_reinterpret_i32($load_3));
                     } else {
                         "core:cbor/decode_half"($mv$$vr_24$1);
@@ -7022,8 +7024,8 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                             if local.tee dropped_86(40_i64 - builtin::i64_clz($mv$$vr_24$1)) <= 0_i64 {
                                 break $inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: $mv$$vr_24$1;
                             }
-                            mask_103 = (1_i64 << dropped_86) - 1_i64;
-                            break $inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: select u64(($mv$$vr_24$1 & mask_103) == 0_i64, $mv$$vr_24$1, ($mv$$vr_24$1 & (mask_103 ^ -1_i64)) | (mask_103 + 1_i64));
+                            mask_102 = (1_i64 << dropped_86) - 1_i64;
+                            break $inline_f16_core_cbor_CborFloat__from_int_spec0_2__$inline_round_to_odd_0: select u64(($mv$$vr_24$1 & mask_102) == 0_i64, $mv$$vr_24$1, ($mv$$vr_24$1 & (mask_102 ^ -1_i64)) | (mask_102 + 1_i64));
                         }));
                     }
                     if $mv$$vr_24$1 == -1_i64 {
@@ -7035,11 +7037,11 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                 return 0, $inline_core_cbor_int_item_f16__17: block -> u16 {
                     if $sroa_slot_58 != 1 {
                         break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32"(builtin::f32_convert_i64_u($inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: block -> u64 {
-                            if local.tee dropped_118(40_i64 - builtin::i64_clz($mv$$vr_24$1)) <= 0_i64 {
+                            if local.tee dropped_116(40_i64 - builtin::i64_clz($mv$$vr_24$1)) <= 0_i64 {
                                 break $inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: $mv$$vr_24$1;
                             }
-                            mask_119 = (1_i64 << dropped_118) - 1_i64;
-                            break $inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: select u64(($mv$$vr_24$1 & mask_119) == 0_i64, $mv$$vr_24$1, ($mv$$vr_24$1 & (mask_119 ^ -1_i64)) | (mask_119 + 1_i64));
+                            mask_117 = (1_i64 << dropped_116) - 1_i64;
+                            break $inline_f16_core_cbor_CborFloat__from_int_spec0_4__$inline_round_to_odd_0: select u64(($mv$$vr_24$1 & mask_117) == 0_i64, $mv$$vr_24$1, ($mv$$vr_24$1 & (mask_117 ^ -1_i64)) | (mask_117 + 1_i64));
                         }));
                     }
                     if $mv$$vr_24$1 == -1_i64 {
@@ -8728,12 +8730,12 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:json
     "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_66, 0);
     v_99 = "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(start_39);
     if @likely(ref.is_null(local.tee r_82($inline_write_json_f32_1: block -> ref null "core:serde//SerializeError" {
-        if ((v_99 - v_99) == 0_f32) == 0 {
+        if (v_99 - v_99) != 0_f32 {
             $inline_write_json_f64_0: block -> ref null "core:serde//SerializeError" {
                 if local.tee v_210(builtin::f64_promote_f32(v_99)) != v_210 {
                     break $inline_write_json_f64_0: struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
                 }
-                if ((v_210 - v_210) == 0) == 0 {
+                if (v_210 - v_210) != 0 {
                     break $inline_write_json_f64_0: struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
                 }
                 "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(v_210, s);
@@ -8753,12 +8755,12 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:json
     "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec1"(s, global:core:serde::$const_obj_64, 1);
     v_99 = builtin::f32_reinterpret_i32(start_39 << 16);
     if @likely(ref.is_null(local.tee r_82($inline_write_json_f32_3: block -> ref null "core:serde//SerializeError" {
-        if ((v_99 - v_99) == 0_f32) == 0 {
+        if (v_99 - v_99) != 0_f32 {
             $inline_write_json_f64_1: block -> ref null "core:serde//SerializeError" {
                 if local.tee v_210(builtin::f64_promote_f32(v_99)) != v_210 {
                     break $inline_write_json_f64_1: struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("NaN is not allowed in JSON"), used: 26 } };
                 }
-                if ((v_210 - v_210) == 0) == 0 {
+                if (v_210 - v_210) != 0 {
                     break $inline_write_json_f64_1: struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Infinity is not allowed in JSON"), used: 31 } };
                 }
                 "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(v_210, s);

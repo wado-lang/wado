@@ -285,17 +285,17 @@ fn "spec_types_newtype.wado/$cm_export__$test_3_function_types"() {
     let double: ref struct;
     let $v0_2: f64;
     double = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_types_newtype.wado//$Closure_0" {  }, func: ref.func "closure/spec_types_newtype.wado/$closure_wrapper_0" };
-    if @unlikely((local.tee $v0_2(block -> f64 {
+    if @unlikely(local.tee $v0_2(block -> f64 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(double)).env, 1.5);
-    }) == 3) == 0) {
+    }) != 3) {
         cold_path;
         "spec_types_newtype.wado/$test_3_function_types$cold1"($v0_2, $v0_2);
         unreachable;
     }
-    if @unlikely((local.tee $v0_2(block -> f64 {
+    if @unlikely(local.tee $v0_2(block -> f64 {
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(double)).env, 1);
-    }) == 2) == 0) {
+    }) != 2) {
         cold_path;
         "spec_types_newtype.wado/$test_3_function_types$cold0"($v0_2);
         unreachable;

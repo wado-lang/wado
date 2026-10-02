@@ -237,7 +237,7 @@ fn "opt_sroa_variant_br_exit.wado/$cm_export__$test_0_f32_deserialize_via_sroa"(
     let $mv$r$2: ref null "core:serde//DeserializeError";
     multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "core:json/core/json/from_bytes<f32,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_input_repr_16, start: 0, end: 3 });
     if @likely($mv$r$0 == 0) {
-        if @unlikely(($mv$r$1 == 100_f32) == 0) {
+        if @unlikely($mv$r$1 != 100_f32) {
             cold_path;
             "opt_sroa_variant_br_exit.wado/$test_0_f32_deserialize_via_sroa$cold0"($mv$r$1);
             unreachable;

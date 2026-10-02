@@ -1478,7 +1478,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/seq_eq<bf16>"(a, a_end, b, b
     b170: block {
         l171: loop {
             break_if b170 b_end >= a_end;
-            if $sroa_self_value_10 = builtin::array_get_value<u16>(a, b_end); other = builtin::array_get_value<u16>(b, b_end); builtin::f32_reinterpret_i32($sroa_self_value_10 << 16) == builtin::f32_reinterpret_i32(other << 16) == 0 {
+            if $sroa_self_value_10 = builtin::array_get_value<u16>(a, b_end); other = builtin::array_get_value<u16>(b, b_end); let $float_cmp_1: f32; $float_cmp_1 = builtin::f32_reinterpret_i32($sroa_self_value_10 << 16); let $float_cmp_2: f32; $float_cmp_2 = builtin::f32_reinterpret_i32(other << 16); ($float_cmp_1 == $float_cmp_2) | (($float_cmp_1 != $float_cmp_1) & ($float_cmp_2 != $float_cmp_2)) == 0 {
                 return 0;
             }
             b_end = b_end + 1;

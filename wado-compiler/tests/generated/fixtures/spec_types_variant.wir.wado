@@ -255,7 +255,7 @@ fn "spec_types_variant.wado/$cm_export__$test_0"() {
     let $fuse_at_17: i32;
     let r_25: f64;
     let h_27: f64;
-    if @unlikely((local.tee h_27((if ref.test "spec_types_variant.wado//Shape::Circle"(local.tee $v0(struct.new "spec_types_variant.wado//Shape::Rectangle" { discriminant: 1, payload_0: struct.new "tuple//[f64, f64]" { 0: 10, 1: 20 } })) -> f64 {
+    if @unlikely(local.tee h_27((if ref.test "spec_types_variant.wado//Shape::Circle"(local.tee $v0(struct.new "spec_types_variant.wado//Shape::Rectangle" { discriminant: 1, payload_0: struct.new "tuple//[f64, f64]" { 0: 10, 1: 20 } })) -> f64 {
         r_25 = ref.cast "spec_types_variant.wado//Shape::Circle"($v0).payload_0;
         (3 * r_25) * r_25;
     } else if ref.test "spec_types_variant.wado//Shape::Rectangle"($v0) -> f64 {
@@ -265,7 +265,7 @@ fn "spec_types_variant.wado/$cm_export__$test_0"() {
         r_25 * h_27;
     } else {
         0;
-    })) == 200) == 0) {
+    })) != 200) {
         cold_path;
         $fuse_at_17 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_10("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(235)), 55);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $fuse_at_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -287,9 +287,9 @@ condition: area(Shape::Rectangle([10.0, 20.0])) == 200.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $fuse_at_17 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("area(Shape::Rectangle([10.0, 20.0])): "), used: 38 }, 38);
         $local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_10);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<f64>" { value: h_27 }, $local_11);
-        let $mv_field_4: ref Array<u8>;
-        $mv_field_4 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_10, $mv_field_4, 1);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_10, $mv_field_3, 1);
         "core:rt/panic"($local_10.repr, $local_10.used);
         unreachable;
     }

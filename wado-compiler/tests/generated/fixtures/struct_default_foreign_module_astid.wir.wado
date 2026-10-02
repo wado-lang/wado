@@ -351,7 +351,7 @@ fn "core:benchmark/format_rate"(total_work, elapsed_ns, $mv$unit$repr, $mv$unit$
     let b: ref Array<u8>;
     let i: i32;
     secs = builtin::f64_convert_i64_u(elapsed_ns) / 1000000000;
-    secs = select f64(secs > 0, total_work / secs, 0);
+    secs = select f64((secs <= 0) == 0, total_work / secs, 0);
     if $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
         b = global:core:benchmark::$const_obj_31;
         if $mv$unit$used != 1 {
@@ -370,7 +370,7 @@ fn "core:benchmark/format_rate"(total_work, elapsed_ns, $mv$unit$repr, $mv$unit$
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
     } {
-        if secs >= 1000000000 {
+        if (secs < 1000000000) == 0 {
             return $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_scalar_1: block {
                 "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(secs / 1000000000, 2, $local_5);
                 break $inline_f64__fmt_into_scalar_spec0_scalar_1;
@@ -379,7 +379,7 @@ fn "core:benchmark/format_rate"(total_work, elapsed_ns, $mv$unit$repr, $mv$unit$
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, i);
             }, start_45 = $local_5.used, $local_5.used = i, builtin::array_copy<u8>($local_5.repr, start_45, global:core:benchmark::$const_obj_30, 0, 5), $local_5;
         }
-        if secs >= 1000000 {
+        if (secs < 1000000) == 0 {
             return $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_scalar_2: block {
                 "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(secs / 1000000, 2, $local_5);
                 break $inline_f64__fmt_into_scalar_spec0_scalar_2;
@@ -388,7 +388,7 @@ fn "core:benchmark/format_rate"(total_work, elapsed_ns, $mv$unit$repr, $mv$unit$
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, start_45);
             }, i = $local_5.used, $local_5.used = start_45, builtin::array_copy<u8>($local_5.repr, i, global:core:benchmark::$const_obj_29, 0, 5), $local_5;
         }
-        if secs >= 1000 {
+        if (secs < 1000) == 0 {
             return $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_scalar_3: block {
                 "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(secs / 1000, 2, $local_5);
                 break $inline_f64__fmt_into_scalar_spec0_scalar_3;
@@ -405,7 +405,7 @@ fn "core:benchmark/format_rate"(total_work, elapsed_ns, $mv$unit$repr, $mv$unit$
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, start_45);
         }, i = $local_5.used, $local_5.used = start_45, builtin::array_copy<u8>($local_5.repr, i, global:core:benchmark::$const_obj_27, 0, 4), $local_5;
     }
-    if secs >= 1000000000 {
+    if (secs < 1000000000) == 0 {
         return $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_scalar_5: block {
             "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(secs / 1000000000, 2, $local_5);
             break $inline_f64__fmt_into_scalar_spec0_scalar_5;
@@ -417,7 +417,7 @@ fn "core:benchmark/format_rate"(total_work, elapsed_ns, $mv$unit$repr, $mv$unit$
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, start_45);
         }, i = $local_5.used, $local_5.used = start_45, builtin::array_copy<u8>(local.tee b($local_5.repr), i, $mv$unit$repr, 0, $mv$unit$used), i = i + $mv$unit$used, builtin::array_copy<u8>(b, i, global:core:benchmark::$const_obj_19, 0, 2), $local_5;
     }
-    if secs >= 1000000 {
+    if (secs < 1000000) == 0 {
         return $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_scalar_6: block {
             "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(secs / 1000000, 2, $local_5);
             break $inline_f64__fmt_into_scalar_spec0_scalar_6;
@@ -429,7 +429,7 @@ fn "core:benchmark/format_rate"(total_work, elapsed_ns, $mv$unit$repr, $mv$unit$
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, start_45);
         }, i = $local_5.used, $local_5.used = start_45, builtin::array_copy<u8>(local.tee b($local_5.repr), i, $mv$unit$repr, 0, $mv$unit$used), i = i + $mv$unit$used, builtin::array_copy<u8>(b, i, global:core:benchmark::$const_obj_19, 0, 2), $local_5;
     }
-    if secs >= 1000 {
+    if (secs < 1000) == 0 {
         return $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_scalar_7: block {
             "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(secs / 1000, 2, $local_5);
             break $inline_f64__fmt_into_scalar_spec0_scalar_7;

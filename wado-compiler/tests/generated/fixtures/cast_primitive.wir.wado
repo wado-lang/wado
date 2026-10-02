@@ -202,7 +202,7 @@ global global:core:prelude/int128.wado::$const_obj_575: ref null Array<u8> = arr
 global global:core:prelude/int128.wado::$const_obj_582: ref null Array<u8> = array.new_fixed<u8>(113, 58, 32);
 global global:core:prelude/int128.wado::$const_obj_583: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 113, 32, 33, 61, 32, 48, 10);
 global global:core:prelude/int128.wado::$const_obj_587: ref null Array<u8> = array.new_fixed<u8>(117, 49, 50, 56, 58, 58, 100, 105, 118, 95, 114, 101, 109);
-global global:core:prelude/primitive.wado::$const_obj_589: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_590: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "cast_primitive.wado/$test_5_a_float_literal_cast_to_an_integer_converts__not_re_types"() {
     let f_1: f64;
@@ -329,9 +329,9 @@ condition: folded == \"3 -3 2 3 127\"
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($sroa_$f_buf_231.repr, start_39 + 37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("folded: "), used: 8 }, 8);
         $local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($sroa_$f_buf_231);
         "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($local_7, $local_12);
-        let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:cast_primitive.wado::$const_obj_0;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($sroa_$f_buf_231, $mv_arg_3.repr, $mv_arg_3.used);
+        let $mv_arg_2: ref "core:prelude/string.wado//String";
+        $mv_arg_2 = global:cast_primitive.wado::$const_obj_0;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($sroa_$f_buf_231, $mv_arg_2.repr, $mv_arg_2.used);
         "core:rt/panic"($sroa_$f_buf_231.repr, $sroa_$f_buf_231.used);
         unreachable;
     }
@@ -395,7 +395,7 @@ fn "cast_primitive.wado/$test_15_cast_to_a_newtype_of_a_wide_integer"() {
     let hi_153: i64;
     let value_157: f64;
     let high_158: u64;
-    let hi_169: i64;
+    let hi_170: i64;
     $local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"(struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: 9223372036854775807_i64 }, $local_15, 0);
     if @unlikely(local.tee i_84($inline_core_prelude_array_wado_seq_eq_u8__19: block -> bool {
@@ -487,12 +487,12 @@ condition: `${-170141183460469231731687303715884105728 as Money}` == \"-17014118
     hi_153 = 0_i64;
     lo_152 = 0_i64;
     $inline_core_prelude_int128_wado_u128__from_f64_2: block {
-        if (local.tee value_157(builtin::f64_abs(2.5)) > 0) == 0 {
+        if (local.tee value_157(builtin::f64_abs(2.5)) <= 0) | (value_157 != value_157) {
             hi_153 = 0_i64;
             lo_152 = 0_i64;
             break $inline_core_prelude_int128_wado_u128__from_f64_2;
         }
-        if value_157 >= 340282366920938500000000000000000000000 {
+        if (value_157 < 340282366920938500000000000000000000000) == 0 {
             hi_153 = -1_i64;
             lo_152 = -1_i64;
             break $inline_core_prelude_int128_wado_u128__from_f64_2;
@@ -504,8 +504,8 @@ condition: `${-170141183460469231731687303715884105728 as Money}` == \"-17014118
     };
     "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar"($inline_core_prelude_int128_wado_i128__abs_u128_44: block -> ref "core:prelude/int128.wado//u128" {
         if lo_152 < 0_i64 {
-            multivalue_bind [high_158, hi_169] = i64.sub128(0_i64, 0_i64, hi_153, lo_152);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_44: struct.new "core:prelude/int128.wado//u128" { low: high_158, high: hi_169 };
+            multivalue_bind [high_158, hi_170] = i64.sub128(0_i64, 0_i64, hi_153, lo_152);
+            break $inline_core_prelude_int128_wado_i128__abs_u128_44: struct.new "core:prelude/int128.wado//u128" { low: high_158, high: hi_170 };
         }
         break $inline_core_prelude_int128_wado_i128__abs_u128_44: struct.new "core:prelude/int128.wado//u128" { low: hi_153, high: lo_152 };
     }, $local_15, lo_152 < 0_i64);
@@ -644,9 +644,9 @@ condition: **rr as i64 == 7 as i64
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_7.repr, $fuse_at_9 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("**rr as i64: "), used: 13 }, 13);
         $local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7);
         "core:prelude/primitive.wado/i64^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: $v3 }, $local_8);
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_7, $mv_field_3, 1);
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_7, $mv_field_2, 1);
         "core:rt/panic"($local_7.repr, $local_7.used);
         unreachable;
     }
@@ -1814,7 +1814,7 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
     digit_count_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee self(select i64(self < 0_i64, 0_i64 - self, self)));
     is_negative = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_589;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_590;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, digit_count_5);
     };
     arr = local.tee $mv_arg_3(f.buf).repr;
@@ -1845,7 +1845,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_589;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_590;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, self);
     };
     arr = local.tee $mv_arg_3(f.buf).repr;

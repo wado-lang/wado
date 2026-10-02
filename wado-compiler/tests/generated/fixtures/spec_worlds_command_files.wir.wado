@@ -4082,7 +4082,6 @@ fn "core:fs/core/fs/normalize<core:prelude/string.wado/String>"($mv$path$repr, $
     let path_108: ref "core:prelude/string.wado//String";
     let b_187: u8;
     let b_192: u8;
-    let $licm_arith_204: bool;
     let limit: i32;
     let i: i32;
     let pos: i32;
@@ -4103,11 +4102,10 @@ fn "core:fs/core/fs/normalize<core:prelude/string.wado/String>"($mv$path$repr, $
     start_3 = 0;
     $load_3 = $arg_spill_1.end;
     $array_clone_dst_7 = $arg_spill_1.repr;
-    $licm_arith_204 = $load_3 <= $load_3;
     b667: block {
         l668: loop {
             break_if b667 start_3 > $load_3;
-            if @unlikely((((0 <= start_3) & (start_3 <= $load_3)) & $licm_arith_204) == 0) {
+            if @unlikely(((0 <= start_3) & (start_3 <= $load_3)) == 0) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$cold1"($arg_spill_1, start_3, $load_3, $load_3);
                 unreachable;
