@@ -162,9 +162,27 @@ Here `x` is not a NaN.
 
 The comparisons now obey the laws of an order. `!(a < b)` is `a >= b`, exactly
 one of `a < b`, `a == b` and `a > b` holds, and `x == x` holds for every `x`.
-`x != x` is always false, so a NaN is tested with `is_nan()`. Each IEEE
-predicate is still one expression of an operator and `is_nan()`, listed in
-[Float Comparison](./spec-standard-traits.md#float-comparison).
+`x != x` is always false, so a NaN is tested with `is_nan()`.
+
+### IEEE comparisons by name
+
+Each float type carries IEEE 754's six comparisons as methods: `ieee754_eq`,
+`ieee754_ne`, `ieee754_lt`, `ieee754_le`, `ieee754_gt` and `ieee754_ge`. The
+operators keep the order, and IEEE's answers stay reachable under a name that
+says which they are, as `minimum` and `maximum` are beside `min` and `max`.
+
+Each is one Wasm instruction. Code that ports an IEEE comparison, or a loop
+that compares two loaded floats and cannot pay the order's NaN tests (see
+[Cost](#cost)), says so with one call. Written with an operator and `is_nan()`
+instead, each predicate is a compound expression that is easy to get wrong.
+
+The names carry the `ieee754_` prefix because a bare `eq` would collide with
+`Eq::eq`, and because a SIMD vector's `eq` and `lt` already name IEEE lane
+comparisons.
+
+No IEEE three-way comparison is offered. IEEE's comparison is partial, so it
+could only return `Option<Ordering>`, which reads as the order's `cmp` and
+costs a branch to consume. The order is a float's one three-way comparison.
 
 ### `min`, `max` and `clamp`
 
@@ -326,6 +344,9 @@ overlap, which is what `benchmark/ab.ts` decides.
   `x` and trap on a NaN bound, `high` included, which `low <= high` passes.
   Each with a fixture. Then measure Loam's kernels, which compare floats
   through `f32::max`, and record it in [Cost](#cost).
+- [ ] Add the six `ieee754_*` comparison methods to `f16`, `bf16`, `f32` and
+  `f64`, each lowering to one Wasm instruction, with a fixture holding each
+  method's answers on a NaN, `-0.0` and an ordinary pair.
 - [ ] Report the `self_comparison` lint, with a fixture for each operator, the
   float hint, a chain, an operand that performs an effect, and `allow`.
 - [ ] Accept float range patterns, with fixtures for `-0.0`, a NaN scrutinee, a
