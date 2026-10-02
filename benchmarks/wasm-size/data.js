@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790906250472,
+  "lastUpdate": 1790927869115,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -62757,6 +62757,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6007ff518a58b85afc8c48f82f7b96725cd364a1"
         },
         "date": 1790906249654,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6262,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20671,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281097,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9e636884f4394b208cace6ea5501478f820980c6",
+          "message": "Merge pull request #2246 from wado-lang/gale-gen-id-sync-sets\n\nperf(optimize): cut 18% off a dev-build gale compile",
+          "timestamp": "2026-10-02T16:42:22+09:00",
+          "tree_id": "b5ba13b638af9a5b7fa9bdcc9853136e7300e4ff",
+          "url": "https://github.com/wado-lang/wado/commit/9e636884f4394b208cace6ea5501478f820980c6"
+        },
+        "date": 1790927868535,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
