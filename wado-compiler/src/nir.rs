@@ -178,6 +178,30 @@ impl NirBinaryOp {
         }
     }
 
+    /// What this comparison answers for a value compared with itself. Every
+    /// type's comparisons read an order, a float's included, so `==`, `<=` and
+    /// `>=` hold and the other three do not. `None` for an op that is not one
+    /// of the six.
+    pub fn reflexive_answer(self) -> Option<bool> {
+        match self {
+            Self::Eq | Self::LtEq | Self::GtEq => Some(true),
+            Self::NotEq | Self::Lt | Self::Gt => Some(false),
+            Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::Mod
+            | Self::And
+            | Self::Or
+            | Self::BitAnd
+            | Self::BitOr
+            | Self::BitXor
+            | Self::Shl
+            | Self::Shr
+            | Self::RefNotEq => None,
+        }
+    }
+
     /// Whether this op may trap, whatever its operands. Integer `Div` / `Mod`
     /// trap on a zero divisor (and `MIN / -1`); every other binary op is total.
     /// The one listing every pass that deletes or moves an operation consults.

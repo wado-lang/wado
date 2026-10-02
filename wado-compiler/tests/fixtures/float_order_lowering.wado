@@ -34,7 +34,14 @@ fn count_ordered(xs: &List<f64>) -> i32 {
     return ordered;
 }
 
+// Constant bounds fold their NaN tests and their `low <= high` away.
+#[inline(never)]
+fn unit(x: f64) -> f64 {
+    return f64::clamp(x, 0.0, 1.0);
+}
+
 test {
+    assert unit(builtin::black_box(2.0)) == 1.0;
     let nan = f64::from_bits(builtin::black_box(0x7FF8_0000_0000_0000));
     let xs: List<f64> = [1.0, 2.0, nan, 0.5, nan];
     assert count_ordered(&xs) == 3;
@@ -55,5 +62,6 @@ __DATA__
         "return (a == b) | ((a != a) & (b != b));"
     ],
     "wir_expect:O1": ["(nan != 2) & (nan != 2)", "ordered = ordered + "],
-    "wir_not_expect:O1": ["(nan == 2) == 0"]
+    "wir_not_expect:O1": ["(nan == 2) == 0"],
+    "wir_not_expect:O2": ["f64::clamp$cold0", "1 != 1"]
 }

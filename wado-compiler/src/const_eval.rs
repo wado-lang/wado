@@ -231,10 +231,11 @@ impl Value {
     /// asks before replacing an expression, which is not the question `==`
     /// answers.
     ///
-    /// `PartialEq` models the program's own `==`, so it follows IEEE and holds
-    /// for `-0.0` and `0.0`. A program tells those apart (`1.0 / x` alone
+    /// `PartialEq` is numeric, so it holds for `-0.0` and `0.0` as the
+    /// program's `==` does. A program tells those apart (`1.0 / x` alone
     /// does), so substituting either changes what it computes. Two NaNs are
-    /// equal under neither question, which leaves them out of reach.
+    /// equal under neither, which leaves them out of reach; the program's own
+    /// float `==` is [`eval_float_comparison`]'s.
     #[must_use]
     pub fn denotes_same(&self, other: &Self) -> bool {
         match (self, other) {

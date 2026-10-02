@@ -757,7 +757,7 @@ fn integer_string<T: FromStr>(s: &String) -> Result<T, DeserializeError> {
 
 /// `f`, when it is whole and within `[min, max)`.
 fn whole_float(f: f64, min: f64, max: f64, type_name: String) -> Result<f64, DeserializeError> {
-    if f != f64::floor(f) {
+    if f.is_nan() || f != f64::floor(f) {
         return Result::Err(DeserializeError::unexpected_type("expected integer, got float"));
     }
     if !(min <= f < max) {

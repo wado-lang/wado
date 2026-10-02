@@ -127,7 +127,7 @@ fn round_to_even(kept: u16, dropped: u32, shift: u32) -> u16 {
 fn round_to_odd_f32(v: f64) -> f32 {
     let near = v as f32;
     let bits = near.to_bits();
-    if near as f64 == v || v.is_nan() || bits & 1 == 1 {
+    if near as f64 == v || bits & 1 == 1 {
         return near;
     }
     let beyond = f64::abs(near as f64) > f64::abs(v);

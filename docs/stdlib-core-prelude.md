@@ -72,8 +72,9 @@ Returns true if self equals other.
 
 ### `pub trait Ord: Eq with ()`
 
-A total order over the type: what `sort`, `TreeMap` and a `T: Ord` bound
-read. A float's is IEEE 754-2019 `totalOrder`, which its `<` is not.
+A total order over the type: what `<`, `sort`, `TreeMap` and a `T: Ord`
+bound read. A float's puts every NaN last, as one value, and `-0.0` equal to
+`0.0`.
 
 #### `fn cmp(&self, other: &Self) -> Ordering`
 
@@ -1306,16 +1307,28 @@ Square root
 
 #### `pub fn min(x: f32, y: f32) -> f32`
 
-Minimum of two values
+The lesser of two values by the order, where NaN is greatest; `x` when
+they are equal.
 
 #### `pub fn max(x: f32, y: f32) -> f32`
 
-Maximum of two values
+The greater of two values by the order, where NaN is greatest; `y` when
+they are equal.
+
+#### `pub fn minimum(x: f32, y: f32) -> f32`
+
+IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
+`0.0`.
+
+#### `pub fn maximum(x: f32, y: f32) -> f32`
+
+IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
+`0.0`.
 
 #### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
 
-`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
-as `low > high` does.
+`x` confined to `low..=high` by the order, except that a NaN `x` stays
+NaN. A NaN bound traps, as `low > high` does.
 
 #### `pub fn copysign(x: f32, y: f32) -> f32`
 
@@ -1629,16 +1642,28 @@ Square root
 
 #### `pub fn min(x: f64, y: f64) -> f64`
 
-Minimum of two values
+The lesser of two values by the order, where NaN is greatest; `x` when
+they are equal.
 
 #### `pub fn max(x: f64, y: f64) -> f64`
 
-Maximum of two values
+The greater of two values by the order, where NaN is greatest; `y` when
+they are equal.
+
+#### `pub fn minimum(x: f64, y: f64) -> f64`
+
+IEEE 754-2019 `minimum`: NaN when either value is, and `-0.0` below
+`0.0`.
+
+#### `pub fn maximum(x: f64, y: f64) -> f64`
+
+IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
+`0.0`.
 
 #### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
 
-`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
-as `low > high` does.
+`x` confined to `low..=high` by the order, except that a NaN `x` stays
+NaN. A NaN bound traps, as `low > high` does.
 
 #### `pub fn copysign(x: f64, y: f64) -> f64`
 
@@ -1934,16 +1959,6 @@ True for a NaN, quiet or signaling.
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
-#### `impl OperatorOrd for f16`
-
-##### `pub fn lt(&self, other: &Self) -> bool`
-
-##### `pub fn le(&self, other: &Self) -> bool`
-
-##### `pub fn gt(&self, other: &Self) -> bool`
-
-##### `pub fn ge(&self, other: &Self) -> bool`
-
 #### `impl Default for f16`
 
 ##### `pub fn default() -> f16`
@@ -2046,16 +2061,6 @@ True for a NaN, quiet or signaling.
 #### `impl Ord for bf16`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl OperatorOrd for bf16`
-
-##### `pub fn lt(&self, other: &Self) -> bool`
-
-##### `pub fn le(&self, other: &Self) -> bool`
-
-##### `pub fn gt(&self, other: &Self) -> bool`
-
-##### `pub fn ge(&self, other: &Self) -> bool`
 
 #### `impl Default for bf16`
 

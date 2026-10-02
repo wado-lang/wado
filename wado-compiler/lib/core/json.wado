@@ -1004,7 +1004,7 @@ fn checked_int_f64<S: AsStrSlice>(
     range_msg: S,
     start: i64,
 ) -> Result<f64, DeserializeError> {
-    if v != f64::floor(v) {
+    if v.is_nan() || v != f64::floor(v) {
         builtin::cold_path();
         return Result::Err(DeserializeError::unexpected_type("expected integer, got float", start));
     }

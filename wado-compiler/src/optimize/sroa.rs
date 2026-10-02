@@ -659,6 +659,7 @@ fn array_read_of_candidate(
         | CtfeBuiltin::ColdPath
         | CtfeBuiltin::Select
         | CtfeBuiltin::I32AsChar
+        | CtfeBuiltin::FloatIsNan
         | CtfeBuiltin::HeapBase(_) => None,
     }
 }

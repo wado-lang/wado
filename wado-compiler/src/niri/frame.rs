@@ -496,6 +496,7 @@ impl Interpreter<'_> {
             | CtfeBuiltin::ArrayClonePrefix
             | CtfeBuiltin::Select
             | CtfeBuiltin::I32AsChar
+            | CtfeBuiltin::FloatIsNan
             | CtfeBuiltin::HeapBase(_) => None,
         }
     }

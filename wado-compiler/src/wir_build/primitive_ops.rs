@@ -11,7 +11,7 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
-use super::translate::{FunctionTranslator, declare_and_set_local};
+use super::translate::FunctionTranslator;
 use crate::nir_arena::{Operand, PackedData};
 use crate::wir_build::{packed_array_is_eager, packed_element_consts};
 
@@ -435,12 +435,9 @@ impl FunctionTranslator<'_, '_> {
                 if matches!(operand, WirInstr::F32Const(_) | WirInstr::F64Const(_)) {
                     return operand;
                 }
-                let name = self.fresh_local("$float_cmp");
-                prelude.extend(declare_and_set_local(name.clone(), ty.clone(), operand));
-                WirInstr::LocalGet {
-                    name,
-                    result_ty: ty.clone(),
-                }
+                let (set, read) = self.spill(operand, ty.clone(), "$float_cmp");
+                prelude.extend(set);
+                read
             })
             .collect();
         (prelude, reads)

@@ -1307,8 +1307,19 @@ impl FunctionTranslator<'_, '_> {
         let ty = self
             .ctx
             .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
-        let name = self.fresh_local(prefix);
         let value = self.translate_operand(op);
+        self.spill(value, ty, prefix)
+    }
+
+    /// Evaluate `value` into a fresh local of type `ty`, and answer that with
+    /// the read of it.
+    pub(super) fn spill(
+        &mut self,
+        value: WirInstr,
+        ty: WirType,
+        prefix: &str,
+    ) -> (Vec<WirInstr>, WirInstr) {
+        let name = self.fresh_local(prefix);
         let prelude = declare_and_set_local(name.clone(), ty.clone(), value).to_vec();
         let read = WirInstr::LocalGet {
             name,
